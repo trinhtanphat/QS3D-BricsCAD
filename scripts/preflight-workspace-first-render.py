@@ -6,6 +6,7 @@ XAML_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml"
 COMPACT_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.CompactShell.cs"
 REFERENCE_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ReferencePaletteLayout.cs"
 TREE_REL = "src/QS3D.BricsCAD.V25/UI/ReferenceWorkspaceTreeAugmenter.cs"
+NAVIGATION_REL = "src/QS3D.Core/Features/FeatureNavigationContracts.cs"
 RUNTIME_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dFiveZoneRuntimeLayout.cs"
 RUNTIME_REPAIR_REL = "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dRuntimeLayoutRepair.cs"
 LOCAL_INBOX_REL = "docs/LOCAL-AGENT-INBOX.md"
@@ -49,6 +50,7 @@ def main():
     compact = read(COMPACT_REL)
     reference = read(REFERENCE_REL)
     tree = read(TREE_REL)
+    navigation = read(NAVIGATION_REL)
     runtime = read(RUNTIME_REL)
     runtime_repair = read(RUNTIME_REPAIR_REL)
     local_inbox = read(LOCAL_INBOX_REL)
@@ -98,47 +100,46 @@ def main():
         REFERENCE_REL,
     )
 
-    # Figure-2 parity is a top-level presentation contract, not permission to throw away existing
-    # semantic children. Keep the legacy canopy/modeling content reachable under the reference
-    # categories while normalizing the visible headers and exact top-level order.
+    # Figure-2 parity remains a presentation contract, but the registry-driven migration makes
+    # FeatureNavigationContracts the canonical owner of visible labels/order. The WPF augmenter
+    # must project that registry while retaining only the legacy container migration mechanics.
     for token in (
-        '"HT_Phong",',
-        '"Kết cấu thép",',
-        '"Cấu kiện khác",',
-        'EnsureTopAlias(tree, "HT_Phong", "HT_Phòng", null);',
+        "WorkspaceFeatureNavigationCatalog.Navigation",
+        "group => EnsureTopAlias(tree, group.LabelKey, group.LegacyLabels, group.LegacyCategory?.ToString())",
         'MoveLegacyTopLevelUnder(tree, slab, "Mái Hắt");',
-        'var canopy = EnsureChildContainer(slab, "Mái Hắt", null);',
-        'EnsureTop(tree, "Kết cấu thép", null);',
-        'var other = EnsureTop(tree, "Cấu kiện khác", null);',
         'MoveLegacyTopLevelUnder(tree, other, "Modeling");',
-        "NormalizeReferenceTopLevelOrder(tree);",
+        "NormalizeReferenceTopLevelOrder(tree, navigation);",
+        "NormalizeRegisteredChildren(groupItems, navigation);",
     ):
         require(tree, token, TREE_REL)
 
-    reference_order = require_section(
-        tree,
-        "private static readonly string[] ReferenceTopLevelOrder =",
-        "public static bool EnsureRegistered()",
-        TREE_REL,
+    navigation_groups = require_section(
+        navigation,
+        "private static readonly FeatureNavigationGroup[] GroupDefinitions =",
+        "private static readonly FeatureNavigationRegistration[] NavigationDefinitions =",
+        NAVIGATION_REL,
     )
     desired_top_level = (
-        '"Lưới Trục"',
-        '"HT_Phong"',
-        '"Dầm"',
-        '"Sàn"',
-        '"Cột"',
-        '"Vách"',
-        '"Tường KT"',
-        '"Cửa"',
-        '"Cầu Thang"',
-        '"Móng"',
-        '"Đào đắp"',
-        '"Kết cấu thép"',
-        '"Cấu kiện khác"',
-        '"KL Tùy chỉnh"',
+        '("grid", 0, "Lưới Trục"',
+        '("room-finishes", 1, "HT_Phong"',
+        '("beam", 2, "Dầm"',
+        '("slab", 3, "Sàn"',
+        '("column", 5, "Cột"',
+        '("structural-wall", 6, "Vách"',
+        '("architectural-wall", 7, "Tường KT"',
+        '("opening", 8, "Cửa"',
+        '("stair", 9, "Cầu Thang"',
+        '("foundation", 10, "Móng"',
+        '("earthwork", 11, "Đào đắp"',
+        '("steel", 12, "Kết cấu thép"',
+        '("other", 13, "Cấu kiện khác"',
+        '("custom-quantity", 14, "KL Tùy chỉnh"',
     )
+    for token in desired_top_level:
+        require(navigation_groups, token, NAVIGATION_REL)
     for first, second in zip(desired_top_level, desired_top_level[1:]):
-        require_order(reference_order, first, second, TREE_REL)
+        require_order(navigation_groups, first, second, NAVIGATION_REL)
+    require(navigation_groups, '("slab-canopy", 4, "Mái Hắt"', NAVIGATION_REL)
 
     for stale in (
         'var finish = EnsureTop(tree, "HT_Phòng", null);',
@@ -277,9 +278,9 @@ def main():
     print(
         "PASS: Workspace keeps the first-measure bootstrap, authoritative idle passes break the "
         "ViewportWidth loop, loaded-lifetime size/visibility/layout recovery is gated/re-entry-safe/"
-        "bounded, the user splitter is preserved, and the visible reference tree matches the owner "
-        "figure while legacy functional children stay reachable; LOCAL-012 remains the licensed "
-        "visual qualification lane."
+        "bounded, the user splitter is preserved, and the registry-projected visible reference tree "
+        "matches the owner figure while legacy functional children stay reachable; LOCAL-012 remains "
+        "the licensed visual qualification lane."
     )
     return 0
 
