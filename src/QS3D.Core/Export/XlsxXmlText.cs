@@ -1,3 +1,4 @@
+using System;
 using System.Security;
 using System.Text;
 
@@ -46,6 +47,26 @@ namespace QS3D.Core.Export
             }
 
             return SecurityElement.Escape(sanitized.ToString()) ?? string.Empty;
+        }
+
+        public static void AppendTextElement(StringBuilder target, string value)
+        {
+            if (target == null) throw new ArgumentNullException(nameof(target));
+
+            target.Append("<t");
+            if (RequiresPreserveSpace(value)) target.Append(" xml:space=\"preserve\"");
+            target.Append(">").Append(Escape(value)).Append("</t>");
+        }
+
+        private static bool RequiresPreserveSpace(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+            return IsXmlWhitespace(value[0]) || IsXmlWhitespace(value[value.Length - 1]);
+        }
+
+        private static bool IsXmlWhitespace(char value)
+        {
+            return value == ' ' || value == '\t' || value == '\n' || value == '\r';
         }
     }
 }
