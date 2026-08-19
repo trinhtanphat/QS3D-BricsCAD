@@ -29,7 +29,7 @@ namespace QS3D.Core.Domain
         {
             var raw = value ?? string.Empty;
             if (raw.Any(char.IsControl)) throw new ArgumentException(name + " cannot contain control characters.", name);
-            return Required(value, name, 64);
+            return Required(raw, name, 64);
         }
 
         private static string Required(string value, string name, int max)
