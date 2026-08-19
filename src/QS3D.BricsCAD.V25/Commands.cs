@@ -196,7 +196,7 @@ namespace QS3D.BricsCAD.V25
         public void Regenerate()
         {
             var doc = Active(); if (doc == null) return;
-            Guard(doc, "QS3DREGEN", () =>
+            GuardRegeneration(doc, "QS3DREGEN", () =>
             {
                 var project = ExistingProjectMutationContext.Require(doc, "Regenerate");
                 var count = RegenerateProject(project);
@@ -246,7 +246,7 @@ namespace QS3D.BricsCAD.V25
         public void Refresh()
         {
             var doc = Active(); if (doc == null) { PaletteCoordinator.RefreshAll(); return; }
-            Guard(doc, "QS3DREFRESH", () =>
+            GuardRegeneration(doc, "QS3DREFRESH", () =>
             {
                 var count = 0;
                 if (ProjectContextCoordinator.TryGetReadOnly(doc, out _))
@@ -254,8 +254,12 @@ namespace QS3D.BricsCAD.V25
                     var project = ExistingProjectMutationContext.Require(doc, "Refresh");
                     count = RegenerateProject(project);
                 }
-                PaletteCoordinator.RefreshAll();
-                doc.Editor.WriteMessage("\nQS3D đã làm mới Project/Layer/Xref" + (count > 0 ? " và regenerate " + count + " lượt cấu kiện." : "."));
+                var message = "QS3D đã làm mới Project/Layer/Xref" + (count > 0 ? " và regenerate " + count + " lượt cấu kiện." : ".");
+                FinalizeCommittedUi(doc, "QS3DREFRESH", () =>
+                {
+                    PaletteCoordinator.RefreshAll();
+                    doc.Editor.WriteMessage("\n" + message);
+                });
             });
         }
 
@@ -634,6 +638,59 @@ namespace QS3D.BricsCAD.V25
         private static int RegenerateProject(ProjectState project) => new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
         private static void Write(string message) => Active()?.Editor.WriteMessage("\n" + message);
+
+        private static void GuardRegeneration(Document document, string operation, Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (CommandUserException expected)
+            {
+                ReportCommandFailure(document, operation, expected.Message);
+            }
+            catch (System.Exception error)
+            {
+                ReportCommandFailure(document, operation, DescribeRegenerationFailure(error));
+            }
+        }
+
+        private static string DescribeRegenerationFailure(System.Exception error)
+        {
+            if (error is AggregateException aggregate &&
+                aggregate.Message.StartsWith("Semantic regeneration failed and project rollback also failed.", StringComparison.Ordinal))
+            {
+                return "regeneration thất bại và rollback semantic cũng thất bại. Chạy QS3DRELOAD rồi QS3DHEALTH trước khi tiếp tục.";
+            }
+
+            var current = error;
+            while (current is AggregateException single && single.InnerExceptions.Count == 1)
+                current = single.InnerExceptions[0];
+
+            var detail = SafeRegenerationDiagnostic(current);
+            var prefix = "regeneration thất bại trước khi commit; semantic state đã được giữ hoặc rollback. ";
+            if (detail.Length > 0)
+                return prefix + detail + " Chạy QS3DHEALTH để kiểm tra project/dependency state.";
+            return prefix + "Nguyên nhân kỹ thuật: " + current.GetType().Name + ". Chạy QS3DHEALTH để kiểm tra project/dependency state.";
+        }
+
+        private static string SafeRegenerationDiagnostic(System.Exception error)
+        {
+            if (!(error is InvalidOperationException) &&
+                !(error is ArgumentException) &&
+                !(error is KeyNotFoundException) &&
+                !(error is FormatException))
+                return string.Empty;
+
+            var message = (error.Message ?? string.Empty)
+                .Replace('\r', ' ')
+                .Replace('\n', ' ')
+                .Replace('\t', ' ')
+                .Trim();
+            while (message.Contains("  ")) message = message.Replace("  ", " ");
+            if (message.Length > 240) message = message.Substring(0, 240).TrimEnd() + "…";
+            return message;
+        }
 
         private static void Guard(Document document, string operation, Action action)
         {

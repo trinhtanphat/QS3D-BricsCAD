@@ -63,8 +63,8 @@ if min(probe, bind, regenerate, refresh_ui) < 0 or not probe < bind < regenerate
 # The command intentionally has an earlier UI-only branch when there is no active document.
 # That branch must remain mutation-free and must not be mistaken for the post-regeneration RefreshAll.
 no_doc = refresh.find("if (doc == null) { PaletteCoordinator.RefreshAll(); return; }")
-guard = refresh.find('Guard(doc, "QS3DREFRESH"')
-if min(no_doc, guard) < 0 or not no_doc < guard:
+regeneration_guard = refresh.find('GuardRegeneration(doc, "QS3DREFRESH"')
+if min(no_doc, regeneration_guard) < 0 or not no_doc < regeneration_guard:
     errors.append("QS3DREFRESH must retain a UI-only no-active-document branch before project lifecycle work")
 
 for token, label in [
