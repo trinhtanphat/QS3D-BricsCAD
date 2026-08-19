@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -157,32 +158,80 @@ namespace QS3D.Core.Documentation
 
         private static Dictionary<string, SemanticScheduleDefinition> BuildScheduleIndex(IEnumerable<SemanticScheduleDefinition> schedules)
         {
+            var knownCount = RequireKnownCountWithinLimit(schedules, "available schedule", TooManyAvailableSchedules);
             var result = new Dictionary<string, SemanticScheduleDefinition>(StringComparer.OrdinalIgnoreCase);
             var count = 0;
             foreach (var schedule in schedules)
             {
                 count++;
                 if (count > MaxItems)
-                    throw new InvalidOperationException("Semantic schedule placement supports at most " + MaxItems + " available schedules.");
+                    throw TooManyAvailableSchedules();
                 if (schedule == null) throw new ArgumentException("Available semantic schedule cannot be null.", nameof(schedules));
                 var id = Required(schedule.Id, "availableSchedules.Id");
                 if (result.ContainsKey(id)) throw new InvalidOperationException("Available semantic schedules contain duplicate id: " + id + ".");
                 result.Add(id, schedule);
             }
+
+            if (knownCount.HasValue && count != knownCount.Value)
+                throw new InvalidOperationException("Semantic schedule placement available schedule traversal count does not match its known count.");
             return result;
         }
 
         private static List<SemanticSchedulePlacementItem> MaterializeItems(IEnumerable<SemanticSchedulePlacementItem> items)
         {
+            var knownCount = RequireKnownCountWithinLimit(items, "placement item", TooManyPlacementItems);
             var result = new List<SemanticSchedulePlacementItem>();
             foreach (var item in items)
             {
                 if (result.Count >= MaxItems)
-                    throw new InvalidOperationException("Semantic schedule placement supports at most " + MaxItems + " schedules per sheet.");
+                    throw TooManyPlacementItems();
                 result.Add(item);
             }
+
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw new InvalidOperationException("Semantic schedule placement item traversal count does not match its known count.");
             return result;
         }
+
+        private static int? RequireKnownCountWithinLimit<T>(
+            IEnumerable<T> source,
+            string label,
+            Func<InvalidOperationException> tooMany)
+        {
+            var counts = new List<int>(3);
+            if (source is ICollection<T> genericCollection)
+                counts.Add(genericCollection.Count);
+            if (source is IReadOnlyCollection<T> readOnlyCollection)
+                counts.Add(readOnlyCollection.Count);
+            if (source is ICollection nonGenericCollection)
+                counts.Add(nonGenericCollection.Count);
+
+            if (counts.Count == 0) return null;
+
+            var expected = counts[0];
+            var maximum = expected;
+            var hasNegative = expected < 0;
+            var hasConflict = false;
+            for (var index = 1; index < counts.Count; index++)
+            {
+                if (counts[index] < 0) hasNegative = true;
+                if (counts[index] != expected) hasConflict = true;
+                if (counts[index] > maximum) maximum = counts[index];
+            }
+
+            if (maximum > MaxItems) throw tooMany();
+            if (hasNegative)
+                throw new InvalidOperationException("Semantic schedule placement " + label + " source reports an invalid negative known count.");
+            if (hasConflict)
+                throw new InvalidOperationException("Semantic schedule placement " + label + " source reports conflicting known counts.");
+            return expected;
+        }
+
+        private static InvalidOperationException TooManyAvailableSchedules() =>
+            new InvalidOperationException("Semantic schedule placement supports at most " + MaxItems + " available schedules.");
+
+        private static InvalidOperationException TooManyPlacementItems() =>
+            new InvalidOperationException("Semantic schedule placement supports at most " + MaxItems + " schedules per sheet.");
 
         private static List<Region> BuildOccupiedRegions(SemanticSheetPlan sheet)
         {
