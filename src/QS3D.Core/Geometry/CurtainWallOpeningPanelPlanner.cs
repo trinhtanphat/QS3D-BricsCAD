@@ -33,7 +33,16 @@ namespace QS3D.Core.Geometry
         public int InterruptedPanelCount { get; set; }
         public double OriginalPanelAreaM2 { get; set; }
         public double RemainingPanelAreaM2 { get; set; }
-        public double RemovedPanelAreaM2 => Math.Max(0d, OriginalPanelAreaM2 - RemainingPanelAreaM2);
+        public double RemovedPanelAreaM2
+        {
+            get
+            {
+                var removed = OriginalPanelAreaM2 - RemainingPanelAreaM2;
+                if (double.IsNaN(removed) || double.IsInfinity(removed))
+                    throw new OverflowException("Curtain removed panel area is not representable.");
+                return removed <= 0d ? 0d : removed;
+            }
+        }
     }
 
     public static class CurtainWallOpeningPanelPlanner
