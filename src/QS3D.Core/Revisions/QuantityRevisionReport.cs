@@ -169,7 +169,15 @@ namespace QS3D.Core.Revisions
                 _sum = next;
             }
 
-            internal double Value(string label) => RevisionMath.Add(_sum, _compensation, label);
+            internal double Value(string label)
+            {
+                var result = RevisionMath.Add(_sum, _compensation, label);
+                if (_compensation != 0d && result == _sum)
+                    throw new OverflowException("Revision quantity total lost a non-zero compensation at floating-point precision: " + label);
+                if (_sum != 0d && result == _compensation)
+                    throw new OverflowException("Revision quantity total lost a non-zero primary sum at floating-point precision: " + label);
+                return result;
+            }
         }
     }
 }
