@@ -33,7 +33,7 @@ namespace QS3D.Core.Features
 
     public sealed class WorkspaceSchemaCondition
     {
-        public WorkspaceSchemaCondition(string fieldKey, object expectedValue)
+        public WorkspaceSchemaCondition(string fieldKey, object? expectedValue)
         {
             if (string.IsNullOrWhiteSpace(fieldKey)) throw new ArgumentException("Condition field key cannot be blank.", nameof(fieldKey));
             FieldKey = fieldKey.Trim();
@@ -41,18 +41,18 @@ namespace QS3D.Core.Features
         }
 
         public string FieldKey { get; }
-        public object ExpectedValue { get; }
+        public object? ExpectedValue { get; }
 
-        public bool Matches(IReadOnlyDictionary<string, object> values)
+        public bool Matches(IReadOnlyDictionary<string, object>? values)
         {
             if (values == null || !values.TryGetValue(FieldKey, out var actual)) return false;
             return EqualsNormalized(actual, ExpectedValue);
         }
 
-        private static bool EqualsNormalized(object left, object right)
+        private static bool EqualsNormalized(object? left, object? right)
         {
             if (left == null || right == null) return left == null && right == null;
-            if (left is string leftText || right is string)
+            if (left is string || right is string)
                 return string.Equals(Convert.ToString(left, CultureInfo.InvariantCulture), Convert.ToString(right, CultureInfo.InvariantCulture), StringComparison.OrdinalIgnoreCase);
             return object.Equals(left, right);
         }
@@ -64,19 +64,19 @@ namespace QS3D.Core.Features
             string key,
             WorkspaceSchemaFieldKind kind,
             bool required = false,
-            object defaultValue = null,
+            object? defaultValue = null,
             double? minimum = null,
             double? maximum = null,
-            string unit = null,
+            string? unit = null,
             int? precision = null,
-            IEnumerable<string> choices = null,
+            IEnumerable<string>? choices = null,
             bool readOnly = false,
             bool computed = false,
-            WorkspaceSchemaCondition visibleWhen = null,
-            WorkspaceSchemaCondition enabledWhen = null,
-            string groupKey = null,
+            WorkspaceSchemaCondition? visibleWhen = null,
+            WorkspaceSchemaCondition? enabledWhen = null,
+            string? groupKey = null,
             int order = 0,
-            string helpText = null,
+            string? helpText = null,
             WorkspaceSchemaApplicability applicability = WorkspaceSchemaApplicability.CreateAndEdit)
         {
             if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("Schema field key cannot be blank.", nameof(key));
@@ -105,19 +105,19 @@ namespace QS3D.Core.Features
         public string Key { get; }
         public WorkspaceSchemaFieldKind Kind { get; }
         public bool Required { get; }
-        public object DefaultValue { get; }
+        public object? DefaultValue { get; }
         public double? Minimum { get; }
         public double? Maximum { get; }
-        public string Unit { get; }
+        public string? Unit { get; }
         public int? Precision { get; }
         public IReadOnlyList<string> Choices { get; }
         public bool ReadOnly { get; }
         public bool Computed { get; }
-        public WorkspaceSchemaCondition VisibleWhen { get; }
-        public WorkspaceSchemaCondition EnabledWhen { get; }
-        public string GroupKey { get; }
+        public WorkspaceSchemaCondition? VisibleWhen { get; }
+        public WorkspaceSchemaCondition? EnabledWhen { get; }
+        public string? GroupKey { get; }
         public int Order { get; }
-        public string HelpText { get; }
+        public string? HelpText { get; }
         public WorkspaceSchemaApplicability Applicability { get; }
 
         public bool AppliesTo(WorkspaceSchemaSurface surface)
@@ -138,12 +138,12 @@ namespace QS3D.Core.Features
                 throw new InvalidOperationException("Computed fields must be read-only: " + Key);
         }
 
-        private static string Normalize(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     public sealed class WorkspaceFormSchema
     {
-        public WorkspaceFormSchema(string key, IEnumerable<WorkspaceSchemaField> fields)
+        public WorkspaceFormSchema(string key, IEnumerable<WorkspaceSchemaField>? fields)
         {
             if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("Schema key cannot be blank.", nameof(key));
             Key = key.Trim();
@@ -160,7 +160,7 @@ namespace QS3D.Core.Features
 
     public sealed class WorkspaceSchemaValidationMessage
     {
-        public WorkspaceSchemaValidationMessage(string fieldKey, string message)
+        public WorkspaceSchemaValidationMessage(string? fieldKey, string? message)
         {
             FieldKey = fieldKey ?? string.Empty;
             Message = message ?? string.Empty;
@@ -190,7 +190,7 @@ namespace QS3D.Core.Features
         public static IReadOnlyList<WorkspaceSchemaRenderField> Plan(
             WorkspaceFormSchema schema,
             WorkspaceSchemaSurface surface,
-            IReadOnlyDictionary<string, object> values)
+            IReadOnlyDictionary<string, object>? values)
         {
             if (schema == null) throw new ArgumentNullException(nameof(schema));
             values = values ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
@@ -226,7 +226,7 @@ namespace QS3D.Core.Features
         public static IReadOnlyList<WorkspaceSchemaValidationMessage> Validate(
             WorkspaceFormSchema schema,
             WorkspaceSchemaSurface surface,
-            IReadOnlyDictionary<string, object> values)
+            IReadOnlyDictionary<string, object>? values)
         {
             if (schema == null) throw new ArgumentNullException(nameof(schema));
             values = values ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
@@ -237,18 +237,19 @@ namespace QS3D.Core.Features
             {
                 var field = row.Field;
                 values.TryGetValue(field.Key, out var raw);
-                if (IsMissing(raw)) raw = field.DefaultValue;
+                object? candidate = raw;
+                if (IsMissing(candidate)) candidate = field.DefaultValue;
 
-                if (field.Required && IsMissing(raw))
+                if (field.Required && IsMissing(candidate))
                 {
                     messages.Add(new WorkspaceSchemaValidationMessage(field.Key, field.Key + " is required."));
                     continue;
                 }
-                if (IsMissing(raw)) continue;
+                if (IsMissing(candidate)) continue;
 
                 if (field.Kind == WorkspaceSchemaFieldKind.Number)
                 {
-                    if (!TryFiniteDouble(raw, out var number))
+                    if (!TryFiniteDouble(candidate, out var number))
                     {
                         messages.Add(new WorkspaceSchemaValidationMessage(field.Key, field.Key + " must be a finite number."));
                         continue;
@@ -260,11 +261,11 @@ namespace QS3D.Core.Features
                 }
                 else if (field.Kind == WorkspaceSchemaFieldKind.Choice)
                 {
-                    var text = Convert.ToString(raw, CultureInfo.InvariantCulture) ?? string.Empty;
+                    var text = Convert.ToString(candidate, CultureInfo.InvariantCulture) ?? string.Empty;
                     if (!field.Choices.Contains(text, StringComparer.OrdinalIgnoreCase))
                         messages.Add(new WorkspaceSchemaValidationMessage(field.Key, field.Key + " must be one of the declared choices."));
                 }
-                else if (field.Kind == WorkspaceSchemaFieldKind.Boolean && !(raw is bool))
+                else if (field.Kind == WorkspaceSchemaFieldKind.Boolean && !(candidate is bool))
                 {
                     messages.Add(new WorkspaceSchemaValidationMessage(field.Key, field.Key + " must be a boolean."));
                 }
@@ -272,9 +273,9 @@ namespace QS3D.Core.Features
             return new ReadOnlyCollection<WorkspaceSchemaValidationMessage>(messages);
         }
 
-        private static bool IsMissing(object value) => value == null || (value is string text && string.IsNullOrWhiteSpace(text));
+        private static bool IsMissing(object? value) => value == null || (value is string text && string.IsNullOrWhiteSpace(text));
 
-        private static bool TryFiniteDouble(object value, out double number)
+        private static bool TryFiniteDouble(object? value, out double number)
         {
             if (value is double d) number = d;
             else if (value is float f) number = f;
@@ -286,7 +287,7 @@ namespace QS3D.Core.Features
 
     public static class ProjectFamilyQuickSchemaAdapter
     {
-        public static WorkspaceFormSchema Create(ElementCategory category, string schemaKey = null)
+        public static WorkspaceFormSchema Create(ElementCategory category, string? schemaKey = null)
         {
             var source = ProjectFamilyQuickSchemaService.GetSchema(category);
             if (!source.SupportsQuickForm)
