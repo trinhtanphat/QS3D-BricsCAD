@@ -106,7 +106,9 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RewireBlt3dRoomAwareAddActions()
         {
-            foreach (var button in RoomPaneDescendants<Button>(this).Where(IsBlt3dRoomAwareAddButton))
+            // Deliberately reuse the generic Family Add predicate. Do not match the room-pane
+            // "+ Thêm" finish button: that control must remain wired to OnAddFinishClick.
+            foreach (var button in RoomPaneDescendants<Button>(this).Where(IsBlt3dFamilyAddButton))
             {
                 button.Click -= OnAddClick;
                 button.Click -= OnFamilyAddModeClick;
@@ -132,15 +134,6 @@ namespace QS3D.BricsCAD.V25.UI
                 item.Click += OnBlt3dRoomAwareAddClick;
                 item.Header = IsBlt3dRoomWorkspace() ? "Thêm Phòng" : "Thêm Family…";
             }
-        }
-
-        private static bool IsBlt3dRoomAwareAddButton(Button button)
-        {
-            var text = button.Content as string;
-            return string.Equals(text, "+ Add", StringComparison.Ordinal) ||
-                   string.Equals(text, "+ Thêm", StringComparison.Ordinal) ||
-                   string.Equals(text, "＋  Add", StringComparison.Ordinal) ||
-                   string.Equals(text, "Add", StringComparison.Ordinal);
         }
 
         private void OnBlt3dRoomAwareAddClick(object sender, RoutedEventArgs e)
