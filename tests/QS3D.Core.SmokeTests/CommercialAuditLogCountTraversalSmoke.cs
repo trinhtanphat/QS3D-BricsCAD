@@ -213,7 +213,7 @@ namespace QS3D.Core.SmokeTests
             public IEnumerator<CommercialAuditRecord> GetEnumerator()
             {
                 yield return CreateRecord(92);
-                yield return null;
+                yield return null!;
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
