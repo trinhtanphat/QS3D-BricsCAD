@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             ThrowsArgumentOutOfRange(5);
             RejectsInvalidKnownLiveHandleCountsBeforeEnumeration();
             RejectsLiveHandleCountTraversalMismatch();
+            RejectsPaddedLiveHandleIdentities();
 
             var project = NewProject();
             project.Elements.Add(null!);
@@ -53,6 +54,49 @@ namespace QS3D.Core.SmokeTests
                 var actual = multiWorker.Inspect(project, liveSourceHandles, null);
                 AssertEquivalent(expected, actual, iteration);
             }
+        }
+
+        private static void RejectsPaddedLiveHandleIdentities()
+        {
+            var project = NewProject();
+            var service = new ComprehensiveModelHealthService(1);
+
+            ThrowsNonCanonicalHandle(
+                () => service.Inspect(
+                    project,
+                    new HashSet<string>(StringComparer.OrdinalIgnoreCase) { " AB12 " },
+                    null),
+                "source");
+
+            ThrowsNonCanonicalHandle(
+                () => service.Inspect(
+                    project,
+                    null,
+                    new HashSet<string>(StringComparer.OrdinalIgnoreCase) { " CD34 " }),
+                "generated-solid");
+
+            _ = service.Inspect(
+                project,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AB12", "   " },
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "CD34", string.Empty });
+        }
+
+        private static void ThrowsNonCanonicalHandle(Action action, string expectedLabel)
+        {
+            try
+            {
+                action();
+            }
+            catch (InvalidOperationException ex) when (
+                ex.Message.IndexOf(expectedLabel, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                ex.Message.IndexOf("non-canonical", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                ex.Message.IndexOf("whitespace", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException(
+                "Expected comprehensive health padded " + expectedLabel + " live Handle rejection.");
         }
 
         private static void RejectsInvalidKnownLiveHandleCountsBeforeEnumeration()
