@@ -81,7 +81,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void NullItemsRemainRejected()
         {
-            ExpectArgument(() => Record(new CommercialRevisionRef[] { null }), "contains a null item");
+            ExpectArgument(() => Record(new CommercialRevisionRef[] { null! }), "contains a null item");
         }
 
         private static CommercialAuditRecord Record(IEnumerable<CommercialRevisionRef> revisions)
