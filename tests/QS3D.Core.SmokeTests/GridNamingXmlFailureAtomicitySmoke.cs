@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             InvalidPrefixFailsBeforeAnyMutation();
             InvalidSuffixFailsBeforeAnyMutation();
+            ControlCharacterAffixesFailBeforeAnyMutation();
             SupplementaryUnicodeRoundTripsThroughGridLabels();
         }
 
@@ -22,7 +23,7 @@ namespace QS3D.Core.SmokeTests
                 first,
                 second,
                 new GridNamingOptions { Prefix = "G-\uD800", Suffix = "-X", StartIndex = 1, NumericPadding = 2 },
-                "prefix");
+                "XML-invalid prefix");
         }
 
         private static void InvalidSuffixFailsBeforeAnyMutation()
@@ -33,7 +34,34 @@ namespace QS3D.Core.SmokeTests
                 first,
                 second,
                 new GridNamingOptions { Prefix = "G-", Suffix = "\uD800-X", StartIndex = 1, NumericPadding = 2 },
-                "suffix");
+                "XML-invalid suffix");
+        }
+
+        private static void ControlCharacterAffixesFailBeforeAnyMutation()
+        {
+            var prefixTabProject = CreateProject(out var prefixTabFirst, out var prefixTabSecond);
+            AssertInvalidAffixIsAtomic(
+                prefixTabProject,
+                prefixTabFirst,
+                prefixTabSecond,
+                new GridNamingOptions { Prefix = "G-\tX", Suffix = "-Y", StartIndex = 1, NumericPadding = 2 },
+                "TAB prefix");
+
+            var prefixLfProject = CreateProject(out var prefixLfFirst, out var prefixLfSecond);
+            AssertInvalidAffixIsAtomic(
+                prefixLfProject,
+                prefixLfFirst,
+                prefixLfSecond,
+                new GridNamingOptions { Prefix = "G-\nX", Suffix = "-Y", StartIndex = 1, NumericPadding = 2 },
+                "LF prefix");
+
+            var suffixCrProject = CreateProject(out var suffixCrFirst, out var suffixCrSecond);
+            AssertInvalidAffixIsAtomic(
+                suffixCrProject,
+                suffixCrFirst,
+                suffixCrSecond,
+                new GridNamingOptions { Prefix = "G-", Suffix = "X\r-Y", StartIndex = 1, NumericPadding = 2 },
+                "CR suffix");
         }
 
         private static void AssertInvalidAffixIsAtomic(
@@ -56,14 +84,14 @@ namespace QS3D.Core.SmokeTests
 
             Throws<ArgumentException>(() => GridNamingService.Renumber(project, new[] { first.Id, second.Id }, options));
 
-            Require(project.ChangeVersion == beforeVersion, "XML-invalid Grid naming " + label + " changed project revision.");
-            Require(project.UpdatedUtc == beforeUpdatedUtc, "XML-invalid Grid naming " + label + " changed project timestamp.");
-            Require(first.Dirty == firstDirty && second.Dirty == secondDirty, "XML-invalid Grid naming " + label + " changed Grid dirty flags.");
-            Require(first.UpdatedUtc == firstUpdatedUtc && second.UpdatedUtc == secondUpdatedUtc, "XML-invalid Grid naming " + label + " changed Grid timestamps.");
-            Require(first.Properties[GridNamingService.GridLabelKey] == firstLabel, "XML-invalid Grid naming " + label + " changed the first Grid label.");
-            Require(second.Properties[GridNamingService.GridLabelKey] == secondLabel, "XML-invalid Grid naming " + label + " changed the second Grid label.");
-            Require(first.Properties[GridNamingService.GridSequenceIndexKey] == firstSequence, "XML-invalid Grid naming " + label + " changed the first Grid sequence index.");
-            Require(second.Properties[GridNamingService.GridSequenceIndexKey] == secondSequence, "XML-invalid Grid naming " + label + " changed the second Grid sequence index.");
+            Require(project.ChangeVersion == beforeVersion, "Invalid Grid naming " + label + " changed project revision.");
+            Require(project.UpdatedUtc == beforeUpdatedUtc, "Invalid Grid naming " + label + " changed project timestamp.");
+            Require(first.Dirty == firstDirty && second.Dirty == secondDirty, "Invalid Grid naming " + label + " changed Grid dirty flags.");
+            Require(first.UpdatedUtc == firstUpdatedUtc && second.UpdatedUtc == secondUpdatedUtc, "Invalid Grid naming " + label + " changed Grid timestamps.");
+            Require(first.Properties[GridNamingService.GridLabelKey] == firstLabel, "Invalid Grid naming " + label + " changed the first Grid label.");
+            Require(second.Properties[GridNamingService.GridLabelKey] == secondLabel, "Invalid Grid naming " + label + " changed the second Grid label.");
+            Require(first.Properties[GridNamingService.GridSequenceIndexKey] == firstSequence, "Invalid Grid naming " + label + " changed the first Grid sequence index.");
+            Require(second.Properties[GridNamingService.GridSequenceIndexKey] == secondSequence, "Invalid Grid naming " + label + " changed the second Grid sequence index.");
         }
 
         private static void SupplementaryUnicodeRoundTripsThroughGridLabels()
