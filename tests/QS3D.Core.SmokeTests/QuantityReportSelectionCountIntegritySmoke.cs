@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
 
