@@ -20,6 +20,7 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly ScrollViewer _secondaryScroll;
         private readonly ContentPresenter _secondaryPresenter;
         private UIElement _focusFallback;
+        private InteractionSurfaceSnapshot? _snapshot;
 
         public WorkspaceInspectorHost()
         {
@@ -73,6 +74,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
 
+            _snapshot = snapshot;
             _primaryPresenter.Content = snapshot.PrimaryInspector == null ? null : primaryContent;
             _secondaryPresenter.Content = snapshot.SecondaryInspector == null ? null : secondaryContent;
             ApplyLayout(snapshot, preferredPrimaryWidth, preferredSecondaryWidth);
@@ -81,6 +83,7 @@ namespace QS3D.BricsCAD.V25.UI
         public void ClearInspectors()
         {
             var restoreFocus = ContainsKeyboardFocus(_primaryScroll) || ContainsKeyboardFocus(_secondaryScroll);
+            _snapshot = null;
             _primaryPresenter.Content = null;
             _secondaryPresenter.Content = null;
             CollapseInspectorColumns();
@@ -130,20 +133,9 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnHostSizeChanged(object sender, SizeChangedEventArgs e)
         {
-            if (_primaryPresenter.Content == null && _secondaryPresenter.Content == null) return;
+            var snapshot = _snapshot;
+            if (snapshot == null) return;
 
-            var primary = _primaryPresenter.Content == null
-                ? null
-                : new InteractionSurfaceBinding(new FeatureId("host.primary"), InteractionSurface.PrimaryInspector, "host.primary");
-            var secondary = _secondaryPresenter.Content == null
-                ? null
-                : new InteractionSurfaceBinding(new FeatureId("host.primary"), InteractionSurface.SecondaryInspector, "host.secondary");
-            var snapshot = new InteractionSurfaceSnapshot(
-                new FeatureId("host.primary"),
-                primary,
-                secondary,
-                null,
-                Array.Empty<InteractionSurfaceBinding>());
             ApplyLayout(snapshot, _primaryColumn.ActualWidth > 0d ? _primaryColumn.ActualWidth : InspectorHostLayoutPlanner.DefaultPrimaryWidth,
                 _secondaryColumn.ActualWidth > 0d ? _secondaryColumn.ActualWidth : InspectorHostLayoutPlanner.DefaultSecondaryWidth);
         }
