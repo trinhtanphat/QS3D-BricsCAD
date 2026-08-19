@@ -70,7 +70,7 @@ namespace QS3D.Core.Reporting
                     throw new InvalidOperationException("Material usage element " + element.Id + " category " + element.Category + " does not match Family " + family.Id + " category " + family.Category + ". Repair the Family relation before reporting.");
                 var material = Effective(element, family, "Material");
                 if (material.Length > 0)
-                    Add(project, element, family, floors, units, rows, order, material, "Material", MetricsForMainMaterial(element));
+                    Add(project, element, family, floors, units, rows, order, material, "Material", MetricsForMainMaterial(element, family));
 
                 if (element.Category == ElementCategory.GlassWall)
                 {
@@ -97,13 +97,13 @@ namespace QS3D.Core.Reporting
             public double MassKg { get; set; }
         }
 
-        private static UsageMetrics MetricsForMainMaterial(ProjectElement element)
+        private static UsageMetrics MetricsForMainMaterial(ProjectElement element, ProjectFamily? family)
         {
             var metrics = new UsageMetrics
             {
                 LengthM = Q(element, "LengthM"),
                 VolumeM3 = QFirst(element, "NetVolumeM3", "VolumeM3"),
-                MassKg = Q(element, "WeightKg")
+                MassKg = EffectiveMass(element, family)
             };
 
             switch (element.Category)
@@ -139,6 +139,66 @@ namespace QS3D.Core.Reporting
                     break;
             }
             return metrics;
+        }
+
+        private static double EffectiveMass(ProjectElement element, ProjectFamily? family)
+        {
+            var explicitMass = OptionalNonNegativeQuantity(element, "WeightKg", "MassKg");
+            if (explicitMass.HasValue) return explicitMass.Value;
+
+            var densityKgM3 = EffectiveDensity(element, family);
+            if (!densityKgM3.HasValue) return 0d;
+
+            var volume = OptionalNonNegativeQuantity(
+                element,
+                "NetConcreteM3",
+                "NetVolumeM3",
+                "GrossConcreteM3",
+                "GrossVolumeM3",
+                "VolumeM3",
+                "MeasuredVolumeM3");
+            if (!volume.HasValue) return 0d;
+
+            var mass = checked(volume.Value * densityKgM3.Value);
+            if (double.IsNaN(mass) || double.IsInfinity(mass))
+                throw new OverflowException("Material usage mass overflow: " + element.Id + "/volume*density.");
+            if (mass == 0d && volume.Value > 0d && densityKgM3.Value > 0d)
+                throw new InvalidOperationException("Material usage mass underflow: " + element.Id + "/volume*density rounded positive finite inputs to zero.");
+            if (volume.Value != 0d && densityKgM3.Value != 0d)
+            {
+                if (densityKgM3.Value != 1d && mass == volume.Value)
+                    throw new InvalidOperationException("Material usage mass lost the density contribution at double precision: " + element.Id + "/volume*density.");
+                if (volume.Value != 1d && mass == densityKgM3.Value)
+                    throw new InvalidOperationException("Material usage mass lost the volume contribution at double precision: " + element.Id + "/volume*density.");
+            }
+            return mass;
+        }
+
+        private static double? EffectiveDensity(ProjectElement element, ProjectFamily? family)
+        {
+            if (element.Properties.TryGetValue("DensityKgM3", out var instance) && !string.IsNullOrWhiteSpace(instance))
+                return PositiveInvariant(instance, element.Id + "/DensityKgM3");
+            if (family != null && family.Properties.TryGetValue("DensityKgM3", out var inherited) && !string.IsNullOrWhiteSpace(inherited))
+                return PositiveInvariant(inherited, "Family " + family.Id + "/DensityKgM3");
+            return null;
+        }
+
+        private static double PositiveInvariant(string value, string label)
+        {
+            if (!double.TryParse(value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ||
+                double.IsNaN(parsed) || double.IsInfinity(parsed) || parsed <= 0d)
+                throw new InvalidOperationException(label + " must be an invariant finite number greater than zero.");
+            return parsed;
+        }
+
+        private static double? OptionalNonNegativeQuantity(ProjectElement element, params string[] keys)
+        {
+            foreach (var key in keys)
+            {
+                if (!element.Quantities.ContainsKey(key)) continue;
+                return Q(element, key);
+            }
+            return null;
         }
 
         private static void Add(
