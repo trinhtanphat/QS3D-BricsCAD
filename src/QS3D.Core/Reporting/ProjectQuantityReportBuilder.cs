@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -9,6 +10,8 @@ namespace QS3D.Core.Reporting
 {
     public static class ProjectQuantityReportBuilder
     {
+        internal const int MaxSelectionElementIds = 10000;
+
         public static IReadOnlyList<QuantityReportRow> Group(ProjectState project) => Build(project, null, false);
 
         public static IReadOnlyList<QuantityReportRow> Group(ProjectState project, IEnumerable<string> elementIds)
@@ -134,10 +137,30 @@ namespace QS3D.Core.Reporting
         private static HashSet<string>? ResolveSelection(ProjectState project, IEnumerable<string>? elementIds)
         {
             if (elementIds == null) return null;
+
+            var knownCount = SnapshotKnownSelectionCount(elementIds);
             var selectionVersion = project.ChangeVersion;
+            var rawIds = knownCount.HasValue
+                ? new List<string?>(knownCount.Value)
+                : new List<string?>();
+            var observedCount = 0;
+            foreach (var raw in elementIds)
+            {
+                observedCount++;
+                if (observedCount > MaxSelectionElementIds)
+                    throw SelectionTooLarge();
+                rawIds.Add(raw);
+            }
+
+            if (knownCount.HasValue && observedCount != knownCount.Value)
+                throw SelectionCountMismatch(knownCount.Value, observedCount);
+
+            if (project.ChangeVersion != selectionVersion)
+                throw new InvalidOperationException("Project changed while quantity report element ids were being enumerated; recompute the selection against the current project state.");
+
             var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var selectedInstances = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
-            foreach (var raw in elementIds)
+            foreach (var raw in rawIds)
             {
                 var id = (raw ?? string.Empty).Trim();
                 if (id.Length == 0) throw new ArgumentException("Quantity report element ids must not be blank.", nameof(elementIds));
@@ -158,6 +181,43 @@ namespace QS3D.Core.Reporting
                     throw new InvalidOperationException("Quantity report selection became stale while element ids were being enumerated; recompute the selection against the current project state.");
             }
             return selected;
+        }
+
+        private static int? SnapshotKnownSelectionCount(IEnumerable<string> elementIds)
+        {
+            int? knownCount = null;
+            if (elementIds is ICollection<string> genericCollection)
+                ObserveKnownSelectionCount(genericCollection.Count, ref knownCount);
+            if (elementIds is IReadOnlyCollection<string> readOnlyCollection)
+                ObserveKnownSelectionCount(readOnlyCollection.Count, ref knownCount);
+            if (elementIds is ICollection nonGenericCollection)
+                ObserveKnownSelectionCount(nonGenericCollection.Count, ref knownCount);
+            return knownCount;
+        }
+
+        private static void ObserveKnownSelectionCount(int count, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Quantity report selection input reported a negative known count.");
+            if (count > MaxSelectionElementIds)
+                throw SelectionTooLarge();
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException(
+                    "Quantity report selection input exposes conflicting known counts: " + knownCount.Value + " and " + count + ".");
+            knownCount = count;
+        }
+
+        private static InvalidOperationException SelectionTooLarge()
+        {
+            return new InvalidOperationException(
+                "Quantity report selection input exceeds the supported bound of " + MaxSelectionElementIds + ".");
+        }
+
+        private static InvalidOperationException SelectionCountMismatch(int reportedCount, int observedCount)
+        {
+            return new InvalidOperationException(
+                "Quantity report selection input changed during enumeration; Count reported " + reportedCount +
+                " items but enumeration produced " + observedCount + ".");
         }
 
         private static void AddHandles(IList<string> destination, IEnumerable<string> source)
