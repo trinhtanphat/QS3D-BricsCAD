@@ -94,9 +94,9 @@ namespace QS3D.Core.Features
             Kind = kind;
             ContextKey = contextKey!.Trim();
             Title = title!.Trim();
-            SchemaKey = string.IsNullOrWhiteSpace(schemaKey) ? null : schemaKey.Trim();
+            SchemaKey = string.IsNullOrWhiteSpace(schemaKey) ? null : schemaKey!.Trim();
             IsDestructive = isDestructive;
-            DefaultFocusKey = string.IsNullOrWhiteSpace(defaultFocusKey) ? null : defaultFocusKey.Trim();
+            DefaultFocusKey = string.IsNullOrWhiteSpace(defaultFocusKey) ? null : defaultFocusKey!.Trim();
             _recipeIds = Snapshot(recipeIds, nameof(recipeIds));
             _wizardSteps = Snapshot(wizardSteps, nameof(wizardSteps));
 
