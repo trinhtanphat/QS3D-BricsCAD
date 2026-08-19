@@ -2,6 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
+using System.Text;
 using QS3D.Core.Export;
 using QS3D.Core.Reporting;
 
@@ -14,6 +16,47 @@ namespace QS3D.Core.SmokeTests
             VerifyRejectsBeforeInspection<MaterialUsageRow>(MaterialUsageXlsxExporter.Export, "Material XLSX");
             VerifyRejectsBeforeInspection<DoorOpeningScheduleRow>(DoorOpeningXlsxExporter.Export, "Door/opening XLSX");
             VerifyRejectsBeforeInspection<CurtainWallScheduleRow>(CurtainWallXlsxExporter.Export, "Curtain XLSX");
+            VerifyMaterialBoundaryWhitespacePreserved();
+        }
+
+        private static void VerifyMaterialBoundaryWhitespacePreserved()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-xlsx-space-" + Guid.NewGuid().ToString("N"));
+            var path = Path.Combine(directory, "out.xlsx");
+            try
+            {
+                MaterialUsageXlsxExporter.Export(
+                    path,
+                    new[]
+                    {
+                        new MaterialUsageRow
+                        {
+                            Floor = "  Level 1  ",
+                            MaterialName = "Concrete & Steel",
+                            UnitHint = string.Empty,
+                            Component = "Material",
+                            Category = "Wall",
+                            FamilyName = "Standard",
+                            ElementCount = 1
+                        }
+                    });
+
+                using (var archive = ZipFile.OpenRead(path))
+                {
+                    var entry = archive.GetEntry("xl/worksheets/sheet1.xml");
+                    if (entry == null) throw new Exception("Material XLSX is missing sheet1.xml.");
+                    string xml;
+                    using (var reader = new StreamReader(entry.Open(), Encoding.UTF8)) xml = reader.ReadToEnd();
+                    if (xml.IndexOf("<t xml:space=\"preserve\">  Level 1  </t>", StringComparison.Ordinal) < 0)
+                        throw new Exception("Material XLSX must preserve leading/trailing cell whitespace with xml:space=\"preserve\".");
+                    if (xml.IndexOf("<t>Concrete &amp; Steel</t>", StringComparison.Ordinal) < 0)
+                        throw new Exception("Material XLSX must retain ordinary inline-text escaping without adding xml:space unnecessarily.");
+                }
+            }
+            finally
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
         }
 
         private static void VerifyRejectsBeforeInspection<T>(Action<string, IReadOnlyList<T>> export, string label)
