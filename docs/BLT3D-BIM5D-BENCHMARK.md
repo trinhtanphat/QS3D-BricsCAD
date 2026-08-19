@@ -74,6 +74,8 @@ Authoritative references:
 - buildingSMART technical standards overview: <https://technical.buildingsmart.org/>
 - buildingSMART IFC 4.3 documentation: <https://standards.buildingsmart.org/IFC/RELEASE/IFC4_3/HTML/content/introduction.htm>
 
+Canonical QS3D terminology and data-flow refinement for this section is maintained by issue #3101 in `docs/BIM5D-QUANTITY-SCHEDULE-COST-MODEL.md`.
+
 A practical QS3D interpretation is:
 
 ```text
@@ -82,17 +84,17 @@ A practical QS3D interpretation is:
         v
 quantity facts + classifications
         |
-        +--------------------+
-        |                    |
-        v                    v
-4D activity / schedule       5D cost codes / rates / resources
-        |                    |
-        +----------+---------+
-                   v
-           progress + forecast
-                   |
-                   v
-        BOQ / claim / variance / report
+        v
+4D activity / schedule / sequence
+        |
+        v
+5D cost codes / rates / resources
+        |
+        v
+progress + forecast
+        |
+        v
+BOQ / claim / variance / report
 ```
 
 ### 3D
@@ -266,7 +268,7 @@ Per `docs/PRODUCT-BOUNDARY.md`:
 
 ## 9. Suggested implementation sequence after research closes
 
-This is sequencing guidance, not pre-authorized implementation scope.
+This is sequencing guidance, not pre-authorized implementation scope. For the canonical terminology/data-flow rationale, see `docs/BIM5D-QUANTITY-SCHEDULE-COST-MODEL.md` (issue #3101).
 
 ### P0 — quantity truth and provenance
 
@@ -276,33 +278,37 @@ This is sequencing guidance, not pre-authorized implementation scope.
 - calculation explanation/trace;
 - revision/delta model.
 
-### P1 — 5D cost foundation
+### P1 — 4D schedule foundation
+
+- activity/schedule links;
+- activity/WBS identity;
+- planned/actual time fields;
+- dependency/sequence representation;
+- quantity/model-to-activity allocations;
+- schedule revision provenance.
+
+### P2 — 5D cost foundation
 
 - WBS/cost codes;
 - rate/resource sets with versions;
-- quantity-to-cost mapping;
+- quantity/activity-to-cost mapping;
 - estimate/budget snapshots;
-- variance reporting.
+- time-phased cost and variance reporting.
 
-### P2 — 4D/progress/claims
+### P3 — progress/claims/forecasting
 
-- activity/schedule links;
 - project segmentation;
 - dated progress snapshots;
+- measured/installed/accepted/claimed/certified state separation;
 - progress valuation and claims;
-- time-phased cost/forecast reporting.
+- change impact and forecast reporting.
 
-### P3 — interoperability
+### P4 — interoperability and advanced automation
 
 - IFC/openBIM import contracts;
 - mapping diagnostics and provenance;
-- external exchange/API adapters where legally/licensably appropriate.
-
-### P4 — advanced automation
-
-- recognition assistance;
-- rule suggestions;
-- anomaly/difference detection;
+- external schedule/cost exchange/API adapters where legally/licensably appropriate;
+- recognition/rule suggestions/anomaly detection only after deterministic contracts exist;
 - never hide confidence, source, or deterministic fallback.
 
 ## 10. Multi-agent self-claim backlog
