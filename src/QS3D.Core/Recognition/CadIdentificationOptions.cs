@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
@@ -41,6 +42,7 @@ namespace QS3D.Core.Recognition
 
     public sealed class CadIdentificationOptions
     {
+        private const int MaximumColorRules = 256;
         private readonly IReadOnlyDictionary<int, string> _classificationByColor;
 
         public CadIdentificationOptions(
@@ -73,9 +75,22 @@ namespace QS3D.Core.Recognition
             var byColor = new Dictionary<int, string>();
             if (colorRules != null)
             {
+                var knownCount = TryGetKnownColorRuleCount(
+                    colorRules,
+                    out var conflictingKnownCounts,
+                    out var negativeKnownCount);
+                if (negativeKnownCount)
+                    throw new InvalidOperationException("Identification color-rule source exposes an invalid negative known Count value.");
+                if (conflictingKnownCounts)
+                    throw new InvalidOperationException("Identification color-rule source exposes conflicting known Count values.");
+                if (knownCount.HasValue && knownCount.Value > MaximumColorRules)
+                    throw new InvalidOperationException("Identification color rules support at most 256 entries.");
+
                 var index = 0;
                 foreach (var rule in colorRules)
                 {
+                    if (index == MaximumColorRules)
+                        throw new InvalidOperationException("Identification color rules support at most 256 entries.");
                     if (rule == null)
                         throw new ArgumentException("Identification color rules contain a null item at index " + index + ".", nameof(colorRules));
                     if (byColor.ContainsKey(rule.ColorIndex))
@@ -83,6 +98,10 @@ namespace QS3D.Core.Recognition
                     byColor.Add(rule.ColorIndex, rule.Classification);
                     index++;
                 }
+
+                if (knownCount.HasValue && index != knownCount.Value)
+                    throw new InvalidOperationException(
+                        "Identification color-rule source known Count does not match completed traversal cardinality.");
             }
             _classificationByColor = new ReadOnlyDictionary<int, string>(byColor);
         }
@@ -95,6 +114,38 @@ namespace QS3D.Core.Recognition
         public bool IdentifyPdfText { get; }
         public bool AllowCadEntityRestore { get; }
         public IReadOnlyDictionary<int, string> ClassificationByColor => _classificationByColor;
+
+        private static int? TryGetKnownColorRuleCount(
+            IEnumerable<IdentificationColorRule> colorRules,
+            out bool conflictingKnownCounts,
+            out bool negativeKnownCount)
+        {
+            conflictingKnownCounts = false;
+            negativeKnownCount = false;
+            int? knownCount = null;
+
+            if (colorRules is ICollection<IdentificationColorRule> genericCollection)
+                knownCount = ObserveKnownCount(knownCount, genericCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (colorRules is IReadOnlyCollection<IdentificationColorRule> readOnlyCollection)
+                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (colorRules is ICollection nonGenericCollection)
+                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+
+            return knownCount;
+        }
+
+        private static int ObserveKnownCount(
+            int? current,
+            int observed,
+            ref bool conflictingKnownCounts,
+            ref bool negativeKnownCount)
+        {
+            if (observed < 0)
+                negativeKnownCount = true;
+            if (current.HasValue && current.Value != observed)
+                conflictingKnownCounts = true;
+            return !current.HasValue || observed > current.Value ? observed : current.Value;
+        }
     }
 
     public sealed class BeamSize
