@@ -1,1 +1,1 @@
-# placeholder
+# BIM3D-QS customer-first MVP plan
