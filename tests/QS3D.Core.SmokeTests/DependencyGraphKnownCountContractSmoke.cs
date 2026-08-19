@@ -17,6 +17,8 @@ namespace QS3D.Core.SmokeTests
             NegativeKnownCountFailsBeforeEnumeration();
             NonGenericOversizedCountFailsBeforeEnumeration();
             ConsistentKnownCountsRemainAccepted();
+            KnownCountTraversalMismatchFailsClosedAndPreservesGraph();
+            KnownCountTraversalMismatchFailsDirtyOrdering();
             ExactBoundRemainsAccepted();
             DishonestKnownCountStillStopsAtStreamingBoundary();
         }
@@ -86,6 +88,42 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Consistent known-count input should be enumerated normally by both dependency operations.");
             if (ordered.Count > 1)
                 throw new Exception("Single-element dependency ordering produced an impossible result count.");
+        }
+
+        private static void KnownCountTraversalMismatchFailsClosedAndPreservesGraph()
+        {
+            var graph = new DependencyGraph();
+            var keep = Element("KEEP-TRAVERSAL");
+            graph.Rebuild(new[] { keep });
+
+            var under = new MultiCountCollection(new[] { Element("UNDER") }, 2, 2, 2, throwOnEnumeration: false);
+            ExpectInvalidOperation(() => graph.Rebuild(under), "count changed during enumeration", "Rebuild must reject known Count under-enumeration.");
+            if (under.EnumerationRequestCount != 1)
+                throw new Exception("Known Count under-enumeration must inspect the rebuild source exactly once.");
+            if (!graph.TryGetElement("KEEP-TRAVERSAL", out var retainedAfterUnder) || !ReferenceEquals(keep, retainedAfterUnder) || graph.TryGetElement("UNDER", out _))
+                throw new Exception("Known Count under-enumeration must preserve the previously committed graph atomically.");
+
+            var over = new MultiCountCollection(new[] { Element("OVER-1"), Element("OVER-2") }, 1, 1, 1, throwOnEnumeration: false);
+            ExpectInvalidOperation(() => graph.Rebuild(over), "count changed during enumeration", "Rebuild must reject known Count over-enumeration.");
+            if (over.EnumerationRequestCount != 1)
+                throw new Exception("Known Count over-enumeration must inspect the rebuild source exactly once.");
+            if (!graph.TryGetElement("KEEP-TRAVERSAL", out var retainedAfterOver) || !ReferenceEquals(keep, retainedAfterOver) || graph.TryGetElement("OVER-1", out _) || graph.TryGetElement("OVER-2", out _))
+                throw new Exception("Known Count over-enumeration must preserve the previously committed graph atomically.");
+        }
+
+        private static void KnownCountTraversalMismatchFailsDirtyOrdering()
+        {
+            var graph = new DependencyGraph();
+
+            var under = new MultiCountCollection(new[] { Element("ORDER-UNDER") }, 2, 2, 2, throwOnEnumeration: false);
+            ExpectInvalidOperation(() => graph.TopologicalDirtyOrder(under), "count changed during enumeration", "Topological ordering must reject known Count under-enumeration.");
+            if (under.EnumerationRequestCount != 1)
+                throw new Exception("Known Count under-enumeration must inspect the ordering source exactly once.");
+
+            var over = new MultiCountCollection(new[] { Element("ORDER-OVER-1"), Element("ORDER-OVER-2") }, 1, 1, 1, throwOnEnumeration: false);
+            ExpectInvalidOperation(() => graph.TopologicalDirtyOrder(over), "count changed during enumeration", "Topological ordering must reject known Count over-enumeration.");
+            if (over.EnumerationRequestCount != 1)
+                throw new Exception("Known Count over-enumeration must inspect the ordering source exactly once.");
         }
 
         private static void ExactBoundRemainsAccepted()
