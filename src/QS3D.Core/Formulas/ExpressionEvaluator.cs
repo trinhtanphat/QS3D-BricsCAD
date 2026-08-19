@@ -180,9 +180,14 @@ namespace QS3D.Core.Formulas
                 var correction = Math.Abs(sum) >= Math.Abs(contribution)
                     ? (sum - next) + contribution
                     : (contribution - next) + sum;
-                compensation = EnsureFinite(
+                var combinedCompensation = EnsureFinite(
                     compensation + correction,
                     operation + " compensation produced a non-finite result.");
+                if (correction != 0d && combinedCompensation == compensation)
+                    throw Error(operation + " compensation lost the correction contribution at double precision.");
+                if (compensation != 0d && combinedCompensation == correction)
+                    throw Error(operation + " compensation lost the accumulated contribution at double precision.");
+                compensation = combinedCompensation;
                 sum = next;
             }
 
