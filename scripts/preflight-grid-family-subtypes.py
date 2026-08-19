@@ -15,7 +15,7 @@ def require(text, needle, label, failures):
 
 
 def main():
-    subtype = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.FamilySubtype.cs")
+    subtype = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.GridFamilySubtype.cs")
     sync = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.FamilySubtypeSelectionSync.cs")
     quick = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.QuickDraw.cs")
     grid = read("src/QS3D.BricsCAD.V25/GridCommands.cs")
@@ -23,10 +23,11 @@ def main():
     failures = []
     require(subtype, 'private static readonly string[] GridFamilySubtypes', "grid subtype catalog", failures)
     require(subtype, '"Lưới Thẳng", "Lưới Cong"', "straight/curved grid leaves", failures)
-    require(subtype, 'if (subtypeCategory.HasValue) category = subtypeCategory.Value;', "subtype category routing", failures)
-    require(subtype, 'return ElementCategory.Grid;', "grid category resolution", failures)
-    require(subtype, 'family.Properties["GridRadiusM"] = "0.5";', "curved grid radius default", failures)
-    require(sync, 'var inferred = InferWorkspaceSubtype(family);', "programmatic subtype sync", failures)
+    require(subtype, 'ElementCategory.Grid', "grid category routing", failures)
+    require(subtype, 'SeedGridDefault(family, "GridRadiusM", "0.5");', "curved grid 500 mm radius default", failures)
+    require(subtype, 'ApplyGridFamilySubtypeFilter();', "grid family subtype filtering", failures)
+    require(sync, 'family.Category == ElementCategory.Grid', "programmatic grid subtype sync", failures)
+    require(sync, 'InferFoundationSubtype(family.Name)', "legacy foundation subtype sync", failures)
     require(quick, 'Send("QS3DGRID");', "workspace grid quick route", failures)
     require(quick, 'var command = advanced ? "QS3DDRAWACTIVEADV" : "QS3DDRAWACTIVE";', "existing active-family draw route", failures)
     require(grid, 'Cad.CadSelectionGuard.AcquireCurrentSelection(document)', "interactive grid selection", failures)
