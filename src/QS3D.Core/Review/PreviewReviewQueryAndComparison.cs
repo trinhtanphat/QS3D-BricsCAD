@@ -206,11 +206,15 @@ namespace QS3D.Core.Review
 
     public sealed class PreviewReviewSnapshotComparisonService
     {
+        internal const int MaximumComparisonEntriesPerSnapshot = PreviewReviewQueryService.MaximumMaterializedQueryEntries;
+
         public PreviewReviewSnapshotComparison Compare(PreviewReviewSnapshot baseline, PreviewReviewSnapshot candidate)
         {
             PreviewReviewQueryService.RequireVerified(baseline);
             PreviewReviewQueryService.RequireVerified(candidate);
             RequireCompatibleScope(baseline, candidate);
+            RequireComparisonBound(baseline, "baseline");
+            RequireComparisonBound(candidate, "candidate");
 
             var left = Index(baseline.Entries);
             var right = Index(candidate.Entries);
@@ -241,6 +245,14 @@ namespace QS3D.Core.Review
                 .ToList();
 
             return new PreviewReviewSnapshotComparison(rows, SummaryDiff(baseline, candidate));
+        }
+
+        private static void RequireComparisonBound(PreviewReviewSnapshot snapshot, string label)
+        {
+            if (snapshot.Entries.Count <= MaximumComparisonEntriesPerSnapshot) return;
+            throw new InvalidOperationException(
+                "Preview review " + label + " snapshot exceeds the supported comparison bound of " +
+                MaximumComparisonEntriesPerSnapshot + " entries.");
         }
 
         private static Dictionary<string, PreviewReviewEntry> Index(IEnumerable<PreviewReviewEntry> entries)
