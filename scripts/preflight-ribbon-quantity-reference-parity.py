@@ -8,6 +8,7 @@ ICON_FACTORY = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonIconFactory.cs"
 COORDINATOR = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs"
 PLUGIN = ROOT / "src/QS3D.BricsCAD.V25/PluginEntry.cs"
 SETTINGS_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/QuantitySettingsCommands.cs"
+ENGINE2_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/QuantityEngine2Commands.cs"
 CORE_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/Commands.cs"
 INSIGHT_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/QuantityInsightCommands.cs"
 REVIEW_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
@@ -19,6 +20,7 @@ for path in (
     COORDINATOR,
     PLUGIN,
     SETTINGS_COMMANDS,
+    ENGINE2_COMMANDS,
     CORE_COMMANDS,
     INSIGHT_COMMANDS,
     REVIEW_COMMANDS,
@@ -28,7 +30,7 @@ for path in (
 
 button_specs = (
     ("QS3D_QTY_BLT_SETTINGS", "Cài đặt\\ntính toán", "QS3DQUANTITYSETTINGS", "QuantitySettings"),
-    ("QS3D_QTY_BLT_CALCULATE", "Tính khối lượng\\n(Engine2)", "QS3DREGEN", "QuantityCalculate"),
+    ("QS3D_QTY_BLT_CALCULATE", "Tính khối lượng\\n(Engine2)", "QS3DQUANTITYENGINE2", "QuantityCalculate"),
     ("QS3D_QTY_BLT_EXPORT", "Xuất\\n.blte2", "QS3DED2", "QuantityExport"),
     ("QS3D_QTY_BLT_VIEW", "Xem khối\\nlượng", "QS3DBQ", "QuantityView"),
     ("QS3D_QTY_BLT_EXPLAIN", "Diễn\\ngiải", "QS3DQUANTITYINSIGHT", "QuantityExplain"),
@@ -85,7 +87,8 @@ if AUGMENTER.is_file():
 
     expected_command_counts = {
         "QS3DQUANTITYSETTINGS": 1,
-        "QS3DREGEN": 1,
+        "QS3DQUANTITYENGINE2": 1,
+        "QS3DREGEN": 0,
         "QS3DED2": 1,
         "QS3DBQ": 1,
         "QS3DQUANTITYINSIGHT": 1,
@@ -147,7 +150,7 @@ if PLUGIN.is_file():
 
 # Pin the real behavior behind every visible BLT3D-style quantity action. A registered
 # command name alone is not enough: this catches accidental visual aliases such as the
-# old Diễn giải -> QS3DBQ routing bug.
+# old calculate -> QS3DREGEN and Diễn giải -> QS3DBQ routing bugs.
 behavior_contracts = (
     (
         SETTINGS_COMMANDS,
@@ -159,11 +162,15 @@ behavior_contracts = (
         ),
     ),
     (
-        CORE_COMMANDS,
+        ENGINE2_COMMANDS,
         "Tính khối lượng (Engine2)",
         (
-            '[CommandMethod("QS3DREGEN", CommandFlags.Modal)]',
-            "var count = RegenerateProject(project);",
+            '[CommandMethod("QS3DQUANTITYENGINE2", CommandFlags.Modal)]',
+            'ExistingProjectMutationContext.Require(document, "Tính khối lượng (Engine2)")',
+            ".RegenerateDirty(project);",
+            "ProjectQuantityReportBuilder.Group(project);",
+            "QuantityEngine2Summary.Build(rows, regenerated);",
+            "QuantityCalculationResultWindow.ShowSuccess(summary);",
         ),
     ),
     (

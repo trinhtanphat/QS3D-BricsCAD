@@ -273,7 +273,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _categoryFilter = family.Category;
                 ApplyFamilyFilter();
                 FamilyList.SelectedItem = family;
-                FamilyList.ScrollIntoView(family);
+                RefreshSelectedFamilyHighlight();
                 _viewModel.SetSelectedElement(element);
             }
             finally { _loadingContext = false; }
