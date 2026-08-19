@@ -42,7 +42,7 @@ namespace QS3D.Core.Export
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
             var sb = new StringBuilder();
-            sb.AppendLine("AlgorithmId,GroupId,Grade,DiameterMm,StockLengthM,RequiredCutCount,RequiredLengthM,AllowanceLengthM,DemandBeforeKerfM,StockBarCount,KerfLengthM,OffCutLengthM,WasteLengthM,ProcurementLengthM,UnitWeightKgM,DemandWeightKg,ProcurementWeightKg,WasteWeightKg,WastePercent");
+            sb.Append("AlgorithmId,GroupId,Grade,DiameterMm,StockLengthM,RequiredCutCount,RequiredLengthM,AllowanceLengthM,DemandBeforeKerfM,StockBarCount,KerfLengthM,OffCutLengthM,WasteLengthM,ProcurementLengthM,UnitWeightKgM,DemandWeightKg,ProcurementWeightKg,WasteWeightKg,WastePercent").Append("\r\n");
             var rowCount = 0;
             foreach (var row in rows)
             {
@@ -68,7 +68,7 @@ namespace QS3D.Core.Export
                     .Append(F(row.DemandWeightKg)).Append(',')
                     .Append(F(row.ProcurementWeightKg)).Append(',')
                     .Append(F(row.WasteWeightKg)).Append(',')
-                    .Append(F(row.WastePercent)).AppendLine();
+                    .Append(F(row.WastePercent)).Append("\r\n");
             }
             var content = sb.ToString();
             StrictUtf8WithBom.GetByteCount(content);
