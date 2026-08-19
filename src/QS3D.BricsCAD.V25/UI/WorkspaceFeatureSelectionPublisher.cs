@@ -20,7 +20,7 @@ namespace QS3D.BricsCAD.V25.UI
         private static readonly object RegistrationGate = new object();
         private static bool _registered;
 
-        public static event EventHandler<SelectedFeatureContext>? SelectedFeatureChanged;
+        public static event Action<SelectedFeatureContext>? SelectedFeatureChanged;
 
         public static SelectedFeatureContext? Current { get; private set; }
 
@@ -55,7 +55,7 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
 
             Current = context;
-            SelectedFeatureChanged?.Invoke(item, context);
+            SelectedFeatureChanged?.Invoke(context);
         }
     }
 }
