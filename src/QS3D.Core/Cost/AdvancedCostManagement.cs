@@ -23,6 +23,19 @@ namespace QS3D.Core.Cost
             return result;
         }
 
+        public static decimal ApplyPercentagePreservingPrecision(decimal amount, decimal percentage, string label)
+        {
+            if (amount == 0m || percentage == 0m)
+                return 0m;
+
+            var rate = DividePreservingNonZero(percentage, 100m, label + " rate");
+            if (checked(rate * 100m) == percentage)
+                return MultiplyPreservingNonZero(amount, rate, label);
+
+            var scaled = MultiplyPreservingNonZero(amount, percentage, label + " numerator");
+            return DividePreservingNonZero(scaled, 100m, label);
+        }
+
         public static decimal AddPreservingNonZeroContribution(decimal left, decimal right, string label)
         {
             var result = checked(left + right);
@@ -196,12 +209,12 @@ namespace QS3D.Core.Cost
                         "rate build-up direct unit cost");
                 }
                 DirectUnitCost = direct;
-                OverheadUnitCost = CostDecimalMath.MultiplyPreservingNonZero(direct, OverheadPercent / 100m, "overhead unit cost");
+                OverheadUnitCost = CostDecimalMath.ApplyPercentagePreservingPrecision(direct, OverheadPercent, "overhead unit cost");
                 var subtotal = CostDecimalMath.AddPreservingNonZeroContribution(
                     direct,
                     OverheadUnitCost,
                     "rate build-up subtotal");
-                ProfitUnitCost = CostDecimalMath.MultiplyPreservingNonZero(subtotal, ProfitPercent / 100m, "profit unit cost");
+                ProfitUnitCost = CostDecimalMath.ApplyPercentagePreservingPrecision(subtotal, ProfitPercent, "profit unit cost");
                 UnitRate = CostDecimalMath.AddPreservingNonZeroContribution(
                     subtotal,
                     ProfitUnitCost,
@@ -874,7 +887,7 @@ namespace QS3D.Core.Cost
                         remaining,
                         value));
                 }
-                var retention = CostDecimalMath.MultiplyPreservingNonZero(gross, retentionPercent / 100m, "progress retention value");
+                var retention = CostDecimalMath.ApplyPercentagePreservingPrecision(gross, retentionPercent, "progress retention value");
                 var net = gross - retention;
                 return new ProgressClaimResult(
                     new ReadOnlyCollection<ProgressClaimLineResult>(results.ToArray()),
