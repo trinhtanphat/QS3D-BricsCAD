@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         {
             CanonicalIdentityIsPreserved();
             PaddedIdentityFailsClosed();
+            ControlCharacterIdentityFailsClosed();
             ClassificationTextStillNormalizes();
             DuplicateIdentityRemainsCaseInsensitive();
         }
@@ -29,6 +30,14 @@ namespace QS3D.Core.SmokeTests
             ExpectArgument(() => Create(" E-01 ", "Structure"));
             ExpectArgument(() => Create("\tE-01", "Structure"));
             ExpectArgument(() => Create("E-01\n", "Structure"));
+        }
+
+        private static void ControlCharacterIdentityFailsClosed()
+        {
+            ExpectArgument(() => Create("E-\t01", "Structure"));
+            ExpectArgument(() => Create("E-\n01", "Structure"));
+            ExpectArgument(() => Create("E-\r01", "Structure"));
+            ExpectArgument(() => Create("E-\0-01", "Structure"));
         }
 
         private static void ClassificationTextStillNormalizes()
