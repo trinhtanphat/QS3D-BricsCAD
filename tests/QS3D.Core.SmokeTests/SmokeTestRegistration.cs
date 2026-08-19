@@ -30,11 +30,13 @@ namespace QS3D.Core.SmokeTests
             XlsxQuantityNullRowSmoke.Run();
             XlsxHandleReaderCoordinateSmoke.Run();
             XlsxExporterRowBoundSmoke.Run();
+            QuantityExportEvidenceSmoke.Run();
             QuantityReportRevisionReviewSmoke.Run();
             QuantityRevisionProjectIdentitySmoke.Run();
             PersistenceHardeningSmoke.Run();
             LicenseVerifierSmoke.Run();
             AdvancedDomainSmoke.Run();
+            EstimatingPortfolioCountIntegritySmoke.Run();
             ProgressClaimSnapshotSmoke.Run();
             CostBenchmarkMedianPrecisionSmoke.Run();
             HardeningRegressionSmoke.Run();
@@ -189,6 +191,8 @@ namespace QS3D.Core.SmokeTests
             ClashDetectionKnownCountContractSmoke.Run();
             ClashDetectionResultBoundSmoke.Run();
             FeatureInteractionContractsSmoke.Run();
+            WorkspaceFeatureSessionSmoke.Run();
+            WorkspaceSchemaFormsSmoke.Run();
             CubicostParitySmoke.Run();
         }
     }

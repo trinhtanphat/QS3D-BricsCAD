@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
@@ -47,6 +49,7 @@ namespace QS3D.BricsCAD.V25.UI
             _locate = locate;
             _recalculate = recalculate;
             InitializeComponent();
+            ConfigureEvidenceAwareMetricColumns();
             DocumentBoundWindowLifetime.Attach(this, _document);
             ReloadFloors();
             ReloadCategories();
@@ -54,6 +57,49 @@ namespace QS3D.BricsCAD.V25.UI
             ApplyFilter();
             UpdateModePresentation();
             _initialized = true;
+        }
+
+        private void ConfigureEvidenceAwareMetricColumns()
+        {
+            ConfigureEvidenceMetricColumn(nameof(QuantityReportRow.GrossConcreteM3), nameof(QuantityReportRow.HasGrossConcreteM3Evidence));
+            ConfigureEvidenceMetricColumn(nameof(QuantityReportRow.DeductionM3), nameof(QuantityReportRow.HasDeductionM3Evidence));
+            ConfigureEvidenceMetricColumn(nameof(QuantityReportRow.NetConcreteM3), nameof(QuantityReportRow.HasNetConcreteM3Evidence));
+            ConfigureEvidenceMetricColumn(nameof(QuantityReportRow.FormworkM2), nameof(QuantityReportRow.HasFormworkM2Evidence));
+            ConfigureEvidenceMetricColumn(nameof(QuantityReportRow.LengthM), nameof(QuantityReportRow.HasLengthMEvidence));
+            ConfigureEvidenceMetricColumn(nameof(QuantityReportRow.OuterPerimeterM), nameof(QuantityReportRow.HasOuterPerimeterMEvidence));
+            ConfigureEvidenceMetricColumn(nameof(QuantityReportRow.InnerPerimeterM), nameof(QuantityReportRow.HasInnerPerimeterMEvidence));
+            ConfigureEvidenceMetricColumn(nameof(QuantityReportRow.DoorAreaM2), nameof(QuantityReportRow.HasDoorAreaM2Evidence));
+            ConfigureEvidenceMetricColumn(nameof(QuantityReportRow.SideAreaM2), nameof(QuantityReportRow.HasSideAreaM2Evidence));
+            ConfigureEvidenceMetricColumn(nameof(QuantityReportRow.BottomAreaM2), nameof(QuantityReportRow.HasBottomAreaM2Evidence));
+            ConfigureEvidenceMetricColumn(nameof(QuantityReportRow.TopAreaM2), nameof(QuantityReportRow.HasTopAreaM2Evidence));
+            ConfigureEvidenceMetricColumn(nameof(QuantityReportRow.OtherAreaM2), nameof(QuantityReportRow.HasOtherAreaM2Evidence));
+        }
+
+        private void ConfigureEvidenceMetricColumn(string valuePath, string evidencePath)
+        {
+            var columnIndex = Array.IndexOf(ColumnKeys, valuePath);
+            if (columnIndex < 0 || columnIndex >= QuantityGrid.Columns.Count || !(QuantityGrid.Columns[columnIndex] is DataGridTextColumn column))
+                throw new InvalidOperationException("BQ evidence column contract is out of sync for " + valuePath + ".");
+
+            var binding = new MultiBinding { Mode = BindingMode.OneWay, Converter = EvidenceMetricConverter.Instance };
+            binding.Bindings.Add(new Binding(valuePath) { Mode = BindingMode.OneWay });
+            binding.Bindings.Add(new Binding(evidencePath) { Mode = BindingMode.OneWay });
+            column.Binding = binding;
+        }
+
+        private sealed class EvidenceMetricConverter : IMultiValueConverter
+        {
+            internal static readonly EvidenceMetricConverter Instance = new EvidenceMetricConverter();
+
+            public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+            {
+                if (values == null || values.Length < 2 || !(values[1] is bool hasEvidence) || !hasEvidence)
+                    return "N/A";
+                return values[0] is double value ? value.ToString("0.###", culture) : "N/A";
+            }
+
+            public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
+                throw new NotSupportedException("BQ evidence display is read-only.");
         }
 
         private void ReloadFloors(string? preferred = null) { var floors = new List<string> { "Tất cả" }; floors.AddRange(_rows.Select(x => x.Floor).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x)); FloorCombo.ItemsSource = floors; FloorCombo.SelectedItem = preferred != null && floors.Any(x => string.Equals(x, preferred, StringComparison.OrdinalIgnoreCase)) ? floors.First(x => string.Equals(x, preferred, StringComparison.OrdinalIgnoreCase)) : "Tất cả"; }
@@ -72,7 +118,8 @@ namespace QS3D.BricsCAD.V25.UI
             try { QuantityGrid.ItemsSource = filtered; }
             finally { _applyingFilter = false; }
             var totals = QuantityReportTotals.FromRows(filtered);
-            TotalsText.Text = $"TỔNG: {totals.Count:N0} cấu kiện  •  Bê tông {totals.NetConcreteM3:N3} m³  •  Cốp pha {totals.FormworkM2:N3} m²  •  Dài {totals.LengthM:N3} m  •  DT cửa {totals.DoorAreaM2:N3} m²";
+            var hasRows = filtered.Count > 0;
+            TotalsText.Text = $"TỔNG: {totals.Count:N0} cấu kiện  •  Bê tông {MetricText(totals.NetConcreteM3, hasRows && filtered.All(x => x.HasNetConcreteM3Evidence), "N3")} m³  •  Cốp pha {MetricText(totals.FormworkM2, hasRows && filtered.All(x => x.HasFormworkM2Evidence), "N3")} m²  •  Dài {MetricText(totals.LengthM, hasRows && filtered.All(x => x.HasLengthMEvidence), "N3")} m  •  DT cửa {MetricText(totals.DoorAreaM2, hasRows && filtered.All(x => x.HasDoorAreaM2Evidence), "N3")} m²";
             UpdateExplanation(QuantityGrid.SelectedItem as QuantityReportRow);
         }
 
@@ -258,6 +305,9 @@ namespace QS3D.BricsCAD.V25.UI
             LocateCurrent();
         }
 
+        private static string MetricText(double value, bool hasEvidence, string format) =>
+            hasEvidence ? value.ToString(format, CultureInfo.CurrentCulture) : "N/A";
+
         private void UpdateExplanation(QuantityReportRow? row)
         {
             if (ExplanationTitleText == null || ExplanationConcreteText == null || ExplanationFormworkText == null || ExplanationGeometryText == null || ExplanationProvenanceText == null) return;
@@ -273,9 +323,9 @@ namespace QS3D.BricsCAD.V25.UI
 
             var name = string.IsNullOrWhiteSpace(row.ElementName) ? row.FamilyName : row.ElementName;
             ExplanationTitleText.Text = name + " — " + row.Category + " • " + row.FloorZoneText;
-            ExplanationConcreteText.Text = $"Bê tông: gộp {row.GrossConcreteM3:0.###} m³ • trừ giao {row.DeductionM3:0.###} m³ • còn {row.NetConcreteM3:0.###} m³";
-            ExplanationFormworkText.Text = $"Cốp pha: {row.FormworkM2:0.###} m² • mặt tham chiếu thành {row.SideAreaM2:0.###} • đáy {row.BottomAreaM2:0.###} • đỉnh {row.TopAreaM2:0.###} • khác {row.OtherAreaM2:0.###} m²";
-            ExplanationGeometryText.Text = $"Hình học: dài {row.LengthM:0.###} m • chu vi ngoài {row.OuterPerimeterM:0.###} m • chu vi trong {row.InnerPerimeterM:0.###} m • DT cửa {row.DoorAreaM2:0.###} m²";
+            ExplanationConcreteText.Text = "Bê tông: gộp " + MetricText(row.GrossConcreteM3, row.HasGrossConcreteM3Evidence, "0.###") + " m³ • trừ giao " + MetricText(row.DeductionM3, row.HasDeductionM3Evidence, "0.###") + " m³ • còn " + MetricText(row.NetConcreteM3, row.HasNetConcreteM3Evidence, "0.###") + " m³";
+            ExplanationFormworkText.Text = "Cốp pha: " + MetricText(row.FormworkM2, row.HasFormworkM2Evidence, "0.###") + " m² • mặt tham chiếu thành " + MetricText(row.SideAreaM2, row.HasSideAreaM2Evidence, "0.###") + " • đáy " + MetricText(row.BottomAreaM2, row.HasBottomAreaM2Evidence, "0.###") + " • đỉnh " + MetricText(row.TopAreaM2, row.HasTopAreaM2Evidence, "0.###") + " • khác " + MetricText(row.OtherAreaM2, row.HasOtherAreaM2Evidence, "0.###") + " m²";
+            ExplanationGeometryText.Text = "Hình học: dài " + MetricText(row.LengthM, row.HasLengthMEvidence, "0.###") + " m • chu vi ngoài " + MetricText(row.OuterPerimeterM, row.HasOuterPerimeterMEvidence, "0.###") + " m • chu vi trong " + MetricText(row.InnerPerimeterM, row.HasInnerPerimeterMEvidence, "0.###") + " m • DT cửa " + MetricText(row.DoorAreaM2, row.HasDoorAreaM2Evidence, "0.###") + " m²";
             var semantic = row.ElementIds.Count == 0 ? "—" : string.Join("; ", row.ElementIds);
             var handles = row.SourceHandles.Count == 0 ? "—" : string.Join("; ", row.SourceHandles);
             var revealHint = _detailMode
@@ -438,17 +488,29 @@ namespace QS3D.BricsCAD.V25.UI
                    string.Equals(left.DrawingFingerprint, right.DrawingFingerprint, StringComparison.Ordinal) &&
                    left.Count == right.Count &&
                    left.GrossConcreteM3.Equals(right.GrossConcreteM3) &&
+                   left.HasGrossConcreteM3Evidence == right.HasGrossConcreteM3Evidence &&
                    left.DeductionM3.Equals(right.DeductionM3) &&
+                   left.HasDeductionM3Evidence == right.HasDeductionM3Evidence &&
                    left.NetConcreteM3.Equals(right.NetConcreteM3) &&
+                   left.HasNetConcreteM3Evidence == right.HasNetConcreteM3Evidence &&
                    left.FormworkM2.Equals(right.FormworkM2) &&
+                   left.HasFormworkM2Evidence == right.HasFormworkM2Evidence &&
                    left.LengthM.Equals(right.LengthM) &&
+                   left.HasLengthMEvidence == right.HasLengthMEvidence &&
                    left.OuterPerimeterM.Equals(right.OuterPerimeterM) &&
+                   left.HasOuterPerimeterMEvidence == right.HasOuterPerimeterMEvidence &&
                    left.InnerPerimeterM.Equals(right.InnerPerimeterM) &&
+                   left.HasInnerPerimeterMEvidence == right.HasInnerPerimeterMEvidence &&
                    left.DoorAreaM2.Equals(right.DoorAreaM2) &&
+                   left.HasDoorAreaM2Evidence == right.HasDoorAreaM2Evidence &&
                    left.SideAreaM2.Equals(right.SideAreaM2) &&
+                   left.HasSideAreaM2Evidence == right.HasSideAreaM2Evidence &&
                    left.BottomAreaM2.Equals(right.BottomAreaM2) &&
+                   left.HasBottomAreaM2Evidence == right.HasBottomAreaM2Evidence &&
                    left.TopAreaM2.Equals(right.TopAreaM2) &&
+                   left.HasTopAreaM2Evidence == right.HasTopAreaM2Evidence &&
                    left.OtherAreaM2.Equals(right.OtherAreaM2) &&
+                   left.HasOtherAreaM2Evidence == right.HasOtherAreaM2Evidence &&
                    Nullable.Equals(left.DensityKgM3, right.DensityKgM3) &&
                    Nullable.Equals(left.MassKg, right.MassKg) &&
                    CanonicalIds(left.ElementIds).SequenceEqual(CanonicalIds(right.ElementIds), StringComparer.OrdinalIgnoreCase) &&

@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
                 Bim4dScheduleFoundationSmoke.Run();
                 AddCreateStateMachineSmoke.Run();
                 FeatureNavigationRegistrySmoke.Run();
+                WorkspaceModalPrimitivesSmoke.Run();
 
                 var legacyMain = typeof(Program).GetMethod(
                     "Main",
