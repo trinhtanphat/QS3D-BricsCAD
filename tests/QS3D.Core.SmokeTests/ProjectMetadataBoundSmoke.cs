@@ -18,8 +18,13 @@ namespace QS3D.Core.SmokeTests
             PublicMutationStopsAtBoundAndPreservesUpdates();
             PersistenceReplacementRejectsKnownOversizedInputBeforeEnumeration();
             PersistenceReplacementRejectsKnownOversizedReadOnlyInputBeforeEnumeration();
+            PersistenceReplacementRejectsNegativeGenericCountBeforeEnumeration();
+            PersistenceReplacementRejectsNegativeNonGenericCountBeforeEnumeration();
+            PersistenceReplacementRejectsConflictingKnownCountsBeforeEnumeration();
+            PersistenceReplacementRejectsKnownCountTraversalMismatch();
             PersistenceReplacementStopsAtBoundAndIsAtomic();
             PersistenceReplacementAcceptsExactKnownBoundary();
+            PersistenceReplacementAcceptsPureStreamingInput();
             OwnedMappingCapacityFailureDoesNotTouchProject();
             OwnedTbqCapacityFailureDoesNotTouchProject();
             SnapshotSupportsExactBoundary();
@@ -53,19 +58,10 @@ namespace QS3D.Core.SmokeTests
             project.Metadata.Add("seed", "original");
             var input = new KnownCountMetadataCollection(MaximumEntries + 1);
 
-            try
-            {
-                InvokePersistenceReplacement(project, input);
-                throw new InvalidOperationException("Expected known oversized project metadata input to be rejected.");
-            }
-            catch (TargetInvocationException ex) when (ex.InnerException is InvalidOperationException)
-            {
-                // Expected: reflection wraps the bounded replacement failure.
-            }
+            ExpectPersistenceReplacementInvalidOperation(project, input, "known oversized project metadata input");
 
             Equal(false, input.WasEnumerated, "known oversized metadata enumerated");
-            Equal(1, project.Metadata.Count, "known oversized atomic metadata replacement count");
-            Equal("original", project.Metadata["seed"], "known oversized atomic metadata replacement value");
+            AssertSeedUnchanged(project, "known oversized");
         }
 
         private static void PersistenceReplacementRejectsKnownOversizedReadOnlyInputBeforeEnumeration()
@@ -74,19 +70,65 @@ namespace QS3D.Core.SmokeTests
             project.Metadata.Add("seed", "original");
             var input = new KnownReadOnlyCountMetadataCollection(MaximumEntries + 1);
 
-            try
-            {
-                InvokePersistenceReplacement(project, input);
-                throw new InvalidOperationException("Expected known oversized read-only project metadata input to be rejected.");
-            }
-            catch (TargetInvocationException ex) when (ex.InnerException is InvalidOperationException)
-            {
-                // Expected: reflection wraps the bounded replacement failure.
-            }
+            ExpectPersistenceReplacementInvalidOperation(project, input, "known oversized read-only project metadata input");
 
             Equal(false, input.WasEnumerated, "known oversized read-only metadata enumerated");
-            Equal(1, project.Metadata.Count, "known oversized read-only atomic metadata replacement count");
-            Equal("original", project.Metadata["seed"], "known oversized read-only atomic metadata replacement value");
+            AssertSeedUnchanged(project, "known oversized read-only");
+        }
+
+        private static void PersistenceReplacementRejectsNegativeGenericCountBeforeEnumeration()
+        {
+            var project = NewProject("negative-generic-count");
+            project.Metadata.Add("seed", "original");
+            var input = new KnownCountMetadataCollection(-1);
+
+            ExpectPersistenceReplacementInvalidOperation(project, input, "negative generic project metadata Count");
+
+            Equal(false, input.WasEnumerated, "negative generic metadata enumerated");
+            AssertSeedUnchanged(project, "negative generic");
+        }
+
+        private static void PersistenceReplacementRejectsNegativeNonGenericCountBeforeEnumeration()
+        {
+            var project = NewProject("negative-non-generic-count");
+            project.Metadata.Add("seed", "original");
+            var input = new NonGenericKnownCountMetadataCollection(-1);
+
+            ExpectPersistenceReplacementInvalidOperation(project, input, "negative non-generic project metadata Count");
+
+            Equal(false, input.WasEnumerated, "negative non-generic metadata enumerated");
+            AssertSeedUnchanged(project, "negative non-generic");
+        }
+
+        private static void PersistenceReplacementRejectsConflictingKnownCountsBeforeEnumeration()
+        {
+            var project = NewProject("conflicting-counts");
+            project.Metadata.Add("seed", "original");
+            var input = new ConflictingKnownCountMetadataCollection(1, 2);
+
+            ExpectPersistenceReplacementInvalidOperation(project, input, "conflicting project metadata Count contracts");
+
+            Equal(false, input.WasEnumerated, "conflicting-count metadata enumerated");
+            AssertSeedUnchanged(project, "conflicting known counts");
+        }
+
+        private static void PersistenceReplacementRejectsKnownCountTraversalMismatch()
+        {
+            AssertKnownCountTraversalMismatch(2, 1, "under-enumeration");
+            AssertKnownCountTraversalMismatch(1, 2, "over-enumeration");
+        }
+
+        private static void AssertKnownCountTraversalMismatch(int advertisedCount, int yieldedCount, string label)
+        {
+            var project = NewProject("traversal-" + label);
+            project.Metadata.Add("seed", "original");
+            var input = new TraversalMismatchMetadataCollection(advertisedCount, yieldedCount);
+
+            ExpectPersistenceReplacementInvalidOperation(project, input, "project metadata " + label);
+
+            Equal(true, input.WasEnumerated, label + " metadata enumerated");
+            Equal(yieldedCount, input.YieldedCount, label + " metadata yielded count");
+            AssertSeedUnchanged(project, label);
         }
 
         private static void PersistenceReplacementStopsAtBoundAndIsAtomic()
@@ -106,8 +148,7 @@ namespace QS3D.Core.SmokeTests
             }
 
             Equal(MaximumEntries + 1, yielded, "lazy metadata enumeration stop point");
-            Equal(1, project.Metadata.Count, "atomic metadata replacement count");
-            Equal("original", project.Metadata["seed"], "atomic metadata replacement value");
+            AssertSeedUnchanged(project, "streaming overflow");
         }
 
         private static void PersistenceReplacementAcceptsExactKnownBoundary()
@@ -120,6 +161,16 @@ namespace QS3D.Core.SmokeTests
             InvokePersistenceReplacement(project, input);
             Equal(MaximumEntries, project.Metadata.Count, "known metadata exact boundary");
             Equal("v", project.Metadata[Key(MaximumEntries - 1)], "known metadata exact boundary value");
+        }
+
+        private static void PersistenceReplacementAcceptsPureStreamingInput()
+        {
+            var project = NewProject("streaming-control");
+
+            InvokePersistenceReplacement(project, StreamingMetadata(3));
+
+            Equal(3, project.Metadata.Count, "pure streaming metadata count");
+            Equal("v2", project.Metadata[Key(2)], "pure streaming metadata value");
         }
 
         private static void OwnedMappingCapacityFailureDoesNotTouchProject()
@@ -192,6 +243,28 @@ namespace QS3D.Core.SmokeTests
             method.Invoke(project.Metadata, new object[] { input });
         }
 
+        private static void ExpectPersistenceReplacementInvalidOperation(
+            ProjectState project,
+            IEnumerable<KeyValuePair<string, string>> input,
+            string label)
+        {
+            try
+            {
+                InvokePersistenceReplacement(project, input);
+                throw new InvalidOperationException("Expected " + label + " to be rejected.");
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException is InvalidOperationException)
+            {
+                // Expected: reflection wraps the fail-closed persistence replacement failure.
+            }
+        }
+
+        private static void AssertSeedUnchanged(ProjectState project, string label)
+        {
+            Equal(1, project.Metadata.Count, label + " atomic metadata replacement count");
+            Equal("original", project.Metadata["seed"], label + " atomic metadata replacement value");
+        }
+
         private static IEnumerable<KeyValuePair<string, string>> OverflowingMetadata(Action onYield)
         {
             for (var i = 0; i <= MaximumEntries; i++)
@@ -199,6 +272,12 @@ namespace QS3D.Core.SmokeTests
                 onYield();
                 yield return new KeyValuePair<string, string>(Key(i), "v");
             }
+        }
+
+        private static IEnumerable<KeyValuePair<string, string>> StreamingMetadata(int count)
+        {
+            for (var i = 0; i < count; i++)
+                yield return new KeyValuePair<string, string>(Key(i), "v" + i);
         }
 
         private static ProjectState NewProject(string suffix)
@@ -237,7 +316,7 @@ namespace QS3D.Core.SmokeTests
             public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
             {
                 WasEnumerated = true;
-                throw new InvalidOperationException("Known oversized metadata must be rejected before enumeration.");
+                throw new InvalidOperationException("Known metadata Count must be rejected before enumeration.");
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -257,10 +336,95 @@ namespace QS3D.Core.SmokeTests
             public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
             {
                 WasEnumerated = true;
-                throw new InvalidOperationException("Known oversized read-only metadata must be rejected before enumeration.");
+                throw new InvalidOperationException("Known read-only metadata Count must be rejected before enumeration.");
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class NonGenericKnownCountMetadataCollection : IEnumerable<KeyValuePair<string, string>>, ICollection
+        {
+            private readonly int _count;
+
+            public NonGenericKnownCountMetadataCollection(int count) { _count = count; }
+            public bool WasEnumerated { get; private set; }
+            int ICollection.Count => _count;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+
+            public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+            {
+                WasEnumerated = true;
+                throw new InvalidOperationException("Known non-generic metadata Count must be rejected before enumeration.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            void ICollection.CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
+        private sealed class ConflictingKnownCountMetadataCollection :
+            ICollection<KeyValuePair<string, string>>,
+            IReadOnlyCollection<KeyValuePair<string, string>>
+        {
+            private readonly int _collectionCount;
+            private readonly int _readOnlyCount;
+
+            public ConflictingKnownCountMetadataCollection(int collectionCount, int readOnlyCount)
+            {
+                _collectionCount = collectionCount;
+                _readOnlyCount = readOnlyCount;
+            }
+
+            int ICollection<KeyValuePair<string, string>>.Count => _collectionCount;
+            int IReadOnlyCollection<KeyValuePair<string, string>>.Count => _readOnlyCount;
+            public bool IsReadOnly => true;
+            public bool WasEnumerated { get; private set; }
+
+            public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+            {
+                WasEnumerated = true;
+                throw new InvalidOperationException("Conflicting metadata Count contracts must be rejected before enumeration.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(KeyValuePair<string, string> item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(KeyValuePair<string, string> item) => false;
+            public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(KeyValuePair<string, string> item) => throw new NotSupportedException();
+        }
+
+        private sealed class TraversalMismatchMetadataCollection : ICollection<KeyValuePair<string, string>>
+        {
+            private readonly int _yieldCount;
+
+            public TraversalMismatchMetadataCollection(int advertisedCount, int yieldCount)
+            {
+                Count = advertisedCount;
+                _yieldCount = yieldCount;
+            }
+
+            public int Count { get; }
+            public bool IsReadOnly => true;
+            public bool WasEnumerated { get; private set; }
+            public int YieldedCount { get; private set; }
+
+            public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+            {
+                WasEnumerated = true;
+                for (var i = 0; i < _yieldCount; i++)
+                {
+                    YieldedCount++;
+                    yield return new KeyValuePair<string, string>(Key(i), "v");
+                }
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(KeyValuePair<string, string> item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(KeyValuePair<string, string> item) => false;
+            public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(KeyValuePair<string, string> item) => throw new NotSupportedException();
         }
     }
 }
