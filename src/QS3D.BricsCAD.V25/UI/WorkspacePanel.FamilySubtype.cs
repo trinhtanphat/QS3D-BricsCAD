@@ -157,7 +157,6 @@ namespace QS3D.BricsCAD.V25.UI
                         var live = _viewModel.Families.FirstOrDefault(x =>
                             string.Equals(x.Id, created.Id, StringComparison.OrdinalIgnoreCase));
                         FamilyList.SelectedItem = live;
-                        if (live != null) FamilyList.ScrollIntoView(live);
                         RefreshSelectedFamilyHighlight();
                         if (launchSolid3D) OnView3DClick(this, new RoutedEventArgs());
                     },
@@ -217,7 +216,6 @@ namespace QS3D.BricsCAD.V25.UI
                 FamilyList.SelectedItem = first;
                 if (first != null)
                 {
-                    FamilyList.ScrollIntoView(first);
                     _viewModel.SetActiveFamily(first);
                     _viewModel.ShowFamilyProperties();
                     SetStatus("Nhóm mô hình: " + _familySubtypeFilter + " • " + first.Name);
@@ -325,6 +323,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _lastHighlightedFamilyItem = null;
             }
             if (!(FamilyList.SelectedItem is ProjectFamily selected)) return;
+            if (FamilyList.ItemContainerGenerator.Status == GeneratorStatus.GeneratingContainers) return;
             FamilyList.ScrollIntoView(selected);
             FamilyList.UpdateLayout();
             var container = FamilyList.ItemContainerGenerator.ContainerFromItem(selected) as ListBoxItem;
