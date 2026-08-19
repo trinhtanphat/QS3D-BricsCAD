@@ -20,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             TbqProjectWorkspaceSmoke.Run();
             QuantityMathUnderflowSmoke.Run();
             WallQuantityOpeningBoundSmoke.Run();
+            WallOpeningHostCanonicalitySmoke.Run();
             WallQuantityMeasurementTraceSmoke.Run();
             QuantityCalculationBltCompatibilityPresetSmoke.Run();
             LegacyQuantityReportIdentitySmoke.Run();
