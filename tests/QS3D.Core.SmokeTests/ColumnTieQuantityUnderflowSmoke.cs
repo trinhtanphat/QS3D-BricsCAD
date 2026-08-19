@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         {
             OrdinaryQuantityRemainsStable();
             SwallowedHookAllowanceFailsClosed();
+            SwallowedPerimeterContributionFailsClosed();
             TotalWeightUnderflowFailsClosed();
         }
 
@@ -26,6 +27,13 @@ namespace QS3D.Core.SmokeTests
         {
             var error = Capture<OverflowException>(() =>
                 ColumnTieQuantityCalculator.Calculate(Layout(9007199254740992d), 16d, 1d));
+            Equal("tie cutting length lost a positive contribution at the current coordinate scale.", error.Message);
+        }
+
+        private static void SwallowedPerimeterContributionFailsClosed()
+        {
+            var error = Capture<OverflowException>(() =>
+                ColumnTieQuantityCalculator.Calculate(Layout(1d), 16d, 9007199254740992d));
             Equal("tie cutting length lost a positive contribution at the current coordinate scale.", error.Message);
         }
 
