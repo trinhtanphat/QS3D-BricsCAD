@@ -39,9 +39,7 @@ namespace QS3D.BricsCAD.V25.UI
                 !(FamilyList.SelectedItem is ProjectFamily family))
                 return;
 
-            var inferred = family.Category == ElementCategory.Foundation
-                ? InferFoundationSubtype(family.Name)
-                : string.Empty;
+            var inferred = InferWorkspaceSubtype(family);
             if (string.Equals(_familySubtypeFilter, inferred, StringComparison.OrdinalIgnoreCase))
                 return;
 
