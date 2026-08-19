@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -17,6 +18,10 @@ namespace QS3D.Core.SmokeTests
             CatalogUsesLastAvailableRevision();
             ScheduleBuildRejectsMoreThanFiveThousandMatchesBeforeTableMaterialization();
             ScheduleBuildCountsOnlyMatchingRowsAgainstTheLimit();
+            DefinitionSnapshotRejectsOversizedKnownCountBeforeTraversal();
+            DefinitionSnapshotRejectsInvalidAndConflictingKnownCounts();
+            DefinitionSnapshotRejectsKnownCountTraversalMismatch();
+            DefinitionSnapshotAcceptsHonestCountAndPureStreaming();
         }
 
         private static void CatalogMutationTouchesProjectExactlyOnce()
@@ -129,6 +134,154 @@ namespace QS3D.Core.SmokeTests
             Equal("B0001", table.Rows[0].ElementId);
         }
 
+        private static void DefinitionSnapshotRejectsOversizedKnownCountBeforeTraversal()
+        {
+            var categories = new CountedSequence<ElementCategory>(
+                new[] { ElementCategory.Beam },
+                genericCount: 5001,
+                readOnlyCount: 5001,
+                nonGenericCount: 5001);
+
+            var message = ThrowsMessage<InvalidOperationException>(() => DefinitionWithCategories(categories));
+            Equal("Semantic schedule category list exceeds 5000 entries.", message);
+            Equal(0, categories.EnumerationCount);
+        }
+
+        private static void DefinitionSnapshotRejectsInvalidAndConflictingKnownCounts()
+        {
+            var negative = new CountedSequence<ElementCategory>(
+                new[] { ElementCategory.Beam },
+                genericCount: -1,
+                readOnlyCount: -1,
+                nonGenericCount: -1);
+            Equal(
+                "Semantic schedule collection source reports an invalid negative known Count.",
+                ThrowsMessage<InvalidOperationException>(() => DefinitionWithCategories(negative)));
+            Equal(0, negative.EnumerationCount);
+
+            var conflictingColumns = new CountedSequence<SemanticDocumentationColumn>(
+                new[] { new SemanticDocumentationColumn("Id", "{Id}") },
+                genericCount: 1,
+                readOnlyCount: 2,
+                nonGenericCount: 1);
+            Equal(
+                "Semantic schedule collection source exposes conflicting known Count values.",
+                ThrowsMessage<InvalidOperationException>(() => DefinitionWithColumns(conflictingColumns)));
+            Equal(0, conflictingColumns.EnumerationCount);
+        }
+
+        private static void DefinitionSnapshotRejectsKnownCountTraversalMismatch()
+        {
+            var underEnumeratedInclude = new CountedSequence<string>(
+                new[] { "E1" },
+                genericCount: 2,
+                readOnlyCount: 2,
+                nonGenericCount: 2);
+            Equal(
+                "Semantic schedule collection source known Count does not match completed traversal.",
+                ThrowsMessage<InvalidOperationException>(() => DefinitionWithInclude(underEnumeratedInclude)));
+            Equal(1, underEnumeratedInclude.EnumerationCount);
+
+            var overEnumeratedExclude = new CountedSequence<string>(
+                new[] { "E1" },
+                genericCount: 0,
+                readOnlyCount: 0,
+                nonGenericCount: 0);
+            Equal(
+                "Semantic schedule collection source known Count does not match completed traversal.",
+                ThrowsMessage<InvalidOperationException>(() => DefinitionWithExclude(overEnumeratedExclude)));
+            Equal(1, overEnumeratedExclude.EnumerationCount);
+        }
+
+        private static void DefinitionSnapshotAcceptsHonestCountAndPureStreaming()
+        {
+            var countedCategories = new CountedSequence<ElementCategory>(
+                new[] { ElementCategory.Beam },
+                genericCount: 1,
+                readOnlyCount: 1,
+                nonGenericCount: 1);
+            var counted = DefinitionWithCategories(countedCategories);
+            Equal(1, counted.Categories.Count);
+            Equal(ElementCategory.Beam, counted.Categories[0]);
+            Equal(1, countedCategories.EnumerationCount);
+
+            var streaming = new SemanticScheduleDefinition(
+                "S-STREAM",
+                "Streaming",
+                "STREAM",
+                Stream(ElementCategory.Beam),
+                string.Empty,
+                string.Empty,
+                Stream("E1", "E2"),
+                Stream<string>(),
+                Stream(new SemanticDocumentationColumn("Id", "{Id}")));
+            Equal(1, streaming.Categories.Count);
+            Equal(2, streaming.IncludeElementIds.Count);
+            Equal(0, streaming.ExcludeElementIds.Count);
+            Equal(1, streaming.Columns.Count);
+        }
+
+        private static SemanticScheduleDefinition DefinitionWithCategories(IEnumerable<ElementCategory> categories)
+        {
+            return new SemanticScheduleDefinition(
+                "S-COUNT",
+                "Count contract",
+                "COUNT",
+                categories,
+                string.Empty,
+                string.Empty,
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                new[] { new SemanticDocumentationColumn("Id", "{Id}") });
+        }
+
+        private static SemanticScheduleDefinition DefinitionWithInclude(IEnumerable<string> include)
+        {
+            return new SemanticScheduleDefinition(
+                "S-INCLUDE",
+                "Include count",
+                "INCLUDE",
+                new[] { ElementCategory.Beam },
+                string.Empty,
+                string.Empty,
+                include,
+                Array.Empty<string>(),
+                new[] { new SemanticDocumentationColumn("Id", "{Id}") });
+        }
+
+        private static SemanticScheduleDefinition DefinitionWithExclude(IEnumerable<string> exclude)
+        {
+            return new SemanticScheduleDefinition(
+                "S-EXCLUDE",
+                "Exclude count",
+                "EXCLUDE",
+                new[] { ElementCategory.Beam },
+                string.Empty,
+                string.Empty,
+                Array.Empty<string>(),
+                exclude,
+                new[] { new SemanticDocumentationColumn("Id", "{Id}") });
+        }
+
+        private static SemanticScheduleDefinition DefinitionWithColumns(IEnumerable<SemanticDocumentationColumn> columns)
+        {
+            return new SemanticScheduleDefinition(
+                "S-COLUMNS",
+                "Column count",
+                "COLUMNS",
+                new[] { ElementCategory.Beam },
+                string.Empty,
+                string.Empty,
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                columns);
+        }
+
+        private static IEnumerable<T> Stream<T>(params T[] values)
+        {
+            foreach (var value in values) yield return value;
+        }
+
         private static SemanticScheduleDefinition Definition(string id, string name, string title)
         {
             return new SemanticScheduleDefinition(
@@ -184,6 +337,47 @@ namespace QS3D.Core.SmokeTests
         {
             try { if (File.Exists(path)) File.Delete(path); }
             catch { }
+        }
+
+        private sealed class CountedSequence<T> : ICollection<T>, IReadOnlyCollection<T>, System.Collections.ICollection
+        {
+            private readonly T[] _items;
+            private readonly int _genericCount;
+            private readonly int _readOnlyCount;
+            private readonly int _nonGenericCount;
+
+            internal CountedSequence(T[] items, int genericCount, int readOnlyCount, int nonGenericCount)
+            {
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+                _genericCount = genericCount;
+                _readOnlyCount = readOnlyCount;
+                _nonGenericCount = nonGenericCount;
+            }
+
+            internal int EnumerationCount { get; private set; }
+            public int Count => _genericCount;
+            int IReadOnlyCollection<T>.Count => _readOnlyCount;
+            int System.Collections.ICollection.Count => _nonGenericCount;
+            public bool IsReadOnly => true;
+            bool System.Collections.ICollection.IsSynchronized => false;
+            object System.Collections.ICollection.SyncRoot => this;
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                for (var i = 0; i < _items.Length; i++)
+                {
+                    EnumerationCount++;
+                    yield return _items[i];
+                }
+            }
+
+            System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+            public bool Contains(T item) => ((ICollection<T>)_items).Contains(item);
+            public void CopyTo(T[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+            void System.Collections.ICollection.CopyTo(Array array, int index) => ((System.Collections.ICollection)_items).CopyTo(array, index);
+            public void Add(T item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(T item) => throw new NotSupportedException();
         }
     }
 }
