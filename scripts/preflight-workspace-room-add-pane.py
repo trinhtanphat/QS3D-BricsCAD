@@ -28,6 +28,23 @@ def main() -> int:
     source = SOURCE.read_text(encoding="utf-8")
     xaml = XAML.read_text(encoding="utf-8")
 
+    rewire = method_body(source, "private void RewireBlt3dRoomAwareAddActions")
+    require(
+        rewire,
+        ".Where(IsBlt3dFamilyAddButton)",
+        "Room-aware Add rewiring must target only the established generic Family Add control",
+    )
+    forbid(
+        source,
+        "IsBlt3dRoomAwareAddButton",
+        "Room-specific broad button matching can steal the room-pane + Thêm finish action",
+    )
+    require(
+        rewire,
+        "OnBlt3dRoomAwareAddClick",
+        "generic Family Add must be redirected through the Room-aware handler",
+    )
+
     add_handler = method_body(source, "private void OnBlt3dRoomAwareAddClick")
     add_compact = " ".join(add_handler.split())
     require(
@@ -61,7 +78,11 @@ def main() -> int:
     require(layout, "columns[3]", "Room layout must restore the right splitter column")
     require(layout, "columns[4]", "Room layout must restore the Room detail column")
     require(layout, "ReferenceEquals(child, roomPane)", "Room detail pane must be made visible")
-    require(source, "WorkspaceOverflow.LayoutUpdated += OnBlt3dRoomWorkspaceLayoutUpdated;", "runtime repair must defend the Room pane from later compact-layout passes")
+    require(
+        source,
+        "WorkspaceOverflow.LayoutUpdated += OnBlt3dRoomWorkspaceLayoutUpdated;",
+        "runtime repair must defend the Room pane from later compact-layout passes",
+    )
 
     presentation = method_body(source, "private void ApplyBlt3dRoomPanePresentation")
     for label in (
@@ -73,12 +94,18 @@ def main() -> int:
     ):
         require(presentation, label, "Room detail pane must expose owner-reference label: " + label)
     require(presentation, 'new Binding("SelectedFamilyName")', "Room detail header must track the selected Room")
+    require(
+        presentation,
+        "createFinish.Click += OnAddFinishClick;",
+        "Tạo hoàn thiện must keep the established finish action",
+    )
 
     for anchor in (
         'Grid Grid.Column="4"',
         'x:Name="SelectionCount"',
         'x:Name="InspectionList"',
         'Content="+ Thêm"',
+        'Click="OnAddFinishClick"',
         'Header="Sàn Hoàn Thiện"',
         'Header="Chống Thấm"',
         'Header="Chân Tường"',
@@ -87,7 +114,10 @@ def main() -> int:
     ):
         require(xaml, anchor, "Room contract depends on the existing docked XAML surface: " + anchor)
 
-    print("PASS: Room + Add is direct, generic Family chooser is preserved elsewhere, and the docked Room/finish pane is restored and runtime-defended.")
+    print(
+        "PASS: Room + Add is direct, the room-pane + Thêm remains a finish action, "
+        "the generic Family chooser is preserved elsewhere, and the docked Room/finish pane is runtime-defended."
+    )
     return 0
 
 
