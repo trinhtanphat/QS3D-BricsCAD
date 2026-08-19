@@ -14,6 +14,8 @@ namespace QS3D.Core.SmokeTests
         {
             CollectivelySignificantSmallTotalsArePreserved();
             InputOrderDoesNotDropSmallTotals();
+            UnrepresentableFinalCompensationFailsClosed();
+            RepresentableFinalCompensationRemainsAccepted();
             OrdinarySummaryAggregationRemainsStable();
             OverflowStillFailsClosed();
         }
@@ -46,6 +48,33 @@ namespace QS3D.Core.SmokeTests
             Assert(summary.Before.Equals(expected), "Quantity revision summary Before must preserve small contributions around a huge middle row.");
             Assert(summary.After.Equals(expected), "Quantity revision summary After must preserve small contributions around a huge middle row.");
             Assert(summary.Delta.Equals(0d), "Equal input-order-independent revision totals must retain a zero delta.");
+        }
+
+        private static void UnrepresentableFinalCompensationFailsClosed()
+        {
+            const double twoTo53 = 9007199254740992d;
+            var error = Capture<OverflowException>(() => Summarize(
+                Row("large", "Concrete", twoTo53, twoTo53),
+                Row("unit", "Concrete", 1d, 1d)));
+
+            Assert(
+                error.Message.Contains("lost a non-zero compensation", StringComparison.Ordinal),
+                "Unrepresentable quantity revision final compensation must fail with the precision-loss diagnostic.");
+        }
+
+        private static void RepresentableFinalCompensationRemainsAccepted()
+        {
+            const double twoTo53 = 9007199254740992d;
+            const double expected = 9007199254740994d;
+            var summaries = Summarize(
+                Row("large", "Concrete", twoTo53, twoTo53),
+                Row("unit-a", "Concrete", 1d, 1d),
+                Row("unit-b", "Concrete", 1d, 1d));
+
+            Assert(summaries.Count == 1, "Representable final compensation control must remain in one summary group.");
+            Assert(summaries[0].Before.Equals(expected), "Representable Before compensation changed unexpectedly.");
+            Assert(summaries[0].After.Equals(expected), "Representable After compensation changed unexpectedly.");
+            Assert(summaries[0].Delta.Equals(0d), "Equal representable compensated totals must retain a zero delta.");
         }
 
         private static void OrdinarySummaryAggregationRemainsStable()
