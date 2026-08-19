@@ -14,6 +14,10 @@ namespace QS3D.Core.SmokeTests
         {
             BuildUpRejectsKnownCountTraversalMismatch();
             HistoricalCatalogRejectsKnownCountTraversalMismatch();
+            BuildUpAnalysisRejectsKnownCountTraversalMismatch();
+            TradeAnalysisRejectsKnownCountTraversalMismatch();
+            BqLibraryRejectsKnownCountTraversalMismatch();
+            BqLibraryImportRejectsKnownCountTraversalMismatch();
             TenderBidRejectsKnownCountTraversalMismatch();
             TenderEvaluationRejectsRequirementAndBidCountMismatch();
             ProgressEvaluationRejectsContractAndClaimCountMismatch();
@@ -39,6 +43,71 @@ namespace QS3D.Core.SmokeTests
             AssertCountMismatch(
                 () => new HistoricalCostCatalog(new MisreportedReadOnlyCollection<HistoricalCostRecord>(1, Historical(0), Historical(1))),
                 "Historical over-yield must reject a Count/traversal mismatch.");
+        }
+
+        private static void BuildUpAnalysisRejectsKnownCountTraversalMismatch()
+        {
+            var service = new BuildUpAnalysisService();
+            var references = new RateReferenceGraph(Array.Empty<RateReferenceEdge>());
+
+            AssertCountMismatch(
+                () => service.Analyze(
+                    new MisreportedReadOnlyCollection<BuildUpRateSnapshot>(2, BuildUpRate(0)),
+                    references,
+                    adoptedOnly: false),
+                "Build-up analysis under-yield must reject a Count/traversal mismatch.");
+            AssertCountMismatch(
+                () => service.Analyze(
+                    new MisreportedReadOnlyCollection<BuildUpRateSnapshot>(1, BuildUpRate(0), BuildUpRate(1)),
+                    references,
+                    adoptedOnly: false),
+                "Build-up analysis over-yield must reject a Count/traversal mismatch.");
+        }
+
+        private static void TradeAnalysisRejectsKnownCountTraversalMismatch()
+        {
+            var service = new TradeCostAnalysisService();
+
+            AssertCountMismatch(
+                () => service.Analyze(
+                    new MisreportedReadOnlyCollection<TradeCostItem>(2, TradeItem(0)),
+                    1m),
+                "Trade analysis under-yield must reject a Count/traversal mismatch.");
+            AssertCountMismatch(
+                () => service.Analyze(
+                    new MisreportedReadOnlyCollection<TradeCostItem>(1, TradeItem(0), TradeItem(1)),
+                    1m),
+                "Trade analysis over-yield must reject a Count/traversal mismatch.");
+        }
+
+        private static void BqLibraryRejectsKnownCountTraversalMismatch()
+        {
+            AssertCountMismatch(
+                () => new BqLibraryCatalog(
+                    "LIB-UNDER",
+                    new MisreportedReadOnlyCollection<BqLibraryEntry>(2, BqEntry(0))),
+                "BQ library under-yield must reject a Count/traversal mismatch.");
+            AssertCountMismatch(
+                () => new BqLibraryCatalog(
+                    "LIB-OVER",
+                    new MisreportedReadOnlyCollection<BqLibraryEntry>(1, BqEntry(0), BqEntry(1))),
+                "BQ library over-yield must reject a Count/traversal mismatch.");
+        }
+
+        private static void BqLibraryImportRejectsKnownCountTraversalMismatch()
+        {
+            var catalog = new BqLibraryCatalog("LIB-IMPORT", new[] { BqEntry(0) });
+
+            AssertCountMismatch(
+                () => catalog.ImportFromProject(
+                    new MisreportedReadOnlyCollection<BqLibraryEntry>(2, BqEntry(1)),
+                    replaceExisting: false),
+                "BQ library import under-yield must reject a Count/traversal mismatch.");
+            AssertCountMismatch(
+                () => catalog.ImportFromProject(
+                    new MisreportedReadOnlyCollection<BqLibraryEntry>(1, BqEntry(1), BqEntry(2)),
+                    replaceExisting: false),
+                "BQ library import over-yield must reject a Count/traversal mismatch.");
         }
 
         private static void TenderBidRejectsKnownCountTraversalMismatch()
@@ -112,6 +181,42 @@ namespace QS3D.Core.SmokeTests
             var streaming = BuildUp(Stream(Component(0), Component(1)));
             Equal(2, streaming.Components.Count, "Pure streaming AdvancedCost sources without a known Count must remain accepted.");
 
+            var references = new RateReferenceGraph(Array.Empty<RateReferenceEdge>());
+            var buildUpAnalysis = new BuildUpAnalysisService();
+            var countedBuildUps = buildUpAnalysis.Analyze(
+                new MisreportedReadOnlyCollection<BuildUpRateSnapshot>(2, BuildUpRate(0), BuildUpRate(1)),
+                references,
+                adoptedOnly: false);
+            Equal(2, countedBuildUps.Count, "Exact counted build-up analysis input must remain accepted.");
+            var streamingBuildUps = buildUpAnalysis.Analyze(
+                Stream(BuildUpRate(0), BuildUpRate(1)),
+                references,
+                adoptedOnly: false);
+            Equal(2, streamingBuildUps.Count, "Pure streaming build-up analysis input must remain accepted.");
+
+            var tradeAnalysis = new TradeCostAnalysisService();
+            var countedTrades = tradeAnalysis.Analyze(
+                new MisreportedReadOnlyCollection<TradeCostItem>(2, TradeItem(0), TradeItem(1)),
+                1m);
+            Equal(2, countedTrades.Count, "Exact counted trade-analysis input must remain accepted.");
+            var streamingTrades = tradeAnalysis.Analyze(Stream(TradeItem(0), TradeItem(1)), 1m);
+            Equal(2, streamingTrades.Count, "Pure streaming trade-analysis input must remain accepted.");
+
+            var countedLibrary = new BqLibraryCatalog(
+                "LIB-COUNTED",
+                new MisreportedReadOnlyCollection<BqLibraryEntry>(2, BqEntry(0), BqEntry(1)));
+            Equal(2, countedLibrary.Entries.Count, "Exact counted BQ library input must remain accepted.");
+            var streamingLibrary = new BqLibraryCatalog("LIB-STREAM", Stream(BqEntry(0), BqEntry(1)));
+            Equal(2, streamingLibrary.Entries.Count, "Pure streaming BQ library input must remain accepted.");
+
+            var importBase = new BqLibraryCatalog("LIB-IMPORT-CONTROL", new[] { BqEntry(0) });
+            var countedImport = importBase.ImportFromProject(
+                new MisreportedReadOnlyCollection<BqLibraryEntry>(2, BqEntry(1), BqEntry(2)),
+                replaceExisting: false);
+            Equal(3, countedImport.Entries.Count, "Exact counted BQ import input must remain accepted.");
+            var streamingImport = importBase.ImportFromProject(Stream(BqEntry(1), BqEntry(2)), replaceExisting: false);
+            Equal(3, streamingImport.Entries.Count, "Pure streaming BQ import input must remain accepted.");
+
             var progress = new ProgressClaimService().Evaluate(
                 new MisreportedReadOnlyCollection<ProgressContractItem>(2, Contract(0), Contract(1)),
                 new MisreportedReadOnlyCollection<ProgressClaimLine>(2, Claim(0), Claim(1)));
@@ -158,6 +263,21 @@ namespace QS3D.Core.SmokeTests
                 index + 1m,
                 "VND",
                 StartUtc.AddTicks(index));
+        }
+
+        private static BuildUpRateSnapshot BuildUpRate(int index)
+        {
+            return new BuildUpRateSnapshot("RATE-" + index, index + 1m);
+        }
+
+        private static TradeCostItem TradeItem(int index)
+        {
+            return new TradeCostItem("TRADE-ITEM-" + index, "TRADE-" + index, index + 1m);
+        }
+
+        private static BqLibraryEntry BqEntry(int index)
+        {
+            return new BqLibraryEntry("BQ-" + index, "BQ item " + index, "m2", "CAT/" + index, index + 1m);
         }
 
         private static TenderRequirement Requirement(int index)
