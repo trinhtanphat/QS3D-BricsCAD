@@ -126,6 +126,9 @@ namespace QS3D.Core.Rules
                     }
 
                     var value = _evaluator.Evaluate(rule.Expression, variables);
+                    if (value < 0d)
+                        throw new InvalidOperationException(
+                            "Quantity rule produced a negative quantity for " + element.Category + "/" + rule.OutputName + ".");
                     staged.Add(new KeyValuePair<QuantityRule, double>(rule, value));
                     variables[rule.OutputName] = value;
                     resolvedOutputs.Add(rule.OutputName);
