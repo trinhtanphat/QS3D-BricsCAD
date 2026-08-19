@@ -4,6 +4,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Xml.Linq;
+using QS3D.Core.Cost;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
@@ -29,6 +30,7 @@ namespace QS3D.Core.SmokeTests
             RebarXlsxExport();
             DetailedRevision();
             AdvancedHealth();
+            CostPercentageScalingPrecision();
         }
 
         private static void MaterialCatalogRevisionSemantics()
@@ -224,6 +226,56 @@ namespace QS3D.Core.SmokeTests
             var beam = new ProjectElement("B3", ElementCategory.Beam, family.Id, "f", "z"); beam.Properties["RebarNotation"] = "bad"; project.Elements.Add(beam);
             var issues = new ModelHealthService().Inspect(project);
             True(issues.Any(x => x.Code == "MISSING_MATERIAL" && x.ElementId == "B3")); True(issues.Any(x => x.Code == "INVALID_REBAR" && x.ElementId == "B3"));
+        }
+
+        private static void CostPercentageScalingPrecision()
+        {
+            const decimal tinyPercent = 1.6e-26m;
+            const decimal expectedTinyShare = 8e-28m;
+            var component = new CostResourceComponent("RES-PREC", "Precision resource", "m2", 1m, 5m);
+
+            var overhead = new CostRateBuildUp(
+                "BUILDUP-OVERHEAD-PREC",
+                new CostCode("PREC"),
+                "m2",
+                "VND",
+                new[] { component },
+                overheadPercent: tinyPercent);
+            Equal(5m, overhead.DirectUnitCost);
+            Equal(expectedTinyShare, overhead.OverheadUnitCost);
+
+            var profit = new CostRateBuildUp(
+                "BUILDUP-PROFIT-PREC",
+                new CostCode("PREC"),
+                "m2",
+                "VND",
+                new[] { component },
+                profitPercent: tinyPercent);
+            Equal(expectedTinyShare, profit.ProfitUnitCost);
+
+            var progress = new ProgressClaimService().Evaluate(
+                new[] { new ProgressContractItem("ITEM-PREC", "m2", 1m, 5m) },
+                new[] { new ProgressClaimLine("ITEM-PREC", 0m, 1m) },
+                tinyPercent);
+            Equal(5m, progress.GrossCertifiedThisPeriod);
+            Equal(expectedTinyShare, progress.RetentionThisPeriod);
+            Equal(5m - expectedTinyShare, progress.NetCertifiedThisPeriod);
+
+            var ordinary = new CostRateBuildUp(
+                "BUILDUP-ORDINARY-PERCENT",
+                new CostCode("PREC"),
+                "m2",
+                "VND",
+                new[] { component },
+                overheadPercent: 10m);
+            Equal(0.5m, ordinary.OverheadUnitCost);
+
+            var ordinaryProgress = new ProgressClaimService().Evaluate(
+                new[] { new ProgressContractItem("ITEM-ORDINARY", "m2", 1m, 5m) },
+                new[] { new ProgressClaimLine("ITEM-ORDINARY", 0m, 1m) },
+                10m);
+            Equal(0.5m, ordinaryProgress.RetentionThisPeriod);
+            Equal(4.5m, ordinaryProgress.NetCertifiedThisPeriod);
         }
 
         private static ProjectState NewProject()

@@ -53,7 +53,10 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (panel._blt3dFamilyModeChooser == null) return;
 
-            panel.ApplyFamilySubtypeFilter();
+            if (IsGridSubtype(panel._familySubtypeFilter))
+                panel.ApplyGridFamilySubtypeFilter();
+            else
+                panel.ApplyFamilySubtypeFilter();
 
             var selected = panel.FamilyList.SelectedItem as ProjectFamily;
             if (selected == null)
