@@ -167,7 +167,7 @@ namespace QS3D.Core.Documentation
 
         private static List<SemanticSheetAutoLayoutItem> MaterializeItemsBounded(IEnumerable<SemanticSheetAutoLayoutItem> items)
         {
-            RequireKnownCountsWithinLimit(items, "automatic sheet layout items");
+            var knownCount = RequireKnownCountsWithinLimit(items, "automatic sheet layout items");
 
             var result = new List<SemanticSheetAutoLayoutItem>(Math.Min(MaxItems, 256));
             using (var enumerator = items.GetEnumerator())
@@ -179,12 +179,14 @@ namespace QS3D.Core.Documentation
                     result.Add(enumerator.Current);
                 }
             }
+
+            RequireTraversalMatchesKnownCount(knownCount, result.Count, "automatic sheet layout items");
             return result;
         }
 
         private static Dictionary<string, SemanticViewPlan> BuildViewIndex(IEnumerable<SemanticViewPlan> availableViews)
         {
-            RequireKnownCountsWithinLimit(availableViews, "automatic sheet layout available views");
+            var knownCount = RequireKnownCountsWithinLimit(availableViews, "automatic sheet layout available views");
 
             var result = new Dictionary<string, SemanticViewPlan>(StringComparer.OrdinalIgnoreCase);
             var count = 0;
@@ -198,17 +200,19 @@ namespace QS3D.Core.Documentation
                 if (result.ContainsKey(id)) throw new InvalidOperationException("Available semantic views contain duplicate id: " + id + ".");
                 result.Add(id, view);
             }
+
+            RequireTraversalMatchesKnownCount(knownCount, count, "automatic sheet layout available views");
             return result;
         }
 
-        private static void RequireKnownCountsWithinLimit<T>(IEnumerable<T> values, string label)
+        private static int? RequireKnownCountsWithinLimit<T>(IEnumerable<T> values, string label)
         {
             var counts = new List<int>(3);
             if (values is ICollection<T> collection) counts.Add(collection.Count);
             if (values is IReadOnlyCollection<T> readOnlyCollection) counts.Add(readOnlyCollection.Count);
             if (values is ICollection nonGenericCollection) counts.Add(nonGenericCollection.Count);
 
-            if (counts.Count == 0) return;
+            if (counts.Count == 0) return null;
 
             var expected = counts[0];
             var maximum = expected;
@@ -227,6 +231,13 @@ namespace QS3D.Core.Documentation
                 throw new InvalidOperationException("Automatic sheet layout received an invalid negative known count for " + label + ".");
             if (hasConflict)
                 throw new InvalidOperationException("Automatic sheet layout received conflicting known counts for " + label + ".");
+            return expected;
+        }
+
+        private static void RequireTraversalMatchesKnownCount(int? knownCount, int observedCount, string label)
+        {
+            if (knownCount.HasValue && observedCount != knownCount.Value)
+                throw new InvalidOperationException("Automatic sheet layout " + label + " known Count does not match traversal cardinality.");
         }
 
         private static void ValidateOptions(SemanticSheetAutoLayoutOptions options)
