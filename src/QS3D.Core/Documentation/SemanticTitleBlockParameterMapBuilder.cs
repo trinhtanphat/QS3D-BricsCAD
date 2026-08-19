@@ -84,17 +84,69 @@ namespace QS3D.Core.Documentation
         private static List<SemanticTitleBlockParameterDefinition> MaterializeDefinitionsBounded(
             IEnumerable<SemanticTitleBlockParameterDefinition> definitions)
         {
-            var result = new List<SemanticTitleBlockParameterDefinition>(MaxParameters);
+            var knownCount = TryGetKnownCount(definitions, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (negativeKnownCount)
+                throw new InvalidOperationException("Semantic title-block mapping source exposes an invalid negative known Count value.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Semantic title-block mapping source exposes conflicting known Count values.");
+            if (knownCount.HasValue && knownCount.Value > MaxParameters)
+                throw ParameterCollectionTooLarge();
+
+            var result = new List<SemanticTitleBlockParameterDefinition>(knownCount ?? MaxParameters);
+            var observedCount = 0;
             using (var enumerator = definitions.GetEnumerator())
             {
                 while (enumerator.MoveNext())
                 {
-                    if (result.Count >= MaxParameters)
-                        throw new InvalidOperationException("Semantic title-block mapping supports at most " + MaxParameters + " parameters.");
+                    observedCount++;
+                    if (observedCount > MaxParameters)
+                        throw ParameterCollectionTooLarge();
                     result.Add(enumerator.Current);
                 }
             }
+
+            if (knownCount.HasValue && observedCount != knownCount.Value)
+                throw new InvalidOperationException("Semantic title-block mapping source known Count does not match the number of definitions traversed.");
+
             return result;
+        }
+
+        private static int? TryGetKnownCount(
+            IEnumerable<SemanticTitleBlockParameterDefinition> definitions,
+            out bool conflictingKnownCounts,
+            out bool negativeKnownCount)
+        {
+            conflictingKnownCounts = false;
+            negativeKnownCount = false;
+            int? knownCount = null;
+
+            if (definitions is ICollection<SemanticTitleBlockParameterDefinition> collection)
+                knownCount = ObserveKnownCount(knownCount, collection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (definitions is IReadOnlyCollection<SemanticTitleBlockParameterDefinition> readOnlyCollection)
+                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (definitions is System.Collections.ICollection nonGenericCollection)
+                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+
+            return knownCount;
+        }
+
+        private static int ObserveKnownCount(
+            int? current,
+            int observed,
+            ref bool conflictingKnownCounts,
+            ref bool negativeKnownCount)
+        {
+            if (observed < 0)
+                negativeKnownCount = true;
+            if (current.HasValue && current.Value != observed)
+                conflictingKnownCounts = true;
+            return !current.HasValue || observed > current.Value ? observed : current.Value;
+        }
+
+        private static InvalidOperationException ParameterCollectionTooLarge()
+        {
+            return new InvalidOperationException(
+                "Semantic title-block mapping supports at most " + MaxParameters + " parameters.");
         }
 
         private static string ResolveValue(SemanticSheetPlan sheet, SemanticTitleBlockSheetField field)
