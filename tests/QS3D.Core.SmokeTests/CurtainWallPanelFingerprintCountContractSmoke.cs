@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             NegativeKnownCountFailsBeforeItemAccess();
+            KnownCountChangesAfterSnapshotFailClosed();
             ValidKnownCountPreservesFingerprint();
         }
 
@@ -27,6 +28,33 @@ namespace QS3D.Core.SmokeTests
                 "Negative curtain panel Pieces Count reached the list indexer before failing closed.");
             Require(!pieces.EnumeratorAccessed,
                 "Negative curtain panel Pieces Count reached enumeration before failing closed.");
+        }
+
+        private static void KnownCountChangesAfterSnapshotFailClosed()
+        {
+            var growsAfterOneItem = new ChangingCountPieces(
+                new[] { Piece() },
+                initialCount: 1,
+                changedCount: 2);
+            var growError = Capture<InvalidOperationException>(() => CurtainWallPanelFingerprint.Compute(Create(growsAfterOneItem)));
+            Require(growError.Message.IndexOf("Count", StringComparison.Ordinal) >= 0,
+                "Curtain panel Pieces Count growth did not report the changed Count contract.");
+            Require(growsAfterOneItem.CountReadCount >= 2,
+                "Curtain panel Pieces Count was not re-read after indexed snapshot materialization.");
+            Require(growsAfterOneItem.IndexerAccessCount == 1,
+                "Curtain panel Pieces snapshot did not consume exactly the originally advertised item count.");
+
+            var becomesNonEmpty = new ChangingCountPieces(
+                Array.Empty<CurtainWallPanelPiece>(),
+                initialCount: 0,
+                changedCount: 1);
+            var emptyError = Capture<InvalidOperationException>(() => CurtainWallPanelFingerprint.Compute(Create(becomesNonEmpty)));
+            Require(emptyError.Message.IndexOf("Count", StringComparison.Ordinal) >= 0,
+                "Curtain panel Pieces zero-to-nonzero Count change did not report the changed Count contract.");
+            Require(becomesNonEmpty.CountReadCount >= 2,
+                "Zero-length curtain panel Pieces snapshot did not re-check the Count contract.");
+            Require(becomesNonEmpty.IndexerAccessCount == 0,
+                "Zero-length curtain panel Pieces snapshot unexpectedly accessed an item.");
         }
 
         private static void ValidKnownCountPreservesFingerprint()
@@ -104,6 +132,47 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Enumeration must not be reached for a negative Count contract.");
             }
 
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class ChangingCountPieces : IReadOnlyList<CurtainWallPanelPiece>
+        {
+            private readonly IReadOnlyList<CurtainWallPanelPiece> _items;
+            private readonly int _initialCount;
+            private readonly int _changedCount;
+
+            internal ChangingCountPieces(
+                IReadOnlyList<CurtainWallPanelPiece> items,
+                int initialCount,
+                int changedCount)
+            {
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+                _initialCount = initialCount;
+                _changedCount = changedCount;
+            }
+
+            public int CountReadCount { get; private set; }
+            public int IndexerAccessCount { get; private set; }
+
+            public int Count
+            {
+                get
+                {
+                    CountReadCount++;
+                    return CountReadCount == 1 ? _initialCount : _changedCount;
+                }
+            }
+
+            public CurtainWallPanelPiece this[int index]
+            {
+                get
+                {
+                    IndexerAccessCount++;
+                    return _items[index];
+                }
+            }
+
+            public IEnumerator<CurtainWallPanelPiece> GetEnumerator() => _items.GetEnumerator();
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
     }
