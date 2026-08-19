@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             VerifyRejectsBeforeInspection<DoorOpeningScheduleRow>(DoorOpeningXlsxExporter.Export, "Door/opening XLSX");
             VerifyRejectsBeforeInspection<CurtainWallScheduleRow>(CurtainWallXlsxExporter.Export, "Curtain XLSX");
             VerifyMaterialBoundaryWhitespacePreserved();
+            VerifyCurtainBoundaryWhitespacePreserved();
         }
 
         private static void VerifyMaterialBoundaryWhitespacePreserved()
@@ -51,6 +52,43 @@ namespace QS3D.Core.SmokeTests
                         throw new Exception("Material XLSX must preserve leading/trailing cell whitespace with xml:space=\"preserve\".");
                     if (xml.IndexOf("<t>Concrete &amp; Steel</t>", StringComparison.Ordinal) < 0)
                         throw new Exception("Material XLSX must retain ordinary inline-text escaping without adding xml:space unnecessarily.");
+                }
+            }
+            finally
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
+        }
+
+        private static void VerifyCurtainBoundaryWhitespacePreserved()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-curtain-xlsx-space-" + Guid.NewGuid().ToString("N"));
+            var path = Path.Combine(directory, "out.xlsx");
+            try
+            {
+                CurtainWallXlsxExporter.Export(
+                    path,
+                    new[]
+                    {
+                        new CurtainWallScheduleRow
+                        {
+                            Floor = "  Level 2  ",
+                            FamilyName = "Glass & Frame",
+                            WallCount = 1,
+                            PanelCount = 1
+                        }
+                    });
+
+                using (var archive = ZipFile.OpenRead(path))
+                {
+                    var entry = archive.GetEntry("xl/worksheets/sheet1.xml");
+                    if (entry == null) throw new Exception("Curtain XLSX is missing sheet1.xml.");
+                    string xml;
+                    using (var reader = new StreamReader(entry.Open(), Encoding.UTF8)) xml = reader.ReadToEnd();
+                    if (xml.IndexOf("<t xml:space=\"preserve\">  Level 2  </t>", StringComparison.Ordinal) < 0)
+                        throw new Exception("Curtain XLSX must preserve leading/trailing cell whitespace with xml:space=\"preserve\".");
+                    if (xml.IndexOf("<t>Glass &amp; Frame</t>", StringComparison.Ordinal) < 0)
+                        throw new Exception("Curtain XLSX must retain ordinary inline-text escaping without adding xml:space unnecessarily.");
                 }
             }
             finally
