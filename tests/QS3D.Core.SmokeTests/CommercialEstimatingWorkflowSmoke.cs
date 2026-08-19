@@ -19,7 +19,7 @@ namespace QS3D.Core.SmokeTests
 
             Equal(EstimatingReadinessState.Unclassified, original.GetLine("L1").State);
             Equal(EstimatingReadinessState.Priced, original.GetLine("L2").State);
-            Equal(10m, original.GetLine("L2").Amount.Value);
+            Equal(10m, Required(original.GetLine("L2").Amount, "L2 original amount"));
 
             var invalidRequest = new BulkRateAssignmentRequest(
                 new[] { "L1", "L2", "L3" },
@@ -70,7 +70,7 @@ namespace QS3D.Core.SmokeTests
                 Utc(2026, 8, 19, 5, 41, 0));
             Equal(EstimatingReadinessState.Priced, priced.GetLine("L1").State);
             Equal("CONC", priced.GetLine("L2").CostCode);
-            Equal(4m, priced.GetLine("L2").ReferencedRate.Value);
+            Equal(4m, Required(priced.GetLine("L2").ReferencedRate, "L2 referenced rate"));
             Equal(3, audit.Events.Count);
             Equal("R5", audit.Events[0].SourceRevisions[0].RevisionId);
 
@@ -94,9 +94,9 @@ namespace QS3D.Core.SmokeTests
                 "override-1",
                 Utc(2026, 8, 19, 5, 43, 0));
             Equal(EstimatingReadinessState.PricedWithOverride, overridden.GetLine("L1").State);
-            Equal(4m, overridden.GetLine("L1").ReferencedRate.Value);
-            Equal(5m, overridden.GetLine("L1").EffectiveRate.Value);
-            Equal(50m, overridden.GetLine("L1").Amount.Value);
+            Equal(4m, Required(overridden.GetLine("L1").ReferencedRate, "L1 referenced rate after override"));
+            Equal(5m, Required(overridden.GetLine("L1").EffectiveRate, "L1 effective override rate"));
+            Equal(50m, Required(overridden.GetLine("L1").Amount, "L1 override amount"));
 
             var restored = service.RemoveManualRateOverride(
                 overridden,
@@ -107,18 +107,25 @@ namespace QS3D.Core.SmokeTests
                 "override-2",
                 Utc(2026, 8, 19, 5, 44, 0));
             Equal(EstimatingReadinessState.Priced, restored.GetLine("L1").State);
-            Equal(4m, restored.GetLine("L1").EffectiveRate.Value);
-            Equal(40m, restored.GetLine("L1").Amount.Value);
+            Equal(4m, Required(restored.GetLine("L1").EffectiveRate, "L1 restored effective rate"));
+            Equal(40m, Required(restored.GetLine("L1").Amount, "L1 restored amount"));
 
             var stale = service.MarkQuantitySourceStale(restored, "L1", "Active model is newer than quantity snapshot Q1");
             Equal(EstimatingReadinessState.Stale, stale.GetLine("L1").State);
-            Equal(40m, stale.GetLine("L1").Amount.Value);
+            Equal(40m, Required(stale.GetLine("L1").Amount, "L1 stale historical amount"));
             Equal("Q1", stale.GetLine("L1").QuantityRevision);
             Equal(5, audit.Events.Count);
         }
 
         private static DateTime Utc(int year, int month, int day, int hour, int minute, int second)
             => new DateTime(year, month, day, hour, minute, second, DateTimeKind.Utc);
+
+        private static decimal Required(decimal? value, string label)
+        {
+            if (!value.HasValue)
+                throw new InvalidOperationException("Commercial estimating smoke expected a value for " + label + ".");
+            return value.GetValueOrDefault();
+        }
 
         private static void True(bool condition)
         {
