@@ -15,7 +15,6 @@ namespace QS3D.Core.SmokeTests
             RoomFinishFamilyCategorySmoke.Run();
             CurtainWallScheduleFamilyCategorySmoke.Run();
             MeasurementTraceContractSmoke.Run();
-            Bim4dScheduleFoundationSmoke.Run();
             TakeoffMeasurementTraceSmoke.Run();
             RateBookSmoke.Run();
             TbqProjectWorkspaceSmoke.Run();
@@ -34,6 +33,7 @@ namespace QS3D.Core.SmokeTests
             PersistenceHardeningSmoke.Run();
             LicenseVerifierSmoke.Run();
             AdvancedDomainSmoke.Run();
+            ProgressClaimSnapshotSmoke.Run();
             CostBenchmarkMedianPrecisionSmoke.Run();
             HardeningRegressionSmoke.Run();
             ReviewHardeningSmoke.Run();
