@@ -167,6 +167,8 @@ namespace QS3D.Core.Formulas
                         var result = EnsureFinite(sum + compensation, "Addition/subtraction produced a non-finite result.");
                         if (compensation != 0d && result == sum)
                             throw Error("Addition/subtraction lost the compensated contribution at double precision.");
+                        if (sum != 0d && result == compensation)
+                            throw Error("Addition/subtraction lost the primary sum at double precision.");
                         return result;
                     }
                 }
