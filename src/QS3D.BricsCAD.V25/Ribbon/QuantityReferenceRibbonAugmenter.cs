@@ -70,7 +70,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             new ButtonSpec(
                 "QS3D_QTY_BLT_CALCULATE",
                 "Tính khối lượng\n(Engine2)",
-                "QS3DREGEN",
+                "QS3DQUANTITYENGINE2",
                 RibbonIconKind.QuantityCalculate),
             new ButtonSpec(
                 "QS3D_QTY_BLT_EXPORT",
