@@ -113,8 +113,18 @@ namespace QS3D.BricsCAD.V25.UI
                 }
 
                 // Reuse the same canonical active-Family write used by other Workspace authoring
-                // actions. Both active-family dispatchers remain read-only/non-creating and own no geometry.
+                // actions. Grid is a semantic reference workflow: route the active Grid family to
+                // QS3DGRID so LINE/ARC capture stays in the existing Grid ownership contract.
                 _viewModel.SetActiveFamily(family);
+                if (family.Category == ElementCategory.Grid)
+                {
+                    SetStatus("Nhập lưới → " + family.Name + " • chọn " +
+                              (family.Name.StartsWith("Lưới Cong", StringComparison.OrdinalIgnoreCase) ? "ARC" :
+                               family.Name.StartsWith("Lưới Thẳng", StringComparison.OrdinalIgnoreCase) ? "LINE" : "LINE/ARC"));
+                    Send("QS3DGRID");
+                    return;
+                }
+
                 var command = advanced ? "QS3DDRAWACTIVEADV" : "QS3DDRAWACTIVE";
                 SetStatus((advanced ? "Vẽ tùy chỉnh → " : "Vẽ Nhanh → ") + family.Name + " • " + family.Category);
                 Send(command);
