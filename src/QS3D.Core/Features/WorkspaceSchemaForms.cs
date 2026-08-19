@@ -138,7 +138,12 @@ namespace QS3D.Core.Features
                 throw new InvalidOperationException("Computed fields must be read-only: " + Key);
         }
 
-        private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        private static string? Normalize(string? value)
+        {
+            if (value == null) return null;
+            var trimmed = value.Trim();
+            return trimmed.Length == 0 ? null : trimmed;
+        }
     }
 
     public sealed class WorkspaceFormSchema
