@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
             CanonicalOrderingAndAllocation();
             DependencyCycleFailsClosed();
             QuantityOverallocationFailsClosed();
+            SubUnitOverallocationFailsClosed();
+            SubUnitAggregateOverallocationFailsClosed();
             ConflictingMeasurementProvenanceFailsClosed();
             UnknownActivityFailsClosed();
             WorkstationTimeSemanticsFailClosed();
@@ -78,6 +80,33 @@ namespace QS3D.Core.SmokeTests
                 {
                     Link("alloc-a", "A", "measure-v1", trace, 6d),
                     Link("alloc-b", "B", "measure-v1", trace, 5d)
+                }));
+        }
+
+        private static void SubUnitOverallocationFailsClosed()
+        {
+            var trace = Trace(1e-20d, "rule-a", "1");
+
+            Throws<ArgumentOutOfRangeException>(() =>
+                Link("alloc-too-large", "A", "measure-v1", trace, 1e-13d));
+
+            var exact = Link("alloc-exact", "A", "measure-v1", trace, trace.NetValue);
+            Equal(trace.NetValue, exact.AllocatedValue);
+        }
+
+        private static void SubUnitAggregateOverallocationFailsClosed()
+        {
+            var trace = Trace(1e-20d, "rule-a", "1");
+            var activityA = Activity("A", 1, 3);
+            var activityB = Activity("B", 3, 5);
+
+            Throws<ArgumentException>(() => Snapshot(
+                new[] { activityA, activityB },
+                null,
+                new[]
+                {
+                    Link("alloc-a", "A", "measure-v1", trace, 6e-21d),
+                    Link("alloc-b", "B", "measure-v1", trace, 6e-21d)
                 }));
         }
 
