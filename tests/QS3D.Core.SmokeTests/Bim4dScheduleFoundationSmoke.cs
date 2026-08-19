@@ -13,7 +13,8 @@ namespace QS3D.Core.SmokeTests
             QuantityOverallocationFailsClosed();
             ConflictingMeasurementProvenanceFailsClosed();
             UnknownActivityFailsClosed();
-            NonUtcActivityFailsClosed();
+            WorkstationTimeSemanticsFailClosed();
+            DuplicateAllocationIdFailsClosed();
         }
 
         private static void CanonicalOrderingAndAllocation()
@@ -22,38 +23,47 @@ namespace QS3D.Core.SmokeTests
             var activityA = Activity("A", 1, 3);
             var activityB = Activity("B", 3, 5);
             var dependency = new ScheduleDependency("A", "B", ScheduleDependencyType.FinishToStart);
-            var linkA = new ScheduleQuantityLink("A", trace, 4d);
-            var linkB = new ScheduleQuantityLink("B", trace, 6d);
+            var linkA = Link("alloc-a", "A", "measure-v1", trace, 4d);
+            var linkB = Link("alloc-b", "B", "measure-v1", trace, 6d);
 
-            var first = new ScheduleSnapshot(
+            var first = Snapshot(
                 new[] { activityB, activityA },
                 new[] { dependency },
                 new[] { linkB, linkA });
-            var second = new ScheduleSnapshot(
+            var second = Snapshot(
                 new[] { activityA, activityB },
                 new[] { dependency },
                 new[] { linkA, linkB });
 
+            Equal("schedule-1", first.ScheduleId);
+            Equal("schedule-v1", first.ScheduleVersionId);
+            Equal("allocation-v1", first.AllocationVersionId);
+            Equal("Asia/Ho_Chi_Minh", first.ProjectTimeZoneId);
+            Equal(new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Unspecified), first.DataDate);
             Equal("A", first.Activities[0].Id);
             Equal("B", first.Activities[1].Id);
+            Equal("cal-std", first.Activities[0].CalendarId);
+            Equal("cal-v1", first.Activities[0].CalendarVersion);
             Near(10d, first.GetAllocatedValue("wall-1", "AB12", "NetVolumeM3"));
             Equal(first.ToCanonicalString(), second.ToCanonicalString());
             Equal(linkA.MeasurementFingerprint, linkB.MeasurementFingerprint);
             Equal(trace.NetValue, linkA.MeasuredValue);
             Equal(trace.Unit, linkA.Unit);
+            Equal(ActivityAllocationBasis.AbsoluteQuantity, linkA.Basis);
         }
 
         private static void DependencyCycleFailsClosed()
         {
             var activityA = Activity("A", 1, 3);
             var activityB = Activity("B", 3, 5);
-            Throws<ArgumentException>(() => new ScheduleSnapshot(
+            Throws<ArgumentException>(() => Snapshot(
                 new[] { activityA, activityB },
                 new[]
                 {
                     new ScheduleDependency("A", "B"),
                     new ScheduleDependency("B", "A")
-                }));
+                },
+                null));
         }
 
         private static void QuantityOverallocationFailsClosed()
@@ -61,13 +71,13 @@ namespace QS3D.Core.SmokeTests
             var trace = Trace(10d, "rule-a", "1");
             var activityA = Activity("A", 1, 3);
             var activityB = Activity("B", 3, 5);
-            Throws<ArgumentException>(() => new ScheduleSnapshot(
+            Throws<ArgumentException>(() => Snapshot(
                 new[] { activityA, activityB },
                 null,
                 new[]
                 {
-                    new ScheduleQuantityLink("A", trace, 6d),
-                    new ScheduleQuantityLink("B", trace, 5d)
+                    Link("alloc-a", "A", "measure-v1", trace, 6d),
+                    Link("alloc-b", "B", "measure-v1", trace, 5d)
                 }));
         }
 
@@ -79,36 +89,103 @@ namespace QS3D.Core.SmokeTests
             var activityB = Activity("B", 3, 5);
 
             True(!string.Equals(
-                new ScheduleQuantityLink("A", before, 4d).MeasurementFingerprint,
-                new ScheduleQuantityLink("B", after, 4d).MeasurementFingerprint,
+                Link("alloc-a", "A", "measure-v1", before, 4d).MeasurementFingerprint,
+                Link("alloc-b", "B", "measure-v2", after, 4d).MeasurementFingerprint,
                 StringComparison.Ordinal));
 
-            Throws<ArgumentException>(() => new ScheduleSnapshot(
+            Throws<ArgumentException>(() => Snapshot(
                 new[] { activityA, activityB },
                 null,
                 new[]
                 {
-                    new ScheduleQuantityLink("A", before, 4d),
-                    new ScheduleQuantityLink("B", after, 4d)
+                    Link("alloc-a", "A", "measure-v1", before, 4d),
+                    Link("alloc-b", "B", "measure-v2", after, 4d)
                 }));
         }
 
         private static void UnknownActivityFailsClosed()
         {
             var trace = Trace(10d, "rule-a", "1");
-            Throws<ArgumentException>(() => new ScheduleSnapshot(
+            Throws<ArgumentException>(() => Snapshot(
                 new[] { Activity("A", 1, 3) },
                 null,
-                new[] { new ScheduleQuantityLink("MISSING", trace, 1d) }));
+                new[] { Link("alloc-missing", "MISSING", "measure-v1", trace, 1d) }));
         }
 
-        private static void NonUtcActivityFailsClosed()
+        private static void WorkstationTimeSemanticsFailClosed()
         {
             Throws<ArgumentException>(() => new ScheduleActivity(
                 "A",
                 "Activity A",
-                new DateTimeOffset(2026, 8, 1, 8, 0, 0, TimeSpan.FromHours(7)),
-                new DateTimeOffset(2026, 8, 1, 9, 0, 0, TimeSpan.FromHours(7))));
+                new DateTime(2026, 8, 1, 8, 0, 0, DateTimeKind.Local),
+                new DateTime(2026, 8, 1, 9, 0, 0, DateTimeKind.Local),
+                "cal-std",
+                "cal-v1"));
+
+            Throws<ArgumentException>(() => new ScheduleSnapshot(
+                "schedule-1",
+                "schedule-v1",
+                "allocation-v1",
+                "Asia/Ho_Chi_Minh",
+                new DateTime(2026, 8, 1, 12, 0, 0, DateTimeKind.Unspecified),
+                new[] { Activity("A", 1, 3) }));
+        }
+
+        private static void DuplicateAllocationIdFailsClosed()
+        {
+            var traceA = Trace(10d, "rule-a", "1");
+            var traceB = new MeasurementTrace(
+                "wall-2",
+                "AB13",
+                "NetVolumeM3",
+                Array.Empty<MeasurementTraceFact>(),
+                8d,
+                Array.Empty<MeasurementTraceAdjustment>(),
+                8d,
+                "m3",
+                "none",
+                ruleId: "rule-a",
+                ruleVersion: "1");
+
+            Throws<ArgumentException>(() => Snapshot(
+                new[] { Activity("A", 1, 3), Activity("B", 3, 5) },
+                null,
+                new[]
+                {
+                    Link("alloc-duplicate", "A", "measure-v1", traceA, 1d),
+                    Link("alloc-duplicate", "B", "measure-v1", traceB, 1d)
+                }));
+        }
+
+        private static ScheduleSnapshot Snapshot(
+            ScheduleActivity[] activities,
+            ScheduleDependency[]? dependencies,
+            ScheduleQuantityLink[]? links)
+        {
+            return new ScheduleSnapshot(
+                "schedule-1",
+                "schedule-v1",
+                "allocation-v1",
+                "Asia/Ho_Chi_Minh",
+                new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Unspecified),
+                activities,
+                dependencies,
+                links);
+        }
+
+        private static ScheduleQuantityLink Link(
+            string allocationId,
+            string activityId,
+            string measurementSnapshotId,
+            MeasurementTrace trace,
+            double allocatedValue)
+        {
+            return new ScheduleQuantityLink(
+                allocationId,
+                activityId,
+                measurementSnapshotId,
+                trace,
+                allocatedValue);
         }
 
         private static ScheduleActivity Activity(string id, int startDay, int finishDay)
@@ -116,8 +193,10 @@ namespace QS3D.Core.SmokeTests
             return new ScheduleActivity(
                 id,
                 "Activity " + id,
-                new DateTimeOffset(2026, 8, startDay, 0, 0, 0, TimeSpan.Zero),
-                new DateTimeOffset(2026, 8, finishDay, 0, 0, 0, TimeSpan.Zero),
+                new DateTime(2026, 8, startDay, 8, 0, 0, DateTimeKind.Unspecified),
+                new DateTime(2026, 8, finishDay, 17, 0, 0, DateTimeKind.Unspecified),
+                "cal-std",
+                "cal-v1",
                 "WBS-" + id);
         }
 
