@@ -6,14 +6,16 @@ using System.Windows.Threading;
 namespace QS3D.BricsCAD.V25.Ribbon
 {
     /// <summary>
-    /// Keeps the BLT3D-style BIM palettes coupled to the QS3D MÔ HÌNH BIM tab without relying on
-    /// a BricsCAD-version-specific Ribbon event signature. A tab transition opens the coordinated
-    /// BIM palettes immediately and for two bounded settle ticks while BricsCAD applies native
-    /// docking. After that window, manually closing palettes while staying on BIM is respected.
+    /// Keeps the top-level QS3D work surface coupled to the selected Ribbon tab without relying on
+    /// a BricsCAD-version-specific Ribbon event signature. BIM retains its bounded docking settle
+    /// ticks, while HOME and PROJECT are routed to their dedicated large surfaces so a stale BIM
+    /// palette can never remain on top after those tab transitions.
     /// </summary>
     internal static class BltBimWorkspaceActivationCoordinator
     {
         private const string AssemblyName = "BrxMgd";
+        private const string HomeTabId = "QS3D_HOME";
+        private const string ProjectTabId = "QS3D_PROJECT";
         private const string BimTabId = "QS3D_BIM";
         private const int BimSettleTicks = 2;
         private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(250);
@@ -64,9 +66,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                         _bimSettleTicksRemaining > 0)
                     {
                         if (ReassertBimWorkspace())
-                        {
                             _bimSettleTicksRemaining--;
-                        }
                     }
                     return;
                 }
@@ -79,15 +79,31 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 // rebuild feature panels or take ownership of native tabs.
                 Blt3dShellChromeCoordinator.Reassert();
 
-                if (!string.Equals(currentId, BimTabId, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(currentId, HomeTabId, StringComparison.OrdinalIgnoreCase))
                 {
                     _bimSettleTicksRemaining = 0;
+                    RouteHomeSurface();
                     return;
                 }
 
-                // The embedded HOME Start Center owns a large docked surface. Release it before
-                // showing the left/right BIM palettes so the real BricsCAD viewport is visible in
-                // the centre instead of leaving the HOME canvas covering the model workspace.
+                if (string.Equals(currentId, ProjectTabId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _bimSettleTicksRemaining = 0;
+                    RouteProjectSurface();
+                    return;
+                }
+
+                if (!string.Equals(currentId, BimTabId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _bimSettleTicksRemaining = 0;
+                    // Normal CAD/Ribbon tabs do not own either large QS3D special surface.
+                    // Preserve the established native/workspace behavior for those tabs while
+                    // ensuring a prior HOME/PROJECT surface cannot cover the editor.
+                    StartCenterPaletteCoordinator.Hide();
+                    ProjectSetupPaletteCoordinator.Hide();
+                    return;
+                }
+
                 _bimSettleTicksRemaining = BimSettleTicks;
                 ReassertBimWorkspace();
             }
@@ -98,47 +114,73 @@ namespace QS3D.BricsCAD.V25.Ribbon
             }
         }
 
+        private static void RouteHomeSurface()
+        {
+            // HOME owns the Start Center. Release both the Project canvas and BIM palettes first
+            // so the previous work surface cannot remain visible behind/on top of it.
+            ProjectSetupPaletteCoordinator.Hide();
+            PaletteCoordinator.Hide();
+            StartCenterPaletteCoordinator.Show();
+        }
+
+        private static void RouteProjectSurface()
+        {
+            // PROJECT owns the dedicated Project Information canvas. Keep this route independent
+            // from the BIM Workspace and HOME Start Center; no document/model command is executed.
+            StartCenterPaletteCoordinator.Hide();
+            PaletteCoordinator.Hide();
+            ProjectSetupPaletteCoordinator.ShowProjectInformation();
+        }
+
         private static bool ReassertBimWorkspace()
         {
             Blt3dShellChromeCoordinator.Reassert();
             StartCenterPaletteCoordinator.Hide();
+            ProjectSetupPaletteCoordinator.Hide();
             return PaletteCoordinator.ShowBimWorkspace();
         }
 
         private static string ResolveCurrentTabId(object control)
         {
-            foreach (var propertyName in new[] { "CurrentTab", "SelectedTab", "ActiveTab" })
+            var tabs = GetProperty(control, "Tabs");
+            if (tabs != null)
+            {
+                // Prefer explicit selection state exposed by the Ribbon collection. Some BricsCAD
+                // builds keep CurrentTab populated while another tab is becoming active, which can
+                // otherwise leave the prior QS3D surface visible for the whole transition.
+                foreach (var propertyName in new[] { "SelectedTabIndex", "SelectedIndex", "CurrentTabIndex" })
+                {
+                    var rawIndex = GetProperty(control, propertyName);
+                    if (!(rawIndex is int index) || index < 0) continue;
+                    var tab = ItemAt(tabs, index);
+                    var id = TabId(tab);
+                    if (!string.IsNullOrWhiteSpace(id)) return id;
+                }
+
+                if (tabs is IEnumerable enumerable)
+                {
+                    foreach (var tab in enumerable)
+                    {
+                        if (tab == null) continue;
+                        if (!ReadBool(tab, "IsActive") &&
+                            !ReadBool(tab, "IsSelected") &&
+                            !ReadBool(tab, "Selected"))
+                            continue;
+
+                        var id = TabId(tab);
+                        if (!string.IsNullOrWhiteSpace(id)) return id;
+                    }
+                }
+            }
+
+            // Direct host properties remain a compatibility fallback for versions that do not
+            // expose an index/active marker. Prefer Selected/Active before the more ambiguous
+            // CurrentTab property.
+            foreach (var propertyName in new[] { "SelectedTab", "ActiveTab", "CurrentTab" })
             {
                 var tab = GetProperty(control, propertyName);
                 var id = TabId(tab);
                 if (!string.IsNullOrWhiteSpace(id)) return id;
-            }
-
-            var tabs = GetProperty(control, "Tabs");
-            if (tabs == null) return string.Empty;
-
-            foreach (var propertyName in new[] { "SelectedTabIndex", "SelectedIndex", "CurrentTabIndex" })
-            {
-                var rawIndex = GetProperty(control, propertyName);
-                if (!(rawIndex is int index) || index < 0) continue;
-                var tab = ItemAt(tabs, index);
-                var id = TabId(tab);
-                if (!string.IsNullOrWhiteSpace(id)) return id;
-            }
-
-            if (tabs is IEnumerable enumerable)
-            {
-                foreach (var tab in enumerable)
-                {
-                    if (tab == null) continue;
-                    if (!ReadBool(tab, "IsActive") &&
-                        !ReadBool(tab, "IsSelected") &&
-                        !ReadBool(tab, "Selected"))
-                        continue;
-
-                    var id = TabId(tab);
-                    if (!string.IsNullOrWhiteSpace(id)) return id;
-                }
             }
 
             return string.Empty;
