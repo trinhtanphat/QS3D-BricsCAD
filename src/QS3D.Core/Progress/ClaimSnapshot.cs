@@ -272,6 +272,8 @@ namespace QS3D.Core.Progress
             }
             if (right != 0m && result == left)
                 throw new OverflowException(label + " lost a non-zero contribution.");
+            if (left != 0m && result == right)
+                throw new OverflowException(label + " lost a non-zero accumulated contribution.");
             return result;
         }
     }

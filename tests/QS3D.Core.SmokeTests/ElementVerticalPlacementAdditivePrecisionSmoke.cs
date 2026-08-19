@@ -8,6 +8,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             LegacyBottomOffsetRejectsSwallowedPositiveAndNegativeTerms();
+            LegacyBottomOffsetRejectsSwallowedBaseTerms();
             LegacyHeightRejectsSwallowedPositiveTerm();
             BottomLevelOffsetRejectsSwallowedPositiveAndNegativeTerms();
             TopLevelOffsetRejectsSwallowedPositiveAndNegativeTerms();
@@ -25,6 +26,21 @@ namespace QS3D.Core.SmokeTests
                 Contains(
                     ThrowsMessage<InvalidOperationException>(() =>
                         ElementVerticalPlacementService.Resolve(project, element, 1e16d, 4d, offset)),
+                    "legacy bottom elevation cannot preserve its non-zero additive term");
+                Equal(version, project.ChangeVersion);
+            }
+        }
+
+        private static void LegacyBottomOffsetRejectsSwallowedBaseTerms()
+        {
+            foreach (var sourceBaseElevationM in new[] { 1d, -1d })
+            {
+                var project = NewProject();
+                var element = NewElement(project, "legacy-bottom-base-term-" + sourceBaseElevationM);
+                var version = project.ChangeVersion;
+                Contains(
+                    ThrowsMessage<InvalidOperationException>(() =>
+                        ElementVerticalPlacementService.Resolve(project, element, sourceBaseElevationM, 4d, 1e16d)),
                     "legacy bottom elevation cannot preserve its non-zero additive term");
                 Equal(version, project.ChangeVersion);
             }
@@ -82,12 +98,14 @@ namespace QS3D.Core.SmokeTests
         private static void HostedOpeningRejectsSwallowedHostSubtraction()
         {
             var project = NewProject();
+            project.Floors.Add(new FloorDefinition("HUGE", "Huge", 1e16d));
             var opening = NewElement(project, "hosted-opening", ElementCategory.WallOpening);
+            opening.Properties[ProjectFloorService.BottomLevelIdKey] = "HUGE";
             var host = new ElementVerticalPlacement(false, false, 1d, 2d);
             var version = project.ChangeVersion;
             Contains(
                 ThrowsMessage<InvalidOperationException>(() =>
-                    ElementVerticalPlacementService.ResolveHostedOpening(project, host, opening, 4d, 1e16d)),
+                    ElementVerticalPlacementService.ResolveHostedOpening(project, host, opening, 4d, 0d)),
                 "relative sill elevation cannot preserve its non-zero additive term");
             Equal(version, project.ChangeVersion);
         }
@@ -104,6 +122,11 @@ namespace QS3D.Core.SmokeTests
             var cancellationPlacement = ElementVerticalPlacementService.Resolve(project, cancellation, 1d, 2d, -1d);
             Equal(0d, cancellationPlacement.BottomElevationM);
             Equal(2d, cancellationPlacement.TopElevationM);
+
+            var ordinary = NewElement(project, "ordinary-finite");
+            var ordinaryPlacement = ElementVerticalPlacementService.Resolve(project, ordinary, 1d, 4d, 2d);
+            Equal(3d, ordinaryPlacement.BottomElevationM);
+            Equal(7d, ordinaryPlacement.TopElevationM);
 
             var representable = NewElement(project, "representable-large");
             var representablePlacement = ElementVerticalPlacementService.Resolve(project, representable, 1e16d, 4d, 2d);
