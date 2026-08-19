@@ -182,6 +182,7 @@ namespace QS3D.Core.SmokeTests
             AuditTrailSnapshotSmoke.Run();
             DrawingUnitResolutionSmoke.Run();
             DrawingUnitMetadataDiagnosticSafetySmoke.Run();
+            RecognitionRuleIdentitySmoke.Run();
             ProxyCaptureEligibilitySmoke.Run();
             MeasuredSolidQuantityPolicySmoke.Run();
             MepTbqDecimalUnderflowSmoke.Run();
