@@ -128,12 +128,23 @@ namespace QS3D.Core.Domain
             if (activeRoomIds == null) throw new ArgumentNullException(nameof(activeRoomIds));
             if (selectedSourceHandles == null) throw new ArgumentNullException(nameof(selectedSourceHandles));
             if (utcNow.Kind != DateTimeKind.Utc) throw new ArgumentException("utcNow must have DateTimeKind.Utc.", nameof(utcNow));
-            if (selectedSourceHandles.Count > MaxSourceHandleInputCount)
+            var knownSelectedSourceHandleCount = selectedSourceHandles.Count;
+            if (knownSelectedSourceHandleCount > MaxSourceHandleInputCount)
                 throw new InvalidOperationException(
                     "Auto Room source handles cannot exceed " + MaxSourceHandleInputCount + " input entries.");
 
             var inputVersion = project.ChangeVersion;
-            var active = new HashSet<string>(activeRoomIds.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()), StringComparer.OrdinalIgnoreCase);
+            var knownActiveRoomCount = activeRoomIds.Count;
+            var active = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var activeInputCount = 0;
+            foreach (var rawRoomId in activeRoomIds)
+            {
+                activeInputCount++;
+                if (string.IsNullOrWhiteSpace(rawRoomId)) continue;
+                active.Add(rawRoomId.Trim());
+            }
+            RequireKnownCountMatchesTraversal("Auto Room active room id set", knownActiveRoomCount, activeInputCount);
+
             var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var selectedInputCount = 0;
             foreach (var raw in selectedSourceHandles)
@@ -145,6 +156,7 @@ namespace QS3D.Core.Domain
                 if (string.IsNullOrWhiteSpace(raw)) continue;
                 selected.Add(raw.Trim());
             }
+            RequireKnownCountMatchesTraversal("Auto Room selected source handle set", knownSelectedSourceHandleCount, selectedInputCount);
             if (project.ChangeVersion != inputVersion)
                 throw new InvalidOperationException("Project changed while Auto Room stale-selection inputs were being enumerated. Retry against the current project state.");
             var stale = ResolveProjectElements(project)
@@ -343,6 +355,14 @@ namespace QS3D.Core.Domain
                 parsed.Kind != DateTimeKind.Utc)
                 return false;
             return string.Equals(staleUtc, parsed.ToString("O"), StringComparison.Ordinal);
+        }
+
+        private static void RequireKnownCountMatchesTraversal(string collectionLabel, int knownCount, int observedCount)
+        {
+            if (knownCount == observedCount) return;
+            throw new InvalidOperationException(
+                collectionLabel + " traversal produced " + observedCount +
+                " entries but its known count reported " + knownCount + ".");
         }
 
         private static void ValidateUniqueFamilyIds(ProjectState project)
