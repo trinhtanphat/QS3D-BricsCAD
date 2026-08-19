@@ -49,6 +49,8 @@ namespace QS3D.Core.Geometry
             var pieces = new List<CurtainWallPanelPiece>(pieceCount);
             for (var index = 0; index < pieceCount; index++)
                 pieces.Add(Validate(input.Pieces[index]));
+            if (input.Pieces.Count != pieceCount)
+                throw new InvalidOperationException("Curtain panel fingerprint Pieces Count changed while being validated.");
 
             var canonical = new StringBuilder("CURTAIN_PANEL_V1")
                 .Append('|').Append(R(input.SourceLengthM))
