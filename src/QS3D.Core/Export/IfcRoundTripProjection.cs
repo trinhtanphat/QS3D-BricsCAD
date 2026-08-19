@@ -21,6 +21,8 @@ namespace QS3D.Core.Export
 
     public sealed class IfcRoundTripProjection
     {
+        internal const int MaxNestedCollectionItems = 10000;
+
         public IfcRoundTripProjection(
             string qs3dElementId,
             string ifcGlobalId,
@@ -73,14 +75,28 @@ namespace QS3D.Core.Export
         private static IReadOnlyList<IfcRoundTripNumericProperty> CanonicalizeDimensions(IEnumerable<IfcRoundTripNumericProperty> dimensions)
         {
             if (dimensions == null) throw new ArgumentNullException(nameof(dimensions));
-            var items = dimensions.ToList();
+
+            var knownCount = TryGetKnownCount(dimensions, out var conflictingKnownCounts, out var negativeKnownCount);
+            ValidateKnownCount(knownCount, conflictingKnownCounts, negativeKnownCount, "dimension");
+
+            var items = knownCount.HasValue
+                ? new List<IfcRoundTripNumericProperty>(knownCount.Value)
+                : new List<IfcRoundTripNumericProperty>();
             var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (var index = 0; index < items.Count; index++)
+            foreach (var item in dimensions)
             {
-                var item = items[index];
-                if (item == null) throw new ArgumentException("Dimension collection cannot contain null entries.", nameof(dimensions));
-                if (!seenNames.Add(item.Name)) throw new ArgumentException("Duplicate dimension name: " + item.Name, nameof(dimensions));
+                if (items.Count == MaxNestedCollectionItems)
+                    ThrowTooManyNestedItems("dimension");
+                if (item == null)
+                    throw new ArgumentException("Dimension collection cannot contain null entries.", nameof(dimensions));
+                if (!seenNames.Add(item.Name))
+                    throw new ArgumentException("Duplicate dimension name: " + item.Name, nameof(dimensions));
+                items.Add(item);
             }
+
+            if (knownCount.HasValue && items.Count != knownCount.Value)
+                throw new InvalidOperationException("IFC round-trip dimension source Count does not match enumerated dimension count.");
+
             items.Sort(IfcRoundTripNumericPropertyComparer.Instance);
             return Array.AsReadOnly(items.ToArray());
         }
@@ -88,17 +104,80 @@ namespace QS3D.Core.Export
         private static IReadOnlyList<string> CanonicalizeProvenance(IEnumerable<string> provenance)
         {
             if (provenance == null) throw new ArgumentNullException(nameof(provenance));
-            var items = new List<string>();
+
+            var knownCount = TryGetKnownCount(provenance, out var conflictingKnownCounts, out var negativeKnownCount);
+            ValidateKnownCount(knownCount, conflictingKnownCounts, negativeKnownCount, "provenance");
+
+            var items = knownCount.HasValue
+                ? new List<string>(knownCount.Value)
+                : new List<string>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var value in provenance)
             {
+                if (items.Count == MaxNestedCollectionItems)
+                    ThrowTooManyNestedItems("provenance");
                 var token = IfcRoundTripProjectionContract.RequireCanonicalToken(value, nameof(provenance));
                 if (!seen.Add(token)) throw new ArgumentException("Duplicate provenance token: " + token, nameof(provenance));
                 items.Add(token);
             }
+
+            if (knownCount.HasValue && items.Count != knownCount.Value)
+                throw new InvalidOperationException("IFC round-trip provenance source Count does not match enumerated provenance count.");
             if (items.Count == 0) throw new ArgumentException("At least one provenance token is required.", nameof(provenance));
             items.Sort(StringComparer.Ordinal);
             return Array.AsReadOnly(items.ToArray());
+        }
+
+        private static int? TryGetKnownCount<T>(
+            IEnumerable<T> values,
+            out bool conflictingKnownCounts,
+            out bool negativeKnownCount)
+        {
+            conflictingKnownCounts = false;
+            negativeKnownCount = false;
+            int? knownCount = null;
+
+            if (values is ICollection<T> collection)
+                knownCount = ObserveKnownCount(knownCount, collection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (values is IReadOnlyCollection<T> readOnlyCollection)
+                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (values is ICollection nonGenericCollection)
+                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+
+            return knownCount;
+        }
+
+        private static int ObserveKnownCount(
+            int? current,
+            int observed,
+            ref bool conflictingKnownCounts,
+            ref bool negativeKnownCount)
+        {
+            if (observed < 0)
+                negativeKnownCount = true;
+            if (current.HasValue && current.Value != observed)
+                conflictingKnownCounts = true;
+            return !current.HasValue || observed > current.Value ? observed : current.Value;
+        }
+
+        private static void ValidateKnownCount(
+            int? knownCount,
+            bool conflictingKnownCounts,
+            bool negativeKnownCount,
+            string collectionName)
+        {
+            if (negativeKnownCount)
+                throw new InvalidOperationException("IFC round-trip " + collectionName + " source exposes an invalid negative known Count value.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("IFC round-trip " + collectionName + " source exposes conflicting known Count values.");
+            if (knownCount.HasValue && knownCount.Value > MaxNestedCollectionItems)
+                ThrowTooManyNestedItems(collectionName);
+        }
+
+        private static void ThrowTooManyNestedItems(string collectionName)
+        {
+            throw new InvalidOperationException(
+                "IFC round-trip projection supports at most " + MaxNestedCollectionItems + " " + collectionName + " items.");
         }
     }
 
