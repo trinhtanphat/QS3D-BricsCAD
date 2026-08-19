@@ -319,6 +319,8 @@ namespace QS3D.Core.Interoperability
 
     public sealed class InteroperabilityElementRecord
     {
+        public const int MaxNestedItems = 10000;
+
         public InteroperabilityElementRecord(
             InteroperabilityElementIdentity identity,
             IEnumerable<InteroperabilityPropertyFact>? properties,
@@ -328,11 +330,11 @@ namespace QS3D.Core.Interoperability
             IEnumerable<InteroperabilityLossDiagnostic>? diagnostics = null)
         {
             Identity = identity ?? throw new ArgumentNullException(nameof(identity));
-            Properties = CanonicalizeProperties(properties);
-            Classifications = CanonicalizeClassifications(classifications);
-            Quantities = CanonicalizeQuantities(quantities);
-            ProvenanceTokens = CanonicalizeTokens(provenanceTokens, nameof(provenanceTokens));
-            Diagnostics = InteroperabilityDiagnosticOrder.Canonicalize(diagnostics);
+            Properties = CanonicalizeProperties(SnapshotBounded(properties, nameof(properties)));
+            Classifications = CanonicalizeClassifications(SnapshotBounded(classifications, nameof(classifications)));
+            Quantities = CanonicalizeQuantities(SnapshotBounded(quantities, nameof(quantities)));
+            ProvenanceTokens = CanonicalizeTokens(SnapshotBounded(provenanceTokens, nameof(provenanceTokens)), nameof(provenanceTokens));
+            Diagnostics = InteroperabilityDiagnosticOrder.Canonicalize(SnapshotBounded(diagnostics, nameof(diagnostics)));
         }
 
         public InteroperabilityElementIdentity Identity { get; }
@@ -418,6 +420,59 @@ namespace QS3D.Core.Interoperability
             }
             items.Sort(StringComparer.Ordinal);
             return Array.AsReadOnly(items.ToArray());
+        }
+
+        private static IReadOnlyList<T> SnapshotBounded<T>(IEnumerable<T>? source, string parameterName)
+        {
+            if (source == null) return Array.Empty<T>();
+
+            var hasKnownCount = TryGetKnownCount(source, out var knownCount);
+            if (hasKnownCount)
+            {
+                if (knownCount < 0)
+                    throw new InvalidOperationException("Interoperability element " + parameterName + " Count must not be negative.");
+                if (knownCount > MaxNestedItems)
+                    throw new InvalidOperationException("Interoperability element " + parameterName + " cannot exceed " + MaxNestedItems + " items.");
+            }
+
+            var items = hasKnownCount ? new List<T>(knownCount) : new List<T>();
+            var observedCount = 0;
+            foreach (var item in source)
+            {
+                observedCount++;
+                if (observedCount > MaxNestedItems)
+                    throw new InvalidOperationException("Interoperability element " + parameterName + " cannot exceed " + MaxNestedItems + " items.");
+                items.Add(item);
+            }
+
+            if (hasKnownCount)
+            {
+                if (!TryGetKnownCount(source, out var currentCount) ||
+                    currentCount != knownCount ||
+                    observedCount != knownCount)
+                {
+                    throw new InvalidOperationException(
+                        "Interoperability element " + parameterName + " Count changed while being materialized.");
+                }
+            }
+
+            return Array.AsReadOnly(items.ToArray());
+        }
+
+        private static bool TryGetKnownCount<T>(IEnumerable<T> source, out int count)
+        {
+            switch (source)
+            {
+                case IReadOnlyCollection<T> readOnlyCollection:
+                    count = readOnlyCollection.Count;
+                    return true;
+                case ICollection<T> collection:
+                    count = collection.Count;
+                    return true;
+                default:
+                    count = 0;
+                    return false;
+            }
         }
     }
 
