@@ -126,9 +126,7 @@ namespace QS3D.Core.Reporting
         {
             if (double.IsNaN(left) || double.IsInfinity(left) || left < 0d || double.IsNaN(right) || double.IsInfinity(right) || right < 0d)
                 throw new InvalidOperationException(label + " requires finite non-negative values.");
-            var result = left + right;
-            if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " overflowed.");
-            return result;
+            return QuantityReportMath.Add(left, right, label);
         }
     }
 }
