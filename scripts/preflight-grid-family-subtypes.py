@@ -22,6 +22,7 @@ def forbid(text, needle, label, failures):
 def main():
     subtype = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.GridFamilySubtype.cs")
     sync = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.FamilySubtypeSelectionSync.cs")
+    refresh = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.FamilySubtypeRefreshSync.cs")
     recovery = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dParameterModeRecovery.cs")
     quick = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.QuickDraw.cs")
     grid = read("src/QS3D.BricsCAD.V25/GridCommands.cs")
@@ -53,6 +54,10 @@ def main():
     require(sync, 'family.Category == ElementCategory.Grid', "programmatic grid subtype sync", failures)
     require(sync, 'InferFoundationSubtype(family.Name)', "legacy foundation subtype sync", failures)
 
+    require(refresh, 'if (IsGridSubtype(_familySubtypeFilter))', "same-document refresh must detect Grid subtype", failures)
+    require(refresh, 'ApplyGridFamilySubtypeFilter();', "same-document refresh must preserve Grid subtype filtering", failures)
+    require(refresh, 'else\n                        ApplyFamilySubtypeFilter();', "same-document refresh must retain Foundation fallback", failures)
+
     require(recovery, 'if (IsGridSubtype(panel._familySubtypeFilter))', "BLT3D parameter recovery must recognize Grid subtype", failures)
     require(recovery, 'panel.ApplyGridFamilySubtypeFilter();', "BLT3D parameter recovery must use Grid filter", failures)
     require(recovery, 'panel.ApplyFamilySubtypeFilter();', "BLT3D parameter recovery must retain non-Grid fallback", failures)
@@ -69,7 +74,7 @@ def main():
             print(" -", failure)
         return 1
 
-    print("PASS: Workspace Grid subtype routing preserves direct Add -> Family -> inline Properties plus LINE/ARC capture contracts.")
+    print("PASS: Workspace Grid subtype routing preserves direct Add -> Family -> inline Properties, refresh filtering, and LINE/ARC capture contracts.")
     return 0
 
 
