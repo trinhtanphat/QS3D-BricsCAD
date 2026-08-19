@@ -16,13 +16,18 @@ namespace QS3D.BricsCAD.V25.UI
 {
     /// <summary>
     /// Workspace-only subtype routing. The persisted ProjectFamily model remains unchanged;
-    /// Foundation subtypes are resolved from the tree leaf plus the established family-name prefix.
+    /// supported subtypes are resolved from the tree leaf plus the established family-name prefix.
     /// </summary>
     public partial class WorkspacePanel
     {
         private static readonly string[] FoundationFamilySubtypes =
         {
             "Bê Tông Lót", "Móng Băng", "Móng Bè", "Dầm Móng", "Đài Cọc", "Cọc"
+        };
+
+        private static readonly string[] GridFamilySubtypes =
+        {
+            "Lưới Thẳng", "Lưới Cong"
         };
 
         private bool _familySubtypeInteractionsAttached;
@@ -102,7 +107,8 @@ namespace QS3D.BricsCAD.V25.UI
                 if (selected != null && !FamilyMatchesWorkspaceSubtype(selected, subtype)) selected = null;
 
                 var category = _categoryFilter ?? selected?.Category ?? ElementCategory.Room;
-                if (!string.IsNullOrWhiteSpace(subtype)) category = ElementCategory.Foundation;
+                var subtypeCategory = CategoryForSubtype(subtype);
+                if (subtypeCategory.HasValue) category = subtypeCategory.Value;
                 if (launchSolid3D && !Cad.NativeBuildCapability.Supports(category))
                 {
                     SetStatus(Cad.NativeBuildCapability.UnsupportedMessage(category));
@@ -138,6 +144,7 @@ namespace QS3D.BricsCAD.V25.UI
                     {
                         family = ProjectFamilyService.Create(project, Guid.NewGuid().ToString("N"), name, category);
                         SeedQuickSchemaDefaults(family);
+                        SeedWorkspaceSubtypeDefaults(family, subtype);
                         AuditTrail.ForProject(project).Record(
                             "family.create", string.Empty,
                             family.Id + " • " + family.Category + " • " + family.Name + " • Workspace " +
@@ -180,6 +187,25 @@ namespace QS3D.BricsCAD.V25.UI
                 family.Properties["Material"] = schema.DefaultMaterial;
         }
 
+        private static void SeedWorkspaceSubtypeDefaults(ProjectFamily family, string subtype)
+        {
+            if (family.Category != ElementCategory.Grid) return;
+
+            family.Properties["GridAxisName"] = "1";
+            family.Properties["GridLocked"] = "false";
+            family.Properties["GridStartBubbleVisible"] = "true";
+            family.Properties["GridEndBubbleVisible"] = "true";
+            family.Properties["DisplayColor"] = "Theo loại (mặc định)";
+            family.Properties["DisplayTransparencyPercent"] = "0";
+            family.Properties["Mark"] = string.Empty;
+            family.Properties["Comment"] = string.Empty;
+            family.Properties["WBS"] = string.Empty;
+            family.Properties["Material"] = "Khác";
+
+            if (string.Equals(subtype, "Lưới Cong", StringComparison.OrdinalIgnoreCase))
+                family.Properties["GridRadiusM"] = "0.5";
+        }
+
         private static string NextSubtypeFamilyName(string subtype, ISet<string> existingNames)
         {
             var baseName = string.IsNullOrWhiteSpace(subtype) ? "Family" : subtype.Trim();
@@ -205,7 +231,7 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnFamilySubtypeTreeSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (!(e.NewValue is TreeViewItem item)) return;
-            _familySubtypeFilter = ResolveFoundationSubtype(item);
+            _familySubtypeFilter = ResolveWorkspaceSubtype(item);
             ApplyFamilySubtypeFilter();
             if (string.IsNullOrWhiteSpace(_familySubtypeFilter)) return;
 
@@ -239,14 +265,14 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnFamilySubtypeFamilySelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_applyingFamilySubtypeFilter) return;
-            if (FamilyList.SelectedItem is ProjectFamily family && family.Category == ElementCategory.Foundation)
+            if (FamilyList.SelectedItem is ProjectFamily family)
             {
-                var inferred = InferFoundationSubtype(family.Name);
+                var inferred = InferWorkspaceSubtype(family);
                 if (_inspection.Count > 0 && inferred.Length > 0 &&
                     !string.Equals(_familySubtypeFilter, inferred, StringComparison.OrdinalIgnoreCase))
                 {
                     _familySubtypeFilter = inferred;
-                    _categoryFilter = ElementCategory.Foundation;
+                    _categoryFilter = family.Category;
                     ApplyFamilySubtypeFilter();
                 }
             }
@@ -284,22 +310,42 @@ namespace QS3D.BricsCAD.V25.UI
             finally { _applyingFamilySubtypeFilter = false; }
         }
 
-        private static string ResolveFoundationSubtype(TreeViewItem item)
+        private static string ResolveWorkspaceSubtype(TreeViewItem item)
         {
             if (!(item.Tag is string tag) ||
-                !Enum.TryParse(tag, true, out ElementCategory category) ||
-                category != ElementCategory.Foundation) return string.Empty;
+                !Enum.TryParse(tag, true, out ElementCategory category)) return string.Empty;
             var header = (item.Header as string ?? string.Empty).Trim();
-            return FoundationFamilySubtypes.FirstOrDefault(x =>
+            var candidates = category == ElementCategory.Foundation
+                ? FoundationFamilySubtypes
+                : category == ElementCategory.Grid ? GridFamilySubtypes : Array.Empty<string>();
+            return candidates.FirstOrDefault(x =>
                 string.Equals(x, header, StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
         }
 
-        private static string InferFoundationSubtype(string familyName) =>
-            FoundationFamilySubtypes.FirstOrDefault(x => FamilyNameHasSubtype(familyName, x)) ?? string.Empty;
+        private static ElementCategory? CategoryForSubtype(string subtype)
+        {
+            if (FoundationFamilySubtypes.Any(x => string.Equals(x, subtype, StringComparison.OrdinalIgnoreCase)))
+                return ElementCategory.Foundation;
+            if (GridFamilySubtypes.Any(x => string.Equals(x, subtype, StringComparison.OrdinalIgnoreCase)))
+                return ElementCategory.Grid;
+            return null;
+        }
 
-        private static bool FamilyMatchesWorkspaceSubtype(ProjectFamily family, string subtype) =>
-            string.IsNullOrWhiteSpace(subtype) ||
-            (family.Category == ElementCategory.Foundation && FamilyNameHasSubtype(family.Name, subtype));
+        private static string InferWorkspaceSubtype(ProjectFamily family)
+        {
+            if (family == null) return string.Empty;
+            var candidates = family.Category == ElementCategory.Foundation
+                ? FoundationFamilySubtypes
+                : family.Category == ElementCategory.Grid ? GridFamilySubtypes : Array.Empty<string>();
+            return candidates.FirstOrDefault(x => FamilyNameHasSubtype(family.Name, x)) ?? string.Empty;
+        }
+
+        private static bool FamilyMatchesWorkspaceSubtype(ProjectFamily family, string subtype)
+        {
+            if (string.IsNullOrWhiteSpace(subtype)) return true;
+            var category = CategoryForSubtype(subtype);
+            return category.HasValue && family.Category == category.Value && FamilyNameHasSubtype(family.Name, subtype);
+        }
 
         private static bool FamilyNameHasSubtype(string familyName, string subtype)
         {
