@@ -94,23 +94,25 @@ namespace QS3D.Core.Cost
             if (buildUpRates == null) throw new ArgumentNullException(nameof(buildUpRates));
             if (rateReferences == null) throw new ArgumentNullException(nameof(rateReferences));
             if (libraryEntries == null) throw new ArgumentNullException(nameof(libraryEntries));
-            ValidateKnownCount(billItems, MaxBillItems, "bill items");
-            ValidateKnownCount(buildUpRates, MaxBuildUpRates, "build-up rates");
-            ValidateKnownCount(rateReferences, MaxRateReferences, "rate references");
-            ValidateKnownCount(libraryEntries, MaxLibraryEntries, "BQ library entries");
+            var knownBillItemCount = ValidateKnownCount(billItems, MaxBillItems, "bill items");
+            var knownBuildUpRateCount = ValidateKnownCount(buildUpRates, MaxBuildUpRates, "build-up rates");
+            var knownRateReferenceCount = ValidateKnownCount(rateReferences, MaxRateReferences, "rate references");
+            var knownLibraryEntryCount = ValidateKnownCount(libraryEntries, MaxLibraryEntries, "BQ library entries");
 
-            BillItems = SnapshotBillItems(billItems);
-            BuildUpRates = SnapshotBuildUpRates(buildUpRates);
+            BillItems = SnapshotBillItems(billItems, knownBillItemCount);
+            BuildUpRates = SnapshotBuildUpRates(buildUpRates, knownBuildUpRateCount);
             RateReferences = new RateReferenceGraph(Bounded(
                 rateReferences,
                 MaxRateReferences,
-                "rate references"));
+                "rate references",
+                knownRateReferenceCount));
             Library = new BqLibraryCatalog(
                 LibraryId,
                 Bounded(
                     libraryEntries,
                     MaxLibraryEntries,
-                    "BQ library entries"));
+                    "BQ library entries",
+                    knownLibraryEntryCount));
 
             new CostAdjustmentService().AdjustByRatios(0m, adjustmentRatioPercent, markupRatioPercent);
             AdjustmentRatioPercent = adjustmentRatioPercent == 0m ? 0m : adjustmentRatioPercent;
@@ -187,7 +189,7 @@ namespace QS3D.Core.Cost
             return new TradeCostAnalysisService().Analyze(adjustedItems, CfaM2);
         }
 
-        private static IReadOnlyList<TbqBillItem> SnapshotBillItems(IEnumerable<TbqBillItem> items)
+        private static IReadOnlyList<TbqBillItem> SnapshotBillItems(IEnumerable<TbqBillItem> items, int? knownCount)
         {
             if (items == null) throw new ArgumentNullException(nameof(items));
             var snapshot = new List<TbqBillItem>();
@@ -197,16 +199,19 @@ namespace QS3D.Core.Cost
             {
                 if (index == MaxBillItems)
                     throw new InvalidOperationException("TBQ workspace supports at most " + MaxBillItems + " bill items.");
+                if (knownCount.HasValue && index == knownCount.Value)
+                    ThrowKnownCountMismatch("bill items", knownCount.Value, index + 1);
                 if (item == null) throw new ArgumentException("TBQ workspace contains a null bill item at index " + index + ".", nameof(items));
                 if (!ids.Add(item.ItemCode)) throw new ArgumentException("Duplicate TBQ bill item code: " + item.ItemCode + ".", nameof(items));
                 snapshot.Add(item);
                 index++;
             }
+            RequireKnownCountMatchesTraversal("bill items", knownCount, index);
             snapshot.Sort(CompareBillItems);
             return new ReadOnlyCollection<TbqBillItem>(snapshot.ToArray());
         }
 
-        private static IReadOnlyList<BuildUpRateSnapshot> SnapshotBuildUpRates(IEnumerable<BuildUpRateSnapshot> rates)
+        private static IReadOnlyList<BuildUpRateSnapshot> SnapshotBuildUpRates(IEnumerable<BuildUpRateSnapshot> rates, int? knownCount)
         {
             if (rates == null) throw new ArgumentNullException(nameof(rates));
             var snapshot = new List<BuildUpRateSnapshot>();
@@ -216,16 +221,19 @@ namespace QS3D.Core.Cost
             {
                 if (index == MaxBuildUpRates)
                     throw new InvalidOperationException("TBQ workspace supports at most " + MaxBuildUpRates + " build-up rates.");
+                if (knownCount.HasValue && index == knownCount.Value)
+                    ThrowKnownCountMismatch("build-up rates", knownCount.Value, index + 1);
                 if (rate == null) throw new ArgumentException("TBQ workspace contains a null build-up rate at index " + index + ".", nameof(rates));
                 if (!ids.Add(rate.RateCode)) throw new ArgumentException("Duplicate TBQ build-up rate code: " + rate.RateCode + ".", nameof(rates));
                 snapshot.Add(rate);
                 index++;
             }
+            RequireKnownCountMatchesTraversal("build-up rates", knownCount, index);
             snapshot.Sort(CompareBuildUps);
             return new ReadOnlyCollection<BuildUpRateSnapshot>(snapshot.ToArray());
         }
 
-        private static void ValidateKnownCount<T>(IEnumerable<T> source, int maximum, string label)
+        private static int? ValidateKnownCount<T>(IEnumerable<T> source, int maximum, string label)
         {
             var counts = new List<int>(3);
             if (source is ICollection<T> collection)
@@ -235,7 +243,7 @@ namespace QS3D.Core.Cost
             if (source is ICollection nonGenericCollection)
                 counts.Add(nonGenericCollection.Count);
 
-            if (counts.Count == 0) return;
+            if (counts.Count == 0) return null;
 
             var expected = counts[0];
             var maximumReported = expected;
@@ -255,18 +263,35 @@ namespace QS3D.Core.Cost
                 throw new InvalidOperationException("TBQ workspace " + label + " collection reports an invalid negative known count.");
             if (hasConflict)
                 throw new InvalidOperationException("TBQ workspace " + label + " collection reports conflicting known counts.");
+            return expected;
         }
 
-        private static IEnumerable<T> Bounded<T>(IEnumerable<T> source, int maximum, string label)
+        private static IEnumerable<T> Bounded<T>(IEnumerable<T> source, int maximum, string label, int? knownCount)
         {
             var count = 0;
             foreach (var item in source)
             {
                 if (count == maximum)
                     throw new InvalidOperationException("TBQ workspace supports at most " + maximum + " " + label + ".");
+                if (knownCount.HasValue && count == knownCount.Value)
+                    ThrowKnownCountMismatch(label, knownCount.Value, count + 1);
                 count++;
                 yield return item;
             }
+            RequireKnownCountMatchesTraversal(label, knownCount, count);
+        }
+
+        private static void RequireKnownCountMatchesTraversal(string label, int? knownCount, int observedCount)
+        {
+            if (knownCount.HasValue && knownCount.Value != observedCount)
+                ThrowKnownCountMismatch(label, knownCount.Value, observedCount);
+        }
+
+        private static void ThrowKnownCountMismatch(string label, int knownCount, int observedCount)
+        {
+            throw new InvalidOperationException(
+                "TBQ workspace " + label + " traversal produced " + observedCount +
+                " entries but its known count reported " + knownCount + ".");
         }
 
         private static int CompareBillItems(TbqBillItem left, TbqBillItem right)
