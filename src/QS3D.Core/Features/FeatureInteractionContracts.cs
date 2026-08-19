@@ -85,7 +85,7 @@ namespace QS3D.Core.Features
             OnSelect = onSelect;
             Recipes = Snapshot(recipes);
             PrimaryRecipeId = NormalizeOptional(primaryRecipeId);
-            PersistentSurfaces = Snapshot(persistentSurfaces);
+            PersistentSurfaces = SnapshotPersistentSurfaces(persistentSurfaces);
             Capabilities = capabilities;
             AllowsModal = allowsModal;
             AllowsFloatingTool = allowsFloatingTool;
@@ -129,6 +129,25 @@ namespace QS3D.Core.Features
         private static IReadOnlyList<T> Snapshot<T>(IEnumerable<T> source)
         {
             return new ReadOnlyCollection<T>((source ?? Enumerable.Empty<T>()).ToArray());
+        }
+
+        private static IReadOnlyList<InteractionSurface> SnapshotPersistentSurfaces(IEnumerable<InteractionSurface> source)
+        {
+            if (source == null)
+                return new ReadOnlyCollection<InteractionSurface>(Array.Empty<InteractionSurface>());
+
+            var snapshot = new List<InteractionSurface>(2);
+            using (var enumerator = source.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (snapshot.Count == 2)
+                        throw new InvalidOperationException("Normal Workspace interaction profiles support at most two persistent surfaces.");
+                    snapshot.Add(enumerator.Current);
+                }
+            }
+
+            return new ReadOnlyCollection<InteractionSurface>(snapshot);
         }
 
         private static string? NormalizeOptional(string? value)

@@ -52,12 +52,13 @@ if PARTIAL.is_file():
         '"FamilyUsageUpgraded"',
         "FrameworkElement.LoadedEvent",
         "panel.EnsureFamilyUsageHooks();",
-        "panel.UpgradeFamilyUsageBadges();",
+        "panel.QueueFamilyUsageBadgeUpgrade();",
         "_ = FamilyUsageClassHandlerRegistered;",
         "if (_familyUsageHooksApplied || FamilyList == null) return;",
         "FamilyList.ItemContainerGenerator.StatusChanged += OnFamilyUsageGeneratorStatusChanged;",
-        "FamilyList.LayoutUpdated += OnFamilyUsageLayoutUpdated;",
         "GeneratorStatus.ContainersGenerated",
+        "private void QueueFamilyUsageBadgeUpgrade()",
+        "Dispatcher.BeginInvoke(new Action(UpgradeFamilyUsageBadges), DispatcherPriority.Loaded);",
         "FamilyList.ItemContainerGenerator.ContainerFromItem(item) as ListBoxItem",
         "Descendants<TextBlock>(container)",
         'binding?.Path?.Path, "Properties.Count"',
@@ -76,18 +77,20 @@ if PARTIAL.is_file():
     hook_pos = text.find("private void EnsureFamilyUsageHooks()")
     guard_pos = text.find("if (_familyUsageHooksApplied || FamilyList == null) return;", hook_pos)
     generator_pos = text.find("FamilyList.ItemContainerGenerator.StatusChanged +=", guard_pos)
-    layout_pos = text.find("FamilyList.LayoutUpdated +=", generator_pos)
-    upgrade_pos = text.find("private void UpgradeFamilyUsageBadges()", layout_pos)
+    queue_pos = text.find("private void QueueFamilyUsageBadgeUpgrade()", generator_pos)
+    upgrade_pos = text.find("private void UpgradeFamilyUsageBadges()", queue_pos)
     original_binding_pos = text.find('"Properties.Count"', upgrade_pos)
     multi_pos = text.find("var usageBinding = new MultiBinding", original_binding_pos)
     set_pos = text.find("BindingOperations.SetBinding", multi_pos)
     mark_pos = text.find("FamilyUsageUpgradedProperty, true", set_pos)
-    if min(hook_pos, guard_pos, generator_pos, layout_pos, upgrade_pos, original_binding_pos, multi_pos, set_pos, mark_pos) < 0 or not (
-        hook_pos < guard_pos < generator_pos < layout_pos < upgrade_pos < original_binding_pos < multi_pos < set_pos < mark_pos
+    if min(hook_pos, guard_pos, generator_pos, queue_pos, upgrade_pos, original_binding_pos, multi_pos, set_pos, mark_pos) < 0 or not (
+        hook_pos < guard_pos < generator_pos < queue_pos < upgrade_pos < original_binding_pos < multi_pos < set_pos < mark_pos
     ):
-        errors.append("Family usage binding upgrade must hook once and replace only the original Properties.Count FamilyList badge before marking it upgraded")
+        errors.append("Family usage binding upgrade must hook once, defer until generated templates are loaded, and replace only the original Properties.Count FamilyList badge before marking it upgraded")
 
     for forbidden in (
+        "FamilyList.LayoutUpdated +=",
+        "OnFamilyUsageLayoutUpdated",
         "ProjectContextCoordinator.GetOrCreate",
         "ExistingProjectMutationContext",
         "SendStringToExecute",
@@ -97,7 +100,7 @@ if PARTIAL.is_file():
         "FamilyList.SelectionChanged +=",
     ):
         if forbidden in text:
-            errors.append("Family usage partial must not replace Family source/selection semantics or mutate CAD/project state: " + forbidden)
+            errors.append("Family usage partial must not rescan on layout, replace Family source/selection semantics, or mutate CAD/project state: " + forbidden)
 
 if XAML.is_file():
     text = XAML.read_text(encoding="utf-8")
@@ -135,4 +138,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: FamilyList keeps canonical ProjectFamily selection while its existing property-count badge is upgraded idempotently to a read-only semantic N cấu kiện count; property-panel counts and Family actions remain unchanged.")
+print("PASS: FamilyList keeps canonical ProjectFamily selection while its existing property-count badge is upgraded idempotently after container generation without a LayoutUpdated rescan loop; property-panel counts and Family actions remain unchanged.")
