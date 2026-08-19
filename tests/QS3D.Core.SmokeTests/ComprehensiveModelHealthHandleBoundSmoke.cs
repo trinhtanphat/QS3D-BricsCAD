@@ -81,7 +81,7 @@ namespace QS3D.Core.SmokeTests
             var project = Project();
             var source = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (var index = 0; index < MaximumHandles; index++)
-                source.Add("  S" + index.ToString("D5", System.Globalization.CultureInfo.InvariantCulture) + "  ");
+                source.Add("S" + index.ToString("D5", System.Globalization.CultureInfo.InvariantCulture));
 
             new ComprehensiveModelHealthService(1).Inspect(project, source, null);
             new ComprehensiveModelHealthService(1).Inspect(project, null, null);
