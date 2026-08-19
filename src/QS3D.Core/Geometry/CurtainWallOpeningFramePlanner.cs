@@ -38,7 +38,16 @@ namespace QS3D.Core.Geometry
         public IReadOnlyList<CurtainWallFramePiece> Pieces { get; set; } = Array.Empty<CurtainWallFramePiece>();
         public double OriginalFrameAreaM2 { get; set; }
         public double RemainingFrameAreaM2 { get; set; }
-        public double RemovedFrameAreaM2 => Math.Max(0d, OriginalFrameAreaM2 - RemainingFrameAreaM2);
+        public double RemovedFrameAreaM2
+        {
+            get
+            {
+                var removed = OriginalFrameAreaM2 - RemainingFrameAreaM2;
+                if (double.IsNaN(removed) || double.IsInfinity(removed))
+                    throw new OverflowException("Curtain removed frame area is not representable.");
+                return removed <= 0d ? 0d : removed;
+            }
+        }
         public int InterruptedFrameCount { get; set; }
     }
 
