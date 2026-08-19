@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             RuleConstructorRejectsInternalControlCharacters();
-            RuleConstructorPreservesExistingTrimBehavior();
+            RuleConstructorRejectsSurroundingWhitespace();
             ResultRejectsCandidateControlCharacters();
             PostConstructionCandidateMutationFailsClosed();
         }
@@ -25,10 +25,26 @@ namespace QS3D.Core.SmokeTests
             ExpectArgument(() => new RecognitionRule("first\tsecond", ElementCategory.ArchitecturalWall));
         }
 
-        private static void RuleConstructorPreservesExistingTrimBehavior()
+        private static void RuleConstructorRejectsSurroundingWhitespace()
         {
-            var rule = new RecognitionRule("  canonical-rule  ", ElementCategory.ArchitecturalWall);
-            Equal("canonical-rule", rule.Id, "RecognitionRule must preserve its existing surrounding-whitespace trim behavior.");
+            foreach (var id in new[]
+            {
+                " canonical-rule",
+                "canonical-rule ",
+                "\tcanonical-rule",
+                "canonical-rule\t",
+                "\rcanonical-rule",
+                "canonical-rule\r",
+                "\ncanonical-rule",
+                "canonical-rule\n",
+                "  canonical-rule  "
+            })
+            {
+                ExpectArgument(() => new RecognitionRule(id, ElementCategory.ArchitecturalWall));
+            }
+
+            var canonical = new RecognitionRule("Canonical-Rule", ElementCategory.ArchitecturalWall);
+            Equal("Canonical-Rule", canonical.Id, "RecognitionRule must preserve an already-canonical rule id exactly.");
         }
 
         private static void ResultRejectsCandidateControlCharacters()
