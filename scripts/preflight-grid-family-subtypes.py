@@ -14,6 +14,11 @@ def require(text, needle, label, failures):
         failures.append(label + ": missing " + needle)
 
 
+def forbid(text, needle, label, failures):
+    if needle in text:
+        failures.append(label + ": forbidden " + needle)
+
+
 def main():
     subtype = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.GridFamilySubtype.cs")
     sync = read("src/QS3D.BricsCAD.V25/UI/WorkspacePanel.FamilySubtypeSelectionSync.cs")
@@ -38,6 +43,13 @@ def main():
     require(subtype, 'if (IsGridSubtype(_familySubtypeFilter))', "Grid search must bypass Foundation-only filtering", failures)
     require(subtype, 'OnFamilySubtypeSearchChanged(sender, e);', "non-Grid search must preserve legacy routing", failures)
 
+    require(subtype, 'e.Handled = true;\n            CreateGridFamilyFromWorkspaceSubtype(false);', "Grid Add must create the selected subtype Family directly", failures)
+    require(subtype, 'FamilyList.SelectedItem = live;', "new Grid Family must be selected after commit", failures)
+    require(subtype, 'if (live != null) _viewModel.ShowFamilyProperties();', "new Grid Family must show inline Properties", failures)
+    forbid(subtype, 'CreateMenuItem("Tham số"', "Grid Add must not open a parameter mode chooser", failures)
+    forbid(subtype, 'CreateMenuItem("Solid3D"', "Grid Add must not open a Solid3D mode chooser", failures)
+    forbid(subtype, 'menu.IsOpen = true;', "Grid Add must not open a context menu", failures)
+
     require(sync, 'family.Category == ElementCategory.Grid', "programmatic grid subtype sync", failures)
     require(sync, 'InferFoundationSubtype(family.Name)', "legacy foundation subtype sync", failures)
 
@@ -57,7 +69,7 @@ def main():
             print(" -", failure)
         return 1
 
-    print("PASS: Workspace Grid subtype routing preserves Grid selection/search/recovery and routes capture by LINE/ARC.")
+    print("PASS: Workspace Grid subtype routing preserves direct Add -> Family -> inline Properties plus LINE/ARC capture contracts.")
     return 0
 
 
