@@ -45,7 +45,9 @@ def main():
         'QuantityEngine2Summary.Build(rows, regenerated)',
         'if (summary.ElementCount == 0)',
         'Chưa có cấu kiện hợp lệ để tính khối lượng.',
-        'QuantityCalculationResultWindow.ShowSuccess(summary)',
+        'var openQuantityReview = QuantityCalculationResultWindow.ShowSuccess(summary)',
+        'if (openQuantityReview)',
+        'new Commands().ShowQuantitySummary()',
         'QuantityCalculationResultWindow.ShowError(ex.Message)',
         'QuantityReportMath.FiniteAccumulator',
         'ElementCategory.Beam',
@@ -57,13 +59,17 @@ def main():
         require(command, needle, COMMAND_REL)
 
     for needle in (
-        'new QuantityCalculationResultWindow("Tính khối lượng", heading, detail, true).ShowDialog()',
+        'public static bool ShowSuccess(QuantityEngine2Summary summary)',
+        'offerQuantity: true',
+        'return window._openQuantityRequested;',
         '"Tính khối lượng thành công (dùng lại kết quả — model chưa đổi):"',
         '"• Bê tông: "',
         '"• Cốp pha: "',
         '"• Chiều dài (dầm/tường): "',
         '"• Chu vi biên (sàn/móng): ngoài "',
-        '"Bấm “Xem khối lượng” để mở bảng tổng hợp chi tiết."',
+        '"Chọn “Xem khối lượng” để mở bảng tổng hợp chi tiết."',
+        'ok.Content = "Xem khối lượng"',
+        '_openQuantityRequested = true;',
         'Content = "OK"',
         'Text = success ? "✓" : "!"',
         'WindowStyle = System.Windows.WindowStyle.None',
@@ -71,7 +77,7 @@ def main():
     ):
         require(window, needle, WINDOW_REL)
 
-    print("PASS: Engine2 ribbon action calculates QS3D quantities and presents the owner-facing result summary popup.")
+    print("PASS: Engine2 calculates QS3D quantities, presents the owner-facing result popup, and can hand successful results to the canonical detailed quantity review.")
 
 
 if __name__ == "__main__":
