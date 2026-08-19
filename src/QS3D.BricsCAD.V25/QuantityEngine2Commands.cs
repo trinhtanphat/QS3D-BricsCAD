@@ -28,8 +28,18 @@ namespace QS3D.BricsCAD.V25
                 var rows = ProjectQuantityReportBuilder.Group(project);
                 var summary = QuantityEngine2Summary.Build(rows, regenerated);
                 if (summary.ElementCount == 0)
-                    throw new InvalidOperationException(
-                        "Chưa có cấu kiện hợp lệ để tính khối lượng. Hãy capture/tạo cấu kiện QS3D rồi chạy lại Engine2.");
+                {
+                    const string noElementsMessage =
+                        "Chưa có cấu kiện hợp lệ để tính khối lượng. Hãy Tạo mới/Capture cấu kiện QS3D rồi chạy lại Engine2.";
+                    var openModeling = QuantityCalculationResultWindow.ShowNoElements(noElementsMessage);
+                    if (openModeling)
+                    {
+                        PaletteCoordinator.ShowBimWorkspace();
+                        PaletteCoordinator.SetStatus(
+                            "Khối lượng chưa có dữ liệu • hãy Tạo mới/Capture cấu kiện QS3D trong Mô hình, kiểm tra Tham số/3D rồi chạy lại Tính khối lượng.");
+                    }
+                    return;
+                }
 
                 try
                 {
