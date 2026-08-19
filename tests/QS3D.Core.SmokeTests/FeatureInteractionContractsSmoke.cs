@@ -66,7 +66,7 @@ namespace QS3D.Core.SmokeTests
             var ids = registry.Descriptors.Select(x => x.Id.ToString()).ToArray();
             if (!ids.SequenceEqual(new[] { "model.room", "model.wall" }))
                 throw new Exception("Feature registry enumeration must be deterministic by group/order/id.");
-            if (!registry.TryGet(new FeatureId("MODEL.ROOM"), out var room) || room.LabelKey != "Feature.Room")
+            if (!registry.TryGet(new FeatureId("MODEL.ROOM"), out var room) || room == null || room.LabelKey != "Feature.Room")
                 throw new Exception("FeatureId lookup must use stable canonical identity rather than visible labels.");
 
             ExpectInvalid(() => new FeatureRegistry(new[]
