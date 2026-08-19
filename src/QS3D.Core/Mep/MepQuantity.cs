@@ -31,7 +31,10 @@ namespace QS3D.Core.Mep
             double areaM2 = 0d,
             double volumeM3 = 0d)
         {
-            ElementId = MepContract.RequireText(elementId, nameof(elementId));
+            var normalizedElementId = MepContract.RequireText(elementId, nameof(elementId));
+            if (!string.Equals(normalizedElementId, elementId, StringComparison.Ordinal))
+                throw new ArgumentException("MEP element id must be canonical without surrounding whitespace.", nameof(elementId));
+            ElementId = normalizedElementId;
             if (!Enum.IsDefined(typeof(MepElementKind), kind))
                 throw new ArgumentOutOfRangeException(nameof(kind));
             Kind = kind;
