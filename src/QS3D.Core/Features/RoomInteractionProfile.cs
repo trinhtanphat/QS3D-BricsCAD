@@ -74,7 +74,8 @@ namespace QS3D.Core.Features
 
         private static string? NormalizeContext(string? roomContextKey)
         {
-            return string.IsNullOrWhiteSpace(roomContextKey) ? null : roomContextKey.Trim();
+            if (roomContextKey == null || string.IsNullOrWhiteSpace(roomContextKey)) return null;
+            return roomContextKey.Trim();
         }
     }
 }
