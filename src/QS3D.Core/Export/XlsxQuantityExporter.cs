@@ -57,7 +57,19 @@ namespace QS3D.Core.Export
                     SideAreaM2 = source.SideAreaM2,
                     BottomAreaM2 = source.BottomAreaM2,
                     TopAreaM2 = source.TopAreaM2,
-                    OtherAreaM2 = source.OtherAreaM2
+                    OtherAreaM2 = source.OtherAreaM2,
+                    HasGrossConcreteM3Evidence = source.HasGrossConcreteM3Evidence,
+                    HasDeductionM3Evidence = source.HasDeductionM3Evidence,
+                    HasNetConcreteM3Evidence = source.HasNetConcreteM3Evidence,
+                    HasFormworkM2Evidence = source.HasFormworkM2Evidence,
+                    HasLengthMEvidence = source.HasLengthMEvidence,
+                    HasOuterPerimeterMEvidence = source.HasOuterPerimeterMEvidence,
+                    HasInnerPerimeterMEvidence = source.HasInnerPerimeterMEvidence,
+                    HasDoorAreaM2Evidence = source.HasDoorAreaM2Evidence,
+                    HasSideAreaM2Evidence = source.HasSideAreaM2Evidence,
+                    HasBottomAreaM2Evidence = source.HasBottomAreaM2Evidence,
+                    HasTopAreaM2Evidence = source.HasTopAreaM2Evidence,
+                    HasOtherAreaM2Evidence = source.HasOtherAreaM2Evidence
                 };
                 SnapshotStrings(source.ElementIds, row.ElementIds);
                 SnapshotStrings(source.SourceHandles, row.SourceHandles);
@@ -169,6 +181,18 @@ namespace QS3D.Core.Export
                     BottomAreaM2 = source.BottomAreaM2,
                     TopAreaM2 = source.TopAreaM2,
                     OtherAreaM2 = source.OtherAreaM2,
+                    HasGrossConcreteM3Evidence = source.HasGrossConcreteM3Evidence,
+                    HasDeductionM3Evidence = source.HasDeductionM3Evidence,
+                    HasNetConcreteM3Evidence = source.HasNetConcreteM3Evidence,
+                    HasFormworkM2Evidence = source.HasFormworkM2Evidence,
+                    HasLengthMEvidence = source.HasLengthMEvidence,
+                    HasOuterPerimeterMEvidence = source.HasOuterPerimeterMEvidence,
+                    HasInnerPerimeterMEvidence = source.HasInnerPerimeterMEvidence,
+                    HasDoorAreaM2Evidence = source.HasDoorAreaM2Evidence,
+                    HasSideAreaM2Evidence = source.HasSideAreaM2Evidence,
+                    HasBottomAreaM2Evidence = source.HasBottomAreaM2Evidence,
+                    HasTopAreaM2Evidence = source.HasTopAreaM2Evidence,
+                    HasOtherAreaM2Evidence = source.HasOtherAreaM2Evidence,
                     DensityKgM3 = source.DensityKgM3,
                     MassKg = source.MassKg
                 };
@@ -212,6 +236,20 @@ namespace QS3D.Core.Export
                 RequireAggregateParity(summary.BottomAreaM2, group, x => x.BottomAreaM2, "BottomAreaM2");
                 RequireAggregateParity(summary.TopAreaM2, group, x => x.TopAreaM2, "TopAreaM2");
                 RequireAggregateParity(summary.OtherAreaM2, group, x => x.OtherAreaM2, "OtherAreaM2");
+
+                RequireEvidenceParity(summary.HasGrossConcreteM3Evidence, group, x => x.HasGrossConcreteM3Evidence, "GrossConcreteM3");
+                RequireEvidenceParity(summary.HasDeductionM3Evidence, group, x => x.HasDeductionM3Evidence, "DeductionM3");
+                RequireEvidenceParity(summary.HasNetConcreteM3Evidence, group, x => x.HasNetConcreteM3Evidence, "NetConcreteM3");
+                RequireEvidenceParity(summary.HasFormworkM2Evidence, group, x => x.HasFormworkM2Evidence, "FormworkM2");
+                RequireEvidenceParity(summary.HasLengthMEvidence, group, x => x.HasLengthMEvidence, "LengthM");
+                RequireEvidenceParity(summary.HasOuterPerimeterMEvidence, group, x => x.HasOuterPerimeterMEvidence, "OuterPerimeterM");
+                RequireEvidenceParity(summary.HasInnerPerimeterMEvidence, group, x => x.HasInnerPerimeterMEvidence, "InnerPerimeterM");
+                RequireEvidenceParity(summary.HasDoorAreaM2Evidence, group, x => x.HasDoorAreaM2Evidence, "DoorAreaM2");
+                RequireEvidenceParity(summary.HasSideAreaM2Evidence, group, x => x.HasSideAreaM2Evidence, "SideAreaM2");
+                RequireEvidenceParity(summary.HasBottomAreaM2Evidence, group, x => x.HasBottomAreaM2Evidence, "BottomAreaM2");
+                RequireEvidenceParity(summary.HasTopAreaM2Evidence, group, x => x.HasTopAreaM2Evidence, "TopAreaM2");
+                RequireEvidenceParity(summary.HasOtherAreaM2Evidence, group, x => x.HasOtherAreaM2Evidence, "OtherAreaM2");
+
                 RequireDensityParity(summary, group);
                 RequireMassParity(summary, group);
             }
@@ -259,6 +297,18 @@ namespace QS3D.Core.Export
             var expected = ValueCompensatedEd2(ref accumulator, field);
             RequireFinite(actual, field);
             if (actual != expected) throw NumericParityError(field);
+        }
+
+        private static void RequireEvidenceParity(
+            bool actual,
+            IReadOnlyList<QuantityReportRow> group,
+            Func<QuantityReportRow, bool> selector,
+            string field)
+        {
+            var expected = true;
+            foreach (var detail in group) expected &= selector(detail);
+            if (actual != expected)
+                throw new InvalidDataException("ED2 TONG_HOP " + field + " evidence presence does not match its CHI_TIET elements.");
         }
 
         private static void RequireDensityParity(QuantityReportRow summary, IReadOnlyList<QuantityReportRow> group)
@@ -570,18 +620,18 @@ namespace QS3D.Core.Export
                 AppendInlineStringCell(sb, CellRef(2, r), row.Category, 0);
                 AppendInlineStringCell(sb, CellRef(3, r), row.FamilyName, 0);
                 AppendNumberCell(sb, CellRef(4, r), row.Count, IntegerStyle);
-                AppendNumberCell(sb, CellRef(5, r), row.GrossConcreteM3, Decimal3Style);
-                AppendNumberCell(sb, CellRef(6, r), row.DeductionM3, Decimal3Style);
-                AppendNumberCell(sb, CellRef(7, r), row.NetConcreteM3, Decimal3Style);
-                AppendNumberCell(sb, CellRef(8, r), row.FormworkM2, Decimal3Style);
-                AppendNumberCell(sb, CellRef(9, r), row.LengthM, Decimal3Style);
-                AppendNumberCell(sb, CellRef(10, r), row.OuterPerimeterM, Decimal3Style);
-                AppendNumberCell(sb, CellRef(11, r), row.InnerPerimeterM, Decimal3Style);
-                AppendNumberCell(sb, CellRef(12, r), row.DoorAreaM2, Decimal3Style);
-                AppendNumberCell(sb, CellRef(13, r), row.SideAreaM2, Decimal3Style);
-                AppendNumberCell(sb, CellRef(14, r), row.BottomAreaM2, Decimal3Style);
-                AppendNumberCell(sb, CellRef(15, r), row.TopAreaM2, Decimal3Style);
-                AppendNumberCell(sb, CellRef(16, r), row.OtherAreaM2, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(5, r), row.GrossConcreteM3, row.HasGrossConcreteM3Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(6, r), row.DeductionM3, row.HasDeductionM3Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(7, r), row.NetConcreteM3, row.HasNetConcreteM3Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(8, r), row.FormworkM2, row.HasFormworkM2Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(9, r), row.LengthM, row.HasLengthMEvidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(10, r), row.OuterPerimeterM, row.HasOuterPerimeterMEvidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(11, r), row.InnerPerimeterM, row.HasInnerPerimeterMEvidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(12, r), row.DoorAreaM2, row.HasDoorAreaM2Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(13, r), row.SideAreaM2, row.HasSideAreaM2Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(14, r), row.BottomAreaM2, row.HasBottomAreaM2Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(15, r), row.TopAreaM2, row.HasTopAreaM2Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(16, r), row.OtherAreaM2, row.HasOtherAreaM2Evidence, Decimal3Style);
                 AppendInlineStringCell(sb, CellRef(17, r), row.ElementIdText, 0);
                 AppendInlineStringCell(sb, CellRef(18, r), row.SourceHandleText, 0);
                 AppendInlineStringCell(sb, CellRef(19, r), row.DrawingFingerprint, 0);
@@ -607,7 +657,7 @@ namespace QS3D.Core.Export
             var range = "A1:Y" + lastRow.ToString(CultureInfo.InvariantCulture);
             var sb = new StringBuilder();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-            sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+            sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">");
             sb.Append("<dimension ref=\"").Append(range).Append("\"/>");
             sb.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
             sb.Append(Ed2ColumnWidthsXml);
@@ -631,18 +681,18 @@ namespace QS3D.Core.Export
                 AppendInlineStringCell(sb, CellRef(4, r), row.FamilyId, 0);
                 AppendInlineStringCell(sb, CellRef(5, r), row.FloorZoneText, 0);
                 AppendNumberCell(sb, CellRef(6, r), row.Count, IntegerStyle);
-                AppendNumberCell(sb, CellRef(7, r), row.GrossConcreteM3, Decimal3Style);
-                AppendNumberCell(sb, CellRef(8, r), row.DeductionM3, Decimal3Style);
-                AppendNumberCell(sb, CellRef(9, r), row.NetConcreteM3, Decimal3Style);
-                AppendNumberCell(sb, CellRef(10, r), row.FormworkM2, Decimal3Style);
-                AppendNumberCell(sb, CellRef(11, r), row.LengthM, Decimal3Style);
-                AppendNumberCell(sb, CellRef(12, r), row.OuterPerimeterM, Decimal3Style);
-                AppendNumberCell(sb, CellRef(13, r), row.InnerPerimeterM, Decimal3Style);
-                AppendNumberCell(sb, CellRef(14, r), row.DoorAreaM2, Decimal3Style);
-                AppendNumberCell(sb, CellRef(15, r), row.SideAreaM2, Decimal3Style);
-                AppendNumberCell(sb, CellRef(16, r), row.BottomAreaM2, Decimal3Style);
-                AppendNumberCell(sb, CellRef(17, r), row.TopAreaM2, Decimal3Style);
-                AppendNumberCell(sb, CellRef(18, r), row.OtherAreaM2, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(7, r), row.GrossConcreteM3, row.HasGrossConcreteM3Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(8, r), row.DeductionM3, row.HasDeductionM3Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(9, r), row.NetConcreteM3, row.HasNetConcreteM3Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(10, r), row.FormworkM2, row.HasFormworkM2Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(11, r), row.LengthM, row.HasLengthMEvidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(12, r), row.OuterPerimeterM, row.HasOuterPerimeterMEvidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(13, r), row.InnerPerimeterM, row.HasInnerPerimeterMEvidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(14, r), row.DoorAreaM2, row.HasDoorAreaM2Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(15, r), row.SideAreaM2, row.HasSideAreaM2Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(16, r), row.BottomAreaM2, row.HasBottomAreaM2Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(17, r), row.TopAreaM2, row.HasTopAreaM2Evidence, Decimal3Style);
+                AppendEvidenceNumberCell(sb, CellRef(18, r), row.OtherAreaM2, row.HasOtherAreaM2Evidence, Decimal3Style);
                 AppendNullableNumberCell(sb, CellRef(19, r), row.DensityKgM3, Decimal2Style);
                 AppendNullableNumberCell(sb, CellRef(20, r), row.MassKg, Decimal2Style);
                 AppendInlineStringCell(sb, CellRef(21, r), row.Note, WrappedTextStyle);
@@ -675,6 +725,12 @@ namespace QS3D.Core.Export
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "XLSX numeric values must be finite.");
             sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"").Append(style).Append("\"><v>")
                 .Append(value.ToString("R", CultureInfo.InvariantCulture)).Append("</v></c>");
+        }
+
+        private static void AppendEvidenceNumberCell(StringBuilder sb, string cellRef, double value, bool hasEvidence, int style = Decimal2Style)
+        {
+            if (!hasEvidence) return;
+            AppendNumberCell(sb, cellRef, value, style);
         }
 
         private static void AppendNullableNumberCell(StringBuilder sb, string cellRef, double? value, int style = Decimal2Style)
