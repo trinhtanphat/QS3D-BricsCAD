@@ -185,6 +185,7 @@ namespace QS3D.Core.SmokeTests
             MepRecognitionSmoke.Run();
             ClashDetectionKnownCountContractSmoke.Run();
             ClashDetectionResultBoundSmoke.Run();
+            FeatureInteractionContractsSmoke.Run();
             CubicostParitySmoke.Run();
         }
     }
