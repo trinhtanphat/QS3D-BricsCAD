@@ -134,7 +134,7 @@ for name, source, method, zoom in locate_contracts:
     if start < 0:
         errors.append(name + " canonical locate method missing")
         continue
-    end_token = "private QuantityReportRow ResolveCurrentRow"
+    end_token = "private void LocateSelectionGeometry(" if name == "Insight" else "private QuantityReportRow ResolveCurrentRow"
     end = source.find(end_token, start)
     block = source[start:end if end >= 0 else len(source)]
     if "Cad.CadHandleService.Select" not in block:

@@ -107,6 +107,28 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             LengthText = Format(totals.LengthM, "m");
         }
 
+        public void ReplaceSelectionGeometry(
+            IReadOnlyList<QuantityInsightFloorViewModel> floors,
+            int rowCount,
+            int objectCount,
+            string status)
+        {
+            Floors.Clear();
+            foreach (var floor in floors ?? Array.Empty<QuantityInsightFloorViewModel>()) Floors.Add(floor);
+
+            QuantityCountText = rowCount.ToString("N0", CultureInfo.CurrentCulture) + " dòng • " +
+                                objectCount.ToString("N0", CultureInfo.CurrentCulture) + " đối tượng";
+
+            // Without a bound QS3D project there is no semantic material/deduction/unit policy.
+            // Keep project totals explicitly unavailable instead of presenting raw drawing units as m/m²/m³.
+            GrossConcreteText = "—";
+            DeductionText = "—";
+            NetConcreteText = "—";
+            FormworkText = "—";
+            LengthText = "—";
+            Status = status ?? string.Empty;
+        }
+
         public void Clear(string status)
         {
             Floors.Clear();
