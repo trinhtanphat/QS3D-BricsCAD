@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -298,8 +299,30 @@ namespace QS3D.Core.Services
             return true;
         }
 
+        private static int? SnapshotKnownPreviewTargetCount(IEnumerable<string> elementIds)
+        {
+            int? knownCount = null;
+            if (elementIds is ICollection<string> collection)
+                ObserveKnownPreviewTargetCount(ref knownCount, collection.Count);
+            if (elementIds is IReadOnlyCollection<string> readOnlyCollection)
+                ObserveKnownPreviewTargetCount(ref knownCount, readOnlyCollection.Count);
+            if (elementIds is ICollection nonGenericCollection)
+                ObserveKnownPreviewTargetCount(ref knownCount, nonGenericCollection.Count);
+            return knownCount;
+        }
+
+        private static void ObserveKnownPreviewTargetCount(ref int? knownCount, int count)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Regeneration preview target collection reported an invalid negative known count.");
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException("Regeneration preview target collection reported conflicting known counts.");
+            knownCount = count;
+        }
+
         private static IReadOnlyList<string> CanonicalPreviewTargets(IEnumerable<string> elementIds, int maxCount)
         {
+            var knownCount = SnapshotKnownPreviewTargetCount(elementIds);
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
@@ -318,6 +341,11 @@ namespace QS3D.Core.Services
                 result.Add(raw);
                 index++;
             }
+            if (knownCount.HasValue && knownCount.Value != result.Count)
+                throw new InvalidOperationException(
+                    "Regeneration preview target collection known count reported " +
+                    knownCount.Value.ToString(CultureInfo.InvariantCulture) +
+                    " but traversal produced " + result.Count.ToString(CultureInfo.InvariantCulture) + ".");
             result.Sort(StringComparer.OrdinalIgnoreCase);
             return result.AsReadOnly();
         }
