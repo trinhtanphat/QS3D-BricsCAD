@@ -148,13 +148,29 @@ namespace QS3D.BricsCAD.V25.Services
             {
                 if (generatedOwners.TryFindOwner(snapshot.Handle, out var generatedOwner, out var generatedSlot))
                     throw new InvalidOperationException("Selected handle " + snapshot.Handle + " is QS3D-generated output owned by " + generatedOwner!.Id + "/" + generatedSlot + ". Select the authoritative source CAD instead.");
+            }
 
-                var element = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, snapshot.Handle);
-                if (element == null)
-                    throw new InvalidOperationException("Selected CAD source is not tracked by QS3D: " + snapshot.Handle + ". Capture it first instead of reconciling an unknown source.");
-
+            var resolvedElements = SemanticHandleOwnershipResolver.Resolve(
+                project,
+                snapshots.Select(x => x.Handle));
+            var sourceOwners = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in resolvedElements)
+            {
                 if (element.SourceHandles.Count != 1)
                     throw new InvalidOperationException("Source reconcile P0 requires exactly one authoritative source handle per semantic element: " + element.Id + ".");
+
+                var sourceHandle = QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(element.SourceHandles[0]);
+                if (sourceOwners.ContainsKey(sourceHandle))
+                    throw new InvalidOperationException("CAD source handle " + sourceHandle + " is claimed by multiple semantic elements. Repair source ownership before reconcile.");
+                sourceOwners.Add(sourceHandle, element);
+            }
+
+            foreach (var snapshot in snapshots)
+            {
+                var sourceHandle = QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(snapshot.Handle);
+                if (!sourceOwners.TryGetValue(sourceHandle, out var element))
+                    throw new InvalidOperationException("Selected CAD source is not tracked by QS3D: " + snapshot.Handle + ". Capture it first instead of reconciling an unknown source.");
+
                 if (!seenElements.Add(element.Id))
                     throw new InvalidOperationException("Multiple selected CAD objects resolve to semantic element " + element.Id + ". Reconcile one authoritative source per element.");
                 targets.Add(new Target { Snapshot = snapshot, Element = element });

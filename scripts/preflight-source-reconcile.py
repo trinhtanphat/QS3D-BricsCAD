@@ -34,7 +34,11 @@ checks = {
         "expectedTargetIds.SetEquals(targets.Select(x => x.Element.Id))",
         "var generatedOwners = GeneratedHandleOwnershipIndex.Build(project);",
         "generatedOwners.TryFindOwner(snapshot.Handle, out var generatedOwner, out var generatedSlot)",
-        "SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, snapshot.Handle)",
+        "var resolvedElements = SemanticHandleOwnershipResolver.Resolve(",
+        "snapshots.Select(x => x.Handle)",
+        "var sourceOwners = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);",
+        "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(element.SourceHandles[0])",
+        "sourceOwners.TryGetValue(sourceHandle, out var element)",
         "is QS3D-generated output owned by",
         "Select the authoritative source CAD instead.",
         "Source reconcile P0 requires exactly one authoritative source handle per semantic element",
@@ -236,12 +240,18 @@ if service.is_file():
     generated_build = resolve.find("GeneratedHandleOwnershipIndex.Build(project)")
     selection_loop = resolve.find("foreach (var snapshot in snapshots)")
     generated_lookup = resolve.find("generatedOwners.TryFindOwner(snapshot.Handle", selection_loop)
-    source_lookup = resolve.find("SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, snapshot.Handle)", generated_lookup)
-    if min(generated_build, selection_loop, generated_lookup, source_lookup) < 0 or not (
-        generated_build < selection_loop < generated_lookup < source_lookup
+    batch_lookup = resolve.find("var resolvedElements = SemanticHandleOwnershipResolver.Resolve(", generated_lookup)
+    source_map = resolve.find("var sourceOwners = new Dictionary<string, ProjectElement>", batch_lookup)
+    source_lookup = resolve.find("sourceOwners.TryGetValue(sourceHandle, out var element)", source_map)
+    if min(generated_build, selection_loop, generated_lookup, batch_lookup, source_map, source_lookup) < 0 or not (
+        generated_build < selection_loop < generated_lookup < batch_lookup < source_map < source_lookup
     ):
-        errors.append("Source reconcile must reject generated output before resolving each selected source through the canonical Core ownership policy")
-    if "BuildSourceOwnerIndex" in text or "sourceOwners.TryGetValue" in text:
+        errors.append("Source reconcile must reject generated output before one bounded canonical batch ownership resolution and indexed snapshot mapping")
+    if resolve.count("SemanticHandleOwnershipResolver.Resolve(") != 1:
+        errors.append("Source reconcile must resolve selected semantic ownership in exactly one canonical batch")
+    if "ResolveUniqueSourceOwner" in resolve:
+        errors.append("Source reconcile must not rescan canonical source ownership once per selected snapshot")
+    if "BuildSourceOwnerIndex" in text:
         errors.append("Source reconcile must not retain a competing raw SourceHandles ownership index")
     if "GeneratedHandleOwnershipPolicy.TryFindOwner(project, snapshot.Handle" in resolve:
         errors.append("Source reconcile must not rescan the whole project for generated ownership on every selected handle")
@@ -337,4 +347,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DSYNCSOURCE validates generated/source ownership read-only before a single canonical bind, revalidates project/target freshness, preserves AuditTrail-owned revision, bounded affected-closure regeneration, snapshot-first targeted regeneration freshness, rollback, and explicit native rebuild boundaries.")
+print("PASS: QS3DSYNCSOURCE validates generated ownership first, resolves selected sources once through the bounded canonical batch authority before a single bind, revalidates project/target freshness, preserves AuditTrail-owned revision, bounded affected-closure regeneration, snapshot-first targeted regeneration freshness, rollback, and explicit native rebuild boundaries.")

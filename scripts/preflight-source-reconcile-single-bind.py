@@ -64,8 +64,12 @@ else:
             "GeneratedHandleOwnershipIndex.Build(project)",
             "foreach (var snapshot in snapshots)",
             "generatedOwners.TryFindOwner(snapshot.Handle",
-            "SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, snapshot.Handle)",
+            "var resolvedElements = SemanticHandleOwnershipResolver.Resolve(",
+            "snapshots.Select(x => x.Handle)",
+            "new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase)",
             "element.SourceHandles.Count != 1",
+            "QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(element.SourceHandles[0])",
+            "sourceOwners.TryGetValue(sourceHandle, out var element)",
             "seenElements.Add(element.Id)",
             "targets.Add(new Target { Snapshot = snapshot, Element = element });",
             "return targets;",
@@ -74,9 +78,15 @@ else:
             if token not in resolver:
                 errors.append("Source Reconcile read-only resolver missing token: " + token)
         generated_lookup = resolver.find("generatedOwners.TryFindOwner(snapshot.Handle")
-        source_lookup = resolver.find("SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, snapshot.Handle)")
-        if generated_lookup < 0 or source_lookup < 0 or generated_lookup > source_lookup:
-            errors.append("Source Reconcile must reject generated output before canonical source-owner resolution")
+        batch_lookup = resolver.find("var resolvedElements = SemanticHandleOwnershipResolver.Resolve(")
+        source_map = resolver.find("var sourceOwners = new Dictionary<string, ProjectElement>", batch_lookup)
+        source_lookup = resolver.find("sourceOwners.TryGetValue(sourceHandle, out var element)", source_map)
+        if min(generated_lookup, batch_lookup, source_map, source_lookup) < 0 or not (
+            generated_lookup < batch_lookup < source_map < source_lookup
+        ):
+            errors.append("Source Reconcile must reject generated output before one bounded canonical batch source-owner resolution and indexed snapshot mapping")
+        if resolver.count("SemanticHandleOwnershipResolver.Resolve(") != 1:
+            errors.append("Source Reconcile must resolve selected semantic ownership in exactly one canonical batch")
         for forbidden in (
             "ExistingProjectMutationContext",
             "ProjectContextCoordinator.GetOrCreate",
@@ -85,8 +95,8 @@ else:
             "MarkDirty(",
             "SetProperty(",
             "BuildSourceOwnerIndex",
-            "sourceOwners.TryGetValue",
             "new Dictionary<string, List<ProjectElement>>",
+            "ResolveUniqueSourceOwner",
         ):
             if forbidden in resolver:
                 errors.append("Source Reconcile ownership resolver must remain read-only: " + forbidden)
@@ -107,4 +117,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: Source Reconcile validates source ownership read-only, binds canonical state once, revalidates ProjectId/ChangeVersion/target IDs before mutation, and preserves AuditTrail-owned revisions.")
+print("PASS: Source Reconcile validates generated output first, resolves selected ownership once through the bounded canonical batch resolver, binds canonical state once, revalidates ProjectId/ChangeVersion/target IDs before mutation, and preserves AuditTrail-owned revisions.")
