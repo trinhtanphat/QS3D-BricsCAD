@@ -49,6 +49,8 @@ required_probe_tokens = (
     'new Point3d(0d, Drawing(context.Document, 3d), 0d)',
     '"90"',
     '"_C"',
+    'NATIVE_STRETCH_COMMAND_REJECTED',
+    'NATIVE_STRETCH_GEOMETRY_REJECTED',
     'RequireSemanticLength(owner, 5d, "native STRETCH before reconcile")',
     'RequireSemanticLength(owner, 8d, "STRETCH reconcile")',
     'RequireNoGenerated(context.Document, owner, state.InitialGeneratedHandle, "MOVE reconcile")',

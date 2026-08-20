@@ -173,17 +173,24 @@ namespace QS3D.BricsCAD.V25
                 var owner = Owner(context, state);
                 var aroundEndA = new Point3d(Drawing(context.Document, -0.1d), Drawing(context.Document, 6.9d), Drawing(context.Document, -0.1d));
                 var aroundEndB = new Point3d(Drawing(context.Document, 0.1d), Drawing(context.Document, 7.1d), Drawing(context.Document, 0.1d));
-                context.Document.Editor.Command(
-                    "_.STRETCH",
-                    "_C",
-                    aroundEndA,
-                    aroundEndB,
-                    string.Empty,
-                    "_Displacement",
-                    new Point3d(0d, Drawing(context.Document, 3d), 0d));
-                RequireGeometry(context.Document, owner, ExpectedStage.Stretched);
-                RequireSemanticLength(owner, 5d, "native STRETCH before reconcile");
-                RequireNoGeneratedProperty(owner, "native STRETCH before reconcile");
+                try
+                {
+                    context.Document.Editor.Command(
+                        "_.STRETCH",
+                        "_C",
+                        aroundEndA,
+                        aroundEndB,
+                        string.Empty,
+                        "_Displacement",
+                        new Point3d(0d, Drawing(context.Document, 3d), 0d));
+                }
+                catch { throw new ProbeFailure("NATIVE_STRETCH_COMMAND_REJECTED"); }
+                try { RequireGeometry(context.Document, owner, ExpectedStage.Stretched); }
+                catch { throw new ProbeFailure("NATIVE_STRETCH_GEOMETRY_REJECTED"); }
+                try { RequireSemanticLength(owner, 5d, "native STRETCH before reconcile"); }
+                catch { throw new ProbeFailure("NATIVE_STRETCH_SEMANTIC_REJECTED"); }
+                try { RequireNoGeneratedProperty(owner, "native STRETCH before reconcile"); }
+                catch { throw new ProbeFailure("NATIVE_STRETCH_GENERATED_REJECTED"); }
                 state.NativeStretchVerified = true;
                 state.Phase = "STRETCHED";
             });
