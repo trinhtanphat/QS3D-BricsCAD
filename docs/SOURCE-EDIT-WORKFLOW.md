@@ -1,12 +1,12 @@
 # QS3D authoritative source edit / reconcile workflow
 
-Updated: 2026-08-10 (UTC+7)
+Updated: 2026-08-20 (UTC+7)
 
 ## Status
 
 `QS3DSYNCSOURCE` is source-implemented as the deterministic P0 bridge for **native BricsCAD source edits**.
 
-This does not claim custom grip/jig/reactor parity. Interactive BricsCAD-native MOVE/ROTATE/STRETCH/grip behavior still requires licensed V25 runtime qualification. The source-level contract is intentionally simpler and safer:
+Exact licensed BricsCAD V25.2.10 evidence at SHA `2a6aa84a41daa68f35160bfc78c4330b78bc0f97` now qualifies the deterministic LINE command/batch path for native `MOVE`, `ROTATE`, and crossing-window endpoint `STRETCH`, including production reconcile, generated invalidation/rebuild, save and cold reopen. This does not claim custom grip/jig/reactor parity, manual ESC behavior, POLYLINE topology editing or the remaining category/dependent matrix. Those broader interactive paths still require licensed qualification. The source-level contract remains intentionally simple and safe:
 
 ```text
 QS3D semantic element
@@ -68,19 +68,23 @@ Post-commit Workspace refresh and viewport regen belong to `SourceReconcileComma
 
 This keeps native editing, semantic reconciliation and physical rebuild as reviewable boundaries.
 
-## Runtime qualification still required
+## Runtime qualification status
 
-Before describing this as production-qualified, test on the exact release SHA in licensed BricsCAD V25 x64:
+The exact `LOCAL_004_P01_LINE_ONLY` run completed these first three cases through the real native command processor on a disposable repository sample:
 
-1. LINE MOVE preserving length;
-2. LINE ROTATE preserving length;
-3. LINE/STRETCH changing length;
-4. closed POLYLINE vertex edit changing area/perimeter;
-5. open/closed POLYLINE state changes where the semantic category allows them;
-6. Door/Opening movement with linked host and generated Curtain/opening state;
-7. Beam/Column/Slab/Foundation edits with generated rebar present;
-8. failure injection proving generated CAD erase abort + project snapshot restore;
-9. save/reopen and multi-DWG behavior;
-10. `QS3DHEALTHALL` / `QS3DRELEASECHECK` after reconcile and after explicit rebuild.
+1. LINE `MOVE` preserving 5 m length, followed by reconcile, stale-solid removal and rebuild;
+2. LINE `ROTATE` preserving 5 m length, followed by reconcile and stale-solid removal;
+3. LINE endpoint `STRETCH` changing source and semantic length to 8 m, followed by reconcile, rebuild, save and cold reopen.
 
-The precise status remains **source-implemented / statically guarded; licensed V25 interactive qualification pending**.
+Still required before claiming the entire native-edit surface:
+
+1. manual grip/jig and ESC/cancel behavior;
+2. closed POLYLINE vertex edit changing area/perimeter;
+3. open/closed POLYLINE state changes where the semantic category allows them;
+4. Door/Opening movement with linked host and generated Curtain/opening state;
+5. Beam/Column/Slab/Foundation edits with generated rebar present;
+6. interactive failure injection beyond the existing guarded LOCAL-004 rollback matrix;
+7. the remaining multi-DWG/user-interaction variants;
+8. `QS3DHEALTHALL` / `QS3DRELEASECHECK` after each remaining reconcile/rebuild scenario.
+
+The broader precise status remains **source-implemented / statically guarded; licensed V25 interactive qualification pending** beyond the exact automated LINE command slice above.

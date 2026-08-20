@@ -64,3 +64,13 @@ processor through these bounded phases:
 - Licensed BricsCAD V25 execution only on disposable repository-sample copies,
   with sanitized bounded evidence and zero residual processes/private state.
 - Protected branch/PR checks and current-main merge only after exact runtime PASS.
+
+## Exact licensed evidence
+
+- Exact clean pushed candidate: `2a6aa84a41daa68f35160bfc78c4330b78bc0f97`.
+- Installed BricsCAD V25.2.10 adapter build: `0 warnings / 0 errors`; adapter and Core ProductVersion both ended in the exact candidate SHA.
+- Sanitized result: `status=PASS`, `production_local004_p01_qualified=true`, native MOVE/ROTATE/STRETCH, all three reconcile checks, both rebuild checks and cold reopen all verified, final length class `EIGHT_METERS`, `error_code=NONE`.
+- Persistence/cleanup: disposable drawing changed and semantic sidecar existed before cold reopen; test-owned processes, scripts and private state were removed; drawing restoration passed; zero BricsCAD processes remained; repository fixture SHA-256 remained `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`.
+- Boundary: this is deterministic LINE command/batch evidence only. Grip/jig/manual ESC, POLYLINE topology and the remaining category/dependent matrix stay pending under parent `#80`.
+
+The claim remains `ACTIVE` until the automation/docs change is integrated on current main.
