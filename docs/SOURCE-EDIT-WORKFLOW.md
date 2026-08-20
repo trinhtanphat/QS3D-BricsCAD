@@ -6,7 +6,7 @@ Updated: 2026-08-20 (UTC+7)
 
 `QS3DSYNCSOURCE` is source-implemented as the deterministic P0 bridge for **native BricsCAD source edits**.
 
-Exact licensed BricsCAD V25.2.10 evidence at SHA `2a6aa84a41daa68f35160bfc78c4330b78bc0f97` now qualifies the deterministic LINE command/batch path for native `MOVE`, `ROTATE`, and crossing-window endpoint `STRETCH`, including production reconcile, generated invalidation/rebuild, save and cold reopen. This does not claim custom grip/jig/reactor parity, manual ESC behavior, POLYLINE topology editing or the remaining category/dependent matrix. Those broader interactive paths still require licensed qualification. The source-level contract remains intentionally simple and safe:
+Exact licensed BricsCAD V25.2.10 evidence now qualifies two bounded deterministic command paths: LINE `MOVE`/`ROTATE`/endpoint `STRETCH` at SHA `2a6aa84a41daa68f35160bfc78c4330b78bc0f97`, and one closed Slab POLYLINE vertex `STRETCH` at SHA `d389fc11a6d9599735180adb34a40a04089e5494`. Both use production reconcile, generated invalidation/rebuild, save and cold reopen. The POLYLINE runner removes the last-created overlapping generated solid from the native crossing selection before displacement, then proves the old solid remained unchanged until reconcile. This does not claim custom grip/jig/reactor parity, manual ESC behavior, closed/open topology transitions or the remaining category/dependent matrix. Those broader interactive paths still require licensed qualification. The source-level contract remains intentionally simple and safe:
 
 ```text
 QS3D semantic element
@@ -76,15 +76,20 @@ The exact `LOCAL_004_P01_LINE_ONLY` run completed these first three cases throug
 2. LINE `ROTATE` preserving 5 m length, followed by reconcile and stale-solid removal;
 3. LINE endpoint `STRETCH` changing source and semantic length to 8 m, followed by reconcile, rebuild, save and cold reopen.
 
+The exact `LOCAL_004_P02_CLOSED_POLYLINE_VERTEX` run then completed one production Direct Draw Slab cell:
+
+1. native top-level crossing-window `STRETCH` changed only the top-right source vertex from `(4,3)` to `(5,3)` m while the explicitly removed overlapping generated solid stayed at its old geometry;
+2. production reconcile refreshed area `12 -> 13.5 m2`, perimeter `14 -> 12 + sqrt(10) m`, gross/net volume `1.44 -> 1.62 m3` and formwork, then erased the stale owned solid;
+3. explicit rebuild created distinct owned native output with expected `0..5 x 0..3 x 0..0.12 m` bounds, scoped Core/runtime Health remained clear, and save plus fresh-process cold reopen preserved the final state.
+
 Still required before claiming the entire native-edit surface:
 
 1. manual grip/jig and ESC/cancel behavior;
-2. closed POLYLINE vertex edit changing area/perimeter;
-3. open/closed POLYLINE state changes where the semantic category allows them;
-4. Door/Opening movement with linked host and generated Curtain/opening state;
-5. Beam/Column/Slab/Foundation edits with generated rebar present;
-6. interactive failure injection beyond the existing guarded LOCAL-004 rollback matrix;
-7. the remaining multi-DWG/user-interaction variants;
-8. `QS3DHEALTHALL` / `QS3DRELEASECHECK` after each remaining reconcile/rebuild scenario.
+2. open/closed POLYLINE state changes where the semantic category allows them;
+3. Door/Opening movement with linked host and generated Curtain/opening state;
+4. Beam/Column/Slab/Foundation edits with generated rebar present;
+5. interactive failure injection beyond the existing guarded LOCAL-004 rollback matrix;
+6. the remaining multi-DWG/user-interaction variants;
+7. `QS3DHEALTHALL` / `QS3DRELEASECHECK` after each remaining reconcile/rebuild scenario.
 
-The broader precise status remains **source-implemented / statically guarded; licensed V25 interactive qualification pending** beyond the exact automated LINE command slice above.
+The broader precise status remains **source-implemented / statically guarded; licensed V25 interactive qualification pending** beyond the exact automated LINE and closed-POLYLINE cells above.
