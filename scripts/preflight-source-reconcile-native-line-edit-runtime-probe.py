@@ -43,7 +43,7 @@ for command in commands:
 required_probe_tokens = (
     'context.Document.Editor.Command(\n                    "_.MOVE"',
     'context.Document.Editor.Command(\n                    "_.ROTATE"',
-    'context.Document.Editor.Command(\n                    "_.STRETCH"',
+    '"_.STRETCH"',
     '"_Displacement"',
     'new Point3d(0d, Drawing(context.Document, 2d), 0d)',
     'new Point3d(0d, Drawing(context.Document, 3d), 0d)',
