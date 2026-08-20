@@ -54,7 +54,7 @@ namespace QS3D.Core.Features
             Order = order;
             LabelKey = labelKey.Trim();
             LegacyCategory = legacyCategory;
-            IconKey = string.IsNullOrWhiteSpace(iconKey) ? null : iconKey.Trim();
+            IconKey = string.IsNullOrWhiteSpace(iconKey) ? null : iconKey!.Trim();
             SearchAliases = FeatureNavigationGroup.SnapshotStrings(searchAliases);
         }
 
