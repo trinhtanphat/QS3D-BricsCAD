@@ -41,6 +41,8 @@ namespace QS3D.Core.Export
                 ValidateNonNegativeFinite(row.AreaM2, rowIndex, "AreaM2");
                 snapshot.Add(row);
             }
+            if (rows.Count != rowCount)
+                throw new InvalidOperationException("Room-finish XLSX export row count changed during snapshot.");
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -101,6 +103,8 @@ namespace QS3D.Core.Export
                         "Room-finish XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
                 target.Add(value);
             }
+            if (source.Count != count)
+                throw new InvalidOperationException("Room-finish XLSX row " + rowIndex + " field " + fieldName + " count changed during snapshot.");
         }
 
         private static string BuildSheet(IReadOnlyList<RoomFinishScheduleRow> rows)

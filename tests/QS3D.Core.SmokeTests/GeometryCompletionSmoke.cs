@@ -5,6 +5,7 @@ using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
 using QS3D.Core.Rebar;
+using QS3D.Core.Reporting;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -20,6 +21,7 @@ namespace QS3D.Core.SmokeTests
             WallFootprintRejectsSelfIntersection();
             OpeningCutPlan();
             OpeningCutRejectsInvalidPlacement();
+            QuantityGeometryExplanationTotals();
             RectangularRebarLayout();
             RectangularRebarRejectsImpossibleCover();
             GeneratedRebarHealth();
@@ -148,6 +150,67 @@ namespace QS3D.Core.SmokeTests
                 HostLengthM = 5d, HostThicknessM = 0.2d, HostHeightM = 3d,
                 OpeningWidthM = 1d, OpeningHeightM = 2.2d, SillHeightM = 1d, CenterAlongHostM = 2.5d
             }));
+        }
+
+        private static void QuantityGeometryExplanationTotals()
+        {
+            var tolerances = new QuantityGeometryTolerances();
+            var valid = new QuantityGeometryExplanation
+            {
+                FormworkFaces = new[]
+                {
+                    Face("A", 5d, 1d, 4d),
+                    Face("B", 3d, 0.5d, 2.5d)
+                }
+            };
+            valid.Validate(tolerances);
+            Near(8d, valid.GrossFormworkArea);
+            Near(1.5d, valid.DeductionFormworkArea);
+            Near(6.5d, valid.NetFormworkArea);
+
+            var overflow = new QuantityGeometryExplanation
+            {
+                FormworkFaces = new[]
+                {
+                    Face("A", double.MaxValue, 0d, double.MaxValue),
+                    Face("B", double.MaxValue, 0d, double.MaxValue)
+                }
+            };
+            Throws<OverflowException>(() => overflow.Validate(tolerances));
+            Throws<OverflowException>(() => { var ignored = overflow.GrossFormworkArea; });
+
+            var lostContribution = new QuantityGeometryExplanation
+            {
+                FormworkFaces = new[]
+                {
+                    Face("A", 1e16d, 0d, 1e16d),
+                    Face("B", 1d, 0d, 1d)
+                }
+            };
+            Throws<OverflowException>(() => lostContribution.Validate(tolerances));
+            Throws<OverflowException>(() => { var ignored = lostContribution.GrossFormworkArea; });
+
+            var nullFaces = new QuantityGeometryExplanation { FormworkFaces = null! };
+            Throws<InvalidOperationException>(() => nullFaces.Validate(tolerances));
+            Throws<InvalidOperationException>(() => { var ignored = nullFaces.NetFormworkArea; });
+
+            var nullFace = new QuantityGeometryExplanation
+            {
+                FormworkFaces = new QuantityFormworkFaceExplanation[] { null! }
+            };
+            Throws<InvalidOperationException>(() => nullFace.Validate(tolerances));
+            Throws<InvalidOperationException>(() => { var ignored = nullFace.DeductionFormworkArea; });
+        }
+
+        private static QuantityFormworkFaceExplanation Face(string id, double gross, double deduction, double net)
+        {
+            return new QuantityFormworkFaceExplanation
+            {
+                FaceId = id,
+                GrossArea = gross,
+                DeductionArea = deduction,
+                NetArea = net
+            };
         }
 
         private static void RectangularRebarLayout()

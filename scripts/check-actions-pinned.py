@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
+MAX_WORKFLOW_CANDIDATES = 1024
 MAX_WORKFLOW_SOURCE_BYTES = 1024 * 1024
 SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 PLAIN_KEY_RE = re.compile(r"[A-Za-z0-9_.-]+")
@@ -434,12 +435,19 @@ def scan_workflow_text(label: str, text: str):
 
 def discover_workflow_paths(workflows_dir: Path):
     errors: list[str] = []
+    candidates: list[Path] = []
     try:
-        entries = list(workflows_dir.iterdir())
+        for path in workflows_dir.iterdir():
+            if path.suffix not in {".yml", ".yaml"}:
+                continue
+            candidates.append(path)
+            if len(candidates) > MAX_WORKFLOW_CANDIDATES:
+                return [], [
+                    f"{workflows_dir}: workflow candidate count exceeds {MAX_WORKFLOW_CANDIDATES}"
+                ]
     except OSError as exc:
         return [], [f"{workflows_dir}: cannot enumerate workflows: {exc}"]
 
-    candidates = [path for path in entries if path.suffix in {".yml", ".yaml"}]
     candidates.sort(key=lambda path: (path.name.casefold(), path.name))
 
     try:

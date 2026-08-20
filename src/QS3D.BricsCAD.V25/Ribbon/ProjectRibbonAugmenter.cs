@@ -62,7 +62,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private static readonly ButtonSpec[] BltButtons =
         {
-            new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\ndự án", "QS3DPROJECTINFO", RibbonIconKind.Qs3dLogo),
+            new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\ndự án", "QS3DPROJECTINFO", RibbonIconKind.Inspect),
             new ButtonSpec("QS3D_PROJECT_FLOORS", "Cài đặt\ntầng", "QS3DLEVELS", RibbonIconKind.Structure),
             new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\ndự án", "QS3DPROJECTPROPERTIES", RibbonIconKind.Settings)
         };

@@ -133,9 +133,13 @@ namespace QS3D.Core.Services
 
         public static IReadOnlyList<string> Normalize(IEnumerable<string> openingIds)
         {
+            var source = openingIds ?? Array.Empty<string>();
+            var knownCount = GetKnownCount(source);
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var raw in openingIds ?? Array.Empty<string>())
+            var observedCount = 0;
+            foreach (var raw in source)
             {
+                observedCount++;
                 if (string.IsNullOrWhiteSpace(raw))
                     throw new InvalidOperationException("Physical opening target-state contains an empty opening id.");
                 if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
@@ -148,7 +152,43 @@ namespace QS3D.Core.Services
                 if (result.Count > MaxOpeningIds)
                     throw new InvalidOperationException("Physical opening target-state exceeds the " + MaxOpeningIds + " opening id limit.");
             }
+
+            RequireObservedCount(knownCount, observedCount);
             return result.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+        }
+
+        private static int? GetKnownCount(IEnumerable<string> openingIds)
+        {
+            var genericCount = openingIds is ICollection<string> collection ? (int?)collection.Count : null;
+            var readOnlyCount = openingIds is IReadOnlyCollection<string> readOnlyCollection ? (int?)readOnlyCollection.Count : null;
+            var nonGenericCount = openingIds is System.Collections.ICollection nonGenericCollection ? (int?)nonGenericCollection.Count : null;
+
+            ValidateKnownCount(genericCount);
+            ValidateKnownCount(readOnlyCount);
+            ValidateKnownCount(nonGenericCount);
+
+            var expected = genericCount ?? readOnlyCount ?? nonGenericCount;
+            if (!expected.HasValue) return null;
+            if ((genericCount.HasValue && genericCount.Value != expected.Value) ||
+                (readOnlyCount.HasValue && readOnlyCount.Value != expected.Value) ||
+                (nonGenericCount.HasValue && nonGenericCount.Value != expected.Value))
+                throw new InvalidOperationException("Physical opening target-state reports conflicting known opening id counts.");
+            return expected;
+        }
+
+        private static void ValidateKnownCount(int? count)
+        {
+            if (!count.HasValue) return;
+            if (count.Value < 0)
+                throw new InvalidOperationException("Physical opening target-state reports an invalid negative opening id count.");
+            if (count.Value > MaxOpeningIds)
+                throw new InvalidOperationException("Physical opening target-state exceeds the " + MaxOpeningIds + " opening id limit.");
+        }
+
+        private static void RequireObservedCount(int? knownCount, int observedCount)
+        {
+            if (knownCount.HasValue && knownCount.Value != observedCount)
+                throw new InvalidOperationException("Physical opening target-state opening id count changed during enumeration.");
         }
 
         private static void ValidateProjectElements(ProjectState project)
