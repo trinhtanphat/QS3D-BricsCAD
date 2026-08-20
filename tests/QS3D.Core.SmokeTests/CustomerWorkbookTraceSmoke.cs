@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             CustomerWorkbookRoundTripsDetailAndAggregateTrace();
             CustomerWorkbookPreservesEvidenceBlankVersusMeasuredZero();
             CustomerTraceReaderRejectsUnsupportedSheet();
+            CustomerWorkbookRejectsMalformedProvenance();
         }
 
         private static void CustomerWorkbookRoundTripsDetailAndAggregateTrace()
@@ -43,6 +44,11 @@ namespace QS3D.Core.SmokeTests
                 var detail = QsCustomerWorkbookTraceReader.Read(path, "CHI_TIET", 2);
                 Require(detail.ElementIds.Count == 1 && detail.ElementIds[0] == "E1", "CHI_TIET trace must preserve one semantic element.");
                 Require(detail.Handles.Count == 1 && detail.Handles[0] == "A1", "CHI_TIET trace must preserve one canonical CAD Handle.");
+
+                var highBit = QsCustomerWorkbookTraceReader.Read(path, "CHI_TIET", 3);
+                Require(highBit.ElementIds.Count == 1 && highBit.ElementIds[0] == "E2", "CHI_TIET high-bit trace lost its semantic element.");
+                Require(highBit.Handles.Count == 1 && highBit.Handles[0] == "8000000000000000",
+                    "Customer workbook must preserve unsigned 64-bit CAD Handles.");
             }
             finally
             {
@@ -87,12 +93,36 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void CustomerWorkbookRejectsMalformedProvenance()
+        {
+            var root = TempDirectory("customer-workbook-provenance");
+            try
+            {
+                var paddedDetails = Details();
+                paddedDetails[0].ElementIds.Clear();
+                paddedDetails[0].ElementIds.Add(" E1 ");
+                ExpectThrows<InvalidDataException>(
+                    () => QsCustomerWorkbookExporter.Export(Path.Combine(root, "padded.xlsx"), paddedDetails, Summary()),
+                    "Customer workbook must reject padded semantic identities instead of silently normalizing them.");
+
+                var badSummary = Summary();
+                badSummary[0].Count = 1;
+                ExpectThrows<InvalidDataException>(
+                    () => QsCustomerWorkbookExporter.Export(Path.Combine(root, "count-mismatch.xlsx"), Details(), badSummary),
+                    "Customer workbook must bind grouped Count to Element ID provenance cardinality.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
         private static QuantityReportRow[] Details()
         {
             var first = NewRow("E1", "A1", 0d, 12d);
             first.HasDeductionM3Evidence = false;
             first.DeductionM3 = 0d;
-            var second = NewRow("E2", "A2", 2d, 18d);
+            var second = NewRow("E2", "8000000000000000", 2d, 18d);
             second.DeductionM3 = 0d;
             return new[] { first, second };
         }
@@ -129,7 +159,7 @@ namespace QS3D.Core.SmokeTests
             row.ElementIds.Add("E1");
             row.ElementIds.Add("E2");
             row.SourceHandles.Add("A1");
-            row.SourceHandles.Add("A2");
+            row.SourceHandles.Add("8000000000000000");
             return new[] { row };
         }
 
