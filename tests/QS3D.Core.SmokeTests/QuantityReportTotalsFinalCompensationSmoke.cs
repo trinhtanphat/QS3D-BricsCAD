@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsSwallowedFinalCompensation();
             PreservesRepresentableCompensation();
+            PreservesOrdinaryPilotCompensation();
             PreservesOrdinaryExactTotals();
             PreservesEmptyTotals();
         }
@@ -36,6 +37,33 @@ namespace QS3D.Core.SmokeTests
             Equal(9007199254740994d, totals.GrossConcreteM3,
                 "Representable compensated GrossConcreteM3 total changed.");
             Equal(3, totals.Count, "Representable compensated row count changed.");
+        }
+
+        private static void PreservesOrdinaryPilotCompensation()
+        {
+            var positiveCompensation = QuantityReportTotals.FromRows(new[]
+            {
+                Row(3.6d),
+                Row(0.6d),
+                Row(0.576d),
+                Row(2.88d),
+                Row(2.4d),
+                Row(2d)
+            });
+            Equal(12.056d, positiveCompensation.GrossConcreteM3,
+                "Ordinary positive sub-half-ULP compensation changed.");
+
+            var negativeCompensation = QuantityReportTotals.FromRows(new[]
+            {
+                Row(3.204d),
+                Row(0.6d),
+                Row(0.576d),
+                Row(2.4d),
+                Row(2.88d),
+                Row(2d)
+            });
+            Equal(11.66d, negativeCompensation.GrossConcreteM3,
+                "Ordinary negative sub-half-ULP compensation changed.");
         }
 
         private static void PreservesOrdinaryExactTotals()
