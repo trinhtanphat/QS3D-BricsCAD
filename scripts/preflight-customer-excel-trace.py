@@ -38,6 +38,9 @@ require("exporter", (
     'public const string TraceSheet = "TRACE_MODEL"',
     'public const string TraceHeader = "TRACE_KEY"',
     "ValidateScope(details, summaries)",
+    "row Count must equal its QS3D Element ID provenance cardinality",
+    "must be canonical without surrounding whitespace",
+    "ulong.TryParse",
     "AppendTextElement",
     "if (hasEvidence) Number",
     'name=\\\"DGKL\\\"',
@@ -57,6 +60,9 @@ require("reader", (
     "TRACE_MODEL lookup is missing or ambiguous",
     "TRACE_MODEL identity cells must be literal values",
     "Customer workbook CHI_TIET trace must reference exactly one QS3D Element ID",
+    "StringSplitOptions.None",
+    "ulong.TryParse",
+    "must be a canonical literal value",
     "DtdProcessing = DtdProcessing.Prohibit",
     "External worksheet relationships are not supported",
 ))
@@ -77,6 +83,7 @@ require("commands", (
 ))
 require("resolver", (
     "ResolveCustomerTrace",
+    "MdiActiveDocument",
     "foreach (var elementId in ids)",
     "project.FindElement(elementId) == null",
     "SourceHandleResolver.Resolve(project, ids)",
@@ -95,10 +102,12 @@ require("ribbon", (
 require("smoke", (
     "CustomerWorkbookRoundTripsDetailAndAggregateTrace",
     "CustomerWorkbookPreservesEvidenceBlankVersusMeasuredZero",
+    "CustomerWorkbookRejectsMalformedProvenance",
     'QsCustomerWorkbookTraceReader.Read(path, "DGKL", 2)',
     'QsCustomerWorkbookTraceReader.Read(path, "COP_PHA", 2)',
     'QsCustomerWorkbookTraceReader.Read(path, "CHI_TIET", 2)',
     'RequireMissingCell(detail, "I2"',
+    '"8000000000000000"',
 ))
 require("registration", ("CustomerWorkbookTraceSmoke.Run();",))
 require("ed2_guard", (
