@@ -163,32 +163,32 @@ namespace QS3D.BricsCAD.V25
             });
         }
 
-        [CommandMethod("QS3DSRNATIVESTRETCH", CommandFlags.Modal)]
-        public void Stretch()
+        [CommandMethod("QS3DSRNATIVESTRETCHPREPARE", CommandFlags.Modal)]
+        public void PrepareStretch()
         {
-            Execute("native_stretch", () =>
+            Execute("prepare_native_stretch", () =>
             {
                 var context = Context();
                 var state = State(context, "ROTATE_SYNCED");
                 var owner = Owner(context, state);
-                var aroundEndA = new Point3d(Drawing(context.Document, -0.1d), Drawing(context.Document, 6.9d), Drawing(context.Document, -0.1d));
-                var aroundEndB = new Point3d(Drawing(context.Document, 0.1d), Drawing(context.Document, 7.1d), Drawing(context.Document, 0.1d));
-                try
-                {
-                    // STRETCH must derive its vertex ownership from the explicit crossing window.
-                    // The prior production reconcile may retain PICKFIRST for the whole LINE;
-                    // clear that selection so BricsCAD cannot degrade endpoint STRETCH into a move.
-                    context.Document.Editor.SetImpliedSelection(Array.Empty<ObjectId>());
-                    context.Document.Editor.Command(
-                        "_.STRETCH",
-                        "_C",
-                        aroundEndA,
-                        aroundEndB,
-                        string.Empty,
-                        "_Displacement",
-                        new Point3d(0d, Drawing(context.Document, 3d), 0d));
-                }
-                catch { throw new ProbeFailure("NATIVE_STRETCH_COMMAND_REJECTED"); }
+                RequireGeometry(context.Document, owner, ExpectedStage.Rotated);
+                RequireSemanticLength(owner, 5d, "native STRETCH preparation");
+                RequireNoGeneratedProperty(owner, "native STRETCH preparation");
+                // STRETCH must derive vertex ownership from the runner's explicit top-level
+                // crossing window, never a retained PICKFIRST selection for the whole LINE.
+                context.Document.Editor.SetImpliedSelection(Array.Empty<ObjectId>());
+                state.Phase = "STRETCH_READY";
+            });
+        }
+
+        [CommandMethod("QS3DSRNATIVESTRETCH", CommandFlags.Modal)]
+        public void CheckNativeStretch()
+        {
+            Execute("native_stretch", () =>
+            {
+                var context = Context();
+                var state = State(context, "STRETCH_READY");
+                var owner = Owner(context, state);
                 try { RequireGeometry(context.Document, owner, ExpectedStage.Stretched); }
                 catch { throw new ProbeFailure("NATIVE_STRETCH_GEOMETRY_" + ClassifyStretchGeometry(context.Document, owner)); }
                 try { RequireSemanticLength(owner, 5d, "native STRETCH before reconcile"); }

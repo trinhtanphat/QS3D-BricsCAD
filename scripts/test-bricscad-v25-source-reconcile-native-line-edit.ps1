@@ -93,7 +93,7 @@ function Require-Qs3dFailureMarker {
     Require-Qs3dValue $Marker "error_code" "SOURCE_RECONCILE_NATIVE_LINE_RUNTIME_FAILED"
     $allowedPhases = @(
         "prepare", "native_move", "select_source", "check_move_reconcile", "check_move_build",
-        "native_rotate", "check_rotate_reconcile", "native_stretch", "check_stretch_reconcile",
+        "native_rotate", "check_rotate_reconcile", "prepare_native_stretch", "native_stretch", "check_stretch_reconcile",
         "final_rebuild", "cold_reopen"
     )
     if (-not ($allowedPhases -contains [string]$Marker["failure_phase"])) { throw "LOCAL-004 P01 failure phase is not allowlisted." }
@@ -102,7 +102,7 @@ function Require-Qs3dFailureMarker {
         "SEQUENCE_ORDER_REJECTED", "SOURCE_OWNER_REJECTED", "SOURCE_MISSING", "SOURCE_TYPE_REJECTED",
         "SELECTION_REJECTED", "GENERATED_HANDLE_REJECTED", "GENERATED_OWNERSHIP_REJECTED",
         "GENERATED_INVALIDATION_REJECTED", "GENERATED_REPLACEMENT_REJECTED", "EXPECTED_GEOMETRY_REJECTED",
-        "NATIVE_STRETCH_COMMAND_REJECTED", "NATIVE_STRETCH_GEOMETRY_EXPECTED", "NATIVE_STRETCH_GEOMETRY_UNCHANGED",
+        "NATIVE_STRETCH_GEOMETRY_EXPECTED", "NATIVE_STRETCH_GEOMETRY_UNCHANGED",
         "NATIVE_STRETCH_GEOMETRY_WHOLE_LINE_MOVED", "NATIVE_STRETCH_GEOMETRY_ENDPOINT_SET_ABSOLUTE",
         "NATIVE_STRETCH_GEOMETRY_STARTPOINT_MOVED", "NATIVE_STRETCH_GEOMETRY_STARTPOINT_STRETCHED",
         "NATIVE_STRETCH_GEOMETRY_OTHER",
@@ -355,6 +355,7 @@ try {
         "QS3DSRNATIVEMOVE", "QS3DSRNATIVESELECT", "QS3DSYNCSOURCE", "QS3DSRNATIVECHECKMOVE",
         "QS3DSRNATIVESELECT", "QS3DBUILD3D", "QS3DSRNATIVECHECKMOVEBUILD",
         "QS3DSRNATIVEROTATE", "QS3DSRNATIVESELECT", "QS3DSYNCSOURCE", "QS3DSRNATIVECHECKROTATE",
+        "QS3DSRNATIVESTRETCHPREPARE", "_.STRETCH", "_C", "-100,6900", "100,7100", "", "0,0", "0,3000",
         "QS3DSRNATIVESTRETCH", "QS3DSRNATIVESELECT", "QS3DSYNCSOURCE", "QS3DSRNATIVECHECKSTRETCH",
         "QS3DSRNATIVESELECT", "QS3DBUILD3D", "QS3DSRNATIVEFINAL",
         "QS3DSAVE", "_.QSAVE", "_.QUIT", "_Y"

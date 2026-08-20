@@ -30,6 +30,7 @@ commands = (
     "QS3DSRNATIVECHECKMOVEBUILD",
     "QS3DSRNATIVEROTATE",
     "QS3DSRNATIVECHECKROTATE",
+    "QS3DSRNATIVESTRETCHPREPARE",
     "QS3DSRNATIVESTRETCH",
     "QS3DSRNATIVECHECKSTRETCH",
     "QS3DSRNATIVEFINAL",
@@ -43,14 +44,10 @@ for command in commands:
 required_probe_tokens = (
     'context.Document.Editor.Command(\n                    "_.MOVE"',
     'context.Document.Editor.Command(\n                    "_.ROTATE"',
-    '"_.STRETCH"',
     'context.Document.Editor.SetImpliedSelection(Array.Empty<ObjectId>());',
     '"_Displacement"',
     'new Point3d(0d, Drawing(context.Document, 2d), 0d)',
-    'new Point3d(0d, Drawing(context.Document, 3d), 0d)',
     '"90"',
-    '"_C"',
-    'NATIVE_STRETCH_COMMAND_REJECTED',
     'NATIVE_STRETCH_GEOMETRY_" + ClassifyStretchGeometry',
     'WHOLE_LINE_MOVED',
     'RequireSemanticLength(owner, 5d, "native STRETCH before reconcile")',
@@ -83,12 +80,12 @@ for forbidden in (
     if forbidden in probe:
         errors.append(f"automation-only probe must not mutate CAD/semantic state directly: {forbidden}")
 
-if probe.count(".Editor.Command(") != 3:
-    errors.append("probe must delegate exactly MOVE, ROTATE and STRETCH to Editor.Command")
+if probe.count(".Editor.Command(") != 2:
+    errors.append("probe must delegate exactly MOVE and ROTATE to Editor.Command; STRETCH stays top-level in the runner")
 stretch_clear = probe.find("context.Document.Editor.SetImpliedSelection(Array.Empty<ObjectId>());")
-stretch_command = probe.find('"_.STRETCH"', stretch_clear)
-if stretch_clear < 0 or stretch_command < stretch_clear:
-    errors.append("probe must clear retained PICKFIRST before the explicit STRETCH crossing window")
+stretch_ready = probe.find('state.Phase = "STRETCH_READY";', stretch_clear)
+if stretch_clear < 0 or stretch_ready < stretch_clear:
+    errors.append("probe must clear retained PICKFIRST before arming the top-level STRETCH crossing window")
 if 'CommandFlags.Modal | CommandFlags.UsePickSet' not in probe:
     errors.append("source reselection command must preserve PICKFIRST for the next production command")
 
@@ -106,6 +103,7 @@ else:
         '"QS3DSRNATIVESELECT", "QS3DBUILD3D", "QS3DSRNATIVECHECKMOVEBUILD"',
         '"QS3DSRNATIVEROTATE"',
         '"QS3DSRNATIVESELECT", "QS3DSYNCSOURCE", "QS3DSRNATIVECHECKROTATE"',
+        '"QS3DSRNATIVESTRETCHPREPARE", "_.STRETCH", "_C", "-100,6900", "100,7100", "", "0,0", "0,3000"',
         '"QS3DSRNATIVESTRETCH"',
         '"QS3DSRNATIVESELECT", "QS3DSYNCSOURCE", "QS3DSRNATIVECHECKSTRETCH"',
         '"QS3DSRNATIVESELECT", "QS3DBUILD3D", "QS3DSRNATIVEFINAL"',
