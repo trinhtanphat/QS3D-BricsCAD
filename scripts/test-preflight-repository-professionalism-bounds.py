@@ -40,7 +40,9 @@ def main() -> int:
 
         oversized.unlink()
         leaked = root / "docs" / "topology.md"
-        leaked.write_text("QS3D-CONTROL\nQS3D-WORKER-01\n", encoding="utf-8")
+        control_marker = "QS3D-" + "CONTROL"
+        worker_marker = "QS3D-" + "WORKER-01"
+        leaked.write_text(control_marker + "\n" + worker_marker + "\n", encoding="utf-8")
         failures = inspect(root)
         assert len(failures) == 1, failures
         assert "external scheduler topology leaked" in failures[0], failures
