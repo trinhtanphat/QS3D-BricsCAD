@@ -79,7 +79,8 @@ processor through these bounded phases:
 - Exact main merge: `2b50bb2bd7aed25cf84da74745bfe08fc3a11d61`.
 - Exact licensed candidate `2a6aa84a41daa68f35160bfc78c4330b78bc0f97`
   is an ancestor of the main merge.
-- All protected PR checks passed before the normal merge.
+- All required protected checks for implementation PR `#3284` passed before
+  the normal merge.
 - Issue `#3281` is closed. Parent product issue `#80` remains open for the
   excluded grip/jig/manual-ESC, POLYLINE-topology, and remaining category and
   dependent-object matrix.
