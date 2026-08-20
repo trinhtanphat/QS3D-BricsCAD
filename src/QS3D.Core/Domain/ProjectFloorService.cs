@@ -285,7 +285,7 @@ namespace QS3D.Core.Domain
         private static IReadOnlyList<ProjectElement> ResolveOwnedElements(ProjectState project, IEnumerable<ProjectElement> elements)
         {
             var targetEnumerationVersion = project.ChangeVersion;
-            RejectKnownOversizeTargetCollection(elements);
+            var knownTargetCount = SnapshotKnownTargetCount(elements);
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Floor mutation targets were being counted. Retry the operation against the current project state.");
 
@@ -307,6 +307,9 @@ namespace QS3D.Core.Domain
             }
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Floor mutation targets were being enumerated. Retry the operation against the current project state.");
+            if (knownTargetCount.HasValue && observed != knownTargetCount.Value)
+                throw new InvalidOperationException(
+                    "Floor mutation target collection known count does not match the observed target traversal.");
 
             var currentProjectElements = ResolveProjectElements(project)
                 .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
@@ -318,14 +321,24 @@ namespace QS3D.Core.Domain
             return unique.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
 
-        private static void RejectKnownOversizeTargetCollection(IEnumerable<ProjectElement> elements)
+        private static int? SnapshotKnownTargetCount(IEnumerable<ProjectElement> elements)
         {
+            int? knownCount = null;
             if (elements is ICollection<ProjectElement> collection)
-                RejectInvalidKnownTargetCount(collection.Count);
+                ValidateKnownTargetCount(collection.Count, ref knownCount);
             if (elements is IReadOnlyCollection<ProjectElement> readOnlyCollection)
-                RejectInvalidKnownTargetCount(readOnlyCollection.Count);
+                ValidateKnownTargetCount(readOnlyCollection.Count, ref knownCount);
             if (elements is ICollection nonGenericCollection)
-                RejectInvalidKnownTargetCount(nonGenericCollection.Count);
+                ValidateKnownTargetCount(nonGenericCollection.Count, ref knownCount);
+            return knownCount;
+        }
+
+        private static void ValidateKnownTargetCount(int count, ref int? knownCount)
+        {
+            RejectInvalidKnownTargetCount(count);
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException("Floor mutation target collection exposes conflicting known counts.");
+            knownCount = count;
         }
 
         private static void RejectInvalidKnownTargetCount(int count)
