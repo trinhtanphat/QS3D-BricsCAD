@@ -13,29 +13,32 @@ def main():
         raise SystemExit("FAIL: could not isolate QuantitySummaryWindow.OnExportClick")
     method = text[start:end]
 
-    guard = 'EnsureCurrentProject("xuất BQ XLSX");'
+    active_guard = 'EnsureActive("xuất BQ XLSX");'
+    project_guard = 'EnsureCurrentProject("xuất BQ XLSX");'
     dialog = "new SaveFileDialog"
     show = "dialog.ShowDialog(this)"
     refresh = "RefreshRowsForCurrentMode(false);"
     export = "XlsxQuantityExporter.Export(dialog.FileName, visibleRows);"
 
-    if method.count(guard) < 2:
-        raise SystemExit("FAIL: BQ XLSX export must validate the bound DWG both before dialog interaction and again before live export")
+    if method.count(active_guard) != 1:
+        raise SystemExit("FAIL: BQ XLSX export must validate the active bound DWG exactly once before dialog interaction")
+    if method.count(project_guard) != 1:
+        raise SystemExit("FAIL: BQ XLSX export must validate the current bound project exactly once after Save confirmation")
 
-    first_guard = method.find(guard)
+    active_guard_pos = method.find(active_guard)
     dialog_pos = method.find(dialog)
     show_pos = method.find(show)
-    second_guard = method.find(guard, first_guard + len(guard))
+    project_guard_pos = method.find(project_guard)
     refresh_pos = method.find(refresh)
     export_pos = method.find(export)
 
-    if min(first_guard, dialog_pos, show_pos, second_guard, refresh_pos, export_pos) < 0:
+    if min(active_guard_pos, dialog_pos, show_pos, project_guard_pos, refresh_pos, export_pos) < 0:
         raise SystemExit("FAIL: BQ XLSX export ordering contract is incomplete")
 
-    if not (first_guard < dialog_pos < show_pos < second_guard < refresh_pos < export_pos):
-        raise SystemExit("FAIL: BQ XLSX export must guard before SaveFileDialog and re-guard before live recalc/export")
+    if not (active_guard_pos < dialog_pos < show_pos < project_guard_pos < refresh_pos < export_pos):
+        raise SystemExit("FAIL: BQ XLSX export must guard active DWG before SaveFileDialog and revalidate the project before live recalc/export")
 
-    print("PASS: BQ XLSX export validates the exact bound DWG/project before SaveFileDialog interaction and revalidates before live recalculation/export.")
+    print("PASS: BQ XLSX export validates active-DWG affinity before SaveFileDialog without reading project state, then revalidates the project before live recalculation/export.")
 
 
 if __name__ == "__main__":
