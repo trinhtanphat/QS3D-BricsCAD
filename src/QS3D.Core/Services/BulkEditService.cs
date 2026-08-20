@@ -222,7 +222,7 @@ namespace QS3D.Core.Services
 
         private static IReadOnlyList<ProjectElement> OwnedDistinct(ProjectState project, IEnumerable<ProjectElement> elements)
         {
-            EnsureKnownCountWithinBound(elements, "Bulk edit target collection");
+            var knownCount = SnapshotKnownCount(elements, "Bulk edit target collection");
 
             var projectElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var projectElement in project.Elements)
@@ -253,6 +253,7 @@ namespace QS3D.Core.Services
                     throw new InvalidOperationException("Element does not belong to the project instance: " + elementId);
                 unique[elementId] = owned;
             }
+            RequireObservedCount(knownCount, inputCount, "Bulk edit target collection");
             return new List<ProjectElement>(unique.Values).AsReadOnly();
         }
 
@@ -369,7 +370,7 @@ namespace QS3D.Core.Services
 
         private static IReadOnlyList<string> MaterializeBounded(IEnumerable<string> values, string label)
         {
-            EnsureKnownCountWithinBound(values, label);
+            var knownCount = SnapshotKnownCount(values, label);
             var result = new List<string>();
             var inputCount = 0;
             foreach (var value in values)
@@ -379,15 +380,42 @@ namespace QS3D.Core.Services
                 inputCount++;
                 result.Add(value);
             }
+            RequireObservedCount(knownCount, inputCount, label);
             return result.AsReadOnly();
         }
 
-        private static void EnsureKnownCountWithinBound<T>(IEnumerable<T> values, string label)
+        private static int? SnapshotKnownCount<T>(IEnumerable<T> values, string label)
         {
-            if (values is ICollection<T> collection && collection.Count > MaxTargetInputCount)
+            var genericCount = values is ICollection<T> collection ? (int?)collection.Count : null;
+            var readOnlyCount = values is IReadOnlyCollection<T> readOnlyCollection ? (int?)readOnlyCollection.Count : null;
+            var nonGenericCount = values is System.Collections.ICollection nonGenericCollection ? (int?)nonGenericCollection.Count : null;
+
+            ValidateKnownCount(genericCount, label);
+            ValidateKnownCount(readOnlyCount, label);
+            ValidateKnownCount(nonGenericCount, label);
+
+            var expected = genericCount ?? readOnlyCount ?? nonGenericCount;
+            if (!expected.HasValue) return null;
+            if ((genericCount.HasValue && genericCount.Value != expected.Value) ||
+                (readOnlyCount.HasValue && readOnlyCount.Value != expected.Value) ||
+                (nonGenericCount.HasValue && nonGenericCount.Value != expected.Value))
+                throw new InvalidOperationException(label + " reports conflicting known input counts.");
+            return expected;
+        }
+
+        private static void ValidateKnownCount(int? count, string label)
+        {
+            if (!count.HasValue) return;
+            if (count.Value < 0)
+                throw new InvalidOperationException(label + " reports an invalid negative input count.");
+            if (count.Value > MaxTargetInputCount)
                 throw new InvalidOperationException(label + " cannot exceed " + MaxTargetInputCount + " input entries.");
-            if (values is IReadOnlyCollection<T> readOnlyCollection && readOnlyCollection.Count > MaxTargetInputCount)
-                throw new InvalidOperationException(label + " cannot exceed " + MaxTargetInputCount + " input entries.");
+        }
+
+        private static void RequireObservedCount(int? knownCount, int observedCount, string label)
+        {
+            if (knownCount.HasValue && knownCount.Value != observedCount)
+                throw new InvalidOperationException(label + " input count changed during enumeration.");
         }
 
         private static bool HasNonZeroSignificand(string value)
