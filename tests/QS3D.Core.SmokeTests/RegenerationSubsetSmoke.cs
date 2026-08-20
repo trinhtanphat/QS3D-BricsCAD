@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             RegeneratesOnlyRequestedElements();
+            UsesCurrentDirtyLinkedOpeningSemantics();
             RejectsMalformedRequestedIds();
             RejectsUnknownTarget();
             RejectsDuplicateProjectIds();
@@ -41,6 +42,34 @@ namespace QS3D.Core.SmokeTests
             Near(12.5d, selected.Quantities["LengthM"]);
             Near(3.25d, selected.Quantities["AreaM2"]);
             Near(1d, selected.Quantities["Count"]);
+        }
+
+        private static void UsesCurrentDirtyLinkedOpeningSemantics()
+        {
+            var project = new ProjectState("regen-subset-linked-opening", "Targeted wall regeneration with dirty opening");
+            var wall = new ProjectElement("wall", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            wall.SetProperty("LengthM", "5");
+            wall.SetProperty("HeightM", "3");
+            wall.SetProperty("ThicknessM", "0.2");
+            project.Elements.Add(wall);
+
+            var opening = new ProjectElement("opening", ElementCategory.WallOpening, string.Empty, string.Empty, string.Empty);
+            opening.SetProperty("HostWallId", wall.Id);
+            opening.SetProperty("WidthM", "1");
+            opening.SetProperty("HeightM", "2");
+            opening.SetQuantity("OpeningAreaM2", 2d);
+            opening.MarkClean(ElementDirtyFlags.All);
+            opening.SetProperty("WidthM", "2");
+            project.Elements.Add(opening);
+
+            var engine = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
+            var count = engine.RegenerateDirtySubset(project, new[] { wall.Id });
+
+            Equal(1, count);
+            Near(4d, wall.Quantities["OpeningAreaM2"]);
+            Near(2.2d, wall.Quantities["NetVolumeM3"]);
+            Near(2d, opening.Quantities["OpeningAreaM2"]);
+            True(opening.Dirty != ElementDirtyFlags.None);
         }
 
         private static void RejectsMalformedRequestedIds()
