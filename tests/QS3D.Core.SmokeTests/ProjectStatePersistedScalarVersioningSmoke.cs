@@ -34,13 +34,13 @@ namespace QS3D.Core.SmokeTests
                 "ActiveZoneId",
                 project => project.ActiveZoneId,
                 (project, value) => project.ActiveZoneId = value,
-                " zone-a ",
+                "zone-a",
                 "zone-a");
             AssertScalarMutation(
                 "ActiveFloorId",
                 project => project.ActiveFloorId,
                 (project, value) => project.ActiveFloorId = value,
-                " floor-a ",
+                "floor-a",
                 "floor-a");
         }
 
