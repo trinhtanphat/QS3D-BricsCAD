@@ -149,6 +149,8 @@ namespace QS3D.Core.Export
                     copy.ElementIds.Add(canonical);
                 }
                 if (copy.ElementIds.Count == 0) throw new InvalidDataException("Customer workbook row has no Element ID provenance.");
+                if (copy.ElementIds.Count != row.Count)
+                    throw new InvalidDataException("Customer workbook row Count must equal its QS3D Element ID provenance cardinality.");
 
                 foreach (var handle in row.SourceHandles)
                 {
@@ -299,8 +301,11 @@ namespace QS3D.Core.Export
 
         private static string Required(string value, string label)
         {
-            var result = (value ?? string.Empty).Trim();
+            var raw = value ?? string.Empty;
+            var result = raw.Trim();
             if (result.Length == 0) throw new InvalidDataException("Customer workbook " + label + " is required.");
+            if (!string.Equals(raw, result, StringComparison.Ordinal))
+                throw new InvalidDataException("Customer workbook " + label + " must be canonical without surrounding whitespace.");
             if (result.Length > 32767) throw new InvalidDataException("Customer workbook " + label + " exceeds the Excel cell text limit.");
             return result;
         }
@@ -309,8 +314,8 @@ namespace QS3D.Core.Export
         {
             var token = Required(value, "CAD Handle");
             if (token.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) token = token.Substring(2);
-            long number;
-            if (!long.TryParse(token, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out number) || number <= 0)
+            ulong number;
+            if (!ulong.TryParse(token, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out number) || number == 0UL)
                 throw new InvalidDataException("Customer workbook contains an invalid CAD Handle: " + value + ".");
             return number.ToString("X", CultureInfo.InvariantCulture);
         }
