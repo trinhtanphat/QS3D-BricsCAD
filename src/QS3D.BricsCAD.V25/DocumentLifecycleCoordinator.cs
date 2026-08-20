@@ -5,6 +5,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
 using Bricscad.ApplicationServices;
+using QS3D.Core.Persistence;
 using Teigha.DatabaseServices;
 using Application = Bricscad.ApplicationServices.Application;
 
