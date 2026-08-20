@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -24,6 +25,7 @@ namespace QS3D.BricsCAD.V25.UI
         private Document? _boundDocument;
         private string _boundProjectId = string.Empty;
         private string _boundDrawingFingerprint = string.Empty;
+        private bool _selectionGeometryFallback;
 
         public QuantityInsightPanel()
         {
@@ -43,7 +45,13 @@ namespace QS3D.BricsCAD.V25.UI
 
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
             {
-                ClearQuantityInsights("Chưa có QS3D project hiện hành. Mở/tạo project để xem khối lượng.");
+                if (_selectionSnapshots.Count > 0)
+                {
+                    ShowSelectionGeometryFallback(document);
+                    return;
+                }
+
+                ClearQuantityInsights("Chưa có QS3D project hiện hành. Chọn đối tượng CAD để xem hình học read-only hoặc mở/tạo project để xem khối lượng semantic.");
                 return;
             }
 
@@ -69,6 +77,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _boundDocument = document;
                 _boundProjectId = project.ProjectId;
                 _boundDrawingFingerprint = project.DrawingFingerprint ?? string.Empty;
+                _selectionGeometryFallback = false;
                 EmptyHint.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
                 QuantityTree.Visibility = rows.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
                 _viewModel.Status = rows.Count == 0
@@ -86,10 +95,28 @@ namespace QS3D.BricsCAD.V25.UI
         {
             _selectionSnapshots = snapshots ?? Array.Empty<EntitySnapshot>();
             var activeDocument = BcadApplication.DocumentManager.MdiActiveDocument;
-            if (project == null || _boundDocument == null || !ReferenceEquals(activeDocument, _boundDocument) || !SameProjectIdentity(project))
+
+            if (project == null)
             {
-                ClearSelectionHighlights();
+                if (activeDocument == null || _selectionSnapshots.Count == 0)
+                {
+                    ClearQuantityInsights("Không có selection CAD hợp lệ để diễn giải read-only.");
+                    return;
+                }
+
+                ShowSelectionGeometryFallback(activeDocument);
                 return;
+            }
+
+            _selectionGeometryFallback = false;
+            if (_boundDocument == null || !ReferenceEquals(activeDocument, _boundDocument) || !SameProjectIdentity(project))
+            {
+                RefreshQuantityInsights();
+                if (_boundDocument == null || !ReferenceEquals(activeDocument, _boundDocument) || !SameProjectIdentity(project))
+                {
+                    ClearSelectionHighlights();
+                    return;
+                }
             }
 
             try
@@ -109,6 +136,7 @@ namespace QS3D.BricsCAD.V25.UI
             _boundDocument = null;
             _boundProjectId = string.Empty;
             _boundDrawingFingerprint = string.Empty;
+            _selectionGeometryFallback = false;
             _viewModel.Clear(status ?? string.Empty);
             EmptyHint.Visibility = Visibility.Visible;
             QuantityTree.Visibility = Visibility.Collapsed;
@@ -159,6 +187,66 @@ namespace QS3D.BricsCAD.V25.UI
             if (Math.Abs(row.LengthM) > 1e-9 && parts.Count < 2) parts.Add(row.LengthM.ToString("0.###") + " m");
             return parts.Count > 0 ? string.Join(" • ", parts) : row.Count.ToString("N0") + " cấu kiện";
         }
+
+        private void ShowSelectionGeometryFallback(Document document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+
+            var snapshots = _selectionSnapshots
+                .Where(x => x != null)
+                .OrderBy(x => x.Handle, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var items = snapshots.Select(ToSelectionGeometryItem).ToArray();
+            var floors = items.Length == 0
+                ? Array.Empty<QuantityInsightFloorViewModel>()
+                : new[] { new QuantityInsightFloorViewModel("Selection CAD • read-only", items) };
+
+            _rowSnapshots.Clear();
+            _boundDocument = document;
+            _boundProjectId = string.Empty;
+            _boundDrawingFingerprint = string.Empty;
+            _selectionGeometryFallback = true;
+
+            _viewModel.ReplaceSelectionGeometry(
+                floors,
+                items.Length,
+                snapshots.Length,
+                "Selection CAD read-only • chưa có QS3D project • số đo native hiển thị theo drawing units (DU/DU²/DU³); tổng quan semantic của dự án không khả dụng.");
+
+            foreach (var item in items) item.SetSelectionMatch(true);
+            EmptyHint.Visibility = items.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+            QuantityTree.Visibility = items.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        private static QuantityInsightItemViewModel ToSelectionGeometryItem(EntitySnapshot snapshot)
+        {
+            var layer = string.IsNullOrWhiteSpace(snapshot.Layer) ? "Layer chưa xác định" : snapshot.Layer.Trim();
+            return new QuantityInsightItemViewModel(
+                "Selection CAD • read-only",
+                snapshot.EntityType,
+                layer,
+                "#" + snapshot.Handle,
+                1,
+                FormatSelectionGeometrySummary(snapshot),
+                new[] { snapshot.Handle });
+        }
+
+        private static string FormatSelectionGeometrySummary(EntitySnapshot snapshot)
+        {
+            var parts = new List<string>(4);
+            if (snapshot.VolumeDrawingUnitsCubed.HasValue)
+                parts.Add("V " + FormatDrawingMetric(snapshot.VolumeDrawingUnitsCubed.Value, "DU³"));
+            if (snapshot.SurfaceAreaDrawingUnitsSquared.HasValue)
+                parts.Add("S " + FormatDrawingMetric(snapshot.SurfaceAreaDrawingUnitsSquared.Value, "DU²"));
+            if (snapshot.AreaDrawingUnitsSquared.HasValue)
+                parts.Add("A " + FormatDrawingMetric(snapshot.AreaDrawingUnitsSquared.Value, "DU²"));
+            if (snapshot.LengthDrawingUnits.HasValue)
+                parts.Add("L " + FormatDrawingMetric(snapshot.LengthDrawingUnits.Value, "DU"));
+            return parts.Count > 0 ? string.Join(" • ", parts) : "Không có số đo length/area/volume native";
+        }
+
+        private static string FormatDrawingMetric(double value, string unit) =>
+            value.ToString("0.###", CultureInfo.CurrentCulture) + " " + unit;
 
         private void ApplySelectionHighlights(ProjectState project, bool updateStatus)
         {
@@ -247,6 +335,13 @@ namespace QS3D.BricsCAD.V25.UI
                 _viewModel.Status = "Dòng khối lượng này thuộc DWG khác hoặc bảng đã cũ; hãy bấm Làm mới trước khi định vị.";
                 return;
             }
+
+            if (_selectionGeometryFallback)
+            {
+                LocateSelectionGeometry(document, item);
+                return;
+            }
+
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
             {
                 _viewModel.Status = "QS3D project hiện hành không còn khả dụng; hãy làm mới bảng.";
@@ -288,6 +383,53 @@ namespace QS3D.BricsCAD.V25.UI
             catch (Exception ex)
             {
                 _viewModel.Status = "Không thể định vị: " + ex.Message;
+            }
+        }
+
+        private void LocateSelectionGeometry(Document document, QuantityInsightItemViewModel item)
+        {
+            try
+            {
+                var handles = item.ElementIds
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                if (handles.Length != 1)
+                {
+                    _viewModel.Status = "Dòng geometry read-only không còn một Handle duy nhất; hãy chọn lại đối tượng.";
+                    return;
+                }
+
+                var live = Cad.EntitySnapshotReader.ReadHandles(document, handles);
+                if (live.Count != 1 ||
+                    !string.Equals(live[0].EntityType, item.Category, StringComparison.Ordinal) ||
+                    !string.Equals(live[0].Layer ?? string.Empty, item.FamilyName ?? string.Empty, StringComparison.Ordinal))
+                {
+                    Cad.CadHandleService.ClearSelection(document);
+                    _viewModel.Status = "Geometry đã thay đổi/xóa kể từ lúc diễn giải; hãy chọn lại đối tượng để lấy snapshot mới.";
+                    return;
+                }
+
+                var count = Cad.CadHandleService.Select(document, handles);
+                if (count != 1)
+                {
+                    Cad.CadHandleService.ClearSelection(document);
+                    _viewModel.Status = "Không còn geometry CAD hợp lệ để định vị.";
+                    return;
+                }
+
+                if (!global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(document))
+                {
+                    _viewModel.Status = "Geometry read-only: đã chọn đối tượng CAD nhưng chưa thể zoom vùng chọn hiện hành.";
+                    return;
+                }
+
+                _viewModel.Status = "Geometry read-only: đã chọn/zoom Handle " + handles[0] + ".";
+            }
+            catch (Exception ex)
+            {
+                _viewModel.Status = "Không thể định vị geometry read-only: " + ex.Message;
             }
         }
 
