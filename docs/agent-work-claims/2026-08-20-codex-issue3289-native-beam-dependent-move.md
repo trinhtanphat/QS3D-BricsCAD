@@ -96,3 +96,34 @@ On a repository-sample disposable drawing:
 - Process/script/private-state cleanup and disposable drawing restoration all
   passed; zero BricsCAD processes remained and the repository fixture hash was
   unchanged. This failure does not authorize any other production surface.
+
+## Licensed PASS handoff
+
+- The bounded correction computes a finite positive half usable bar length and
+  places each centered longitudinal frustum at
+  `covered start + beam axis * usableLength/2`; transverse layout remains
+  relative to that longitudinal midpoint. Counts, cover, notation, ownership,
+  native transaction and semantic metadata behavior are unchanged.
+- Exact pushed licensed candidate:
+  `a49342145020b154479eaa780ef3a1af597a2b3f`.
+- Installed BricsCAD V25.2.10 x64 loaded matching adapter/Core ProductVersion
+  `0.1.0-preview.10081+a49342145020b154479eaa780ef3a1af597a2b3f`.
+  The installed-reference V25 `Release|x64` build passed with zero warnings and
+  zero errors; plugin SHA-256 was
+  `523A0430FF7F0858CC9062586226CF96E1C50312C1351ECA41AB5789F1BC1C6E`.
+- The exact runtime returned `production_local004_p03_qualified=true` and
+  `error_code=NONE`. The baseline contained one 5 m Beam host, four `4D16`
+  longitudinal bars and six `D8@1000` stirrups. Native top-level `MOVE`
+  translated only the source LINE by `+1 m` WCS Y while all old generated
+  geometry remained unchanged before reconcile.
+- Production `QS3DSYNCSOURCE` erased every old host/rebar/stirrup handle and
+  removed all three metadata families. Production `QS3DBUILD3D`,
+  `QS3DBEAMREBAR3D` and `QS3DBEAMSTIRRUP3D` built distinct complete translated
+  replacements. Containment, volume, bounds, ownership, scoped Core/runtime
+  Health, save, sidecar persistence and fresh-process cold reopen all passed.
+- Process/script/private-state cleanup and drawing restoration passed, zero
+  BricsCAD processes remained, and the repository fixture retained SHA-256
+  `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`.
+- This claim stays `ACTIVE` until the implementation PR is integrated. The
+  bounded P03 is ready for review, while parent issue `#80` and the broader
+  LOCAL-004 interactive/dependent matrix remain open.
