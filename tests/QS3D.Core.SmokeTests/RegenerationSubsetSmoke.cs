@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             RegeneratesOnlyRequestedElements();
             UsesCurrentDirtyLinkedOpeningSemantics();
             RejectsMalformedRequestedIds();
+            MarkChangedRejectsNonCanonicalElementIds();
             RejectsUnknownTarget();
             RejectsDuplicateProjectIds();
             RejectsInvalidKnownTargetCountsBeforeEnumeration();
@@ -87,6 +88,30 @@ namespace QS3D.Core.SmokeTests
 
             Equal(dirtyBefore, selected.Dirty);
             True(!selected.Quantities.ContainsKey("Count"));
+        }
+
+        private static void MarkChangedRejectsNonCanonicalElementIds()
+        {
+            var project = new ProjectState("regen-mark-changed-id", "Canonical MarkChanged identity");
+            var selected = new ProjectElement("Selected", ElementCategory.CustomQuantity, string.Empty, string.Empty, string.Empty);
+            selected.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(selected);
+            var engine = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
+            var versionBefore = project.ChangeVersion;
+
+            Throws<ArgumentException>(() => engine.MarkChanged(project, " Selected ", ElementDirtyFlags.Quantity));
+            Throws<ArgumentException>(() => engine.MarkChanged(project, string.Empty, ElementDirtyFlags.Quantity));
+            Throws<KeyNotFoundException>(() => engine.MarkChanged(project, "Missing", ElementDirtyFlags.Quantity));
+            Equal(ElementDirtyFlags.None, selected.Dirty);
+            True(project.ChangeVersion == versionBefore);
+
+            engine.MarkChanged(project, "selected", ElementDirtyFlags.None);
+            Equal(ElementDirtyFlags.None, selected.Dirty);
+            True(project.ChangeVersion == versionBefore);
+
+            engine.MarkChanged(project, "selected", ElementDirtyFlags.Quantity);
+            True((selected.Dirty & ElementDirtyFlags.Quantity) != 0);
+            True(project.ChangeVersion > versionBefore);
         }
 
         private static void RejectsUnknownTarget()

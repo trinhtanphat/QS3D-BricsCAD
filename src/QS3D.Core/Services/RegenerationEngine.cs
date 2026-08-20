@@ -46,9 +46,13 @@ namespace QS3D.Core.Services
         public void MarkChanged(ProjectState project, string elementId, ElementDirtyFlags flags)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            _graph.Rebuild(project.Elements);
+            var normalizedId = elementId ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(normalizedId))
+                throw new ArgumentException("Regeneration changed element id cannot be blank.", nameof(elementId));
+            if (!string.Equals(normalizedId, normalizedId.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Regeneration changed element id must be canonical without surrounding whitespace: " + normalizedId + ".", nameof(elementId));
 
-            var normalizedId = (elementId ?? string.Empty).Trim();
+            _graph.Rebuild(project.Elements);
             if (!_graph.TryGetElement(normalizedId, out var source) || source == null)
                 throw new KeyNotFoundException("Unknown element: " + elementId);
             if (flags == ElementDirtyFlags.None) return;
