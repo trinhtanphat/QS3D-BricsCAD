@@ -166,7 +166,9 @@ behavior_contracts = (
         "Tính khối lượng (Engine2)",
         (
             '[CommandMethod("QS3DQUANTITYENGINE2", CommandFlags.Modal)]',
-            'ExistingProjectMutationContext.Require(document, "Tính khối lượng (Engine2)")',
+            'ExistingProjectMutationContext.TryGet(document, out var project)',
+            'QuantityCalculationResultWindow.ShowNoProject(noProjectMessage)',
+            'PaletteCoordinator.ShowBimWorkspace()',
             ".RegenerateDirty(project);",
             "ProjectQuantityReportBuilder.Group(project);",
             "QuantityEngine2Summary.Build(rows, regenerated);",
@@ -217,6 +219,18 @@ for path, action_name, needles in behavior_contracts:
         if needle not in text:
             errors.append(f"{action_name} behavior contract missing: {needle}")
 
+if ENGINE2_COMMANDS.is_file():
+    engine2 = ENGINE2_COMMANDS.read_text(encoding="utf-8")
+    if 'ExistingProjectMutationContext.Require(document, "Tính khối lượng (Engine2)")' in engine2:
+        errors.append("Tính khối lượng (Engine2) must not use the generic missing-project mutation exception")
+    if "ProjectContextCoordinator.GetOrCreate" in engine2:
+        errors.append("Tính khối lượng (Engine2) must not silently create a QS3D project")
+    try_get_pos = engine2.find('ExistingProjectMutationContext.TryGet(document, out var project)')
+    no_project_pos = engine2.find('QuantityCalculationResultWindow.ShowNoProject(noProjectMessage)', try_get_pos)
+    regenerate_pos = engine2.find('.RegenerateDirty(project)', no_project_pos)
+    if not (0 <= try_get_pos < no_project_pos < regenerate_pos):
+        errors.append("Tính khối lượng (Engine2) must handle missing-project UX before existing-project regeneration")
+
 adapter_root = ROOT / "src/QS3D.BricsCAD.V25"
 if adapter_root.is_dir():
     command_source = "\n".join(
@@ -239,6 +253,6 @@ if errors:
 print(
     "PASS: QS3D_QTY is reconciled to the BLT3D reference with exactly two groups, "
     "six large icon buttons, deterministic removal of legacy QS3D quantity panels, "
-    "distinct registered command routing with pinned behavior, coordinated initialization, "
+    "distinct registered command routing with pinned behavior including actionable no-project Engine2 UX, coordinated initialization, "
     "and contained teardown."
 )
