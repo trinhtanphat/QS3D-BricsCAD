@@ -101,6 +101,8 @@ namespace QS3D.Core.Export
                 ValidateNonNegative(row.TotalWeightKg, index, "TotalWeightKg");
                 snapshot.Add(row);
             }
+            if (rows.Count != count)
+                throw new InvalidOperationException("Rebar XLSX export row count changed during snapshot.");
             return snapshot;
         }
 
