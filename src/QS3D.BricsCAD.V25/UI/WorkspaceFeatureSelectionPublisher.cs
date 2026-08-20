@@ -51,7 +51,7 @@ namespace QS3D.BricsCAD.V25.UI
             var raw = item.GetValue(FeatureIdProperty) as string;
             if (string.IsNullOrWhiteSpace(raw)) return;
 
-            if (!WorkspaceFeatureNavigationCatalog.Navigation.TrySelect(new FeatureId(raw), out var context) || context == null)
+            if (!WorkspaceFeatureNavigationCatalog.Navigation.TrySelect(new FeatureId(raw!), out var context) || context == null)
                 return;
 
             Current = context;
