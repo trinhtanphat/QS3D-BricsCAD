@@ -175,6 +175,10 @@ namespace QS3D.BricsCAD.V25
                 var aroundEndB = new Point3d(Drawing(context.Document, 0.1d), Drawing(context.Document, 7.1d), Drawing(context.Document, 0.1d));
                 try
                 {
+                    // STRETCH must derive its vertex ownership from the explicit crossing window.
+                    // The prior production reconcile may retain PICKFIRST for the whole LINE;
+                    // clear that selection so BricsCAD cannot degrade endpoint STRETCH into a move.
+                    context.Document.Editor.SetImpliedSelection(Array.Empty<ObjectId>());
                     context.Document.Editor.Command(
                         "_.STRETCH",
                         "_C",

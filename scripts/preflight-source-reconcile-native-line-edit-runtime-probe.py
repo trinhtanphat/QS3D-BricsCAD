@@ -44,6 +44,7 @@ required_probe_tokens = (
     'context.Document.Editor.Command(\n                    "_.MOVE"',
     'context.Document.Editor.Command(\n                    "_.ROTATE"',
     '"_.STRETCH"',
+    'context.Document.Editor.SetImpliedSelection(Array.Empty<ObjectId>());',
     '"_Displacement"',
     'new Point3d(0d, Drawing(context.Document, 2d), 0d)',
     'new Point3d(0d, Drawing(context.Document, 3d), 0d)',
@@ -83,6 +84,10 @@ for forbidden in (
 
 if probe.count(".Editor.Command(") != 3:
     errors.append("probe must delegate exactly MOVE, ROTATE and STRETCH to Editor.Command")
+stretch_clear = probe.find("context.Document.Editor.SetImpliedSelection(Array.Empty<ObjectId>());")
+stretch_command = probe.find('"_.STRETCH"', stretch_clear)
+if stretch_clear < 0 or stretch_command < stretch_clear:
+    errors.append("probe must clear retained PICKFIRST before the explicit STRETCH crossing window")
 if 'CommandFlags.Modal | CommandFlags.UsePickSet' not in probe:
     errors.append("source reselection command must preserve PICKFIRST for the next production command")
 
