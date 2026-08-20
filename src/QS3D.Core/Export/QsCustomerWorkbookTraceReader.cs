@@ -72,7 +72,7 @@ namespace QS3D.Core.Export
             var header = FindUniqueRow(rows, 1);
             var target = FindUniqueRow(rows, rowNumber);
             var headerCells = ReadCells(header, ns, out var headerFormulaColumns);
-            var traceColumns = headerCells.Where(pair => string.Equals(pair.Value.Trim(), QsCustomerWorkbookExporter.TraceHeader, StringComparison.OrdinalIgnoreCase))
+            var traceColumns = headerCells.Where(pair => string.Equals(pair.Value, QsCustomerWorkbookExporter.TraceHeader, StringComparison.OrdinalIgnoreCase))
                                           .Select(pair => pair.Key).ToList();
             if (traceColumns.Count != 1) throw new InvalidDataException("Customer workbook business sheet must contain exactly one TRACE_KEY header.");
             if (headerFormulaColumns.Contains(traceColumns[0])) throw new InvalidDataException("Customer workbook TRACE_KEY header must be literal.");
@@ -81,7 +81,10 @@ namespace QS3D.Core.Export
             string traceKey;
             if (!targetCells.TryGetValue(traceColumns[0], out traceKey) || string.IsNullOrWhiteSpace(traceKey))
                 throw new InvalidDataException("Customer workbook business row is missing TRACE_KEY.");
-            return traceKey.Trim();
+            var canonicalTraceKey = traceKey.Trim();
+            if (!string.Equals(traceKey, canonicalTraceKey, StringComparison.Ordinal) || canonicalTraceKey.Any(char.IsControl))
+                throw new InvalidDataException("Customer workbook TRACE_KEY must be a canonical literal value.");
+            return canonicalTraceKey;
         }
 
         private static QsCustomerWorkbookTrace ReadTraceProjection(ZipArchiveEntry entry, string traceKey, string worksheetName, int rowNumber)
@@ -103,7 +106,7 @@ namespace QS3D.Core.Export
             var columns = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             foreach (var name in required)
             {
-                var matches = headers.Where(pair => string.Equals(pair.Value.Trim(), name, StringComparison.OrdinalIgnoreCase)).Select(pair => pair.Key).ToList();
+                var matches = headers.Where(pair => string.Equals(pair.Value, name, StringComparison.OrdinalIgnoreCase)).Select(pair => pair.Key).ToList();
                 if (matches.Count != 1) throw new InvalidDataException("TRACE_MODEL must contain exactly one " + name + " column.");
                 if (headerFormulaColumns.Contains(matches[0])) throw new InvalidDataException("TRACE_MODEL identity headers must be literal.");
                 columns[name] = matches[0];
@@ -115,7 +118,7 @@ namespace QS3D.Core.Export
                 var cells = ReadCells(row, ns, out var formulas);
                 string value;
                 if (cells.TryGetValue(columns[QsCustomerWorkbookExporter.TraceHeader], out value) &&
-                    string.Equals(value.Trim(), traceKey, StringComparison.Ordinal))
+                    string.Equals(value, traceKey, StringComparison.Ordinal))
                 {
                     matchesByKey.Add(Tuple.Create(ParseRow(row), cells, formulas));
                 }
@@ -143,10 +146,11 @@ namespace QS3D.Core.Export
         {
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var raw in text.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var raw in text.Split(new[] { ';' }, StringSplitOptions.None))
             {
                 var value = raw.Trim();
-                if (value.Length == 0) continue;
+                if (value.Length == 0 || !string.Equals(raw, value, StringComparison.Ordinal) || value.Any(char.IsControl))
+                    throw new InvalidDataException("TRACE_MODEL contains a malformed identity token.");
                 if (handles) value = CanonicalHandle(value);
                 if (!seen.Add(value)) throw new InvalidDataException("TRACE_MODEL contains duplicate identity token: " + value + ".");
                 result.Add(value);
@@ -158,8 +162,8 @@ namespace QS3D.Core.Export
         private static string CanonicalHandle(string value)
         {
             var token = value.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? value.Substring(2) : value;
-            long number;
-            if (!long.TryParse(token, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out number) || number <= 0)
+            ulong number;
+            if (!ulong.TryParse(token, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out number) || number == 0UL)
                 throw new InvalidDataException("TRACE_MODEL contains an invalid CAD Handle: " + value + ".");
             return number.ToString("X", CultureInfo.InvariantCulture);
         }
@@ -168,7 +172,10 @@ namespace QS3D.Core.Export
         {
             string value;
             if (!cells.TryGetValue(column, out value) || string.IsNullOrWhiteSpace(value)) throw new InvalidDataException(label + " is missing.");
-            return value.Trim();
+            var canonical = value.Trim();
+            if (!string.Equals(value, canonical, StringComparison.Ordinal) || canonical.Any(char.IsControl))
+                throw new InvalidDataException(label + " must be a canonical literal value.");
+            return canonical;
         }
 
         private static Dictionary<string, ZipArchiveEntry> ResolveSheets(ZipArchive archive)
@@ -183,15 +190,24 @@ namespace QS3D.Core.Export
             var result = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
             foreach (var sheet in workbook.Descendants(ns + "sheet"))
             {
-                var name = ((string)sheet.Attribute("name") ?? string.Empty).Trim();
-                var id = ((string)sheet.Attribute(rns + "id") ?? string.Empty).Trim();
-                if (name.Length == 0 || id.Length == 0 || result.ContainsKey(name)) throw new InvalidDataException("Customer workbook contains invalid or duplicate sheet metadata.");
+                var rawName = (string)sheet.Attribute("name") ?? string.Empty;
+                var name = rawName.Trim();
+                var rawId = (string)sheet.Attribute(rns + "id") ?? string.Empty;
+                var id = rawId.Trim();
+                if (name.Length == 0 || id.Length == 0 ||
+                    !string.Equals(rawName, name, StringComparison.Ordinal) ||
+                    !string.Equals(rawId, id, StringComparison.Ordinal) ||
+                    result.ContainsKey(name))
+                    throw new InvalidDataException("Customer workbook contains invalid or duplicate sheet metadata.");
                 var matches = rels.Descendants(pns + "Relationship").Where(item => string.Equals((string)item.Attribute("Id"), id, StringComparison.Ordinal)).ToList();
                 if (matches.Count != 1) throw new InvalidDataException("Customer workbook worksheet relationship is missing or ambiguous.");
                 var type = ((string)matches[0].Attribute("Type") ?? string.Empty).Trim();
                 if (!string.Equals(type, WorksheetRelationshipType, StringComparison.Ordinal)) throw new InvalidDataException("Customer workbook relationship is not a worksheet.");
                 if (string.Equals((string)matches[0].Attribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("External worksheet relationships are not supported.");
-                var target = ((string)matches[0].Attribute("Target") ?? string.Empty).Replace('\\', '/').TrimStart('/');
+                var rawTarget = ((string)matches[0].Attribute("Target") ?? string.Empty).Replace('\\', '/');
+                var target = rawTarget.Trim();
+                if (!string.Equals(rawTarget, target, StringComparison.Ordinal)) throw new InvalidDataException("Customer workbook worksheet target is invalid.");
+                target = target.TrimStart('/');
                 if (target.StartsWith("xl/", StringComparison.OrdinalIgnoreCase)) target = target.Substring(3);
                 if (target.Contains("..")) throw new InvalidDataException("Customer workbook worksheet target is invalid.");
                 var entry = UniqueEntry(archive, "xl/" + target) ?? throw new InvalidDataException("Customer workbook worksheet part is missing: " + target + ".");
