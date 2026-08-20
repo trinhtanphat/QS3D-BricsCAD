@@ -20,7 +20,7 @@ def main():
     v26 = read(V26_REL)
 
     for needle in (
-        'new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\\ndự án", "QS3DPROJECTINFO", RibbonIconKind.Qs3dLogo)',
+        'new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\\ndự án", "QS3DPROJECTINFO", RibbonIconKind.Inspect)',
         'new ButtonSpec("QS3D_PROJECT_FLOORS", "Cài đặt\\ntầng", "QS3DLEVELS", RibbonIconKind.Structure)',
         'new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\\ndự án", "QS3DPROJECTPROPERTIES", RibbonIconKind.Settings)',
         'SetProperty(button, "ShowImage", true);',
@@ -43,7 +43,7 @@ def main():
     require(v26, '<Compile Include="..\\QS3D.BricsCAD.V25\\**\\*.cs"', V26_REL)
 
     print(
-        "PASS: THIẾT LẬP DỰ ÁN creates explicit 16/32 px deterministic icons for "
+        "PASS: THIẾT LẬP DỰ ÁN creates explicit semantic 16/32 px deterministic icons for "
         "Thông tin dự án, Cài đặt tầng and Thuộc tính dự án, with V26 inheriting the same source."
     )
     return 0

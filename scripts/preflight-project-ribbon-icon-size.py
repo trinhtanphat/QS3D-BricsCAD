@@ -10,7 +10,7 @@ def main():
     text = SOURCE.read_text(encoding="utf-8")
 
     required = (
-        'new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\\ndự án", "QS3DPROJECTINFO", RibbonIconKind.Qs3dLogo)',
+        'new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\\ndự án", "QS3DPROJECTINFO", RibbonIconKind.Inspect)',
         'new ButtonSpec("QS3D_PROJECT_FLOORS", "Cài đặt\\ntầng", "QS3DLEVELS", RibbonIconKind.Structure)',
         'new ButtonSpec("QS3D_PROJECT_PROPERTIES", "Thuộc tính\\ndự án", "QS3DPROJECTPROPERTIES", RibbonIconKind.Settings)',
         'SetProperty(button, "Image", CreateIcon(spec.Icon, 16));',
@@ -31,8 +31,8 @@ def main():
         return 1
 
     print(
-        "PASS: THIẾT LẬP DỰ ÁN keeps 16 px fallback images, supplies 32 px LargeImage assets, "
-        "and requests BricsCAD's native Large Ribbon item layout for all three project buttons."
+        "PASS: THIẾT LẬP DỰ ÁN keeps semantic project-info/structure/settings icons, 16 px fallback images, "
+        "supplies 32 px LargeImage assets, and requests BricsCAD's native Large Ribbon item layout for all three project buttons."
     )
     return 0
 

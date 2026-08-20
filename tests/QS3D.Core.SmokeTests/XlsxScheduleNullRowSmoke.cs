@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using QS3D.Core.Export;
 using QS3D.Core.Reporting;
@@ -27,6 +29,8 @@ namespace QS3D.Core.SmokeTests
             AssertRejectsInvalidRoomFinishRow("LengthM", row => row.LengthM = -0.01d);
             AssertRejectsInvalidRoomFinishRow("AreaM2", row => row.AreaM2 = -0.01d);
             AssertAcceptsZeroRoomFinishValues();
+            AssertCurtainWallCountDriftFailsBeforeExistingDestinationReplacement();
+            AssertCurtainWallCountDriftFailsBeforeFilesystemCreation();
         }
 
         private static void AssertRejectsNullRow(string exportName, Action<string> export)
@@ -145,6 +149,84 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void AssertCurtainWallCountDriftFailsBeforeExistingDestinationReplacement()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-curtain-xlsx-count-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var destination = Path.Combine(root, "curtain-wall.xlsx");
+                const string sentinel = "preserve-existing-curtain-wall-destination";
+                File.WriteAllText(destination, sentinel);
+
+                AssertCurtainWallCountDrift(destination);
+                if (!string.Equals(File.ReadAllText(destination), sentinel, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Curtain XLSX row-count drift replaced an existing destination file.");
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
+        private static void AssertCurtainWallCountDriftFailsBeforeFilesystemCreation()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-curtain-xlsx-count-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var untouchedDirectory = Path.Combine(root, "must-not-be-created");
+                AssertCurtainWallCountDrift(Path.Combine(untouchedDirectory, "curtain-wall.xlsx"));
+                if (Directory.Exists(untouchedDirectory))
+                    throw new InvalidOperationException("Curtain XLSX row-count drift touched the filesystem before failing.");
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
+        private static void AssertCurtainWallCountDrift(string destination)
+        {
+            try
+            {
+                CurtainWallXlsxExporter.Export(destination, new CurtainCountDriftingRows(ValidCurtainWallRow()));
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("row count changed during snapshot", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new InvalidOperationException("Curtain XLSX row-count drift must identify snapshot count instability.", ex);
+                return;
+            }
+
+            throw new InvalidOperationException("Curtain XLSX exporter accepted a source whose row count changed during snapshot.");
+        }
+
+        private static CurtainWallScheduleRow ValidCurtainWallRow()
+        {
+            return new CurtainWallScheduleRow
+            {
+                Floor = "L1",
+                FamilyName = "CW1",
+                WallCount = 1,
+                TotalWallLengthM = 4d,
+                GrossWallAreaM2 = 10d,
+                OpeningAreaM2 = 0d,
+                NetGlassAreaM2 = 10d,
+                FrameFaceAreaM2 = 0d,
+                FrameLengthM = 0d,
+                PanelCount = 1,
+                VerticalFrameCount = 0,
+                HorizontalFrameCount = 0,
+                MinimumClearPanelWidthM = 0d,
+                MaximumClearPanelWidthM = 0d,
+                MinimumClearPanelHeightM = 0d,
+                MaximumClearPanelHeightM = 0d
+            };
+        }
+
         private static RoomFinishScheduleRow ValidRoomFinishRow()
         {
             var row = new RoomFinishScheduleRow
@@ -163,6 +245,42 @@ namespace QS3D.Core.SmokeTests
             row.ElementIds.Add("E1");
             row.RoomIds.Add("R1");
             return row;
+        }
+
+        private sealed class CurtainCountDriftingRows : IReadOnlyList<CurtainWallScheduleRow>
+        {
+            private readonly CurtainWallScheduleRow _row;
+            private int _countReads;
+
+            internal CurtainCountDriftingRows(CurtainWallScheduleRow row)
+            {
+                _row = row;
+            }
+
+            public int Count
+            {
+                get
+                {
+                    _countReads++;
+                    return _countReads == 1 ? 1 : 2;
+                }
+            }
+
+            public CurtainWallScheduleRow this[int index]
+            {
+                get
+                {
+                    if (index != 0) throw new ArgumentOutOfRangeException(nameof(index));
+                    return _row;
+                }
+            }
+
+            public IEnumerator<CurtainWallScheduleRow> GetEnumerator()
+            {
+                yield return _row;
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
     }
 }

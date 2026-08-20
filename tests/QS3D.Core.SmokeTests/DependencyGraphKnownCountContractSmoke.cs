@@ -19,6 +19,8 @@ namespace QS3D.Core.SmokeTests
             ConsistentKnownCountsRemainAccepted();
             KnownCountTraversalMismatchFailsClosedAndPreservesGraph();
             KnownCountTraversalMismatchFailsDirtyOrdering();
+            DirtyAndCleanDuplicateSemanticIdsFailDirtyOrdering();
+            CleanDuplicateSemanticIdsFailDirtyOrdering();
             ExactBoundRemainsAccepted();
             DishonestKnownCountStillStopsAtStreamingBoundary();
         }
@@ -124,6 +126,31 @@ namespace QS3D.Core.SmokeTests
             ExpectInvalidOperation(() => graph.TopologicalDirtyOrder(over), "count changed during enumeration", "Topological ordering must reject known Count over-enumeration.");
             if (over.EnumerationRequestCount != 1)
                 throw new Exception("Known Count over-enumeration must inspect the ordering source exactly once.");
+        }
+
+        private static void DirtyAndCleanDuplicateSemanticIdsFailDirtyOrdering()
+        {
+            var dirty = Element("ORDER-DUP-DIRTY-CLEAN");
+            var clean = Element("ORDER-DUP-DIRTY-CLEAN");
+            clean.MarkClean(ElementDirtyFlags.All);
+
+            ExpectInvalidOperation(
+                () => new DependencyGraph().TopologicalDirtyOrder(new[] { dirty, clean }),
+                "duplicate semantic element id",
+                "Topological ordering must reject duplicate semantic IDs across dirty and clean elements.");
+        }
+
+        private static void CleanDuplicateSemanticIdsFailDirtyOrdering()
+        {
+            var first = Element("ORDER-DUP-CLEAN-CASE");
+            var second = Element("order-dup-clean-case");
+            first.MarkClean(ElementDirtyFlags.All);
+            second.MarkClean(ElementDirtyFlags.All);
+
+            ExpectInvalidOperation(
+                () => new DependencyGraph().TopologicalDirtyOrder(new[] { first, second }),
+                "duplicate semantic element id",
+                "Topological ordering must reject case-insensitive duplicate semantic IDs when all matching elements are clean.");
         }
 
         private static void ExactBoundRemainsAccepted()

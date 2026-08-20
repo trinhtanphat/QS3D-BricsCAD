@@ -47,6 +47,8 @@ namespace QS3D.Core.Export
                 ValidateRange(row.MinimumClearPanelHeightM, row.MaximumClearPanelHeightM, rowIndex, "clear-panel height");
                 snapshot.Add(row);
             }
+            if (rows.Count != rowCount)
+                throw new InvalidOperationException("Curtain XLSX export row count changed during snapshot.");
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
