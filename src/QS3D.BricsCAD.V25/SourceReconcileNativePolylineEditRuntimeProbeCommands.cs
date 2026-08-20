@@ -71,16 +71,19 @@ namespace QS3D.BricsCAD.V25
                 var context = Context();
                 var state = State(context, "PREPARED");
                 var owner = Owner(context, state);
-                RequireGeometry(context.Document, owner, ExpectedStage.Stretched);
-                RequireSemanticMetrics(owner, ExpectedStage.Initial);
-                RequireQuantities(owner, ExpectedStage.Initial);
+                try { RequireGeometry(context.Document, owner, ExpectedStage.Stretched); }
+                catch { throw new ProbeFailure("NATIVE_STRETCH_GEOMETRY_REJECTED"); }
+                try { RequireSemanticMetrics(owner, ExpectedStage.Initial); }
+                catch { throw new ProbeFailure("NATIVE_STRETCH_SEMANTIC_REJECTED"); }
+                try { RequireQuantities(owner, ExpectedStage.Initial); }
+                catch { throw new ProbeFailure("NATIVE_STRETCH_QUANTITY_REJECTED"); }
                 try
                 {
                     var current = RequireGenerated(context.Document, context.Project, owner, ExpectedStage.Initial);
                     if (!SameGenerated(state.InitialGenerated, current))
                         throw new ProbeFailure("GENERATED_MUTATED_BY_NATIVE_STRETCH");
                 }
-                catch (ProbeFailure failure) when (!string.Equals(failure.Code, "GENERATED_MUTATED_BY_NATIVE_STRETCH", StringComparison.Ordinal))
+                catch
                 {
                     throw new ProbeFailure("GENERATED_MUTATED_BY_NATIVE_STRETCH");
                 }
