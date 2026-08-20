@@ -55,9 +55,40 @@ namespace QS3D.Core.SmokeTests
             Equal(FeatureCapability.Geometry3D, context.InteractionProfile.Capabilities & FeatureCapability.Geometry3D, "Room navigation lost the Geometry3D capability.");
             Equal(ElementCategory.Room, context.LegacyCategory, "Legacy ElementCategory adapter changed.");
 
+            AssertRoomFinishNavigation(
+                navigation,
+                RoomFinishInteractionProfiles.FloorFinishId,
+                "floor-finish.from-room",
+                ElementCategory.FloorFinish);
+            AssertRoomFinishNavigation(
+                navigation,
+                RoomFinishInteractionProfiles.WaterproofingId,
+                "waterproofing.form-pick",
+                ElementCategory.Waterproofing);
+            AssertRoomFinishNavigation(
+                navigation,
+                RoomFinishInteractionProfiles.SkirtingId,
+                "skirting.from-room-perimeter",
+                ElementCategory.Skirting);
+
             var fallback = navigation.SelectRequired(new FeatureId("model.architectural-wall"));
             Equal(FeatureOnSelectBehavior.SelectContext, fallback.InteractionProfile.OnSelect, "Unmigrated navigation features must retain selection-only fallback behavior.");
             Equal(FeatureCapability.None, fallback.InteractionProfile.Capabilities, "Unmigrated navigation feature unexpectedly gained migrated capabilities.");
+        }
+
+        private static void AssertRoomFinishNavigation(
+            FeatureNavigationRegistry navigation,
+            FeatureId featureId,
+            string primaryRecipeId,
+            ElementCategory legacyCategory)
+        {
+            var context = navigation.SelectRequired(featureId);
+            Equal(featureId, context.FeatureId, "Room-finish navigation lost the canonical migrated FeatureId.");
+            Equal(FeatureOnSelectBehavior.SelectAndRefresh, context.InteractionProfile.OnSelect, "Room-finish navigation did not resolve its migrated InteractionProfile.");
+            Equal(primaryRecipeId, context.InteractionProfile.PrimaryRecipeId, "Room-finish navigation lost its migrated primary Add recipe.");
+            Equal(FeatureCapability.Create, context.InteractionProfile.Capabilities & FeatureCapability.Create, "Room-finish navigation lost Create capability.");
+            Equal(FeatureCapability.Geometry3D, context.InteractionProfile.Capabilities & FeatureCapability.Geometry3D, "Room-finish navigation lost Geometry3D capability.");
+            Equal(legacyCategory, context.LegacyCategory, "Room-finish legacy ElementCategory adapter changed.");
         }
 
         private static void DuplicateAndMissingRegistrationsFailFast()
