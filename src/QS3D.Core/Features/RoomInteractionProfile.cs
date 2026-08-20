@@ -55,6 +55,7 @@ namespace QS3D.Core.Features
                 new[] { InteractionSurface.PrimaryInspector, InteractionSurface.SecondaryInspector },
                 FeatureCapability.Create |
                 FeatureCapability.EditParameters |
+                FeatureCapability.Geometry3D |
                 FeatureCapability.Quantity |
                 FeatureCapability.Locate |
                 FeatureCapability.Delete,
