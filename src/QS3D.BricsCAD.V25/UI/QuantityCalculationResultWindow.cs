@@ -75,6 +75,23 @@ namespace QS3D.BricsCAD.V25.UI
             return window._openQuantityRequested;
         }
 
+        public static bool ShowNoProject(string message)
+        {
+            var detail = string.IsNullOrWhiteSpace(message)
+                ? "Bản vẽ hiện tại chưa có dự án QS3D. Hãy mở Mô hình, tạo Family hoặc Capture cấu kiện CAD rồi chạy lại Engine2."
+                : message.Trim();
+            detail += "\n\nChọn “Về Mô hình” để bắt đầu đúng luồng Project/Floor/Family → Tạo mới/Capture → 3D → Khối lượng.";
+
+            var window = new QuantityCalculationResultWindow(
+                "Tính khối lượng",
+                "Bản vẽ chưa có dự án QS3D.",
+                detail,
+                false,
+                offerModeling: true);
+            window.ShowDialog();
+            return window._openModelRequested;
+        }
+
         public static bool ShowNoElements(string message)
         {
             var detail = string.IsNullOrWhiteSpace(message)
