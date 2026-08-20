@@ -268,7 +268,7 @@ namespace QS3D.Core.Services
                 var hostId = CanonicalOptionalHostId(host, child.Id);
                 if (hostId.Length == 0 || !string.Equals(hostId, wall.Id, StringComparison.OrdinalIgnoreCase)) continue;
                 double area;
-                if (child.Quantities.TryGetValue("OpeningAreaM2", out var stored)) area = QuantityMath.Positive(stored);
+                if (child.Dirty == ElementDirtyFlags.None && child.Quantities.TryGetValue("OpeningAreaM2", out var stored)) area = QuantityMath.Positive(stored);
                 else
                 {
                     var width = QuantityMath.Positive(SemanticNumber.Get(child, "WidthM"));
