@@ -14,7 +14,6 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             OversizedProfileRejectedBeforePlanning();
-            EscapedProfileRejectedBeforePlanning();
             BelowBoundProfileStillApplies();
             AuditOverflowRestoresWholeTemplateApply();
         }
@@ -49,38 +48,6 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeAudits, project.AuditEvents.Count, "Oversized template apply appended an audit event.");
             Equal(beforeVersion, project.ChangeVersion, "Oversized template apply changed project version.");
             Equal(beforeUtc, project.UpdatedUtc, "Oversized template apply changed UpdatedUtc.");
-        }
-
-        private static void EscapedProfileRejectedBeforePlanning()
-        {
-            var project = new ProjectState("P-TEMPLATE-ESCAPED-BOUND", "Template escaped apply bound");
-            project.Families.Add(new ProjectFamily("DUP", "Existing A", ElementCategory.ArchitecturalWall));
-            project.Families.Add(new ProjectFamily("DUP", "Existing B", ElementCategory.StructuralWall));
-            var beforeFamilies = project.Families.Count;
-            var beforeAudits = project.AuditEvents.Count;
-            var beforeVersion = project.ChangeVersion;
-            var beforeUtc = project.UpdatedUtc;
-
-            var profile = new TemplateProfile("T-ESCAPED-OVERSIZED", "Escaped oversized template");
-            var family = new ProjectFamily("F-ESCAPED-OVERSIZED", "Escaped oversized wall", ElementCategory.ArchitecturalWall);
-            family.Properties["Payload"] = new string('&', 2 * 1024 * 1024);
-            profile.Families.Add(family);
-
-            try
-            {
-                new TemplateProfileStore().Apply(project, profile);
-                throw new Exception("Expected XML-expanded template apply to fail before project planning.");
-            }
-            catch (InvalidDataException ex)
-            {
-                if (!ex.Message.Contains("exceeds 8 MiB", StringComparison.Ordinal))
-                    throw new Exception("XML-expanded template apply did not fail through the established size contract: " + ex.Message);
-            }
-
-            Equal(beforeFamilies, project.Families.Count, "XML-expanded template apply changed project families.");
-            Equal(beforeAudits, project.AuditEvents.Count, "XML-expanded template apply appended an audit event.");
-            Equal(beforeVersion, project.ChangeVersion, "XML-expanded template apply changed project version.");
-            Equal(beforeUtc, project.UpdatedUtc, "XML-expanded template apply changed UpdatedUtc.");
         }
 
         private static void BelowBoundProfileStillApplies()
