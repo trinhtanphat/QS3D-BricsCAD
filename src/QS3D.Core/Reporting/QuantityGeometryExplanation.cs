@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace QS3D.Core.Reporting
 {
@@ -77,9 +76,9 @@ namespace QS3D.Core.Reporting
         public IReadOnlyList<QuantityFormworkFaceExplanation> FormworkFaces { get; set; } = Array.Empty<QuantityFormworkFaceExplanation>();
         public IReadOnlyList<string> Diagnostics { get; set; } = Array.Empty<string>();
 
-        public double GrossFormworkArea => FormworkFaces.Sum(x => x.GrossArea);
-        public double DeductionFormworkArea => FormworkFaces.Sum(x => x.DeductionArea);
-        public double NetFormworkArea => FormworkFaces.Sum(x => x.NetArea);
+        public double GrossFormworkArea => SumFormworkArea(FormworkFaces, x => x.GrossArea, nameof(GrossFormworkArea));
+        public double DeductionFormworkArea => SumFormworkArea(FormworkFaces, x => x.DeductionArea, nameof(DeductionFormworkArea));
+        public double NetFormworkArea => SumFormworkArea(FormworkFaces, x => x.NetArea, nameof(NetFormworkArea));
 
         public void Validate(QuantityGeometryTolerances tolerances)
         {
@@ -92,8 +91,10 @@ namespace QS3D.Core.Reporting
             if (Math.Abs(NetVolume - Math.Max(0d, GrossVolume - DeductionVolume)) > tolerances.Volume)
                 throw new InvalidOperationException("Net volume is not gross volume minus union deduction volume.");
 
-            foreach (var face in FormworkFaces)
+            var faces = FormworkFaces ?? throw new InvalidOperationException("FormworkFaces cannot be null.");
+            for (var index = 0; index < faces.Count; index++)
             {
+                var face = faces[index] ?? throw new InvalidOperationException("FormworkFaces cannot contain null entries.");
                 NonNegativeFinite(face.GrossArea, face.FaceId + "/GrossArea");
                 NonNegativeFinite(face.DeductionArea, face.FaceId + "/DeductionArea");
                 NonNegativeFinite(face.NetArea, face.FaceId + "/NetArea");
@@ -102,6 +103,26 @@ namespace QS3D.Core.Reporting
                 if (Math.Abs(face.NetArea - Math.Max(0d, face.GrossArea - face.DeductionArea)) > tolerances.Area)
                     throw new InvalidOperationException(face.FaceId + " net area is not gross area minus deduction area.");
             }
+
+            _ = SumFormworkArea(faces, x => x.GrossArea, nameof(GrossFormworkArea));
+            _ = SumFormworkArea(faces, x => x.DeductionArea, nameof(DeductionFormworkArea));
+            _ = SumFormworkArea(faces, x => x.NetArea, nameof(NetFormworkArea));
+        }
+
+        private static double SumFormworkArea(
+            IReadOnlyList<QuantityFormworkFaceExplanation>? faces,
+            Func<QuantityFormworkFaceExplanation, double> selector,
+            string label)
+        {
+            if (faces == null) throw new InvalidOperationException("FormworkFaces cannot be null.");
+            var total = 0d;
+            for (var index = 0; index < faces.Count; index++)
+            {
+                var face = faces[index] ?? throw new InvalidOperationException("FormworkFaces cannot contain null entries.");
+                var value = QuantityReportMath.NonNegative(selector(face), label + "[" + index + "]");
+                total = QuantityReportMath.Add(total, value, label);
+            }
+            return total;
         }
 
         private static void NonNegativeFinite(double value, string label)
