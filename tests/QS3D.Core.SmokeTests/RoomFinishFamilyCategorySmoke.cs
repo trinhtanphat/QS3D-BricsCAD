@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             MismatchedFamilyCategoryFailsClosed();
             MatchingFamilyCategoryPreservesInheritance();
             MissingFamilyFailsClosed();
+            LostNonZeroAreaAddendFailsClosed();
         }
 
         private static void MismatchedFamilyCategoryFailsClosed()
@@ -60,6 +61,22 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(floorFinish);
 
             Throws<InvalidOperationException>(() => RoomFinishScheduleBuilder.Build(project));
+        }
+
+        private static void LostNonZeroAreaAddendFailsClosed()
+        {
+            var project = NewProject("finish-addend-loss");
+            var floorFinishFamily = new ProjectFamily("FF", "Floor finish family", ElementCategory.FloorFinish);
+            project.Families.Add(floorFinishFamily);
+
+            var large = new ProjectElement("FF1", ElementCategory.FloorFinish, floorFinishFamily.Id, "F1", "Z1");
+            large.Quantities["BottomAreaM2"] = 9007199254740992d;
+            var small = new ProjectElement("FF2", ElementCategory.FloorFinish, floorFinishFamily.Id, "F1", "Z1");
+            small.Quantities["BottomAreaM2"] = 1d;
+            project.Elements.Add(large);
+            project.Elements.Add(small);
+
+            Throws<OverflowException>(() => RoomFinishScheduleBuilder.Build(project));
         }
 
         private static ProjectState NewProject(string id)

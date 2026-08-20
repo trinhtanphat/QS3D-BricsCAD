@@ -295,10 +295,12 @@ namespace QS3D.Core.Domain
 
         private void SetActiveContextId(ref string field, string? value)
         {
-            var normalizedValue = (value ?? string.Empty).Trim();
-            if (normalizedValue.Any(char.IsControl))
+            var rawValue = value ?? string.Empty;
+            if (rawValue.Length != 0 && !string.Equals(rawValue, rawValue.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Active context id must be empty or canonical without surrounding whitespace.", nameof(value));
+            if (rawValue.Any(char.IsControl))
                 throw new ArgumentException("Active context id cannot contain control characters.", nameof(value));
-            SetPersistedScalar(ref field, PersistedTextXml.Verify(normalizedValue, nameof(value), "Active context id"));
+            SetPersistedScalar(ref field, PersistedTextXml.Verify(rawValue, nameof(value), "Active context id"));
         }
 
         private void SetCanonicalOptionalIdentity(ref string field, string? value, string label)

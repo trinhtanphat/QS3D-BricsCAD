@@ -71,7 +71,7 @@ namespace QS3D.Core.Mapping
             IEnumerable<MeasurementWorkItemCoverageFinding> findings)
         {
             if (findings == null) throw new ArgumentNullException(nameof(findings));
-            ValidateKnownCount(findings);
+            var knownCount = ValidateKnownCount(findings);
 
             var rows = new List<MeasurementWorkItemCoverageReportRow>();
             var index = 0;
@@ -84,6 +84,11 @@ namespace QS3D.Core.Mapping
                 rows.Add(new MeasurementWorkItemCoverageReportRow(finding));
                 index++;
             }
+
+            if (knownCount.HasValue && index != knownCount.Value)
+                throw new ArgumentException(
+                    "Coverage report input traversal count does not match its validated known count.",
+                    nameof(findings));
 
             rows.Sort(CompareRows);
 
@@ -123,7 +128,7 @@ namespace QS3D.Core.Mapping
                 unmappedWorkItemCount);
         }
 
-        private static void ValidateKnownCount(IEnumerable<MeasurementWorkItemCoverageFinding> findings)
+        private static int? ValidateKnownCount(IEnumerable<MeasurementWorkItemCoverageFinding> findings)
         {
             var counts = new List<int>(3);
             if (findings is ICollection<MeasurementWorkItemCoverageFinding> collection)
@@ -133,7 +138,7 @@ namespace QS3D.Core.Mapping
             if (findings is ICollection nonGenericCollection)
                 counts.Add(nonGenericCollection.Count);
 
-            if (counts.Count == 0) return;
+            if (counts.Count == 0) return null;
 
             var expected = counts[0];
             var maximumReported = expected;
@@ -153,6 +158,8 @@ namespace QS3D.Core.Mapping
                 throw new ArgumentException("Coverage report input reports an invalid negative known count.", nameof(findings));
             if (hasConflict)
                 throw new ArgumentException("Coverage report input reports conflicting known counts.", nameof(findings));
+
+            return expected;
         }
 
         private static ArgumentException CreateFindingCountException()
