@@ -419,8 +419,8 @@ namespace QS3D.BricsCAD.V25
             var host = RequireHost(document, project, owner, stage);
             var rebar = RequireRebarSet(document, project, owner, "GeneratedRebarHandles", "GeneratedRebarCount", 4);
             var stirrups = RequireRebarSet(document, project, owner, "GeneratedBeamStirrupHandles", "GeneratedBeamStirrupCount", 6);
-            RequireContained(host, rebar);
-            RequireContained(host, stirrups);
+            RequireContained(host, rebar, "REBAR_HOST_CONTAINMENT_REJECTED");
+            RequireContained(host, stirrups, "STIRRUP_HOST_CONTAINMENT_REJECTED");
             return new OutputSnapshot(host, rebar, stirrups);
         }
 
@@ -492,7 +492,10 @@ namespace QS3D.BricsCAD.V25
             RequireNear(snapshot.MaximumZM, .5d, NativeToleranceM, "host maximum Z");
         }
 
-        private static void RequireContained(SolidSnapshot host, IEnumerable<SolidSnapshot> dependents)
+        private static void RequireContained(
+            SolidSnapshot host,
+            IEnumerable<SolidSnapshot> dependents,
+            string failureCode)
         {
             foreach (var dependent in dependents)
             {
@@ -502,7 +505,7 @@ namespace QS3D.BricsCAD.V25
                     dependent.MaximumYM > host.MaximumYM + NativeToleranceM ||
                     dependent.MinimumZM < host.MinimumZM - NativeToleranceM ||
                     dependent.MaximumZM > host.MaximumZM + NativeToleranceM)
-                    throw new ProbeFailure("OUTPUT_HOST_CONTAINMENT_REJECTED");
+                    throw new ProbeFailure(failureCode);
             }
         }
 

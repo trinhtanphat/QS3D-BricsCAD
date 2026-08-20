@@ -6,9 +6,10 @@ ROOT = Path(__file__).resolve().parents[1]
 PROBE = ROOT / "src" / "QS3D.BricsCAD.V25" / "SourceReconcileNativeBeamDependentRuntimeProbeCommands.cs"
 RUNNER = ROOT / "scripts" / "test-bricscad-v25-source-reconcile-native-beam-dependent.ps1"
 CLAIM = ROOT / "docs" / "agent-work-claims" / "2026-08-20-codex-issue3289-native-beam-dependent-move.md"
+BUILDER = ROOT / "src" / "QS3D.BricsCAD.V25" / "Cad" / "BeamRebarSolidBuilder.cs"
 
 errors = []
-for path in (PROBE, RUNNER, CLAIM):
+for path in (PROBE, RUNNER, CLAIM, BUILDER):
     if not path.is_file():
         errors.append(f"missing required LOCAL-004 P03 file: {path.relative_to(ROOT)}")
 
@@ -20,6 +21,7 @@ if errors:
 probe = PROBE.read_text(encoding="utf-8")
 runner = RUNNER.read_text(encoding="utf-8")
 claim = CLAIM.read_text(encoding="utf-8")
+builder = BUILDER.read_text(encoding="utf-8")
 
 commands = (
     "QS3DSRBEAMP03PREPARE",
@@ -46,8 +48,8 @@ required_probe_tokens = (
     'RequireRebarSet(document, project, owner, "GeneratedBeamStirrupHandles", "GeneratedBeamStirrupCount", 6)',
     "GeneratedGeometryService.HasMatchingOwnership(solid, project, owner)",
     "GeneratedRebarNativeOwnershipService.HasMatchingOwnership(solid, project, owner, handlesKey)",
-    "RequireContained(host, rebar)",
-    "RequireContained(host, stirrups)",
+    'RequireContained(host, rebar, "REBAR_HOST_CONTAINMENT_REJECTED")',
+    'RequireContained(host, stirrups, "STIRRUP_HOST_CONTAINMENT_REJECTED")',
     "GENERATED_MUTATED_BY_NATIVE_MOVE",
     "RequireNoGenerated(context.Document, owner, state.RequiredBaseline)",
     "RequireTranslatedReplacement(state.RequiredBaseline, rebuilt)",
@@ -158,6 +160,19 @@ for forbidden_marker_key in (
     if forbidden_marker_key in probe.lower():
         errors.append("sanitized probe marker must not publish IDs, handles, paths, or raw exception details")
 
+placement_tokens = (
+    "var halfBarLength = CadGeometryGuard.Finite(barLength / 2d",
+    "var longitudinalCenterX = CadGeometryGuard.Add(startX",
+    "var longitudinalCenterY = CadGeometryGuard.Add(startY",
+    "CadGeometryGuard.Add(longitudinalCenterX",
+    "CadGeometryGuard.Add(longitudinalCenterY",
+)
+for token in placement_tokens:
+    if token not in builder:
+        errors.append(f"Beam longitudinal builder is missing licensed midpoint-correction token: {token}")
+if "var x = CadGeometryGuard.Add(startX" in builder or "var y = CadGeometryGuard.Add(startY" in builder:
+    errors.append("Beam longitudinal builder still places a centered frustum at the covered source start")
+
 claim_tokens = (
     "issue #3289",
     "Status: `ACTIVE`",
@@ -167,6 +182,8 @@ claim_tokens = (
     "QS3DBEAMREBAR3D",
     "QS3DBEAMSTIRRUP3D",
     "automation-only",
+    "OUTPUT_HOST_CONTAINMENT_REJECTED",
+    "usableLength/2",
     "Parent issue #80 remains open",
 )
 for token in claim_tokens:
@@ -178,4 +195,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: LOCAL-004 P03 drives one production Direct Draw Beam through real native MOVE, production host/longitudinal/stirrup invalidation and rebuild, save/cold reopen, and exact privacy/cleanup guards without production edits.")
+print("PASS: LOCAL-004 P03 drives one production Direct Draw Beam through real native MOVE, production host/longitudinal/stirrup invalidation and rebuild, save/cold reopen, exact privacy/cleanup guards, and the licensed longitudinal midpoint correction.")
