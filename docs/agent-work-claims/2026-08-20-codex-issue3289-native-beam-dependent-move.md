@@ -22,6 +22,10 @@ without stale ownership.
   `src/QS3D.BricsCAD.V25/`
 - one additive guarded exact-SHA PowerShell runner under `scripts/`
 - one additive focused auto-discovered preflight under `scripts/`
+- after exact licensed containment evidence only,
+  `src/QS3D.BricsCAD.V25/Cad/BeamRebarSolidBuilder.cs` plus the existing
+  `scripts/preflight-beam-rebar.py` may correct and lock the isolated
+  longitudinal placement defect
 - `docs/LOCAL-AGENT-INBOX.md` and `docs/SOURCE-EDIT-WORKFLOW.md` only after an
   exact licensed result is available
 - this claim file
@@ -51,8 +55,10 @@ On a repository-sample disposable drawing:
 ## Exclusions
 
 - No production Source Reconcile, Undo coordinator, Direct Draw, structural
-  builder, Beam rebar/stirrup builder, ownership, persistence or UI changes
-  unless exact runtime evidence proves a separately bounded defect.
+  host builder, Beam stirrup builder, ownership, persistence or UI changes.
+- The Beam longitudinal builder exception is limited to the exact licensed
+  centered-frustum midpoint correction recorded below; no layout/count/cover,
+  ownership, transaction or semantic metadata redesign is authorized.
 - No synthetic database edit in place of native top-level `MOVE`; only bounded
   test-fixture notation provisioning may mutate semantics directly.
 - No changes to the completed P01 files or the open P02 branch/PR.
@@ -72,3 +78,21 @@ On a repository-sample disposable drawing:
   bounded evidence and zero residual test processes/private state.
 - Update local workflow documentation only from an exact licensed PASS and
   stop before main merge unless the owner explicitly authorizes this named PR.
+
+## Licensed diagnostic evidence and bounded source continuation
+
+- Exact pushed diagnostic candidate:
+  `87ea546b484fb690fde300be26eb12f662c4d937`.
+- Installed BricsCAD V25.2.10 returned sanitized
+  `failure_phase=dependent_baseline` /
+  `failure_code=OUTPUT_HOST_CONTAINMENT_REJECTED` before MOVE or reconcile.
+  The probe checks the four longitudinal bars before the stirrup set, so the
+  result isolates the `GeneratedRebarHandles` geometry family.
+- Source correlation is exact: `BeamRebarSolidBuilder` creates each full-length
+  bar with centered `Solid3d.CreateFrustum`, rotates it onto the Beam axis, then
+  translates its center to the covered source start rather than
+  `covered start + axis * usableLength/2`. This places half of each bar outside
+  the host envelope while counts and ownership still appear healthy.
+- Process/script/private-state cleanup and disposable drawing restoration all
+  passed; zero BricsCAD processes remained and the repository fixture hash was
+  unchanged. This failure does not authorize any other production surface.
