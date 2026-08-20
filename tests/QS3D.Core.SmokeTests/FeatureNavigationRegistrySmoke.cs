@@ -47,10 +47,17 @@ namespace QS3D.Core.SmokeTests
 
         private static void SelectionResolvesInteractionProfileAndLegacyCategory()
         {
-            var context = WorkspaceFeatureNavigationCatalog.Navigation.SelectRequired(new FeatureId("model.room"));
-            Equal(new FeatureId("model.room"), context.FeatureId, "Selected feature context lost FeatureId.");
-            Equal(FeatureOnSelectBehavior.SelectContext, context.InteractionProfile.OnSelect, "Selected feature context did not resolve InteractionProfile.");
+            var navigation = WorkspaceFeatureNavigationCatalog.Navigation;
+            var context = navigation.SelectRequired(RoomInteractionProfile.RoomId);
+            Equal(RoomInteractionProfile.RoomId, context.FeatureId, "Selected feature context lost FeatureId.");
+            Equal(FeatureOnSelectBehavior.SelectAndRefresh, context.InteractionProfile.OnSelect, "Room navigation did not resolve the migrated Room InteractionProfile.");
+            Equal(RoomInteractionProfile.DirectRecipeId, context.InteractionProfile.PrimaryRecipeId, "Room navigation lost the direct Add recipe.");
+            Equal(FeatureCapability.Geometry3D, context.InteractionProfile.Capabilities & FeatureCapability.Geometry3D, "Room navigation lost the Geometry3D capability.");
             Equal(ElementCategory.Room, context.LegacyCategory, "Legacy ElementCategory adapter changed.");
+
+            var fallback = navigation.SelectRequired(new FeatureId("model.architectural-wall"));
+            Equal(FeatureOnSelectBehavior.SelectContext, fallback.InteractionProfile.OnSelect, "Unmigrated navigation features must retain selection-only fallback behavior.");
+            Equal(FeatureCapability.None, fallback.InteractionProfile.Capabilities, "Unmigrated navigation feature unexpectedly gained migrated capabilities.");
         }
 
         private static void DuplicateAndMissingRegistrationsFailFast()
