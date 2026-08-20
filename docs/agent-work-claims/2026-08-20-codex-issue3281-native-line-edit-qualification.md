@@ -1,6 +1,6 @@
 # Work claim — issue #3281 native LINE edit qualification
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Lane-Key: `issue-3281`
 - Canonical owner/session: `codex-root-20260820`
 - Canonical carrier: `agent/codex/issue3281-native-line-edit-qualification`
@@ -73,4 +73,16 @@ processor through these bounded phases:
 - Persistence/cleanup: disposable drawing changed and semantic sidecar existed before cold reopen; test-owned processes, scripts and private state were removed; drawing restoration passed; zero BricsCAD processes remained; repository fixture SHA-256 remained `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`.
 - Boundary: this is deterministic LINE command/batch evidence only. Grip/jig/manual ESC, POLYLINE topology and the remaining category/dependent matrix stay pending under parent `#80`.
 
-The claim remains `ACTIVE` until the automation/docs change is integrated on current main.
+## Integration closeout
+
+- Implementation PR: `#3284`.
+- Exact main merge: `2b50bb2bd7aed25cf84da74745bfe08fc3a11d61`.
+- Exact licensed candidate `2a6aa84a41daa68f35160bfc78c4330b78bc0f97`
+  is an ancestor of the main merge.
+- All required protected checks for implementation PR `#3284` passed before
+  the normal merge.
+- Issue `#3281` is closed. Parent product issue `#80` remains open for the
+  excluded grip/jig/manual-ESC, POLYLINE-topology, and remaining category and
+  dependent-object matrix.
+
+This bounded claim is `COMPLETED` and its reserved surfaces are released.
