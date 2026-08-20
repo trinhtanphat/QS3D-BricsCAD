@@ -1,6 +1,6 @@
 # Work claim — issue #3277 Source Reconcile batched canonical ownership
 
-- Status: `ACTIVE`
+- Status: `COMPLETED`
 - Lane-Key: `issue-3277`
 - Canonical owner/session: `codex-root-20260820`
 - Canonical carrier: `agent/codex/issue3277-source-reconcile-batch-ownership`
@@ -62,3 +62,23 @@ second ownership model.
 - Obtain exact-head branch CI, protected current-candidate PR checks, then merge
   the one canonical PR through the protected-main path.
 
+## Completion evidence
+
+- Claim commit: `8b99e3287e8d48ca071820ef60534439ffd6d449`.
+- Source/gate commit: `da0ecdc6e6f6e5d2d1582262b28356f95bbf89af`.
+- Branch CI run `32332357992`: `preflight` and `core` PASS on the exact source
+  head, including deterministic Core smoke and installed-reference V25 build.
+- Implementation PR `#3278` protected checks: `preflight` and `core` PASS;
+  merge state was `CLEAN` and `origin/main` remained an ancestor of the head.
+- Implementation PR `#3278` squash-merged as exact main SHA
+  `0f3844555d3da58fbe4640f911c23224660077de`.
+- Exact merged-main focused gates PASS:
+  `preflight-source-reconcile-batched-ownership.py`,
+  `preflight-source-reconcile.py`, and
+  `preflight-source-reconcile-single-bind.py`.
+- Pre-merge local validation on the exact source head: aggregate `948/948`
+  discovered feature gates PASS; Core Release build `0` warnings / `0` errors;
+  full Core smoke `ALL PASS`; installed-reference BricsCAD V25 `Release|x64`
+  build `0` warnings / `0` errors.
+- No BricsCAD process was launched and no LOCAL-004/private-data/Actions or
+  release surface was changed. Parent issue `#80` remains open.
