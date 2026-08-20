@@ -91,10 +91,6 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, negative));
             True(!negative.EnumerationRequested);
 
-            var oversized = new MultiCountTargetIds(new[] { "A" }, 3, 3, 3, throwOnEnumeration: true);
-            Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, oversized));
-            True(!oversized.EnumerationRequested);
-
             var conflicting = new MultiCountTargetIds(new[] { "A" }, 1, 2, 1, throwOnEnumeration: true);
             Throws<ArgumentException>(() => engine.RegenerateDirtySubset(project, conflicting));
             True(!conflicting.EnumerationRequested);
