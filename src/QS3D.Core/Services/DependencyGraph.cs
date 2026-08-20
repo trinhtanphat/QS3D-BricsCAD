@@ -157,6 +157,16 @@ namespace QS3D.Core.Services
                 if (element.Dirty != ElementDirtyFlags.None) list.Add(element);
             }
 
+            foreach (var element in materialized)
+            {
+                foreach (var dependencyId in element.DependsOn)
+                {
+                    if (seenIds.Contains(dependencyId)) continue;
+                    throw new InvalidOperationException(
+                        "Semantic element " + element.Id + " depends on missing semantic element: " + dependencyId + ". Repair semantic relations before graph evaluation.");
+                }
+            }
+
             var byId = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in list)
                 byId[element.Id] = element;
