@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard the runtime probe's Ribbon-first palette visibility contract."""
+"""Guard the runtime probe's BIM-workspace palette visibility contract."""
 
 from pathlib import Path
 
@@ -12,15 +12,15 @@ RUNNERS = (
 )
 
 WORKSPACE_ASSERTION = "if (!PaletteCoordinator.IsWorkspaceVisible)"
-RIGHT_PANEL_ASSERTION = "if (PaletteCoordinator.IsRightPanelVisible)"
+RIGHT_PANEL_ASSERTION = "if (!PaletteCoordinator.IsRightPanelVisible)"
 QUANTITY_PANEL_ASSERTION = "if (PaletteCoordinator.IsQuantityInsightVisible)"
-STALE_RIGHT_PANEL_ASSERTION = "if (!PaletteCoordinator.IsRightPanelVisible)"
+STALE_RIGHT_PANEL_ASSERTION = "if (PaletteCoordinator.IsRightPanelVisible)"
 STALE_QUANTITY_PANEL_ASSERTION = "if (!PaletteCoordinator.IsQuantityInsightVisible)"
 WORKSPACE_MARKER = '"workspace_palette_visible=true"'
-RIGHT_PANEL_MARKER = '"right_palette_visible=false"'
+RIGHT_PANEL_MARKER = '"right_palette_visible=true"'
 QUANTITY_PANEL_MARKER = '"quantity_palette_visible=false"'
 WORKSPACE_RUNNER_REQUIREMENT = 'Require-Qs3dMarkerValue -Marker $marker -Key "workspace_palette_visible" -Expected "true"'
-RIGHT_RUNNER_REQUIREMENT = 'Require-Qs3dMarkerValue -Marker $marker -Key "right_palette_visible" -Expected "false"'
+RIGHT_RUNNER_REQUIREMENT = 'Require-Qs3dMarkerValue -Marker $marker -Key "right_palette_visible" -Expected "true"'
 QUANTITY_RUNNER_REQUIREMENT = 'Require-Qs3dMarkerValue -Marker $marker -Key "quantity_palette_visible" -Expected "false"'
 
 
@@ -31,23 +31,23 @@ def main():
     if WORKSPACE_ASSERTION not in probe_text:
         errors.append("runtime probe no longer requires the Workspace palette to be visible")
     if RIGHT_PANEL_ASSERTION not in probe_text:
-        errors.append("runtime probe must fail when the legacy right-side palette is visible")
+        errors.append("runtime probe must require the BIM drawing/layer palette to be visible")
     if QUANTITY_PANEL_ASSERTION not in probe_text:
         errors.append("runtime probe must fail when the quantity insight palette is visible")
     if STALE_RIGHT_PANEL_ASSERTION in probe_text:
-        errors.append("runtime probe still requires the legacy right-side palette to be visible")
+        errors.append("runtime probe still rejects the BIM drawing/layer palette when it is visible")
     if STALE_QUANTITY_PANEL_ASSERTION in probe_text:
         errors.append("runtime probe incorrectly requires the quantity insight palette to be visible")
     if WORKSPACE_MARKER not in probe_text:
         errors.append("runtime probe must report workspace_palette_visible=true on success")
     if RIGHT_PANEL_MARKER not in probe_text:
-        errors.append("runtime probe must report right_palette_visible=false on success")
+        errors.append("runtime probe must report right_palette_visible=true on success")
     if QUANTITY_PANEL_MARKER not in probe_text:
         errors.append("runtime probe must report quantity_palette_visible=false on success")
     if '"workspace_palette_visible=false"' in probe_text:
         errors.append("runtime probe reports the Workspace palette as hidden")
-    if '"right_palette_visible=true"' in probe_text:
-        errors.append("runtime probe still reports the legacy right-side palette as visible")
+    if '"right_palette_visible=false"' in probe_text:
+        errors.append("runtime probe reports the BIM drawing/layer palette as hidden")
     if '"quantity_palette_visible=true"' in probe_text:
         errors.append("runtime probe reports the quantity insight palette as visible")
 
@@ -57,7 +57,7 @@ def main():
         if WORKSPACE_RUNNER_REQUIREMENT not in runner_text:
             errors.append("{} does not enforce workspace_palette_visible=true".format(relative))
         if RIGHT_RUNNER_REQUIREMENT not in runner_text:
-            errors.append("{} does not enforce right_palette_visible=false".format(relative))
+            errors.append("{} does not enforce right_palette_visible=true".format(relative))
         if QUANTITY_RUNNER_REQUIREMENT not in runner_text:
             errors.append("{} does not enforce quantity_palette_visible=false".format(relative))
 
@@ -66,7 +66,7 @@ def main():
             print("[FAIL] {}".format(error))
         return 1
 
-    print("[OK] runtime probe contract: Workspace visible, Right Panel hidden, Quantity Insight hidden")
+    print("[OK] runtime probe contract: Workspace visible, BIM Right Panel visible, Quantity Insight hidden")
     return 0
 
 
