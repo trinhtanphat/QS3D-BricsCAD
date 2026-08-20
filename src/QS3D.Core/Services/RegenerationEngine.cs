@@ -46,9 +46,13 @@ namespace QS3D.Core.Services
         public void MarkChanged(ProjectState project, string elementId, ElementDirtyFlags flags)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            _graph.Rebuild(project.Elements);
+            var normalizedId = elementId ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(normalizedId))
+                throw new ArgumentException("Regeneration changed element id cannot be blank.", nameof(elementId));
+            if (!string.Equals(normalizedId, normalizedId.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Regeneration changed element id must be canonical without surrounding whitespace: " + normalizedId + ".", nameof(elementId));
 
-            var normalizedId = (elementId ?? string.Empty).Trim();
+            _graph.Rebuild(project.Elements);
             if (!_graph.TryGetElement(normalizedId, out var source) || source == null)
                 throw new KeyNotFoundException("Unknown element: " + elementId);
             if (flags == ElementDirtyFlags.None) return;
@@ -175,6 +179,7 @@ namespace QS3D.Core.Services
 
         private static HashSet<string> CanonicalTargetIds(IEnumerable<string> elementIds, int maxCount)
         {
+            var knownCount = ValidateKnownTargetIdCounts(elementIds);
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var value in elementIds)
@@ -191,7 +196,36 @@ namespace QS3D.Core.Services
                 result.Add(raw);
                 index++;
             }
+
+            if (knownCount.HasValue && knownCount.Value != index)
+                throw new InvalidOperationException("Regeneration target id count changed during enumeration.");
             return result;
+        }
+
+        private static int? ValidateKnownTargetIdCounts(IEnumerable<string> elementIds)
+        {
+            var genericCount = elementIds is ICollection<string> collection ? (int?)collection.Count : null;
+            var readOnlyCount = elementIds is IReadOnlyCollection<string> readOnlyCollection ? (int?)readOnlyCollection.Count : null;
+            var nonGenericCount = elementIds is System.Collections.ICollection nonGenericCollection ? (int?)nonGenericCollection.Count : null;
+
+            ValidateKnownTargetIdCount(genericCount, nameof(elementIds));
+            ValidateKnownTargetIdCount(readOnlyCount, nameof(elementIds));
+            ValidateKnownTargetIdCount(nonGenericCount, nameof(elementIds));
+
+            var expected = genericCount ?? readOnlyCount ?? nonGenericCount;
+            if (!expected.HasValue) return null;
+            if ((genericCount.HasValue && genericCount.Value != expected.Value) ||
+                (readOnlyCount.HasValue && readOnlyCount.Value != expected.Value) ||
+                (nonGenericCount.HasValue && nonGenericCount.Value != expected.Value))
+                throw new ArgumentException("Regeneration target ids report conflicting known counts.", nameof(elementIds));
+            return expected;
+        }
+
+        private static void ValidateKnownTargetIdCount(int? count, string parameterName)
+        {
+            if (!count.HasValue) return;
+            if (count.Value < 0)
+                throw new ArgumentException("Regeneration target ids report an invalid negative known count.", parameterName);
         }
 
         private int RegenerateTransactional(ProjectState project, IEnumerable<ProjectElement> candidates, int passBasis)

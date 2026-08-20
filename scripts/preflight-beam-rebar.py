@@ -30,9 +30,14 @@ if builder.is_file():
         "GeneratedRebarOwnershipGuard.Build(project)", 'ownership.EnsureOwned(handle, element, "GeneratedRebarHandles")',
         "MaxBarsPerElement = 1024", "MaxBarsPerBatch = 4096", "document.Editor.GetSelection()",
         "CadElementVerticalPlacement.Resolve(", "vertical.CenterDrawing", "GeneratedRebar", "CadGeometryGuard.Finite(nx * localX",
+        "var halfBarLength = CadGeometryGuard.Finite(barLength / 2d", "var longitudinalCenterX = CadGeometryGuard.Add(startX",
+        "var longitudinalCenterY = CadGeometryGuard.Add(startY", "CadGeometryGuard.Add(longitudinalCenterX",
+        "CadGeometryGuard.Add(longitudinalCenterY",
     ):
         if needle not in text: errors.append("beam rebar solid builder missing: " + needle)
     if "CadGeometryGuard.Multiply" in text: errors.append("beam rebar builder references nonexistent CadGeometryGuard.Multiply")
+    if "var x = CadGeometryGuard.Add(startX" in text or "var y = CadGeometryGuard.Add(startY" in text:
+        errors.append("beam rebar builder must translate centered frustums to the usable-bar midpoint before transverse placement")
 
 command = ROOT / "src/QS3D.BricsCAD.V25/BeamRebarCommands.cs"
 if command.is_file():

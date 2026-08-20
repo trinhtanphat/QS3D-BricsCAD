@@ -4,13 +4,16 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
 using System.Threading;
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace QS3D.BricsCAD.V25.Ribbon
 {
     /// <summary>
     /// Fills missing images on the canonical QS3D Ribbon after every richer feature augmenter
-    /// has reconciled. Existing Home/Draw/custom images are preserved; text-only buttons get
-    /// deterministic semantic QS3D icons based on their command intent.
+    /// has reconciled. Existing Home/Draw/custom images are preserved except for a small set of
+    /// owner-approved semantic overrides where a generic/brand image is known to be incorrect.
     /// </summary>
     internal static class RibbonBootstrapIconAugmenter
     {
@@ -95,11 +98,32 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 && !string.IsNullOrWhiteSpace(command))
             {
                 commandButtons++;
-                if (!HasCompleteVisibleIcon(item))
+                var text = (GetProperty(item, "Text") as string)
+                           ?? (GetProperty(item, "Name") as string)
+                           ?? string.Empty;
+
+                // These three commands are explicit owner-facing fixes. Apply them even when a
+                // previous augmenter supplied a complete image, because those complete images can
+                // still be semantically wrong (generic Objects or the QS3D product brand).
+                if (IsSystemObjects(command))
                 {
-                    var text = (GetProperty(item, "Text") as string)
-                               ?? (GetProperty(item, "Name") as string)
-                               ?? string.Empty;
+                    ApplySemanticIcon(item, RibbonIconKind.Model3d, makeLarge: true);
+                }
+                else if (IsProjectInfo(command))
+                {
+                    ApplySemanticIcon(item, RibbonIconKind.Inspect, makeLarge: true);
+                }
+                else if (IsIfcRemove(command, text))
+                {
+                    SetProperty(item, "ShowImage", true);
+                    SetProperty(item, "Image", CreateIfcRemoveIcon(16));
+                    SetProperty(item, "LargeImage", CreateIfcRemoveIcon(32));
+                    // IFC import/add/remove are primary, full-height actions in the richer ribbon
+                    // and the BIM mirror. Keep the fallback path at the same BricsCAD visual weight.
+                    SetEnumProperty(item, "Size", "Large");
+                }
+                else if (!HasCompleteVisibleIcon(item))
+                {
                     var icon = ResolveIcon(command, text);
                     SetProperty(item, "ShowImage", true);
                     SetProperty(item, "Image", CreateIcon(icon, 16));
@@ -115,6 +139,30 @@ namespace QS3D.BricsCAD.V25.Ribbon
             foreach (var child in nestedEnumerable)
                 DecorateItem(child, visited, ref commandButtons);
         }
+
+        private static void ApplySemanticIcon(object item, RibbonIconKind icon, bool makeLarge)
+        {
+            SetProperty(item, "ShowImage", true);
+            SetProperty(item, "Image", CreateIcon(icon, 16));
+            SetProperty(item, "LargeImage", CreateIcon(icon, 32));
+            if (makeLarge)
+                SetEnumProperty(item, "Size", "Large");
+        }
+
+        private static bool IsSystemObjects(string command) =>
+            command.IndexOf("QS3D_HOME_SYSTEM_OBJECTS", StringComparison.OrdinalIgnoreCase) >= 0
+            || command.IndexOf("QS3DSYSTEMOBJECTS", StringComparison.OrdinalIgnoreCase) >= 0;
+
+        private static bool IsProjectInfo(string command) =>
+            command.IndexOf("QS3DPROJECTINFO", StringComparison.OrdinalIgnoreCase) >= 0
+            || command.IndexOf("QS3D_PROJECT_INFO", StringComparison.OrdinalIgnoreCase) >= 0;
+
+        private static bool IsIfcRemove(string command, string text) =>
+            command.IndexOf("IFCREMOVE", StringComparison.OrdinalIgnoreCase) >= 0
+            || command.IndexOf("IFC_REMOVE", StringComparison.OrdinalIgnoreCase) >= 0
+            || text.IndexOf("Xóa IFC", StringComparison.OrdinalIgnoreCase) >= 0
+            || text.IndexOf("Xoa IFC", StringComparison.OrdinalIgnoreCase) >= 0
+            || text.IndexOf("Remove IFC", StringComparison.OrdinalIgnoreCase) >= 0;
 
         private static object CreateIcon(RibbonIconKind icon, int pixelSize)
         {
@@ -137,6 +185,48 @@ namespace QS3D.BricsCAD.V25.Ribbon
             {
                 thread.CurrentCulture = previous;
             }
+        }
+
+        private static object CreateIfcRemoveIcon(int pixelSize)
+        {
+            var blue = new SolidColorBrush(Color.FromRgb(34, 137, 245));
+            var blueDark = new SolidColorBrush(Color.FromRgb(13, 77, 172));
+            var light = new SolidColorBrush(Color.FromRgb(224, 238, 255));
+            var red = new SolidColorBrush(Color.FromRgb(220, 65, 65));
+            blue.Freeze();
+            blueDark.Freeze();
+            light.Freeze();
+            red.Freeze();
+
+            var group = new DrawingGroup();
+            group.Children.Add(new GeometryDrawing(blueDark, null, new RectangleGeometry(new Rect(4, 4, 19, 24), 2, 2)));
+            group.Children.Add(new GeometryDrawing(blue, null, new RectangleGeometry(new Rect(7, 7, 13, 18), 1, 1)));
+            group.Children.Add(new GeometryDrawing(light, null, new RectangleGeometry(new Rect(9, 10, 9, 2), 0.6, 0.6)));
+            group.Children.Add(new GeometryDrawing(light, null, new RectangleGeometry(new Rect(9, 15, 9, 2), 0.6, 0.6)));
+
+            group.Children.Add(new GeometryDrawing(red, null, new EllipseGeometry(new Point(24, 23), 7, 7)));
+            var deletePen = new Pen(Brushes.White, 2.2)
+            {
+                StartLineCap = PenLineCap.Round,
+                EndLineCap = PenLineCap.Round
+            };
+            deletePen.Freeze();
+            group.Children.Add(new GeometryDrawing(null, deletePen, new LineGeometry(new Point(20.5, 19.5), new Point(27.5, 26.5))));
+            group.Children.Add(new GeometryDrawing(null, deletePen, new LineGeometry(new Point(27.5, 19.5), new Point(20.5, 26.5))));
+            group.Freeze();
+
+            var visual = new DrawingVisual();
+            using (var drawing = visual.RenderOpen())
+            {
+                drawing.PushTransform(new ScaleTransform(pixelSize / 32.0, pixelSize / 32.0));
+                drawing.DrawDrawing(group);
+                drawing.Pop();
+            }
+
+            var bitmap = new RenderTargetBitmap(pixelSize, pixelSize, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(visual);
+            bitmap.Freeze();
+            return bitmap;
         }
 
         private static bool HasCompleteVisibleIcon(object item) =>
@@ -318,6 +408,20 @@ namespace QS3D.BricsCAD.V25.Ribbon
             if (property == null || !property.CanWrite) return;
             if (property.PropertyType.IsInstanceOfType(value) || property.PropertyType == value.GetType())
                 property.SetValue(target, value, null);
+        }
+
+        private static void SetEnumProperty(object target, string name, string value)
+        {
+            var property = target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public);
+            if (property == null || !property.CanWrite || !property.PropertyType.IsEnum) return;
+            try
+            {
+                property.SetValue(target, Enum.Parse(property.PropertyType, value, true), null);
+            }
+            catch
+            {
+                // Keep icon reconciliation best-effort on host versions with a different enum.
+            }
         }
     }
 }
