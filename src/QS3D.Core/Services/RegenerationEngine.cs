@@ -175,6 +175,7 @@ namespace QS3D.Core.Services
 
         private static HashSet<string> CanonicalTargetIds(IEnumerable<string> elementIds, int maxCount)
         {
+            var knownCount = ValidateKnownTargetIdCounts(elementIds, maxCount);
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var value in elementIds)
@@ -191,7 +192,40 @@ namespace QS3D.Core.Services
                 result.Add(raw);
                 index++;
             }
+
+            if (knownCount.HasValue && knownCount.Value != index)
+                throw new InvalidOperationException("Regeneration target id count changed during enumeration.");
             return result;
+        }
+
+        private static int? ValidateKnownTargetIdCounts(IEnumerable<string> elementIds, int maxCount)
+        {
+            var genericCount = elementIds is ICollection<string> collection ? (int?)collection.Count : null;
+            var readOnlyCount = elementIds is IReadOnlyCollection<string> readOnlyCollection ? (int?)readOnlyCollection.Count : null;
+            var nonGenericCount = elementIds is System.Collections.ICollection nonGenericCollection ? (int?)nonGenericCollection.Count : null;
+
+            ValidateKnownTargetIdCount(genericCount, maxCount, nameof(elementIds));
+            ValidateKnownTargetIdCount(readOnlyCount, maxCount, nameof(elementIds));
+            ValidateKnownTargetIdCount(nonGenericCount, maxCount, nameof(elementIds));
+
+            var expected = genericCount ?? readOnlyCount ?? nonGenericCount;
+            if (!expected.HasValue) return null;
+            if ((genericCount.HasValue && genericCount.Value != expected.Value) ||
+                (readOnlyCount.HasValue && readOnlyCount.Value != expected.Value) ||
+                (nonGenericCount.HasValue && nonGenericCount.Value != expected.Value))
+                throw new ArgumentException("Regeneration target ids report conflicting known counts.", nameof(elementIds));
+            return expected;
+        }
+
+        private static void ValidateKnownTargetIdCount(int? count, int maxCount, string parameterName)
+        {
+            if (!count.HasValue) return;
+            if (count.Value < 0)
+                throw new ArgumentException("Regeneration target ids report an invalid negative known count.", parameterName);
+            if (count.Value > maxCount)
+                throw new ArgumentException(
+                    "Regeneration target set cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".",
+                    parameterName);
         }
 
         private int RegenerateTransactional(ProjectState project, IEnumerable<ProjectElement> candidates, int passBasis)
