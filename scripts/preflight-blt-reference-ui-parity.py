@@ -8,6 +8,7 @@ bootstrap = (ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs").read_t
 commands = (ROOT / "src/QS3D.BricsCAD.V25/ReferenceUiCommands.cs").read_text(encoding="utf-8")
 project_tools = (ROOT / "src/QS3D.BricsCAD.V25/ProjectToolsCommands.cs").read_text(encoding="utf-8")
 tree = (ROOT / "src/QS3D.BricsCAD.V25/UI/ReferenceWorkspaceTreeAugmenter.cs").read_text(encoding="utf-8")
+navigation = (ROOT / "src/QS3D.Core/Features/FeatureNavigationContracts.cs").read_text(encoding="utf-8")
 registration = (ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ReferenceTreeRegistration.cs").read_text(encoding="utf-8")
 command_doc = (ROOT / "docs/COMMANDS.md").read_text(encoding="utf-8")
 
@@ -91,11 +92,15 @@ for label in [
     "Mái Hắt Biên Dạng", "Cọc", "Đài Cọc", "Dầm Móng", "Móng Băng",
     "Móng Bè", "Bê Tông Lót", "Khối giao đào", "Khối đất sau trừ",
     "KL Chiều dài", "KL Diện tích", "KL Thể tích", "KL Biên dạng",
-    "KL Mặt phẳng", "Modeling",
+    "KL Mặt phẳng",
 ]:
-    if label not in tree:
-        errors.append(f"missing Workspace tree label: {label}")
+    if label not in navigation:
+        errors.append(f"missing registry-backed Workspace tree label: {label}")
 
+if "Modeling" not in tree:
+    errors.append("missing legacy Workspace tree container migration: Modeling")
+if "WorkspaceFeatureNavigationCatalog.Navigation" not in tree:
+    errors.append("Workspace reference tree must project from the canonical Feature Navigation Registry")
 if "ReferenceWorkspaceTreeAugmenter.EnsureRegistered()" not in registration:
     errors.append("Workspace reference tree augmenter is orphaned: no WorkspacePanel type-initialization registration call")
 if "static readonly bool ReferenceWorkspaceTreeRegistrationReady" not in registration:
