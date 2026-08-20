@@ -143,6 +143,7 @@ namespace QS3D.Core.SmokeTests
             BcfIssueExchangeSmoke.Run();
             BcfZipPackageSmoke.Run();
             RegenerationSubsetSmoke.Run();
+            PhysicalOpeningCutTargetKnownCountSmoke.Run();
             GeneratedHandleOwnershipIndexSmoke.Run();
             GeneratedHandleOwnershipPolicyIdentitySmoke.Run();
             DependencyGraphDirectDependentsSmoke.Run();
