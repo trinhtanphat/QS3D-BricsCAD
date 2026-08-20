@@ -52,7 +52,7 @@ resolve = block(
     "public static string? NormalizeHexHandle",
 )
 summary_locate = block(summary, "private void LocateCurrent()", "private QuantityReportRow ResolveCurrentRow")
-insight_locate = block(insight, "private void LocateSelected()", "private QuantityReportRow ResolveCurrentRow")
+insight_locate = block(insight, "private void LocateSelected()", "private void LocateSelectionGeometry(")
 
 if "=> SelectIfAny(document, handles);" not in select:
     errors.append("Select must preserve its normal locate no-op-on-empty behavior through SelectIfAny")
