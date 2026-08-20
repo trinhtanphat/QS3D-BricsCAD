@@ -148,19 +148,18 @@ namespace QS3D.Core.Services
             foreach (var element in materialized)
                 ValidateDependencies(element);
 
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var list = new List<ProjectElement>();
             foreach (var element in materialized)
             {
+                if (!seenIds.Add(element.Id))
+                    throw new InvalidOperationException("Dependency ordering contains duplicate semantic element id: " + element.Id);
                 if (element.Dirty != ElementDirtyFlags.None) list.Add(element);
             }
 
             var byId = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in list)
-            {
-                if (byId.ContainsKey(element.Id))
-                    throw new InvalidOperationException("Dependency ordering contains duplicate semantic element id: " + element.Id);
                 byId[element.Id] = element;
-            }
 
             var result = new List<ProjectElement>(list.Count);
             var temporary = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
