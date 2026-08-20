@@ -191,9 +191,9 @@ namespace QS3D.Core.Features
             F("model.grid.straight", "grid", 0, "Lưới Thẳng", ElementCategory.Grid, "grid", "axis"),
             F("model.grid.curved", "grid", 1, "Lưới Cong", ElementCategory.Grid, "grid", "arc"),
             F("model.room", "room-finishes", 0, "Phòng", ElementCategory.Room, "room"),
-            F("model.floor-finish", "room-finishes", 1, "Sàn Hoàn Thiện", ElementCategory.FloorFinish, "floor finish"),
-            F("model.waterproofing", "room-finishes", 2, "Chống Thấm", ElementCategory.Waterproofing, "waterproof"),
-            F("model.skirting", "room-finishes", 3, "Chân Tường", ElementCategory.Skirting, "skirting"),
+            F(RoomFinishInteractionProfiles.FloorFinishId.Value, "room-finishes", 1, "Sàn Hoàn Thiện", ElementCategory.FloorFinish, "floor finish"),
+            F(RoomFinishInteractionProfiles.WaterproofingId.Value, "room-finishes", 2, "Chống Thấm", ElementCategory.Waterproofing, "waterproof"),
+            F(RoomFinishInteractionProfiles.SkirtingId.Value, "room-finishes", 3, "Chân Tường", ElementCategory.Skirting, "skirting"),
             F("model.wall-finish", "room-finishes", 4, "Hoàn Thiện Tường", ElementCategory.WallFinish, "wall finish"),
             F("model.ceiling-finish", "room-finishes", 5, "Trần Hoàn Thiện", ElementCategory.CeilingFinish, "ceiling finish"),
             F("model.ceiling-plaster", "room-finishes", 6, "Trát Trần", ElementCategory.CeilingFinish, "ceiling plaster"),
@@ -231,6 +231,8 @@ namespace QS3D.Core.Features
             F("quantity.custom.plane", "custom-quantity", 4, "KL Mặt phẳng", ElementCategory.CustomQuantity, "plane")
         };
 
+        private static readonly FeatureRegistry RoomFinishFeatures = RoomFinishInteractionProfiles.CreateRegistry();
+
         private static readonly FeatureRegistry Features = new FeatureRegistry(
             NavigationDefinitions.Select(x => new FeatureDescriptor(
                 x.FeatureId, x.GroupKey, x.Order, x.LabelKey, ResolveInteractionProfile(x.FeatureId), x.IconKey)));
@@ -238,10 +240,14 @@ namespace QS3D.Core.Features
         public static FeatureNavigationRegistry Navigation { get; } =
             new FeatureNavigationRegistry(Features, GroupDefinitions, NavigationDefinitions);
 
-        private static InteractionProfile ResolveInteractionProfile(FeatureId featureId) =>
-            featureId == RoomInteractionProfile.RoomId
-                ? RoomInteractionProfile.Descriptor.InteractionProfile
-                : SelectionOnlyProfile;
+        private static InteractionProfile ResolveInteractionProfile(FeatureId featureId)
+        {
+            if (featureId == RoomInteractionProfile.RoomId)
+                return RoomInteractionProfile.Descriptor.InteractionProfile;
+            if (RoomFinishFeatures.TryGet(featureId, out var roomFinish) && roomFinish != null)
+                return roomFinish.InteractionProfile;
+            return SelectionOnlyProfile;
+        }
 
         private static FeatureNavigationGroup G(string key, int order, string label, ElementCategory? category = null, params string[] legacyLabels) =>
             new FeatureNavigationGroup(key, order, label, category, legacyLabels);
