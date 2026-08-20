@@ -233,10 +233,15 @@ namespace QS3D.Core.Features
 
         private static readonly FeatureRegistry Features = new FeatureRegistry(
             NavigationDefinitions.Select(x => new FeatureDescriptor(
-                x.FeatureId, x.GroupKey, x.Order, x.LabelKey, SelectionOnlyProfile, x.IconKey)));
+                x.FeatureId, x.GroupKey, x.Order, x.LabelKey, ResolveInteractionProfile(x.FeatureId), x.IconKey)));
 
         public static FeatureNavigationRegistry Navigation { get; } =
             new FeatureNavigationRegistry(Features, GroupDefinitions, NavigationDefinitions);
+
+        private static InteractionProfile ResolveInteractionProfile(FeatureId featureId) =>
+            featureId == RoomInteractionProfile.RoomId
+                ? RoomInteractionProfile.Descriptor.InteractionProfile
+                : SelectionOnlyProfile;
 
         private static FeatureNavigationGroup G(string key, int order, string label, ElementCategory? category = null, params string[] legacyLabels) =>
             new FeatureNavigationGroup(key, order, label, category, legacyLabels);
