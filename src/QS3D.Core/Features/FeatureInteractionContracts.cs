@@ -43,7 +43,8 @@ namespace QS3D.Core.Features
         Quantity = 8,
         Regenerate = 16,
         Locate = 32,
-        Delete = 64
+        Delete = 64,
+        Geometry3D = 128
     }
 
     public sealed class CreateRecipeDescriptor

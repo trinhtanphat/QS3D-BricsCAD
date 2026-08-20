@@ -13,7 +13,8 @@ namespace QS3D.Core.Features
         Quantity,
         Regenerate,
         Locate,
-        Delete
+        Delete,
+        Geometry3D
     }
 
     public enum FeatureActionPlacement
@@ -141,6 +142,8 @@ namespace QS3D.Core.Features
                 "FeatureAction.EditParameters", "P", "FeatureAction.EditParameters.ToolTip", "FeatureAction.EditParameters.StatusHint"),
             new Definition(FeatureActionId.Material, FeatureCapability.Material, FeatureActionPlacement.Secondary, 20,
                 "FeatureAction.Material", "M", "FeatureAction.Material.ToolTip", "FeatureAction.Material.StatusHint"),
+            new Definition(FeatureActionId.Geometry3D, FeatureCapability.Geometry3D, FeatureActionPlacement.Secondary, 30,
+                "FeatureAction.Geometry3D", "G", "FeatureAction.Geometry3D.ToolTip", "FeatureAction.Geometry3D.StatusHint"),
             new Definition(FeatureActionId.Quantity, FeatureCapability.Quantity, FeatureActionPlacement.Secondary, 40,
                 "FeatureAction.Quantity", "Q", "FeatureAction.Quantity.ToolTip", "FeatureAction.Quantity.StatusHint"),
             new Definition(FeatureActionId.Regenerate, FeatureCapability.Regenerate, FeatureActionPlacement.Secondary, 50,

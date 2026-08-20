@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             AlternateRecipesDriveSplitAddOnlyWhenNeeded();
             DisabledActionsExplainMissingPreconditions();
             SimpleFeatureRemainsSimple();
+            PilotProfilesExposeGeometry3DCapability();
             ActionMetadataIsConsistent();
         }
 
@@ -20,13 +21,14 @@ namespace QS3D.Core.SmokeTests
             var profile = Profile(
                 FeatureCapability.Create |
                 FeatureCapability.EditParameters |
+                FeatureCapability.Geometry3D |
                 FeatureCapability.Quantity |
                 FeatureCapability.Locate |
                 FeatureCapability.Delete,
                 Recipe("direct", CreateInputMode.Direct));
 
             var bar = FeatureActionBarBuilder.Build(profile);
-            Equal("Add|EditParameters|Quantity|Locate|Delete", string.Join("|", bar.Actions.Select(x => x.Id)));
+            Equal("Add|EditParameters|Geometry3D|Quantity|Locate|Delete", string.Join("|", bar.Actions.Select(x => x.Id)));
             Equal(1, bar.Primary.Count);
             Equal(FeatureActionId.Add, bar.Primary[0].Id);
             Equal(FeatureActionId.Delete, bar.Overflow.Single().Id);
@@ -82,6 +84,21 @@ namespace QS3D.Core.SmokeTests
             Equal(0, bar.Primary.Count);
             Equal(FeatureActionId.Quantity, bar.Secondary.Single().Id);
             Equal(0, bar.Overflow.Count);
+            False(bar.Actions.Any(x => x.Id == FeatureActionId.Geometry3D), "Features without Geometry3D capability must not render a dead 3D action.");
+        }
+
+        private static void PilotProfilesExposeGeometry3DCapability()
+        {
+            var room = RoomInteractionProfile.Descriptor.InteractionProfile;
+            var finishes = RoomFinishInteractionProfiles.CreateRegistry();
+            var floor = finishes.GetRequired(RoomFinishInteractionProfiles.FloorFinishId).InteractionProfile;
+            var waterproofing = finishes.GetRequired(RoomFinishInteractionProfiles.WaterproofingId).InteractionProfile;
+            var skirting = finishes.GetRequired(RoomFinishInteractionProfiles.SkirtingId).InteractionProfile;
+
+            True((room.Capabilities & FeatureCapability.Geometry3D) != 0, "Room must expose its documented Geometry3D capability.");
+            True((floor.Capabilities & FeatureCapability.Geometry3D) != 0, "Floor Finish must expose its documented Geometry3D capability.");
+            True((waterproofing.Capabilities & FeatureCapability.Geometry3D) != 0, "Waterproofing must expose its documented Geometry3D capability.");
+            True((skirting.Capabilities & FeatureCapability.Geometry3D) != 0, "Skirting must expose its documented Geometry3D capability.");
         }
 
         private static void ActionMetadataIsConsistent()
@@ -90,6 +107,7 @@ namespace QS3D.Core.SmokeTests
                 FeatureCapability.Create |
                 FeatureCapability.EditParameters |
                 FeatureCapability.Material |
+                FeatureCapability.Geometry3D |
                 FeatureCapability.Quantity |
                 FeatureCapability.Regenerate |
                 FeatureCapability.Locate |
