@@ -70,3 +70,23 @@ On a repository-sample disposable drawing:
   bounded evidence and zero residual test processes/private state.
 - Update local workflow documentation only from an exact licensed PASS and
   stop before main merge unless the owner explicitly authorizes this named PR.
+
+## Exact licensed evidence
+
+- Exact clean pushed candidate: `d389fc11a6d9599735180adb34a40a04089e5494`.
+- Installed BricsCAD V25.2.10 adapter build: `0 warnings / 0 errors`; adapter
+  and Core ProductVersion both ended in the exact candidate SHA.
+- Sanitized result: `status=PASS`,
+  `production_local004_p02_qualified=true`, native vertex STRETCH,
+  pre-sync generated isolation, area/perimeter reconcile, quantity refresh,
+  generated invalidation/rebuild, native bounds, scoped Health and cold reopen
+  all verified; `error_code=NONE`.
+- Geometry/quantity boundary: area `12 -> 13.5 m2`, perimeter
+  `14 -> 12 + sqrt(10) m`, volume `1.44 -> 1.62 m3`, final bounds
+  `0..5 x 0..3 x 0..0.12 m`.
+- Persistence/cleanup: disposable drawing and semantic sidecar persisted before
+  cold reopen; process/script/private-state cleanup and drawing restoration
+  passed; zero BricsCAD processes remained; repository fixture SHA-256 stayed
+  `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`.
+- This evidence is bounded to one deterministic closed Slab POLYLINE vertex
+  edit. Parent #80 remains open for the excluded matrix.
