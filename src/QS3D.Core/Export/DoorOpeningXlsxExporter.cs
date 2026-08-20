@@ -30,6 +30,8 @@ namespace QS3D.Core.Export
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
                 snapshot.Add(SnapshotRow(sourceRow, rowIndex));
             }
+            if (rows.Count != rowCount)
+                throw new InvalidOperationException("Door/opening XLSX export row count changed during snapshot.");
             ValidateCellText(snapshot);
             ValidateNumericValues(snapshot);
 
@@ -95,6 +97,8 @@ namespace QS3D.Core.Export
                         "Door/opening XLSX " + label + " exceeds Excel's " + MaxCellTextLength + "-character cell text limit.");
                 target.Add(value);
             }
+            if (source.Count != count)
+                throw new InvalidOperationException("Door/opening XLSX " + label + " count changed during snapshot.");
         }
 
         private static void ValidateCellText(IReadOnlyList<DoorOpeningScheduleRow> rows)

@@ -58,6 +58,26 @@ def main() -> int:
             require(read_error is None and text is not None, f"ordinary read failed: {read_error}")
             require(not checker.scan_workflow_text(path.name, text), f"ordinary workflow failed scan: {path}")
 
+        for path in list(workflows.iterdir()):
+            path.unlink()
+        for index in range(checker.MAX_WORKFLOW_CANDIDATES):
+            write_valid(workflows / f"bounded-{index:04d}.yml")
+        paths, errors = checker.discover_workflow_paths(workflows)
+        require(not errors, f"exact workflow candidate limit must be accepted: {errors}")
+        require(len(paths) == checker.MAX_WORKFLOW_CANDIDATES, "exact workflow candidate limit was not preserved")
+        write_valid(workflows / "overflow.yml")
+        paths, errors = checker.discover_workflow_paths(workflows)
+        require(not paths, "workflow candidate limit+1 must fail closed")
+        require(
+            any(f"exceeds {checker.MAX_WORKFLOW_CANDIDATES}" in error for error in errors),
+            f"missing workflow candidate count diagnostic: {errors}",
+        )
+        for path in list(workflows.iterdir()):
+            path.unlink()
+        write_valid(workflows / "b.yaml")
+        write_valid(workflows / "A.yml")
+        (workflows / "ignored.txt").write_text("uses: bad/action@main\n", encoding="utf-8")
+
         nonregular = workflows / "directory.yml"
         nonregular.mkdir()
         paths, errors = checker.discover_workflow_paths(workflows)
