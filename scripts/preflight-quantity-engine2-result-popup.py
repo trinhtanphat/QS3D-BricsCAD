@@ -38,12 +38,15 @@ def main():
     for needle in (
         '[CommandMethod("QS3DQUANTITYENGINE2", CommandFlags.Modal)]',
         'DrawingUnitWorkflow.EnsureResolved(document, "QS3DQUANTITYENGINE2")',
-        'ExistingProjectMutationContext.Require(document, "Tính khối lượng (Engine2)")',
+        'ExistingProjectMutationContext.TryGet(document, out var project)',
+        'QuantityCalculationResultWindow.ShowNoProject(noProjectMessage)',
+        'PaletteCoordinator.ShowBimWorkspace()',
         'new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())',
         '.RegenerateDirty(project)',
         'ProjectQuantityReportBuilder.Group(project)',
         'QuantityEngine2Summary.Build(rows, regenerated)',
         'if (summary.ElementCount == 0)',
+        'QuantityCalculationResultWindow.ShowNoElements(noElementsMessage)',
         'Chưa có cấu kiện hợp lệ để tính khối lượng.',
         'var openQuantityReview = QuantityCalculationResultWindow.ShowSuccess(summary)',
         'if (openQuantityReview)',
@@ -58,7 +61,21 @@ def main():
     ):
         require(command, needle, COMMAND_REL)
 
+    forbid(command, 'ExistingProjectMutationContext.Require(document, "Tính khối lượng (Engine2)")', COMMAND_REL)
+    forbid(command, 'ProjectContextCoordinator.GetOrCreate', COMMAND_REL)
+
+    try_get_pos = command.find('ExistingProjectMutationContext.TryGet(document, out var project)')
+    no_project_pos = command.find('QuantityCalculationResultWindow.ShowNoProject(noProjectMessage)', try_get_pos)
+    regenerate_pos = command.find('.RegenerateDirty(project)', no_project_pos)
+    if not (0 <= try_get_pos < no_project_pos < regenerate_pos):
+        raise SystemExit(
+            "FAIL: Engine2 must resolve the existing project, handle the no-project UX without creation, then regenerate only the existing project."
+        )
+
     for needle in (
+        'public static bool ShowNoProject(string message)',
+        'offerModeling: true',
+        'public static bool ShowNoElements(string message)',
         'public static bool ShowSuccess(QuantityEngine2Summary summary)',
         'offerQuantity: true',
         'return window._openQuantityRequested;',
@@ -77,7 +94,9 @@ def main():
     ):
         require(window, needle, WINDOW_REL)
 
-    print("PASS: Engine2 calculates QS3D quantities, presents the owner-facing result popup, and can hand successful results to the canonical detailed quantity review.")
+    print(
+        "PASS: Engine2 keeps the no-silent-project-creation boundary, presents actionable missing/empty-project UX, calculates existing-project quantities, and can hand successful results to the canonical detailed quantity review."
+    )
 
 
 if __name__ == "__main__":

@@ -22,7 +22,20 @@ namespace QS3D.BricsCAD.V25
             {
                 if (!DrawingUnitWorkflow.EnsureResolved(document, "QS3DQUANTITYENGINE2")) return;
 
-                var project = ExistingProjectMutationContext.Require(document, "Tính khối lượng (Engine2)");
+                if (!ExistingProjectMutationContext.TryGet(document, out var project))
+                {
+                    const string noProjectMessage =
+                        "Bản vẽ hiện tại chưa có dự án QS3D. Mở Mô hình, tạo Family hoặc Capture cấu kiện CAD để khởi tạo dữ liệu QS3D, rồi chạy lại Engine2.";
+                    var openModeling = QuantityCalculationResultWindow.ShowNoProject(noProjectMessage);
+                    if (openModeling)
+                    {
+                        PaletteCoordinator.ShowBimWorkspace();
+                        PaletteCoordinator.SetStatus(
+                            "Khối lượng chưa có dự án QS3D • hãy tạo Family/Capture cấu kiện trong Mô hình rồi chạy lại Tính khối lượng.");
+                    }
+                    return;
+                }
+
                 var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
                     .RegenerateDirty(project);
                 var rows = ProjectQuantityReportBuilder.Group(project);
