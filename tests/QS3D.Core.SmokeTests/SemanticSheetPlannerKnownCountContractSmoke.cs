@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Documentation;
+using QS3D.Core.Domain;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -16,7 +17,11 @@ namespace QS3D.Core.SmokeTests
             SheetDefinitionsRejectMalformedKnownCountsBeforeEnumeration();
             AvailableViewsRejectMalformedKnownCountsBeforeEnumeration();
             NonGenericKnownCountRejectsBeforeEnumeration();
+            SheetDefinitionsRejectKnownCountTraversalMismatch();
+            AvailableViewsRejectKnownCountTraversalMismatch();
             ConsistentKnownCountsRemainAccepted();
+            HonestCountedInputsRemainAccepted();
+            PureStreamingInputsRemainAccepted();
         }
 
         private static void SheetDefinitionsRejectMalformedKnownCountsBeforeEnumeration()
@@ -66,6 +71,42 @@ namespace QS3D.Core.SmokeTests
                 "non-generic available-view Count");
         }
 
+        private static void SheetDefinitionsRejectKnownCountTraversalMismatch()
+        {
+            ThrowsTraversalMismatch(
+                () => SemanticSheetPlanner.BuildCatalog(
+                    new CountTraversalSource<SemanticSheetDefinition>(2, NewSheet("SHEET-U1", "U-001")),
+                    Array.Empty<SemanticViewPlan>()),
+                "sheet-definition under-enumeration");
+
+            ThrowsTraversalMismatch(
+                () => SemanticSheetPlanner.BuildCatalog(
+                    new CountTraversalSource<SemanticSheetDefinition>(
+                        1,
+                        NewSheet("SHEET-O1", "O-001"),
+                        NewSheet("SHEET-O2", "O-002")),
+                    Array.Empty<SemanticViewPlan>()),
+                "sheet-definition over-enumeration");
+        }
+
+        private static void AvailableViewsRejectKnownCountTraversalMismatch()
+        {
+            var view1 = NewView("VIEW-U1");
+            ThrowsTraversalMismatch(
+                () => SemanticSheetPlanner.BuildCatalog(
+                    Array.Empty<SemanticSheetDefinition>(),
+                    new CountTraversalSource<SemanticViewPlan>(2, view1)),
+                "available-view under-enumeration");
+
+            var view2 = NewView("VIEW-O1");
+            var view3 = NewView("VIEW-O2");
+            ThrowsTraversalMismatch(
+                () => SemanticSheetPlanner.BuildCatalog(
+                    Array.Empty<SemanticSheetDefinition>(),
+                    new CountTraversalSource<SemanticViewPlan>(1, view2, view3)),
+                "available-view over-enumeration");
+        }
+
         private static void ConsistentKnownCountsRemainAccepted()
         {
             var sheets = new MultiCountSource<SemanticSheetDefinition>(0, 0, 0, allowEnumeration: true);
@@ -75,6 +116,67 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("SemanticSheetPlannerKnownCountContractSmoke expected an empty catalog for consistent zero counts.");
             if (!sheets.Enumerated || !views.Enumerated)
                 throw new InvalidOperationException("SemanticSheetPlannerKnownCountContractSmoke must continue to enumerate valid consistent inputs.");
+        }
+
+        private static void HonestCountedInputsRemainAccepted()
+        {
+            var result = SemanticSheetPlanner.BuildCatalog(
+                new CountTraversalSource<SemanticSheetDefinition>(1, NewSheet("SHEET-H1", "H-001")),
+                new CountTraversalSource<SemanticViewPlan>(1, NewView("VIEW-H1")));
+
+            if (result.Count != 1 || result[0].Id != "SHEET-H1")
+                throw new InvalidOperationException("SemanticSheetPlannerKnownCountContractSmoke rejected or changed honest counted inputs.");
+        }
+
+        private static void PureStreamingInputsRemainAccepted()
+        {
+            var result = SemanticSheetPlanner.BuildCatalog(
+                Stream(NewSheet("SHEET-S2", "S-002"), NewSheet("SHEET-S1", "S-001")),
+                Stream(NewView("VIEW-S1")));
+
+            if (result.Count != 2 || result[0].Id != "SHEET-S1" || result[1].Id != "SHEET-S2")
+                throw new InvalidOperationException("SemanticSheetPlannerKnownCountContractSmoke changed pure streaming support or deterministic ordering.");
+        }
+
+        private static SemanticSheetDefinition NewSheet(string id, string number)
+        {
+            return new SemanticSheetDefinition(
+                id,
+                number,
+                "Sheet " + number,
+                1000d,
+                1000d,
+                Array.Empty<SemanticSheetPlacementDefinition>());
+        }
+
+        private static SemanticViewPlan NewView(string id)
+        {
+            var project = new ProjectState("sheet-planner-count-" + id, "Sheet planner count " + id);
+            return SemanticViewPlanner.Build(project, new SemanticViewDefinition(id, "View " + id));
+        }
+
+        private static IEnumerable<T> Stream<T>(params T[] items)
+        {
+            for (var i = 0; i < items.Length; i++) yield return items[i];
+        }
+
+        private static void ThrowsTraversalMismatch(Action action, string label)
+        {
+            try
+            {
+                action();
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("traversal count does not match", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return;
+                throw new InvalidOperationException(
+                    "SemanticSheetPlannerKnownCountContractSmoke " + label + " returned the wrong diagnostic: " + ex.Message,
+                    ex);
+            }
+
+            throw new InvalidOperationException(
+                "SemanticSheetPlannerKnownCountContractSmoke did not reject " + label + ".");
         }
 
         private static void AssertRejectedBeforeEnumeration<T>(
@@ -161,6 +263,28 @@ namespace QS3D.Core.SmokeTests
             }
 
             public void CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
+        private sealed class CountTraversalSource<T> : ICollection<T>
+        {
+            private readonly T[] _items;
+            private readonly int _knownCount;
+
+            public CountTraversalSource(int knownCount, params T[] items)
+            {
+                _knownCount = knownCount;
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+            }
+
+            public int Count => _knownCount;
+            public bool IsReadOnly => true;
+            public IEnumerator<T> GetEnumerator() => ((IEnumerable<T>)_items).GetEnumerator();
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public bool Contains(T item) => Array.IndexOf(_items, item) >= 0;
+            public void CopyTo(T[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+            public void Add(T item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(T item) => throw new NotSupportedException();
         }
     }
 }
