@@ -162,13 +162,17 @@ for forbidden_marker_key in (
 
 claim_tokens = (
     "issue #3281",
-    "Status: `ACTIVE`",
+    "Status: `COMPLETED`",
     "MOVE",
     "ROTATE",
     "STRETCH",
     "LINE",
     "automation-only",
     "grip",
+    "#3284",
+    "2b50bb2bd7aed25cf84da74745bfe08fc3a11d61",
+    "2a6aa84a41daa68f35160bfc78c4330b78bc0f97",
+    "Parent product issue `#80` remains open",
 )
 for token in claim_tokens:
     if token not in claim:
