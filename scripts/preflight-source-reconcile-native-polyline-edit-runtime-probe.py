@@ -95,7 +95,7 @@ else:
     ordered = (
         '"QS3DDRAWSLAB", "0,0", "4000,0", "4000,3000", "0,3000", ""',
         '"QS3DSRPOLYPREPARE"',
-        '"_.STRETCH", "_C", "3900,2900", "4100,3100", "", "0,0", "1000,0"',
+        '"_.STRETCH", "_C", "3900,2900", "4100,3100", "_R", "_L", "", "0,0", "1000,0"',
         '"QS3DSRPOLYSTRETCHCHECK"',
         '"QS3DSRPOLYSELECT", "QS3DSYNCSOURCE", "QS3DSRPOLYSYNCCHECK"',
         '"QS3DSRPOLYSELECT", "QS3DBUILD3D", "QS3DSRPOLYFINAL"',
@@ -110,6 +110,8 @@ else:
         cursor = current
     if script.count('"_.STRETCH"') != 1:
         errors.append("runner must issue exactly one real top-level native STRETCH")
+    if script.count('"_R", "_L"') != 1:
+        errors.append("runner must remove the last-created overlapping generated solid from the crossing selection")
     if script.count('"QS3DSYNCSOURCE"') != 1:
         errors.append("runner must reconcile exactly once after the native vertex edit")
     if script.count('"QS3DBUILD3D"') != 1:

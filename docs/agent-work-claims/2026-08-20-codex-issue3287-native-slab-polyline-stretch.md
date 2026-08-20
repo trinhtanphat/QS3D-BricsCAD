@@ -32,7 +32,9 @@ On a repository-sample disposable drawing:
 1. Use production `QS3DDRAWSLAB` to author and build one closed four-vertex
    4 m by 3 m Slab POLYLINE with 0.12 m thickness.
 2. Clear retained PICKFIRST and issue real top-level `STRETCH` with a crossing
-   window around only the `(4 m, 3 m)` vertex, displacing it `+1 m` in WCS X.
+   window around only the `(4 m, 3 m)` vertex, remove the last-created
+   overlapping generated solid from the native selection, and displace the
+   source vertex `+1 m` in WCS X.
 3. Before reconcile, require final source vertices
    `(0,0),(4,0),(5,3),(0,3)` while semantic metrics and the overlapping old
    1.44 m3 generated solid remain unchanged.

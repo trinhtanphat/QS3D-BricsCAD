@@ -351,7 +351,7 @@ try {
         "NETLOAD", ('"' + $PluginDll + '"'),
         "QS3DDRAWSLAB", "0,0", "4000,0", "4000,3000", "0,3000", "",
         "QS3DSRPOLYPREPARE",
-        "_.STRETCH", "_C", "3900,2900", "4100,3100", "", "0,0", "1000,0",
+        "_.STRETCH", "_C", "3900,2900", "4100,3100", "_R", "_L", "", "0,0", "1000,0",
         "QS3DSRPOLYSTRETCHCHECK", "QS3DSRPOLYSELECT", "QS3DSYNCSOURCE", "QS3DSRPOLYSYNCCHECK",
         "QS3DSRPOLYSELECT", "QS3DBUILD3D", "QS3DSRPOLYFINAL",
         "QS3DSAVE", "_.QSAVE", "_.QUIT", "_Y"
