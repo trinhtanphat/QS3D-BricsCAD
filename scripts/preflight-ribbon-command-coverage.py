@@ -2,9 +2,11 @@
 """Fail CI when a QS3D Ribbon command has no CommandMethod registration.
 
 This guard intentionally validates source wiring rather than pretending to execute a
-licensed BricsCAD host in GitHub Actions.  It scans every C# file whose path contains
-``Ribbon`` for QS3D command-like string literals, then checks that each one is backed
-by a ``[CommandMethod(...)]`` registration somewhere under ``src``.
+licensed BricsCAD host in GitHub Actions. It scans every C# file whose path contains
+``Ribbon`` for QS3D command-like string literals used as bindings, then checks that
+each one is backed by a ``[CommandMethod(...)]`` registration somewhere under ``src``.
+Classifier-only literals (for example ``command.IndexOf(\"QS3D...\")``) are not bindings
+and therefore must not be promoted to executable commands by this source guard.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 
 # Ribbon element ids in this repository generally contain underscores (for example
-# QS3D_BLT_...), while BricsCAD command names are compact upper-case tokens.  Keeping
+# QS3D_BLT_...), while BricsCAD command names are compact upper-case tokens. Keeping
 # the grammar narrow prevents UI ids from being misclassified as executable commands.
 QS3D_COMMAND_RE = re.compile(r"^QS3D[A-Z0-9]+$")
 STRING_RE = re.compile(r'@"(?:""|[^"])*"|"(?:\\.|[^"\\])*"', re.DOTALL)
@@ -60,6 +62,24 @@ def _line_number(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
 
 
+def _is_classifier_literal(text: str, offset: int) -> bool:
+    """Return True for command-name strings used only to classify an existing binding.
+
+    RibbonBootstrapIconAugmenter and similar source can inspect CommandParameter values
+    with ``IndexOf`` to choose a semantic icon. Those strings do not create or dispatch
+    commands, so requiring a second CommandMethod registration for them is a false
+    positive. Restrict the exclusion to the source line containing the literal; actual
+    ButtonSpec/CommandParameter literals continue through the normal coverage check.
+    """
+
+    line_start = text.rfind("\n", 0, offset) + 1
+    line_end = text.find("\n", offset)
+    if line_end < 0:
+        line_end = len(text)
+    line = text[line_start:line_end]
+    return "IndexOf(" in line
+
+
 def main() -> int:
     if not SRC.is_dir():
         print(f"ERROR: source directory not found: {SRC}", file=sys.stderr)
@@ -79,7 +99,7 @@ def main() -> int:
         text = path.read_text(encoding="utf-8")
         rel = path.relative_to(ROOT).as_posix()
         for offset, value in _string_literals(text):
-            if QS3D_COMMAND_RE.fullmatch(value):
+            if QS3D_COMMAND_RE.fullmatch(value) and not _is_classifier_literal(text, offset):
                 ribbon_refs[value].append(f"{rel}:{_line_number(text, offset)}")
 
     for path in cs_files:
