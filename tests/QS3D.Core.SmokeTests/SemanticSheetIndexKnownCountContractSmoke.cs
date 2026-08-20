@@ -19,7 +19,11 @@ namespace QS3D.Core.SmokeTests
             RejectsNegativeReadOnlyCountBeforeEnumeration();
             RejectsNegativeNonGenericCountBeforeEnumeration();
             RejectsInBoundConflictingCountContractsBeforeEnumeration();
+            RejectsUnderEnumerationAgainstKnownCount();
+            RejectsOverEnumerationAgainstKnownCount();
             AcceptsConsistentKnownCountContracts();
+            AcceptsHonestNonEmptyKnownCount();
+            AcceptsPureStreamingTraversal();
         }
 
         private static void RejectsNonGenericCountBeforeEnumeration()
@@ -70,6 +74,27 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("SemanticSheetIndexKnownCountContractSmoke enumerated a source with contradictory in-bound Count contracts.");
         }
 
+        private static void RejectsUnderEnumerationAgainstKnownCount()
+        {
+            var source = new TraversalCountSource(2, CreateSheet("S-UNDER-1", "U-001"));
+            ThrowsDiagnostic(
+                () => SemanticSheetIndexBuilder.Build(source),
+                "traversal count does not match",
+                "known Count greater than traversal");
+        }
+
+        private static void RejectsOverEnumerationAgainstKnownCount()
+        {
+            var source = new TraversalCountSource(
+                1,
+                CreateSheet("S-OVER-1", "O-001"),
+                CreateSheet("S-OVER-2", "O-002"));
+            ThrowsDiagnostic(
+                () => SemanticSheetIndexBuilder.Build(source),
+                "traversal count does not match",
+                "known Count smaller than traversal");
+        }
+
         private static void AcceptsConsistentKnownCountContracts()
         {
             var source = new MultiCountSource(0, 0, 0, throwOnEnumeration: false);
@@ -78,6 +103,38 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("SemanticSheetIndexKnownCountContractSmoke did not enumerate a consistent known-count source.");
             if (index.Rows.Count != 0)
                 throw new InvalidOperationException("SemanticSheetIndexKnownCountContractSmoke expected an empty index for an empty consistent source.");
+        }
+
+        private static void AcceptsHonestNonEmptyKnownCount()
+        {
+            var source = new TraversalCountSource(1, CreateSheet("S-HONEST-1", "H-001"));
+            var index = SemanticSheetIndexBuilder.Build(source);
+            if (index.Rows.Count != 1 || index.Rows[0].SheetId != "S-HONEST-1")
+                throw new InvalidOperationException("SemanticSheetIndexKnownCountContractSmoke rejected or changed an honest counted source.");
+        }
+
+        private static void AcceptsPureStreamingTraversal()
+        {
+            var source = new StreamingSource(
+                CreateSheet("S-STREAM-2", "P-002"),
+                CreateSheet("S-STREAM-1", "P-001"));
+            var index = SemanticSheetIndexBuilder.Build(source);
+            if (index.Rows.Count != 2 ||
+                index.Rows[0].SheetId != "S-STREAM-1" ||
+                index.Rows[1].SheetId != "S-STREAM-2")
+                throw new InvalidOperationException("SemanticSheetIndexKnownCountContractSmoke changed pure streaming support or deterministic ordering.");
+        }
+
+        private static SemanticSheetPlan CreateSheet(string id, string number)
+        {
+            var definition = new SemanticSheetDefinition(
+                id,
+                number,
+                "Sheet " + number,
+                1000d,
+                1000d,
+                Array.Empty<SemanticSheetPlacementDefinition>());
+            return SemanticSheetPlanner.Build(definition, Array.Empty<SemanticViewPlan>());
         }
 
         private static void ThrowsLimit(Action action, string label)
@@ -228,6 +285,41 @@ namespace QS3D.Core.SmokeTests
             public void Add(SemanticSheetPlan item) => throw new NotSupportedException();
             public void Clear() => throw new NotSupportedException();
             public bool Remove(SemanticSheetPlan item) => throw new NotSupportedException();
+        }
+
+        private sealed class TraversalCountSource : ICollection<SemanticSheetPlan>
+        {
+            private readonly SemanticSheetPlan[] _items;
+            private readonly int _knownCount;
+
+            public TraversalCountSource(int knownCount, params SemanticSheetPlan[] items)
+            {
+                _knownCount = knownCount;
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+            }
+
+            public int Count => _knownCount;
+            public bool IsReadOnly => true;
+            public IEnumerator<SemanticSheetPlan> GetEnumerator() => ((IEnumerable<SemanticSheetPlan>)_items).GetEnumerator();
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public bool Contains(SemanticSheetPlan item) => Array.IndexOf(_items, item) >= 0;
+            public void CopyTo(SemanticSheetPlan[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+            public void Add(SemanticSheetPlan item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(SemanticSheetPlan item) => throw new NotSupportedException();
+        }
+
+        private sealed class StreamingSource : IEnumerable<SemanticSheetPlan>
+        {
+            private readonly SemanticSheetPlan[] _items;
+
+            public StreamingSource(params SemanticSheetPlan[] items)
+            {
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+            }
+
+            public IEnumerator<SemanticSheetPlan> GetEnumerator() => ((IEnumerable<SemanticSheetPlan>)_items).GetEnumerator();
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
     }
 }

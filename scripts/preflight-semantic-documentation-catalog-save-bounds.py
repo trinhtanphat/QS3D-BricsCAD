@@ -47,8 +47,13 @@ def main():
         "private const int MaxCatalogSheets = 10000;",
         "var viewDefinitions = MaterializeViews(views);",
         "var sheetDefinitions = MaterializeSheets(sheets);",
-        'throw new InvalidOperationException("Semantic view catalog supports at most " + MaxCatalogViews + " views.");',
-        'throw new InvalidOperationException("Semantic sheet catalog supports at most " + MaxCatalogSheets + " sheets.");',
+        '"Semantic view catalog supports at most " + MaxCatalogViews + " views."',
+        '"Semantic sheet catalog supports at most " + MaxCatalogSheets + " sheets."',
+        "private static IReadOnlyList<T> MaterializeBounded<T>(",
+        "if (result.Count >= maxCount)",
+        "throw new InvalidOperationException(capacityError);",
+        "if (value is null) throw new ArgumentException(nullEntryError, nameof(values));",
+        "result.Add(value);",
         "project.Metadata.Remove(MetadataKey);",
         "project.Metadata[MetadataKey] = payload;",
     ]
@@ -61,22 +66,48 @@ def main():
         print("ERROR: ProjectMetadataDictionary must own exact-once project revision updates for public Remove/indexer persistence mutations.")
         return 1
 
-    views = method_slice(source, "private static IReadOnlyList<SemanticViewDefinition> MaterializeViews", "private static IReadOnlyList<SemanticSheetDefinition> MaterializeSheets")
-    sheets = method_slice(source, "private static IReadOnlyList<SemanticSheetDefinition> MaterializeSheets", "private static string Serialize")
-    for label, text, count_token, error_token in [
-        ("views", views, "if (result.Count >= MaxCatalogViews)", "Semantic view catalog supports at most"),
-        ("sheets", sheets, "if (result.Count >= MaxCatalogSheets)", "Semantic sheet catalog supports at most"),
+    views = method_slice(
+        source,
+        "private static IReadOnlyList<SemanticViewDefinition> MaterializeViews",
+        "private static IReadOnlyList<SemanticSheetDefinition> MaterializeSheets")
+    sheets = method_slice(
+        source,
+        "private static IReadOnlyList<SemanticSheetDefinition> MaterializeSheets",
+        "private static IReadOnlyList<T> MaterializeBounded<T>")
+    bounded = method_slice(
+        source,
+        "private static IReadOnlyList<T> MaterializeBounded<T>",
+        "private static void ValidateKnownCount<T>(ICollection<T>? values")
+
+    for label, text, max_token, error_token, null_token in [
+        (
+            "views",
+            views,
+            "MaxCatalogViews",
+            '"Semantic view catalog supports at most " + MaxCatalogViews + " views."',
+            '"Semantic documentation view cannot be null."',
+        ),
+        (
+            "sheets",
+            sheets,
+            "MaxCatalogSheets",
+            '"Semantic sheet catalog supports at most " + MaxCatalogSheets + " sheets."',
+            '"Semantic documentation sheet cannot be null."',
+        ),
     ]:
-        loop = text.find("foreach (var value in values)")
-        cap = text.find(count_token, loop)
-        null_guard = text.find("if (value == null)", loop)
-        add = text.find("result.Add(value);", loop)
-        if min(loop, cap, null_guard, add) < 0 or not (loop < cap < null_guard < add):
-            print("ERROR: documentation catalog " + label + " guard must run during enumeration before null validation/add.")
+        if "return MaterializeBounded(" not in text or max_token not in text or error_token not in text or null_token not in text:
+            print("ERROR: documentation catalog " + label + " must delegate to the shared bounded materializer with its capacity/null contract.")
             return 1
-        if error_token not in text:
-            print("ERROR: documentation catalog " + label + " capacity message is missing.")
-            return 1
+
+    loop = bounded.find("while (enumerator.MoveNext())")
+    cap = bounded.find("if (result.Count >= maxCount)", loop)
+    capacity_throw = bounded.find("throw new InvalidOperationException(capacityError);", cap)
+    current = bounded.find("var value = enumerator.Current;", capacity_throw)
+    null_guard = bounded.find("if (value is null) throw new ArgumentException(nullEntryError, nameof(values));", current)
+    add = bounded.find("result.Add(value);", null_guard)
+    if min(loop, cap, capacity_throw, current, null_guard, add) < 0 or not (loop < cap < capacity_throw < current < null_guard < add):
+        print("ERROR: documentation catalog shared bounded guard must run during enumeration before null validation/add.")
+        return 1
 
     save = method_slice(source, "public void Save(", "public SemanticDocumentationCatalog Load")
     view_materialize = save.find("MaterializeViews(views)")
@@ -108,7 +139,7 @@ def main():
         print("ERROR: documentation catalog save bound smoke is not module-registered.")
         return 1
 
-    print("PASS: SemanticDocumentationCatalogStore.Save bounds lazy view/sheet enumeration before metadata persistence, whose dictionary owner performs exact-once project revision mutation.")
+    print("PASS: SemanticDocumentationCatalogStore.Save bounds lazy view/sheet enumeration through the shared materializer before metadata persistence, whose dictionary owner performs exact-once project revision mutation.")
     return 0
 
 

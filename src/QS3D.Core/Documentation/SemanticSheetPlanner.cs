@@ -255,7 +255,7 @@ namespace QS3D.Core.Documentation
 
         private static List<SemanticSheetDefinition> MaterializeCatalogBounded(IEnumerable<SemanticSheetDefinition> definitions)
         {
-            RequireKnownCountsWithinLimit(definitions, MaxCatalogSheets, "Semantic sheet catalog", "sheets");
+            var knownCount = RequireKnownCountsWithinLimit(definitions, MaxCatalogSheets, "Semantic sheet catalog", "sheets");
 
             var result = new List<SemanticSheetDefinition>(Math.Min(MaxCatalogSheets, 256));
             using (var enumerator = definitions.GetEnumerator())
@@ -267,12 +267,16 @@ namespace QS3D.Core.Documentation
                     result.Add(enumerator.Current);
                 }
             }
+
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw new InvalidOperationException("Semantic sheet catalog traversal count does not match its known count for sheets.");
+
             return result;
         }
 
         private static List<SemanticViewPlan> MaterializeAvailableViewsBounded(IEnumerable<SemanticViewPlan> availableViews)
         {
-            RequireKnownCountsWithinLimit(availableViews, MaxAvailableViews, "Semantic sheet planner", "available views");
+            var knownCount = RequireKnownCountsWithinLimit(availableViews, MaxAvailableViews, "Semantic sheet planner", "available views");
 
             var result = new List<SemanticViewPlan>(Math.Min(MaxAvailableViews, 256));
             using (var enumerator = availableViews.GetEnumerator())
@@ -284,10 +288,14 @@ namespace QS3D.Core.Documentation
                     result.Add(enumerator.Current);
                 }
             }
+
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw new InvalidOperationException("Semantic sheet planner traversal count does not match its known count for available views.");
+
             return result;
         }
 
-        private static void RequireKnownCountsWithinLimit<T>(IEnumerable<T> values, int limit, string owner, string itemLabel)
+        private static int? RequireKnownCountsWithinLimit<T>(IEnumerable<T> values, int limit, string owner, string itemLabel)
         {
             var knownCounts = new List<int>(3);
             if (values is ICollection<T> collection) knownCounts.Add(collection.Count);
@@ -303,11 +311,12 @@ namespace QS3D.Core.Documentation
                     throw new InvalidOperationException(owner + " supports at most " + limit + " " + itemLabel + ".");
             }
 
-            if (knownCounts.Count <= 1) return;
+            if (knownCounts.Count == 0) return null;
             var expected = knownCounts[0];
             for (var i = 1; i < knownCounts.Count; i++)
                 if (knownCounts[i] != expected)
                     throw new InvalidOperationException(owner + " received conflicting known counts for " + itemLabel + ".");
+            return expected;
         }
 
         private static Dictionary<string, SemanticViewPlan> BuildUniqueViewIndex(IEnumerable<SemanticViewPlan> views)

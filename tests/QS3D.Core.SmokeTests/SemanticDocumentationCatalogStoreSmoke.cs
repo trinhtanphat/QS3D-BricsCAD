@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using QS3D.Core.Documentation;
@@ -20,6 +22,10 @@ namespace QS3D.Core.SmokeTests
             PersistedViewCountBound();
             PersistedSheetCountBound();
             PersistedPlacementCountBound();
+            SaveRejectsOversizedKnownCountBeforeTraversal();
+            SaveRejectsNegativeAndConflictingKnownCounts();
+            SaveRejectsKnownCountTraversalMismatch();
+            SaveAcceptsHonestCountAndPureStreaming();
             EmptyCatalogClearsMetadata();
         }
 
@@ -201,6 +207,110 @@ namespace QS3D.Core.SmokeTests
                 "Persisted documentation sheets above the 128-placement bound must fail closed at the persisted-data boundary.");
         }
 
+        private static void SaveRejectsOversizedKnownCountBeforeTraversal()
+        {
+            var views = new CountedSequence<SemanticViewDefinition>(
+                new[] { BuildView() },
+                genericCount: 10001,
+                readOnlyCount: 10001,
+                nonGenericCount: 10001);
+            var message = MustFailMessage(() =>
+                new SemanticDocumentationCatalogStore().Save(
+                    BuildProject(),
+                    views,
+                    Array.Empty<SemanticSheetDefinition>()));
+
+            Equal("Semantic view catalog supports at most 10000 views.", message);
+            Equal(0, views.EnumerationCount);
+        }
+
+        private static void SaveRejectsNegativeAndConflictingKnownCounts()
+        {
+            var negativeViews = new CountedSequence<SemanticViewDefinition>(
+                new[] { BuildView() },
+                genericCount: -1,
+                readOnlyCount: -1,
+                nonGenericCount: -1);
+            Equal(
+                "Semantic documentation catalog source reports an invalid negative known Count.",
+                MustFailMessage(() =>
+                    new SemanticDocumentationCatalogStore().Save(
+                        BuildProject(),
+                        negativeViews,
+                        Array.Empty<SemanticSheetDefinition>())));
+            Equal(0, negativeViews.EnumerationCount);
+
+            var conflictingSheets = new CountedSequence<SemanticSheetDefinition>(
+                new[] { BuildSheet() },
+                genericCount: 1,
+                readOnlyCount: 2,
+                nonGenericCount: 1);
+            Equal(
+                "Semantic documentation catalog source exposes conflicting known Count values.",
+                MustFailMessage(() =>
+                    new SemanticDocumentationCatalogStore().Save(
+                        BuildProject(),
+                        new[] { BuildView() },
+                        conflictingSheets)));
+            Equal(0, conflictingSheets.EnumerationCount);
+        }
+
+        private static void SaveRejectsKnownCountTraversalMismatch()
+        {
+            var underEnumeratedViews = new CountedSequence<SemanticViewDefinition>(
+                new[] { BuildView() },
+                genericCount: 2,
+                readOnlyCount: 2,
+                nonGenericCount: 2);
+            Equal(
+                "Semantic documentation catalog source known Count does not match completed traversal.",
+                MustFailMessage(() =>
+                    new SemanticDocumentationCatalogStore().Save(
+                        BuildProject(),
+                        underEnumeratedViews,
+                        Array.Empty<SemanticSheetDefinition>())));
+            Equal(1, underEnumeratedViews.EnumerationCount);
+
+            var overEnumeratedSheets = new CountedSequence<SemanticSheetDefinition>(
+                new[] { BuildSheet() },
+                genericCount: 0,
+                readOnlyCount: 0,
+                nonGenericCount: 0);
+            Equal(
+                "Semantic documentation catalog source known Count does not match completed traversal.",
+                MustFailMessage(() =>
+                    new SemanticDocumentationCatalogStore().Save(
+                        BuildProject(),
+                        new[] { BuildView() },
+                        overEnumeratedSheets)));
+            Equal(1, overEnumeratedSheets.EnumerationCount);
+        }
+
+        private static void SaveAcceptsHonestCountAndPureStreaming()
+        {
+            var countedViews = new CountedSequence<SemanticViewDefinition>(
+                new[] { BuildView() },
+                genericCount: 1,
+                readOnlyCount: 1,
+                nonGenericCount: 1);
+            var project = BuildProject();
+            var store = new SemanticDocumentationCatalogStore();
+            store.Save(project, countedViews, Stream(BuildSheet()));
+            Equal(1, countedViews.EnumerationCount);
+            Equal(1, store.Load(project).Views.Count);
+            Equal(1, store.Load(project).Sheets.Count);
+
+            var streamingProject = BuildProject();
+            store.Save(streamingProject, Stream(BuildView()), Stream(BuildSheet()));
+            Equal(1, store.Load(streamingProject).Views.Count);
+            Equal(1, store.Load(streamingProject).Sheets.Count);
+        }
+
+        private static IEnumerable<T> Stream<T>(params T[] items)
+        {
+            foreach (var item in items) yield return item;
+        }
+
         // Keep these generated fixtures deliberately compact so count guards, not the 1 MiB XML cap, determine the result.
         private static string BuildPersistedCatalog(int viewCount, int sheetCount)
         {
@@ -293,6 +403,13 @@ namespace QS3D.Core.SmokeTests
             if (!failed) throw new Exception(message);
         }
 
+        private static string MustFailMessage(Action action)
+        {
+            try { action(); }
+            catch (InvalidOperationException ex) { return ex.Message; }
+            throw new Exception("Expected InvalidOperationException.");
+        }
+
         private static void MustFailLoad(Action action, string message)
         {
             var failed = false;
@@ -310,6 +427,47 @@ namespace QS3D.Core.SmokeTests
         private static void Equal<T>(T expected, T actual)
         {
             if (!Equals(expected, actual)) throw new Exception("Expected '" + expected + "' but got '" + actual + "'.");
+        }
+
+        private sealed class CountedSequence<T> : ICollection<T>, IReadOnlyCollection<T>, ICollection
+        {
+            private readonly T[] _items;
+            private readonly int _genericCount;
+            private readonly int _readOnlyCount;
+            private readonly int _nonGenericCount;
+
+            internal CountedSequence(T[] items, int genericCount, int readOnlyCount, int nonGenericCount)
+            {
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+                _genericCount = genericCount;
+                _readOnlyCount = readOnlyCount;
+                _nonGenericCount = nonGenericCount;
+            }
+
+            internal int EnumerationCount { get; private set; }
+            public int Count => _genericCount;
+            int IReadOnlyCollection<T>.Count => _readOnlyCount;
+            int ICollection.Count => _nonGenericCount;
+            public bool IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                for (var i = 0; i < _items.Length; i++)
+                {
+                    EnumerationCount++;
+                    yield return _items[i];
+                }
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public bool Contains(T item) => ((ICollection<T>)_items).Contains(item);
+            public void CopyTo(T[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+            void ICollection.CopyTo(Array array, int index) => ((ICollection)_items).CopyTo(array, index);
+            public void Add(T item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(T item) => throw new NotSupportedException();
         }
     }
 }

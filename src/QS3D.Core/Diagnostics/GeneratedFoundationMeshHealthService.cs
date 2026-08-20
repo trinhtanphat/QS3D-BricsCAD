@@ -47,7 +47,7 @@ namespace QS3D.Core.Diagnostics
                 {
                     var handleText = item ?? string.Empty;
                     var handle = handleText.Trim();
-                    if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+                    if (handle.Length == 0 || !ulong.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var parsed) || parsed == 0)
                     {
                         issues.Add(new ModelHealthIssue("INVALID_FOUNDATION_MESH_GENERATED_HANDLE", HealthSeverity.Error, HandlesKey + " chứa handle không hợp lệ.", element.Id));
                         continue;

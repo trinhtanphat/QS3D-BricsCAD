@@ -69,13 +69,17 @@ def main():
         if forbidden in zone:
             missing.append("zone strict identity contract regressed: " + forbidden)
 
+    # Public active-context setters are strict canonical boundaries: padded IDs must fail
+    # before persisted-state mutation instead of being silently normalized. Snapshot restore
+    # keeps its separate compatibility normalization path for historical persisted data.
     require(project_state, [
         'set => SetActiveContextId(ref _activeFloorId, value);',
         'set => SetActiveContextId(ref _activeZoneId, value);',
         'private void SetActiveContextId(ref string field, string? value)',
-        'var normalizedValue = (value ?? string.Empty).Trim();',
-        'if (normalizedValue.Any(char.IsControl))',
-        'SetPersistedScalar(ref field, PersistedTextXml.Verify(normalizedValue, nameof(value), "Active context id"));',
+        'var rawValue = value ?? string.Empty;',
+        'if (rawValue.Length != 0 && !string.Equals(rawValue, rawValue.Trim(), StringComparison.Ordinal))',
+        'if (rawValue.Any(char.IsControl))',
+        'SetPersistedScalar(ref field, PersistedTextXml.Verify(rawValue, nameof(value), "Active context id"));',
         'var nextChangeVersion = checked(ChangeVersion + 1L);',
     ], "project state", missing)
 
@@ -171,7 +175,7 @@ def main():
             print(" -", item)
         return 1
 
-    print("PASS: Floor compatibility repair remains intact; Zone semantic identities fail closed before lookup/mutation; canonical no-op and null-target atomicity contracts remain covered.")
+    print("PASS: Floor compatibility repair remains intact; Zone semantic identities and public active-context assignments fail closed before lookup/mutation; canonical no-op and null-target atomicity contracts remain covered.")
     return 0
 
 

@@ -47,14 +47,17 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("P-FLOOR-ACTIVE", "Floor active test");
             var floor = ProjectFloorService.Create(project, "Floor-A", "Floor A", 0d);
-            project.ActiveFloorId = "  fLOOR-a  ";
+
+            // Public ActiveFloorId now rejects surrounding whitespace. Inject a legacy/corrupt
+            // persisted alias directly so Delete's compatibility guard is still exercised.
+            SetRawActiveFloorId(project, "  fLOOR-a  ");
             var beforeVersion = project.ChangeVersion;
 
             ThrowsActiveFloor(() => ProjectFloorService.Delete(project, " floor-A "));
 
             Equal(beforeVersion, project.ChangeVersion);
             Same(floor, project.FindFloor(floor.Id));
-            Equal("fLOOR-a", project.ActiveFloorId);
+            Equal("  fLOOR-a  ", project.ActiveFloorId);
         }
 
         private static void ZoneReferenceIdentityFailsClosed()
@@ -95,6 +98,13 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeVersion, project.ChangeVersion);
             Same(zone, project.FindZone(zone.Id));
             Equal("  zONE-a  ", RawActiveZoneId(project));
+        }
+
+        private static void SetRawActiveFloorId(ProjectState project, string value)
+        {
+            var field = typeof(ProjectState).GetField("_activeFloorId", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new Exception("ProjectState._activeFloorId field was not found.");
+            field.SetValue(project, value);
         }
 
         private static void SetRawZoneId(ProjectElement element, string value)

@@ -255,6 +255,9 @@ namespace QS3D.Core.Persistence
                     ThrowTooManyEntries(collectionLabel);
                 bounded.Add(value);
             }
+            if (bounded.Count != knownCount)
+                throw new InvalidOperationException(
+                    "Persistence stamp " + collectionLabel + " known count does not match enumerated entry count.");
             return bounded;
         }
 
