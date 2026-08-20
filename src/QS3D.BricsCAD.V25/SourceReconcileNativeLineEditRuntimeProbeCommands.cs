@@ -190,7 +190,7 @@ namespace QS3D.BricsCAD.V25
                 }
                 catch { throw new ProbeFailure("NATIVE_STRETCH_COMMAND_REJECTED"); }
                 try { RequireGeometry(context.Document, owner, ExpectedStage.Stretched); }
-                catch { throw new ProbeFailure("NATIVE_STRETCH_GEOMETRY_REJECTED"); }
+                catch { throw new ProbeFailure("NATIVE_STRETCH_GEOMETRY_" + ClassifyStretchGeometry(context.Document, owner)); }
                 try { RequireSemanticLength(owner, 5d, "native STRETCH before reconcile"); }
                 catch { throw new ProbeFailure("NATIVE_STRETCH_SEMANTIC_REJECTED"); }
                 try { RequireNoGeneratedProperty(owner, "native STRETCH before reconcile"); }
@@ -395,6 +395,45 @@ namespace QS3D.BricsCAD.V25
                 default: throw new ProbeFailure("EXPECTED_GEOMETRY_REJECTED");
             }
         }
+
+        private static string ClassifyStretchGeometry(Document document, ProjectElement owner)
+        {
+            try
+            {
+                var id = ResolveSource(document, owner.SourceHandles.Single());
+                Point3d start;
+                Point3d end;
+                double length;
+                using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+                {
+                    var line = transaction.GetObject(id, OpenMode.ForRead, false) as Line;
+                    if (line == null) return "OTHER";
+                    start = line.StartPoint;
+                    end = line.EndPoint;
+                    length = line.Length;
+                }
+                var actual = new LineCoordinates(
+                    Meters(document, start.X), Meters(document, start.Y),
+                    Meters(document, end.X), Meters(document, end.Y),
+                    Meters(document, length));
+                if (Matches(actual, Coordinates(ExpectedStage.Stretched))) return "EXPECTED";
+                if (Matches(actual, Coordinates(ExpectedStage.Rotated))) return "UNCHANGED";
+                if (Matches(actual, new LineCoordinates(0d, 5d, 0d, 10d, 5d))) return "WHOLE_LINE_MOVED";
+                if (Matches(actual, new LineCoordinates(0d, 2d, 0d, 3d, 1d))) return "ENDPOINT_SET_ABSOLUTE";
+                if (Matches(actual, new LineCoordinates(0d, 5d, 0d, 7d, 2d))) return "STARTPOINT_MOVED";
+                if (Matches(actual, new LineCoordinates(0d, -1d, 0d, 7d, 8d))) return "STARTPOINT_STRETCHED";
+                return "OTHER";
+            }
+            catch { return "OTHER"; }
+        }
+
+        private static bool Matches(LineCoordinates actual, LineCoordinates expected) =>
+            Near(actual.StartX, expected.StartX) && Near(actual.StartY, expected.StartY) &&
+            Near(actual.EndX, expected.EndX) && Near(actual.EndY, expected.EndY) &&
+            Near(actual.Length, expected.Length);
+
+        private static bool Near(double actual, double expected) =>
+            !double.IsNaN(actual) && !double.IsInfinity(actual) && Math.Abs(actual - expected) <= ToleranceM;
 
         private static void RequireSemanticLength(ProjectElement owner, double expectedM, string label)
         {
