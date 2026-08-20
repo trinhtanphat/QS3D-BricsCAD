@@ -10,27 +10,33 @@ namespace QS3D.Core.SmokeTests
         [ModuleInitializer]
         internal static void Initialize()
         {
-            PaddedActiveContextNormalizesAndEquivalentAssignmentsAreNoOps();
+            PaddedActiveContextAssignmentsFailAtomicallyAndCanonicalAssignmentsAreNoOps();
             ControlCharacterAssignmentsFailAtomically();
             NullStillClearsActiveContext();
             DrawingPathRemainsExactWhileFingerprintCanonicalizes();
         }
 
-        private static void PaddedActiveContextNormalizesAndEquivalentAssignmentsAreNoOps()
+        private static void PaddedActiveContextAssignmentsFailAtomicallyAndCanonicalAssignmentsAreNoOps()
         {
-            var project = new ProjectState("PROJECT-ACTIVE-CONTEXT", "Active Context");
-
-            project.ActiveZoneId = "  ZONE-01  ";
-            project.ActiveFloorId = "  FLOOR-01  ";
-
-            Equal("ZONE-01", project.ActiveZoneId);
-            Equal("FLOOR-01", project.ActiveFloorId);
+            var project = new ProjectState("PROJECT-ACTIVE-CONTEXT", "Active Context")
+            {
+                ActiveZoneId = "ZONE-01",
+                ActiveFloorId = "FLOOR-01"
+            };
 
             var version = project.ChangeVersion;
             var updatedUtc = project.UpdatedUtc;
 
-            project.ActiveZoneId = " ZONE-01 ";
-            project.ActiveFloorId = " FLOOR-01 ";
+            Throws<ArgumentException>(() => project.ActiveZoneId = "  ZONE-01  ");
+            Throws<ArgumentException>(() => project.ActiveFloorId = "  FLOOR-01  ");
+
+            Equal("ZONE-01", project.ActiveZoneId);
+            Equal("FLOOR-01", project.ActiveFloorId);
+            Equal(version, project.ChangeVersion);
+            Equal(updatedUtc, project.UpdatedUtc);
+
+            project.ActiveZoneId = "ZONE-01";
+            project.ActiveFloorId = "FLOOR-01";
 
             Equal(version, project.ChangeVersion);
             Equal(updatedUtc, project.UpdatedUtc);
