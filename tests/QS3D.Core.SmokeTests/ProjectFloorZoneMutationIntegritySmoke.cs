@@ -1,10 +1,17 @@
 using System;
+using System.Reflection;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class ProjectFloorZoneMutationIntegritySmoke
     {
+        private static readonly FieldInfo ActiveFloorIdField =
+            typeof(ProjectState).GetField(
+                "_activeFloorId",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("ProjectState active-floor backing field was not found.");
+
         public static void Run()
         {
             FloorActiveAliasIsCanonicalRepair();
@@ -19,7 +26,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("P-FLOOR-ACTIVE-REPAIR", "Floor active repair");
             var floor = ProjectFloorService.Create(project, "F-01", "Floor 01", 0d);
-            project.ActiveFloorId = "  f-01  ";
+            SetPersistedActiveFloorIdForSmoke(project, "  f-01  ");
             var beforeVersion = project.ChangeVersion;
 
             ProjectFloorService.SetActive(project, " F-01 ");
@@ -133,6 +140,11 @@ namespace QS3D.Core.SmokeTests
             Equal(string.Empty, element.ZoneId);
             Equal(ElementDirtyFlags.None, element.Dirty);
             Equal(beforeUpdatedUtc, element.UpdatedUtc);
+        }
+
+        private static void SetPersistedActiveFloorIdForSmoke(ProjectState project, string? value)
+        {
+            ActiveFloorIdField.SetValue(project, value);
         }
 
         private static void ThrowsArgument(Action action)

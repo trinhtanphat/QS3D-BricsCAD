@@ -18,7 +18,11 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("P-ACTIVE-FLOOR-CANONICAL", "Active floor canonical regression");
             var floor = ProjectFloorService.Create(project, "floor-a", "Floor A", 0d);
-            project.ActiveFloorId = " FLOOR-A ";
+
+            // Public active-context assignments are now a strict canonical boundary. Inject a
+            // legacy/persisted padded value directly so this regression continues to exercise
+            // ProjectFloorService's intentional compatibility-repair behavior.
+            SetRawActiveFloorId(project, " FLOOR-A ");
             var beforeRepair = project.ChangeVersion;
 
             ProjectFloorService.SetActive(project, " Floor-A ");
@@ -58,6 +62,13 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => ProjectZoneService.SetActive(project, "missing-zone"));
             Equal(zone.Id, project.ActiveZoneId, "zone missing-id state");
             Equal(corruptVersion, project.ChangeVersion, "zone missing-id version");
+        }
+
+        private static void SetRawActiveFloorId(ProjectState project, string value)
+        {
+            var field = typeof(ProjectState).GetField("_activeFloorId", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new InvalidOperationException("ProjectState._activeFloorId field was not found.");
+            field.SetValue(project, value);
         }
 
         private static void SetRawActiveZoneId(ProjectState project, string value)

@@ -13,7 +13,7 @@ else:
     text = SOURCE.read_text(encoding="utf-8")
     required = (
         "foreach (var item in raw.Split(new[] { ';' }, StringSplitOptions.None))",
-        "if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))",
+        "if (handle.Length == 0 || !ulong.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var parsed) || parsed == 0)",
         '"INVALID_FOUNDATION_MESH_GENERATED_HANDLE"',
         '"FOUNDATION_MESH_GENERATED_HANDLE_NON_CANONICAL"',
         "StringComparison.Ordinal",
@@ -46,4 +46,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: foundation-mesh health preserves delimiter-empty tokens, rejects invalid handles and flags padded/non-canonical generated handle tokens.")
+print("PASS: foundation-mesh health preserves delimiter-empty tokens, rejects invalid handles (including zero), and flags padded/non-canonical generated handle tokens while allowing unsigned CAD handle identities.")
