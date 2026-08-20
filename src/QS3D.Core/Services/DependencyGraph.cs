@@ -145,8 +145,13 @@ namespace QS3D.Core.Services
 
             RequireObservedCount(knownCount, materialized.Count, "Dependency ordering");
 
+            var allIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in materialized)
+            {
                 ValidateDependencies(element);
+                if (!allIds.Add(element.Id))
+                    throw new InvalidOperationException("Dependency ordering contains duplicate semantic element id: " + element.Id);
+            }
 
             var list = new List<ProjectElement>();
             foreach (var element in materialized)

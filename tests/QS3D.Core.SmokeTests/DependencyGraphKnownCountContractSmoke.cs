@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             NegativeKnownCountFailsBeforeEnumeration();
             NonGenericOversizedCountFailsBeforeEnumeration();
             ConsistentKnownCountsRemainAccepted();
+            DuplicateIdentityValidationIncludesCleanElements();
             KnownCountTraversalMismatchFailsClosedAndPreservesGraph();
             KnownCountTraversalMismatchFailsDirtyOrdering();
             ExactBoundRemainsAccepted();
@@ -88,6 +89,19 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Consistent known-count input should be enumerated normally by both dependency operations.");
             if (ordered.Count > 1)
                 throw new Exception("Single-element dependency ordering produced an impossible result count.");
+        }
+
+        private static void DuplicateIdentityValidationIncludesCleanElements()
+        {
+            var graph = new DependencyGraph();
+            var clean = Element("DUPLICATE-ID");
+            clean.MarkClean(ElementDirtyFlags.All);
+            var dirty = Element("duplicate-id");
+
+            ExpectInvalidOperation(
+                () => graph.TopologicalDirtyOrder(new[] { clean, dirty }),
+                "duplicate semantic element id",
+                "Topological ordering must reject duplicate semantic IDs before filtering clean elements.");
         }
 
         private static void KnownCountTraversalMismatchFailsClosedAndPreservesGraph()
