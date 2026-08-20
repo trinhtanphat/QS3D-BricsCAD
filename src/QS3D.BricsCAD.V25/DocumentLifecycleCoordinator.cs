@@ -16,6 +16,7 @@ namespace QS3D.BricsCAD.V25
         private static readonly Dictionary<Document, DatabaseIOEventHandler> SaveCompleteHandlers = new Dictionary<Document, DatabaseIOEventHandler>();
         private static readonly Dictionary<Document, DocumentBeginCloseEventHandler> BeginCloseHandlers = new Dictionary<Document, DocumentBeginCloseEventHandler>();
         private static readonly Dictionary<Document, bool> PendingReconciliation = new Dictionary<Document, bool>();
+        private static readonly Dictionary<Document, FailedProjectReconcile> FailedProjectReconciliations = new Dictionary<Document, FailedProjectReconcile>();
         private static DispatcherTimer? _lifecycleIdleTimer;
         private static bool _pendingNoDocumentReset;
 
@@ -115,6 +116,7 @@ namespace QS3D.BricsCAD.V25
             // BricsCAD destroys the document. Any queued reconcile for this document is
             // cancelled first so an idle callback can never touch the destroyed document.
             CancelPendingReconcile(document);
+            FailedProjectReconciliations.Remove(document);
             DetachProjectPersistence(document);
             SourceReconcileUndoCoordinator.Detach(document);
             CurtainWallUndoCoordinator.Detach(document);
@@ -198,6 +200,7 @@ namespace QS3D.BricsCAD.V25
         {
             StopLifecycleIdleTimer();
             PendingReconciliation.Clear();
+            FailedProjectReconciliations.Clear();
             _pendingNoDocumentReset = false;
         }
 
@@ -376,26 +379,122 @@ namespace QS3D.BricsCAD.V25
         private static void EnsureProject(Document? document, bool refreshUi)
         {
             if (document == null) return;
+            if (TryUseStableFailedProjectReconcile(document, refreshUi)) return;
+
+            ProjectSidecarRevisionStamp? attemptedRevision = null;
+            TryCaptureProjectRevision(document, out attemptedRevision);
             try
             {
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out _))
                 {
+                    FailedProjectReconciliations.Remove(document);
                     if (refreshUi)
                         PaletteCoordinator.ResetForUnavailableProject(
                             "No QS3D project is available for this drawing. Use an authoring command to create one.");
                     return;
                 }
 
+                FailedProjectReconciliations.Remove(document);
                 if (refreshUi) PaletteCoordinator.RefreshAll();
+            }
+            catch (InvalidDataException ex)
+            {
+                var message = "QS3D project load error: " + ex.Message;
+                RememberStableProjectLoadFailure(document, attemptedRevision, message);
+                try { document.Editor.WriteMessage("\n" + message); }
+                catch { }
+                try { PaletteCoordinator.ResetForUnavailableProject(message); }
+                catch { }
             }
             catch (Exception ex)
             {
+                FailedProjectReconciliations.Remove(document);
                 var message = "QS3D project load error: " + ex.Message;
                 try { document.Editor.WriteMessage("\n" + message); }
                 catch { }
                 try { PaletteCoordinator.ResetForUnavailableProject(message); }
                 catch { }
             }
+        }
+
+        private static bool TryUseStableFailedProjectReconcile(Document document, bool refreshUi)
+        {
+            if (!FailedProjectReconciliations.TryGetValue(document, out var failed)) return false;
+
+            try
+            {
+                if (ProjectContextCoordinator.TryGetCached(document, out _))
+                {
+                    FailedProjectReconciliations.Remove(document);
+                    return false;
+                }
+            }
+            catch
+            {
+                FailedProjectReconciliations.Remove(document);
+                return false;
+            }
+
+            if (!TryCaptureProjectRevision(document, out var current) || current == null || !failed.Revision.Equals(current))
+            {
+                FailedProjectReconciliations.Remove(document);
+                return false;
+            }
+
+            if (refreshUi)
+            {
+                try { PaletteCoordinator.ResetForUnavailableProject(failed.Message); }
+                catch { }
+            }
+            return true;
+        }
+
+        private static void RememberStableProjectLoadFailure(
+            Document document,
+            ProjectSidecarRevisionStamp? attemptedRevision,
+            string message)
+        {
+            if (attemptedRevision == null || !attemptedRevision.HasAnyFile)
+            {
+                FailedProjectReconciliations.Remove(document);
+                return;
+            }
+
+            if (!TryCaptureProjectRevision(document, out var current) || current == null || !attemptedRevision.Equals(current))
+            {
+                FailedProjectReconciliations.Remove(document);
+                return;
+            }
+
+            FailedProjectReconciliations[document] = new FailedProjectReconcile(current, message);
+        }
+
+        private static bool TryCaptureProjectRevision(Document document, out ProjectSidecarRevisionStamp? revision)
+        {
+            revision = null;
+            if (!IsNamedDrawing(document)) return false;
+            try
+            {
+                revision = ProjectSidecarRevisionStamp.Capture(ProjectContextCoordinator.GetProjectPath(document));
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException || ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException)
+            {
+                revision = null;
+                return false;
+            }
+        }
+
+        private sealed class FailedProjectReconcile
+        {
+            public FailedProjectReconcile(ProjectSidecarRevisionStamp revision, string message)
+            {
+                Revision = revision ?? throw new ArgumentNullException(nameof(revision));
+                Message = message ?? string.Empty;
+            }
+
+            public ProjectSidecarRevisionStamp Revision { get; }
+            public string Message { get; }
         }
     }
 }
