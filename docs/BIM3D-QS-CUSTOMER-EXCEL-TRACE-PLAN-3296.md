@@ -129,3 +129,7 @@ Extend `ExcelLocateResolutionService` with a multi-element customer-trace entry 
 - no unrelated NETLOAD/startup-log performance lane;
 - no claim of licensed BricsCAD V25 runtime PASS from remote CI;
 - no clash/duplicate issue persistence in this lane.
+
+## 7. Integration-batch reconciliation
+
+The owner-authorized open-PR integration batch landed to protected `main` as PR #3295 at `db7cc6f15a828d166731cee8011dd5289e948422` after exact-current `preflight` and `core` succeeded. The #3296 carrier began from the earlier `ca8f224...` baseline, so it must be reconciled with `db7cc6f...` before its protected PR is considered current. The #3295 landing intentionally excluded held template lane #2842; #3296 does not reintroduce that held scope.
