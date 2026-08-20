@@ -32,6 +32,8 @@ namespace QS3D.Core.SmokeTests
             CsvRejectsInvalidRowsBeforeReplace();
             XlsxPreservesNonzeroSubEightDecimalValues();
             XlsxRejectsWorksheetOverflowBeforeMutation();
+            XlsxRejectsCountDriftBeforeReplace();
+            XlsxRejectsCountDriftBeforeDirectoryCreation();
         }
 
         private static void RebarWeightRejectsNonFiniteValues()
@@ -347,6 +349,112 @@ namespace QS3D.Core.SmokeTests
             {
                 try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
             }
+        }
+
+        private static void XlsxRejectsCountDriftBeforeReplace()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-bbs-xlsx-count-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "bbs.xlsx");
+            try
+            {
+                const string sentinel = "preserve-existing-rebar-xlsx-destination";
+                File.WriteAllText(path, sentinel);
+                AssertXlsxCountDrift(path);
+                Equal(sentinel, File.ReadAllText(path));
+            }
+            finally
+            {
+                try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
+            }
+        }
+
+        private static void XlsxRejectsCountDriftBeforeDirectoryCreation()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-bbs-xlsx-count-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var untouchedDirectory = Path.Combine(root, "must-not-be-created");
+                AssertXlsxCountDrift(Path.Combine(untouchedDirectory, "bbs.xlsx"));
+                if (Directory.Exists(untouchedDirectory))
+                    throw new Exception("BBS XLSX row-count drift touched the filesystem before failing.");
+            }
+            finally
+            {
+                try { if (Directory.Exists(root)) Directory.Delete(root, true); } catch { }
+            }
+        }
+
+        private static void AssertXlsxCountDrift(string path)
+        {
+            try
+            {
+                XlsxRebarScheduleExporter.Export(path, new CountDriftingBbsRows(ValidXlsxRow()));
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("row count changed during snapshot", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new Exception("BBS XLSX row-count drift must identify snapshot count instability.", ex);
+                return;
+            }
+
+            throw new Exception("BBS XLSX exporter accepted a source whose row count changed during snapshot.");
+        }
+
+        private static RebarScheduleRow ValidXlsxRow()
+        {
+            return new RebarScheduleRow
+            {
+                ElementId = "E-COUNT",
+                BarMark = "B-COUNT",
+                ShapeCode = "00",
+                Notation = "1D16",
+                DiameterMm = 16d,
+                Quantity = 1,
+                CuttingLengthM = 2d,
+                TotalLengthM = 2d,
+                UnitWeightKgM = 1d,
+                NetWeightKg = 2d,
+                WastePercent = 0d,
+                TotalWeightKg = 2d
+            };
+        }
+
+        private sealed class CountDriftingBbsRows : IReadOnlyList<RebarScheduleRow>
+        {
+            private readonly RebarScheduleRow _row;
+            private int _countReads;
+
+            public CountDriftingBbsRows(RebarScheduleRow row)
+            {
+                _row = row;
+            }
+
+            public int Count
+            {
+                get
+                {
+                    _countReads++;
+                    return _countReads == 1 ? 1 : 2;
+                }
+            }
+
+            public RebarScheduleRow this[int index]
+            {
+                get
+                {
+                    if (index != 0) throw new ArgumentOutOfRangeException(nameof(index));
+                    return _row;
+                }
+            }
+
+            public IEnumerator<RebarScheduleRow> GetEnumerator()
+            {
+                yield return _row;
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private sealed class OversizedBbsRows : IReadOnlyList<RebarScheduleRow>
