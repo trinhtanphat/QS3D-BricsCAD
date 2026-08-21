@@ -250,15 +250,21 @@ General source-safe bug fixing, tests, docs, refactors, source guards, packaging
 
 Local workers must not perform broad opportunistic cleanup, treat Actions failures as their default backlog, dispatch/re-run/cancel Actions without exact owner assignment, or broaden into remote-safe work when no compatible LOCAL_ONLY item exists.
 
+Start permitted local passes from `docs/LOCAL-AGENT-INBOX.md`, then follow the linked exact runbook. For licensed BricsCAD V25 qualification, use `docs/LOCAL-V25-QUALIFICATION.md` and record evidence against the exact source SHA.
+
 ### Remote / hybrid online agents
 
 Remote/hybrid agents handle repository-safe source review/implementation, core/domain/persistence/reporting/test code, static analysis, general source bugs, Markdown/documentation/planning, workflow/policy review without unauthorized Actions dispatch, Git history inspection, and probes for later local execution.
 
 `docs/REMOTE-AGENT-SCOPE.md` is authoritative for remote backlog filtering. Remote/static evidence must never be reported as `LOCAL_PASS`.
 
+Remote agents must skip execution gates already classified LOCAL_ONLY rather than repeatedly rechecking them.
+
 ## Unavailable-work handoff
 
 When a required part cannot be completed/proved because the session lacks licensed runtime, private fixtures, Windows UI, signing credentials, hardware or another non-repository resource, classify/handoff the unavailable part precisely, update the relevant local inbox/runbook reference on the task branch when appropriate, leave source-safe implementation/tests/probes ready, and continue other safe work. Lack of local capability is a handoff condition, not a reason for repeated remote retries.
+
+New or materially changed LOCAL_ONLY scenarios must be registered in `docs/LOCAL-AGENT-INBOX.md` on the same task branch/PR so source-side policy and local evidence requirements stay synchronized.
 
 ## GitHub Actions / release
 
