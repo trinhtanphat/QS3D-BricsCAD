@@ -167,28 +167,30 @@ namespace QS3D.Core.SmokeTests
             var root = TempDirectory("customer-workbook-invalid-shared-index");
             try
             {
-                var path = Path.Combine(root, "qs-customer.xlsx");
-                QsCustomerWorkbookExporter.Export(path, Details(), Summary());
-                ConvertInlineStringsToSharedStrings(path);
-                MutateWorksheet(path, "xl/worksheets/sheet1.xml", document =>
+                var negativePath = Path.Combine(root, "negative.xlsx");
+                QsCustomerWorkbookExporter.Export(negativePath, Details(), Summary());
+                ConvertInlineStringsToSharedStrings(negativePath);
+                MutateWorksheet(negativePath, "xl/worksheets/sheet1.xml", document =>
                 {
                     XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
                     var cell = document.Descendants(ns + "c")
-                        .First(item => string.Equals((string)item.Attribute("t"), "s", StringComparison.Ordinal));
+                        .First(item => string.Equals((string?)item.Attribute("t"), "s", StringComparison.Ordinal));
                     cell.Element(ns + "v")!.Value = "-1";
                 });
-                ExpectThrows<InvalidDataException>(() => QsCustomerWorkbookTraceReader.Read(path, "DGKL", 2),
+                ExpectThrows<InvalidDataException>(() => QsCustomerWorkbookTraceReader.Read(negativePath, "DGKL", 2),
                     "Reader must reject negative shared-string indices.");
 
-                ConvertInlineStringsToSharedStrings(path, replaceExisting: true);
-                MutateWorksheet(path, "xl/worksheets/sheet1.xml", document =>
+                var outOfRangePath = Path.Combine(root, "out-of-range.xlsx");
+                QsCustomerWorkbookExporter.Export(outOfRangePath, Details(), Summary());
+                ConvertInlineStringsToSharedStrings(outOfRangePath);
+                MutateWorksheet(outOfRangePath, "xl/worksheets/sheet1.xml", document =>
                 {
                     XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
                     var cell = document.Descendants(ns + "c")
-                        .First(item => string.Equals((string)item.Attribute("t"), "s", StringComparison.Ordinal));
+                        .First(item => string.Equals((string?)item.Attribute("t"), "s", StringComparison.Ordinal));
                     cell.Element(ns + "v")!.Value = "2147483647";
                 });
-                ExpectThrows<InvalidDataException>(() => QsCustomerWorkbookTraceReader.Read(path, "DGKL", 2),
+                ExpectThrows<InvalidDataException>(() => QsCustomerWorkbookTraceReader.Read(outOfRangePath, "DGKL", 2),
                     "Reader must reject out-of-range shared-string indices.");
             }
             finally
@@ -396,7 +398,7 @@ namespace QS3D.Core.SmokeTests
             return row;
         }
 
-        private static Dictionary<string, int> ConvertInlineStringsToSharedStrings(string path, bool replaceExisting = false)
+        private static Dictionary<string, int> ConvertInlineStringsToSharedStrings(string path)
         {
             var strings = new List<string>();
             var indexes = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -404,12 +406,6 @@ namespace QS3D.Core.SmokeTests
 
             using (var archive = ZipFile.Open(path, ZipArchiveMode.Update))
             {
-                if (replaceExisting)
-                {
-                    foreach (var existing in archive.Entries.Where(entry => string.Equals(entry.FullName, "xl/sharedStrings.xml", StringComparison.Ordinal)).ToList())
-                        existing.Delete();
-                }
-
                 var worksheetNames = archive.Entries
                     .Where(entry => entry.FullName.StartsWith("xl/worksheets/", StringComparison.Ordinal) && entry.FullName.EndsWith(".xml", StringComparison.Ordinal))
                     .Select(entry => entry.FullName)
@@ -419,7 +415,7 @@ namespace QS3D.Core.SmokeTests
                     var entry = archive.GetEntry(worksheetName) ?? throw new Exception("Missing worksheet fixture part: " + worksheetName + ".");
                     XDocument document;
                     using (var stream = entry.Open()) document = XDocument.Load(stream, LoadOptions.PreserveWhitespace);
-                    foreach (var cell in document.Descendants(ns + "c").Where(item => string.Equals((string)item.Attribute("t"), "inlineStr", StringComparison.Ordinal)).ToList())
+                    foreach (var cell in document.Descendants(ns + "c").Where(item => string.Equals((string?)item.Attribute("t"), "inlineStr", StringComparison.Ordinal)).ToList())
                     {
                         var value = string.Concat(cell.Descendants(ns + "t").Select(text => text.Value));
                         int index;
