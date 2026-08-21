@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             DuplicateHeadersFailClosed();
             GeneratedOwnershipPropertiesRemainBlocked();
             OutputSnapshotsAreDefensivelyImmutable();
+            DirectConstructionEnforcesBuilderContracts();
             UnusedReferenceIndexesStayLazy();
             KnownCountsFailClosedBeforeEnumeration();
             KnownCountsMustMatchCompletedTraversal();
@@ -167,6 +168,77 @@ namespace QS3D.Core.SmokeTests
             Equal("E-1", table.Rows[0].ElementId);
             Throws<NotSupportedException>(() => ((IList<string>)table.Headers)[0] = "MUTATED");
             Throws<NotSupportedException>(() => ((IList<SemanticDocumentationRow>)table.Rows).Clear());
+        }
+
+        private static void DirectConstructionEnforcesBuilderContracts()
+        {
+            var exactHeader = new string('H', 96);
+            var exactTemplate = new string('T', 512);
+            var column = new SemanticDocumentationColumn("  " + exactHeader + "  ", "  " + exactTemplate + "  ");
+            Equal(exactHeader, column.Header);
+            Equal(exactTemplate, column.Template);
+
+            Throws<ArgumentException>(() => new SemanticDocumentationColumn(new string('H', 97), "{Id}"));
+            Throws<ArgumentException>(() => new SemanticDocumentationColumn("Header", new string('T', 513)));
+            Throws<FormatException>(() => new SemanticDocumentationColumn("Header", "{Unsupported}"));
+            Throws<InvalidOperationException>(() => new SemanticDocumentationColumn("Header", "{P:GeneratedSolidHandle}"));
+
+            var exactId = new string('E', 128);
+            var exactCells = new List<string>();
+            for (var i = 0; i < 32; i++) exactCells.Add("C-" + i);
+            var exactRow = new SemanticDocumentationRow(exactId, exactCells);
+            Equal(32, exactRow.Cells.Count);
+
+            Throws<ArgumentException>(() => new SemanticDocumentationRow(" E-1", new[] { "A" }));
+            Throws<ArgumentException>(() => new SemanticDocumentationRow(new string('E', 129), new[] { "A" }));
+            var tooManyCells = new List<string>();
+            for (var i = 0; i < 33; i++) tooManyCells.Add("C-" + i);
+            ThrowsMessage<InvalidOperationException>(() => new SemanticDocumentationRow("E-1", tooManyCells), "at most 32 cells per row");
+            Throws<ArgumentException>(() => new SemanticDocumentationRow("E-1", new string[] { "A", null! }));
+
+            var headers = new List<string>();
+            for (var i = 0; i < 32; i++) headers.Add("H-" + i);
+            var table = new SemanticDocumentationTable("  Direct table  ", headers, new[] { exactRow });
+            Equal("Direct table", table.Title);
+            Equal(32, table.Headers.Count);
+            Equal(1, table.Rows.Count);
+
+            Throws<ArgumentException>(() => new SemanticDocumentationTable(new string('T', 161), new[] { "H" }, Array.Empty<SemanticDocumentationRow>()));
+            Throws<InvalidOperationException>(() => new SemanticDocumentationTable("Table", Array.Empty<string>(), Array.Empty<SemanticDocumentationRow>()));
+            Throws<InvalidOperationException>(() => new SemanticDocumentationTable(
+                "Table",
+                new[] { "Mark", "mark" },
+                Array.Empty<SemanticDocumentationRow>()));
+            Throws<InvalidOperationException>(() => new SemanticDocumentationTable(
+                "Table",
+                new[] { "A", "B" },
+                new[] { new SemanticDocumentationRow("E-1", new[] { "only-one" }) }));
+            Throws<InvalidOperationException>(() => new SemanticDocumentationTable(
+                "Table",
+                new[] { "A" },
+                new[]
+                {
+                    new SemanticDocumentationRow("E-1", new[] { "A" }),
+                    new SemanticDocumentationRow("e-1", new[] { "B" })
+                }));
+            Throws<ArgumentException>(() => new SemanticDocumentationTable(
+                "Table",
+                new[] { "A" },
+                new SemanticDocumentationRow[] { null! }));
+
+            var oversizedHeaders = new NoIndexReadOnlyList<string>(33);
+            ThrowsMessage<InvalidOperationException>(() => new SemanticDocumentationTable(
+                "Table",
+                oversizedHeaders,
+                Array.Empty<SemanticDocumentationRow>()), "at most 32 columns");
+            Equal(0, oversizedHeaders.IndexAttempts);
+
+            var oversizedRows = new NoIndexReadOnlyList<SemanticDocumentationRow>(5001);
+            ThrowsMessage<InvalidOperationException>(() => new SemanticDocumentationTable(
+                "Table",
+                new[] { "A" },
+                oversizedRows), "at most 5000 rows");
+            Equal(0, oversizedRows.IndexAttempts);
         }
 
         private static void UnusedReferenceIndexesStayLazy()
@@ -423,6 +495,23 @@ namespace QS3D.Core.SmokeTests
             public void Clear() => throw new NotSupportedException();
             public bool Remove(T item) => throw new NotSupportedException();
             public void CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
+        private sealed class NoIndexReadOnlyList<T> : IReadOnlyList<T>
+        {
+            public NoIndexReadOnlyList(int count) { Count = count; }
+            public int Count { get; }
+            public int IndexAttempts { get; private set; }
+            public T this[int index]
+            {
+                get
+                {
+                    IndexAttempts++;
+                    throw new Exception("Known oversized IReadOnlyList must be rejected before indexing.");
+                }
+            }
+            public IEnumerator<T> GetEnumerator() => throw new NotSupportedException();
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private static ProjectElement Element(ProjectState project, string id, ElementCategory category, string mark, double length)
