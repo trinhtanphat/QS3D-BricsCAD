@@ -98,28 +98,43 @@ namespace QS3D.BricsCAD.V25
 
                 failureStage = "source_creation";
                 var sources = CreateSources(document);
-                var project = new ProjectState("curved-structural-runtime", "Curved Structural Runtime Probe");
-                project.Floors.Add(new FloorDefinition("L0", "Level 0", 0d));
-                project.ActiveFloorId = "L0";
-                DrawingUnitResolutionPolicy.BindQuantityUnit(
-                    project.Metadata,
-                    false,
-                    nativeUnit,
-                    DrawingUnitResolutionSource.NativeInsunits);
-
+                // StructuralSolidBuilder participates in the production native
+                // Undo bridge, so the runtime probe must exercise the same
+                // document-bound canonical project contract as real commands.
+                // A detached ProjectState would fail closed before any geometry
+                // is built and would no longer qualify the structural path.
+                var project = ProjectContextCoordinator.GetOrCreate(document);
                 var measurements = new List<Measurement>();
-                failureStage = "positive_cases";
-                foreach (var source in sources.Positive)
+                try
                 {
-                    activeCase = source.Name;
-                    measurements.Add(ExercisePositive(document, project, source));
-                }
+                    if (project.Elements.Count != 0)
+                        throw new InvalidOperationException("Curved structural runtime probe requires a pristine canonical project.");
+                    project.Floors.Add(new FloorDefinition("L0", "Level 0", 0d));
+                    project.ActiveFloorId = "L0";
+                    DrawingUnitResolutionPolicy.BindQuantityUnit(
+                        project.Metadata,
+                        false,
+                        nativeUnit,
+                        DrawingUnitResolutionSource.NativeInsunits);
 
-                failureStage = "fail_closed";
-                activeCase = "closed_beam_polyline";
-                VerifyFailClosed(document, project, sources.ClosedBeamPolyline);
-                activeCase = "non_wcs_beam_circle";
-                VerifyFailClosed(document, project, sources.NonWcsBeamCircle);
+                    failureStage = "positive_cases";
+                    foreach (var source in sources.Positive)
+                    {
+                        activeCase = source.Name;
+                        measurements.Add(ExercisePositive(document, project, source));
+                    }
+
+                    failureStage = "fail_closed";
+                    activeCase = "closed_beam_polyline";
+                    VerifyFailClosed(document, project, sources.ClosedBeamPolyline);
+                    activeCase = "non_wcs_beam_circle";
+                    VerifyFailClosed(document, project, sources.NonWcsBeamCircle);
+                }
+                finally
+                {
+                    try { document.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
+                    finally { ProjectContextCoordinator.Forget(document); }
+                }
 
                 failureStage = "marker";
                 var lines = new List<string>
@@ -139,7 +154,6 @@ namespace QS3D.BricsCAD.V25
                 };
                 foreach (var measurement in measurements) AddMeasurement(lines, measurement);
                 WriteMarkerAtomic(resultPath, lines);
-                document.Editor.SetImpliedSelection(Array.Empty<ObjectId>());
                 document.Editor.WriteMessage("\nQS3D curved structural runtime probe PASS.");
             }
             catch (System.Exception error)
