@@ -383,7 +383,8 @@ namespace QS3D.BricsCAD.V25.UI
                     PaletteCoordinator.SetStatus(selectedCount < expectedCount
                         ? "BQ Định vị: đã chọn " + selectedCount + "/" + expectedCount + " đối tượng CAD; " + (expectedCount - selectedCount) + " handle đã mất hoặc không còn hợp lệ."
                         : "BQ Định vị: đã chọn " + selectedCount + " đối tượng CAD.");
-                    _document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+                    if (!global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(_document))
+                        PaletteCoordinator.SetStatus("BQ Định vị: đã chọn " + selectedCount + " đối tượng CAD nhưng chưa thể zoom vùng chọn hiện hành.");
                     return;
                 }
 
