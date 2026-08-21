@@ -295,4 +295,3 @@ before any source edit.
    applicable, and open/update the single canonical PR. Follow the current
    protected same-task merge contract only after every prompt-required
    LOCAL_ONLY acceptance row is actually satisfied.
-
