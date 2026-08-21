@@ -58,12 +58,11 @@ function Assert-SafeDirectory {
 
     $fullPath = Get-CanonicalFullPath -Path $Path -Label $Label
     $pathRoot = [IO.Path]::GetPathRoot($fullPath)
-    $trimmedFullPath = $fullPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-    $trimmedPathRoot = if ([string]::IsNullOrWhiteSpace($pathRoot)) { '' } else { $pathRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) }
-    if (-not [string]::IsNullOrWhiteSpace($trimmedPathRoot) -and
-        [string]::Equals($trimmedFullPath, $trimmedPathRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    if (-not [string]::IsNullOrWhiteSpace($pathRoot) -and
+        [string]::Equals($fullPath, $pathRoot, [StringComparison]::OrdinalIgnoreCase)) {
         throw "$Label must not be a filesystem root: $fullPath"
     }
+    $trimmedFullPath = $fullPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
     Assert-NoReparseDirectoryChain -Path $fullPath -Label $Label
     if (-not (Test-Path -LiteralPath $fullPath -PathType Container)) {
         throw "$Label directory was not found: $fullPath"
