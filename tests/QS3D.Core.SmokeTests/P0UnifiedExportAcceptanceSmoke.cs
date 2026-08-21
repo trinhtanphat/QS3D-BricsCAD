@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using QS3D.Core.Export;
 using QS3D.Core.Reporting;
 
@@ -11,12 +10,6 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class P0UnifiedExportAcceptanceSmoke
     {
-        [ModuleInitializer]
-        internal static void Register()
-        {
-            Run();
-        }
-
         internal static void Run()
         {
             var root = Path.Combine(Path.GetTempPath(), "qs3d-p0-export-" + Guid.NewGuid().ToString("N"));
@@ -57,8 +50,8 @@ namespace QS3D.Core.SmokeTests
                 Require(detailXml.Contains("r=\"O9\""), "WallOpening area evidence must be exported.");
 
                 var traceXml = ReadEntry(path, "xl/worksheets/sheet4.xml");
-                Require(Count(traceXml, "DWG-P0-EXPORT") == 16,
-                    "TRACE_MODEL must contain one fingerprint projection for each DGKL and CHI_TIET P0 row.");
+                Require(Count(traceXml, "DWG-P0-EXPORT") == 22,
+                    "TRACE_MODEL must cover 8 DGKL, 6 applicable COP_PHA, and 8 CHI_TIET P0 projections.");
                 Console.WriteLine("PASS P0 unified export acceptance");
             }
             finally
