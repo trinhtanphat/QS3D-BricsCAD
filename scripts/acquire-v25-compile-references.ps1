@@ -19,9 +19,57 @@ if ($expected -notmatch '^[0-9A-F]{64}$') {
     throw 'ExpectedSha256 must be one 64-hex SHA-256 digest.'
 }
 
-$msi = [IO.Path]::GetFullPath($MsiPath)
-$extract = [IO.Path]::GetFullPath($ExtractDir)
-$cacheDir = Split-Path -Parent $msi
+function Get-CanonicalAbsolutePath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $full = [IO.Path]::GetFullPath($Path)
+    $root = [IO.Path]::GetPathRoot($full)
+    if ([string]::IsNullOrWhiteSpace($root)) {
+        throw "Path has no filesystem root: $Path"
+    }
+
+    if ($full.Length -gt $root.Length) {
+        return $full.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    }
+    return $full
+}
+
+function Test-CanonicalPathEqual {
+    param(
+        [Parameter(Mandatory = $true)][string]$Left,
+        [Parameter(Mandatory = $true)][string]$Right
+    )
+
+    return [string]::Equals($Left, $Right, [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Test-CanonicalPathWithin {
+    param(
+        [Parameter(Mandatory = $true)][string]$Candidate,
+        [Parameter(Mandatory = $true)][string]$Parent
+    )
+
+    if (Test-CanonicalPathEqual -Left $Candidate -Right $Parent) { return $true }
+    $prefix = $Parent.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    return $Candidate.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)
+}
+
+$msi = Get-CanonicalAbsolutePath -Path $MsiPath
+$extract = Get-CanonicalAbsolutePath -Path $ExtractDir
+$cacheDir = Get-CanonicalAbsolutePath -Path (Split-Path -Parent $msi)
+$extractRoot = Get-CanonicalAbsolutePath -Path ([IO.Path]::GetPathRoot($extract))
+
+if (Test-CanonicalPathEqual -Left $extract -Right $extractRoot) {
+    throw "ExtractDir must not be a filesystem root: $extract"
+}
+if (Test-CanonicalPathWithin -Candidate $msi -Parent $extract) {
+    throw 'ExtractDir must not equal or contain MsiPath because extraction cleanup is recursive.'
+}
+if (Test-CanonicalPathWithin -Candidate $cacheDir -Parent $extract) {
+    throw 'ExtractDir must not equal or contain the MSI cache directory because extraction cleanup is recursive.'
+}
+
+# No destructive filesystem mutation may occur before the path-overlap guards above.
 New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
 Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $extract -Force | Out-Null
