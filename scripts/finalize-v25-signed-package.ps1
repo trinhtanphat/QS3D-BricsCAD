@@ -173,6 +173,7 @@ if ([string]::Equals($zip, $packagePath, [StringComparison]::OrdinalIgnoreCase) 
     throw 'PackageZip must be outside PackageDirectory so finalization cannot delete or overwrite package payload.'
 }
 $zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'
+$null = @(Get-SafePackageFiles -PackageRoot $package)
 $expectedSigner = Normalize-Thumbprint $ExpectedSignerThumbprint
 $metadataPath = Assert-SafeFile -Path (Join-Path $package 'PACKAGE-METADATA.json') -Label 'PACKAGE-METADATA.json'
 foreach ($name in $SignedPayloadNames) {
