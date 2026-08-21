@@ -15,8 +15,8 @@ namespace QS3D.Core.SmokeTests
         {
             OrdinaryInterruptionProducesDeterministicMetadata();
             NullAndCountContractsFailClosedBeforeIndexing();
-            PanelCountDriftFailsClosedBeforeIndexing();
-            OpeningCountDriftFailsClosedBeforeIndexing();
+            PanelCountGrowthAfterBoundaryIsIgnoredBySnapshot();
+            OpeningCountGrowthAfterBoundaryIsIgnoredBySnapshot();
         }
 
         private static void OrdinaryInterruptionProducesDeterministicMetadata()
@@ -29,15 +29,12 @@ namespace QS3D.Core.SmokeTests
             var openings = new[] { Opening(1d, 1d, 2d, 1d) };
 
             var plan = CurtainWallOpeningPanelPlanner.Plan(panels, openings);
-            if (plan.SourcePanelCount != 2)
-                throw new InvalidOperationException("Opening panel plan must preserve source panel count.");
-            if (plan.InterruptedPanelCount != 1)
-                throw new InvalidOperationException("Exactly one source panel must be interrupted.");
+            Equal(2, plan.SourcePanelCount, "source panel count");
+            Equal(1, plan.InterruptedPanelCount, "interrupted panel count");
             Near(16d, plan.OriginalPanelAreaM2, "original panel area");
             Near(14d, plan.RemainingPanelAreaM2, "remaining panel area");
             Near(2d, plan.RemovedPanelAreaM2, "removed panel area");
-            if (plan.Pieces.Count != 5)
-                throw new InvalidOperationException("One interrupted panel plus one untouched panel must produce five pieces.");
+            Equal(5, plan.Pieces.Count, "piece count");
 
             for (var index = 1; index < plan.Pieces.Count; index++)
             {
@@ -59,56 +56,45 @@ namespace QS3D.Core.SmokeTests
 
             var negativePanels = new FixedCountProbeList<CurtainWallRect>(-1, Array.Empty<CurtainWallRect>());
             Expect<InvalidOperationException>(() => CurtainWallOpeningPanelPlanner.Plan(negativePanels, Array.Empty<CurtainWallOpeningRect>()), "negative panel Count");
-            if (negativePanels.IndexReads != 0)
-                throw new InvalidOperationException("Negative panel Count must fail before index access.");
+            Equal(0, negativePanels.IndexReads, "negative panel Count must fail before index access");
 
             var oversizedPanels = new FixedCountProbeList<CurtainWallRect>(CurtainWallOpeningPanelPlanner.MaxInputPanels + 1, Array.Empty<CurtainWallRect>());
             Expect<InvalidOperationException>(() => CurtainWallOpeningPanelPlanner.Plan(oversizedPanels, Array.Empty<CurtainWallOpeningRect>()), "oversized panel Count");
-            if (oversizedPanels.IndexReads != 0)
-                throw new InvalidOperationException("Oversized panel Count must fail before index access.");
+            Equal(0, oversizedPanels.IndexReads, "oversized panel Count must fail before index access");
 
             var oversizedOpenings = new FixedCountProbeList<CurtainWallOpeningRect>(CurtainWallOpeningPanelPlanner.MaxOpenings + 1, Array.Empty<CurtainWallOpeningRect>());
             Expect<InvalidOperationException>(() => CurtainWallOpeningPanelPlanner.Plan(Array.Empty<CurtainWallRect>(), oversizedOpenings), "oversized opening Count");
-            if (oversizedOpenings.IndexReads != 0)
-                throw new InvalidOperationException("Oversized opening Count must fail before index access.");
+            Equal(0, oversizedOpenings.IndexReads, "oversized opening Count must fail before index access");
         }
 
-        private static void PanelCountDriftFailsClosedBeforeIndexing()
+        private static void PanelCountGrowthAfterBoundaryIsIgnoredBySnapshot()
         {
-            var growing = new ChangingCountList<CurtainWallRect>(
+            var panels = new ChangingCountProbeList<CurtainWallRect>(
                 new[] { Rect(0d, 0d, 2d, 2d) },
                 firstCount: 1,
                 laterCount: 2);
-            Expect<InvalidOperationException>(() => CurtainWallOpeningPanelPlanner.Plan(growing, Array.Empty<CurtainWallOpeningRect>()), "growing panel Count");
-            if (growing.IndexReads != 0)
-                throw new InvalidOperationException("Panel Count drift must fail before reading an element against the stale count.");
 
-            var shrinking = new ChangingCountList<CurtainWallRect>(
-                new[] { Rect(0d, 0d, 2d, 2d) },
-                firstCount: 1,
-                laterCount: 0);
-            Expect<InvalidOperationException>(() => CurtainWallOpeningPanelPlanner.Plan(shrinking, Array.Empty<CurtainWallOpeningRect>()), "shrinking panel Count");
-            if (shrinking.IndexReads != 0)
-                throw new InvalidOperationException("Shrinking panel Count must fail before index access.");
+            var plan = CurtainWallOpeningPanelPlanner.Plan(panels, Array.Empty<CurtainWallOpeningRect>());
+            Equal(1, panels.CountReads, "panel Count must be read once at the public boundary");
+            Equal(1, panels.IndexReads, "nested planning must consume only the snapshotted panel range");
+            Equal(1, plan.SourcePanelCount, "source panel count must retain the validated snapshot");
+            Equal(1, plan.Pieces.Count, "later panel Count growth must not expand the accepted input set");
+            Near(4d, plan.OriginalPanelAreaM2, "panel snapshot area");
         }
 
-        private static void OpeningCountDriftFailsClosedBeforeIndexing()
+        private static void OpeningCountGrowthAfterBoundaryIsIgnoredBySnapshot()
         {
-            var growing = new ChangingCountList<CurtainWallOpeningRect>(
+            var openings = new ChangingCountProbeList<CurtainWallOpeningRect>(
                 new[] { Opening(0.5d, 0.5d, 1d, 1d) },
                 firstCount: 1,
                 laterCount: 2);
-            Expect<InvalidOperationException>(() => CurtainWallOpeningPanelPlanner.Plan(new[] { Rect(0d, 0d, 2d, 2d) }, growing), "growing opening Count");
-            if (growing.IndexReads != 0)
-                throw new InvalidOperationException("Opening Count drift must fail before reading an element against the stale count.");
 
-            var shrinking = new ChangingCountList<CurtainWallOpeningRect>(
-                new[] { Opening(0.5d, 0.5d, 1d, 1d) },
-                firstCount: 1,
-                laterCount: 0);
-            Expect<InvalidOperationException>(() => CurtainWallOpeningPanelPlanner.Plan(new[] { Rect(0d, 0d, 2d, 2d) }, shrinking), "shrinking opening Count");
-            if (shrinking.IndexReads != 0)
-                throw new InvalidOperationException("Shrinking opening Count must fail before index access.");
+            var plan = CurtainWallOpeningPanelPlanner.Plan(new[] { Rect(0d, 0d, 2d, 2d) }, openings);
+            Equal(1, openings.CountReads, "opening Count must be read once at the public boundary");
+            Equal(1, openings.IndexReads, "nested planning must consume only the snapshotted opening range");
+            Equal(1, plan.InterruptedPanelCount, "later opening Count growth must not expand the accepted input set");
+            Near(3d, plan.RemainingPanelAreaM2, "opening snapshot clipping area");
+            Near(1d, plan.RemovedPanelAreaM2, "opening snapshot removed area");
         }
 
         private static CurtainWallRect Rect(double x, double z, double width, double height)
@@ -124,10 +110,16 @@ namespace QS3D.Core.SmokeTests
             throw new InvalidOperationException(label + " must fail with " + typeof(TException).Name + ".");
         }
 
+        private static void Equal<T>(T expected, T actual, string label)
+        {
+            if (!Equals(expected, actual))
+                throw new InvalidOperationException(label + ": expected " + expected + ", actual " + actual + ".");
+        }
+
         private static void Near(double expected, double actual, string label)
         {
             if (Math.Abs(expected - actual) > 1e-9d)
-                throw new InvalidOperationException(label + " mismatch: expected " + expected + ", actual " + actual + ".");
+                throw new InvalidOperationException(label + ": expected " + expected + ", actual " + actual + ".");
         }
 
         private sealed class FixedCountProbeList<T> : IReadOnlyList<T>
@@ -155,22 +147,22 @@ namespace QS3D.Core.SmokeTests
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
-        private sealed class ChangingCountList<T> : IReadOnlyList<T>
+        private sealed class ChangingCountProbeList<T> : IReadOnlyList<T>
         {
             private readonly IReadOnlyList<T> _items;
             private readonly int _firstCount;
             private readonly int _laterCount;
-            private int _countReads;
 
-            internal ChangingCountList(IReadOnlyList<T> items, int firstCount, int laterCount)
+            internal ChangingCountProbeList(IReadOnlyList<T> items, int firstCount, int laterCount)
             {
                 _items = items;
                 _firstCount = firstCount;
                 _laterCount = laterCount;
             }
 
+            internal int CountReads { get; private set; }
             internal int IndexReads { get; private set; }
-            public int Count => ++_countReads == 1 ? _firstCount : _laterCount;
+            public int Count => ++CountReads == 1 ? _firstCount : _laterCount;
             public T this[int index]
             {
                 get
