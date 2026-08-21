@@ -46,6 +46,8 @@ namespace QS3D.Core.Export
                                                   row.HasBottomAreaM2Evidence || row.HasTopAreaM2Evidence ||
                                                   row.HasOtherAreaM2Evidence || row.HasDoorAreaM2Evidence)
                                     .ToList();
+            if ((long)details.Count + summaries.Count + formwork.Count > MaxRows)
+                throw new InvalidDataException("Customer workbook TRACE_MODEL exceeds the Excel row limit.");
 
             var traces = new List<TraceProjection>();
             var dgklXml = BuildBusinessSheet(DgklSheet, summaries, false, traces);
