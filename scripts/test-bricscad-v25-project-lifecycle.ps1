@@ -265,7 +265,7 @@ try {
             }
         }
         elseif ($phase -eq "UNITS_OVERRIDE_ABSENT") {
-            foreach ($key in @("explicit_unit_override_persisted", "automation_confirmation_consumed", "intentional_project_bootstrap", "no_pending_project_state", "semantic_elements_not_created")) {
+            foreach ($key in @("explicit_unit_override_persisted", "automation_confirmation_consumed", "intentional_project_bootstrap", "no_pending_project_state", "semantic_elements_not_created", "unbound_binding_evidence_absent", "effective_override_resolved")) {
                 Require-Qs3dValue -Marker $phaseMarker -Key $key -Expected "true"
             }
         }

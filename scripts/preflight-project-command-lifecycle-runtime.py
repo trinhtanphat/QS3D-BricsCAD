@@ -40,7 +40,13 @@ for token in (
     '"native_unit_resolution_noncreating=true"',
     '"explicit_unit_override_persisted=true"',
     '"automation_confirmation_consumed=true"',
+    '"unbound_binding_evidence_absent=true"',
+    '"effective_override_resolved=true"',
     "DrawingUnitResolutionPolicy.BoundMetadataKey",
+    "DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey",
+    "DrawingUnitResolutionPolicy.BindingSourceMetadataKey",
+    "Cad.CadUnitService.TryGetPolicy(document, out _, out var effectiveResolution)",
+    "effectiveResolution.Source != DrawingUnitResolutionSource.ProjectOverride",
     "Teigha.DatabaseServices.UnitsValue.Undefined",
     "DrawingUnitAutomationConfirmation.Arm(document, LengthUnit.Meter)",
     "DrawingUnitAutomationConfirmation.IsArmed(document)",
@@ -71,6 +77,7 @@ for token in (
     'legacyBqUnitBindingPersisted = $true',
     'nativeBqAbsentNoncreating = $true',
     'explicitUnitOverrideBootstrap = $true',
+    '"unbound_binding_evidence_absent", "effective_override_resolved"',
 ):
     if token not in runner:
         errors.append("runner unit/execution lifecycle contract missing token: " + token)
