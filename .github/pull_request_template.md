@@ -54,4 +54,4 @@ For release-impacting work, describe exact source/tag/package/provenance implica
 
 ## Merge authorization
 
-`origin/main` remains direct-write read-only. Normal owner-requested task PRs follow `docs/MAIN-WRITE-AUTHORIZATION.md`: merge only through the protected PR path when the same-task standing authorization applies and every required current gate is satisfied. Never interpret a green PR as permission to merge unrelated work or bypass protection.
+`origin/main` remains direct-write read-only. A green PR does **not** authorize its own merge. Normal owner-requested task PRs follow `docs/MAIN-WRITE-AUTHORIZATION.md`: merge only through the protected PR path when the same-task standing authorization applies and every required current gate is satisfied. Never interpret a green PR as permission to merge unrelated work or bypass protection.
