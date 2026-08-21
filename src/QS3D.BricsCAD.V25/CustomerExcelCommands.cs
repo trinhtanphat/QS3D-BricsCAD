@@ -121,7 +121,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static IReadOnlyList<string> ResolveScope(
+        private static IReadOnlyList<string>? ResolveScope(
             Document document,
             ProjectState project,
             string scope,
