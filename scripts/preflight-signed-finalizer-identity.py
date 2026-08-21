@@ -40,7 +40,8 @@ def main() -> int:
 
     required_tokens = (
         "$SignedPayloadNames = @(",
-        "$packagePath = [IO.Path]::GetFullPath($package).TrimEnd",
+        "$packagePath = Assert-SafeDirectory -Path $PackageDirectory -Label 'PackageDirectory'",
+        "$package = $packagePath",
         "$packageRoot = $packagePath + [IO.Path]::DirectorySeparatorChar",
         "[IO.Path]::GetExtension($zip), '.zip', [StringComparison]::OrdinalIgnoreCase",
         "$zip.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)",
@@ -131,6 +132,7 @@ def main() -> int:
         actual = output_isolated(package, output)
         require(actual is expected, f"signed finalizer output model mismatch for {label}: expected {expected}, got {actual}")
 
+    package_guard_pos = text.find("$packagePath = Assert-SafeDirectory -Path $PackageDirectory -Label 'PackageDirectory'")
     extension_guard_pos = text.find("[IO.Path]::GetExtension($zip), '.zip', [StringComparison]::OrdinalIgnoreCase")
     output_guard_pos = text.find("$zip.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)")
     signature_pos = text.find("Assert-AuthenticodeSigner -Path $path -ExpectedSigner $expectedSigner")
@@ -143,6 +145,7 @@ def main() -> int:
     output_remove_pos = text.find("Remove-Item -LiteralPath $zip -Force")
     zip_pos = text.find("Compress-Archive -Path (Join-Path $package '*') -DestinationPath $zip -CompressionLevel Optimal")
     positions = (
+        package_guard_pos,
         extension_guard_pos,
         output_guard_pos,
         signature_pos,
@@ -157,12 +160,12 @@ def main() -> int:
     )
     require(min(positions) >= 0, "signed finalizer output/identity/publication ordering token is missing")
     require(
-        extension_guard_pos < output_guard_pos < signature_pos < product_pos < managed_loop_pos < product_version_compare_pos < should_process_pos < metadata_write_pos < hash_remove_pos < output_remove_pos < zip_pos,
-        "signed finalizer must isolate output, verify signatures/identity, then gate mutations before output cleanup/compression",
+        package_guard_pos < extension_guard_pos < output_guard_pos < signature_pos < product_pos < managed_loop_pos < product_version_compare_pos < should_process_pos < metadata_write_pos < hash_remove_pos < output_remove_pos < zip_pos,
+        "signed finalizer must validate the package root, isolate output, verify signatures/identity, then gate mutations before output cleanup/compression",
     )
 
     print(
-        "PASS: signed V25 finalization requires an external .zip output, binds canonical product/target/version/productVersion to both signed managed DLLs, and performs output cleanup/compression only after isolation, signer, identity and ShouldProcess gates."
+        "PASS: signed V25 finalization validates a safe package root, requires an external .zip output, binds canonical product/target/version/productVersion to both signed managed DLLs, and performs output cleanup/compression only after isolation, signer, identity and ShouldProcess gates."
     )
     return 0
 
