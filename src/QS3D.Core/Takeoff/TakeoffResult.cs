@@ -22,10 +22,23 @@ namespace QS3D.Core.Takeoff
                     throw new ArgumentException("Takeoff handle must not contain control characters.", nameof(handle));
             }
 
+            var canonicalUnit = unit.Trim();
+            if (!string.Equals(unit, canonicalUnit, StringComparison.Ordinal))
+                throw new ArgumentException("Takeoff unit must not contain surrounding whitespace.", nameof(unit));
+
+            for (var index = 0; index < canonicalUnit.Length; index++)
+            {
+                if (char.IsWhiteSpace(canonicalUnit[index]) || char.IsControl(canonicalUnit[index]))
+                    throw new ArgumentException("Takeoff unit must not contain whitespace or control characters.", nameof(unit));
+            }
+
+            if (!string.Equals(canonicalUnit, canonicalUnit.ToLowerInvariant(), StringComparison.Ordinal))
+                throw new ArgumentException("Takeoff unit must use canonical lower-case text.", nameof(unit));
+
             Handle = canonicalHandle;
             Kind = kind;
             Value = value == 0d ? 0d : value;
-            Unit = unit.Trim();
+            Unit = canonicalUnit;
         }
 
         public string Handle { get; }
