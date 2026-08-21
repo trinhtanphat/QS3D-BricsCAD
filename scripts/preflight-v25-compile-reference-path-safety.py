@@ -75,7 +75,7 @@ def main() -> int:
         require(not extraction_is_unsafe(msi, extract), f"safe sibling/disjoint layout rejected by contract model: {msi} / {extract}")
 
     unsafe_cases = (
-        (r"C:\cache\v25.msi", r"C:\"),
+        (r"C:\cache\v25.msi", "C:/"),
         (r"C:\cache\v25.msi", r"C:\cache\v25.msi"),
         (r"C:\cache\v25.msi", r"C:\cache"),
         (r"C:\cache\nested\v25.msi", r"C:\cache"),
