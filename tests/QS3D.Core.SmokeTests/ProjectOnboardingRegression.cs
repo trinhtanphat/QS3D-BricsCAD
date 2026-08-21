@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             MaterialGateIsNonDestructive();
             FreshProjectCreatesStarterRoute();
             ExistingFamilyIsPreserved();
+            MalformedExistingMaterialIsNotTrusted();
             RepeatIsIdempotent();
         }
 
@@ -77,6 +78,40 @@ namespace QS3D.Core.SmokeTests
             Equal(1, project.Families.Count(x => x.Category == ElementCategory.Beam), "Compatible Beam must not be duplicated.");
             Equal("KEEP", beam.Properties["CatalogMarker"], "Existing Family data was overwritten.");
             True(result.ReusedFamilyIds.Contains(beam.Id), "Existing compatible Family should be reported as reused.");
+        }
+
+        private static void MalformedExistingMaterialIsNotTrusted()
+        {
+            var malformed = new[]
+            {
+                "Concrete\nC30",
+                "Concrete\uFFFE",
+                new string('X', 1001)
+            };
+
+            for (var index = 0; index < malformed.Length; index++)
+            {
+                var project = new ProjectState("P-ONBOARD-BAD-MAT-" + index, "bad existing material");
+                var beam = ProjectFamilyService.Create(project, "bad-beam", "Bad Beam", ElementCategory.Beam);
+                ProjectFamilyService.SetProperty(project, beam.Id, "WidthM", "0.3");
+                ProjectFamilyService.SetProperty(project, beam.Id, "HeightM", "0.5");
+                ProjectFamilyService.SetProperty(project, beam.Id, "BottomOffsetM", "0");
+                beam.Properties["Material"] = malformed[index];
+
+                var materials = Materials();
+                materials.Remove(ElementCategory.Beam);
+                var result = ProjectOnboardingService.Bootstrap(
+                    project,
+                    new ProjectOnboardingRequest(LengthUnit.Millimeter, null, materials));
+
+                Equal(ProjectOnboardingStatus.NeedsMaterialConfirmation, result.Status,
+                    "Malformed existing material must not be trusted for starter reuse.");
+                True(result.MissingMaterialCategories.Contains(ElementCategory.Beam),
+                    "Malformed Beam material must require explicit confirmation.");
+                Equal(0, project.Floors.Count, "Malformed reused material gate must not create a Floor.");
+                Equal(1, project.Families.Count, "Malformed reused material gate must not mutate the Family catalog.");
+                Equal(malformed[index], beam.Properties["Material"], "Malformed source Family must remain untouched for repair/review.");
+            }
         }
 
         private static void RepeatIsIdempotent()
