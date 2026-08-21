@@ -59,12 +59,18 @@ else:
         "SetPersistedScalar(ref _drawingPath, PersistedTextXml.Verify(rawValue, nameof(value), \"Drawing path\"));",
         "set => SetCanonicalOptionalIdentity(ref _drawingFingerprint, value, \"Drawing fingerprint\");",
         "private void SetCanonicalOptionalIdentity(ref string field, string? value, string label)",
-        "SetPersistedScalar(ref field, PersistedTextXml.Verify(normalizedValue, nameof(value), label));",
+        "if (rawValue.Length != 0 && !string.Equals(rawValue, rawValue.Trim(), StringComparison.Ordinal))",
+        'throw new ArgumentException(label + " must be empty or canonical without surrounding whitespace.", nameof(value));',
+        "if (rawValue.Any(char.IsControl))",
+        "SetPersistedScalar(ref field, PersistedTextXml.Verify(rawValue, nameof(value), label));",
         "private void SetPersistedScalar(ref string field, string value)",
         "var nextChangeVersion = checked(ChangeVersion + 1L);",
+        "if (restoredDrawingFingerprint.Length != 0 && !string.Equals(restoredDrawingFingerprint, restoredDrawingFingerprint.Trim(), StringComparison.Ordinal))",
+        'throw new ArgumentException("Drawing fingerprint must be empty or canonical without surrounding whitespace.", nameof(drawingFingerprint));',
+        "restoredDrawingFingerprint = PersistedTextXml.Verify(restoredDrawingFingerprint, nameof(drawingFingerprint), \"Drawing fingerprint\");",
     )
     for token in required_state:
-        if token not in project_state: errors.append("ProjectState missing scalar-owned revision contract token: " + token)
+        if token not in project_state: errors.append("ProjectState missing scalar-owned revision/canonicality contract token: " + token)
     if "Drawing path cannot contain control characters." not in project_state:
         errors.append("DrawingPath must retain its persisted XML/control-character validation before scalar mutation")
 
@@ -73,4 +79,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: drawing identity synchronization validates first, preflights exact scalar revision capacity, preserves canonical/persistable identity normalization, and relies on the shared persisted-scalar helper as the only project revision owner.")
+print("PASS: drawing identity synchronization validates first, preflights exact scalar revision capacity, rejects non-canonical padded fingerprints before mutation, preserves persistable identity validation, and relies on the shared persisted-scalar helper as the only project revision owner.")
