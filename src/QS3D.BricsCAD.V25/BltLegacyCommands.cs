@@ -361,7 +361,7 @@ namespace QS3D.BricsCAD.V25
                 if (property == null || property.GetIndexParameters().Length != 0) return;
                 var value = property.GetValue(target, null) as string;
                 if (string.IsNullOrWhiteSpace(value)) return;
-                Put(snapshot, metadataKey, value);
+                Put(snapshot, metadataKey, value ?? string.Empty);
             }
             catch { }
         }
