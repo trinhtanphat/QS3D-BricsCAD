@@ -153,7 +153,7 @@ namespace QS3D.Core.SmokeTests
             };
 
             var forward = new RateBook("ORDER-A", source);
-            var reverse = new RateBook("ORDER-B", source.Reverse());
+            var reverse = new RateBook("ORDER-B", source.AsEnumerable().Reverse());
 
             Equal(forward.Items.Count, reverse.Items.Count, "ordering cardinality");
             for (var i = 0; i < forward.Items.Count; i++)
