@@ -16,6 +16,16 @@ The authoritative operating rules remain `AGENTS.md`, `docs/REMOTE-AGENT-SCOPE.m
 - Remote/static/CI evidence must never be promoted to `LOCAL_PASS`. Only a compatible local agent with real evidence tied to the exact tested SHA may record `LOCAL_PASS`.
 - If a remote source change materially changes the local scenario, update the canonical local inbox item in the same task branch/PR, then stop remote execution and routine owner-facing reporting of that local gate again.
 
+## Hard execution boundary: remote finishes code before local spends runtime
+
+`LOCAL_ONLY` means **local execution/evidence remains**. It does not mean “send unfinished implementation to the local agent.” Before handing a scenario to local execution, the remote/source owner **MUST** finish all repository-safe implementation and deterministic/static guards it can do, run all available remote-safe validation, commit the coherent batch, and push the exact canonical branch/SHA to GitHub.
+
+The local inbox handoff must identify that exact pushed SHA and the minimum remaining local scenario/evidence. A chat-only patch, uncommitted worktree, stash, or “needs local test” note is not a valid ready-for-local handoff.
+
+Compatible local agents are primarily **sync -> run -> collect sanitized evidence** workers. They sync the exact pushed candidate instead of reconstructing source work. If the runtime exposes an ordinary source-safe bug, local captures the smallest sanitized reproduction and returns the defect to the remote/source lane; after the remote fix is committed/pushed, local resumes the same LOCAL_ONLY validation on the new exact SHA. Local agents edit implementation code only when reproducing, implementing, or proving the fix genuinely requires licensed/proprietary BricsCAD/Windows/private-DWG/UI/runtime capability unavailable remotely.
+
+This rule exists to keep scarce local-machine time/token focused on work that only the local environment can perform.
+
 ## Mandatory reporting-contract interpretation for remote agents
 
 For remote/hybrid/source-only agents, this rule is the required exception to any generic `Local/runtime evidence` field in `AGENTS.md` or `docs/AGENT-PROMPT-TO-RELEASE-CONTRACT.md`:

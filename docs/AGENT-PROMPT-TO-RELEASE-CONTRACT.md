@@ -71,6 +71,16 @@ owner prompt
 
 A watched branch must not use a new PR as its first CI attempt. A stale or failed earlier run is never evidence for the new exact head.
 
+## Mandatory LOCAL_ONLY handoff sequencing
+
+A missing licensed/private/local runtime changes only the **execution/evidence boundary**. It does not create an early stopping point for repository-safe implementation.
+
+When a task contains a LOCAL_ONLY gate, a remote/source agent must finish every source-safe implementation, deterministic test/guard/probe, docs/handoff update, and available remote-safe validation first; then it must commit and push the exact canonical branch/SHA before handing the remaining runtime scenario to `docs/LOCAL-AGENT-INBOX.md`. An uncommitted patch, stash, chat snippet, or generic “needs local testing” note is not a valid ready-for-local state.
+
+The local handoff must name the exact pushed SHA plus the narrow scenario/commands, prerequisites, expected result, and minimum sanitized evidence. Compatible local agents primarily sync that SHA, run the unavailable runtime scenario, and record evidence. They should not redo remote-safe engineering. If local execution exposes an ordinary source-safe defect, local records the smallest sanitized reproduction and hands the defect back to the remote/source lane; after the remote fix is committed/pushed, local resumes the same LOCAL_ONLY validation on the new exact SHA. Local implementation edits are reserved for defects whose reproduction, implementation, or proof genuinely requires the licensed/proprietary BricsCAD/Windows/private-DWG/UI/runtime environment.
+
+This sequencing is part of action-first execution: remote agents must not conserve their own effort by shifting unfinished source-safe work onto scarce local-machine agents.
+
 ## CI is agent-owned work, not owner homework
 
 The owning agent/session is responsible for checking the applicable CI state itself through the available GitHub/Actions tooling. Do not tell the owner to check CI, paste logs, press refresh, retry a routine gate, or determine whether checks are green when the session has a tool surface that can obtain that evidence.
@@ -113,7 +123,7 @@ A normal task may produce an owner-facing blocker report before `MERGED_MAIN` on
 - the available GitHub/tooling surface cannot perform or observe a required action/evidence and all permitted fallback paths have actually been attempted;
 - the defect has been investigated and cannot be safely fixed inside the current lane without violating ownership, scope, product boundary, or repository policy.
 
-A blocker report must state the exact blocker, what was attempted, the last exact Git/CI evidence, and why no safe authorized remediation remains. `CI is running`, `CI is red`, `branch is behind`, `PR is open`, or `review found a bug` are **not** terminal blockers by themselves.
+A blocker report must state the exact blocker, what was attempted, the last exact Git/CI evidence, and why no safe authorized remediation remains. `CI is running`, `CI is red`, `branch is behind`, `PR is open`, `review found a bug`, or `LOCAL_ONLY execution remains` are **not** terminal blockers by themselves when repository-safe implementation/commit/push work is still available.
 
 ## Terminal-only owner-facing lifecycle reporting
 
@@ -184,6 +194,7 @@ After an authorized merge, ordinary code/docs/chore tasks are complete at `MERGE
 - Do not claim `RELEASED` without exact publication evidence.
 - Remote/source-only agents never infer `LOCAL_PASS`.
 - Parked LOCAL_ONLY evidence is not an owner-facing blocker unless the prompt explicitly makes that evidence a completion gate.
+- Before a LOCAL_ONLY gate is parked, all remotely actionable repository-safe work must already be complete, validated as far as available, committed and pushed on the exact candidate handed to local execution.
 
 ## Durable owner corrections
 
