@@ -10,21 +10,27 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             var evaluator = new ExpressionEvaluator();
-            var padded = new Dictionary<string, double>
+            var canonical = new Dictionary<string, double>
             {
-                ["  Width "] = 0.4,
-                ["HEIGHT\t"] = 0.6
+                ["Width"] = 0.4,
+                ["HEIGHT"] = 0.6
             };
 
-            Near(1.0, evaluator.Evaluate("width + height", padded), 1e-12, "trimmed variable-name binding");
-            Near(0.24, evaluator.Evaluate("WIDTH * Height", padded), 1e-12, "trimmed variable-name multiplication");
+            Near(1.0, evaluator.Evaluate("width + height", canonical), 1e-12, "canonical variable-name binding");
+            Near(0.24, evaluator.Evaluate("WIDTH * Height", canonical), 1e-12, "canonical variable-name multiplication");
+
+            foreach (var paddedName in new[] { " Width", "Width ", "\tWidth", "Width\t" })
+            {
+                var padded = new Dictionary<string, double> { [paddedName] = 0.4 };
+                Throws<InvalidOperationException>(() => evaluator.Evaluate("width", padded), $"padded variable name '{paddedName}'");
+            }
 
             var ambiguous = new Dictionary<string, double>
             {
-                [" Width"] = 0.4,
-                ["width "] = 0.5
+                ["Width"] = 0.4,
+                ["width"] = 0.5
             };
-            Throws<InvalidOperationException>(() => evaluator.Evaluate("width", ambiguous), "trimmed duplicate variable names");
+            Throws<InvalidOperationException>(() => evaluator.Evaluate("width", ambiguous), "case-insensitive duplicate variable names");
 
             var blank = new Dictionary<string, double> { [" \t "] = 1.0 };
             Throws<InvalidOperationException>(() => evaluator.Evaluate("1", blank), "blank variable name");
