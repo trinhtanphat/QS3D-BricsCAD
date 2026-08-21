@@ -34,6 +34,7 @@ FORBIDDEN_EXTERNAL_ORCHESTRATION_PATH_MARKERS = (
 ORCHESTRATION_SCAN_SUFFIXES = {".md", ".txt", ".yml", ".yaml", ".json", ".toml", ".py", ".ps1", ".sh"}
 MAX_REPOSITORY_TEXT_BYTES = 1024 * 1024
 MAX_ORCHESTRATION_SCAN_BYTES = MAX_REPOSITORY_TEXT_BYTES
+MAX_OPEN_IDENTITY_ATTEMPTS = 2
 WINDOWS_REPARSE_POINT_ATTRIBUTE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
 SELF_PATH = "scripts/preflight-repository-professionalism.py"
 
@@ -64,51 +65,68 @@ def read_repository_text(path: Path, root: Path = ROOT, maximum_bytes: int = MAX
 
     try:
         root_resolved = root.resolve(strict=True)
-        metadata = path.lstat()
     except OSError as exc:
         return None, f"cannot inspect repository text input: {exc}"
 
-    type_error = _metadata_type_error(metadata)
-    if type_error is not None:
-        return None, type_error
-    if metadata.st_size > maximum_bytes:
-        return None, f"exceeds {maximum_bytes} byte safety bound ({metadata.st_size} bytes)"
+    payload = None
+    identity_changed = False
+    for attempt in range(MAX_OPEN_IDENTITY_ATTEMPTS):
+        try:
+            metadata = path.lstat()
+        except OSError as exc:
+            return None, f"cannot inspect repository text input: {exc}"
 
-    try:
-        resolved = path.resolve(strict=True)
-        resolved.relative_to(root_resolved)
-    except (OSError, ValueError) as exc:
-        return None, f"escapes repository root or cannot be resolved safely: {exc}"
+        type_error = _metadata_type_error(metadata)
+        if type_error is not None:
+            return None, type_error
+        if metadata.st_size > maximum_bytes:
+            return None, f"exceeds {maximum_bytes} byte safety bound ({metadata.st_size} bytes)"
 
-    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
-    fd = None
-    try:
-        fd = os.open(path, flags)
-        opened_metadata = os.fstat(fd)
-        opened_type_error = _metadata_type_error(opened_metadata)
-        if opened_type_error is not None:
-            return None, opened_type_error
-        if not _same_opened_file(metadata, opened_metadata):
-            return None, "changed identity between filesystem validation and open"
-        if opened_metadata.st_size > maximum_bytes:
-            return None, f"exceeds {maximum_bytes} byte safety bound ({opened_metadata.st_size} bytes)"
+        try:
+            resolved = path.resolve(strict=True)
+            resolved.relative_to(root_resolved)
+        except (OSError, ValueError) as exc:
+            return None, f"escapes repository root or cannot be resolved safely: {exc}"
 
-        chunks: list[bytes] = []
-        total = 0
-        while total <= maximum_bytes:
-            chunk = os.read(fd, min(64 * 1024, maximum_bytes + 1 - total))
-            if not chunk:
-                break
-            chunks.append(chunk)
-            total += len(chunk)
-        if total > maximum_bytes:
-            return None, f"exceeds {maximum_bytes} byte safety bound while reading"
-        payload = b"".join(chunks)
-    except OSError as exc:
-        return None, f"cannot open/read repository text input safely: {exc}"
-    finally:
-        if fd is not None:
-            os.close(fd)
+        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        fd = None
+        try:
+            fd = os.open(path, flags)
+            opened_metadata = os.fstat(fd)
+            opened_type_error = _metadata_type_error(opened_metadata)
+            if opened_type_error is not None:
+                return None, opened_type_error
+            if not _same_opened_file(metadata, opened_metadata):
+                identity_changed = True
+                if attempt + 1 < MAX_OPEN_IDENTITY_ATTEMPTS:
+                    continue
+                return None, "changed identity between filesystem validation and open after bounded retry"
+            if opened_metadata.st_size > maximum_bytes:
+                return None, f"exceeds {maximum_bytes} byte safety bound ({opened_metadata.st_size} bytes)"
+
+            chunks: list[bytes] = []
+            total = 0
+            while total <= maximum_bytes:
+                chunk = os.read(fd, min(64 * 1024, maximum_bytes + 1 - total))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                total += len(chunk)
+            if total > maximum_bytes:
+                return None, f"exceeds {maximum_bytes} byte safety bound while reading"
+            payload = b"".join(chunks)
+            identity_changed = False
+            break
+        except OSError as exc:
+            return None, f"cannot open/read repository text input safely: {exc}"
+        finally:
+            if fd is not None:
+                os.close(fd)
+
+    if payload is None:
+        if identity_changed:
+            return None, "changed identity between filesystem validation and open after bounded retry"
+        return None, "repository text input could not be read safely"
 
     try:
         return payload.decode("utf-8"), None
