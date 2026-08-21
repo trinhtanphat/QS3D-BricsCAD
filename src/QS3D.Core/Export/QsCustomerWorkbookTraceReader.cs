@@ -306,7 +306,7 @@ namespace QS3D.Core.Export
             return column - 1;
         }
 
-        private static ZipArchiveEntry UniqueEntry(ZipArchive archive, string path)
+        private static ZipArchiveEntry? UniqueEntry(ZipArchive archive, string path)
         {
             var matches = archive.Entries.Where(entry => string.Equals(entry.FullName, path, StringComparison.Ordinal)).Take(2).ToList();
             if (matches.Count > 1) throw new InvalidDataException("Customer workbook contains duplicate package part: " + path + ".");
