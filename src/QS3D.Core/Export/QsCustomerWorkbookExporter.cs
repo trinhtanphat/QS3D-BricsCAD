@@ -95,7 +95,7 @@ namespace QS3D.Core.Export
         private static List<QuantityReportRow> Snapshot(IReadOnlyList<QuantityReportRow> source, bool requireSingle)
         {
             var result = new List<QuantityReportRow>(source.Count);
-            string fingerprint = null;
+            string? fingerprint = null;
             for (var index = 0; index < source.Count; index++)
             {
                 var row = source[index] ?? throw new InvalidDataException("Customer workbook contains a null quantity row.");
