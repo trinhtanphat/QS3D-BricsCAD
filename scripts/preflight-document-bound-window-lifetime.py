@@ -34,8 +34,8 @@ def method_block(source: str, signature: str) -> str:
 source = SOURCE.read_text(encoding="utf-8")
 
 require(
-    "private bool _invalidated;" in source,
-    "Document-bound windows must retain a permanent invalidated/fail-closed state after affinity loss.",
+    "private volatile bool _invalidated;" in source,
+    "Document-bound windows must publish the permanent invalidated/fail-closed state across host/UI threads.",
 )
 
 ensure = method_block(source, "private bool EnsureProjectAffinity()")
