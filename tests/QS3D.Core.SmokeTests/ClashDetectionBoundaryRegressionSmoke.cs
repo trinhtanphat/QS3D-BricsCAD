@@ -71,7 +71,7 @@ namespace QS3D.Core.SmokeTests
             Require(first.Count == 2, "Default detection must exclude only the same-discipline pair.");
             Require(first[0].LeftElementId == "a" && first[0].RightElementId == "z", "First canonical result mismatch.");
             Require(first[1].LeftElementId == "B" && first[1].RightElementId == "z", "Second canonical result mismatch.");
-            var reversed = service.Detect(input.Reverse().ToArray());
+            var reversed = service.Detect(Enumerable.Reverse(input).ToArray());
             Require(Signature(first) == Signature(reversed), "Traversal order must not affect semantic result ordering.");
             var same = service.Detect(input, includeSameDiscipline: true);
             Require(same.Count == 3 && same[0].LeftElementId == "a" && same[0].RightElementId == "B",
