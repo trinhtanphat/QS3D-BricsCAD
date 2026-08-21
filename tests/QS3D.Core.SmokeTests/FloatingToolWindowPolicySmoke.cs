@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             MissingVisibleWorkAreaFailsClosed();
             ExactWorkAreaBoundaryIsAccepted();
             KnownOversizedWorkAreaCollectionFailsBeforeEnumeration();
+            NonGenericKnownOversizedWorkAreaCollectionFailsBeforeEnumeration();
             StreamingWorkAreaBoundaryFailsWithoutOverread();
         }
 
@@ -113,6 +114,25 @@ namespace QS3D.Core.SmokeTests
             throw new Exception("Known oversized work-area input must fail closed.");
         }
 
+        private static void NonGenericKnownOversizedWorkAreaCollectionFailsBeforeEnumeration()
+        {
+            var areas = new ThrowingNonGenericOversizedCollection();
+            try
+            {
+                FloatingToolWindowPolicy.Normalize(
+                    new FloatingToolBounds(0d, 0d, 400d, 300d),
+                    areas);
+            }
+            catch (InvalidOperationException)
+            {
+                if (areas.EnumerationAttempted)
+                    throw new Exception("Non-generic known oversized work-area input must fail before enumeration.");
+                return;
+            }
+
+            throw new Exception("Non-generic known oversized work-area input must fail closed.");
+        }
+
         private static void StreamingWorkAreaBoundaryFailsWithoutOverread()
         {
             try
@@ -146,6 +166,27 @@ namespace QS3D.Core.SmokeTests
             {
                 EnumerationAttempted = true;
                 throw new Exception("Known oversized collection must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class ThrowingNonGenericOversizedCollection : IEnumerable<FloatingToolBounds>, ICollection
+        {
+            public int Count => FloatingToolWindowPolicy.MaximumVisibleWorkAreas + 1;
+            public bool EnumerationAttempted { get; private set; }
+            public object SyncRoot => this;
+            public bool IsSynchronized => false;
+
+            public void CopyTo(Array array, int index)
+            {
+                throw new NotSupportedException();
+            }
+
+            public IEnumerator<FloatingToolBounds> GetEnumerator()
+            {
+                EnumerationAttempted = true;
+                throw new Exception("Non-generic known oversized collection must not be enumerated.");
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();

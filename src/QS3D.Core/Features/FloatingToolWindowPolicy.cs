@@ -125,6 +125,13 @@ namespace QS3D.Core.Features
                 count = readOnlyCollection.Count;
             }
 
+            if (visibleWorkAreas is System.Collections.ICollection nonGenericCollection)
+            {
+                if (count.HasValue && count.Value != nonGenericCollection.Count)
+                    throw new InvalidOperationException("Visible work-area collection exposes conflicting Count values.");
+                count = nonGenericCollection.Count;
+            }
+
             if (count.HasValue && count.Value < 0)
                 throw new InvalidOperationException("Visible work-area collection exposes a negative Count value.");
 
