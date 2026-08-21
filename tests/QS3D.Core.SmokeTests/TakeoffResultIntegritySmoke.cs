@@ -30,11 +30,12 @@ namespace QS3D.Core.SmokeTests
         private static void TokenWhitespaceContractIsExplicit()
         {
             Throws<ArgumentException>(() => new TakeoffResult("  ABCD\t", TakeoffKind.Length, 1d, "m"));
+            Throws<ArgumentException>(() => new TakeoffResult("ABCD", TakeoffKind.Length, 1d, "\tm  "));
 
-            var result = new TakeoffResult("ABCD", TakeoffKind.Length, 1d, "\tm  ");
+            var result = new TakeoffResult("ABCD", TakeoffKind.Length, 1d, "m");
             if (!string.Equals(result.Handle, "ABCD", StringComparison.Ordinal) ||
                 !string.Equals(result.Unit, "m", StringComparison.Ordinal))
-                throw new InvalidOperationException("Takeoff handles must stay canonical while units remain trimmed before storage.");
+                throw new InvalidOperationException("Canonical takeoff handle and unit tokens must be preserved exactly.");
         }
 
         private static void ZeroValueRemainsValid()
