@@ -9,22 +9,35 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
-            CanonicalizesWhitespaceAndCaseVariant();
+            RejectsWhitespaceBeforeOnboarding();
+            CanonicalizesReachableCaseVariant();
             PreservesExactCanonicalIdentity();
         }
 
-        private static void CanonicalizesWhitespaceAndCaseVariant()
+        private static void RejectsWhitespaceBeforeOnboarding()
+        {
+            var project = new ProjectState("P-ONBOARD-PADDED-FLOOR", "padded active floor");
+            ProjectFloorService.Create(project, "Floor-Main", "Main Floor", 0d);
+            var canonical = project.ActiveFloorId;
+
+            Throws<ArgumentException>(() => project.ActiveFloorId = "  floor-main  ",
+                "Public ProjectState assignment must reject padded active Floor identity before onboarding can observe it.");
+            Equal(canonical, project.ActiveFloorId,
+                "Rejected padded active Floor identity must not mutate the canonical active Floor.");
+        }
+
+        private static void CanonicalizesReachableCaseVariant()
         {
             var project = new ProjectState("P-ONBOARD-CANONICAL-FLOOR", "canonical active floor");
             ProjectFloorService.Create(project, "Floor-Main", "Main Floor", 0d);
-            project.ActiveFloorId = "  floor-main  ";
+            project.ActiveFloorId = "floor-main";
 
             var result = ProjectOnboardingService.Bootstrap(
                 project,
                 new ProjectOnboardingRequest(LengthUnit.Millimeter, null, Materials()));
 
             Equal(ProjectOnboardingStatus.ReadyForFirstObject, result.Status,
-                "A uniquely matching active Floor token should allow onboarding to become ready.");
+                "A case-variant active Floor token should allow onboarding to become ready.");
             Equal("Floor-Main", project.ActiveFloorId,
                 "Ready ProjectState must store the exact canonical Floor catalog identity.");
             Equal("Floor-Main", result.ActiveFloorId,
@@ -68,6 +81,21 @@ namespace QS3D.Core.SmokeTests
         {
             if (!Equals(expected, actual))
                 throw new Exception(message + " Expected=" + expected + ", actual=" + actual + ".");
+        }
+
+        private static void Throws<TException>(Action action, string message)
+            where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+
+            throw new Exception(message + " Expected exception=" + typeof(TException).Name + ".");
         }
     }
 }
