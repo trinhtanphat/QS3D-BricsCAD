@@ -32,6 +32,7 @@ namespace QS3D.Core.Geometry
             Validate(input.MullionWidthM, nameof(input.MullionWidthM), false, true);
             Validate(input.TransomWidthM, nameof(input.TransomWidthM), false, true);
             Validate(input.FrameDepthM, nameof(input.FrameDepthM), true);
+            ValidateRepresentableEnvelope(input);
 
             var canonical = string.Join("|", new[]
             {
@@ -47,6 +48,21 @@ namespace QS3D.Core.Geometry
                 foreach (var value in bytes) text.Append(value.ToString("x2", CultureInfo.InvariantCulture));
                 return text.ToString();
             }
+        }
+
+        private static void ValidateRepresentableEnvelope(CurtainWallFrameFingerprintInput input)
+        {
+            var top = input.BottomOffsetM + input.HeightM;
+            if (double.IsNaN(top) || double.IsInfinity(top))
+                throw new OverflowException("Curtain frame fingerprint top elevation must remain finite.");
+            if (!(top > input.BottomOffsetM))
+                throw new OverflowException("Curtain frame fingerprint height is below the representable elevation resolution.");
+
+            var grossArea = input.LengthM * input.HeightM;
+            if (double.IsNaN(grossArea) || double.IsInfinity(grossArea))
+                throw new OverflowException("Curtain frame fingerprint gross area must remain finite.");
+            if (grossArea == 0d && input.LengthM != 0d && input.HeightM != 0d)
+                throw new OverflowException("Curtain frame fingerprint gross area underflowed to zero.");
         }
 
         private static string R(double value) => (value == 0d ? 0d : value).ToString("R", CultureInfo.InvariantCulture);
