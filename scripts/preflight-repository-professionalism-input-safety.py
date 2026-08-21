@@ -48,7 +48,7 @@ def main() -> int:
         directory = root / "directory.yml"
         directory.mkdir()
         text, error = module.read_repository_text(directory, root, 64)
-        require(text is None and error is not None and "regular file" in error, "directory candidate was not rejected")
+        require(text is None and error is not None and "regular file" in error, "directory candidate was not rejected by strict reader")
 
         outside = Path(temp) / "outside.yml"
         outside.write_text("name: outside\n", encoding="utf-8")
@@ -76,9 +76,40 @@ def main() -> int:
         fake_regular = SimpleNamespace(st_mode=stat.S_IFREG | 0o644, st_file_attributes=0)
         require(module._metadata_type_error(fake_regular) is None, "regular metadata was rejected")
 
+        scan_root = root / "scan"
+        scan_root.mkdir()
+        (scan_root / "ordinary.md").mkdir()
+        (scan_root / "safe.txt").write_text("ordinary repository text\n", encoding="utf-8")
+        scan_outside = root / "scan-outside.txt"
+        scan_outside.write_text("outside target\n", encoding="utf-8")
+        scan_link = scan_root / "unsafe.yml"
+        try:
+            scan_link.symlink_to(scan_outside)
+        except (OSError, NotImplementedError):
+            scan_link = None
+
+        original_root = module.ROOT
+        try:
+            module.ROOT = scan_root
+            failures: list[str] = []
+            module.reject_external_orchestration_artifacts(failures)
+        finally:
+            module.ROOT = original_root
+
+        require(
+            not any("ordinary.md" in failure for failure in failures),
+            f"ordinary suffix-bearing directory was misclassified as a file: {failures}",
+        )
+        if scan_link is not None:
+            require(
+                any("unsafe.yml" in failure and "symlink" in failure for failure in failures),
+                f"symlink scan candidate did not fail closed: {failures}",
+            )
+
     print("PASS: repository professionalism input-safety regression")
     print(" - bounded UTF-8 reads accept the exact boundary and reject one-over inputs")
     print(" - invalid UTF-8, non-regular, outside-root, symlink and reparse candidates fail closed")
+    print(" - orchestration scan skips ordinary suffix-bearing directories while retaining unsafe-link refusal")
     return 0
 
 
