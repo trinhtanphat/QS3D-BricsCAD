@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             MaterialGateIsNonDestructive();
             FreshProjectCreatesStarterRoute();
             ExistingFamilyIsPreserved();
+            AmbiguousExactFamilyReuseFailsClosed();
             MalformedExistingMaterialIsNotTrusted();
             RepeatIsIdempotent();
         }
@@ -78,6 +79,38 @@ namespace QS3D.Core.SmokeTests
             Equal(1, project.Families.Count(x => x.Category == ElementCategory.Beam), "Compatible Beam must not be duplicated.");
             Equal("KEEP", beam.Properties["CatalogMarker"], "Existing Family data was overwritten.");
             True(result.ReusedFamilyIds.Contains(beam.Id), "Existing compatible Family should be reported as reused.");
+        }
+
+        private static void AmbiguousExactFamilyReuseFailsClosed()
+        {
+            var project = new ProjectState("P-ONBOARD-AMBIG", "ambiguous exact family");
+            var first = ProjectFamilyService.Create(project, "beam-a", "Beam A", ElementCategory.Beam);
+            var second = ProjectFamilyService.Create(project, "beam-b", "Beam B", ElementCategory.Beam);
+            foreach (var family in new[] { first, second })
+            {
+                ProjectFamilyService.SetProperty(project, family.Id, "WidthM", "0.3");
+                ProjectFamilyService.SetProperty(project, family.Id, "HeightM", "0.5");
+                ProjectFamilyService.SetProperty(project, family.Id, "BottomOffsetM", "0");
+                ProjectFamilyService.SetProperty(project, family.Id, "Material", "Concrete C30");
+            }
+
+            var beforeIds = project.Families.Select(x => x.Id).ToArray();
+            var threw = false;
+            try
+            {
+                ProjectOnboardingService.Bootstrap(
+                    project,
+                    new ProjectOnboardingRequest(null, LengthUnit.Millimeter, Materials()));
+            }
+            catch (InvalidOperationException ex)
+            {
+                threw = ex.Message.IndexOf("multiple exact Family matches", StringComparison.Ordinal) >= 0;
+            }
+
+            True(threw, "Explicit starter material must fail closed when exact Family reuse is ambiguous.");
+            Equal(0, project.Floors.Count, "Ambiguous exact reuse must fail before starter Floor creation.");
+            False(project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.OverrideMetadataKey), "Ambiguous exact reuse must fail before persisting unit override.");
+            True(beforeIds.SequenceEqual(project.Families.Select(x => x.Id), StringComparer.OrdinalIgnoreCase), "Ambiguous exact reuse must not mutate the Family catalog.");
         }
 
         private static void MalformedExistingMaterialIsNotTrusted()
