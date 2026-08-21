@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using QS3D.Core.Export;
 using QS3D.Core.Reporting;
 
@@ -10,6 +11,12 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class P0UnifiedExportAcceptanceSmoke
     {
+        [ModuleInitializer]
+        internal static void Register()
+        {
+            Run();
+        }
+
         internal static void Run()
         {
             var root = Path.Combine(Path.GetTempPath(), "qs3d-p0-export-" + Guid.NewGuid().ToString("N"));
@@ -19,7 +26,6 @@ namespace QS3D.Core.SmokeTests
                 var details = BuildP0Rows();
                 var summaries = details.Select(Clone).ToArray();
                 var path = Path.Combine(root, "p0-unified-export.xlsx");
-
                 QsCustomerWorkbookExporter.Export(path, details, summaries);
 
                 var detailXml = ReadEntry(path, "xl/worksheets/sheet3.xml");
@@ -43,17 +49,15 @@ namespace QS3D.Core.SmokeTests
                         "P0 export trace lost drawing fingerprint for " + expected.Category + ".");
                 }
 
-                // Door and wall-opening rows deliberately have no concrete/formwork evidence.
-                // The unified export contract must leave those cells absent, never fabricate numeric zero.
-                Require(!detailXml.Contains("r=\"H7\""), "Door gross concrete must remain blank when no evidence exists.");
-                Require(!detailXml.Contains("r=\"K7\""), "Door formwork must remain blank when no evidence exists.");
-                Require(!detailXml.Contains("r=\"H8\""), "WallOpening gross concrete must remain blank when no evidence exists.");
-                Require(!detailXml.Contains("r=\"K8\""), "WallOpening formwork must remain blank when no evidence exists.");
-                Require(detailXml.Contains("r=\"O7\""), "Door opening area evidence must be exported.");
-                Require(detailXml.Contains("r=\"O8\""), "WallOpening area evidence must be exported.");
+                Require(!detailXml.Contains("r=\"H8\""), "Door gross concrete must remain blank when no evidence exists.");
+                Require(!detailXml.Contains("r=\"K8\""), "Door formwork must remain blank when no evidence exists.");
+                Require(!detailXml.Contains("r=\"H9\""), "WallOpening gross concrete must remain blank when no evidence exists.");
+                Require(!detailXml.Contains("r=\"K9\""), "WallOpening formwork must remain blank when no evidence exists.");
+                Require(detailXml.Contains("r=\"O8\""), "Door opening area evidence must be exported.");
+                Require(detailXml.Contains("r=\"O9\""), "WallOpening area evidence must be exported.");
 
                 var traceXml = ReadEntry(path, "xl/worksheets/sheet4.xml");
-                Require(Count(traceXml, "DWG-P0-EXPORT") == 14,
+                Require(Count(traceXml, "DWG-P0-EXPORT") == 16,
                     "TRACE_MODEL must contain one fingerprint projection for each DGKL and CHI_TIET P0 row.");
                 Console.WriteLine("PASS P0 unified export acceptance");
             }
@@ -65,17 +69,7 @@ namespace QS3D.Core.SmokeTests
 
         private static IReadOnlyList<QuantityReportRow> BuildP0Rows()
         {
-            var categories = new[]
-            {
-                "ArchitecturalWall",
-                "Beam",
-                "Column",
-                "Slab",
-                "StructuralWall",
-                "Foundation",
-                "Door",
-                "WallOpening"
-            };
+            var categories = new[] { "ArchitecturalWall", "Beam", "Column", "Slab", "StructuralWall", "Foundation", "Door", "WallOpening" };
             var rows = new List<QuantityReportRow>(categories.Length);
             for (var index = 0; index < categories.Length; index++)
             {
@@ -83,31 +77,17 @@ namespace QS3D.Core.SmokeTests
                 var isOpening = category == "Door" || category == "WallOpening";
                 var row = new QuantityReportRow
                 {
-                    Floor = "L0" + (index + 1),
-                    Zone = "Z" + (index + 1),
-                    Category = category,
-                    FamilyId = "F-P0-" + category.ToUpperInvariant(),
-                    FamilyName = category + " Family",
-                    ElementName = category + " #1",
-                    Material = isOpening ? "Opening" : "Concrete",
-                    DrawingFingerprint = "DWG-P0-EXPORT",
-                    Count = 1,
-                    GrossConcreteM3 = isOpening ? 0d : index + 1d,
-                    NetConcreteM3 = isOpening ? 0d : index + 0.5d,
-                    FormworkM2 = isOpening ? 0d : index + 10d,
-                    DoorAreaM2 = isOpening ? index + 2d : 0d,
-                    HasGrossConcreteM3Evidence = !isOpening,
-                    HasDeductionM3Evidence = false,
-                    HasNetConcreteM3Evidence = !isOpening,
-                    HasFormworkM2Evidence = !isOpening,
-                    HasLengthMEvidence = false,
-                    HasOuterPerimeterMEvidence = false,
-                    HasInnerPerimeterMEvidence = false,
-                    HasDoorAreaM2Evidence = isOpening,
-                    HasSideAreaM2Evidence = false,
-                    HasBottomAreaM2Evidence = false,
-                    HasTopAreaM2Evidence = false,
-                    HasOtherAreaM2Evidence = false
+                    Floor = "L0" + (index + 1), Zone = "Z" + (index + 1), Category = category,
+                    FamilyId = "F-P0-" + category.ToUpperInvariant(), FamilyName = category + " Family",
+                    ElementName = category + " #1", Material = isOpening ? "Opening" : "Concrete",
+                    DrawingFingerprint = "DWG-P0-EXPORT", Count = 1,
+                    GrossConcreteM3 = isOpening ? 0d : index + 1d, NetConcreteM3 = isOpening ? 0d : index + 0.5d,
+                    FormworkM2 = isOpening ? 0d : index + 10d, DoorAreaM2 = isOpening ? index + 2d : 0d,
+                    HasGrossConcreteM3Evidence = !isOpening, HasDeductionM3Evidence = false,
+                    HasNetConcreteM3Evidence = !isOpening, HasFormworkM2Evidence = !isOpening,
+                    HasLengthMEvidence = false, HasOuterPerimeterMEvidence = false, HasInnerPerimeterMEvidence = false,
+                    HasDoorAreaM2Evidence = isOpening, HasSideAreaM2Evidence = false, HasBottomAreaM2Evidence = false,
+                    HasTopAreaM2Evidence = false, HasOtherAreaM2Evidence = false
                 };
                 row.ElementIds.Add("P0-" + (index + 1));
                 row.SourceHandles.Add((0xA0 + index).ToString("X"));
@@ -120,39 +100,19 @@ namespace QS3D.Core.SmokeTests
         {
             var row = new QuantityReportRow
             {
-                Floor = source.Floor,
-                Zone = source.Zone,
-                Category = source.Category,
-                FamilyId = source.FamilyId,
-                FamilyName = source.FamilyName,
-                ElementName = source.ElementName,
-                Material = source.Material,
-                DrawingFingerprint = source.DrawingFingerprint,
-                Count = source.Count,
-                GrossConcreteM3 = source.GrossConcreteM3,
-                DeductionM3 = source.DeductionM3,
-                NetConcreteM3 = source.NetConcreteM3,
-                FormworkM2 = source.FormworkM2,
-                LengthM = source.LengthM,
-                OuterPerimeterM = source.OuterPerimeterM,
-                InnerPerimeterM = source.InnerPerimeterM,
-                DoorAreaM2 = source.DoorAreaM2,
-                SideAreaM2 = source.SideAreaM2,
-                BottomAreaM2 = source.BottomAreaM2,
-                TopAreaM2 = source.TopAreaM2,
-                OtherAreaM2 = source.OtherAreaM2,
-                HasGrossConcreteM3Evidence = source.HasGrossConcreteM3Evidence,
-                HasDeductionM3Evidence = source.HasDeductionM3Evidence,
-                HasNetConcreteM3Evidence = source.HasNetConcreteM3Evidence,
-                HasFormworkM2Evidence = source.HasFormworkM2Evidence,
-                HasLengthMEvidence = source.HasLengthMEvidence,
-                HasOuterPerimeterMEvidence = source.HasOuterPerimeterMEvidence,
-                HasInnerPerimeterMEvidence = source.HasInnerPerimeterMEvidence,
-                HasDoorAreaM2Evidence = source.HasDoorAreaM2Evidence,
-                HasSideAreaM2Evidence = source.HasSideAreaM2Evidence,
-                HasBottomAreaM2Evidence = source.HasBottomAreaM2Evidence,
-                HasTopAreaM2Evidence = source.HasTopAreaM2Evidence,
-                HasOtherAreaM2Evidence = source.HasOtherAreaM2Evidence
+                Floor = source.Floor, Zone = source.Zone, Category = source.Category, FamilyId = source.FamilyId,
+                FamilyName = source.FamilyName, ElementName = source.ElementName, Material = source.Material,
+                DrawingFingerprint = source.DrawingFingerprint, Count = source.Count, GrossConcreteM3 = source.GrossConcreteM3,
+                DeductionM3 = source.DeductionM3, NetConcreteM3 = source.NetConcreteM3, FormworkM2 = source.FormworkM2,
+                LengthM = source.LengthM, OuterPerimeterM = source.OuterPerimeterM, InnerPerimeterM = source.InnerPerimeterM,
+                DoorAreaM2 = source.DoorAreaM2, SideAreaM2 = source.SideAreaM2, BottomAreaM2 = source.BottomAreaM2,
+                TopAreaM2 = source.TopAreaM2, OtherAreaM2 = source.OtherAreaM2,
+                HasGrossConcreteM3Evidence = source.HasGrossConcreteM3Evidence, HasDeductionM3Evidence = source.HasDeductionM3Evidence,
+                HasNetConcreteM3Evidence = source.HasNetConcreteM3Evidence, HasFormworkM2Evidence = source.HasFormworkM2Evidence,
+                HasLengthMEvidence = source.HasLengthMEvidence, HasOuterPerimeterMEvidence = source.HasOuterPerimeterMEvidence,
+                HasInnerPerimeterMEvidence = source.HasInnerPerimeterMEvidence, HasDoorAreaM2Evidence = source.HasDoorAreaM2Evidence,
+                HasSideAreaM2Evidence = source.HasSideAreaM2Evidence, HasBottomAreaM2Evidence = source.HasBottomAreaM2Evidence,
+                HasTopAreaM2Evidence = source.HasTopAreaM2Evidence, HasOtherAreaM2Evidence = source.HasOtherAreaM2Evidence
             };
             foreach (var id in source.ElementIds) row.ElementIds.Add(id);
             foreach (var handle in source.SourceHandles) row.SourceHandles.Add(handle);
@@ -170,13 +130,8 @@ namespace QS3D.Core.SmokeTests
 
         private static int Count(string value, string token)
         {
-            var count = 0;
-            var offset = 0;
-            while ((offset = value.IndexOf(token, offset, StringComparison.Ordinal)) >= 0)
-            {
-                count++;
-                offset += token.Length;
-            }
+            var count = 0; var offset = 0;
+            while ((offset = value.IndexOf(token, offset, StringComparison.Ordinal)) >= 0) { count++; offset += token.Length; }
             return count;
         }
 
