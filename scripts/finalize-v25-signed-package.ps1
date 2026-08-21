@@ -25,6 +25,113 @@ function Normalize-Thumbprint {
     return $Thumbprint.Replace(' ', '').ToUpperInvariant()
 }
 
+function Get-CanonicalFullPath {
+    param([string]$Path, [string]$Label)
+    if ([string]::IsNullOrWhiteSpace($Path)) { throw "$Label path is required." }
+    try { return [IO.Path]::GetFullPath($Path) }
+    catch { throw "$Label path is invalid: $($_.Exception.Message)" }
+}
+
+function Assert-NoReparseDirectoryChain {
+    param([string]$Path, [string]$Label)
+
+    $current = Get-CanonicalFullPath -Path $Path -Label $Label
+    while (-not [string]::IsNullOrWhiteSpace($current)) {
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "$Label traverses a reparse-backed filesystem entry: $current"
+            }
+            if (-not $item.PSIsContainer) {
+                throw "$Label requires a directory path, but an ancestor is not a directory: $current"
+            }
+        }
+
+        $parent = [IO.Path]::GetDirectoryName($current)
+        if ([string]::IsNullOrWhiteSpace($parent) -or [string]::Equals($parent, $current, [StringComparison]::OrdinalIgnoreCase)) { break }
+        $current = $parent
+    }
+}
+
+function Assert-SafeDirectory {
+    param([string]$Path, [string]$Label)
+
+    $fullPath = Get-CanonicalFullPath -Path $Path -Label $Label
+    $pathRoot = [IO.Path]::GetPathRoot($fullPath)
+    if (-not [string]::IsNullOrWhiteSpace($pathRoot) -and
+        [string]::Equals($fullPath, $pathRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Label must not be a filesystem root: $fullPath"
+    }
+    $trimmedFullPath = $fullPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    Assert-NoReparseDirectoryChain -Path $fullPath -Label $Label
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Container)) {
+        throw "$Label directory was not found: $fullPath"
+    }
+    $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or -not $item.PSIsContainer) {
+        throw "$Label must be an ordinary non-reparse directory: $fullPath"
+    }
+    return $trimmedFullPath
+}
+
+function Assert-SafeFile {
+    param([string]$Path, [string]$Label)
+
+    $fullPath = Get-CanonicalFullPath -Path $Path -Label $Label
+    $parent = [IO.Path]::GetDirectoryName($fullPath)
+    Assert-NoReparseDirectoryChain -Path $parent -Label ("$Label parent")
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+        throw "$Label file was not found: $fullPath"
+    }
+    $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
+    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "$Label must be an ordinary non-reparse file: $fullPath"
+    }
+    return $fullPath
+}
+
+function Assert-SafeOptionalFileTarget {
+    param([string]$Path, [string]$Label)
+
+    $fullPath = Get-CanonicalFullPath -Path $Path -Label $Label
+    $parent = [IO.Path]::GetDirectoryName($fullPath)
+    Assert-NoReparseDirectoryChain -Path $parent -Label ("$Label parent")
+    if (Test-Path -LiteralPath $fullPath) {
+        $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
+        if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "$Label must be an ordinary non-reparse file target: $fullPath"
+        }
+    }
+    return $fullPath
+}
+
+function Get-SafePackageFiles {
+    param([string]$PackageRoot)
+
+    $pending = New-Object 'System.Collections.Generic.Stack[string]'
+    $files = New-Object 'System.Collections.Generic.List[System.IO.FileInfo]'
+    $pending.Push($PackageRoot)
+
+    while ($pending.Count -gt 0) {
+        $directory = $pending.Pop()
+        foreach ($item in Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop) {
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Signed package contains a reparse-backed entry: $($item.FullName)"
+            }
+            if ($item.PSIsContainer) {
+                $pending.Push($item.FullName)
+                continue
+            }
+            if (-not ($item -is [IO.FileInfo])) {
+                throw "Signed package contains a non-regular filesystem entry: $($item.FullName)"
+            }
+            $files.Add($item)
+        }
+    }
+
+    return @($files | Sort-Object FullName)
+}
+
 function Assert-AuthenticodeSigner {
     param([string]$Path, [string]$ExpectedSigner, [string]$Label)
     $signature = Get-AuthenticodeSignature -FilePath $Path
@@ -60,10 +167,10 @@ function Read-ManagedProductVersion {
     }
 }
 
-$package = (Resolve-Path -LiteralPath $PackageDirectory).Path
-$packagePath = [IO.Path]::GetFullPath($package).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+$packagePath = Assert-SafeDirectory -Path $PackageDirectory -Label 'PackageDirectory'
+$package = $packagePath
 $packageRoot = $packagePath + [IO.Path]::DirectorySeparatorChar
-$zip = [IO.Path]::GetFullPath($PackageZip)
+$zip = Get-CanonicalFullPath -Path $PackageZip -Label 'PackageZip'
 if (-not [string]::Equals([IO.Path]::GetExtension($zip), '.zip', [StringComparison]::OrdinalIgnoreCase)) {
     throw "PackageZip must use the .zip extension: $zip"
 }
@@ -71,12 +178,12 @@ if ([string]::Equals($zip, $packagePath, [StringComparison]::OrdinalIgnoreCase) 
     $zip.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'PackageZip must be outside PackageDirectory so finalization cannot delete or overwrite package payload.'
 }
+$zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'
+$null = @(Get-SafePackageFiles -PackageRoot $package)
 $expectedSigner = Normalize-Thumbprint $ExpectedSignerThumbprint
-$metadataPath = Join-Path $package 'PACKAGE-METADATA.json'
-if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "Missing signed-package artifact: $metadataPath" }
+$metadataPath = Assert-SafeFile -Path (Join-Path $package 'PACKAGE-METADATA.json') -Label 'PACKAGE-METADATA.json'
 foreach ($name in $SignedPayloadNames) {
-    $path = Join-Path $package $name
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing signed-package artifact: $path" }
+    $path = Assert-SafeFile -Path (Join-Path $package $name) -Label ("signed-package artifact " + $name)
     Assert-AuthenticodeSigner -Path $path -ExpectedSigner $expectedSigner -Label ("QS3D executable payload " + $name)
 }
 
@@ -93,7 +200,7 @@ if ([string]::IsNullOrWhiteSpace($metadataProductVersion)) { throw 'PACKAGE-META
 $managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')
 $managedIdentities = @{}
 foreach ($name in $managedIdentityNames) {
-    $path = Join-Path $package $name
+    $path = Assert-SafeFile -Path (Join-Path $package $name) -Label ("managed signed-package artifact " + $name)
     $assemblyVersion = Read-ManagedAssemblyVersion -Path $path -Label $name
     if ($metadataVersion -ne $assemblyVersion) {
         throw "PACKAGE-METADATA version $metadataVersion does not match signed $name assembly version $assemblyVersion."
@@ -120,9 +227,12 @@ $metadata | Add-Member -NotePropertyName signedPackageFinalizedUtc -NoteProperty
 $metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
 
 $hashManifest = Join-Path $package 'SHA256SUMS.txt'
-if (Test-Path -LiteralPath $hashManifest) { Remove-Item -LiteralPath $hashManifest -Force }
-$hashLines = foreach ($file in Get-ChildItem -LiteralPath $package -Recurse -File | Sort-Object FullName) {
-    if ($file.FullName -eq $hashManifest) { continue }
+if (Test-Path -LiteralPath $hashManifest) {
+    $hashManifest = Assert-SafeFile -Path $hashManifest -Label 'SHA256SUMS.txt'
+    Remove-Item -LiteralPath $hashManifest -Force
+}
+$hashLines = foreach ($file in Get-SafePackageFiles -PackageRoot $package) {
+    if ([string]::Equals($file.FullName, $hashManifest, [StringComparison]::OrdinalIgnoreCase)) { continue }
     $relative = $file.FullName.Substring($package.Length).TrimStart('\', '/').Replace([IO.Path]::DirectorySeparatorChar, '/')
     if ([string]::IsNullOrWhiteSpace($relative) -or [IO.Path]::IsPathRooted($relative) -or $relative.Contains(':') -or $relative.Contains('\')) {
         throw "Unsafe package-relative path while hashing: $relative"
@@ -138,7 +248,12 @@ if (@($hashLines).Count -eq 0) { throw 'Signed package contains no payload files
 $hashLines | Set-Content -LiteralPath $hashManifest -Encoding ASCII
 
 $zipParent = Split-Path -Parent $zip
-if (-not [string]::IsNullOrWhiteSpace($zipParent)) { New-Item -ItemType Directory -Path $zipParent -Force | Out-Null }
+if (-not [string]::IsNullOrWhiteSpace($zipParent)) {
+    Assert-NoReparseDirectoryChain -Path $zipParent -Label 'PackageZip parent'
+    New-Item -ItemType Directory -Path $zipParent -Force | Out-Null
+    Assert-NoReparseDirectoryChain -Path $zipParent -Label 'PackageZip parent'
+}
+$zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 Compress-Archive -Path (Join-Path $package '*') -DestinationPath $zip -CompressionLevel Optimal
 
