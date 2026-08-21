@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Text;
+using System.Xml.Linq;
 using QS3D.Core.Export;
 using QS3D.Core.Reporting;
 
@@ -13,6 +16,11 @@ namespace QS3D.Core.SmokeTests
         {
             CustomerWorkbookRoundTripsDetailAndAggregateTrace();
             CustomerWorkbookPreservesEvidenceBlankVersusMeasuredZero();
+            CustomerTraceReaderSupportsSharedStringResave();
+            CustomerTraceReaderSupportsRichSharedStrings();
+            CustomerTraceReaderRejectsMissingSharedStringsPart();
+            CustomerTraceReaderRejectsInvalidSharedStringIndex();
+            CustomerTraceReaderRejectsDuplicateSharedStringsPart();
             CustomerTraceReaderRejectsUnsupportedSheet();
             CustomerTraceReaderRejectsTamperedTraceIdentity();
             CustomerWorkbookRejectsMalformedProvenance();
@@ -67,9 +75,146 @@ namespace QS3D.Core.SmokeTests
                 QsCustomerWorkbookExporter.Export(path, Details(), Summary());
                 var detail = ReadEntry(path, "xl/worksheets/sheet3.xml");
 
-                // CHI_TIET: H=Gross, I=Deduction. E1 has measured gross zero but no deduction evidence.
                 RequireCellValue(detail, "H2", "0", "Measured zero gross quantity must remain numeric zero.");
                 RequireMissingCell(detail, "I2", "Unsupported deduction must remain blank rather than fabricated zero.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
+        private static void CustomerTraceReaderSupportsSharedStringResave()
+        {
+            var root = TempDirectory("customer-workbook-shared-strings");
+            try
+            {
+                var path = Path.Combine(root, "qs-customer.xlsx");
+                QsCustomerWorkbookExporter.Export(path, Details(), Summary());
+                ConvertInlineStringsToSharedStrings(path);
+
+                var aggregate = QsCustomerWorkbookTraceReader.Read(path, "DGKL", 2);
+                Require(aggregate.ElementIds.Count == 2 && aggregate.Handles.Count == 2,
+                    "Shared-string DGKL resave must preserve aggregate trace identity.");
+                var detail = QsCustomerWorkbookTraceReader.Read(path, "CHI_TIET", 3);
+                Require(detail.ElementIds.Count == 1 && detail.ElementIds[0] == "E2",
+                    "Shared-string CHI_TIET resave must preserve semantic element identity.");
+                Require(detail.Handles.Count == 1 && detail.Handles[0] == "8000000000000000",
+                    "Shared-string CHI_TIET resave must preserve unsigned CAD Handle identity.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
+        private static void CustomerTraceReaderSupportsRichSharedStrings()
+        {
+            var root = TempDirectory("customer-workbook-rich-shared-strings");
+            try
+            {
+                var path = Path.Combine(root, "qs-customer.xlsx");
+                QsCustomerWorkbookExporter.Export(path, Details(), Summary());
+                var indexes = ConvertInlineStringsToSharedStrings(path);
+                int traceHeaderIndex;
+                Require(indexes.TryGetValue(QsCustomerWorkbookExporter.TraceHeader, out traceHeaderIndex),
+                    "Shared-string fixture did not include TRACE_KEY.");
+
+                MutateSharedStrings(path, document =>
+                {
+                    XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+                    var items = document.Root!.Elements(ns + "si").ToList();
+                    var item = items[traceHeaderIndex];
+                    item.RemoveNodes();
+                    item.Add(new XElement(ns + "r", new XElement(ns + "t", "TRACE_")));
+                    item.Add(new XElement(ns + "r", new XElement(ns + "t", "KEY")));
+                });
+
+                var trace = QsCustomerWorkbookTraceReader.Read(path, "DGKL", 2);
+                Require(trace.ElementIds.Count == 2,
+                    "Rich-text shared-string runs must concatenate to the original TRACE_KEY header.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
+        private static void CustomerTraceReaderRejectsMissingSharedStringsPart()
+        {
+            var root = TempDirectory("customer-workbook-missing-shared-strings");
+            try
+            {
+                var path = Path.Combine(root, "qs-customer.xlsx");
+                QsCustomerWorkbookExporter.Export(path, Details(), Summary());
+                ConvertInlineStringsToSharedStrings(path);
+                using (var archive = ZipFile.Open(path, ZipArchiveMode.Update))
+                {
+                    var entry = archive.GetEntry("xl/sharedStrings.xml") ?? throw new Exception("Missing shared-string fixture part.");
+                    entry.Delete();
+                }
+                ExpectThrows<InvalidDataException>(() => QsCustomerWorkbookTraceReader.Read(path, "DGKL", 2),
+                    "Reader must reject shared-string cells when sharedStrings.xml is missing.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
+        private static void CustomerTraceReaderRejectsInvalidSharedStringIndex()
+        {
+            var root = TempDirectory("customer-workbook-invalid-shared-index");
+            try
+            {
+                var negativePath = Path.Combine(root, "negative.xlsx");
+                QsCustomerWorkbookExporter.Export(negativePath, Details(), Summary());
+                ConvertInlineStringsToSharedStrings(negativePath);
+                MutateWorksheet(negativePath, "xl/worksheets/sheet1.xml", document =>
+                {
+                    XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+                    var cell = document.Descendants(ns + "c")
+                        .First(item => string.Equals(item.Attribute("t")?.Value, "s", StringComparison.Ordinal));
+                    cell.Element(ns + "v")!.Value = "-1";
+                });
+                ExpectThrows<InvalidDataException>(() => QsCustomerWorkbookTraceReader.Read(negativePath, "DGKL", 2),
+                    "Reader must reject negative shared-string indices.");
+
+                var outOfRangePath = Path.Combine(root, "out-of-range.xlsx");
+                QsCustomerWorkbookExporter.Export(outOfRangePath, Details(), Summary());
+                ConvertInlineStringsToSharedStrings(outOfRangePath);
+                MutateWorksheet(outOfRangePath, "xl/worksheets/sheet1.xml", document =>
+                {
+                    XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+                    var cell = document.Descendants(ns + "c")
+                        .First(item => string.Equals(item.Attribute("t")?.Value, "s", StringComparison.Ordinal));
+                    cell.Element(ns + "v")!.Value = "2147483647";
+                });
+                ExpectThrows<InvalidDataException>(() => QsCustomerWorkbookTraceReader.Read(outOfRangePath, "DGKL", 2),
+                    "Reader must reject out-of-range shared-string indices.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
+        private static void CustomerTraceReaderRejectsDuplicateSharedStringsPart()
+        {
+            var root = TempDirectory("customer-workbook-duplicate-shared-strings");
+            try
+            {
+                var path = Path.Combine(root, "qs-customer.xlsx");
+                QsCustomerWorkbookExporter.Export(path, Details(), Summary());
+                ConvertInlineStringsToSharedStrings(path);
+                using (var archive = ZipFile.Open(path, ZipArchiveMode.Update))
+                {
+                    var duplicate = archive.CreateEntry("xl/sharedStrings.xml", CompressionLevel.Optimal);
+                    using (var writer = new StreamWriter(duplicate.Open(), new UTF8Encoding(false)))
+                        writer.Write("<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><si><t>duplicate</t></si></sst>");
+                }
+                ExpectThrows<InvalidDataException>(() => QsCustomerWorkbookTraceReader.Read(path, "DGKL", 2),
+                    "Reader must reject duplicate sharedStrings.xml package parts.");
             }
             finally
             {
@@ -251,6 +396,79 @@ namespace QS3D.Core.SmokeTests
             row.ElementIds.Add(elementId);
             row.SourceHandles.Add(handle);
             return row;
+        }
+
+        private static Dictionary<string, int> ConvertInlineStringsToSharedStrings(string path)
+        {
+            var strings = new List<string>();
+            var indexes = new Dictionary<string, int>(StringComparer.Ordinal);
+            XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+
+            using (var archive = ZipFile.Open(path, ZipArchiveMode.Update))
+            {
+                var worksheetNames = archive.Entries
+                    .Where(entry => entry.FullName.StartsWith("xl/worksheets/", StringComparison.Ordinal) && entry.FullName.EndsWith(".xml", StringComparison.Ordinal))
+                    .Select(entry => entry.FullName)
+                    .ToList();
+                foreach (var worksheetName in worksheetNames)
+                {
+                    var entry = archive.GetEntry(worksheetName) ?? throw new Exception("Missing worksheet fixture part: " + worksheetName + ".");
+                    XDocument document;
+                    using (var stream = entry.Open()) document = XDocument.Load(stream, LoadOptions.PreserveWhitespace);
+                    foreach (var cell in document.Descendants(ns + "c").Where(item => string.Equals(item.Attribute("t")?.Value, "inlineStr", StringComparison.Ordinal)).ToList())
+                    {
+                        var value = string.Concat(cell.Descendants(ns + "t").Select(text => text.Value));
+                        int index;
+                        if (!indexes.TryGetValue(value, out index))
+                        {
+                            index = strings.Count;
+                            strings.Add(value);
+                            indexes.Add(value, index);
+                        }
+                        cell.Elements(ns + "is").Remove();
+                        cell.SetAttributeValue("t", "s");
+                        cell.Add(new XElement(ns + "v", index));
+                    }
+                    entry.Delete();
+                    var replacement = archive.CreateEntry(worksheetName, CompressionLevel.Optimal);
+                    using (var writer = new StreamWriter(replacement.Open(), new UTF8Encoding(false)))
+                        document.Save(writer, SaveOptions.DisableFormatting);
+                }
+
+                var shared = archive.CreateEntry("xl/sharedStrings.xml", CompressionLevel.Optimal);
+                var sst = new XDocument(new XElement(ns + "sst",
+                    new XAttribute("count", strings.Count),
+                    new XAttribute("uniqueCount", strings.Count),
+                    strings.Select(value => new XElement(ns + "si", new XElement(ns + "t", value)))));
+                using (var writer = new StreamWriter(shared.Open(), new UTF8Encoding(false)))
+                    sst.Save(writer, SaveOptions.DisableFormatting);
+            }
+            return indexes;
+        }
+
+        private static void MutateSharedStrings(string path, Action<XDocument> mutation)
+        {
+            MutateXmlEntry(path, "xl/sharedStrings.xml", mutation);
+        }
+
+        private static void MutateWorksheet(string path, string entryName, Action<XDocument> mutation)
+        {
+            MutateXmlEntry(path, entryName, mutation);
+        }
+
+        private static void MutateXmlEntry(string path, string entryName, Action<XDocument> mutation)
+        {
+            using (var archive = ZipFile.Open(path, ZipArchiveMode.Update))
+            {
+                var entry = archive.GetEntry(entryName) ?? throw new Exception("Missing XLSX entry: " + entryName + ".");
+                XDocument document;
+                using (var stream = entry.Open()) document = XDocument.Load(stream, LoadOptions.PreserveWhitespace);
+                mutation(document);
+                entry.Delete();
+                var replacement = archive.CreateEntry(entryName, CompressionLevel.Optimal);
+                using (var writer = new StreamWriter(replacement.Open(), new UTF8Encoding(false)))
+                    document.Save(writer, SaveOptions.DisableFormatting);
+            }
         }
 
         private static string ReadEntry(string path, string entryName)
