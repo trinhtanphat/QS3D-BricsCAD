@@ -10,8 +10,8 @@ internal static class CurtainWallOpeningFrameCoordinateCollapseSmoke
         OpeningWidthCollapseFailsClosed();
         OpeningHeightCollapseFailsClosed();
         PositiveClearanceCollapseFailsClosed();
-        FrameWidthCollapseFailsClosed();
-        FrameHeightCollapseFailsClosed();
+        FrameWidthCollapseFailsClosedAtRectBoundary();
+        FrameHeightCollapseFailsClosedAtRectBoundary();
         OrdinaryInterruptionRemainsStable();
     }
 
@@ -40,20 +40,20 @@ internal static class CurtainWallOpeningFrameCoordinateCollapseSmoke
         Equal("opening[0] horizontal clearance is below the representable coordinate resolution.", error.Message);
     }
 
-    private static void FrameWidthCollapseFailsClosed()
+    private static void FrameWidthCollapseFailsClosedAtRectBoundary()
     {
         var error = Capture<OverflowException>(() => CurtainWallOpeningFramePlanner.Plan(
             new[] { new CurtainWallRect(1e16d, 0d, 1d, 1d) },
             Array.Empty<CurtainWallOpeningRect>()));
-        Equal("frame[0] width is below the representable coordinate resolution.", error.Message);
+        Equal("Curtain rectangle width is below the representable coordinate resolution.", error.Message);
     }
 
-    private static void FrameHeightCollapseFailsClosed()
+    private static void FrameHeightCollapseFailsClosedAtRectBoundary()
     {
         var error = Capture<OverflowException>(() => CurtainWallOpeningFramePlanner.Plan(
             new[] { new CurtainWallRect(0d, 1e16d, 1d, 1d) },
             Array.Empty<CurtainWallOpeningRect>()));
-        Equal("frame[0] height is below the representable coordinate resolution.", error.Message);
+        Equal("Curtain rectangle height is below the representable coordinate resolution.", error.Message);
     }
 
     private static void OrdinaryInterruptionRemainsStable()

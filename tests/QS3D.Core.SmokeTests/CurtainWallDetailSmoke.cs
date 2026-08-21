@@ -10,6 +10,8 @@ namespace QS3D.Core.SmokeTests
             DetailGridMatchesClearGlassArea();
             SinglePanelKeepsOnlyPerimeterFrames();
             NativeDetailCapRejectsHugeGrid();
+            PublicRectRejectsInvalidGeometry();
+            PublicRectPreservesCanonicalGeometry();
         }
 
         private static CurtainWallLayoutInput Standard() => new CurtainWallLayoutInput
@@ -71,6 +73,30 @@ namespace QS3D.Core.SmokeTests
                 MullionWidthM = 0.02d,
                 TransomWidthM = 0.02d
             }));
+        }
+
+        private static void PublicRectRejectsInvalidGeometry()
+        {
+            Throws<ArgumentOutOfRangeException>(() => new CurtainWallRect(double.NaN, 0d, 1d, 1d));
+            Throws<ArgumentOutOfRangeException>(() => new CurtainWallRect(0d, double.PositiveInfinity, 1d, 1d));
+            Throws<ArgumentOutOfRangeException>(() => new CurtainWallRect(-1d, 0d, 1d, 1d));
+            Throws<ArgumentOutOfRangeException>(() => new CurtainWallRect(0d, -1d, 1d, 1d));
+            Throws<ArgumentOutOfRangeException>(() => new CurtainWallRect(0d, 0d, 0d, 1d));
+            Throws<ArgumentOutOfRangeException>(() => new CurtainWallRect(0d, 0d, -1d, -1d));
+            Throws<ArgumentOutOfRangeException>(() => new CurtainWallRect(0d, 0d, double.NegativeInfinity, 1d));
+            Throws<OverflowException>(() => new CurtainWallRect(double.MaxValue, 0d, double.MaxValue, 1d));
+            Throws<OverflowException>(() => new CurtainWallRect(double.MaxValue, 0d, double.Epsilon, 1d));
+            Throws<OverflowException>(() => new CurtainWallRect(0d, double.MaxValue, 1d, double.Epsilon));
+        }
+
+        private static void PublicRectPreservesCanonicalGeometry()
+        {
+            var rect = new CurtainWallRect(1.25d, 2.5d, 3d, 4d);
+            Near(1.25d, rect.X_M);
+            Near(2.5d, rect.Z_M);
+            Near(3d, rect.WidthM);
+            Near(4d, rect.HeightM);
+            Near(12d, rect.AreaM2);
         }
 
         private static void Equal(int expected, int actual)
