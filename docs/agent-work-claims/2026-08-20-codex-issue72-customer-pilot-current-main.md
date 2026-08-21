@@ -4,6 +4,7 @@
 - Lane-Key: `issue-72`
 - Canonical owner/session: `codex-root-20260820`
 - Canonical carrier: `agent/codex/issue72-customer-pilot-20260820`
+- Canonical issue: `#72`
 - Canonical PR: `#3402`
 - Validated publication baseline main SHA:
   `577d835872ada46f6521fff1c2e85a4f15cedd46`
