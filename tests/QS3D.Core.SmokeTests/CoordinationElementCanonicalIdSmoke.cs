@@ -15,14 +15,15 @@ namespace QS3D.Core.SmokeTests
             CanonicalIdentityIsPreserved();
             PaddedIdentityFailsClosed();
             ControlCharacterIdentityFailsClosed();
-            ClassificationTextStillNormalizes();
+            ClassificationTextFailsClosedInsteadOfNormalizing();
             DuplicateIdentityRemainsCaseInsensitive();
         }
 
         private static void CanonicalIdentityIsPreserved()
         {
-            var element = Create("E-01", " Structure ");
+            var element = Create("E-01", "Structure");
             Assert(element.ElementId == "E-01", "Canonical coordination element id changed.");
+            Assert(element.Discipline == "Structure", "Canonical coordination discipline changed.");
         }
 
         private static void PaddedIdentityFailsClosed()
@@ -40,20 +41,13 @@ namespace QS3D.Core.SmokeTests
             ExpectArgument(() => Create("E-\0-01", "Structure"));
         }
 
-        private static void ClassificationTextStillNormalizes()
+        private static void ClassificationTextFailsClosedInsteadOfNormalizing()
         {
-            var element = new CoordinationElement(
-                "E-02",
-                " Structure ",
-                " Beam ",
-                " Primary ",
-                " Zone A ",
-                new AxisAlignedBox(0d, 0d, 0d, 1d, 1d, 1d));
-
-            Assert(element.Discipline == "Structure", "Discipline trimming changed.");
-            Assert(element.Category == "Beam", "Category trimming changed.");
-            Assert(element.System == "Primary", "System trimming changed.");
-            Assert(element.Region == "Zone A", "Region trimming changed.");
+            var bounds = new AxisAlignedBox(0d, 0d, 0d, 1d, 1d, 1d);
+            ExpectArgument(() => new CoordinationElement("E-02", " Structure ", "Beam", "Primary", "Zone A", bounds));
+            ExpectArgument(() => new CoordinationElement("E-02", "Structure", " Beam ", "Primary", "Zone A", bounds));
+            ExpectArgument(() => new CoordinationElement("E-02", "Structure", "Beam", " Primary ", "Zone A", bounds));
+            ExpectArgument(() => new CoordinationElement("E-02", "Structure", "Beam", "Primary", " Zone A ", bounds));
         }
 
         private static void DuplicateIdentityRemainsCaseInsensitive()
@@ -90,7 +84,7 @@ namespace QS3D.Core.SmokeTests
                 return;
             }
 
-            throw new InvalidOperationException("Expected coordination canonical-id validation to reject the input.");
+            throw new InvalidOperationException("Expected coordination canonical validation to reject the input.");
         }
 
         private static void Assert(bool condition, string message)

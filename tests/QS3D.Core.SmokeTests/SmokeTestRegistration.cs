@@ -5,6 +5,7 @@ namespace QS3D.Core.SmokeTests
         internal static void RunAll()
         {
             ProjectQuantitySmoke.Run();
+            GoldenProjectE2ERegressionSmoke.Run();
             P0QuantityContractRegressionSmoke.Run();
             QuantityReportSelectionCountIntegritySmoke.Run();
             QuantityRuleCanonicalNumericKeySmoke.Run();
@@ -178,6 +179,7 @@ namespace QS3D.Core.SmokeTests
             FamilyTemplateImportSmoke.Run();
             ProjectFamilyQuickSchemaSmoke.Run();
             ProjectOnboardingRegression.Run();
+            ProjectOnboardingActiveFloorCanonicalSmoke.Run();
             ProjectFamilyActivationRevisionSmoke.Run();
             RegenerationAtomicitySmoke.Run();
             HostLinkCanonicalizationSmoke.Run();

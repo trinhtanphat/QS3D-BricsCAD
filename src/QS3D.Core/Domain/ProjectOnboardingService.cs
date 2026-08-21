@@ -144,18 +144,23 @@ namespace QS3D.Core.Domain
 
                 ValidateMaterial(explicitMaterial, category);
                 var exact = ProjectFamilyQuickSchemaService.FindIdentityMatches(project, category, values, explicitMaterial);
+                if (exact.Count > 1)
+                    throw new InvalidOperationException(
+                        "Starter onboarding found multiple exact Family matches for " + category +
+                        ". Repair the Family catalog before onboarding so canonical reuse is unambiguous.");
                 plans.Add(new StarterPlan
                 {
                     Category = category,
                     Material = explicitMaterial,
                     Values = values,
-                    ReusedFamily = exact.Count > 0 ? exact[0] : null
+                    ReusedFamily = exact.Count == 1 ? exact[0] : null
                 });
             }
 
             if (missingMaterials.Count > 0)
                 return Result(ProjectOnboardingStatus.NeedsMaterialConfirmation, effectiveUnit, missingMaterials, project);
 
+            var existingFloorToActivate = ResolveExistingFloorActivationPlan(project);
             var createCount = plans.Count(x => x.ReusedFamily == null);
             if (project.Families.Count + createCount > MaxFamilies)
                 throw new InvalidOperationException("Starter onboarding would exceed the supported 10000 Family limit.");
@@ -166,6 +171,8 @@ namespace QS3D.Core.Domain
 
             if (project.Floors.Count == 0)
                 ProjectFloorService.Create(project, StarterFloorId, StarterFloorName, 0d);
+            else if (existingFloorToActivate != null)
+                ProjectFloorService.SetActive(project, existingFloorToActivate.Id);
 
             var created = new List<string>();
             var reused = new List<string>();
@@ -286,6 +293,30 @@ namespace QS3D.Core.Domain
         {
             if (!HasTrustedMaterial(family)) return string.Empty;
             return (family.Properties[MaterialKey] ?? string.Empty).Trim();
+        }
+
+        private static FloorDefinition? ResolveExistingFloorActivationPlan(ProjectState project)
+        {
+            var rawActiveFloorId = project.ActiveFloorId ?? string.Empty;
+            var activeFloorId = rawActiveFloorId.Trim();
+            if (activeFloorId.Length > 0)
+            {
+                var activeFloor = project.Floors.SingleOrDefault(
+                    x => string.Equals(x.Id, activeFloorId, StringComparison.OrdinalIgnoreCase));
+                if (activeFloor == null)
+                    throw new InvalidOperationException(
+                        "Project active Floor '" + activeFloorId + "' was not found in the current Floor catalog. Repair the active Floor reference before onboarding.");
+
+                return string.Equals(rawActiveFloorId, activeFloor.Id, StringComparison.Ordinal)
+                    ? null
+                    : activeFloor;
+            }
+
+            if (project.Floors.Count == 0) return null;
+            if (project.Floors.Count == 1) return project.Floors[0];
+
+            throw new InvalidOperationException(
+                "Project contains multiple Floors but no active Floor is selected. Select the intended active Floor before onboarding.");
         }
 
         private static string MakeUniqueFamilyId(ProjectState project, ElementCategory category)
