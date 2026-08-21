@@ -106,7 +106,7 @@ def test_main_passes_one_sanitized_environment_to_every_child():
         assert first_env["PYTHONNOUSERSITE"] == "1"
         assert first_env["PYTHONDONTWRITEBYTECODE"] == "1"
         for args, kwargs in calls:
-            assert args[0][0] == module.sys.executable
+            assert args[0] == module.sys.executable
             assert kwargs["cwd"] == str(root)
             assert kwargs["check"] is False
             assert kwargs["timeout"] == module.CHILD_TIMEOUT_SECONDS

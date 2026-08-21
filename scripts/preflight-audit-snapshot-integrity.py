@@ -49,10 +49,12 @@ if AUDIT.is_file():
     record_pos = text.find("public void Record(")
     clear_pos = text.find("public void Clear()", record_pos)
     record_text = text[record_pos:clear_pos] if record_pos >= 0 and clear_pos > record_pos else ""
-    record_validate_pos = record_text.find("ValidateExistingHistory(requireAppendCapacity: true);")
+    record_validate_pos = record_text.find(
+        "ValidateExistingHistory(requireAppendCapacity: true, additionalTextCharacters: newTextCharacters);"
+    )
     record_add_pos = record_text.find("_events.Add(item);")
     if record_validate_pos < 0 or record_add_pos < 0 or record_validate_pos >= record_add_pos:
-        errors.append("AuditTrail.Record must validate existing history before adding a new audit event.")
+        errors.append("AuditTrail.Record must validate existing history and aggregate text capacity before adding a new audit event.")
 
     clear_method_pos = text.find("public void Clear()")
     validate_method_pos = text.find("private int ValidateExistingHistory", clear_method_pos)
