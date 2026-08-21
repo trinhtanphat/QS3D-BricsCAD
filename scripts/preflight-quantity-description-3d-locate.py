@@ -33,7 +33,7 @@ for needle in (
     "var expectedCount = displayedHandles.Length > 0 ? displayedHandles.Length : liveHandles.Length;",
     "if (selectedCount <= 0)",
     "selectedCount < expectedCount",
-    '_document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);',
+    "global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(_document)",
 ):
     if needle not in locate:
         errors.append("locate flow missing contract: " + needle)
@@ -41,9 +41,11 @@ for needle in (
 if locate:
     select_pos = locate.find("Cad.CadHandleService.Select(_document, liveHandles)")
     zero_guard_pos = locate.find("if (selectedCount <= 0)")
-    zoom_pos = locate.find('_document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);')
+    zoom_pos = locate.find("global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(_document)")
     if not (0 <= select_pos < zero_guard_pos < zoom_pos):
         errors.append("zoom must remain after CAD selection and zero-selection guard")
+    if 'SendStringToExecute("QS3DZOOMSELECTED ' in locate:
+        errors.append("locate must zoom the exact bound document without queued command re-entry")
 
 for needle in (
     "var displayedIds = CanonicalIds(displayedRow.ElementIds);",

@@ -89,12 +89,13 @@ for needle in (
 
 summary_select = "Cad.CadHandleService.Select(_document, liveHandles)"
 summary_clear = "Cad.CadHandleService.ClearSelection(_document)"
+summary_zoom = "global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(_document)"
 for needle in (
     summary_select,
     "if (selectedCount <= 0)",
     summary_clear,
     "if (_locate != null)",
-    '_document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);',
+    summary_zoom,
 ):
     if needle not in summary_locate:
         errors.append("QuantitySummary locate missing contract: " + needle)
@@ -104,10 +105,12 @@ if summary_locate:
         errors.append("QuantitySummary must use normal Select only for the positive-candidate locate attempt")
     if summary_locate.count(summary_clear) < 2:
         errors.append("QuantitySummary must explicitly clear both zero-resolved and zero-candidate stale selection paths")
+    if 'SendStringToExecute("QS3DZOOMSELECTED ' in summary_locate:
+        errors.append("QuantitySummary must use direct in-process zoom rather than queued command re-entry")
     select_pos = summary_locate.find(summary_select)
     zero_resolved_guard_pos = summary_locate.find("if (selectedCount <= 0)", select_pos)
     zero_resolved_clear_pos = summary_locate.find(summary_clear, zero_resolved_guard_pos)
-    zoom_pos = summary_locate.find('_document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);')
+    zoom_pos = summary_locate.find(summary_zoom)
     zero_candidate_clear_pos = summary_locate.find(summary_clear, zoom_pos)
     fallback_pos = summary_locate.find("if (_locate != null)")
     if not (0 <= select_pos < zero_resolved_guard_pos < zero_resolved_clear_pos < zoom_pos < zero_candidate_clear_pos < fallback_pos):
@@ -165,5 +168,5 @@ if errors:
 
 print(
     "PASS: normal CAD Select preserves implied selection when no handle resolves, explicit ClearSelection removes stale PICKFIRST on failed quantity locate paths, "
-    "and both quantity surfaces keep multi-object resolution with zoom gated on a positive live selection; Insight uses direct in-process zoom."
+    "and both quantity surfaces keep multi-object resolution with direct in-process zoom gated on a positive live selection."
 )
