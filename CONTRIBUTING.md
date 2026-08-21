@@ -21,7 +21,7 @@ Normal work uses a dedicated branch from the latest valid `main`, normally `agen
 
 Keep commits reviewable and request-scoped. Do not split one coherent fix into file-by-file commits, and do not mix unrelated fixes just because they were found in the same session.
 
-`main` is read-only for direct task writes by normal agents and contributors. Requests such as `fix bug`, `continue all`, `commit push git`, `update docs`, or `update md` never authorize a direct contents write/ref update to `main`.
+`main` is read-only for normal agents and contributors. In particular, this means direct task writes remain forbidden: requests such as `fix bug`, `continue all`, `commit push git`, `update docs`, or `update md` never authorize a direct contents write/ref update to `main`.
 
 For a normal repository-owner request, `docs/MAIN-WRITE-AUTHORIZATION.md` provides standing authorization to merge the **same task PR** once all current required checks are green, the candidate is current and mergeable, and the owner has not explicitly opted out. That standing authorization does not permit unrelated/bulk merges or any protection bypass.
 
@@ -50,7 +50,7 @@ Do not commit BricsCAD runtime assemblies, private drawings, signing certificate
 
 ## Pull requests
 
-Use the pull-request template. Link the task issue, record the exact validated branch SHA, identify runtime/release impact, and keep the PR limited to its registered scope.
+Use the pull-request template. Link the task issue, record the exact validated branch SHA, identify runtime/release impact, and keep the PR limited to its registered scope. A PR does not self-authorize merge.
 
 A green PR does not create merge permission by itself. Merge the same owner-requested task PR only through the protected path when the standing same-task authorization in `docs/MAIN-WRITE-AUTHORIZATION.md` applies and every current gate is satisfied. Otherwise stop at the authorized boundary.
 
