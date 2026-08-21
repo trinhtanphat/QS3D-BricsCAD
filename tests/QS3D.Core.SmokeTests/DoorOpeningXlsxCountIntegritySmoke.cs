@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using QS3D.Core.Export;
 using QS3D.Core.Reporting;
 
@@ -13,6 +14,8 @@ namespace QS3D.Core.SmokeTests
         {
             AssertRowCountDriftFailsBeforeExistingDestinationReplacement();
             AssertRowCountDriftFailsBeforeFilesystemCreation();
+            AssertProvenanceIsExported();
+            AssertOversizedSourceHandlesFailBeforeFilesystemCreation();
         }
 
         private static void AssertRowCountDriftFailsBeforeExistingDestinationReplacement()
@@ -55,6 +58,74 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void AssertProvenanceIsExported()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-door-opening-xlsx-provenance-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var destination = Path.Combine(root, "door-opening.xlsx");
+                var row = ValidRow();
+                row.ProjectId = "project-door-opening";
+                row.DrawingFingerprint = "drawing-fingerprint-door-opening";
+                row.SourceHandles.Add("AB12");
+                row.SourceHandles.Add("CD34");
+
+                DoorOpeningXlsxExporter.Export(destination, new[] { row });
+
+                using (var archive = ZipFile.OpenRead(destination))
+                {
+                    var entry = archive.GetEntry("xl/worksheets/sheet1.xml")
+                        ?? throw new InvalidOperationException("Door/opening XLSX is missing sheet1.xml.");
+                    string xml;
+                    using (var reader = new StreamReader(entry.Open())) xml = reader.ReadToEnd();
+                    AssertContains(xml, "<dimension ref=\"A1:P2\"/>", "expanded provenance worksheet range");
+                    AssertContains(xml, "Project ID", "Project ID header");
+                    AssertContains(xml, "Drawing Fingerprint", "Drawing Fingerprint header");
+                    AssertContains(xml, "Source Handles", "Source Handles header");
+                    AssertContains(xml, "project-door-opening", "Project ID value");
+                    AssertContains(xml, "drawing-fingerprint-door-opening", "Drawing Fingerprint value");
+                    AssertContains(xml, "AB12;CD34", "Source Handles value");
+                }
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
+        private static void AssertOversizedSourceHandlesFailBeforeFilesystemCreation()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-door-opening-xlsx-provenance-bound-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var untouchedDirectory = Path.Combine(root, "must-not-be-created");
+                var row = ValidRow();
+                row.SourceHandles.Add(new string('A', 32768));
+                try
+                {
+                    DoorOpeningXlsxExporter.Export(Path.Combine(untouchedDirectory, "door-opening.xlsx"), new[] { row });
+                }
+                catch (ArgumentOutOfRangeException ex)
+                {
+                    if (ex.Message.IndexOf("Source Handles", StringComparison.OrdinalIgnoreCase) < 0)
+                        throw new InvalidOperationException("Door/opening XLSX oversized source-handle failure must identify the provenance field.", ex);
+                    if (Directory.Exists(untouchedDirectory))
+                        throw new InvalidOperationException("Door/opening XLSX oversized source handles touched the filesystem before failing.");
+                    return;
+                }
+
+                throw new InvalidOperationException("Door/opening XLSX exporter accepted source handles exceeding Excel's cell text limit.");
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
         private static void AssertRowCountDrift(string destination)
         {
             try
@@ -69,6 +140,12 @@ namespace QS3D.Core.SmokeTests
             }
 
             throw new InvalidOperationException("Door/opening XLSX exporter accepted a source whose row count changed during snapshot.");
+        }
+
+        private static void AssertContains(string text, string expected, string label)
+        {
+            if (text.IndexOf(expected, StringComparison.Ordinal) < 0)
+                throw new InvalidOperationException("Door/opening XLSX did not preserve expected " + label + ".");
         }
 
         private static DoorOpeningScheduleRow ValidRow()
