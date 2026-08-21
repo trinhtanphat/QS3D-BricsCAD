@@ -11,6 +11,20 @@ namespace QS3D.Core.Geometry
     {
         public SectionDetailVolumePlan(double firstX, double firstY, double baseZ, double oppositeX, double oppositeY, double height)
         {
+            if (!Finite(firstX)) throw new ArgumentOutOfRangeException(nameof(firstX), "BIM Detail volume coordinates must be finite.");
+            if (!Finite(firstY)) throw new ArgumentOutOfRangeException(nameof(firstY), "BIM Detail volume coordinates must be finite.");
+            if (!Finite(baseZ)) throw new ArgumentOutOfRangeException(nameof(baseZ), "BIM Detail volume coordinates must be finite.");
+            if (!Finite(oppositeX)) throw new ArgumentOutOfRangeException(nameof(oppositeX), "BIM Detail volume coordinates must be finite.");
+            if (!Finite(oppositeY)) throw new ArgumentOutOfRangeException(nameof(oppositeY), "BIM Detail volume coordinates must be finite.");
+            if (!Finite(height)) throw new ArgumentOutOfRangeException(nameof(height), "BIM Detail volume height must be finite.");
+            if (!(oppositeX > firstX)) throw new ArgumentOutOfRangeException(nameof(oppositeX), "BIM Detail volume opposite X must be greater than first X.");
+            if (!(oppositeY > firstY)) throw new ArgumentOutOfRangeException(nameof(oppositeY), "BIM Detail volume opposite Y must be greater than first Y.");
+            if (!(height > 0d)) throw new ArgumentOutOfRangeException(nameof(height), "BIM Detail volume height must be greater than zero.");
+
+            var topZ = baseZ + height;
+            if (!Finite(topZ))
+                throw new ArgumentOutOfRangeException(nameof(height), "BIM Detail volume represented top must remain finite.");
+
             FirstX = firstX;
             FirstY = firstY;
             BaseZ = baseZ;
@@ -25,6 +39,8 @@ namespace QS3D.Core.Geometry
         public double OppositeX { get; }
         public double OppositeY { get; }
         public double Height { get; }
+
+        private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
     }
 
     public static class SectionDetailVolumePlanner

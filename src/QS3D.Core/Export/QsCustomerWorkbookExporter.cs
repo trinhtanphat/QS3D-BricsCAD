@@ -179,6 +179,33 @@ namespace QS3D.Core.Export
             var count = summaries.Sum(row => row.Count);
             if (detailIds.Count != details.Count || !summaryIds.SetEquals(detailIds) || !summaryHandles.SetEquals(detailHandles) || count != details.Count)
                 throw new InvalidDataException("Customer workbook detail and grouped rows do not describe the same semantic scope.");
+
+            var handlesByElementId = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var detail in details)
+            {
+                if (detail.ElementIds.Count != 1)
+                    throw new InvalidDataException("Customer workbook CHI_TIET must contain exactly one semantic element per row.");
+                var elementId = detail.ElementIds[0];
+                if (handlesByElementId.ContainsKey(elementId))
+                    throw new InvalidDataException("Customer workbook CHI_TIET contains duplicate semantic Element ID: " + elementId + ".");
+                handlesByElementId.Add(elementId, new HashSet<string>(detail.SourceHandles, StringComparer.OrdinalIgnoreCase));
+            }
+
+            foreach (var summary in summaries)
+            {
+                var expectedHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var elementId in summary.ElementIds)
+                {
+                    HashSet<string> detailRowHandles;
+                    if (!handlesByElementId.TryGetValue(elementId, out detailRowHandles))
+                        throw new InvalidDataException("Customer workbook grouped row references an unknown QS3D Element ID: " + elementId + ".");
+                    expectedHandles.UnionWith(detailRowHandles);
+                }
+
+                var actualHandles = new HashSet<string>(summary.SourceHandles, StringComparer.OrdinalIgnoreCase);
+                if (!actualHandles.SetEquals(expectedHandles))
+                    throw new InvalidDataException("Customer workbook grouped row CAD Handle provenance does not match its QS3D Element IDs.");
+            }
         }
 
         private static string BuildBusinessSheet(

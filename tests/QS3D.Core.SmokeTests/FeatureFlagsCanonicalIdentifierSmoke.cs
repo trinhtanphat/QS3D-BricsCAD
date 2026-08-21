@@ -8,14 +8,17 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             var flags = new FeatureFlags();
-            flags.Set("  Alpha  ", true);
+            flags.Set("Alpha", true);
+            flags.Set("Beta", true);
 
             Require(flags.IsEnabled("alpha"), "Feature flags must preserve case-insensitive identity.");
-            Require(flags.IsEnabled(" Alpha "), "Feature flags must preserve outer-whitespace trimming.");
+            Require(flags.IsEnabled("BETA"), "Feature flags must preserve case-insensitive identity.");
 
-            flags.Set("\tBeta\t", true);
-            Require(flags.IsEnabled("beta"), "Outer whitespace controls must be trimmed before identifier validation.");
+            Require(!flags.IsEnabled(" Alpha "), "Whitespace-padded feature lookups must fail closed.");
+            Require(!flags.IsEnabled("\tBeta\t"), "Control-whitespace feature lookups must fail closed.");
 
+            AssertRejectedWithoutMutation(flags, "  Alpha  ");
+            AssertRejectedWithoutMutation(flags, "\tBeta\t");
             AssertRejectedWithoutMutation(flags, "Alpha\nInjected");
             AssertRejectedWithoutMutation(flags, "Alpha\rInjected");
             AssertRejectedWithoutMutation(flags, "Alpha\tInjected");
@@ -27,7 +30,7 @@ namespace QS3D.Core.SmokeTests
 
             var snapshot = flags.Snapshot();
             Require(snapshot.Count == 2, "Rejected identifiers must not enter the feature snapshot.");
-            Require(snapshot.ContainsKey("Alpha") && snapshot.ContainsKey("Beta"), "Snapshot must preserve canonical trimmed identifiers.");
+            Require(snapshot.ContainsKey("Alpha") && snapshot.ContainsKey("Beta"), "Snapshot must preserve canonical feature identifiers.");
         }
 
         private static void AssertRejectedWithoutMutation(FeatureFlags flags, string name)
@@ -36,7 +39,7 @@ namespace QS3D.Core.SmokeTests
             try
             {
                 flags.Set(name, true);
-                throw new InvalidOperationException("FeatureFlags.Set accepted a control-character identifier.");
+                throw new InvalidOperationException("FeatureFlags.Set accepted a non-canonical identifier.");
             }
             catch (ArgumentException)
             {

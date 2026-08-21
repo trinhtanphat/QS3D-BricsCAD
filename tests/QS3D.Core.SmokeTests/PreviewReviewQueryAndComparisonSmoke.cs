@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             QueryFiltersAndFacetsAreDeterministic();
             QueryResultBoundIsEnforcedAfterFiltering();
             SnapshotComparisonClassifiesRows();
+            SnapshotComparisonEntryBoundIsEnforcedBeforeIndexing();
             ComparisonRejectsDifferentProjects();
             ResultCollectionsAreImmutable();
         }
@@ -107,6 +108,23 @@ namespace QS3D.Core.SmokeTests
             Equal(PreviewReviewDeltaKind.Removed, diff.Rows.Single(x => x.Field == "Quantity:B").Kind);
             Equal(PreviewReviewDeltaKind.Added, diff.Rows.Single(x => x.Field == "Quantity:C").Kind);
             Equal(PreviewReviewDeltaKind.Unchanged, diff.Rows.Single(x => x.Field == "Quantity:D").Kind);
+        }
+
+        private static void SnapshotComparisonEntryBoundIsEnforcedBeforeIndexing()
+        {
+            const int maximum = 10000;
+            const string projectId = "P-COMPARE-BOUND";
+            var exactSnapshot = CreateSnapshot("compare-exact", ProjectWithElementCount(projectId, maximum));
+            var overflowSnapshot = CreateSnapshot("compare-overflow", ProjectWithElementCount(projectId, maximum + 1));
+            var service = new PreviewReviewSnapshotComparisonService();
+
+            var exact = service.Compare(exactSnapshot, exactSnapshot);
+            Equal(maximum, exact.Rows.Count);
+            Equal(maximum, exact.UnchangedCount);
+            True(!exact.HasChanges);
+
+            Throws<InvalidOperationException>(() => service.Compare(overflowSnapshot, exactSnapshot));
+            Throws<InvalidOperationException>(() => service.Compare(exactSnapshot, overflowSnapshot));
         }
 
         private static void ComparisonRejectsDifferentProjects()

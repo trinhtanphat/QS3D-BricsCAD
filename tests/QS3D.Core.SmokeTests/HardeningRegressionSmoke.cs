@@ -183,12 +183,15 @@ namespace QS3D.Core.SmokeTests
         private static void FeatureFlagsNormalizeLookupNames()
         {
             var flags = new FeatureFlags();
-            flags.Set("  hardening.flag  ", true);
+            flags.Set("hardening.flag", true);
 
             True(flags.IsEnabled("hardening.flag"));
-            True(flags.IsEnabled("  HARDENING.FLAG  "));
+            True(flags.IsEnabled("HARDENING.FLAG"));
+            True(!flags.IsEnabled("  HARDENING.FLAG  "));
+            Throws<ArgumentException>(() => flags.Set("  hardening.flag  ", true));
 
             flags.Set("hardening.flag", false);
+            True(!flags.IsEnabled("Hardening.Flag"));
             True(!flags.IsEnabled("  Hardening.Flag  "));
         }
 
