@@ -76,6 +76,48 @@ def main() -> int:
         fake_regular = SimpleNamespace(st_mode=stat.S_IFREG | 0o644, st_file_attributes=0)
         require(module._metadata_type_error(fake_regular) is None, "regular metadata was rejected")
 
+        replacement = root / "replacement.txt"
+        replacement.write_text("stable after replacement\n", encoding="utf-8")
+        original_same_opened_file = module._same_opened_file
+        transient_calls = 0
+
+        def transient_identity(before, opened):
+            nonlocal transient_calls
+            transient_calls += 1
+            if transient_calls == 1:
+                return False
+            return original_same_opened_file(before, opened)
+
+        try:
+            module._same_opened_file = transient_identity
+            text, error = module.read_repository_text(replacement, root, 64)
+        finally:
+            module._same_opened_file = original_same_opened_file
+        require(
+            error is None and text == "stable after replacement\n" and transient_calls == 2,
+            f"single transient identity replacement did not recover with one bounded retry: calls={transient_calls}, error={error}",
+        )
+
+        persistent_calls = 0
+
+        def persistent_identity(before, opened):
+            nonlocal persistent_calls
+            persistent_calls += 1
+            return False
+
+        try:
+            module._same_opened_file = persistent_identity
+            text, error = module.read_repository_text(replacement, root, 64)
+        finally:
+            module._same_opened_file = original_same_opened_file
+        require(
+            text is None
+            and error is not None
+            and "bounded retry" in error
+            and persistent_calls == module.MAX_OPEN_IDENTITY_ATTEMPTS,
+            f"persistently moving identity did not fail closed after bounded retry: calls={persistent_calls}, error={error}",
+        )
+
         scan_root = root / "scan"
         scan_root.mkdir()
         (scan_root / "ordinary.md").mkdir()
@@ -109,6 +151,7 @@ def main() -> int:
     print("PASS: repository professionalism input-safety regression")
     print(" - bounded UTF-8 reads accept the exact boundary and reject one-over inputs")
     print(" - invalid UTF-8, non-regular, outside-root, symlink and reparse candidates fail closed")
+    print(" - one transient file replacement is retried once while persistent identity churn remains fail-closed")
     print(" - orchestration scan skips ordinary suffix-bearing directories while retaining unsafe-link refusal")
     return 0
 
