@@ -11,7 +11,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             InvalidPublicResultStateFailsClosed();
-            TokenWhitespaceIsCanonicalized();
+            TokenWhitespaceContractIsExplicit();
             ZeroValueRemainsValid();
             QuantityEngineResultRemainsValid();
         }
@@ -27,12 +27,14 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => new TakeoffResult("ABCD", TakeoffKind.Count, 1d, " "));
         }
 
-        private static void TokenWhitespaceIsCanonicalized()
+        private static void TokenWhitespaceContractIsExplicit()
         {
-            var result = new TakeoffResult("  ABCD\t", TakeoffKind.Length, 1d, "\tm  ");
+            Throws<ArgumentException>(() => new TakeoffResult("  ABCD\t", TakeoffKind.Length, 1d, "m"));
+
+            var result = new TakeoffResult("ABCD", TakeoffKind.Length, 1d, "\tm  ");
             if (!string.Equals(result.Handle, "ABCD", StringComparison.Ordinal) ||
                 !string.Equals(result.Unit, "m", StringComparison.Ordinal))
-                throw new InvalidOperationException("Takeoff result tokens must be trimmed before storage.");
+                throw new InvalidOperationException("Takeoff handles must stay canonical while units remain trimmed before storage.");
         }
 
         private static void ZeroValueRemainsValid()

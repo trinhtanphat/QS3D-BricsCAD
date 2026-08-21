@@ -20,7 +20,7 @@ if AUDIT.is_file():
         "var snapshot = new List<AuditEvent>(storedCount);",
         "var validationError = GetStoredEventValidationError(item);",
         "if (validationError != null) throw new InvalidOperationException(validationError);",
-        "snapshot.Add(Clone(item!));",
+        "snapshot.Add(Clone(item));",
         "RequireObservedHistoryCount(storedCount, observed);",
         "return snapshot.AsReadOnly();",
         "private static void RequireObservedHistoryCount(int storedCount, int observed)",
@@ -32,7 +32,7 @@ if AUDIT.is_file():
     count_pos = text.find("var storedCount = RequireSupportedHistoryCount(requireAppendCapacity: false);")
     snapshot_pos = text.find("var snapshot = new List<AuditEvent>(storedCount);", count_pos)
     validation_pos = text.find("var validationError = GetStoredEventValidationError(item);")
-    clone_pos = text.find("snapshot.Add(Clone(item!));", validation_pos)
+    clone_pos = text.find("snapshot.Add(Clone(item));", validation_pos)
     equality_pos = text.find("RequireObservedHistoryCount(storedCount, observed);", clone_pos)
     return_pos = text.find("return snapshot.AsReadOnly();", equality_pos)
     if count_pos < 0 or snapshot_pos < 0 or count_pos >= snapshot_pos:
@@ -49,10 +49,12 @@ if AUDIT.is_file():
     record_pos = text.find("public void Record(")
     clear_pos = text.find("public void Clear()", record_pos)
     record_text = text[record_pos:clear_pos] if record_pos >= 0 and clear_pos > record_pos else ""
-    record_validate_pos = record_text.find("ValidateExistingHistory(requireAppendCapacity: true);")
+    record_validate_pos = record_text.find(
+        "ValidateExistingHistory(requireAppendCapacity: true, additionalTextCharacters: newTextCharacters);"
+    )
     record_add_pos = record_text.find("_events.Add(item);")
     if record_validate_pos < 0 or record_add_pos < 0 or record_validate_pos >= record_add_pos:
-        errors.append("AuditTrail.Record must validate existing history before adding a new audit event.")
+        errors.append("AuditTrail.Record must validate existing history and aggregate text capacity before adding a new audit event.")
 
     clear_method_pos = text.find("public void Clear()")
     validate_method_pos = text.find("private int ValidateExistingHistory", clear_method_pos)
