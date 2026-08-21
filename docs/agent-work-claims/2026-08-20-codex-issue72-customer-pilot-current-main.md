@@ -7,11 +7,11 @@
 - Canonical issue: `#72`
 - Canonical PR: `#3402`
 - Validated publication baseline main SHA:
-  `600f6734f264a1474954811b623c26885b165f28`
+  `805bc1dc63c007b562dc5d65529c76b25a7336ab`
 - Refreshed: 2026-08-21 (UTC+7), after fetching the GitHub remote, merging the
   then-current `main`, and re-running the licensed exact-candidate gates.
 - Runtime target: licensed BricsCAD V25.2.10 x64 on disposable synthetic
-  copies only. Exact task candidate `598fe6d46198d49bc2a9af1a681dc6149e23134b`
+  copies only. Exact task candidate `9130c70582f4f67b83d4d63c6a59d3a30f7c0ed8`
   passes the official NETLOAD/Ribbon/Palette baseline plus the current curved
   structural and Curtain P04/P10 gates below. Earlier exact-SHA Level,
   project-lifecycle, Source Reconcile and Curtain P11/P12 evidence remains
@@ -263,21 +263,26 @@ build. The minimum automation-only correction is confined to
 The corrected exact commit `9e6a731e652e41d685a4f35100af6226291d3a7d`
 passed the official qualification and both curved structural unit runs. The
 carrier then fetched and merged the newer
-`main@600f6734f264a1474954811b623c26885b165f28`, including the Curtain frame
-fingerprint boundary hardening, and froze final exact candidate
-`598fe6d46198d49bc2a9af1a681dc6149e23134b`. Matching adapter/Core
+`main@600f6734f9320b6d1e437792a1ca4c737d842f22`, including the Curtain frame
+fingerprint boundary hardening, and froze intermediate candidate
+`598fe6d46198d49bc2a9af1a681dc6149e23134b`. Two further relevant main
+refreshes were then merged deliberately: `c1761be843ad09b91c7385e5ffbd4ff8a0bc1a13`
+snapshotted validated panel fingerprint pieces, and
+`805bc1dc63c007b562dc5d65529c76b25a7336ab` snapshotted the fingerprint input
+scalars. The final frozen exact candidate is
+`9130c70582f4f67b83d4d63c6a59d3a30f7c0ed8`. Matching adapter/Core
 ProductVersion is
-`0.1.0-preview.10081+598fe6d46198d49bc2a9af1a681dc6149e23134b`; adapter
+`0.1.0-preview.10081+9130c70582f4f67b83d4d63c6a59d3a30f7c0ed8`; adapter
 SHA-256 is
-`B31D1B8E3503FF7DDB4B10B0401D980C2FFDE2F8B72B143896A30383B5C3F1FE` and
+`2E31BCF12D3770E62097671CC683628B83A72F6158CC26C302BA6193D965EB1E` and
 Core SHA-256 is
-`4A2402A14EF5A7AE427F092C168268D597103095ED1B20AAA6572EB0407555C9`.
+`8344EB5859583770EEA98B0AB7DCB2F216E26018420E88AF2E658F26D6169B92`.
 
 The official exact-final report is `PASS`:
 
 - manual-only policy and generic preflight: `PASS`;
 - aggregate feature preflight: `962/962 PASS`;
-- smoke registration: `846/846` runnable classes accounted for;
+- smoke registration: `847/847` runnable classes accounted for;
 - Core Release and V25 `Release|x64`: `0 warnings / 0 errors`;
 - deterministic Core smoke: `ALL PASS`;
 - offline WPF Theme/Workspace/RightPanel: `PASS`;
@@ -289,12 +294,14 @@ replacements covered Beam LINE/ARC/CIRCLE/straight-open-POLYLINE/
 curved-open-POLYLINE plus CIRCLE Slab/Column; closed Beam POLYLINE and non-WCS
 Beam CIRCLE failed closed. All expected length/area/Z/positive-volume checks
 passed, and 66 common mm/m marker fields matched within tolerance with zero
-differences. Both synthetic copies remained/restored at SHA-256
+tolerance mismatches; the maximum absolute numeric difference was approximately
+`9.99e-15`. Both synthetic copies remained/restored at SHA-256
 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`;
 both hosts exited gracefully with process, script and private-state cleanup.
 
-Because the latest `main` changed Curtain frame fingerprint behavior, the final
-candidate also reran the affected native review paths:
+Because the successive `main` refreshes changed Curtain frame/panel fingerprint
+snapshot behavior, the final candidate also reran the affected native review
+paths:
 
 - Curtain P04 passed 50 curved tessellation segments plus one straight segment,
   24 source panel cells, 168 authoritative/native panel pieces, 215 frames, 168
