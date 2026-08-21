@@ -174,7 +174,7 @@ namespace QS3D.Core.SmokeTests
                 {
                     XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
                     var cell = document.Descendants(ns + "c")
-                        .First(item => string.Equals((string?)item.Attribute("t"), "s", StringComparison.Ordinal));
+                        .First(item => string.Equals(item.Attribute("t")?.Value, "s", StringComparison.Ordinal));
                     cell.Element(ns + "v")!.Value = "-1";
                 });
                 ExpectThrows<InvalidDataException>(() => QsCustomerWorkbookTraceReader.Read(negativePath, "DGKL", 2),
@@ -187,7 +187,7 @@ namespace QS3D.Core.SmokeTests
                 {
                     XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
                     var cell = document.Descendants(ns + "c")
-                        .First(item => string.Equals((string?)item.Attribute("t"), "s", StringComparison.Ordinal));
+                        .First(item => string.Equals(item.Attribute("t")?.Value, "s", StringComparison.Ordinal));
                     cell.Element(ns + "v")!.Value = "2147483647";
                 });
                 ExpectThrows<InvalidDataException>(() => QsCustomerWorkbookTraceReader.Read(outOfRangePath, "DGKL", 2),
@@ -415,7 +415,7 @@ namespace QS3D.Core.SmokeTests
                     var entry = archive.GetEntry(worksheetName) ?? throw new Exception("Missing worksheet fixture part: " + worksheetName + ".");
                     XDocument document;
                     using (var stream = entry.Open()) document = XDocument.Load(stream, LoadOptions.PreserveWhitespace);
-                    foreach (var cell in document.Descendants(ns + "c").Where(item => string.Equals((string?)item.Attribute("t"), "inlineStr", StringComparison.Ordinal)).ToList())
+                    foreach (var cell in document.Descendants(ns + "c").Where(item => string.Equals(item.Attribute("t")?.Value, "inlineStr", StringComparison.Ordinal)).ToList())
                     {
                         var value = string.Concat(cell.Descendants(ns + "t").Select(text => text.Value));
                         int index;
