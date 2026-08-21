@@ -126,7 +126,7 @@ for needle in (
         errors.append("Insight XAML locate wiring changed: " + needle)
 
 locate_contracts = (
-    ("Summary", summary_code, "private void LocateCurrent()", '_document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);'),
+    ("Summary", summary_code, "private void LocateCurrent()", "global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(_document)"),
     ("Insight", insight_code, "private void LocateSelected()", "global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(document)"),
 )
 for name, source, method, zoom in locate_contracts:
@@ -142,6 +142,8 @@ for name, source, method, zoom in locate_contracts:
     if zoom not in block:
         errors.append(name + " canonical locate zoom contract missing")
     if name == "Summary":
+        if 'SendStringToExecute("QS3DZOOMSELECTED ' in block:
+            errors.append("Summary canonical locate must not queue QS3DZOOMSELECTED command re-entry")
         select_pos = block.find("Cad.CadHandleService.Select")
         zero_pos = block.find("if (selectedCount <= 0)")
         zoom_pos = block.find(zoom)
@@ -164,5 +166,5 @@ if errors:
 print(
     "PASS: quantity locate triggers explicitly clear only the same active DWG before validation, "
     "Summary Follow3D parity covers both Summary/Detail modes, wrong-DWG behavior remains non-clearing, "
-    "and canonical locate selection/zoom contracts remain intact with direct in-process Insight zoom."
+    "and canonical locate selection/zoom contracts remain intact with direct in-process Summary and Insight zoom."
 )

@@ -112,10 +112,13 @@ if resolve and "_detailMode ? RecalculateDetailRows() : RecalculateSummaryRows(t
 for token in (
     "var currentRow = ResolveCurrentRow(row);",
     "var liveHandles = CanonicalIds(currentRow.SourceHandles);",
-    'SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);',
+    "global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(_document)",
 ):
     if locate and token not in locate:
         errors.append("safe locate path missing token: " + token)
+
+if locate and 'SendStringToExecute("QS3DZOOMSELECTED ' in locate:
+    errors.append("safe locate must zoom the exact bound document without queued command re-entry")
 
 if xaml:
     if 'x:Name="AutoRevealCheck"' not in xaml or 'Content="Bám 3D"' not in xaml:
