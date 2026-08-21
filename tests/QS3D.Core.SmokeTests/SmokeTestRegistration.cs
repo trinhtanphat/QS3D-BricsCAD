@@ -202,6 +202,7 @@ namespace QS3D.Core.SmokeTests
             MepRecognitionSmoke.Run();
             ClashDetectionKnownCountContractSmoke.Run();
             ClashDetectionResultBoundSmoke.Run();
+            DuplicateDetectionSmoke.Run();
             FeatureInteractionContractsSmoke.Run();
             WorkspaceFeatureSessionSmoke.Run();
             WorkspaceSchemaFormsSmoke.Run();
