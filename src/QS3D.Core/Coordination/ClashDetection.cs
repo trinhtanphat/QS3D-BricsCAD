@@ -84,7 +84,15 @@ namespace QS3D.Core.Coordination
         {
             if (string.IsNullOrWhiteSpace(value))
                 throw new ArgumentException("Coordination classification text is required.", parameterName);
-            return value.Trim();
+            var normalized = value.Trim();
+            if (!string.Equals(value, normalized, StringComparison.Ordinal))
+                throw new ArgumentException("Coordination classification text must not contain surrounding whitespace.", parameterName);
+            for (var index = 0; index < value.Length; index++)
+            {
+                if (char.IsControl(value[index]))
+                    throw new ArgumentException("Coordination classification text must not contain control characters.", parameterName);
+            }
+            return value;
         }
     }
 
