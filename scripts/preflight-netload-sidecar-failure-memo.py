@@ -40,9 +40,24 @@ def main() -> int:
         "ProjectSidecarRevisionStamp.Capture(ProjectContextCoordinator.GetProjectPath(document))",
         "FailedProjectReconciliations.Remove(document);",
         "FailedProjectReconciliations.Clear();",
+        "DispatcherOperation? _lifecycleIdleOperation",
+        "Dispatcher.CurrentDispatcher.BeginInvoke",
+        "DispatcherPriority.ApplicationIdle",
+        "new Action(OnLifecycleIdle)",
     )
     for token in required:
-        require(source, token, "NETLOAD invalid-sidecar reconcile memo contract regressed")
+        require(source, token, "NETLOAD invalid-sidecar reconcile contract regressed")
+
+    forbid(
+        source,
+        "DispatcherTimer",
+        "lifecycle reconciliation must use a one-shot ApplicationIdle dispatcher operation rather than a timer",
+    )
+    forbid(
+        source,
+        "TimeSpan.FromMilliseconds(1d)",
+        "NETLOAD lifecycle reconciliation must not retain the 1 ms timer cadence",
+    )
 
     ensure = slice_method(
         source,
@@ -58,6 +73,16 @@ def main() -> int:
             "ERROR: lifecycle must check the stable failure memo before capturing/reading the sidecar, "
             "then memoize only after the failed read attempt"
         )
+    forbid(
+        ensure,
+        "Editor.WriteMessage",
+        "automatic startup/activation project reconciliation must not print sidecar load failures to the command line",
+    )
+    require(
+        ensure,
+        "PaletteCoordinator.ResetForUnavailableProject(message)",
+        "automatic sidecar load failures must remain visible through unavailable-project Palette state",
+    )
 
     stable = slice_method(
         source,
@@ -113,8 +138,8 @@ def main() -> int:
     )
 
     print(
-        "PASS: lifecycle memoizes only stable unreadable sidecar generations, suppresses repeat load/spam, "
-        "retries changed or explicitly reloaded projects, and remains fail-closed/read-only."
+        "PASS: lifecycle uses one-shot ApplicationIdle reconciliation, keeps automatic sidecar failures out of the command line, "
+        "memoizes only stable unreadable generations, retries changed/explicitly reloaded projects, and remains fail-closed/read-only."
     )
     return 0
 
