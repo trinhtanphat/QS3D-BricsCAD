@@ -327,8 +327,9 @@ namespace QS3D.Core.Legacy
         private static bool TryFiniteNonNegative(string? raw, out double value)
         {
             value = 0d;
-            if (string.IsNullOrWhiteSpace(raw)) return false;
-            var text = raw.Trim();
+            var text = raw ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            text = text.Trim();
             if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
             {
                 var comma = text.Replace(',', '.');
@@ -346,8 +347,9 @@ namespace QS3D.Core.Legacy
 
         private static string Normalize(string? value)
         {
-            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
-            var decomposed = value.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);
+            var text = value ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+            var decomposed = text.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);
             var builder = new StringBuilder(decomposed.Length);
             foreach (var character in decomposed)
             {
@@ -367,8 +369,9 @@ namespace QS3D.Core.Legacy
 
         private static string Bound(string? value, int max)
         {
-            if (string.IsNullOrEmpty(value)) return string.Empty;
-            return value.Length <= max ? value : value.Substring(0, max);
+            var text = value ?? string.Empty;
+            if (text.Length == 0) return string.Empty;
+            return text.Length <= max ? text : text.Substring(0, max);
         }
     }
 }
