@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             OffscreenRequestIsBroughtBackIntoView();
             BestIntersectingWorkAreaWins();
             MissingVisibleWorkAreaFailsClosed();
+            NonRepresentableWorkAreaEdgesFailClosed();
             ExactWorkAreaBoundaryIsAccepted();
             KnownOversizedWorkAreaCollectionFailsBeforeEnumeration();
             NonGenericKnownOversizedWorkAreaCollectionFailsBeforeEnumeration();
@@ -70,18 +71,40 @@ namespace QS3D.Core.SmokeTests
 
         private static void MissingVisibleWorkAreaFailsClosed()
         {
+            ExpectNoValidWorkArea(Array.Empty<FloatingToolBounds>(),
+                "Floating tool normalization must fail closed without a valid visible work area.");
+        }
+
+        private static void NonRepresentableWorkAreaEdgesFailClosed()
+        {
+            ExpectNoValidWorkArea(
+                new[] { new FloatingToolBounds(double.MaxValue, 0d, double.MaxValue, 600d) },
+                "Work areas whose right edge overflows must fail closed.");
+            ExpectNoValidWorkArea(
+                new[] { new FloatingToolBounds(0d, double.MaxValue, 800d, double.MaxValue) },
+                "Work areas whose bottom edge overflows must fail closed.");
+            ExpectNoValidWorkArea(
+                new[] { new FloatingToolBounds(9007199254740992d, 0d, 1d, 600d) },
+                "Positive width that cannot advance the represented right edge must fail closed.");
+            ExpectNoValidWorkArea(
+                new[] { new FloatingToolBounds(0d, 9007199254740992d, 800d, 1d) },
+                "Positive height that cannot advance the represented bottom edge must fail closed.");
+        }
+
+        private static void ExpectNoValidWorkArea(IEnumerable<FloatingToolBounds> areas, string message)
+        {
             try
             {
                 FloatingToolWindowPolicy.Normalize(
                     new FloatingToolBounds(0d, 0d, 400d, 300d),
-                    Array.Empty<FloatingToolBounds>());
+                    areas);
             }
             catch (InvalidOperationException)
             {
                 return;
             }
 
-            throw new Exception("Floating tool normalization must fail closed without a valid visible work area.");
+            throw new Exception(message);
         }
 
         private static void ExactWorkAreaBoundaryIsAccepted()
