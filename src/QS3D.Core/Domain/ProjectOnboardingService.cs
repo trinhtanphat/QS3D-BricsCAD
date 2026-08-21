@@ -160,6 +160,7 @@ namespace QS3D.Core.Domain
             if (missingMaterials.Count > 0)
                 return Result(ProjectOnboardingStatus.NeedsMaterialConfirmation, effectiveUnit, missingMaterials, project);
 
+            var existingFloorToActivate = ResolveExistingFloorActivationPlan(project);
             var createCount = plans.Count(x => x.ReusedFamily == null);
             if (project.Families.Count + createCount > MaxFamilies)
                 throw new InvalidOperationException("Starter onboarding would exceed the supported 10000 Family limit.");
@@ -170,6 +171,8 @@ namespace QS3D.Core.Domain
 
             if (project.Floors.Count == 0)
                 ProjectFloorService.Create(project, StarterFloorId, StarterFloorName, 0d);
+            else if (existingFloorToActivate != null)
+                ProjectFloorService.SetActive(project, existingFloorToActivate.Id);
 
             var created = new List<string>();
             var reused = new List<string>();
@@ -290,6 +293,26 @@ namespace QS3D.Core.Domain
         {
             if (!HasTrustedMaterial(family)) return string.Empty;
             return (family.Properties[MaterialKey] ?? string.Empty).Trim();
+        }
+
+        private static FloorDefinition? ResolveExistingFloorActivationPlan(ProjectState project)
+        {
+            var activeFloorId = (project.ActiveFloorId ?? string.Empty).Trim();
+            if (activeFloorId.Length > 0)
+            {
+                var activeFloor = project.Floors.SingleOrDefault(
+                    x => string.Equals(x.Id, activeFloorId, StringComparison.OrdinalIgnoreCase));
+                if (activeFloor == null)
+                    throw new InvalidOperationException(
+                        "Project active Floor '" + activeFloorId + "' was not found in the current Floor catalog. Repair the active Floor reference before onboarding.");
+                return null;
+            }
+
+            if (project.Floors.Count == 0) return null;
+            if (project.Floors.Count == 1) return project.Floors[0];
+
+            throw new InvalidOperationException(
+                "Project contains multiple Floors but no active Floor is selected. Select the intended active Floor before onboarding.");
         }
 
         private static string MakeUniqueFamilyId(ProjectState project, ElementCategory category)
