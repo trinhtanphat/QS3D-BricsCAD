@@ -59,6 +59,11 @@ namespace QS3D.Core.Features
 
     public sealed class AddCreateStateMachine
     {
+        // Current create schemas are compact property forms. Keep a deliberately generous
+        // ceiling so normal UI schemas remain unaffected while arbitrary/lazy callers cannot
+        // turn form ingestion into an unbounded enumeration/allocation path.
+        internal const int MaximumFormFields = 64;
+
         private readonly FeatureDescriptor _feature;
         private readonly Dictionary<string, string> _formValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private CreateRecipeDescriptor? _recipe;
@@ -119,17 +124,18 @@ namespace QS3D.Core.Features
                 throw new InvalidOperationException("The create session is not waiting for form input.");
             if (validate == null) throw new ArgumentNullException(nameof(validate));
 
-            _formValues.Clear();
-            foreach (var item in values ?? Enumerable.Empty<KeyValuePair<string, string>>())
-                _formValues[item.Key ?? string.Empty] = item.Value ?? string.Empty;
-
-            var request = BuildRequest();
+            var pendingValues = SnapshotFormValues(values ?? Enumerable.Empty<KeyValuePair<string, string>>());
+            var request = BuildRequest(pendingValues);
             if (!validate(request))
             {
                 _formValues.Clear();
                 _formValidated = false;
                 throw new InvalidOperationException("Create form validation failed before mutation handoff.");
             }
+
+            _formValues.Clear();
+            foreach (var item in pendingValues)
+                _formValues.Add(item.Key, item.Value);
 
             _formValidated = true;
             switch (_recipe.InputMode)
@@ -208,7 +214,7 @@ namespace QS3D.Core.Features
         public AddCreateRequest GetCreateRequest()
         {
             EnsureState(AddCreateState.Creating);
-            return BuildRequest();
+            return BuildRequest(_formValues);
         }
 
         private AddCreateDirective SelectRecipeCore(string recipeId)
@@ -257,12 +263,60 @@ namespace QS3D.Core.Features
             return Directive;
         }
 
-        private AddCreateRequest BuildRequest()
+        private AddCreateRequest BuildRequest(Dictionary<string, string> formValues)
         {
             if (_recipe == null) throw new InvalidOperationException("No create recipe is selected.");
-            var snapshot = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(_formValues, StringComparer.OrdinalIgnoreCase));
+            var snapshot = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(formValues, StringComparer.OrdinalIgnoreCase));
             return new AddCreateRequest(_feature.Id, _recipe, snapshot, _cadInput);
         }
+
+        private static Dictionary<string, string> SnapshotFormValues(IEnumerable<KeyValuePair<string, string>> values)
+        {
+            var knownCount = SnapshotKnownCount(values);
+            var snapshot = knownCount.HasValue
+                ? new Dictionary<string, string>(knownCount.Value, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            var observed = 0;
+            foreach (var item in values)
+            {
+                observed++;
+                if (observed > MaximumFormFields)
+                    throw TooManyFormFields();
+                snapshot[item.Key ?? string.Empty] = item.Value ?? string.Empty;
+            }
+
+            if (knownCount.HasValue && observed != knownCount.Value)
+                throw new InvalidOperationException("Create form field count changed during enumeration.");
+
+            return snapshot;
+        }
+
+        private static int? SnapshotKnownCount(IEnumerable<KeyValuePair<string, string>> values)
+        {
+            int? knownCount = null;
+            if (values is ICollection<KeyValuePair<string, string>> genericCollection)
+                AcceptKnownCount(genericCollection.Count, ref knownCount);
+            if (values is IReadOnlyCollection<KeyValuePair<string, string>> readOnlyCollection)
+                AcceptKnownCount(readOnlyCollection.Count, ref knownCount);
+            if (values is System.Collections.ICollection nonGenericCollection)
+                AcceptKnownCount(nonGenericCollection.Count, ref knownCount);
+            return knownCount;
+        }
+
+        private static void AcceptKnownCount(int count, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Create form exposes an invalid negative field count.");
+            if (count > MaximumFormFields)
+                throw TooManyFormFields();
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException("Create form exposes conflicting known field counts.");
+            knownCount = count;
+        }
+
+        private static InvalidOperationException TooManyFormFields()
+            => new InvalidOperationException("Create form supports at most " + MaximumFormFields + " fields.");
 
         private void EnsurePreparing()
         {
