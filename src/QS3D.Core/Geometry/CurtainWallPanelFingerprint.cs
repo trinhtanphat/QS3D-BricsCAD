@@ -89,11 +89,19 @@ namespace QS3D.Core.Geometry
             Finite(piece.Z_M, nameof(piece.Z_M));
             Positive(piece.WidthM, nameof(piece.WidthM));
             Positive(piece.HeightM, nameof(piece.HeightM));
-            Finite(piece.X_M + piece.WidthM, "panel right");
-            Finite(piece.Z_M + piece.HeightM, "panel top");
+            var right = piece.X_M + piece.WidthM;
+            var top = piece.Z_M + piece.HeightM;
+            Finite(right, "panel right");
+            Finite(top, "panel top");
+            if (!(right > piece.X_M))
+                throw new OverflowException("Curtain panel fingerprint piece width is below the representable coordinate resolution.");
+            if (!(top > piece.Z_M))
+                throw new OverflowException("Curtain panel fingerprint piece height is below the representable coordinate resolution.");
             var area = piece.WidthM * piece.HeightM;
             if (double.IsNaN(area) || double.IsInfinity(area))
                 throw new OverflowException("Curtain panel fingerprint piece area must remain finite.");
+            if (area == 0d && piece.WidthM != 0d && piece.HeightM != 0d)
+                throw new OverflowException("Curtain panel fingerprint piece area underflowed to zero.");
             return piece;
         }
 
