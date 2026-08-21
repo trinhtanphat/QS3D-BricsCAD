@@ -13,9 +13,31 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
+            CollectionAccessCannotMutateValidatedInputScalars();
             PostValidationMutationUsesValidatedSnapshot();
             StablePieceOrderingRemainsCanonical();
             CountDriftStillFailsClosed();
+        }
+
+        private static void CollectionAccessCannotMutateValidatedInputScalars()
+        {
+            var stable = Input(new[] { Piece(0, 0d, 0d, 3d, 3d) });
+            var expected = CurtainWallPanelFingerprint.Compute(stable);
+
+            var candidate = Input(Array.Empty<CurtainWallPanelPiece>());
+            candidate.Pieces = new CountMutatingPieceList(
+                Piece(0, 0d, 0d, 3d, 3d),
+                () =>
+                {
+                    candidate.SourceLengthM = double.NaN;
+                    candidate.HeightM = -3d;
+                    candidate.BottomOffsetM = double.PositiveInfinity;
+                    candidate.PanelDepthM = 0d;
+                    candidate.PathSegmentCount = 99;
+                });
+
+            var actual = CurtainWallPanelFingerprint.Compute(candidate);
+            Equal(expected, actual, "collection access must not alter already-validated top-level fingerprint scalars");
         }
 
         private static void PostValidationMutationUsesValidatedSnapshot()
@@ -100,6 +122,42 @@ namespace QS3D.Core.SmokeTests
         {
             if (!Equals(expected, actual))
                 throw new InvalidOperationException(label + ": expected " + expected + ", actual " + actual + ".");
+        }
+
+        private sealed class CountMutatingPieceList : IReadOnlyList<CurtainWallPanelPiece>
+        {
+            private readonly CurtainWallPanelPiece _piece;
+            private readonly Action _mutate;
+            private bool _mutated;
+
+            internal CountMutatingPieceList(CurtainWallPanelPiece piece, Action mutate)
+            {
+                _piece = piece;
+                _mutate = mutate;
+            }
+
+            public int Count
+            {
+                get
+                {
+                    if (!_mutated)
+                    {
+                        _mutated = true;
+                        _mutate();
+                    }
+                    return 1;
+                }
+            }
+
+            public CurtainWallPanelPiece this[int index]
+                => index == 0 ? _piece : throw new ArgumentOutOfRangeException(nameof(index));
+
+            public IEnumerator<CurtainWallPanelPiece> GetEnumerator()
+            {
+                yield return _piece;
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private sealed class MutatingPieceList : IReadOnlyList<CurtainWallPanelPiece>
