@@ -267,8 +267,19 @@ namespace QS3D.Core.Domain
             if (family == null) return false;
             if (!family.Properties.TryGetValue(MaterialKey, out var raw)) return false;
             var material = (raw ?? string.Empty).Trim();
-            return material.Length > 0 &&
-                   !string.Equals(material, UnconfirmedMaterialPlaceholder, StringComparison.OrdinalIgnoreCase);
+            try
+            {
+                ValidateMaterial(material, family.Category);
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
         }
 
         private static string TrustedMaterial(ProjectFamily family)
