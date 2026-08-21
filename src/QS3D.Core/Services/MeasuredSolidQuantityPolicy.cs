@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using QS3D.Core.Domain;
+using QS3D.Core.Legacy;
 
 namespace QS3D.Core.Services
 {
@@ -51,6 +52,12 @@ namespace QS3D.Core.Services
                 handled = true;
                 removed = true;
             }
+
+            // BLT legacy evidence is a final guard on the ordinary measured/default
+            // quantity lane. Exact legacy concrete must survive later regeneration,
+            // while formwork without exact evidence must remain absent rather than
+            // silently inheriting a default Family-derived value.
+            if (BltLegacyQuantityEvidencePolicy.Apply(element)) handled = true;
 
             if (removed) element.MarkDirty(ElementDirtyFlags.Quantity);
             return handled;

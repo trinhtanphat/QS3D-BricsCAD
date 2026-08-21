@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
                 AddCreateStateMachineSmoke.Run();
                 FeatureNavigationRegistrySmoke.Run();
                 WorkspaceModalPrimitivesSmoke.Run();
+                BltLegacyAdapterSmoke.Run();
 
                 var legacyMain = typeof(Program).GetMethod(
                     "Main",
