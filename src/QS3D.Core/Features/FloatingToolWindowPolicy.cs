@@ -140,12 +140,22 @@ namespace QS3D.Core.Features
 
         private static bool IsValidWorkArea(FloatingToolBounds bounds)
         {
-            return IsFinite(bounds.Left)
-                && IsFinite(bounds.Top)
-                && IsFinite(bounds.Width)
-                && IsFinite(bounds.Height)
-                && bounds.Width > 0d
-                && bounds.Height > 0d;
+            if (!IsFinite(bounds.Left)
+                || !IsFinite(bounds.Top)
+                || !IsFinite(bounds.Width)
+                || !IsFinite(bounds.Height)
+                || bounds.Width <= 0d
+                || bounds.Height <= 0d)
+            {
+                return false;
+            }
+
+            var right = bounds.Right;
+            var bottom = bounds.Bottom;
+            return IsFinite(right)
+                && IsFinite(bottom)
+                && right > bounds.Left
+                && bottom > bounds.Top;
         }
 
         private static double IntersectionArea(FloatingToolBounds left, FloatingToolBounds right)
