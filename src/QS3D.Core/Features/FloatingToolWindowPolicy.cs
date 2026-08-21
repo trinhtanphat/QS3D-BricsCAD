@@ -51,13 +51,14 @@ namespace QS3D.Core.Features
         public const double DefaultHeight = 520d;
         public const double MinimumWidth = 320d;
         public const double MinimumHeight = 240d;
+        public const int MaximumVisibleWorkAreas = 64;
 
         public static FloatingToolBounds Normalize(
             FloatingToolBounds requested,
             IEnumerable<FloatingToolBounds> visibleWorkAreas)
         {
             if (visibleWorkAreas == null) throw new ArgumentNullException(nameof(visibleWorkAreas));
-            var areas = visibleWorkAreas.Where(IsValidWorkArea).ToArray();
+            var areas = MaterializeVisibleWorkAreas(visibleWorkAreas);
             if (areas.Length == 0)
                 throw new InvalidOperationException("At least one valid visible work area is required for a floating tool.");
 
@@ -82,6 +83,52 @@ namespace QS3D.Core.Features
             var left = Clamp(requestedLeft, area.Left, area.Right - width);
             var top = Clamp(requestedTop, area.Top, area.Bottom - height);
             return new FloatingToolBounds(left, top, width, height);
+        }
+
+        private static FloatingToolBounds[] MaterializeVisibleWorkAreas(IEnumerable<FloatingToolBounds> visibleWorkAreas)
+        {
+            var knownCount = GetKnownCount(visibleWorkAreas);
+            if (knownCount.HasValue && knownCount.Value > MaximumVisibleWorkAreas)
+            {
+                throw new InvalidOperationException(
+                    "Floating tool normalization supports at most " + MaximumVisibleWorkAreas + " visible work areas.");
+            }
+
+            var validAreas = new List<FloatingToolBounds>(knownCount ?? 4);
+            var traversed = 0;
+            foreach (var candidate in visibleWorkAreas)
+            {
+                traversed++;
+                if (traversed > MaximumVisibleWorkAreas)
+                {
+                    throw new InvalidOperationException(
+                        "Floating tool normalization supports at most " + MaximumVisibleWorkAreas + " visible work areas.");
+                }
+
+                if (IsValidWorkArea(candidate))
+                    validAreas.Add(candidate);
+            }
+
+            return validAreas.ToArray();
+        }
+
+        private static int? GetKnownCount(IEnumerable<FloatingToolBounds> visibleWorkAreas)
+        {
+            int? count = null;
+            if (visibleWorkAreas is ICollection<FloatingToolBounds> collection)
+                count = collection.Count;
+
+            if (visibleWorkAreas is IReadOnlyCollection<FloatingToolBounds> readOnlyCollection)
+            {
+                if (count.HasValue && count.Value != readOnlyCollection.Count)
+                    throw new InvalidOperationException("Visible work-area collection exposes conflicting Count values.");
+                count = readOnlyCollection.Count;
+            }
+
+            if (count.HasValue && count.Value < 0)
+                throw new InvalidOperationException("Visible work-area collection exposes a negative Count value.");
+
+            return count;
         }
 
         private static bool IsValidWorkArea(FloatingToolBounds bounds)
