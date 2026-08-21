@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             CustomerTraceReaderRejectsUnsupportedSheet();
             CustomerTraceReaderRejectsTamperedTraceIdentity();
             CustomerWorkbookRejectsMalformedProvenance();
+            CustomerWorkbookRejectsOversizedTraceCell();
         }
 
         private static void CustomerWorkbookRoundTripsDetailAndAggregateTrace()
@@ -134,6 +135,38 @@ namespace QS3D.Core.SmokeTests
                 ExpectThrows<InvalidDataException>(
                     () => QsCustomerWorkbookExporter.Export(Path.Combine(root, "count-mismatch.xlsx"), Details(), badSummary),
                     "Customer workbook must bind grouped Count to Element ID provenance cardinality.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
+        private static void CustomerWorkbookRejectsOversizedTraceCell()
+        {
+            var root = TempDirectory("customer-workbook-cell-limit");
+            try
+            {
+                var firstId = new string('A', 20000);
+                var secondId = new string('B', 20000);
+                var details = new[]
+                {
+                    NewRow(firstId, "A1", 1d, 1d),
+                    NewRow(secondId, "A2", 1d, 1d)
+                };
+                var summary = Summary()[0];
+                summary.ElementIds.Clear();
+                summary.ElementIds.Add(firstId);
+                summary.ElementIds.Add(secondId);
+                summary.SourceHandles.Clear();
+                summary.SourceHandles.Add("A1");
+                summary.SourceHandles.Add("A2");
+                var path = Path.Combine(root, "oversized-trace.xlsx");
+
+                ExpectThrows<InvalidDataException>(
+                    () => QsCustomerWorkbookExporter.Export(path, details, new[] { summary }),
+                    "Customer workbook must reject TRACE_MODEL text cells beyond Excel's 32,767-character limit.");
+                Require(!File.Exists(path), "Oversized customer workbook must fail before output file commit.");
             }
             finally
             {
