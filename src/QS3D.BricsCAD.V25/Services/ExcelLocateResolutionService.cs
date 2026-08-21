@@ -43,8 +43,8 @@ namespace QS3D.BricsCAD.V25.Services
     }
 
     /// <summary>
-    /// Shared fail-closed resolver for a modern ED2 CHI_TIET row. All identity,
-    /// provenance and live-CAD checks complete before a caller may replace PICKFIRST.
+    /// Shared fail-closed resolver for modern Excel provenance. All semantic identity,
+    /// fingerprint, Handle parity and live-CAD checks complete before a caller may replace PICKFIRST.
     /// </summary>
     internal static class ExcelLocateResolutionService
     {
@@ -56,8 +56,6 @@ namespace QS3D.BricsCAD.V25.Services
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (lookup == null) throw new ArgumentNullException(nameof(lookup));
-            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
-                throw new InvalidOperationException("Excel Locate requires the reviewed DWG to remain active.");
             if (!lookup.IsModernSchema || !lookup.IsEd2Detail ||
                 !string.Equals(lookup.WorksheetName, "CHI_TIET", StringComparison.OrdinalIgnoreCase))
                 throw new ExcelLocateResolutionException(
@@ -67,12 +65,31 @@ namespace QS3D.BricsCAD.V25.Services
                 throw new ExcelLocateResolutionException(
                     ExcelLocateFailureCode.UnknownElementId,
                     "ED2 CHI_TIET Locate requires exactly one QS3D Element ID.");
-            return ResolveModernRow(
+            return ResolveRow(
                 document,
                 project,
                 lookup.ElementIds,
                 lookup.Handles,
-                lookup.DrawingFingerprint);
+                lookup.DrawingFingerprint,
+                true,
+                "ED2 CHI_TIET");
+        }
+
+        public static ExcelLocateResolution ResolveCustomerTrace(
+            Document document,
+            ProjectState project,
+            QsCustomerWorkbookTrace trace)
+        {
+            if (trace == null) throw new ArgumentNullException(nameof(trace));
+            var requireSingle = string.Equals(trace.WorksheetName, QsCustomerWorkbookExporter.DetailSheet, StringComparison.OrdinalIgnoreCase);
+            return ResolveRow(
+                document,
+                project,
+                trace.ElementIds,
+                trace.Handles,
+                trace.DrawingFingerprint,
+                requireSingle,
+                "Customer Excel " + trace.WorksheetName);
         }
 
         internal static ExcelLocateResolution ResolveModernRow(
@@ -82,6 +99,18 @@ namespace QS3D.BricsCAD.V25.Services
             IEnumerable<string> handles,
             string drawingFingerprint)
         {
+            return ResolveRow(document, project, elementIds, handles, drawingFingerprint, true, "ED2 CHI_TIET");
+        }
+
+        private static ExcelLocateResolution ResolveRow(
+            Document document,
+            ProjectState project,
+            IEnumerable<string> elementIds,
+            IEnumerable<string> handles,
+            string drawingFingerprint,
+            bool requireSingleElement,
+            string label)
+        {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
@@ -90,26 +119,30 @@ namespace QS3D.BricsCAD.V25.Services
                 .Select(value => (value ?? string.Empty).Trim())
                 .Where(value => value.Length > 0)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            if (ids.Count != 1)
+            if (ids.Count == 0 || (requireSingleElement && ids.Count != 1))
                 throw new ExcelLocateResolutionException(
                     ExcelLocateFailureCode.UnknownElementId,
-                    "ED2 CHI_TIET Locate requires exactly one QS3D Element ID.");
+                    requireSingleElement
+                        ? label + " Locate requires exactly one QS3D Element ID."
+                        : label + " Locate requires at least one QS3D Element ID.");
             if (string.IsNullOrWhiteSpace(drawingFingerprint) ||
                 !string.Equals(drawingFingerprint, project.DrawingFingerprint, StringComparison.OrdinalIgnoreCase))
                 throw new ExcelLocateResolutionException(
                     ExcelLocateFailureCode.FingerprintMismatch,
                     "Excel drawing fingerprint does not match the active DWG.");
 
-            var elementId = ids[0];
-            if (project.FindElement(elementId) == null)
-                throw new ExcelLocateResolutionException(
-                    ExcelLocateFailureCode.UnknownElementId,
-                    "Excel references an unknown QS3D Element ID.");
+            foreach (var elementId in ids)
+                if (project.FindElement(elementId) == null)
+                    throw new ExcelLocateResolutionException(
+                        ExcelLocateFailureCode.UnknownElementId,
+                        "Excel references an unknown QS3D Element ID: " + elementId + ".");
 
-            var projectHandles = CanonicalHandles(SourceHandleResolver.Resolve(project, new[] { elementId }), "QS3D project");
+            var projectHandles = CanonicalHandles(SourceHandleResolver.Resolve(project, ids), "QS3D project");
             var excelHandles = CanonicalHandles(handles, "Excel");
-            if (excelHandles.Count == 0 || !excelHandles.SequenceEqual(projectHandles, StringComparer.OrdinalIgnoreCase))
+            if (projectHandles.Count == 0 || excelHandles.Count == 0 ||
+                !excelHandles.SequenceEqual(projectHandles, StringComparer.OrdinalIgnoreCase))
                 throw new ExcelLocateResolutionException(
                     ExcelLocateFailureCode.ProvenanceMismatch,
                     "Excel Element ID to CAD Handle provenance does not match the active QS3D project.");
@@ -128,7 +161,7 @@ namespace QS3D.BricsCAD.V25.Services
 
         private static IReadOnlyList<string> CanonicalHandles(IEnumerable<string> values, string label)
         {
-            return values
+            return (values ?? throw new ArgumentNullException(nameof(values)))
                 .Select(value => CadHandleService.NormalizeHexHandle(value)
                     ?? throw new InvalidOperationException(label + " contains an invalid CAD Handle."))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
