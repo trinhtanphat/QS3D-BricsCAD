@@ -25,7 +25,7 @@ namespace QS3D.BricsCAD.V25.UI
             private readonly Document _document;
             private bool _attached;
             private bool _projectAffinityBound;
-            private bool _invalidated;
+            private volatile bool _invalidated;
             private string _projectId = string.Empty;
 
             public Registration(Window window, Document document)
