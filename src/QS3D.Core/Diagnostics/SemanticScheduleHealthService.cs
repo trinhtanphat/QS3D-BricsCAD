@@ -202,8 +202,12 @@ namespace QS3D.Core.Diagnostics
         {
             for (Exception? current = ex; current != null; current = current.InnerException)
             {
+                if (!IsTemplateFailure(current)) continue;
                 var message = current.Message ?? string.Empty;
-                if (IsTemplateFailure(current) && message.StartsWith("Semantic tag ", StringComparison.Ordinal))
+                if (message.StartsWith("Semantic tag ", StringComparison.Ordinal) ||
+                    message.StartsWith("Unsupported semantic tag token:", StringComparison.Ordinal) ||
+                    message.StartsWith("P: semantic tag token ", StringComparison.Ordinal) ||
+                    message.StartsWith("Q: semantic tag token ", StringComparison.Ordinal))
                     return true;
             }
             return false;
