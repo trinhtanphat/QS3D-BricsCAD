@@ -71,7 +71,9 @@ namespace QS3D.Core.SmokeTests
             foreach (var elementId in new[] { " E1", "E1 ", " E1 " })
             {
                 var project = NewProject();
-                project.Elements.Add(new ProjectElement(elementId, ElementCategory.Beam, string.Empty, "f", "z"));
+                var element = new ProjectElement("E1", ElementCategory.Beam, string.Empty, "f", "z");
+                SetRawElementId(element, elementId);
+                project.Elements.Add(element);
                 Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "padded-element-id"));
             }
 
@@ -328,6 +330,15 @@ namespace QS3D.Core.SmokeTests
             project.ActiveZoneId = "z";
             project.ActiveFloorId = "f";
             return project;
+        }
+
+        private static void SetRawElementId(ProjectElement element, string value)
+        {
+            var field = typeof(ProjectElement).GetField("<Id>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement Id backing field was not found.");
+            if (field.FieldType != typeof(string))
+                throw new Exception("ProjectElement Id backing field must remain a string.");
+            field.SetValue(element, value);
         }
 
         private static void SetRawRelation(ProjectElement element, string fieldName, string value)
