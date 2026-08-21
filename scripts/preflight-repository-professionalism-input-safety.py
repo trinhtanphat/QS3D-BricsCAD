@@ -30,6 +30,14 @@ def main() -> int:
         text, error = module.read_repository_text(safe, root, 64)
         require(error is None and text == "name: safe\n", f"safe UTF-8 file rejected: {error}")
 
+        crlf = root / "crlf.yml"
+        crlf.write_bytes(b"permissions:\r\n  contents: read\r\n")
+        text, error = module.read_repository_text(crlf, root, 64)
+        require(
+            error is None and text == "permissions:\n  contents: read\n",
+            f"CRLF repository text did not preserve universal-newline semantics: text={text!r}, error={error}",
+        )
+
         exact = root / "exact.txt"
         exact.write_bytes(b"x" * 16)
         text, error = module.read_repository_text(exact, root, 16)
@@ -150,6 +158,7 @@ def main() -> int:
 
     print("PASS: repository professionalism input-safety regression")
     print(" - bounded UTF-8 reads accept the exact boundary and reject one-over inputs")
+    print(" - CRLF repository text preserves platform-independent universal-newline semantics")
     print(" - invalid UTF-8, non-regular, outside-root, symlink and reparse candidates fail closed")
     print(" - one transient file replacement is retried once while persistent identity churn remains fail-closed")
     print(" - orchestration scan skips ordinary suffix-bearing directories while retaining unsafe-link refusal")
