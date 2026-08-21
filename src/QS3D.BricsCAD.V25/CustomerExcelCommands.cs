@@ -38,14 +38,15 @@ namespace QS3D.BricsCAD.V25
                     "Selection Floor Zone All");
                 if (scopePrompt.Status != PromptStatus.OK && scopePrompt.Status != PromptStatus.None) return;
                 var scope = scopePrompt.Status == PromptStatus.None ? defaultScope : scopePrompt.StringResult;
-                var elementIds = ResolveScope(document, project, scope, implied);
+                var allScope = string.Equals(scope, "All", StringComparison.OrdinalIgnoreCase);
+                var elementIds = allScope ? Array.Empty<string>() : ResolveScope(document, project, scope, implied);
 
                 var preview = ProjectStateSnapshot.CreateDetachedCopy(project);
                 var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(preview);
-                var details = elementIds == null
+                var details = allScope
                     ? ProjectQuantityReportBuilder.Detail(preview)
                     : ProjectQuantityReportBuilder.Detail(preview, elementIds);
-                var summary = elementIds == null
+                var summary = allScope
                     ? ProjectQuantityReportBuilder.Group(preview)
                     : ProjectQuantityReportBuilder.Group(preview, elementIds);
                 if (details.Count == 0) throw new InvalidOperationException("Phạm vi Excel " + scope + " không có cấu kiện hợp lệ để xuất.");
@@ -121,13 +122,14 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static IReadOnlyList<string>? ResolveScope(
+        private static IReadOnlyList<string> ResolveScope(
             Document document,
             ProjectState project,
             string scope,
             IReadOnlyList<EntitySnapshot> implied)
         {
-            if (string.Equals(scope, "All", StringComparison.OrdinalIgnoreCase)) return null;
+            if (string.Equals(scope, "All", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Excel All scope phải dùng quantity report không lọc.");
             if (string.Equals(scope, "Floor", StringComparison.OrdinalIgnoreCase))
             {
                 var floor = project.FindFloor(project.ActiveFloorId) ?? throw new InvalidOperationException("Excel Floor cần một Floor/Level active hợp lệ.");
