@@ -18,16 +18,23 @@ for path in (BUILDER, RENDERER, CONTEXT, SMOKE, REG, DOC):
 if BUILDER.is_file():
     text = BUILDER.read_text(encoding="utf-8")
     for token in (
-        "private const int MaxRows = 5000",
-        "private const int MaxColumns = 32",
+        "internal const int MaxRows = 5000",
+        "internal const int MaxColumns = 32",
+        "internal const int MaxTitleLength = 160",
+        "internal const int MaxHeaderLength = 96",
+        "internal const int MaxElementIdLength = 128",
+        "internal const int MaxTemplateLength = 512",
         "ids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != ids.Count",
         "var headers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)",
         "var context = new SemanticTagRenderContext(project)",
         "elements.Add(context.ResolveElement(id))",
         "SemanticTagRenderer.Render(context, element, column.Template, allowEmpty: true)",
-        "Cells = new List<string>(cells).AsReadOnly()",
-        "Headers = new List<string>(headers).AsReadOnly()",
-        "Rows = new List<SemanticDocumentationRow>(rows).AsReadOnly()",
+        "var snapshot = new List<string>(cells.Count)",
+        "Cells = snapshot.AsReadOnly()",
+        "var headerSnapshot = new List<string>(headers.Count)",
+        "Headers = headerSnapshot.AsReadOnly()",
+        "var rowSnapshot = new List<SemanticDocumentationRow>(rows.Count)",
+        "Rows = rowSnapshot.AsReadOnly()",
         "return new SemanticDocumentationTable(",
     ):
         if token not in text:
@@ -81,10 +88,12 @@ if SMOKE.is_file():
         "DuplicateHeadersFailClosed",
         "GeneratedOwnershipPropertiesRemainBlocked",
         "OutputSnapshotsAreDefensivelyImmutable",
+        "DirectConstructionEnforcesBuilderContracts",
         "UnusedReferenceIndexesStayLazy",
         "sourceCells[0] = \"MUTATED\"",
         "((IList<string>)row.Cells)[0] = \"MUTATED\"",
         "((IList<SemanticDocumentationRow>)table.Rows).Clear()",
+        "new NoIndexReadOnlyList<SemanticDocumentationRow>(5001)",
     ):
         if token not in text:
             errors.append("SemanticDocumentationTableSmoke.cs missing regression scenario: " + token)
