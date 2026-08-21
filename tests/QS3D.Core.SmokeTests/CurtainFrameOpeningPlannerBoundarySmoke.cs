@@ -32,12 +32,12 @@ namespace QS3D.Core.SmokeTests
             Expect<ArgumentException>(() => CurtainFrameOpeningPlanner.Interrupt(new CurtainWallRect[] { frame, null! }, Array.Empty<CurtainOpeningRect>()), "null frame entry");
             Expect<ArgumentException>(() => CurtainFrameOpeningPlanner.Interrupt(new[] { frame }, new CurtainOpeningRect[] { opening, null! }), "null opening entry");
 
-            Expect<InvalidOperationException>(() => CurtainFrameOpeningPlanner.Interrupt(new[] { R(0d, 0d, 0d, 1d) }, Array.Empty<CurtainOpeningRect>()), "zero frame width");
-            Expect<InvalidOperationException>(() => CurtainFrameOpeningPlanner.Interrupt(new[] { R(0d, 0d, 1d, -1d) }, Array.Empty<CurtainOpeningRect>()), "negative frame height");
-            Expect<InvalidOperationException>(() => CurtainFrameOpeningPlanner.Interrupt(new[] { R(double.NaN, 0d, 1d, 1d) }, Array.Empty<CurtainOpeningRect>()), "NaN frame coordinate");
-            Expect<InvalidOperationException>(() => CurtainFrameOpeningPlanner.Interrupt(new[] { R(0d, 0d, double.PositiveInfinity, 1d) }, Array.Empty<CurtainOpeningRect>()), "infinite frame width");
-            Expect<InvalidOperationException>(() => CurtainFrameOpeningPlanner.Interrupt(new[] { R(double.MaxValue, 0d, double.MaxValue, 1d) }, Array.Empty<CurtainOpeningRect>()), "overflowing frame bound");
-            Expect<InvalidOperationException>(() => CurtainFrameOpeningPlanner.Interrupt(new[] { R(1e308d, 0d, 1d, 1d) }, Array.Empty<CurtainOpeningRect>()), "unrepresentable frame width increment");
+            Expect<ArgumentOutOfRangeException>(() => R(0d, 0d, 0d, 1d), "zero frame width");
+            Expect<ArgumentOutOfRangeException>(() => R(0d, 0d, 1d, -1d), "negative frame height");
+            Expect<ArgumentOutOfRangeException>(() => R(double.NaN, 0d, 1d, 1d), "NaN frame coordinate");
+            Expect<ArgumentOutOfRangeException>(() => R(0d, 0d, double.PositiveInfinity, 1d), "infinite frame width");
+            Expect<OverflowException>(() => R(double.MaxValue, 0d, double.MaxValue, 1d), "overflowing frame bound");
+            Expect<OverflowException>(() => R(1e308d, 0d, 1d, 1d), "unrepresentable frame width increment");
 
             Expect<ArgumentOutOfRangeException>(() => O(double.NaN, 0d, 1d, 1d), "NaN opening coordinate");
             Expect<ArgumentOutOfRangeException>(() => O(0d, 0d, 0d, 1d), "zero opening width");
