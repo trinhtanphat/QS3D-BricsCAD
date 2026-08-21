@@ -102,7 +102,15 @@ namespace QS3D.Core.Geometry
                 throw new OverflowException("Curtain panel fingerprint piece area must remain finite.");
             if (area == 0d && piece.WidthM != 0d && piece.HeightM != 0d)
                 throw new OverflowException("Curtain panel fingerprint piece area underflowed to zero.");
-            return piece;
+
+            return new CurtainWallPanelPiece
+            {
+                SourcePanelIndex = piece.SourcePanelIndex,
+                X_M = piece.X_M,
+                Z_M = piece.Z_M,
+                WidthM = piece.WidthM,
+                HeightM = piece.HeightM
+            };
         }
 
         private static double Positive(double value, string label)
