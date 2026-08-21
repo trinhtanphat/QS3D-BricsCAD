@@ -60,7 +60,7 @@ namespace QS3D.Core.SmokeTests
 
             vertices[0] = V(100d, 100d, 1d);
             vertices[1] = V(200d, 100d);
-            if (result.Count != before.Count)
+            if (result.Count != before.Length)
                 throw new InvalidOperationException("Returned footprint must not track later caller-list mutations.");
             for (var i = 0; i < result.Count; i++)
                 AssertSame(result[i], before[i], "snapshot vertex " + i);
@@ -68,9 +68,9 @@ namespace QS3D.Core.SmokeTests
 
         private static void InputContractsFailClosed()
         {
-            Expect<ArgumentNullException>(() => BulgedPolygonFootprintTessellator.TessellateClosed(null), "null vertex collection");
+            Expect<ArgumentNullException>(() => BulgedPolygonFootprintTessellator.TessellateClosed(null!), "null vertex collection");
             Expect<ArgumentException>(() => BulgedPolygonFootprintTessellator.TessellateClosed(new[] { V(0d, 0d), V(1d, 0d) }), "fewer than three vertices");
-            Expect<ArgumentException>(() => BulgedPolygonFootprintTessellator.TessellateClosed(new BulgedPolygonVertex2[] { V(0d, 0d), null, V(0d, 1d) }), "null vertex entry");
+            Expect<ArgumentException>(() => BulgedPolygonFootprintTessellator.TessellateClosed(new BulgedPolygonVertex2[] { V(0d, 0d), null!, V(0d, 1d) }), "null vertex entry");
             Expect<ArgumentOutOfRangeException>(() => BulgedPolygonFootprintTessellator.TessellateClosed(new[] { V(0d, 0d, double.NaN), V(1d, 0d), V(0d, 1d) }), "NaN bulge");
             Expect<ArgumentOutOfRangeException>(() => BulgedPolygonFootprintTessellator.TessellateClosed(new[] { V(0d, 0d, double.PositiveInfinity), V(1d, 0d), V(0d, 1d) }), "infinite bulge");
             Expect<ArgumentOutOfRangeException>(() => BulgedPolygonFootprintTessellator.TessellateClosed(Triangle(), 0d), "zero sagitta");
