@@ -33,6 +33,7 @@ def main() -> None:
         ("function Get-SafePackageFiles", "bounded traversal helper"),
         ("[IO.FileAttributes]::ReparsePoint", "reparse-point refusal"),
         ("[IO.Path]::GetPathRoot($fullPath)", "filesystem-root identity"),
+        ("[string]::Equals($fullPath, $pathRoot, [StringComparison]::OrdinalIgnoreCase)", "canonical filesystem-root comparison"),
         ("must not be a filesystem root", "filesystem-root refusal"),
         ("Assert-SafeDirectory -Path $PackageDirectory", "package-root validation"),
         ("Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'", "ZIP validation"),
@@ -46,8 +47,14 @@ def main() -> None:
     require_before(
         v25,
         "[IO.Path]::GetPathRoot($fullPath)",
+        "[string]::Equals($fullPath, $pathRoot, [StringComparison]::OrdinalIgnoreCase)",
+        "filesystem-root identity must be captured before canonical comparison",
+    )
+    require_before(
+        v25,
+        "[string]::Equals($fullPath, $pathRoot, [StringComparison]::OrdinalIgnoreCase)",
         "Assert-NoReparseDirectoryChain -Path $fullPath -Label $Label",
-        "filesystem-root refusal must precede directory traversal",
+        "canonical filesystem-root refusal must precede directory traversal",
     )
     require_before(
         v25,
