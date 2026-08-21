@@ -19,7 +19,7 @@ namespace QS3D.Core.SmokeTests
             Near(1.0, evaluator.Evaluate("width + height", canonical), 1e-12, "canonical variable-name binding");
             Near(0.24, evaluator.Evaluate("WIDTH * Height", canonical), 1e-12, "canonical variable-name multiplication");
 
-            foreach (var paddedName in new[] { " Width", "Width ", "\tWidth", "Width\t" })
+            foreach (var paddedName in new[] { " Width", "Width ", "\tWidth", "Width\t", "\rWidth", "Width\r", "\nWidth", "Width\n" })
             {
                 var padded = new Dictionary<string, double> { [paddedName] = 0.4 };
                 Throws<InvalidOperationException>(() => evaluator.Evaluate("width", padded), $"padded variable name '{paddedName}'");
