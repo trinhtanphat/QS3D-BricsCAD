@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace QS3D.BricsCAD.V25.UI
 {
@@ -34,7 +35,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (!(sender is WorkspacePanel panel)) return;
             panel.EnsureFamilyUsageHooks();
-            panel.UpgradeFamilyUsageBadges();
+            panel.QueueFamilyUsageBadgeUpgrade();
         }
 
         private void EnsureFamilyUsageHooks()
@@ -42,17 +43,21 @@ namespace QS3D.BricsCAD.V25.UI
             _ = FamilyUsageClassHandlerRegistered;
             if (_familyUsageHooksApplied || FamilyList == null) return;
             FamilyList.ItemContainerGenerator.StatusChanged += OnFamilyUsageGeneratorStatusChanged;
-            FamilyList.LayoutUpdated += OnFamilyUsageLayoutUpdated;
             _familyUsageHooksApplied = true;
         }
 
         private void OnFamilyUsageGeneratorStatusChanged(object? sender, EventArgs e)
         {
             if (FamilyList.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
-                UpgradeFamilyUsageBadges();
+                QueueFamilyUsageBadgeUpgrade();
         }
 
-        private void OnFamilyUsageLayoutUpdated(object? sender, EventArgs e) => UpgradeFamilyUsageBadges();
+        private void QueueFamilyUsageBadgeUpgrade()
+        {
+            // Template visuals can lag container generation by a dispatcher turn. Upgrade once at Loaded
+            // priority instead of rescanning the complete FamilyList on every LayoutUpdated pass.
+            Dispatcher.BeginInvoke(new Action(UpgradeFamilyUsageBadges), DispatcherPriority.Loaded);
+        }
 
         private void UpgradeFamilyUsageBadges()
         {

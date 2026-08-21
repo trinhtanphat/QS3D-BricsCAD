@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
@@ -14,6 +16,30 @@ namespace QS3D.Core.SmokeTests
             first.SourceHandles.Add("AA");
             var sameIdentityDifferentCase = new ElementInstance("legacy-a", family, "Floor") { LengthM = 3d, GrossConcreteM3 = 2d };
             sameIdentityDifferentCase.SourceHandles.Add("BB");
+
+            var countSecond = new ElementInstance("Legacy-Count-B", family, "Floor") { LengthM = 3d, GrossConcreteM3 = 2d };
+            var underTraversal = new ReadOnlyCountSequence(2, new[] { first });
+            ExpectThrows<InvalidOperationException>(() => QuantityReportBuilder.Group(underTraversal));
+            var overTraversal = new ReadOnlyCountSequence(1, new[] { first, countSecond });
+            ExpectThrows<InvalidOperationException>(() => QuantityReportBuilder.Group(overTraversal));
+
+            var honestKnownCount = QuantityReportBuilder.Group(new ReadOnlyCountSequence(2, new[] { first, countSecond })).Single();
+            if (honestKnownCount.Count != 2 || Math.Abs(honestKnownCount.LengthM - 5d) > 1e-12)
+                throw new Exception("Legacy quantity grouping must preserve valid known-Count enumeration semantics.");
+
+            var pureStream = QuantityReportBuilder.Group(YieldElements(first, countSecond)).Single();
+            if (pureStream.Count != 2 || Math.Abs(pureStream.GrossConcreteM3 - 3d) > 1e-12)
+                throw new Exception("Legacy quantity grouping must preserve pure IEnumerable semantics without a known Count contract.");
+
+            var negativeCount = new NonGenericCountSequence(-1);
+            ExpectThrows<InvalidOperationException>(() => QuantityReportBuilder.Group(negativeCount));
+            if (negativeCount.EnumeratorEntered)
+                throw new Exception("Legacy quantity grouping must reject a negative known Count before enumeration.");
+
+            var conflictingCounts = new ConflictingCountSequence();
+            ExpectThrows<InvalidOperationException>(() => QuantityReportBuilder.Group(conflictingCounts));
+            if (conflictingCounts.EnumeratorEntered)
+                throw new Exception("Legacy quantity grouping must reject conflicting known Counts before enumeration.");
 
             ExpectThrows<InvalidOperationException>(() => QuantityReportBuilder.Group(new[] { first, first }));
             ExpectThrows<InvalidOperationException>(() => QuantityReportBuilder.Group(new[] { first, sameIdentityDifferentCase }));
@@ -91,6 +117,12 @@ namespace QS3D.Core.SmokeTests
             ExpectThrows<InvalidOperationException>(() => ProjectQuantityReportBuilder.Group(project));
         }
 
+        private static IEnumerable<ElementInstance> YieldElements(params ElementInstance[] elements)
+        {
+            foreach (var element in elements)
+                yield return element;
+        }
+
         private static void ExpectArgumentException(Action action, string paramName, string messagePart)
         {
             try { action(); }
@@ -109,6 +141,68 @@ namespace QS3D.Core.SmokeTests
             try { action(); }
             catch (T) { return; }
             throw new Exception("Expected " + typeof(T).Name + ".");
+        }
+
+        private sealed class NonGenericCountSequence : IEnumerable<ElementInstance>, ICollection
+        {
+            internal NonGenericCountSequence(int count)
+            {
+                Count = count;
+            }
+
+            public int Count { get; }
+            public bool IsSynchronized => false;
+            public object SyncRoot => this;
+            internal bool EnumeratorEntered { get; private set; }
+
+            public IEnumerator<ElementInstance> GetEnumerator()
+            {
+                EnumeratorEntered = true;
+                throw new EnumerationEnteredException();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
+        private sealed class ReadOnlyCountSequence : IReadOnlyCollection<ElementInstance>
+        {
+            private readonly IReadOnlyList<ElementInstance> _items;
+
+            internal ReadOnlyCountSequence(int count, IReadOnlyList<ElementInstance> items)
+            {
+                Count = count;
+                _items = items;
+            }
+
+            public int Count { get; }
+            public IEnumerator<ElementInstance> GetEnumerator() => _items.GetEnumerator();
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class ConflictingCountSequence : ICollection<ElementInstance>, IReadOnlyCollection<ElementInstance>
+        {
+            int ICollection<ElementInstance>.Count => 1;
+            int IReadOnlyCollection<ElementInstance>.Count => 2;
+            bool ICollection<ElementInstance>.IsReadOnly => true;
+            internal bool EnumeratorEntered { get; private set; }
+
+            public IEnumerator<ElementInstance> GetEnumerator()
+            {
+                EnumeratorEntered = true;
+                throw new EnumerationEnteredException();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            void ICollection<ElementInstance>.Add(ElementInstance item) => throw new NotSupportedException();
+            void ICollection<ElementInstance>.Clear() => throw new NotSupportedException();
+            bool ICollection<ElementInstance>.Contains(ElementInstance item) => false;
+            void ICollection<ElementInstance>.CopyTo(ElementInstance[] array, int arrayIndex) => throw new NotSupportedException();
+            bool ICollection<ElementInstance>.Remove(ElementInstance item) => throw new NotSupportedException();
+        }
+
+        private sealed class EnumerationEnteredException : Exception
+        {
         }
     }
 }

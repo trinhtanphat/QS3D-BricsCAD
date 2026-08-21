@@ -70,7 +70,9 @@ if panel_calls != [
 ]:
     fail("quantity augmenter must add exactly the Cài đặt and Khối lượng panels in reference order")
 
-# Lock the exact owner-visible button order and production command routing.
+# Lock the customer-visible button order and production command routing. The customer Excel lane
+# intentionally replaces the visible legacy ED2 export and revision-diff slots while preserving
+# those legacy commands outside this compact Ribbon for compatibility.
 button_ids = (
     "QS3D_QTY_BLT_SETTINGS",
     "QS3D_QTY_BLT_CALCULATE",
@@ -83,11 +85,11 @@ require_order(
     quantity,
     (
         '"QS3D_QTY_BLT_SETTINGS",\n                "Cài đặt\\ntính toán",\n                "QS3DQUANTITYSETTINGS"',
-        '"QS3D_QTY_BLT_CALCULATE",\n                "Tính khối lượng\\n(Engine2)",\n                "QS3DREGEN"',
-        '"QS3D_QTY_BLT_EXPORT",\n                "Xuất\\n.blte2",\n                "QS3DED2"',
+        '"QS3D_QTY_BLT_CALCULATE",\n                "Tính khối lượng\\n(Engine2)",\n                "QS3DQUANTITYENGINE2"',
+        '"QS3D_QTY_BLT_EXPORT",\n                "Xuất\\nExcel",\n                "QS3DEXCEL"',
         '"QS3D_QTY_BLT_VIEW",\n                "Xem khối\\nlượng",\n                "QS3DBQ"',
         '"QS3D_QTY_BLT_EXPLAIN",\n                "Diễn\\ngiải",\n                "QS3DQUANTITYINSIGHT"',
-        '"QS3D_QTY_BLT_COMPARE",\n                "Đối chiếu\\nCũ/Mới",\n                "QS3DREVDIFF"',
+        '"QS3D_QTY_BLT_COMPARE",\n                "Excel →\\nCAD",\n                "QS3DEXCELTRACE"',
     ),
     "quantity reference buttons",
 )
@@ -169,7 +171,7 @@ if stop_start < 0 or reset < 0 or try_initialize_all < 0 or reset >= try_initial
     fail("quantity Reset must execute from RibbonInitializationCoordinator.Stop before the next initialization lifecycle")
 
 print(
-    "PASS: ĐỊNH LƯỢNG keeps the two-panel BLT3D-reference layout and exact command order, "
+    "PASS: QS3D quantity keeps the two-panel reference layout and exact customer command order, "
     "reapplies six clean-room screenshot-familiar vector icons as distinct frozen 16/32 bitmaps, "
     "verifies native Image/LargeImage read-back before initialization, and remains restart-safe."
 )

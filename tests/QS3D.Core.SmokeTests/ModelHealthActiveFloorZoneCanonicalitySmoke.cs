@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -11,25 +12,21 @@ namespace QS3D.Core.SmokeTests
         [ModuleInitializer]
         internal static void Initialize()
         {
-            PaddedActiveFloorNormalizesBeforeHealth();
+            PaddedStoredActiveFloorFailsVisible();
             CaseVariantActiveZoneFailsVisible();
             CanonicalActiveIdsDoNotEmitCanonicalityErrors();
             MissingActiveIdsKeepInvalidDiagnostics();
             DuplicateActiveTargetsKeepAmbiguityDiagnostics();
         }
 
-        private static void PaddedActiveFloorNormalizesBeforeHealth()
+        private static void PaddedStoredActiveFloorFailsVisible()
         {
             var project = ProjectWithFloorAndZone("FLOOR-PAD");
-            project.ActiveFloorId = " Floor-A ";
-            if (!string.Equals(project.ActiveFloorId, "Floor-A", StringComparison.Ordinal))
-                throw new InvalidOperationException("Padded ActiveFloorId must normalize before health inspection.");
-            var issues = new ModelHealthService().Inspect(project);
-            if (issues.Any(x =>
-                string.Equals(x.Code, "ACTIVE_FLOOR_NON_CANONICAL", StringComparison.Ordinal) ||
-                string.Equals(x.Code, "INVALID_ACTIVE_FLOOR", StringComparison.Ordinal) ||
-                string.Equals(x.Code, "AMBIGUOUS_ACTIVE_FLOOR", StringComparison.Ordinal)))
-                throw new InvalidOperationException("Normalized ActiveFloorId must remain a healthy canonical reference.");
+
+            // Public active-context assignment now rejects surrounding whitespace. Health still
+            // needs to diagnose a legacy/corrupt persisted value, so inject that state directly.
+            SetRawActiveFloorId(project, " Floor-A ");
+            RequireIssue(project, "ACTIVE_FLOOR_NON_CANONICAL", HealthSeverity.Error);
         }
 
         private static void CaseVariantActiveZoneFailsVisible()
@@ -88,6 +85,13 @@ namespace QS3D.Core.SmokeTests
             ProjectFloorService.Create(project, "Floor-A", "Level A", 0d);
             ProjectZoneService.Create(project, "Zone-A", "Zone A");
             return project;
+        }
+
+        private static void SetRawActiveFloorId(ProjectState project, string value)
+        {
+            var field = typeof(ProjectState).GetField("_activeFloorId", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new InvalidOperationException("ProjectState._activeFloorId field was not found.");
+            field.SetValue(project, value);
         }
 
         private static void RequireIssue(ProjectState project, string code, HealthSeverity severity)

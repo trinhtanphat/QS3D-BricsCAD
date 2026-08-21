@@ -202,9 +202,7 @@ namespace QS3D.Core.Reporting
 
         private static double Add(double left, double right, string label)
         {
-            var result = left + right;
-            if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " overflowed.");
-            return result;
+            return QuantityReportMath.Add(left, right, label);
         }
     }
 }

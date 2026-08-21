@@ -75,7 +75,7 @@ namespace QS3D.Core.Documentation
 
         private static List<SemanticSheetPlan> MaterializeBounded(IEnumerable<SemanticSheetPlan> sheets)
         {
-            RequireKnownCountsWithinLimit(sheets);
+            var knownCount = RequireKnownCountsWithinLimit(sheets);
 
             var result = new List<SemanticSheetPlan>(Math.Min(MaxSheets, 256));
             using (var enumerator = sheets.GetEnumerator())
@@ -90,10 +90,14 @@ namespace QS3D.Core.Documentation
                     result.Add(sheet);
                 }
             }
+
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw new InvalidOperationException("Semantic sheet index source traversal count does not match its known count.");
+
             return result;
         }
 
-        private static void RequireKnownCountsWithinLimit(IEnumerable<SemanticSheetPlan> sheets)
+        private static int? RequireKnownCountsWithinLimit(IEnumerable<SemanticSheetPlan> sheets)
         {
             var counts = new List<int>(3);
             if (sheets is ICollection<SemanticSheetPlan> collection)
@@ -103,7 +107,7 @@ namespace QS3D.Core.Documentation
             if (sheets is ICollection nonGenericCollection)
                 counts.Add(nonGenericCollection.Count);
 
-            if (counts.Count == 0) return;
+            if (counts.Count == 0) return null;
 
             var expected = counts[0];
             var maximum = expected;
@@ -121,6 +125,8 @@ namespace QS3D.Core.Documentation
                 throw new InvalidOperationException("Semantic sheet index source reports an invalid negative known count.");
             if (hasConflict)
                 throw new InvalidOperationException("Semantic sheet index source reports conflicting known counts.");
+
+            return expected;
         }
 
         private static InvalidOperationException TooManySheets()

@@ -72,10 +72,11 @@ def main() -> int:
         require(factory, token, "QS3D compact ribbon brand mark")
 
     # Functional Home actions must use semantic glyphs; the product mark is not a substitute for
-    # a missing icon. Keep the brand-rendering path available only for future explicit identity specs.
+    # a missing icon. System Objects intentionally gets the distinct 3D/model glyph rather than
+    # the generic Objects fallback called out in the owner screenshots.
     require(
         home,
-        'new HomeButtonSpec("QS3D_HOME_SYSTEM_OBJECTS", "Đối tượng\\nhệ thống", () => new FamilyManagerCommands().ShowFamilyManager(), RibbonIconKind.Objects)',
+        'new HomeButtonSpec("QS3D_HOME_SYSTEM_OBJECTS", "Đối tượng\\nhệ thống", () => new FamilyManagerCommands().ShowFamilyManager(), RibbonIconKind.Model3d)',
         "QS3D system-object semantic icon",
     )
     for token in (
@@ -93,6 +94,9 @@ def main() -> int:
         "return RibbonIconKind.Qs3dLogo;",
         "return RibbonIconKind.Objects;",
         "Do not turn a missing mapping into product branding.",
+        "ApplySemanticIcon(item, RibbonIconKind.Model3d, makeLarge: true);",
+        "ApplySemanticIcon(item, RibbonIconKind.Inspect, makeLarge: true);",
+        "CreateIfcRemoveIcon(32)",
     ):
         require(bootstrap, token, "canonical Ribbon brand/fallback separation")
 
@@ -118,8 +122,8 @@ def main() -> int:
 
     print(
         "PASS: repository branding keeps the independent QS3D cube mark for explicit identity, "
-        "System Objects uses a semantic Objects icon, unknown functional Ribbon commands use a "
-        "neutral fallback instead of product branding, and BricsCAD host/icon ownership is untouched."
+        "System Objects uses a distinct Model3d glyph, Project Info uses Inspect, IFC remove has a destructive glyph, "
+        "unknown functional Ribbon commands use a neutral fallback instead of product branding, and BricsCAD host/icon ownership is untouched."
     )
     return 0
 

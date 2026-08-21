@@ -12,7 +12,18 @@ namespace QS3D.Core.Geometry
         public double Z_M { get; set; }
         public double WidthM { get; set; }
         public double HeightM { get; set; }
-        public double AreaM2 => WidthM * HeightM;
+        public double AreaM2
+        {
+            get
+            {
+                var area = WidthM * HeightM;
+                if (double.IsNaN(area) || double.IsInfinity(area))
+                    throw new OverflowException("Curtain panel piece area overflowed.");
+                if (area == 0d && WidthM != 0d && HeightM != 0d)
+                    throw new OverflowException("Curtain panel piece area underflowed to zero.");
+                return area == 0d ? 0d : area;
+            }
+        }
     }
 
     public sealed class CurtainWallOpeningPanelPlan
@@ -22,7 +33,16 @@ namespace QS3D.Core.Geometry
         public int InterruptedPanelCount { get; set; }
         public double OriginalPanelAreaM2 { get; set; }
         public double RemainingPanelAreaM2 { get; set; }
-        public double RemovedPanelAreaM2 => Math.Max(0d, OriginalPanelAreaM2 - RemainingPanelAreaM2);
+        public double RemovedPanelAreaM2
+        {
+            get
+            {
+                var removed = OriginalPanelAreaM2 - RemainingPanelAreaM2;
+                if (double.IsNaN(removed) || double.IsInfinity(removed))
+                    throw new OverflowException("Curtain removed panel area is not representable.");
+                return removed <= 0d ? 0d : removed;
+            }
+        }
     }
 
     public static class CurtainWallOpeningPanelPlanner

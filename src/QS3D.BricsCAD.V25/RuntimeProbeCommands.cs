@@ -27,7 +27,7 @@ namespace QS3D.BricsCAD.V25
                 var ribbonReady = RibbonBootstrapper.TryInitialize();
                 if (!ribbonReady) throw new InvalidOperationException("QS3D ribbon initialization did not complete.");
                 if (!PaletteCoordinator.IsWorkspaceVisible) throw new InvalidOperationException("QS3D workspace palette is not visible after initialization.");
-                if (PaletteCoordinator.IsRightPanelVisible) throw new InvalidOperationException("QS3D drawing/layer palette should remain hidden after initialization.");
+                if (!PaletteCoordinator.IsRightPanelVisible) throw new InvalidOperationException("QS3D drawing/layer palette is not visible after BIM workspace initialization.");
                 if (PaletteCoordinator.IsQuantityInsightVisible) throw new InvalidOperationException("QS3D quantity insight palette should remain hidden after initialization.");
 
                 var process = Process.GetCurrentProcess();
@@ -48,10 +48,10 @@ namespace QS3D.BricsCAD.V25
                     "assembly_version=" + OneLine(assembly.GetName().Version?.ToString() ?? "unknown"),
                     "ribbon_ready=true",
                     // Keep the legacy key for downstream artifact compatibility while also reporting
-                    // the specific Workspace/Right/Quantity states that define the Ribbon-first contract.
+                    // the specific Workspace/Right/Quantity states that define the BIM workspace contract.
                     "palette_visible=true",
                     "workspace_palette_visible=true",
-                    "right_palette_visible=false",
+                    "right_palette_visible=true",
                     "quantity_palette_visible=false"
                 });
 

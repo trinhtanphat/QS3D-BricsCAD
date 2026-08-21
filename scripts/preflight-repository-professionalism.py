@@ -30,6 +30,7 @@ FORBIDDEN_EXTERNAL_ORCHESTRATION_PATH_MARKERS = (
     "controller-worker-pool",
 )
 ORCHESTRATION_SCAN_SUFFIXES = {".md", ".txt", ".yml", ".yaml", ".json", ".toml", ".py", ".ps1", ".sh"}
+MAX_ORCHESTRATION_SCAN_BYTES = 1024 * 1024
 SELF_PATH = "scripts/preflight-repository-professionalism.py"
 
 
@@ -62,8 +63,22 @@ def reject_external_orchestration_artifacts(failures: list[str]) -> None:
             continue
 
         try:
+            size = path.stat().st_size
+        except OSError as exc:
+            failures.append(f"cannot inspect orchestration-scanned repository file metadata: {relative}: {exc}")
+            continue
+        if size > MAX_ORCHESTRATION_SCAN_BYTES:
+            failures.append(
+                f"orchestration-scanned repository file exceeds {MAX_ORCHESTRATION_SCAN_BYTES} byte safety bound: {relative} ({size} bytes)"
+            )
+            continue
+
+        try:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
+            continue
+        except OSError as exc:
+            failures.append(f"cannot read orchestration-scanned repository file: {relative}: {exc}")
             continue
 
         if "QS3D-CONTROL" in text and "QS3D-WORKER-" in text:

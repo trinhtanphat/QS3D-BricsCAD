@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
@@ -58,6 +59,7 @@ namespace QS3D.Core.Revisions
         public IReadOnlyList<QuantityRevisionSummary> Summarize(IEnumerable<QuantityRevisionRow> rows)
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            var knownCount = SnapshotKnownSummaryCount(rows);
             var summarizable = new List<QuantityRevisionRow>();
             var index = 0;
             foreach (var row in rows)
@@ -73,6 +75,11 @@ namespace QS3D.Core.Revisions
                 }
                 index++;
             }
+
+            if (knownCount.HasValue && index != knownCount.Value)
+                throw new InvalidOperationException(
+                    "Quantity revision summary input changed during enumeration; Count reported " + knownCount.Value +
+                    " rows but traversal produced " + index + ".");
 
             var result = new List<QuantityRevisionSummary>();
             foreach (var group in summarizable.GroupBy(x => x.QuantityName, StringComparer.OrdinalIgnoreCase).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
@@ -92,6 +99,28 @@ namespace QS3D.Core.Revisions
                 });
             }
             return result.AsReadOnly();
+        }
+
+        private static int? SnapshotKnownSummaryCount(IEnumerable<QuantityRevisionRow> rows)
+        {
+            int? knownCount = null;
+            if (rows is ICollection<QuantityRevisionRow> genericCollection)
+                ObserveKnownSummaryCount(genericCollection.Count, ref knownCount);
+            if (rows is IReadOnlyCollection<QuantityRevisionRow> readOnlyCollection)
+                ObserveKnownSummaryCount(readOnlyCollection.Count, ref knownCount);
+            if (rows is ICollection nonGenericCollection)
+                ObserveKnownSummaryCount(nonGenericCollection.Count, ref knownCount);
+            return knownCount;
+        }
+
+        private static void ObserveKnownSummaryCount(int count, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Quantity revision summary input reported a negative known Count.");
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException(
+                    "Quantity revision summary input exposes conflicting known Counts: " + knownCount.Value + " and " + count + ".");
+            knownCount = count;
         }
 
         private static void ValidateProjectIdentityCompatibility(RevisionSnapshot before, RevisionSnapshot after)
@@ -169,7 +198,15 @@ namespace QS3D.Core.Revisions
                 _sum = next;
             }
 
-            internal double Value(string label) => RevisionMath.Add(_sum, _compensation, label);
+            internal double Value(string label)
+            {
+                var result = RevisionMath.Add(_sum, _compensation, label);
+                if (_compensation != 0d && result == _sum)
+                    throw new OverflowException("Revision quantity total lost a non-zero compensation at floating-point precision: " + label);
+                if (_sum != 0d && result == _compensation)
+                    throw new OverflowException("Revision quantity total lost a non-zero primary sum at floating-point precision: " + label);
+                return result;
+            }
         }
     }
 }

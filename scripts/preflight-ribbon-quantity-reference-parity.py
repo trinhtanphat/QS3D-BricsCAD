@@ -8,9 +8,11 @@ ICON_FACTORY = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonIconFactory.cs"
 COORDINATOR = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonInitializationCoordinator.cs"
 PLUGIN = ROOT / "src/QS3D.BricsCAD.V25/PluginEntry.cs"
 SETTINGS_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/QuantitySettingsCommands.cs"
+ENGINE2_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/QuantityEngine2Commands.cs"
 CORE_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/Commands.cs"
 INSIGHT_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/QuantityInsightCommands.cs"
 REVIEW_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
+CUSTOMER_EXCEL_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/CustomerExcelCommands.cs"
 errors = []
 
 for path in (
@@ -19,20 +21,22 @@ for path in (
     COORDINATOR,
     PLUGIN,
     SETTINGS_COMMANDS,
+    ENGINE2_COMMANDS,
     CORE_COMMANDS,
     INSIGHT_COMMANDS,
     REVIEW_COMMANDS,
+    CUSTOMER_EXCEL_COMMANDS,
 ):
     if not path.is_file():
         errors.append("missing quantity Ribbon parity source: " + str(path.relative_to(ROOT)))
 
 button_specs = (
     ("QS3D_QTY_BLT_SETTINGS", "Cài đặt\\ntính toán", "QS3DQUANTITYSETTINGS", "QuantitySettings"),
-    ("QS3D_QTY_BLT_CALCULATE", "Tính khối lượng\\n(Engine2)", "QS3DREGEN", "QuantityCalculate"),
-    ("QS3D_QTY_BLT_EXPORT", "Xuất\\n.blte2", "QS3DED2", "QuantityExport"),
+    ("QS3D_QTY_BLT_CALCULATE", "Tính khối lượng\\n(Engine2)", "QS3DQUANTITYENGINE2", "QuantityCalculate"),
+    ("QS3D_QTY_BLT_EXPORT", "Xuất\\nExcel", "QS3DEXCEL", "QuantityExport"),
     ("QS3D_QTY_BLT_VIEW", "Xem khối\\nlượng", "QS3DBQ", "QuantityView"),
     ("QS3D_QTY_BLT_EXPLAIN", "Diễn\\ngiải", "QS3DQUANTITYINSIGHT", "QuantityExplain"),
-    ("QS3D_QTY_BLT_COMPARE", "Đối chiếu\\nCũ/Mới", "QS3DREVDIFF", "QuantityCompare"),
+    ("QS3D_QTY_BLT_COMPARE", "Excel →\\nCAD", "QS3DEXCELTRACE", "QuantityCompare"),
 )
 
 legacy_panel_ids = (
@@ -66,10 +70,10 @@ if AUGMENTER.is_file():
     )
     for needle in required:
         if needle not in text:
-            errors.append("QuantityReferenceRibbonAugmenter missing BLT3D reconciliation contract: " + needle)
+            errors.append("QuantityReferenceRibbonAugmenter missing customer quantity reconciliation contract: " + needle)
 
     if text.count("AddPanel(panels,") != 2:
-        errors.append("quantity BLT3D layout must add exactly two panels")
+        errors.append("quantity layout must add exactly two panels")
 
     for panel_id in legacy_panel_ids:
         if text.count(f'"{panel_id}"') != 1:
@@ -77,25 +81,29 @@ if AUGMENTER.is_file():
 
     for button_id, label, command, icon in button_specs:
         if text.count(f'"{button_id}"') != 1:
-            errors.append("expected exactly one BLT3D quantity button id: " + button_id)
+            errors.append("expected exactly one quantity button id: " + button_id)
         if text.count(f'"{label}"') != 1:
-            errors.append("expected exactly one BLT3D quantity button label: " + label)
+            errors.append("expected exactly one quantity button label: " + label)
         if text.count(f"RibbonIconKind.{icon}") != 1:
-            errors.append("expected exactly one BLT3D quantity button icon binding: " + icon)
+            errors.append("expected exactly one quantity button icon binding: " + icon)
 
     expected_command_counts = {
         "QS3DQUANTITYSETTINGS": 1,
-        "QS3DREGEN": 1,
-        "QS3DED2": 1,
+        "QS3DQUANTITYENGINE2": 1,
+        "QS3DREGEN": 0,
+        "QS3DEXCEL": 1,
         "QS3DBQ": 1,
         "QS3DQUANTITYINSIGHT": 1,
-        "QS3DREVDIFF": 1,
+        "QS3DEXCELTRACE": 1,
+        # Legacy ED2/revision commands stay registered but are no longer visible in this compact customer Ribbon.
+        "QS3DED2": 0,
+        "QS3DREVDIFF": 0,
     }
     for command, expected_count in expected_command_counts.items():
         actual_count = text.count(f'"{command}"')
         if actual_count != expected_count:
             errors.append(
-                f"expected {expected_count} BLT3D quantity command binding(s) for {command}, found {actual_count}"
+                f"expected {expected_count} quantity Ribbon binding(s) for {command}, found {actual_count}"
             )
 
     if '"QS3D_QTY_BLT_EXPLAIN",\n                "Diễn\\ngiải",\n                "QS3DBQ"' in text:
@@ -110,16 +118,16 @@ if AUGMENTER.is_file():
     )
     for button_id in forbidden_button_ids:
         if button_id in text:
-            errors.append("stale additive quantity-reference button survived BLT3D replacement: " + button_id)
+            errors.append("stale additive quantity-reference button survived replacement: " + button_id)
 
 if ICON_FACTORY.is_file():
     text = ICON_FACTORY.read_text(encoding="utf-8")
     for _, _, _, icon in button_specs:
         if text.count(f"case RibbonIconKind.{icon}:") != 1:
-            errors.append("RibbonIconFactory must render exactly one BLT3D quantity icon case: " + icon)
+            errors.append("RibbonIconFactory must render exactly one quantity icon case: " + icon)
         enum_count = text.count(f"        {icon},") + text.count(f"        {icon}\n")
         if enum_count != 1:
-            errors.append("RibbonIconKind must declare exactly one BLT3D quantity icon: " + icon)
+            errors.append("RibbonIconKind must declare exactly one quantity icon: " + icon)
 
 if COORDINATOR.is_file():
     text = COORDINATOR.read_text(encoding="utf-8")
@@ -145,9 +153,9 @@ if PLUGIN.is_file():
         if needle not in text:
             errors.append("PluginEntry missing coordinated Quantity reference lifecycle hook: " + needle)
 
-# Pin the real behavior behind every visible BLT3D-style quantity action. A registered
-# command name alone is not enough: this catches accidental visual aliases such as the
-# old Diễn giải -> QS3DBQ routing bug.
+# Pin the real behavior behind every visible customer quantity action. Registered command names
+# alone are not enough; this catches accidental aliases while allowing legacy ED2/revision commands
+# to remain available outside the compact customer Ribbon.
 behavior_contracts = (
     (
         SETTINGS_COMMANDS,
@@ -159,19 +167,29 @@ behavior_contracts = (
         ),
     ),
     (
-        CORE_COMMANDS,
+        ENGINE2_COMMANDS,
         "Tính khối lượng (Engine2)",
         (
-            '[CommandMethod("QS3DREGEN", CommandFlags.Modal)]',
-            "var count = RegenerateProject(project);",
+            '[CommandMethod("QS3DQUANTITYENGINE2", CommandFlags.Modal)]',
+            'ExistingProjectMutationContext.TryGet(document, out var project)',
+            'QuantityCalculationResultWindow.ShowNoProject(noProjectMessage)',
+            'PaletteCoordinator.ShowBimWorkspace()',
+            ".RegenerateDirty(project);",
+            "ProjectQuantityReportBuilder.Group(project);",
+            "QuantityEngine2Summary.Build(rows, regenerated);",
+            "QuantityCalculationResultWindow.ShowSuccess(summary);",
         ),
     ),
     (
-        CORE_COMMANDS,
-        "Xuất .blte2 / ED2 export route",
+        CUSTOMER_EXCEL_COMMANDS,
+        "Xuất Excel",
         (
-            '[CommandMethod("QS3DED2", CommandFlags.UsePickSet)]',
-            "XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary);",
+            '[CommandMethod("QS3DEXCEL", CommandFlags.UsePickSet)]',
+            "ProjectStateSnapshot.CreateDetachedCopy(project)",
+            "ProjectQuantityReportBuilder.Detail(preview",
+            "ProjectQuantityReportBuilder.Group(preview",
+            "EnsureHandlesAreLive(document, details)",
+            "QsCustomerWorkbookExporter.Export(dialog.FileName, details, summary);",
         ),
     ),
     (
@@ -192,12 +210,14 @@ behavior_contracts = (
         ),
     ),
     (
-        REVIEW_COMMANDS,
-        "Đối chiếu Cũ/Mới",
+        CUSTOMER_EXCEL_COMMANDS,
+        "Excel → CAD",
         (
-            '[CommandMethod("QS3DREVDIFF", CommandFlags.Modal)]',
-            "new QuantityRevisionReport().Build(before, after);",
-            "new RevisionWindow(doc, before, after, rows, locate)",
+            '[CommandMethod("QS3DEXCELTRACE", CommandFlags.Modal)]',
+            "QsCustomerWorkbookTraceReader.Read(dialog.FileName, sheet, row.Value);",
+            "ExcelLocateResolutionService.ResolveCustomerTrace(document, project, trace);",
+            "document.Editor.SetImpliedSelection(resolution.ObjectIds.ToArray());",
+            'SendStringToExecute("QS3DZOOMSELECTED "',
         ),
     ),
 )
@@ -210,6 +230,46 @@ for path, action_name, needles in behavior_contracts:
         if needle not in text:
             errors.append(f"{action_name} behavior contract missing: {needle}")
 
+# The customer Ribbon replacement must not delete the established compatibility commands.
+legacy_compatibility_contracts = (
+    (
+        CORE_COMMANDS,
+        "legacy ED2 export",
+        (
+            '[CommandMethod("QS3DED2", CommandFlags.UsePickSet)]',
+            "XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary);",
+        ),
+    ),
+    (
+        REVIEW_COMMANDS,
+        "legacy revision comparison",
+        (
+            '[CommandMethod("QS3DREVDIFF", CommandFlags.Modal)]',
+            "new QuantityRevisionReport().Build(before, after);",
+            "new RevisionWindow(doc, before, after, rows, locate)",
+        ),
+    ),
+)
+for path, action_name, needles in legacy_compatibility_contracts:
+    if not path.is_file():
+        continue
+    text = path.read_text(encoding="utf-8")
+    for needle in needles:
+        if needle not in text:
+            errors.append(f"{action_name} compatibility contract missing: {needle}")
+
+if ENGINE2_COMMANDS.is_file():
+    engine2 = ENGINE2_COMMANDS.read_text(encoding="utf-8")
+    if 'ExistingProjectMutationContext.Require(document, "Tính khối lượng (Engine2)")' in engine2:
+        errors.append("Tính khối lượng (Engine2) must not use the generic missing-project mutation exception")
+    if "ProjectContextCoordinator.GetOrCreate" in engine2:
+        errors.append("Tính khối lượng (Engine2) must not silently create a QS3D project")
+    try_get_pos = engine2.find('ExistingProjectMutationContext.TryGet(document, out var project)')
+    no_project_pos = engine2.find('QuantityCalculationResultWindow.ShowNoProject(noProjectMessage)', try_get_pos)
+    regenerate_pos = engine2.find('.RegenerateDirty(project)', no_project_pos)
+    if not (0 <= try_get_pos < no_project_pos < regenerate_pos):
+        errors.append("Tính khối lượng (Engine2) must handle missing-project UX before existing-project regeneration")
+
 adapter_root = ROOT / "src/QS3D.BricsCAD.V25"
 if adapter_root.is_dir():
     command_source = "\n".join(
@@ -220,9 +280,9 @@ if adapter_root.is_dir():
     for command in sorted({spec[2] for spec in button_specs}):
         marker = f'[CommandMethod("{command}"'
         if marker not in command_source:
-            errors.append("BLT3D quantity Ribbon points to an unregistered adapter command: " + command)
+            errors.append("quantity Ribbon points to an unregistered adapter command: " + command)
 
-print("QS3D ĐỊNH LƯỢNG Ribbon BLT3D reference-parity preflight")
+print("QS3D quantity Ribbon customer-workflow parity preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
@@ -230,8 +290,7 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: QS3D_QTY is reconciled to the BLT3D reference with exactly two groups, "
-    "six large icon buttons, deterministic removal of legacy QS3D quantity panels, "
-    "distinct registered command routing with pinned behavior, coordinated initialization, "
-    "and contained teardown."
+    "PASS: QS3D_QTY is reconciled to the two-panel customer quantity workflow with six large icon buttons, "
+    "deterministic removal of legacy QS3D quantity panels, registered QS3DEXCEL/QS3DEXCELTRACE routing, "
+    "preserved ED2/revision compatibility commands, coordinated initialization, and contained teardown."
 )

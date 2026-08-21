@@ -101,6 +101,9 @@ namespace QS3D.BricsCAD.V25.Cad
                         var endCover = CadGeometryGuard.ToDrawingUnits(document, endCoverM, element.Id + "/beam end cover");
                         var startX = CadGeometryGuard.Add(line.StartPoint.X, CadGeometryGuard.Finite(ux * endCover, element.Id + "/beam rebar start dx"), element.Id + "/beam rebar start X");
                         var startY = CadGeometryGuard.Add(line.StartPoint.Y, CadGeometryGuard.Finite(uy * endCover, element.Id + "/beam rebar start dy"), element.Id + "/beam rebar start Y");
+                        var halfBarLength = CadGeometryGuard.Finite(barLength / 2d, element.Id + "/beam rebar half length");
+                        var longitudinalCenterX = CadGeometryGuard.Add(startX, CadGeometryGuard.Finite(ux * halfBarLength, element.Id + "/beam rebar center dx"), element.Id + "/beam rebar center X");
+                        var longitudinalCenterY = CadGeometryGuard.Add(startY, CadGeometryGuard.Finite(uy * halfBarLength, element.Id + "/beam rebar center dy"), element.Id + "/beam rebar center Y");
                         var centerZ = vertical.CenterDrawing;
                         ErasePrevious(document, transaction, project, element, ownership);
                         var update = new PendingUpdate { Element = element, DiameterMm = diameterMm, CoverM = coverM, EndCoverM = endCoverM, TopCount = counts.Item1, BottomCount = counts.Item2, VerticalPlacement = vertical };
@@ -108,8 +111,8 @@ namespace QS3D.BricsCAD.V25.Cad
                         {
                             var localX = CadGeometryGuard.ToDrawingUnits(document, local.X, element.Id + "/beam rebar transverse offset");
                             var localZ = CadGeometryGuard.ToDrawingUnits(document, local.Y, element.Id + "/beam rebar vertical offset");
-                            var x = CadGeometryGuard.Add(startX, CadGeometryGuard.Finite(nx * localX, element.Id + "/beam rebar transverse X"), element.Id + "/beam rebar X");
-                            var y = CadGeometryGuard.Add(startY, CadGeometryGuard.Finite(ny * localX, element.Id + "/beam rebar transverse Y"), element.Id + "/beam rebar Y");
+                            var x = CadGeometryGuard.Add(longitudinalCenterX, CadGeometryGuard.Finite(nx * localX, element.Id + "/beam rebar transverse X"), element.Id + "/beam rebar X");
+                            var y = CadGeometryGuard.Add(longitudinalCenterY, CadGeometryGuard.Finite(ny * localX, element.Id + "/beam rebar transverse Y"), element.Id + "/beam rebar Y");
                             var z = CadGeometryGuard.Add(centerZ, localZ, element.Id + "/beam rebar Z");
                             Solid3d? bar = new Solid3d();
                             try

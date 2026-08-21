@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
-using System.Security;
 using System.Text;
 using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
@@ -48,6 +47,8 @@ namespace QS3D.Core.Export
                 ValidateRange(row.MinimumClearPanelHeightM, row.MaximumClearPanelHeightM, rowIndex, "clear-panel height");
                 snapshot.Add(row);
             }
+            if (rows.Count != rowCount)
+                throw new InvalidOperationException("Curtain XLSX export row count changed during snapshot.");
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -187,8 +188,9 @@ namespace QS3D.Core.Export
 
         private static void AppendInlineStringCell(StringBuilder sb, string cellRef, string value, int style)
         {
-            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>")
-                .Append(XlsxXmlText.Escape(value)).Append("</t></is></c>");
+            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is>");
+            XlsxXmlText.AppendTextElement(sb, value);
+            sb.Append("</is></c>");
         }
 
         private static void AppendNumberCell(StringBuilder sb, string cellRef, double value)

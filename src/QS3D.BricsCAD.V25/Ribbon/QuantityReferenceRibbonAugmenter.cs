@@ -22,18 +22,13 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private static readonly string[] OwnedPanelSourceIds =
         {
-            // Current BLT3D-reference panels.
             SettingsPanelSourceId,
             QuantityPanelSourceId,
-
-            // Older grouped bootstrap panels that must not survive beside the reference UI.
             "QS3D_QTY_EXCEL_PANEL_SOURCE",
             "QS3D_QTY_OPENINGS_PANEL_SOURCE",
             "QS3D_QTY_REBAR_SCHEDULE_PANEL_SOURCE",
             "QS3D_QTY_REBAR_3D_PANEL_SOURCE",
             "QS3D_QTY_REBAR_HEALTH_PANEL_SOURCE",
-
-            // Previous quantity reference/fallback layouts.
             "QS3D_QTY_REFERENCE_PANEL_SOURCE",
             "QS3D_QTY_PANEL_SOURCE"
         };
@@ -70,12 +65,12 @@ namespace QS3D.BricsCAD.V25.Ribbon
             new ButtonSpec(
                 "QS3D_QTY_BLT_CALCULATE",
                 "Tính khối lượng\n(Engine2)",
-                "QS3DREGEN",
+                "QS3DQUANTITYENGINE2",
                 RibbonIconKind.QuantityCalculate),
             new ButtonSpec(
                 "QS3D_QTY_BLT_EXPORT",
-                "Xuất\n.blte2",
-                "QS3DED2",
+                "Xuất\nExcel",
+                "QS3DEXCEL",
                 RibbonIconKind.QuantityExport),
             new ButtonSpec(
                 "QS3D_QTY_BLT_VIEW",
@@ -89,8 +84,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 RibbonIconKind.QuantityExplain),
             new ButtonSpec(
                 "QS3D_QTY_BLT_COMPARE",
-                "Đối chiếu\nCũ/Mới",
-                "QS3DREVDIFF",
+                "Excel →\nCAD",
+                "QS3DEXCELTRACE",
                 RibbonIconKind.QuantityCompare)
         };
 
@@ -107,21 +102,19 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 var quantityTab = tabs == null ? null : FindById(tabs, TabId);
                 if (quantityTab == null) return false;
 
+                // Preserve the stable internal tab id used by bootstrap/retry logic, but present
+                // the customer-facing quantity workspace under the concise QS3D caption.
+                SetProperty(quantityTab, "Title", "QS3D");
+
                 var panels = GetProperty(quantityTab, "Panels");
                 if (panels == null) return false;
 
-                // Remove only QS3D-owned quantity panel IDs. Native/third-party ribbon content
-                // remains untouched. Rebuilding both panels also guarantees the order shown in
-                // the BLT3D reference regardless of which older QS3D version was loaded first.
                 foreach (var sourceId in OwnedPanelSourceIds)
                     RemoveOwnedPanel(panels, sourceId);
 
                 AddPanel(panels, SettingsPanelSourceId, "Cài đặt", SettingsButtons);
                 AddPanel(panels, QuantityPanelSourceId, "Khối lượng", QuantityButtons);
 
-                // Do not accept source-level Image/LargeImage assignment as proof that BricsCAD
-                // retained a visible native icon. Reapply the six clean-room reference glyphs
-                // through the dedicated host-tree polisher and require successful read-back.
                 if (!BltQuantityIconPolisher.TryInitialize())
                     return false;
 

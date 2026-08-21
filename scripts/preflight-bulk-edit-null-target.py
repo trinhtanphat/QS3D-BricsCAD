@@ -20,7 +20,7 @@ if SERVICE.is_file():
     else:
         body = text[start:end]
         for token in (
-            "EnsureKnownCountWithinBound(elements, \"Bulk edit target collection\")",
+            "var knownCount = SnapshotKnownCount(elements, \"Bulk edit target collection\")",
             "foreach (var projectElement in project.Elements)",
             "if (projectElement == null)",
             "if (projectElements.ContainsKey(projectElementId))",
@@ -30,9 +30,15 @@ if SERVICE.is_file():
             'throw new InvalidOperationException("Bulk edit target collection contains a null semantic element entry.")',
             "if (elementId.Length == 0)",
             "!projectElements.TryGetValue(elementId, out var owned) || !ReferenceEquals(owned, element)",
+            "RequireObservedCount(knownCount, inputCount, \"Bulk edit target collection\")",
         ):
             if token not in body:
                 errors.append("OwnedDistinct missing fail-closed target validation: " + token)
+        snapshot = body.find("var knownCount = SnapshotKnownCount(elements, \"Bulk edit target collection\")")
+        enumeration = body.find("foreach (var element in elements)")
+        observed = body.find("RequireObservedCount(knownCount, inputCount, \"Bulk edit target collection\")")
+        if snapshot < 0 or enumeration < 0 or observed < 0 or not (snapshot < enumeration < observed):
+            errors.append("OwnedDistinct must snapshot known Count before target enumeration and bind it to the completed traversal")
         if "if (element == null) continue;" in body:
             errors.append("OwnedDistinct must not silently drop null caller-supplied targets")
 
@@ -72,4 +78,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: object-based bulk edits reject null/invalid caller targets and stale target enumeration before property/dirty/version mutation while retaining bounded project-ownership validation.")
+print("PASS: object-based bulk edits reject null/invalid caller targets and stale target enumeration before property/dirty/version mutation while retaining bounded Count-integrity and project-ownership validation.")

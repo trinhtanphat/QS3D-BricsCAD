@@ -23,7 +23,7 @@ namespace QS3D.Core.Services
         public void Rebuild(IEnumerable<ProjectElement> elements)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
-            RejectKnownOversizedInput(elements, "Dependency graph rebuild");
+            var knownCount = RejectKnownOversizedInput(elements, "Dependency graph rebuild");
 
             var next = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
             var nextElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
@@ -54,6 +54,8 @@ namespace QS3D.Core.Services
                 }
                 processedDependencies.Add(new KeyValuePair<ProjectElement, HashSet<string>>(element, dependencySnapshot));
             }
+
+            RequireObservedCount(knownCount, elementCount, "Dependency graph rebuild");
 
             foreach (var processed in processedDependencies)
             {
@@ -131,7 +133,7 @@ namespace QS3D.Core.Services
         public IReadOnlyList<ProjectElement> TopologicalDirtyOrder(IEnumerable<ProjectElement> elements)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
-            RejectKnownOversizedInput(elements, "Dependency ordering");
+            var knownCount = RejectKnownOversizedInput(elements, "Dependency ordering");
             var materialized = new List<ProjectElement>();
             foreach (var element in elements)
             {
@@ -141,22 +143,23 @@ namespace QS3D.Core.Services
                 materialized.Add(element);
             }
 
+            RequireObservedCount(knownCount, materialized.Count, "Dependency ordering");
+
             foreach (var element in materialized)
                 ValidateDependencies(element);
 
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var list = new List<ProjectElement>();
             foreach (var element in materialized)
             {
+                if (!seenIds.Add(element.Id))
+                    throw new InvalidOperationException("Dependency ordering contains duplicate semantic element id: " + element.Id);
                 if (element.Dirty != ElementDirtyFlags.None) list.Add(element);
             }
 
             var byId = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in list)
-            {
-                if (byId.ContainsKey(element.Id))
-                    throw new InvalidOperationException("Dependency ordering contains duplicate semantic element id: " + element.Id);
                 byId[element.Id] = element;
-            }
 
             var result = new List<ProjectElement>(list.Count);
             var temporary = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -190,7 +193,7 @@ namespace QS3D.Core.Services
             return result.AsReadOnly();
         }
 
-        private static void RejectKnownOversizedInput(IEnumerable<ProjectElement> elements, string operation)
+        private static int? RejectKnownOversizedInput(IEnumerable<ProjectElement> elements, string operation)
         {
             var genericCount = elements is ICollection<ProjectElement> collection ? (int?)collection.Count : null;
             var readOnlyCount = elements is IReadOnlyCollection<ProjectElement> readOnlyCollection ? (int?)readOnlyCollection.Count : null;
@@ -201,11 +204,18 @@ namespace QS3D.Core.Services
             ValidateKnownCount(nonGenericCount, operation);
 
             var expected = genericCount ?? readOnlyCount ?? nonGenericCount;
-            if (!expected.HasValue) return;
+            if (!expected.HasValue) return null;
             if ((genericCount.HasValue && genericCount.Value != expected.Value) ||
                 (readOnlyCount.HasValue && readOnlyCount.Value != expected.Value) ||
                 (nonGenericCount.HasValue && nonGenericCount.Value != expected.Value))
                 throw new InvalidOperationException(operation + " reports conflicting known element counts.");
+            return expected;
+        }
+
+        private static void RequireObservedCount(int? knownCount, int observedCount, string operation)
+        {
+            if (knownCount.HasValue && knownCount.Value != observedCount)
+                throw new InvalidOperationException(operation + " element count changed during enumeration.");
         }
 
         private static void ValidateKnownCount(int? count, string operation)

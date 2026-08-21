@@ -50,8 +50,12 @@ namespace QS3D.Core.Recognition
     {
         public RecognitionRule(string id, ElementCategory category, IEnumerable<string>? layerTerms = null, IEnumerable<string>? textTerms = null, IEnumerable<string>? entityTypes = null)
         {
-            Id = string.IsNullOrWhiteSpace(id) ? throw new ArgumentException("Rule id is required.", nameof(id)) : id.Trim();
-            if (Id.Any(char.IsControl)) throw new ArgumentException("Rule id must not contain control characters.", nameof(id));
+            if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Rule id is required.", nameof(id));
+            var canonicalId = id.Trim();
+            if (!string.Equals(id, canonicalId, StringComparison.Ordinal))
+                throw new ArgumentException("Rule id must not contain leading or trailing whitespace.", nameof(id));
+            if (canonicalId.Any(char.IsControl)) throw new ArgumentException("Rule id must not contain control characters.", nameof(id));
+            Id = canonicalId;
             if (!Enum.IsDefined(typeof(ElementCategory), category)) throw new ArgumentOutOfRangeException(nameof(category), "Recognition rule category must be defined.");
             Category = category;
             LayerTerms = NormalizeTerms(layerTerms);

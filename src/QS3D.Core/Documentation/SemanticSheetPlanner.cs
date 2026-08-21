@@ -53,7 +53,25 @@ namespace QS3D.Core.Documentation
 
         private static IReadOnlyList<SemanticSheetPlacementDefinition> SnapshotPlacements(IEnumerable<SemanticSheetPlacementDefinition> placements)
         {
-            var result = new List<SemanticSheetPlacementDefinition>(SemanticSheetPlanner.MaxPlacements);
+            var knownCounts = new List<int>(3);
+            if (placements is ICollection<SemanticSheetPlacementDefinition> collection) knownCounts.Add(collection.Count);
+            if (placements is IReadOnlyCollection<SemanticSheetPlacementDefinition> readOnlyCollection) knownCounts.Add(readOnlyCollection.Count);
+            if (placements is ICollection nonGenericCollection) knownCounts.Add(nonGenericCollection.Count);
+
+            int? knownCount = null;
+            for (var index = 0; index < knownCounts.Count; index++)
+            {
+                var count = knownCounts[index];
+                if (count < 0)
+                    throw new InvalidOperationException("Semantic sheet placement source exposes an invalid negative known Count value.");
+                if (count > SemanticSheetPlanner.MaxPlacements)
+                    throw new InvalidOperationException("Semantic sheet supports at most " + SemanticSheetPlanner.MaxPlacements + " view placements.");
+                if (knownCount.HasValue && knownCount.Value != count)
+                    throw new InvalidOperationException("Semantic sheet placement source exposes conflicting known Count values.");
+                knownCount = count;
+            }
+
+            var result = new List<SemanticSheetPlacementDefinition>(knownCount ?? SemanticSheetPlanner.MaxPlacements);
             using (var enumerator = placements.GetEnumerator())
             {
                 while (enumerator.MoveNext())
@@ -63,6 +81,10 @@ namespace QS3D.Core.Documentation
                     result.Add(enumerator.Current);
                 }
             }
+
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw new InvalidOperationException("Semantic sheet placement source known Count does not match the number of placements traversed.");
+
             return result.AsReadOnly();
         }
     }
@@ -233,7 +255,7 @@ namespace QS3D.Core.Documentation
 
         private static List<SemanticSheetDefinition> MaterializeCatalogBounded(IEnumerable<SemanticSheetDefinition> definitions)
         {
-            RequireKnownCountsWithinLimit(definitions, MaxCatalogSheets, "Semantic sheet catalog", "sheets");
+            var knownCount = RequireKnownCountsWithinLimit(definitions, MaxCatalogSheets, "Semantic sheet catalog", "sheets");
 
             var result = new List<SemanticSheetDefinition>(Math.Min(MaxCatalogSheets, 256));
             using (var enumerator = definitions.GetEnumerator())
@@ -245,12 +267,16 @@ namespace QS3D.Core.Documentation
                     result.Add(enumerator.Current);
                 }
             }
+
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw new InvalidOperationException("Semantic sheet catalog traversal count does not match its known count for sheets.");
+
             return result;
         }
 
         private static List<SemanticViewPlan> MaterializeAvailableViewsBounded(IEnumerable<SemanticViewPlan> availableViews)
         {
-            RequireKnownCountsWithinLimit(availableViews, MaxAvailableViews, "Semantic sheet planner", "available views");
+            var knownCount = RequireKnownCountsWithinLimit(availableViews, MaxAvailableViews, "Semantic sheet planner", "available views");
 
             var result = new List<SemanticViewPlan>(Math.Min(MaxAvailableViews, 256));
             using (var enumerator = availableViews.GetEnumerator())
@@ -262,10 +288,14 @@ namespace QS3D.Core.Documentation
                     result.Add(enumerator.Current);
                 }
             }
+
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw new InvalidOperationException("Semantic sheet planner traversal count does not match its known count for available views.");
+
             return result;
         }
 
-        private static void RequireKnownCountsWithinLimit<T>(IEnumerable<T> values, int limit, string owner, string itemLabel)
+        private static int? RequireKnownCountsWithinLimit<T>(IEnumerable<T> values, int limit, string owner, string itemLabel)
         {
             var knownCounts = new List<int>(3);
             if (values is ICollection<T> collection) knownCounts.Add(collection.Count);
@@ -281,11 +311,12 @@ namespace QS3D.Core.Documentation
                     throw new InvalidOperationException(owner + " supports at most " + limit + " " + itemLabel + ".");
             }
 
-            if (knownCounts.Count <= 1) return;
+            if (knownCounts.Count == 0) return null;
             var expected = knownCounts[0];
             for (var i = 1; i < knownCounts.Count; i++)
                 if (knownCounts[i] != expected)
                     throw new InvalidOperationException(owner + " received conflicting known counts for " + itemLabel + ".");
+            return expected;
         }
 
         private static Dictionary<string, SemanticViewPlan> BuildUniqueViewIndex(IEnumerable<SemanticViewPlan> views)

@@ -75,7 +75,22 @@ namespace QS3D.Core.Reporting
             var result = current + compensation;
             if (double.IsNaN(result) || double.IsInfinity(result))
                 throw new OverflowException("Quantity report total overflow: " + quantity);
+            if (compensation != 0d && result == current && !IsStrictlyBelowHalfUlp(current, compensation))
+                throw new OverflowException("Quantity report total lost a non-zero compensation at floating-point precision: " + quantity);
+            if (current != 0d && result == compensation)
+                throw new OverflowException("Quantity report total lost a non-zero accumulated value at floating-point precision: " + quantity);
             return result == 0d ? 0d : result;
+        }
+
+        private static bool IsStrictlyBelowHalfUlp(double current, double compensation)
+        {
+            if (current <= 0d || compensation == 0d) return false;
+
+            var currentBits = BitConverter.DoubleToInt64Bits(current);
+            var adjacentBits = compensation > 0d ? currentBits + 1L : currentBits - 1L;
+            var adjacent = BitConverter.Int64BitsToDouble(adjacentBits);
+            var spacing = Math.Abs(adjacent - current);
+            return Math.Abs(compensation) < spacing / 2d;
         }
     }
 }
