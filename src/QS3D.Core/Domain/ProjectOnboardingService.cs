@@ -144,12 +144,16 @@ namespace QS3D.Core.Domain
 
                 ValidateMaterial(explicitMaterial, category);
                 var exact = ProjectFamilyQuickSchemaService.FindIdentityMatches(project, category, values, explicitMaterial);
+                if (exact.Count > 1)
+                    throw new InvalidOperationException(
+                        "Starter onboarding found multiple exact Family matches for " + category +
+                        ". Repair the Family catalog before onboarding so canonical reuse is unambiguous.");
                 plans.Add(new StarterPlan
                 {
                     Category = category,
                     Material = explicitMaterial,
                     Values = values,
-                    ReusedFamily = exact.Count > 0 ? exact[0] : null
+                    ReusedFamily = exact.Count == 1 ? exact[0] : null
                 });
             }
 
