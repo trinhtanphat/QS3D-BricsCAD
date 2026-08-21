@@ -49,11 +49,14 @@ namespace QS3D.Core.Audit
                     observed++;
                     if (observed > MaxStoredEvents)
                         throw TooManyEvents();
+                    if (item == null)
+                        throw new InvalidOperationException("Audit trail contains a null event.");
 
+                    // Resource integrity wins before XML/canonical scans or cloning.
+                    AccumulateTextCharacters(item, ref textCharacters);
                     var validationError = GetStoredEventValidationError(item);
                     if (validationError != null) throw new InvalidOperationException(validationError);
-                    AccumulateTextCharacters(item!, ref textCharacters);
-                    snapshot.Add(Clone(item!));
+                    snapshot.Add(Clone(item));
                 }
                 RequireObservedHistoryCount(storedCount, observed);
                 return snapshot.AsReadOnly();
@@ -81,14 +84,6 @@ namespace QS3D.Core.Audit
             var safeDetail = detail ?? string.Empty;
             var safeActor = actor ?? string.Empty;
             var safeCorrelationId = correlationId ?? string.Empty;
-            RequireCanonicalOptionalIdentity(safeElementId, nameof(elementId), "Audit element id");
-            RequireCanonicalOptionalIdentity(safeCorrelationId, nameof(correlationId), "Audit correlation id");
-            RequireXmlCharacters(normalizedAction, nameof(action), "Audit action");
-            RequireXmlCharacters(safeElementId, nameof(elementId), "Audit element id");
-            RequireXmlCharacters(safeDetail, nameof(detail), "Audit detail");
-            RequireXmlCharacters(safeActor, nameof(actor), "Audit actor");
-            RequireXmlCharacters(safeCorrelationId, nameof(correlationId), "Audit correlation id");
-
             var newTextCharacters = CountTextCharacters(
                 normalizedAction,
                 safeElementId,
@@ -96,7 +91,15 @@ namespace QS3D.Core.Audit
                 safeActor,
                 safeCorrelationId);
             if (newTextCharacters > MaxStoredTextCharacters)
-                throw new ArgumentException("Audit event exceeds the supported aggregate text budget.", nameof(detail));
+                throw new ArgumentException("Audit event exceeds the supported aggregate text budget.");
+
+            RequireCanonicalOptionalIdentity(safeElementId, nameof(elementId), "Audit element id");
+            RequireCanonicalOptionalIdentity(safeCorrelationId, nameof(correlationId), "Audit correlation id");
+            RequireXmlCharacters(normalizedAction, nameof(action), "Audit action");
+            RequireXmlCharacters(safeElementId, nameof(elementId), "Audit element id");
+            RequireXmlCharacters(safeDetail, nameof(detail), "Audit detail");
+            RequireXmlCharacters(safeActor, nameof(actor), "Audit actor");
+            RequireXmlCharacters(safeCorrelationId, nameof(correlationId), "Audit correlation id");
 
             ValidateExistingHistory(requireAppendCapacity: true, additionalTextCharacters: newTextCharacters);
 
@@ -135,11 +138,14 @@ namespace QS3D.Core.Audit
                 observed++;
                 if (observed > MaxStoredEvents)
                     throw TooManyEvents();
+                if (existing == null)
+                    throw new InvalidOperationException("Audit trail contains a null event. Repair the existing audit history before modifying it.");
 
+                // Reject aggregate abuse before XML/canonical scans of the event.
+                AccumulateTextCharacters(existing, ref textCharacters);
                 var validationError = GetStoredEventValidationError(existing);
                 if (validationError != null)
                     throw new InvalidOperationException(validationError + " Repair the existing audit history before modifying it.");
-                AccumulateTextCharacters(existing!, ref textCharacters);
             }
 
             RequireObservedHistoryCount(storedCount, observed);

@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             ExactAggregateBudgetIsAcceptedAndNextAppendIsRefused();
+            OversizedNewEventFailsBeforeXmlValidationAndMutation();
             OversizedExistingAggregateFailsClosedWithoutMutation();
         }
 
@@ -38,6 +39,21 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => trail.Record("c", string.Empty, string.Empty));
             Equal(exactVersion, project.ChangeVersion, "one-over append version");
             Equal(2, project.AuditEvents.Count, "one-over append count");
+        }
+
+        private static void OversizedNewEventFailsBeforeXmlValidationAndMutation()
+        {
+            var project = new ProjectState("AUDIT-TEXT-PREFLIGHT", "Audit text preflight ordering");
+            var beforeVersion = project.ChangeVersion;
+            var oversizedInvalidXmlDetail = new string('x', TextBudget) + "\u0001";
+
+            var error = ThrowsAndReturns<ArgumentException>(() =>
+                AuditTrail.ForProject(project).Record("a", string.Empty, oversizedInvalidXmlDetail));
+
+            if (error.InnerException != null)
+                throw new Exception("AuditTextPayloadBoundSmoke oversized input reached XML validation before the text-budget refusal.");
+            Equal(beforeVersion, project.ChangeVersion, "oversized new event version");
+            Equal(0, project.AuditEvents.Count, "oversized new event count");
         }
 
         private static void OversizedExistingAggregateFailsClosedWithoutMutation()
@@ -83,8 +99,13 @@ namespace QS3D.Core.SmokeTests
 
         private static void Throws<TException>(Action action) where TException : Exception
         {
+            _ = ThrowsAndReturns<TException>(action);
+        }
+
+        private static TException ThrowsAndReturns<TException>(Action action) where TException : Exception
+        {
             try { action(); }
-            catch (TException) { return; }
+            catch (TException exception) { return exception; }
             throw new Exception("AuditTextPayloadBoundSmoke expected " + typeof(TException).Name + ".");
         }
     }
