@@ -98,16 +98,12 @@ namespace QS3D.Core.SmokeTests
 
         private static void FrameDerivedBoundsMustRemainFinite()
         {
-            Throws<InvalidOperationException>(
-                () => CurtainFrameOpeningPlanner.Interrupt(
-                    new[] { new CurtainWallRect(double.MaxValue, 0d, double.MaxValue, 1d) },
-                    Array.Empty<CurtainOpeningRect>()),
-                "Frame right bound overflow must fail closed.");
-            Throws<InvalidOperationException>(
-                () => CurtainFrameOpeningPlanner.Interrupt(
-                    new[] { new CurtainWallRect(0d, double.MaxValue, 1d, double.MaxValue) },
-                    Array.Empty<CurtainOpeningRect>()),
-                "Frame top bound overflow must fail closed.");
+            Throws<OverflowException>(
+                () => new CurtainWallRect(double.MaxValue, 0d, double.MaxValue, 1d),
+                "Frame right bound overflow must fail closed at the rectangle boundary.");
+            Throws<OverflowException>(
+                () => new CurtainWallRect(0d, double.MaxValue, 1d, double.MaxValue),
+                "Frame top bound overflow must fail closed at the rectangle boundary.");
         }
 
         private static void Throws<TException>(Action action, string message)
