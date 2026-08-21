@@ -190,12 +190,18 @@ namespace QS3D.Core.Audit
             total += itemCharacters;
         }
 
-        private static long CountTextCharacters(params string?[] values)
+        private static long CountTextCharacters(
+            string? action,
+            string? elementId,
+            string? detail,
+            string? actor,
+            string? correlationId)
         {
-            long total = 0L;
-            for (var i = 0; i < values.Length; i++)
-                total += values[i]?.Length ?? 0;
-            return total;
+            return (long)(action?.Length ?? 0) +
+                   (elementId?.Length ?? 0) +
+                   (detail?.Length ?? 0) +
+                   (actor?.Length ?? 0) +
+                   (correlationId?.Length ?? 0);
         }
 
         private static string? GetStoredEventValidationError(AuditEvent? item)
