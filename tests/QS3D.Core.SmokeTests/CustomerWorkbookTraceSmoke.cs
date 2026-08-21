@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             CustomerWorkbookRoundTripsDetailAndAggregateTrace();
             CustomerWorkbookPreservesEvidenceBlankVersusMeasuredZero();
             CustomerTraceReaderRejectsUnsupportedSheet();
+            CustomerTraceReaderRejectsTamperedTraceIdentity();
             CustomerWorkbookRejectsMalformedProvenance();
         }
 
@@ -86,6 +87,29 @@ namespace QS3D.Core.SmokeTests
                     "TRACE_MODEL must not be accepted as a user business-row locate source.");
                 ExpectThrows<ArgumentOutOfRangeException>(() => QsCustomerWorkbookTraceReader.Read(path, "DGKL", 1),
                     "Header row must not be accepted as a business-row trace.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
+        private static void CustomerTraceReaderRejectsTamperedTraceIdentity()
+        {
+            var root = TempDirectory("customer-workbook-trace-tamper");
+            try
+            {
+                var path = Path.Combine(root, "qs-customer.xlsx");
+                QsCustomerWorkbookExporter.Export(path, Details(), Summary());
+                const string traceEntry = "xl/worksheets/sheet4.xml";
+                var original = ReadEntry(path, traceEntry);
+                var tampered = original.Replace("DWG-CUSTOMER-TRACE", "DWG-CUSTOMER-TAMPERED");
+                Require(!string.Equals(original, tampered, StringComparison.Ordinal), "TRACE_MODEL tamper fixture did not modify provenance.");
+                ReplaceEntry(path, traceEntry, tampered);
+
+                ExpectThrows<InvalidDataException>(
+                    () => QsCustomerWorkbookTraceReader.Read(path, "DGKL", 2),
+                    "Customer trace reader must recompute TRACE_KEY and reject tampered TRACE_MODEL provenance.");
             }
             finally
             {
@@ -202,6 +226,17 @@ namespace QS3D.Core.SmokeTests
             {
                 var entry = archive.GetEntry(entryName) ?? throw new Exception("Missing XLSX entry: " + entryName + ".");
                 using (var reader = new StreamReader(entry.Open(), Encoding.UTF8)) return reader.ReadToEnd();
+            }
+        }
+
+        private static void ReplaceEntry(string path, string entryName, string content)
+        {
+            using (var archive = ZipFile.Open(path, ZipArchiveMode.Update))
+            {
+                var entry = archive.GetEntry(entryName) ?? throw new Exception("Missing XLSX entry: " + entryName + ".");
+                entry.Delete();
+                var replacement = archive.CreateEntry(entryName, CompressionLevel.Optimal);
+                using (var writer = new StreamWriter(replacement.Open(), new UTF8Encoding(false))) writer.Write(content);
             }
         }
 
