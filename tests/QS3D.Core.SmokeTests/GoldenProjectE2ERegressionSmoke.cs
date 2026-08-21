@@ -32,6 +32,7 @@ namespace QS3D.Core.SmokeTests
                 AssertGoldenProjection(project, before);
 
                 var summary = ProjectQuantityReportBuilder.Group(project);
+                AssertGoldenSummary(summary);
                 QsCustomerWorkbookExporter.Export(xlsxPath, before, summary);
                 True(File.Exists(xlsxPath) && new FileInfo(xlsxPath).Length > 0,
                     "Golden project did not produce a non-empty authoritative customer workbook.");
@@ -53,6 +54,7 @@ namespace QS3D.Core.SmokeTests
                 var after = ProjectQuantityReportBuilder.Detail(reopened);
                 AssertGoldenProjection(reopened, after);
                 AssertEquivalent(before, after);
+                AssertGoldenSummary(ProjectQuantityReportBuilder.Group(reopened));
 
                 reopened.Families.Single(x => x.Id == "F-WALL").Category = ElementCategory.Room;
                 Throws<InvalidDataException>(() => store.Save(reopened, invalidPath));
@@ -137,6 +139,18 @@ namespace QS3D.Core.SmokeTests
                 "Golden opening lost canonical host relation.");
             True(semanticOpening.DependsOn.Count == 1 && semanticOpening.DependsOn[0] == "W-GOLDEN",
                 "Golden opening lost dependency provenance.");
+        }
+
+        private static void AssertGoldenSummary(System.Collections.Generic.IReadOnlyList<QuantityReportRow> rows)
+        {
+            Equal(2, rows.Count, "Golden summary must preserve separate wall/opening semantic groups.");
+            var wall = rows.Single(x => x.FamilyId == "F-WALL");
+            var opening = rows.Single(x => x.FamilyId == "F-OPENING");
+            Equal(1, wall.Count, "Golden wall summary count changed.");
+            Equal(1, opening.Count, "Golden opening summary count changed.");
+            Near(3d, wall.GrossConcreteM3, "Golden wall summary gross volume changed.");
+            Near(2.604d, wall.NetConcreteM3, "Golden wall summary net volume changed.");
+            Near(1.98d, opening.DoorAreaM2, "Golden opening summary area changed.");
         }
 
         private static void AssertRoundTripIdentity(ProjectState project)
