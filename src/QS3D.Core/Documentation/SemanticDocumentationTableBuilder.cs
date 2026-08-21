@@ -9,8 +9,15 @@ namespace QS3D.Core.Documentation
     {
         public SemanticDocumentationColumn(string header, string template)
         {
-            Header = header;
-            Template = template;
+            Header = SemanticDocumentationTableBuilder.Required(
+                header,
+                nameof(header),
+                SemanticDocumentationTableBuilder.MaxHeaderLength);
+            Template = SemanticDocumentationTableBuilder.Required(
+                template,
+                nameof(template),
+                SemanticDocumentationTableBuilder.MaxTemplateLength);
+            SemanticTagRenderer.ValidateTemplate(Template);
         }
 
         public string Header { get; }
@@ -22,8 +29,25 @@ namespace QS3D.Core.Documentation
         public SemanticDocumentationRow(string elementId, IReadOnlyList<string> cells)
         {
             if (cells == null) throw new ArgumentNullException(nameof(cells));
-            ElementId = elementId;
-            Cells = new List<string>(cells).AsReadOnly();
+            if (cells.Count > SemanticDocumentationTableBuilder.MaxColumns)
+                throw SemanticDocumentationTableBuilder.LimitExceeded(
+                    SemanticDocumentationTableBuilder.MaxColumns,
+                    "cells per row");
+
+            ElementId = SemanticDocumentationTableBuilder.RequiredCanonicalId(
+                elementId,
+                nameof(elementId),
+                SemanticDocumentationTableBuilder.MaxElementIdLength);
+
+            var snapshot = new List<string>(cells.Count);
+            for (var i = 0; i < cells.Count; i++)
+            {
+                var cell = cells[i];
+                if (cell == null)
+                    throw new ArgumentException("Documentation table row cell cannot be null at index " + i + ".", nameof(cells));
+                snapshot.Add(cell);
+            }
+            Cells = snapshot.AsReadOnly();
         }
 
         public string ElementId { get; }
@@ -39,9 +63,53 @@ namespace QS3D.Core.Documentation
         {
             if (headers == null) throw new ArgumentNullException(nameof(headers));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            Title = title;
-            Headers = new List<string>(headers).AsReadOnly();
-            Rows = new List<SemanticDocumentationRow>(rows).AsReadOnly();
+            if (headers.Count == 0)
+                throw new InvalidOperationException("Documentation table requires at least one header.");
+            if (headers.Count > SemanticDocumentationTableBuilder.MaxColumns)
+                throw SemanticDocumentationTableBuilder.LimitExceeded(
+                    SemanticDocumentationTableBuilder.MaxColumns,
+                    "columns");
+            if (rows.Count > SemanticDocumentationTableBuilder.MaxRows)
+                throw SemanticDocumentationTableBuilder.LimitExceeded(
+                    SemanticDocumentationTableBuilder.MaxRows,
+                    "rows");
+
+            Title = SemanticDocumentationTableBuilder.Required(
+                title,
+                nameof(title),
+                SemanticDocumentationTableBuilder.MaxTitleLength);
+
+            var headerSnapshot = new List<string>(headers.Count);
+            var uniqueHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < headers.Count; i++)
+            {
+                var header = SemanticDocumentationTableBuilder.Required(
+                    headers[i],
+                    "headers[" + i + "]",
+                    SemanticDocumentationTableBuilder.MaxHeaderLength);
+                if (!uniqueHeaders.Add(header))
+                    throw new InvalidOperationException("Documentation table contains duplicate column header: " + header + ".");
+                headerSnapshot.Add(header);
+            }
+
+            var rowSnapshot = new List<SemanticDocumentationRow>(rows.Count);
+            var uniqueElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < rows.Count; i++)
+            {
+                var row = rows[i];
+                if (row == null)
+                    throw new ArgumentException("Documentation table row cannot be null at index " + i + ".", nameof(rows));
+                if (row.Cells.Count != headerSnapshot.Count)
+                    throw new InvalidOperationException(
+                        "Documentation table row " + row.ElementId + " has " + row.Cells.Count +
+                        " cells but the table has " + headerSnapshot.Count + " headers.");
+                if (!uniqueElementIds.Add(row.ElementId))
+                    throw new InvalidOperationException("Documentation table contains duplicate semantic element id: " + row.ElementId + ".");
+                rowSnapshot.Add(row);
+            }
+
+            Headers = headerSnapshot.AsReadOnly();
+            Rows = rowSnapshot.AsReadOnly();
         }
 
         public string Title { get; }
@@ -51,11 +119,12 @@ namespace QS3D.Core.Documentation
 
     public static class SemanticDocumentationTableBuilder
     {
-        private const int MaxRows = 5000;
-        private const int MaxColumns = 32;
-        private const int MaxTitleLength = 160;
-        private const int MaxHeaderLength = 96;
-        private const int MaxElementIdLength = 128;
+        internal const int MaxRows = 5000;
+        internal const int MaxColumns = 32;
+        internal const int MaxTitleLength = 160;
+        internal const int MaxHeaderLength = 96;
+        internal const int MaxElementIdLength = 128;
+        internal const int MaxTemplateLength = 512;
 
         public static SemanticDocumentationTable Build(
             ProjectState project,
@@ -96,7 +165,7 @@ namespace QS3D.Core.Documentation
             {
                 var column = columnList[i] ?? throw new ArgumentException("Documentation table column cannot be null at index " + i + ".", nameof(columns));
                 var header = Required(column.Header, "columns[" + i + "].Header", MaxHeaderLength);
-                var template = Required(column.Template, "columns[" + i + "].Template", 512);
+                var template = Required(column.Template, "columns[" + i + "].Template", MaxTemplateLength);
                 if (!headers.Add(header)) throw new InvalidOperationException("Documentation table contains duplicate column header: " + header + ".");
                 SemanticTagRenderer.ValidateTemplate(template);
                 normalizedColumns.Add(new SemanticDocumentationColumn(header, template));
@@ -165,12 +234,12 @@ namespace QS3D.Core.Documentation
             knownCount = count;
         }
 
-        private static InvalidOperationException LimitExceeded(int maxCount, string label)
+        internal static InvalidOperationException LimitExceeded(int maxCount, string label)
         {
             return new InvalidOperationException("Documentation table supports at most " + maxCount + " " + label + ".");
         }
 
-        private static string Required(string? value, string name, int maxLength)
+        internal static string Required(string? value, string name, int maxLength)
         {
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", name);
             var normalized = value!.Trim();
@@ -178,7 +247,7 @@ namespace QS3D.Core.Documentation
             return normalized;
         }
 
-        private static string RequiredCanonicalId(string? value, string name, int maxLength)
+        internal static string RequiredCanonicalId(string? value, string name, int maxLength)
         {
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", name);
             var raw = value!;
