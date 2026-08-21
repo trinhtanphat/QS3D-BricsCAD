@@ -40,6 +40,7 @@ namespace QS3D.Core.SmokeTests
             LicenseVerifierSmoke.Run();
             AdvancedDomainSmoke.Run();
             EstimatingPortfolioCountIntegritySmoke.Run();
+            EstimatingStateProvenanceCoherenceSmoke.Run();
             ProgressClaimSnapshotSmoke.Run();
             CostBenchmarkMedianPrecisionSmoke.Run();
             HardeningRegressionSmoke.Run();
@@ -91,11 +92,13 @@ namespace QS3D.Core.SmokeTests
             GeneratedOutputHealthStaleSmoke.Run();
             CurtainFrameOpeningSmoke.Run();
             CurtainWallOpeningFramePlannerSmoke.Run();
+            CurtainPathFrameKnownCountContractSmoke.Run();
             CurtainFrameOpeningHealthSmoke.Run();
             BomReleaseGuardSmoke.Run();
             HealthSummaryReadinessSmoke.Run();
             DependencyHealthMissingTargetSmoke.Run();
             DependencyHealthBlankTargetSmoke.Run();
+            DependencyHealthRelationBoundSmoke.Run();
             LevelReferenceSmoke.Run();
             ElementVerticalPlacementAdditivePrecisionSmoke.Run();
             ProjectFloorMutationTargetBoundSmoke.Run();
@@ -134,6 +137,7 @@ namespace QS3D.Core.SmokeTests
             ProjectBrowserWorkspaceCoordinatorSmoke.Run();
             SemanticSelectionInspectorSmoke.Run();
             SemanticSelectionBulkEditSmoke.Run();
+            PreviewReviewNullOrderingSmoke.Run();
             PreviewReviewQueryAndComparisonSmoke.Run();
             ProjectInterchangeJsonSmoke.Run();
             ProjectInterchangeImportPreviewSmoke.Run();

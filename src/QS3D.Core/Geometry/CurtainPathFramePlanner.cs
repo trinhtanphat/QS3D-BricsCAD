@@ -81,12 +81,15 @@ namespace QS3D.Core.Geometry
         {
             if (centerline == null) throw new ArgumentNullException(nameof(centerline));
             if (frames == null) throw new ArgumentNullException(nameof(frames));
-            if (frames.Count > MaxPieces)
+            var sourceFrameCount = frames.Count;
+            if (sourceFrameCount < 0)
+                throw new InvalidOperationException("Curtain path frame input Count cannot be negative.");
+            if (sourceFrameCount > MaxPieces)
                 throw new InvalidOperationException("Curtain path frame input cannot exceed " + MaxPieces + " rectangles.");
             var path = BuildPath(centerline);
             var pieces = new List<CurtainPathFramePiece>();
 
-            for (var frameIndex = 0; frameIndex < frames.Count; frameIndex++)
+            for (var frameIndex = 0; frameIndex < sourceFrameCount; frameIndex++)
             {
                 var frame = frames[frameIndex] ?? throw new InvalidOperationException("Curtain frame rectangle cannot be null.");
                 var start = Finite(frame.X_M, "curtain frame start station");
@@ -135,7 +138,7 @@ namespace QS3D.Core.Geometry
                     throw new InvalidOperationException("Curtain frame rectangle could not be mapped to any host path segment.");
             }
 
-            return new CurtainPathFramePlan(path.TotalLengthM, path.Segments.Count, frames.Count, pieces.AsReadOnly());
+            return new CurtainPathFramePlan(path.TotalLengthM, path.Segments.Count, sourceFrameCount, pieces.AsReadOnly());
         }
 
         public static CurtainPathProjection ProjectPoint(IReadOnlyList<Point2> centerline, Point2 point)

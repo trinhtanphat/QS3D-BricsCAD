@@ -50,11 +50,16 @@ namespace QS3D.Core.SmokeTests
 
         private static void TakeoffResultHandleCanonicality()
         {
-            var trimmed = new TakeoffResult("  H1  ", TakeoffKind.Count, 1d, "  ea  ");
-            Equal("H1", trimmed.Handle, "TakeoffResult must preserve existing surrounding-space handle canonicalization.");
-            Equal("ea", trimmed.Unit, "TakeoffResult must preserve existing surrounding-space unit canonicalization.");
-            Equal(TakeoffKind.Count, trimmed.Kind, "TakeoffResult kind changed during handle hardening.");
-            Equal(1d, trimmed.Value, "TakeoffResult value changed during handle hardening.");
+            var paddedMessage = Capture<ArgumentException>(() =>
+                new TakeoffResult("  H1  ", TakeoffKind.Count, 1d, "ea"));
+            Contains(paddedMessage, "Takeoff handle must not contain surrounding whitespace.",
+                "Padded TakeoffResult handles must fail closed instead of aliasing canonical identity.");
+
+            var canonical = new TakeoffResult("H1", TakeoffKind.Count, 1d, "  ea  ");
+            Equal("H1", canonical.Handle, "Canonical TakeoffResult handle must be preserved exactly.");
+            Equal("ea", canonical.Unit, "TakeoffResult must preserve surrounding-space unit canonicalization.");
+            Equal(TakeoffKind.Count, canonical.Kind, "TakeoffResult kind changed during handle hardening.");
+            Equal(1d, canonical.Value, "TakeoffResult value changed during handle hardening.");
 
             var controls = new[]
             {
@@ -76,21 +81,22 @@ namespace QS3D.Core.SmokeTests
                     "Embedded control character U+" + ((int)control).ToString("X4") + " must fail with the canonical handle diagnostic.");
             }
 
-            var trimmedControl = new TakeoffResult("\t H2 \t", TakeoffKind.Count, 2d, "ea");
-            Equal("H2", trimmedControl.Handle,
-                "Control whitespace removed entirely by the existing surrounding trim must remain compatible.");
+            var surroundingControlMessage = Capture<ArgumentException>(() =>
+                new TakeoffResult("\t H2 \t", TakeoffKind.Count, 2d, "ea"));
+            Contains(surroundingControlMessage, "Takeoff handle must not contain surrounding whitespace.",
+                "Surrounding control whitespace must fail the canonical handle boundary before identity publication.");
 
             var entity = new EntitySnapshot("H3", "Point", "QTO");
-            var canonical = QuantityEngine.Calculate(entity, TakeoffKind.Count, DrawingUnit.Meter);
+            var calculated = QuantityEngine.Calculate(entity, TakeoffKind.Count, DrawingUnit.Meter);
             var traced = QuantityEngine.CalculateWithTrace(entity, TakeoffKind.Count, DrawingUnit.Meter);
-            Equal("H3", canonical.Handle, "Canonical QuantityEngine handle changed unexpectedly.");
-            Equal(canonical.Handle, traced.Result.Handle,
+            Equal("H3", calculated.Handle, "Canonical QuantityEngine handle changed unexpectedly.");
+            Equal(calculated.Handle, traced.Result.Handle,
                 "Trace projection must preserve canonical result handle after hardening.");
-            Equal(canonical.Kind, traced.Result.Kind,
+            Equal(calculated.Kind, traced.Result.Kind,
                 "Trace projection kind parity changed during TakeoffResult hardening.");
-            Equal(canonical.Value, traced.Result.Value,
+            Equal(calculated.Value, traced.Result.Value,
                 "Trace projection value parity changed during TakeoffResult hardening.");
-            Equal(canonical.Unit, traced.Result.Unit,
+            Equal(calculated.Unit, traced.Result.Unit,
                 "Trace projection unit parity changed during TakeoffResult hardening.");
         }
 

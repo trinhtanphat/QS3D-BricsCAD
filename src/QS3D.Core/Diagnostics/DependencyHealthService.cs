@@ -7,6 +7,8 @@ namespace QS3D.Core.Diagnostics
 {
     public sealed class DependencyHealthService
     {
+        private const int MaxDependencyRelationsPerElement = 10000;
+
         public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -38,6 +40,16 @@ namespace QS3D.Core.Diagnostics
             foreach (var element in elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
                 if (duplicateIds.Contains(element.Id) || graph.ContainsKey(element.Id)) continue;
+                if (element.DependsOn.Count > MaxDependencyRelationsPerElement)
+                {
+                    throw new InvalidOperationException(
+                        "Dependency health cannot inspect an element with more than " +
+                        MaxDependencyRelationsPerElement +
+                        " dependency relations: " +
+                        element.Id +
+                        ".");
+                }
+
                 var dependencies = new List<string>();
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var reportedDuplicates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

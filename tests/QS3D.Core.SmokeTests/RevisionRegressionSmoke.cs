@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             CaptureRejectsNonFiniteQuantities();
             SignedZeroIsCanonicalized();
             CaptureRejectsDuplicateElementIds();
+            CaptureRejectsPaddedElementIds();
             CaptureRejectsPaddedReferenceIds();
             CaptureRejectsNonCanonicalMapKeys();
             QuantityDiffRejectsOverflow();
@@ -63,6 +64,22 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(new ProjectElement("E1", ElementCategory.Beam, string.Empty, "f", "z"));
             project.Elements.Add(new ProjectElement("e1", ElementCategory.Beam, string.Empty, "f", "z"));
             Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "duplicate-capture"));
+        }
+
+        private static void CaptureRejectsPaddedElementIds()
+        {
+            foreach (var elementId in new[] { " E1", "E1 ", " E1 " })
+            {
+                var project = NewProject();
+                project.Elements.Add(new ProjectElement(elementId, ElementCategory.Beam, string.Empty, "f", "z"));
+                Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "padded-element-id"));
+            }
+
+            var canonicalProject = NewProject();
+            canonicalProject.Elements.Add(new ProjectElement("E1", ElementCategory.Beam, string.Empty, "f", "z"));
+            var captured = new RevisionService().Capture(canonicalProject, "canonical-element-id");
+            if (captured.Elements.Count != 1 || !string.Equals(captured.Elements[0].ElementId, "E1", StringComparison.Ordinal))
+                throw new Exception("Canonical revision element id was not preserved during capture.");
         }
 
         private static void CaptureRejectsPaddedReferenceIds()

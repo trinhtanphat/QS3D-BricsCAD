@@ -754,13 +754,22 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 ProjectFileUiService.OpenProject(normalized);
-                StartCenterUserStateStore.RecordProject(normalized);
-                _statusText.Text = "Đã mở " + Path.GetFileName(normalized) + ".";
-                RefreshRecentProjects();
             }
             catch (Exception ex)
             {
                 _statusText.Text = "Không thể mở: " + ex.Message;
+                return;
+            }
+
+            _statusText.Text = "Đã mở " + Path.GetFileName(normalized) + ".";
+            try
+            {
+                StartCenterUserStateStore.RecordProject(normalized);
+                RefreshRecentProjects();
+            }
+            catch
+            {
+                // The drawing is already open. Recent-project bookkeeping must not turn success into a false open failure.
             }
         }
 
