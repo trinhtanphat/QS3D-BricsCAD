@@ -13,6 +13,9 @@ namespace QS3D.Core.Takeoff
             if (string.IsNullOrWhiteSpace(unit)) throw new ArgumentException("Takeoff unit is required.", nameof(unit));
 
             var canonicalHandle = handle.Trim();
+            if (!string.Equals(handle, canonicalHandle, StringComparison.Ordinal))
+                throw new ArgumentException("Takeoff handle must not contain surrounding whitespace.", nameof(handle));
+
             for (var index = 0; index < canonicalHandle.Length; index++)
             {
                 if (char.IsControl(canonicalHandle[index]))

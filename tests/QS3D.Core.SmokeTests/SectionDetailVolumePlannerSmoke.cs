@@ -8,6 +8,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             OrdinaryBoundsExpandOnEverySide();
+            DirectConstructionRejectsInvalidStates();
+            DirectConstructionAcceptsCanonicalState();
             LargeCoordinatePaddingCollapseFailsClosed();
             SpanOverflowFailsClosed();
             NonFiniteInputFailsClosed();
@@ -23,6 +25,45 @@ namespace QS3D.Core.SmokeTests
                 !(plan.OppositeX > 10d) || !(plan.OppositeY > 20d) || !(plan.Height > 30d) ||
                 !(plan.BaseZ + plan.Height > 30d))
                 throw new InvalidOperationException("Ordinary BIM Detail volume did not strictly expand every requested bound.");
+        }
+
+        private static void DirectConstructionRejectsInvalidStates()
+        {
+            Throws<ArgumentOutOfRangeException>(() => new SectionDetailVolumePlan(
+                double.NaN, 0d, 0d, 1d, 1d, 1d),
+                "Direct BIM Detail plans must reject non-finite coordinates.");
+            Throws<ArgumentOutOfRangeException>(() => new SectionDetailVolumePlan(
+                0d, 0d, 0d, double.PositiveInfinity, 1d, 1d),
+                "Direct BIM Detail plans must reject non-finite opposite coordinates.");
+            Throws<ArgumentOutOfRangeException>(() => new SectionDetailVolumePlan(
+                1d, 0d, 0d, 1d, 1d, 1d),
+                "Direct BIM Detail plans must reject zero-width X extents.");
+            Throws<ArgumentOutOfRangeException>(() => new SectionDetailVolumePlan(
+                2d, 0d, 0d, 1d, 1d, 1d),
+                "Direct BIM Detail plans must reject reversed X extents.");
+            Throws<ArgumentOutOfRangeException>(() => new SectionDetailVolumePlan(
+                0d, 1d, 0d, 1d, 1d, 1d),
+                "Direct BIM Detail plans must reject zero-width Y extents.");
+            Throws<ArgumentOutOfRangeException>(() => new SectionDetailVolumePlan(
+                0d, 2d, 0d, 1d, 1d, 1d),
+                "Direct BIM Detail plans must reject reversed Y extents.");
+            Throws<ArgumentOutOfRangeException>(() => new SectionDetailVolumePlan(
+                0d, 0d, 0d, 1d, 1d, 0d),
+                "Direct BIM Detail plans must reject zero height.");
+            Throws<ArgumentOutOfRangeException>(() => new SectionDetailVolumePlan(
+                0d, 0d, 0d, 1d, 1d, -1d),
+                "Direct BIM Detail plans must reject negative height.");
+            Throws<ArgumentOutOfRangeException>(() => new SectionDetailVolumePlan(
+                0d, 0d, double.MaxValue, 1d, 1d, double.MaxValue),
+                "Direct BIM Detail plans must reject represented-top overflow.");
+        }
+
+        private static void DirectConstructionAcceptsCanonicalState()
+        {
+            var plan = new SectionDetailVolumePlan(-1d, -2d, -3d, 4d, 5d, 9d);
+            if (plan.FirstX != -1d || plan.FirstY != -2d || plan.BaseZ != -3d ||
+                plan.OppositeX != 4d || plan.OppositeY != 5d || plan.Height != 9d)
+                throw new InvalidOperationException("Canonical direct BIM Detail plan construction changed stored coordinates.");
         }
 
         private static void LargeCoordinatePaddingCollapseFailsClosed()
@@ -54,6 +95,21 @@ namespace QS3D.Core.SmokeTests
                 !(plan.OppositeX > large + 1000d) || !(plan.OppositeY > large + 1200d) ||
                 !(plan.BaseZ + plan.Height > large + 800d))
                 throw new InvalidOperationException("Representable large-coordinate BIM Detail volume lost a requested expansion.");
+        }
+
+        private static void Throws<TException>(Action action, string message)
+            where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException(message);
         }
     }
 }

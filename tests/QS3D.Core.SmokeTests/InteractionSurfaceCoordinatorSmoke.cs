@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
             ModalExclusivityFailsClosed();
             FeatureSwitchClearsTransientState();
             FloatingToolsAreKeyedAndReusable();
+            FloatingToolCapacityIsBoundedAndMutationFree();
+            FloatingToolCapacityIsReleasedByLifecycleTransitions();
         }
 
         private static void PersistentSurfacesReplaceDeterministically()
@@ -94,6 +96,99 @@ namespace QS3D.Core.SmokeTests
 
             if (!coordinator.Close(InteractionSurface.FloatingTool, "quantity.review") || coordinator.Snapshot.FloatingTools.Count != 0)
                 throw new Exception("A keyed floating tool must close deterministically.");
+        }
+
+        private static void FloatingToolCapacityIsBoundedAndMutationFree()
+        {
+            if (InteractionSurfaceCoordinator.MaximumFloatingTools != FloatingToolWindowPolicy.MaximumVisibleWorkAreas)
+                throw new Exception("Floating interaction-state capacity must stay aligned with the bounded floating-window policy.");
+
+            var feature = CreateFeature("model.capacity", false, false, true);
+            var coordinator = new InteractionSurfaceCoordinator();
+            coordinator.SelectFeature(feature);
+
+            for (var i = InteractionSurfaceCoordinator.MaximumFloatingTools - 1; i >= 0; i--)
+            {
+                coordinator.Open(new InteractionSurfaceBinding(
+                    feature.Id,
+                    InteractionSurface.FloatingTool,
+                    "tool." + i.ToString("D3"),
+                    "context." + i.ToString("D3")));
+            }
+
+            var atCapacity = coordinator.Snapshot;
+            if (atCapacity.FloatingTools.Count != InteractionSurfaceCoordinator.MaximumFloatingTools)
+                throw new Exception("The exact floating-tool capacity must remain accepted.");
+            if (atCapacity.FloatingTools[0].ContentKey != "tool.000" ||
+                atCapacity.FloatingTools[atCapacity.FloatingTools.Count - 1].ContentKey != "tool.063")
+                throw new Exception("Bounded floating-tool snapshots must retain deterministic semantic-key ordering.");
+
+            ExpectInvalid(
+                () => coordinator.Open(new InteractionSurfaceBinding(feature.Id, InteractionSurface.FloatingTool, "tool.overflow", "overflow")),
+                "Opening a distinct floating tool above the supported capacity must fail closed.");
+
+            var afterRefusal = coordinator.Snapshot;
+            if (afterRefusal.FloatingTools.Count != atCapacity.FloatingTools.Count ||
+                Contains(afterRefusal, "tool.overflow"))
+                throw new Exception("Floating-tool capacity refusal must not mutate coordinator state.");
+
+            coordinator.Open(new InteractionSurfaceBinding(feature.Id, InteractionSurface.FloatingTool, "tool.000", "replacement"));
+            var afterReplacement = coordinator.Snapshot;
+            if (afterReplacement.FloatingTools.Count != InteractionSurfaceCoordinator.MaximumFloatingTools ||
+                afterReplacement.FloatingTools[0].ContextKey != "replacement")
+                throw new Exception("Replacing an existing floating-tool key must remain allowed at capacity without increasing state size.");
+
+            if (!coordinator.Close(InteractionSurface.FloatingTool, "tool.001"))
+                throw new Exception("A floating tool must release its capacity when closed.");
+            coordinator.Open(new InteractionSurfaceBinding(feature.Id, InteractionSurface.FloatingTool, "tool.reused", "reused"));
+            if (coordinator.Snapshot.FloatingTools.Count != InteractionSurfaceCoordinator.MaximumFloatingTools ||
+                !Contains(coordinator.Snapshot, "tool.reused"))
+                throw new Exception("Released floating-tool capacity must be reusable by a new semantic tool.");
+        }
+
+        private static void FloatingToolCapacityIsReleasedByLifecycleTransitions()
+        {
+            var feature = CreateFeature("model.lifecycle", false, false, true);
+            var coordinator = new InteractionSurfaceCoordinator();
+            coordinator.SelectFeature(feature);
+            FillFloatingTools(coordinator, feature, "first");
+
+            coordinator.InvalidateContext();
+            if (coordinator.Snapshot.FloatingTools.Count != 0)
+                throw new Exception("Invalidating interaction context must release all floating-tool capacity.");
+            FillFloatingTools(coordinator, feature, "second");
+
+            coordinator.ClearSelection();
+            if (coordinator.SelectedFeature != null || coordinator.Snapshot.FloatingTools.Count != 0)
+                throw new Exception("Clearing selection must release floating-tool state and selected-feature ownership.");
+
+            coordinator.SelectFeature(feature);
+            FillFloatingTools(coordinator, feature, "third");
+            var sameFeatureWithoutFloating = CreateFeature("model.lifecycle", false, false, false);
+            coordinator.SelectFeature(sameFeatureWithoutFloating);
+            if (coordinator.Snapshot.FloatingTools.Count != 0)
+                throw new Exception("Updating the selected feature profile to disallow floating tools must release prior floating-tool state.");
+        }
+
+        private static void FillFloatingTools(InteractionSurfaceCoordinator coordinator, FeatureDescriptor feature, string prefix)
+        {
+            for (var i = 0; i < InteractionSurfaceCoordinator.MaximumFloatingTools; i++)
+            {
+                coordinator.Open(new InteractionSurfaceBinding(
+                    feature.Id,
+                    InteractionSurface.FloatingTool,
+                    prefix + "." + i.ToString("D3")));
+            }
+
+            if (coordinator.Snapshot.FloatingTools.Count != InteractionSurfaceCoordinator.MaximumFloatingTools)
+                throw new Exception("Lifecycle capacity control must accept the exact supported floating-tool count.");
+        }
+
+        private static bool Contains(InteractionSurfaceSnapshot snapshot, string contentKey)
+        {
+            for (var i = 0; i < snapshot.FloatingTools.Count; i++)
+                if (snapshot.FloatingTools[i].ContentKey == contentKey) return true;
+            return false;
         }
 
         private static FeatureDescriptor CreateFeature(string id, bool secondary, bool modal, bool floating)

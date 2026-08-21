@@ -59,10 +59,14 @@ namespace QS3D.Core.Commercial
             IsBlocked = isBlocked;
             if (isBlocked && BlockReason.Length == 0)
                 throw new ArgumentException("A blocked estimating line requires a block reason.", nameof(blockReason));
+            if (!isBlocked && BlockReason.Length != 0)
+                throw new ArgumentException("A block reason is only valid when the estimating line is blocked.", nameof(blockReason));
             StaleReason = CommercialGuard.RequireOptionalCanonicalText(staleReason, nameof(staleReason));
             IsStale = isStale;
             if (isStale && StaleReason.Length == 0)
                 throw new ArgumentException("A stale estimating line requires a stale reason.", nameof(staleReason));
+            if (!isStale && StaleReason.Length != 0)
+                throw new ArgumentException("A stale reason is only valid when the estimating line is stale.", nameof(staleReason));
 
             if (referencedRate.HasValue)
             {
