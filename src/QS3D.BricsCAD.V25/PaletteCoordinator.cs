@@ -25,6 +25,7 @@ namespace QS3D.BricsCAD.V25
         private static System.Windows.FrameworkElement? _propertiesVisual;
         private static RightPanel? _rightPanel;
         private static QuantityInsightPanel? _quantityInsightPanel;
+        private static bool _preserveInspectionStatusOnNextShow;
 
         public static bool IsWorkspaceVisible => _workspace != null && _workspace.Visible;
         public static bool IsPropertiesVisible => _properties != null && _properties.Visible;
@@ -121,6 +122,8 @@ namespace QS3D.BricsCAD.V25
         // auto-open in BIM because the reference keeps Properties embedded below Family.
         public static bool ShowBimWorkspace()
         {
+            var preserveInspectionStatus = _preserveInspectionStatusOnNextShow;
+            _preserveInspectionStatusOnNextShow = false;
             try
             {
                 EnsureCreated();
@@ -129,7 +132,8 @@ namespace QS3D.BricsCAD.V25
                 SetVisibility(workspace: true, right: true, quantityInsight: false);
                 SelectionSyncCoordinator.Refresh(Application.DocumentManager.MdiActiveDocument);
                 _rightPanel?.Refresh();
-                _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • Zone/Tầng/Mô hình + Family/Thuộc tính bên trái • viewport BricsCAD native ở giữa • Quản lý bản vẽ/lớp bên phải.");
+                if (!preserveInspectionStatus)
+                    _workspacePanel?.SetStatus("MÔ HÌNH BIM • BLT3D workspace • Zone/Tầng/Mô hình + Family/Thuộc tính bên trái • viewport BricsCAD native ở giữa • Quản lý bản vẽ/lớp bên phải.");
                 return true;
             }
             catch (Exception)
@@ -199,6 +203,7 @@ namespace QS3D.BricsCAD.V25
                 project = currentProject;
             _workspacePanel?.SetInspectionReadOnly(snapshots, project);
             _quantityInsightPanel?.SetInspectionReadOnly(snapshots, project);
+            _preserveInspectionStatusOnNextShow = true;
         }
 
         public static void SetStatus(string status)
@@ -267,6 +272,7 @@ namespace QS3D.BricsCAD.V25
             _propertiesVisual = null;
             _rightPanel = null;
             _quantityInsightPanel = null;
+            _preserveInspectionStatusOnNextShow = false;
         }
 
         private static void DisposePalette(ref PaletteSet? palette)
