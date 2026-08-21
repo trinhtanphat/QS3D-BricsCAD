@@ -32,6 +32,8 @@ def main() -> None:
         ("function Assert-SafeOptionalFileTarget", "ZIP target guard"),
         ("function Get-SafePackageFiles", "bounded traversal helper"),
         ("[IO.FileAttributes]::ReparsePoint", "reparse-point refusal"),
+        ("[IO.Path]::GetPathRoot($fullPath)", "filesystem-root identity"),
+        ("must not be a filesystem root", "filesystem-root refusal"),
         ("Assert-SafeDirectory -Path $PackageDirectory", "package-root validation"),
         ("Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'", "ZIP validation"),
         ("Assert-SafeFile -Path (Join-Path $package 'PACKAGE-METADATA.json')", "metadata validation"),
@@ -41,6 +43,18 @@ def main() -> None:
     ):
         require(v25, token, label)
 
+    require_before(
+        v25,
+        "[IO.Path]::GetPathRoot($fullPath)",
+        "Assert-NoReparseDirectoryChain -Path $fullPath -Label $Label",
+        "filesystem-root refusal must precede directory traversal",
+    )
+    require_before(
+        v25,
+        "must not be a filesystem root",
+        "Assert-NoReparseDirectoryChain -Path $fullPath -Label $Label",
+        "filesystem-root refusal must precede reparse traversal",
+    )
     require_before(
         v25,
         "Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'",
@@ -83,7 +97,7 @@ def main() -> None:
     ):
         require(v26, token, label)
 
-    print("PASS: signed-package finalizer validates reparse/path boundaries before destructive mutation")
+    print("PASS: signed-package finalizer validates reparse/path/root boundaries before destructive mutation")
 
 
 if __name__ == "__main__":
