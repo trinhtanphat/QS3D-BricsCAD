@@ -47,11 +47,29 @@ finalize_source = read(FINALIZE)
 install_source = read(INSTALL)
 update_source = read(UPDATE)
 
-for label, source in (("package-v25.ps1", package_source), ("finalize-v25-signed-package.ps1", finalize_source)):
-    require("Get-ChildItem" in source and "-Recurse" in source and "-File" in source,
-            f"{label} must enumerate regular package files recursively for hashing")
-    require("SHA256SUMS.txt" in source and "Get-FileHash" in source and "-Algorithm SHA256" in source,
-            f"{label} must produce/verify the SHA256SUMS contract")
+# The package producer may use PowerShell's recursive regular-file enumeration because it
+# operates on the build-owned staging tree. The signed-package finalizer deliberately uses
+# Get-SafePackageFiles instead so reparse/non-regular entries are rejected while traversing.
+require("Get-ChildItem" in package_source and "-Recurse" in package_source and "-File" in package_source,
+        "package-v25.ps1 must enumerate regular package files recursively for hashing")
+require("SHA256SUMS.txt" in package_source and "Get-FileHash" in package_source and "-Algorithm SHA256" in package_source,
+        "package-v25.ps1 must produce the SHA256SUMS contract")
+
+finalizer_tokens = (
+    "function Get-SafePackageFiles",
+    "Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop",
+    "[IO.FileAttributes]::ReparsePoint",
+    "$files.Add($item)",
+    "return @($files | Sort-Object FullName)",
+    "$hashLines = foreach ($file in Get-SafePackageFiles -PackageRoot $package)",
+    "SHA256SUMS.txt",
+    "Get-FileHash",
+    "-Algorithm SHA256",
+)
+for token in finalizer_tokens:
+    require(token in finalize_source, f"finalize-v25-signed-package.ps1 safe hash traversal missing token: {token}")
+require("Get-ChildItem -LiteralPath $package -Recurse -File" not in finalize_source,
+        "finalize-v25-signed-package.ps1 must not bypass safe package traversal with recursive Get-ChildItem")
 
 require("install-v25-autoload.ps1" in package_source,
         "package-v25.ps1 must package the installer that enforces internal manifest coverage")

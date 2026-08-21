@@ -28,7 +28,7 @@ namespace QS3D.Core.SmokeTests
                 "DrawingFingerprint",
                 project => project.DrawingFingerprint,
                 (project, value) => project.DrawingFingerprint = value,
-                " fingerprint-value ",
+                "fingerprint-value",
                 "fingerprint-value");
             AssertScalarMutation(
                 "ActiveZoneId",

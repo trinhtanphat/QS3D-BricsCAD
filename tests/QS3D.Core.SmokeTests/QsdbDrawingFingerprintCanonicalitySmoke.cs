@@ -10,27 +10,30 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
-            PublicProjectMutationIsCanonicalAndAtomic();
+            PublicProjectMutationRejectsPaddingAndIsAtomic();
             PublicElementMutationIsCanonicalAndAtomic();
             RejectsPaddedProjectDrawingFingerprint();
             RejectsPaddedElementDrawingFingerprint();
             AcceptsCanonicalDrawingFingerprints();
-            PaddedPublicAssignmentsRoundTripCanonically();
+            CanonicalProjectAndPaddedElementAssignmentsRoundTripCanonically();
         }
 
-        private static void PublicProjectMutationIsCanonicalAndAtomic()
+        private static void PublicProjectMutationRejectsPaddingAndIsAtomic()
         {
             var project = new ProjectState("qsdb-fingerprint-public-project", "QSDB fingerprint public mutation");
             project.DrawingFingerprint = "DWG-ROOT";
             var version = project.ChangeVersion;
+            var updatedUtc = project.UpdatedUtc;
 
-            project.DrawingFingerprint = "  DWG-ROOT  ";
-            Require(project.DrawingFingerprint == "DWG-ROOT", "Padded project drawing fingerprint was not normalized at public mutation boundary.");
-            Require(project.ChangeVersion == version, "Canonical project drawing fingerprint no-op changed the project revision.");
+            Throws<ArgumentException>(() => project.DrawingFingerprint = "  DWG-ROOT  ");
+            Require(project.DrawingFingerprint == "DWG-ROOT", "Rejected padded project drawing fingerprint mutated the previous canonical value.");
+            Require(project.ChangeVersion == version, "Rejected padded project drawing fingerprint changed the project revision.");
+            Require(project.UpdatedUtc == updatedUtc, "Rejected padded project drawing fingerprint changed the project timestamp.");
 
             Throws<ArgumentException>(() => project.DrawingFingerprint = "DWG\u0001ROOT");
             Require(project.DrawingFingerprint == "DWG-ROOT", "Rejected project drawing fingerprint mutated the previous canonical value.");
             Require(project.ChangeVersion == version, "Rejected project drawing fingerprint changed the project revision.");
+            Require(project.UpdatedUtc == updatedUtc, "Rejected project drawing fingerprint changed the project timestamp.");
         }
 
         private static void PublicElementMutationIsCanonicalAndAtomic()
@@ -81,7 +84,7 @@ namespace QS3D.Core.SmokeTests
             });
         }
 
-        private static void PaddedPublicAssignmentsRoundTripCanonically()
+        private static void CanonicalProjectAndPaddedElementAssignmentsRoundTripCanonically()
         {
             var directory = Path.Combine(Path.GetTempPath(), "qs3d-fingerprint-public-roundtrip-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
@@ -91,7 +94,7 @@ namespace QS3D.Core.SmokeTests
             {
                 var project = new ProjectState("qsdb-fingerprint-public-roundtrip", "QSDB fingerprint public round-trip")
                 {
-                    DrawingFingerprint = "  DWG-ROOT  "
+                    DrawingFingerprint = "DWG-ROOT"
                 };
                 project.Elements.Add(new ProjectElement("E1", ElementCategory.Beam)
                 {
@@ -101,8 +104,8 @@ namespace QS3D.Core.SmokeTests
                 var store = new QsdbProjectStore();
                 store.SaveNew(project, path);
                 var loaded = store.Load(path);
-                Require(loaded.DrawingFingerprint == "DWG-ROOT", "Normalized project drawing fingerprint did not round-trip canonically.");
-                Require(loaded.Elements.Count == 1, "Normalized drawing fingerprint round-trip lost its element.");
+                Require(loaded.DrawingFingerprint == "DWG-ROOT", "Canonical project drawing fingerprint did not round-trip canonically.");
+                Require(loaded.Elements.Count == 1, "Drawing fingerprint round-trip lost its element.");
                 Require(loaded.Elements[0].DrawingFingerprint == "DWG-ELEMENT", "Normalized element drawing fingerprint did not round-trip canonically.");
             }
             finally

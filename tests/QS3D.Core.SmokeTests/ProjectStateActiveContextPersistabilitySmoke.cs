@@ -13,7 +13,7 @@ namespace QS3D.Core.SmokeTests
             PaddedActiveContextAssignmentsFailAtomicallyAndCanonicalAssignmentsAreNoOps();
             ControlCharacterAssignmentsFailAtomically();
             NullStillClearsActiveContext();
-            DrawingPathRemainsExactWhileFingerprintCanonicalizes();
+            DrawingPathRemainsExactWhilePaddedFingerprintIsRejected();
         }
 
         private static void PaddedActiveContextAssignmentsFailAtomicallyAndCanonicalAssignmentsAreNoOps()
@@ -81,16 +81,23 @@ namespace QS3D.Core.SmokeTests
             Equal(string.Empty, project.ActiveFloorId);
         }
 
-        private static void DrawingPathRemainsExactWhileFingerprintCanonicalizes()
+        private static void DrawingPathRemainsExactWhilePaddedFingerprintIsRejected()
         {
             var project = new ProjectState("PROJECT-DRAWING-TEXT", "Drawing Text")
             {
                 DrawingPath = "  C:/Exact Drawing.dwg  ",
-                DrawingFingerprint = "  fingerprint:AbC123  "
+                DrawingFingerprint = "fingerprint:AbC123"
             };
+
+            var version = project.ChangeVersion;
+            var updatedUtc = project.UpdatedUtc;
+
+            Throws<ArgumentException>(() => project.DrawingFingerprint = "  fingerprint:AbC123  ");
 
             Equal("  C:/Exact Drawing.dwg  ", project.DrawingPath);
             Equal("fingerprint:AbC123", project.DrawingFingerprint);
+            Equal(version, project.ChangeVersion);
+            Equal(updatedUtc, project.UpdatedUtc);
         }
 
         private static void Throws<T>(Action action) where T : Exception
