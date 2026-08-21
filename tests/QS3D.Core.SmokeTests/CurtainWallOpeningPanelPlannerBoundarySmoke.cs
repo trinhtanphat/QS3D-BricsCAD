@@ -112,7 +112,7 @@ namespace QS3D.Core.SmokeTests
         }
 
         private static CurtainWallRect Rect(double x, double z, double width, double height)
-            => new CurtainWallRect { X_M = x, Z_M = z, WidthM = width, HeightM = height };
+            => new CurtainWallRect(x, z, width, height);
 
         private static CurtainWallOpeningRect Opening(double x, double z, double width, double height)
             => new CurtainWallOpeningRect { X_M = x, Z_M = z, WidthM = width, HeightM = height };
