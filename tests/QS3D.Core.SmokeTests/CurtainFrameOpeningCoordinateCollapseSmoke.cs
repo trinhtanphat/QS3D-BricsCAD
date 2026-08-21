@@ -38,20 +38,16 @@ internal static class CurtainFrameOpeningCoordinateCollapseSmoke
 
     private static void FrameWidthCollapseFailsClosed()
     {
-        var error = Capture<InvalidOperationException>(() =>
-            CurtainFrameOpeningPlanner.Interrupt(
-                new[] { new CurtainWallRect(1e16d, 0d, 1d, 1d) },
-                Array.Empty<CurtainOpeningRect>()));
-        Equal("Curtain frame rectangle width is below the representable coordinate resolution.", error.Message);
+        var error = Capture<OverflowException>(() =>
+            new CurtainWallRect(1e16d, 0d, 1d, 1d));
+        Equal("Curtain rectangle width is below the representable coordinate resolution.", error.Message);
     }
 
     private static void FrameHeightCollapseFailsClosed()
     {
-        var error = Capture<InvalidOperationException>(() =>
-            CurtainFrameOpeningPlanner.Interrupt(
-                new[] { new CurtainWallRect(0d, 1e16d, 1d, 1d) },
-                Array.Empty<CurtainOpeningRect>()));
-        Equal("Curtain frame rectangle height is below the representable coordinate resolution.", error.Message);
+        var error = Capture<OverflowException>(() =>
+            new CurtainWallRect(0d, 1e16d, 1d, 1d));
+        Equal("Curtain rectangle height is below the representable coordinate resolution.", error.Message);
     }
 
     private static void OrdinaryOpeningStillInterrupts()
