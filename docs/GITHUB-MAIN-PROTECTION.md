@@ -1,6 +1,6 @@
 # GitHub main protection and CI-recovery addendum
 
-This addendum records the GitHub-settings side of the canonical multi-agent protocol in `docs/MAIN-WRITE-AUTHORIZATION.md`, `AGENTS.md`, `docs/AGENT-WORK-REGISTRATION.md` and `CI_POLICY.md`.
+This addendum records the GitHub-settings side of the canonical multi-agent protocol in `docs/MAIN-WRITE-AUTHORIZATION.md`, `AGENTS.md`, `docs/AGENT-RUNTIME-CONTRACT.md`, `docs/AGENT-WORK-REGISTRATION.md` and `CI_POLICY.md`.
 
 ## Active hard protection
 
@@ -17,11 +17,11 @@ Effective rules on `main` are:
 
 The GitHub branch API reports `main` as protected, and the effective-rules API reports ruleset `20890901` applying to `main`.
 
-Hard protection is the technical barrier. Repository Markdown remains the behavioral contract for agents and defines who is allowed to perform a merge. Green checks never grant merge authorization by themselves.
+Hard protection is the technical barrier. Repository Markdown remains the behavioral contract for agents and defines which session is authorized to merge. Green checks alone do not authorize unrelated work or a protection bypass.
 
 ## Zero-direct-main target
 
-Normal AI agents/chat sessions must treat `main` as read-only for **all** task content:
+Normal AI agents/chat sessions must treat `main` as read-only for **direct writes of all task content**:
 
 - source;
 - tests;
@@ -31,13 +31,15 @@ Normal AI agents/chat sessions must treat `main` as read-only for **all** task c
 - claim/handoff/status files;
 - chores and release notes.
 
-Normal work uses Issue + dedicated branch + PR. There is no docs/claim exception.
+Normal work uses Issue + dedicated branch + PR. There is no docs/claim direct-main exception.
 
-The active ruleset now physically enforces the PR path for `main` in addition to the repository policy. Do not use a bypass, direct ref update, force push, or temporary ruleset weakening as a normal agent workflow.
+The active ruleset physically enforces the PR path for `main` in addition to repository policy. Do not use a bypass, direct ref update, force push, or temporary ruleset weakening as a normal agent workflow.
 
-## Mandatory branch CI before PR
+For a normal repository-owner task, the standing same-task merge authorization in `docs/MAIN-WRITE-AUTHORIZATION.md` applies after every current required gate is satisfied unless the owner explicitly opts out. That authorization is PR-only and never permits direct-main writes or unrelated/bulk merges.
 
-For changes watched by shared CI, the task branch must pass its own automatic shared branch-push CI on the exact current branch SHA **before a new PR is opened**.
+## Branch CI sequencing and PR timing
+
+For changes watched by shared CI, preferred sequencing is:
 
 ```text
 latest main
@@ -46,19 +48,23 @@ latest main
   -> implement + validate
   -> commit + push task branch
   -> shared branch CI on exact branch SHA
-  -> CI SUCCESS
+  -> CI SUCCESS when required by the current admission gate
   -> refresh main / reconcile if needed
-  -> open PR
+  -> open/update canonical PR
   -> protected-main required checks / freshness gate
-  -> owner-authorized merge only
+  -> same-task authorized merge when all gates are satisfied
   -> exact-main release CI when applicable
 ```
 
-A PR is not the first CI attempt for watched/integration-relevant work. If branch CI is red, fix it on the branch and obtain a fresh green branch run before opening the PR.
+A PR is not a substitute for diagnosing a known red exact-head branch run. If branch CI is red on the current canonical carrier, fix the concrete failure on that same branch and obtain fresh evidence.
 
-After PR creation, GitHub may run the shared workflow again for the PR merge candidate because the protected-main ruleset requires `preflight` and `core`. This is merge-candidate/freshness evidence, not a policy requirement to run two arbitrary identical full CI passes. If `main` moves or the candidate changes, strict protection requires fresh applicable checks.
+However, CI completion timestamp is **not** permanent carrier identity. If the one canonical PR already exists while branch CI is queued/running, completes later, or a later same-carrier remediation changes the head SHA, do not close/recreate the PR or create a replacement branch merely to reorder timestamps. Revalidate the current candidate and follow `docs/PR-CI-LIFECYCLE.md`.
 
-For ordinary docs/claim/handoff-only paths that are intentionally outside the shared branch-CI watch set, heavy pre-PR branch CI may be omitted, but a branch + PR is still mandatory and the protected-main checks must not be bypassed.
+After PR creation, GitHub may run the shared workflow again for the PR merge candidate because the protected-main ruleset requires `preflight` and `core`. This is current merge-candidate/freshness evidence, not a requirement to manufacture duplicate carriers or cosmetic CI runs. If `main` moves or the candidate changes, strict protection requires fresh applicable checks.
+
+For ordinary docs/claim/handoff-only paths intentionally outside the policy/source/build watched set, heavy pre-PR validation may be omitted, but branch + PR remain mandatory and protected-main checks must not be bypassed.
+
+Governance/policy Markdown explicitly classified by `.github/workflows/ci.yml` must run the required policy/source guards, but does not require a Core/V25 build unless another build-relevant path changed. Changed paths, not `docs:`/`md:`/`chore:` prefixes, decide this classification.
 
 ## No CI direct-main exception
 
@@ -71,9 +77,10 @@ exact failing run/SHA
   -> reserve non-overlapping repair lane
   -> recovery/<agent>/<scope> or agent/<agent>/<scope>
   -> deterministic regression/guard
-  -> branch CI SUCCESS before PR
-  -> PR / integration/<batch-id>
-  -> owner-authorized reviewed final landing to main
+  -> exact-head branch CI evidence
+  -> canonical PR / integration carrier
+  -> protected checks + current-candidate verification
+  -> same-task authorized landing under MAIN-WRITE-AUTHORIZATION
   -> fresh current-main V25 cloud CI
   -> repeat from newest relevant failure until green
 ```
@@ -87,7 +94,7 @@ Treat V25 recovery as a monotonic loop that always converges on the newest `main
 1. After an authorized integration-relevant landing reaches `main`, refresh current `main` HEAD and require a fresh relevant `release-v25-cloud.yml` qualification for that state.
 2. Read the newest V25 cloud run together with the newest `main` commit. The newest run is diagnostic evidence; it is final release evidence only when it qualifies the newest relevant source/release tree.
 3. If a run is stale because `main` moved, keep stale-dispatch/concurrency guards intact. Do not weaken or bypass them.
-4. If the newest run exposes a real source/test/preflight/build/package failure, reproduce or verify that failure against the newest `main` before patching. If still present, fix it on a recovery/agent branch, verify it, obtain green branch CI before PR, hand it to PR/integration review, and land only with explicit owner merge authorization.
+4. If the newest run exposes a real source/test/preflight/build/package failure, reproduce or verify that failure against the newest `main` before patching. If still present, fix it on a recovery/agent branch, verify it, revalidate the exact current head, and land only through the protected PR path under the applicable same-task authorization.
 5. Repeat until the newest relevant V25 run is green and no newer integration-relevant landing invalidates it.
 6. Never create a no-op implementation commit merely to obtain a new SHA.
 
@@ -122,6 +129,6 @@ Use a GitHub Issue as the preferred immediately visible task reservation. A Mark
 
 ## Final-state rule
 
-`ALL MERGED TO MAIN` means the current combined tree has been freshly reviewed for task completion, commit/tree reachability, missing off-main work, accidental reversions, duplicate implementations and semantic/API/test conflicts after an explicitly authorized landing.
+`ALL MERGED TO MAIN` means the current combined tree has been freshly reviewed for task completion, commit/tree reachability, missing off-main work, accidental reversions, duplicate implementations and semantic/API/test conflicts after an authorized landing.
 
 Branch existence, branch deletion, Issue state or PR UI state alone is not proof. Current tree reachability, active protection state and exact-SHA evidence are authoritative.
