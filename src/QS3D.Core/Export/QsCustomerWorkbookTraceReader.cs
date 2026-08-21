@@ -4,6 +4,8 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -139,6 +141,9 @@ namespace QS3D.Core.Export
             var elementIds = SplitIdentity(RequiredCell(match.Item2, columns["QS3D Element ID"], "TRACE_MODEL Element ID"), false);
             var handles = SplitIdentity(RequiredCell(match.Item2, columns["CAD Handle (hex)"], "TRACE_MODEL CAD Handle"), true);
             var fingerprint = RequiredCell(match.Item2, columns["QS3D Drawing Fingerprint"], "TRACE_MODEL Drawing Fingerprint");
+            var expectedTraceKey = BuildTraceKey(sourceSheet, fingerprint, elementIds, handles);
+            if (!string.Equals(traceKey, expectedTraceKey, StringComparison.Ordinal))
+                throw new InvalidDataException("Customer workbook TRACE_KEY does not match canonical TRACE_MODEL identity provenance.");
             return new QsCustomerWorkbookTrace(worksheetName, rowNumber, traceKey, elementIds, handles, fingerprint);
         }
 
@@ -166,6 +171,20 @@ namespace QS3D.Core.Export
             if (!ulong.TryParse(token, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out number) || number == 0UL)
                 throw new InvalidDataException("TRACE_MODEL contains an invalid CAD Handle: " + value + ".");
             return number.ToString("X", CultureInfo.InvariantCulture);
+        }
+
+        private static string BuildTraceKey(string sheet, string drawingFingerprint, IEnumerable<string> elementIds, IEnumerable<string> handles)
+        {
+            var ids = elementIds.OrderBy(value => value, StringComparer.OrdinalIgnoreCase);
+            var orderedHandles = handles.OrderBy(value => value, StringComparer.OrdinalIgnoreCase);
+            var raw = sheet + "\u001f" + drawingFingerprint + "\u001f" + string.Join("\u001e", ids) + "\u001f" + string.Join("\u001e", orderedHandles);
+            using (var sha = SHA256.Create())
+            {
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(raw));
+                var hex = new StringBuilder(hash.Length * 2);
+                foreach (var value in hash) hex.Append(value.ToString("x2", CultureInfo.InvariantCulture));
+                return sheet + ":" + hex;
+            }
         }
 
         private static string RequiredCell(IReadOnlyDictionary<int, string> cells, int column, string label)
