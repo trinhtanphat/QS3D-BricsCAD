@@ -100,7 +100,6 @@ namespace QS3D.Core.Features
         public IReadOnlyList<FeatureActionItem> Primary { get; }
         public IReadOnlyList<FeatureActionItem> Secondary { get; }
         public IReadOnlyList<FeatureActionItem> Overflow { get; }
-        public int PersistentInspectorCount => 0;
     }
 
     public static class FeatureActionBarBuilder
