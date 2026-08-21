@@ -98,7 +98,7 @@ namespace QS3D.BricsCAD.V25
                 failureCode = "LEVEL_Z_RUNTIME_SOURCE_FAILED";
                 var sources = CreateSources(document);
                 var topOnlyFailClosed = VerifyTopOnlyFailsBeforeMutation(document, sources.TopOnlyWall);
-                var project = CreateProject("level-z-runtime");
+                var project = CreateProject(document);
                 if (!CadUnitService.TryGetNativeLengthUnit(document, out var nativeUnit))
                     throw new InvalidOperationException("Level Z runtime probe requires a supported native drawing unit.");
                 DrawingUnitResolutionPolicy.BindQuantityUnit(
@@ -316,6 +316,21 @@ namespace QS3D.BricsCAD.V25
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
                     "\nQS3D Level Z runtime probe FAIL. See the local qualification marker.");
             }
+        }
+
+        private static ProjectState CreateProject(Document document)
+        {
+            var project = ProjectContextCoordinator.GetOrCreate(document);
+            if (project.Elements.Count != 0 ||
+                project.FindFloor("L0") != null ||
+                project.FindFloor("L1") != null ||
+                project.FindFloor("L2") != null)
+                throw new InvalidOperationException("Level Z runtime probe requires a fresh canonical project.");
+            project.Floors.Add(new FloorDefinition("L0", "Level 0", 0d));
+            project.Floors.Add(new FloorDefinition("L1", "Level 1", 3d));
+            project.Floors.Add(new FloorDefinition("L2", "Level 2", 7d));
+            project.ActiveFloorId = "L0";
+            return project;
         }
 
         private static ProjectState CreateProject(string id)

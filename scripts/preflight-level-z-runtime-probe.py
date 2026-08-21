@@ -25,6 +25,8 @@ if COMMAND.is_file():
         'CadUnitService.TryGetNativeLengthUnit(document, out var nativeUnit)',
         'DrawingUnitResolutionPolicy.BindQuantityUnit(',
         'DrawingUnitResolutionSource.NativeInsunits',
+        'var project = ProjectContextCoordinator.GetOrCreate(document);',
+        'Level Z runtime probe requires a fresh canonical project.',
         'CadGeometryGuard.ToDrawingUnits(document, 1d, "Level Z probe meter scale")',
         'RequireAssemblyRevision(typeof(LevelZRuntimeProbeCommands).Assembly, sourceSha',
         'RequireAssemblyRevision(typeof(ProjectState).Assembly, sourceSha',
@@ -109,6 +111,10 @@ if COMMAND.is_file():
     for forbidden in ("error.Message", "error.StackTrace", "error.Source", "error.Data"):
         if forbidden in text:
             errors.append("Level-Z failure marker exposes raw exception detail: " + forbidden)
+    canonical = text.find('var project = CreateProject(document);')
+    structural_build = text.find('StructuralSolidBuilder.BuildSelected(document, project, ElementCategory.Beam)')
+    if canonical < 0 or structural_build < 0 or canonical >= structural_build:
+        errors.append("Level-Z probe must bind a canonical drawing project before structural generation")
 
 if STRUCTURAL.is_file():
     text = STRUCTURAL.read_text(encoding="utf-8")
