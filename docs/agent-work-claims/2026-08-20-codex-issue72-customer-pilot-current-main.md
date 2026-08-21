@@ -181,6 +181,15 @@ therefore remains frozen at `0ae7fb4369172198d25347b9b0d75bdbceead2bb`; any
 later integration that adds those Core commits must treat the result as a new
 candidate and rerun the applicable exact-SHA gates.
 
+A later pre-handoff refresh observed GitHub
+`main@68e2083ff67c866bff81b2dfd2379a393481cf61`. The additional merged PR
+`#3405` changes only floating-work-area policy source and its focused Core
+smoke. It does not overlap this lane's implementation or handoff paths, but it
+also changes Core identity, so it was not merged into the frozen native
+candidate. The carrier is intentionally behind current `main`; that status is
+an exact-evidence boundary, not merge authorization or a claim that the newer
+combined tree has passed this licensed matrix.
+
 ## Local preview installation correction — 2026-08-21
 
 The stale persistent install was independently repaired without replacing it
@@ -194,11 +203,26 @@ The package manifest covered 17 files; the verified unblock path removed
 Mark-of-the-Web from the 18 extracted package files without weakening
 PowerShell policy or BricsCAD trust settings.
 
-The transactional installer replaced the fixed per-user DemandLoad location,
-registered `LoadCtrls=4` and 462 commands, and installed adapter SHA-256
+The transactional installer replaced the fixed per-user DemandLoad location
+and installed adapter SHA-256
 `6B090154648CBA7378CD09C2396A620130BD8EFECC80DA0B542FA98A6FBCC7A7`.
-A cold DemandLoad-only run loaded that exact fixed-path DLL and passed with
-zero process residue, so reboot no longer returns to `0.1.0-preview.2`.
+The initial `OnCommand` registration covered all 462 packaged commands and a
+cold DemandLoad-only probe passed on the initialized default profile. A later
+customer-style open exposed inconsistent command-triggered activation in a
+separate local test profile. The supported installer was therefore rerun in
+`OnStartup` mode (`LoadCtrls=2`) while retaining the same fixed path, payload
+hash and 462-command registry surface.
+
+After that correction, a clean `Default`-profile start plus the in-host
+`QS3DVERSION` command reported public version `v0.1.0-preview.10192`, build
+identity `afff082096998fa404f08a5e29bcfd9fbc3830dd` and the canonical
+per-user installed DLL path. The user-selected drawing was then opened in the
+same responsive host with one document, `DBMOD=0`, saved state true and no
+QS3D sidecar creation. The pre-open on-disk file identity was retained only in
+ignored local evidence. The installer did not weaken BricsCAD security or add
+trusted paths, so reboot/startup no longer depends on stale command wrappers
+or the older `0.1.0-preview.2` location.
+
 This preview package is intentionally Authenticode `NotSigned`; checksum,
 manifest and loaded-binary integrity are verified, but no publisher/timestamp
 or commercial trust claim is made.
