@@ -140,6 +140,16 @@ def reject_external_orchestration_artifacts(failures: list[str]) -> None:
         if relative == SELF_PATH or path.suffix.lower() not in ORCHESTRATION_SCAN_SUFFIXES:
             continue
 
+        try:
+            metadata = path.lstat()
+        except OSError as exc:
+            failures.append(f"cannot inspect orchestration-scanned repository path metadata: {relative}: {exc}")
+            continue
+        if stat.S_ISDIR(metadata.st_mode) and not (
+            getattr(metadata, "st_file_attributes", 0) & WINDOWS_REPARSE_POINT_ATTRIBUTE
+        ):
+            continue
+
         text, error = read_repository_text(path, ROOT, MAX_ORCHESTRATION_SCAN_BYTES)
         if error is not None:
             failures.append(f"unsafe orchestration-scanned repository file: {relative}: {error}")
