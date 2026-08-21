@@ -24,8 +24,8 @@ namespace QS3D.Core.SmokeTests
         private static void CanonicalInputsProduceStableDigest()
         {
             var digest = CurtainWallPanelFingerprint.Compute(Input(
-                new Piece(1, 4d, 0d, 2d, 3d),
-                new Piece(0, 0d, 0d, 4d, 3d)));
+                Piece(1, 4d, 0d, 2d, 3d),
+                Piece(0, 0d, 0d, 4d, 3d)));
             if (digest.Length != 64)
                 throw new InvalidOperationException("Curtain panel fingerprint must be a 64-character SHA-256 hex digest.");
             for (var i = 0; i < digest.Length; i++)
@@ -38,8 +38,8 @@ namespace QS3D.Core.SmokeTests
 
         private static void InputOrderSourceKindCaseAndSignedZeroAreCanonical()
         {
-            var first = new Piece(0, 0d, 0d, 4d, 3d);
-            var second = new Piece(1, 4d, 0d, 2d, 3d);
+            var first = Piece(0, 0d, 0d, 4d, 3d);
+            var second = Piece(1, 4d, 0d, 2d, 3d);
             var forward = Input(first, second);
             var reverse = Input(second, first);
             var upper = Input(first, second);
@@ -64,48 +64,48 @@ namespace QS3D.Core.SmokeTests
         {
             Expect<ArgumentNullException>(() => CurtainWallPanelFingerprint.Compute(null!), "null input");
 
-            var invalidSourceKind = Input(new Piece(0, 0d, 0d, 1d, 1d));
+            var invalidSourceKind = Input(Piece(0, 0d, 0d, 1d, 1d));
             invalidSourceKind.SourceKind = " Line ";
             Expect<ArgumentException>(() => CurtainWallPanelFingerprint.Compute(invalidSourceKind), "padded source kind");
 
-            var invalidLineSegments = Input(new Piece(0, 0d, 0d, 1d, 1d));
+            var invalidLineSegments = Input(Piece(0, 0d, 0d, 1d, 1d));
             invalidLineSegments.PathSegmentCount = 1;
             Expect<ArgumentOutOfRangeException>(() => CurtainWallPanelFingerprint.Compute(invalidLineSegments), "Line path segment count");
 
-            var invalidPolylineSegments = Input(new Piece(0, 0d, 0d, 1d, 1d));
+            var invalidPolylineSegments = Input(Piece(0, 0d, 0d, 1d, 1d));
             invalidPolylineSegments.SourceKind = "OpenPolyline";
             invalidPolylineSegments.PathSegmentCount = 0;
             Expect<ArgumentOutOfRangeException>(() => CurtainWallPanelFingerprint.Compute(invalidPolylineSegments), "OpenPolyline path segment count");
 
-            var negativeIndex = Input(new Piece(-1, 0d, 0d, 1d, 1d));
+            var negativeIndex = Input(Piece(-1, 0d, 0d, 1d, 1d));
             Expect<ArgumentOutOfRangeException>(() => CurtainWallPanelFingerprint.Compute(negativeIndex), "negative source panel index");
 
-            var nullPiece = Input(new Piece(0, 0d, 0d, 1d, 1d));
+            var nullPiece = Input(Piece(0, 0d, 0d, 1d, 1d));
             nullPiece.Pieces = new CurtainWallPanelPiece[] { null! };
             Expect<InvalidOperationException>(() => CurtainWallPanelFingerprint.Compute(nullPiece), "null piece");
 
-            var invalidWidth = Input(new Piece(0, 0d, 0d, 0d, 1d));
+            var invalidWidth = Input(Piece(0, 0d, 0d, 0d, 1d));
             Expect<ArgumentOutOfRangeException>(() => CurtainWallPanelFingerprint.Compute(invalidWidth), "zero piece width");
         }
 
         private static void NonRepresentablePieceBoundsFailClosed()
         {
-            var lostWidth = Input(new Piece(0, 1e308d, 0d, 1d, 1d));
+            var lostWidth = Input(Piece(0, 1e308d, 0d, 1d, 1d));
             Expect<OverflowException>(() => CurtainWallPanelFingerprint.Compute(lostWidth), "non-representable right bound");
 
-            var lostHeight = Input(new Piece(0, 0d, 1e308d, 1d, 1d));
+            var lostHeight = Input(Piece(0, 0d, 1e308d, 1d, 1d));
             Expect<OverflowException>(() => CurtainWallPanelFingerprint.Compute(lostHeight), "non-representable top bound");
 
-            var overflowingWidth = Input(new Piece(0, double.MaxValue, 0d, double.MaxValue, 1d));
+            var overflowingWidth = Input(Piece(0, double.MaxValue, 0d, double.MaxValue, 1d));
             Expect<ArgumentOutOfRangeException>(() => CurtainWallPanelFingerprint.Compute(overflowingWidth), "overflowing right bound");
         }
 
         private static void PieceAreaUnderflowFailsClosed()
         {
-            var underflow = Input(new Piece(0, 0d, 0d, 1e-200d, 1e-200d));
+            var underflow = Input(Piece(0, 0d, 0d, 1e-200d, 1e-200d));
             Expect<OverflowException>(() => CurtainWallPanelFingerprint.Compute(underflow), "piece area underflow");
 
-            var normalSmall = Input(new Piece(0, 0d, 0d, 1e-100d, 1e-100d));
+            var normalSmall = Input(Piece(0, 0d, 0d, 1e-100d, 1e-100d));
             var digest = CurtainWallPanelFingerprint.Compute(normalSmall);
             if (digest.Length != 64)
                 throw new InvalidOperationException("Representable small panel piece must remain fingerprintable.");
@@ -127,7 +127,7 @@ namespace QS3D.Core.SmokeTests
             if (oversized.IndexReads != 0)
                 throw new InvalidOperationException("Oversized Pieces Count must fail before index access.");
 
-            var changing = new ChangingCountList(new[] { new Piece(0, 0d, 0d, 1d, 1d) }, firstCount: 1, laterCount: 0);
+            var changing = new ChangingCountList(new[] { Piece(0, 0d, 0d, 1d, 1d) }, firstCount: 1, laterCount: 0);
             var changingInput = Input();
             changingInput.Pieces = changing;
             Expect<InvalidOperationException>(() => CurtainWallPanelFingerprint.Compute(changingInput), "Pieces Count drift");
