@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             CanonicalResultParityAndProvenance();
             SignedZeroResultParity();
             TakeoffResultHandleCanonicality();
+            TakeoffResultUnitCanonicality();
             MissingMetricStillFailsThroughCanonicalPath();
             InvalidDrawingUnitStillFailsThroughCanonicalPath();
         }
@@ -55,22 +56,22 @@ namespace QS3D.Core.SmokeTests
             Contains(paddedMessage, "Takeoff handle must not contain surrounding whitespace.",
                 "Padded TakeoffResult handles must fail closed instead of aliasing canonical identity.");
 
-            var canonical = new TakeoffResult("H1", TakeoffKind.Count, 1d, "  ea  ");
+            var canonical = new TakeoffResult("H1", TakeoffKind.Count, 1d, "ea");
             Equal("H1", canonical.Handle, "Canonical TakeoffResult handle must be preserved exactly.");
-            Equal("ea", canonical.Unit, "TakeoffResult must preserve surrounding-space unit canonicalization.");
+            Equal("ea", canonical.Unit, "Canonical TakeoffResult unit must be preserved exactly.");
             Equal(TakeoffKind.Count, canonical.Kind, "TakeoffResult kind changed during handle hardening.");
             Equal(1d, canonical.Value, "TakeoffResult value changed during handle hardening.");
 
             var controls = new[]
             {
-                '\0',       // NUL / C0
-                '\u0001',   // SOH / C0
-                '\t',       // TAB / C0
-                '\n',       // LF / C0
-                '\u001F',   // Unit Separator / C0
-                '\u007F',   // DEL
-                '\u0085',   // NEL / C1
-                '\u009F'    // C1 boundary
+                '\0',
+                '\u0001',
+                '\t',
+                '\n',
+                '\u001F',
+                '\u007F',
+                '\u0085',
+                '\u009F'
             };
 
             foreach (var control in controls)
@@ -98,6 +99,55 @@ namespace QS3D.Core.SmokeTests
                 "Trace projection value parity changed during TakeoffResult hardening.");
             Equal(calculated.Unit, traced.Result.Unit,
                 "Trace projection unit parity changed during TakeoffResult hardening.");
+        }
+
+        private static void TakeoffResultUnitCanonicality()
+        {
+            var canonicalUnits = new[] { "ea", "m", "m2", "m3" };
+            foreach (var unit in canonicalUnits)
+            {
+                var result = new TakeoffResult("U-" + unit, TakeoffKind.Count, 1d, unit);
+                Equal(unit, result.Unit, "Canonical TakeoffResult unit must be preserved exactly.");
+            }
+
+            var paddedUnits = new[] { " m", "m ", "\tm", "m\t", "\rm", "m\r", "\nm", "m\n" };
+            foreach (var unit in paddedUnits)
+            {
+                var message = Capture<ArgumentException>(() => new TakeoffResult("U1", TakeoffKind.Length, 1d, unit));
+                Contains(message, "Takeoff unit must not contain surrounding whitespace.",
+                    "Padded TakeoffResult unit must fail closed instead of being trimmed: " + Escape(unit));
+            }
+
+            var embeddedUnits = new[] { "m 2", "m\t2", "m\r2", "m\n2", "m\u00012", "m\u007F2", "m\u00852" };
+            foreach (var unit in embeddedUnits)
+            {
+                var message = Capture<ArgumentException>(() => new TakeoffResult("U2", TakeoffKind.Area, 1d, unit));
+                Contains(message, "Takeoff unit must not contain whitespace or control characters.",
+                    "Embedded whitespace/control TakeoffResult unit must fail closed: " + Escape(unit));
+            }
+
+            var nonCanonicalCaseUnits = new[] { "M", "EA", "M2", "m3X" };
+            foreach (var unit in nonCanonicalCaseUnits)
+            {
+                var message = Capture<ArgumentException>(() => new TakeoffResult("U3", TakeoffKind.Volume, 1d, unit));
+                Contains(message, "Takeoff unit must use canonical lower-case text.",
+                    "Upper/mixed-case TakeoffResult unit must fail closed: " + unit);
+            }
+
+            var entity = new EntitySnapshot("U4", "Polyline", "QTO")
+            {
+                LengthDrawingUnits = 2d,
+                AreaDrawingUnitsSquared = 3d,
+                VolumeDrawingUnitsCubed = 4d
+            };
+            var kinds = new[] { TakeoffKind.Count, TakeoffKind.Length, TakeoffKind.Area, TakeoffKind.Volume };
+            foreach (var kind in kinds)
+            {
+                var calculated = QuantityEngine.Calculate(entity, kind, DrawingUnit.Meter);
+                var traced = QuantityEngine.CalculateWithTrace(entity, kind, DrawingUnit.Meter);
+                Equal(calculated.Unit, traced.Result.Unit, kind + " result/trace unit parity changed during unit hardening.");
+                Equal(calculated.Unit, traced.Trace.Unit, kind + " canonical trace unit changed during unit hardening.");
+            }
         }
 
         private static void AssertParity(
@@ -171,6 +221,11 @@ namespace QS3D.Core.SmokeTests
                 return exception.Message;
             }
             throw new InvalidOperationException("Expected " + typeof(TException).Name + ".");
+        }
+
+        private static string Escape(string value)
+        {
+            return value.Replace("\t", "\\t").Replace("\r", "\\r").Replace("\n", "\\n");
         }
 
         private static void Contains(string actual, string expectedFragment, string message)
