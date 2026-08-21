@@ -62,7 +62,7 @@ namespace QS3D.Core.Features
         // Current create schemas are compact property forms. Keep a deliberately generous
         // ceiling so normal UI schemas remain unaffected while arbitrary/lazy callers cannot
         // turn form ingestion into an unbounded enumeration/allocation path.
-        internal const int MaximumFormFields = 64;
+        public const int MaximumFormFields = 64;
 
         private readonly FeatureDescriptor _feature;
         private readonly Dictionary<string, string> _formValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
