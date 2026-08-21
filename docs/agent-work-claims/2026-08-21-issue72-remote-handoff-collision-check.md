@@ -2,6 +2,24 @@
 
 Supporting handoff only; this is not a second queue. The canonical owner/local queue remains `docs/LOCAL-AGENT-INBOX.md`.
 
+## Supersession update after local continuation
+
+This document preserves the collision audit at remote merge SHA
+`d36989144ba1454bd0b5efd58d9a0ab834176edb`; its `UNQUALIFIED` warning applies
+to that historical combined SHA. The canonical local carrier later merged
+`main@805bc1dc63c007b562dc5d65529c76b25a7336ab` and froze exact source/runtime
+candidate `9130c70582f4f67b83d4d63c6a59d3a30f7c0ed8`. That candidate passed the
+official `962/962` source gate set, zero-warning Core/V25 builds, Core smoke,
+offline WPF, licensed V25 NETLOAD/Ribbon/Palette, curved structural Millimeter
+and Meter probes, and the affected Curtain P04/P10 native reviews. Canonical
+sanitized evidence is recorded by commit
+`7f6fd97bff232e64adc70c225f9b0b67557fa45c`; later docs/merge commits must not
+be relabeled as the tested binary SHA. A final fetch observed later
+`main@1a8f60fa5c41ac7c52e9e0ca042f4db72d9bd5cf` drift only in the unrelated
+measurement boundary smoke and intentionally did not reopen the frozen runtime
+candidate. Broad LOCAL-002/LOCAL-003 and the full customer/private-DWG matrix
+remain pending as recorded in the canonical inbox and Issue #72 claim.
+
 ## Canonical carrier
 
 - Lane-Key: `issue-72`
