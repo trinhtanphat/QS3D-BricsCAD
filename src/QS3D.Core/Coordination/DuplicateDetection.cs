@@ -24,7 +24,7 @@ namespace QS3D.Core.Coordination
 
     public sealed class DuplicateCandidate
     {
-        public DuplicateCandidate(CoordinationElement element, string sourceId = null)
+        public DuplicateCandidate(CoordinationElement element, string? sourceId = null)
         {
             Element = element ?? throw new ArgumentNullException(nameof(element));
             SourceId = NormalizeOptionalIdentity(sourceId, nameof(sourceId));
@@ -33,7 +33,7 @@ namespace QS3D.Core.Coordination
         public CoordinationElement Element { get; }
         public string SourceId { get; }
 
-        private static string NormalizeOptionalIdentity(string value, string parameterName)
+        private static string NormalizeOptionalIdentity(string? value, string parameterName)
         {
             if (string.IsNullOrWhiteSpace(value)) return string.Empty;
             var normalized = value.Trim();
@@ -48,10 +48,7 @@ namespace QS3D.Core.Coordination
 
     public sealed class DuplicatePair
     {
-        internal DuplicatePair(
-            DuplicateCandidate left,
-            DuplicateCandidate right,
-            DuplicateMatchKind matchKinds)
+        internal DuplicatePair(DuplicateCandidate left, DuplicateCandidate right, DuplicateMatchKind matchKinds)
         {
             Left = left;
             Right = right;
@@ -104,7 +101,7 @@ namespace QS3D.Core.Coordination
 
         public DuplicateDetectionResult Detect(
             IEnumerable<CoordinationElement> elements,
-            DuplicateDetectionOptions options = null)
+            DuplicateDetectionOptions? options = null)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             return Detect(ProjectCandidates(elements), options);
@@ -112,7 +109,7 @@ namespace QS3D.Core.Coordination
 
         public DuplicateDetectionResult Detect(
             IEnumerable<DuplicateCandidate> candidates,
-            DuplicateDetectionOptions options = null)
+            DuplicateDetectionOptions? options = null)
         {
             if (candidates == null) throw new ArgumentNullException(nameof(candidates));
             var effective = options ?? new DuplicateDetectionOptions();
