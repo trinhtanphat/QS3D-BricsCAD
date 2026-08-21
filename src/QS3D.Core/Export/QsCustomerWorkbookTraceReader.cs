@@ -36,6 +36,7 @@ namespace QS3D.Core.Export
         private const long MaxWorkbookBytes = 128L * 1024L * 1024L;
         private const long MaxXmlCharacters = 64L * 1024L * 1024L;
         private const int MaxRows = 1048576;
+        private const int MaxSharedStrings = MaxRows;
         private const string WorksheetRelationshipType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
 
         public static QsCustomerWorkbookTrace Read(string path, string worksheetName, int rowNumber)
@@ -54,10 +55,11 @@ namespace QS3D.Core.Export
             {
                 var sheets = ResolveSheets(archive);
                 RequireExactCustomerSheets(sheets.Keys);
+                var sharedStrings = ReadSharedStrings(archive);
                 var business = sheets[requestedSheet];
                 var traceSheet = sheets[QsCustomerWorkbookExporter.TraceSheet];
-                var traceKey = ReadCriticalBusinessTraceKey(business, rowNumber);
-                var trace = ReadTraceProjection(traceSheet, traceKey, requestedSheet, rowNumber);
+                var traceKey = ReadCriticalBusinessTraceKey(business, rowNumber, sharedStrings);
+                var trace = ReadTraceProjection(traceSheet, traceKey, requestedSheet, rowNumber, sharedStrings);
                 if (string.Equals(requestedSheet, QsCustomerWorkbookExporter.DetailSheet, StringComparison.OrdinalIgnoreCase) && trace.ElementIds.Count != 1)
                     throw new InvalidDataException("Customer workbook CHI_TIET trace must reference exactly one QS3D Element ID.");
                 if (trace.ElementIds.Count == 0 || trace.Handles.Count == 0 || string.IsNullOrWhiteSpace(trace.DrawingFingerprint))
@@ -66,19 +68,19 @@ namespace QS3D.Core.Export
             }
         }
 
-        private static string ReadCriticalBusinessTraceKey(ZipArchiveEntry entry, int rowNumber)
+        private static string ReadCriticalBusinessTraceKey(ZipArchiveEntry entry, int rowNumber, IReadOnlyList<string>? sharedStrings)
         {
             var document = LoadXml(entry);
             XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
             var rows = document.Descendants(ns + "row").ToList();
             var header = FindUniqueRow(rows, 1);
             var target = FindUniqueRow(rows, rowNumber);
-            var headerCells = ReadCells(header, ns, out var headerFormulaColumns);
+            var headerCells = ReadCells(header, ns, sharedStrings, out var headerFormulaColumns);
             var traceColumns = headerCells.Where(pair => string.Equals(pair.Value, QsCustomerWorkbookExporter.TraceHeader, StringComparison.OrdinalIgnoreCase))
                                           .Select(pair => pair.Key).ToList();
             if (traceColumns.Count != 1) throw new InvalidDataException("Customer workbook business sheet must contain exactly one TRACE_KEY header.");
             if (headerFormulaColumns.Contains(traceColumns[0])) throw new InvalidDataException("Customer workbook TRACE_KEY header must be literal.");
-            var targetCells = ReadCells(target, ns, out var targetFormulaColumns);
+            var targetCells = ReadCells(target, ns, sharedStrings, out var targetFormulaColumns);
             if (targetFormulaColumns.Contains(traceColumns[0])) throw new InvalidDataException("Customer workbook TRACE_KEY must be a literal value.");
             string traceKey;
             if (!targetCells.TryGetValue(traceColumns[0], out traceKey) || string.IsNullOrWhiteSpace(traceKey))
@@ -89,13 +91,13 @@ namespace QS3D.Core.Export
             return canonicalTraceKey;
         }
 
-        private static QsCustomerWorkbookTrace ReadTraceProjection(ZipArchiveEntry entry, string traceKey, string worksheetName, int rowNumber)
+        private static QsCustomerWorkbookTrace ReadTraceProjection(ZipArchiveEntry entry, string traceKey, string worksheetName, int rowNumber, IReadOnlyList<string>? sharedStrings)
         {
             var document = LoadXml(entry);
             XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
             var rows = document.Descendants(ns + "row").ToList();
             var header = FindUniqueRow(rows, 1);
-            var headers = ReadCells(header, ns, out var headerFormulaColumns);
+            var headers = ReadCells(header, ns, sharedStrings, out var headerFormulaColumns);
             var required = new[]
             {
                 QsCustomerWorkbookExporter.TraceHeader,
@@ -117,7 +119,7 @@ namespace QS3D.Core.Export
             var matchesByKey = new List<Tuple<int, Dictionary<int, string>, HashSet<int>>>();
             foreach (var row in rows.Where(item => ParseRow(item) >= 2))
             {
-                var cells = ReadCells(row, ns, out var formulas);
+                var cells = ReadCells(row, ns, sharedStrings, out var formulas);
                 string value;
                 if (cells.TryGetValue(columns[QsCustomerWorkbookExporter.TraceHeader], out value) &&
                     string.Equals(value, traceKey, StringComparison.Ordinal))
@@ -145,6 +147,29 @@ namespace QS3D.Core.Export
             if (!string.Equals(traceKey, expectedTraceKey, StringComparison.Ordinal))
                 throw new InvalidDataException("Customer workbook TRACE_KEY does not match canonical TRACE_MODEL identity provenance.");
             return new QsCustomerWorkbookTrace(worksheetName, rowNumber, traceKey, elementIds, handles, fingerprint);
+        }
+
+        private static IReadOnlyList<string>? ReadSharedStrings(ZipArchive archive)
+        {
+            var entry = UniqueEntry(archive, "xl/sharedStrings.xml");
+            if (entry == null) return null;
+
+            var document = LoadXml(entry);
+            XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            if (document.Root == null || document.Root.Name != ns + "sst")
+                throw new InvalidDataException("Customer workbook sharedStrings.xml has an invalid root element.");
+
+            var result = new List<string>();
+            foreach (var item in document.Root.Elements(ns + "si"))
+            {
+                if (result.Count == MaxSharedStrings)
+                    throw new InvalidDataException("Customer workbook shared-string table exceeds the supported limit.");
+                var textNodes = item.Descendants(ns + "t").ToList();
+                if (textNodes.Count == 0)
+                    throw new InvalidDataException("Customer workbook shared-string item contains no text.");
+                result.Add(string.Concat(textNodes.Select(text => text.Value)));
+            }
+            return result.AsReadOnly();
         }
 
         private static IReadOnlyList<string> SplitIdentity(string text, bool handles)
@@ -264,7 +289,7 @@ namespace QS3D.Core.Export
             return int.TryParse((string)row.Attribute("r"), NumberStyles.None, CultureInfo.InvariantCulture, out value) && value >= 1 && value <= MaxRows ? value : int.MaxValue;
         }
 
-        private static Dictionary<int, string> ReadCells(XElement row, XNamespace ns, out HashSet<int> formulaColumns)
+        private static Dictionary<int, string> ReadCells(XElement row, XNamespace ns, IReadOnlyList<string>? sharedStrings, out HashSet<int> formulaColumns)
         {
             var rowNumber = ParseRow(row);
             if (rowNumber == int.MaxValue) throw new InvalidDataException("Customer workbook contains an invalid row number.");
@@ -279,9 +304,27 @@ namespace QS3D.Core.Export
                 var type = ((string)cell.Attribute("t") ?? string.Empty).Trim();
                 string value;
                 if (string.Equals(type, "inlineStr", StringComparison.Ordinal))
+                {
                     value = string.Concat(cell.Descendants(ns + "t").Select(text => text.Value));
+                }
+                else if (string.Equals(type, "s", StringComparison.Ordinal))
+                {
+                    if (sharedStrings == null)
+                        throw new InvalidDataException("Customer workbook references shared strings but xl/sharedStrings.xml is missing.");
+                    var valueNodes = cell.Elements(ns + "v").ToList();
+                    if (valueNodes.Count != 1)
+                        throw new InvalidDataException("Customer workbook shared-string cell must contain exactly one index value.");
+                    var indexText = valueNodes[0].Value;
+                    int sharedStringIndex;
+                    if (!int.TryParse(indexText, NumberStyles.None, CultureInfo.InvariantCulture, out sharedStringIndex) ||
+                        sharedStringIndex < 0 || sharedStringIndex >= sharedStrings.Count)
+                        throw new InvalidDataException("Customer workbook shared-string index is invalid or out of range.");
+                    value = sharedStrings[sharedStringIndex];
+                }
                 else
+                {
                     value = (string)cell.Element(ns + "v") ?? string.Empty;
+                }
                 result[column] = value;
             }
             return result;
