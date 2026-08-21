@@ -129,9 +129,13 @@ def read_repository_text(path: Path, root: Path = ROOT, maximum_bytes: int = MAX
         return None, "repository text input could not be read safely"
 
     try:
-        return payload.decode("utf-8"), None
+        text = payload.decode("utf-8")
     except UnicodeDecodeError as exc:
         return None, f"is not valid UTF-8: {exc}"
+
+    # Match Path.read_text()/TextIOWrapper universal-newline semantics so repository
+    # contract markers remain platform-independent after the bounded binary read.
+    return text.replace("\r\n", "\n").replace("\r", "\n"), None
 
 
 def require(text: str, tokens: tuple[str, ...], label: str, failures: list[str]) -> None:
