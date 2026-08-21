@@ -272,11 +272,9 @@ namespace QS3D.Core.Domain
             restoredDrawingPath = PersistedTextXml.Verify(restoredDrawingPath, nameof(drawingPath), "Drawing path");
 
             var restoredDrawingFingerprint = drawingFingerprint ?? string.Empty;
-            if (restoredDrawingFingerprint.Length != 0 && !string.Equals(restoredDrawingFingerprint, restoredDrawingFingerprint.Trim(), StringComparison.Ordinal))
-                throw new ArgumentException("Drawing fingerprint must be empty or canonical without surrounding whitespace.", nameof(drawingFingerprint));
             if (restoredDrawingFingerprint.Any(char.IsControl))
                 throw new ArgumentException("Drawing fingerprint cannot contain control characters.", nameof(drawingFingerprint));
-            restoredDrawingFingerprint = PersistedTextXml.Verify(restoredDrawingFingerprint, nameof(drawingFingerprint), "Drawing fingerprint");
+            restoredDrawingFingerprint = PersistedTextXml.Verify(restoredDrawingFingerprint.Trim(), nameof(drawingFingerprint), "Drawing fingerprint");
 
             var restoredActiveZoneId = (activeZoneId ?? string.Empty).Trim();
             if (restoredActiveZoneId.Any(char.IsControl))
@@ -308,11 +306,10 @@ namespace QS3D.Core.Domain
         private void SetCanonicalOptionalIdentity(ref string field, string? value, string label)
         {
             var rawValue = value ?? string.Empty;
-            if (rawValue.Length != 0 && !string.Equals(rawValue, rawValue.Trim(), StringComparison.Ordinal))
-                throw new ArgumentException(label + " must be empty or canonical without surrounding whitespace.", nameof(value));
             if (rawValue.Any(char.IsControl))
                 throw new ArgumentException(label + " cannot contain control characters.", nameof(value));
-            SetPersistedScalar(ref field, PersistedTextXml.Verify(rawValue, nameof(value), label));
+            var normalizedValue = rawValue.Trim();
+            SetPersistedScalar(ref field, PersistedTextXml.Verify(normalizedValue, nameof(value), label));
         }
 
         private void SetPersistedScalar(ref string field, string value)
