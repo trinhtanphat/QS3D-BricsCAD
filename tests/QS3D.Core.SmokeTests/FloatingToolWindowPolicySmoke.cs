@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using QS3D.Core.Features;
 
 namespace QS3D.Core.SmokeTests
@@ -12,6 +14,9 @@ namespace QS3D.Core.SmokeTests
             OffscreenRequestIsBroughtBackIntoView();
             BestIntersectingWorkAreaWins();
             MissingVisibleWorkAreaFailsClosed();
+            ExactWorkAreaBoundaryIsAccepted();
+            KnownOversizedWorkAreaCollectionFailsBeforeEnumeration();
+            StreamingWorkAreaBoundaryFailsWithoutOverread();
         }
 
         private static void InvalidRequestUsesVisibleCenteredDefaults()
@@ -76,6 +81,74 @@ namespace QS3D.Core.SmokeTests
             }
 
             throw new Exception("Floating tool normalization must fail closed without a valid visible work area.");
+        }
+
+        private static void ExactWorkAreaBoundaryIsAccepted()
+        {
+            var areas = new FloatingToolBounds[FloatingToolWindowPolicy.MaximumVisibleWorkAreas];
+            for (var i = 0; i < areas.Length; i++)
+                areas[i] = new FloatingToolBounds(i * 1000d, 0d, 800d, 600d);
+
+            var requested = new FloatingToolBounds(50d, 50d, 400d, 300d);
+            var result = FloatingToolWindowPolicy.Normalize(requested, areas);
+            Equal(requested, result, "exact visible-work-area boundary must remain accepted");
+        }
+
+        private static void KnownOversizedWorkAreaCollectionFailsBeforeEnumeration()
+        {
+            var areas = new ThrowingOversizedCollection();
+            try
+            {
+                FloatingToolWindowPolicy.Normalize(
+                    new FloatingToolBounds(0d, 0d, 400d, 300d),
+                    areas);
+            }
+            catch (InvalidOperationException)
+            {
+                if (areas.EnumerationAttempted)
+                    throw new Exception("Known oversized work-area input must fail before enumeration.");
+                return;
+            }
+
+            throw new Exception("Known oversized work-area input must fail closed.");
+        }
+
+        private static void StreamingWorkAreaBoundaryFailsWithoutOverread()
+        {
+            try
+            {
+                FloatingToolWindowPolicy.Normalize(
+                    new FloatingToolBounds(0d, 0d, 400d, 300d),
+                    StreamBoundaryPlusOne());
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+
+            throw new Exception("Streaming work-area input must fail at boundary+1.");
+        }
+
+        private static IEnumerable<FloatingToolBounds> StreamBoundaryPlusOne()
+        {
+            for (var i = 0; i <= FloatingToolWindowPolicy.MaximumVisibleWorkAreas; i++)
+                yield return new FloatingToolBounds(i * 1000d, 0d, 800d, 600d);
+
+            throw new Exception("Floating tool policy requested an item after boundary+1.");
+        }
+
+        private sealed class ThrowingOversizedCollection : IReadOnlyCollection<FloatingToolBounds>
+        {
+            public int Count => FloatingToolWindowPolicy.MaximumVisibleWorkAreas + 1;
+            public bool EnumerationAttempted { get; private set; }
+
+            public IEnumerator<FloatingToolBounds> GetEnumerator()
+            {
+                EnumerationAttempted = true;
+                throw new Exception("Known oversized collection must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private static void Equal(double expected, double actual, string label)
