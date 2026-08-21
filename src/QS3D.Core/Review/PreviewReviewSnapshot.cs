@@ -109,14 +109,18 @@ namespace QS3D.Core.Review
             var safeName = CanonicalRequired(name, nameof(name));
             var projectId = CanonicalRequired(preview.ProjectId, nameof(preview.ProjectId));
             var entries = new List<PreviewReviewEntry>();
+            var previewElements = RequireNonNullRows(
+                preview.Elements,
+                index => "Quantity-rule preview contains a null element preview at index " + index + ".");
 
-            foreach (var element in preview.Elements.OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase))
+            foreach (var element in previewElements.OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase))
             {
-                if (element == null) throw new InvalidOperationException("Quantity-rule preview contains a null element preview.");
                 var elementId = CanonicalRequired(element.ElementId, "quantity preview element id");
-                foreach (var change in element.Changes.OrderBy(x => x.OutputName, StringComparer.OrdinalIgnoreCase))
+                var elementChanges = RequireNonNullRows(
+                    element.Changes,
+                    index => "Quantity-rule preview contains a null change for element " + elementId + " at index " + index + ".");
+                foreach (var change in elementChanges.OrderBy(x => x.OutputName, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (change == null) throw new InvalidOperationException("Quantity-rule preview contains a null change.");
                     var output = CanonicalRequired(change.OutputName, "quantity preview output name");
                     entries.Add(new PreviewReviewEntry(
                         elementId,
@@ -159,15 +163,19 @@ namespace QS3D.Core.Review
 
             var entries = new List<PreviewReviewEntry>();
             var omittedHandles = 0;
-            foreach (var delta in preview.Deltas.OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase))
+            var deltas = RequireNonNullRows(
+                preview.Deltas,
+                index => "Regeneration preview contains a null revision delta at index " + index + ".");
+            foreach (var delta in deltas.OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase))
             {
-                if (delta == null) throw new InvalidOperationException("Regeneration preview contains a null revision delta.");
                 var elementId = CanonicalRequired(delta.ElementId, "regeneration preview element id");
                 var change = CanonicalRequired(delta.Change, "regeneration preview change");
                 var safeFieldCount = 0;
-                foreach (var field in delta.Fields.OrderBy(x => x.Field, StringComparer.OrdinalIgnoreCase))
+                var fields = RequireNonNullRows(
+                    delta.Fields,
+                    index => "Regeneration preview contains a null field delta for element " + elementId + " at index " + index + ".");
+                foreach (var field in fields.OrderBy(x => x.Field, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (field == null) throw new InvalidOperationException("Regeneration preview contains a null field delta.");
                     var fieldName = CanonicalRequired(field.Field, "regeneration preview field");
                     if (!IsPortableReviewField(fieldName))
                     {
@@ -370,6 +378,21 @@ namespace QS3D.Core.Review
                         throw new InvalidOperationException("Regeneration subset review entry is outside the reviewed target set: " + entry.ElementId + ".");
                 }
             }
+        }
+
+        private static IReadOnlyList<T> RequireNonNullRows<T>(IEnumerable<T> values, Func<int, string> errorMessage) where T : class
+        {
+            if (values == null) throw new InvalidOperationException("Preview review row collection is missing.");
+            if (errorMessage == null) throw new ArgumentNullException(nameof(errorMessage));
+            var result = new List<T>();
+            var index = 0;
+            foreach (var value in values)
+            {
+                if (value == null) throw new InvalidOperationException(errorMessage(index));
+                result.Add(value);
+                index++;
+            }
+            return result.AsReadOnly();
         }
 
         private static PreviewReviewSnapshot Build(

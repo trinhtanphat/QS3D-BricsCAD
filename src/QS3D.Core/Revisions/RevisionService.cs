@@ -64,6 +64,8 @@ namespace QS3D.Core.Revisions
             foreach (var element in project.Elements)
             {
                 if (element == null || string.IsNullOrWhiteSpace(element.Id)) throw new InvalidOperationException("Revision capture encountered an element without id.");
+                if (!string.Equals(element.Id, element.Id.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Revision capture encountered a non-canonical padded element id: " + element.Id + ".");
                 if (!elementIds.Add(element.Id)) throw new InvalidOperationException("Revision capture encountered duplicate element id: " + element.Id + ".");
                 ValidateOptionalCanonicalIdentity(element.FamilyId, "element " + element.Id + " family id");
                 ValidateOptionalCanonicalIdentity(element.FloorId, "element " + element.Id + " floor id");

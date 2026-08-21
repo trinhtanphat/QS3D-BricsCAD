@@ -80,6 +80,8 @@ namespace QS3D.Core.Features
 
     public sealed class InteractionSurfaceCoordinator
     {
+        public const int MaximumFloatingTools = FloatingToolWindowPolicy.MaximumVisibleWorkAreas;
+
         private FeatureDescriptor? _selectedFeature;
         private InteractionSurfaceBinding? _primaryInspector;
         private InteractionSurfaceBinding? _secondaryInspector;
@@ -161,6 +163,8 @@ namespace QS3D.Core.Features
                 case InteractionSurface.FloatingTool:
                     if (!profile.AllowsFloatingTool)
                         throw new InvalidOperationException("Selected feature does not allow a floating tool.");
+                    if (!_floatingTools.ContainsKey(binding.ContentKey) && _floatingTools.Count >= MaximumFloatingTools)
+                        throw new InvalidOperationException("Selected feature already has the maximum supported floating tools open.");
                     _floatingTools[binding.ContentKey] = binding;
                     break;
                 default:
