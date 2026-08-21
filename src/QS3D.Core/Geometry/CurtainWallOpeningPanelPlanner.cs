@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -70,10 +69,9 @@ namespace QS3D.Core.Geometry
             if (openingCount > MaxOpenings)
                 throw new InvalidOperationException("Curtain panel interruption input exceeds " + MaxOpenings + " openings.");
 
-            var clipped = CurtainWallOpeningFramePlanner.Plan(
-                new CountSnapshotList<CurtainWallRect>(panels, panelCount),
-                new CountSnapshotList<CurtainWallOpeningRect>(openings, openingCount),
-                clearanceM);
+            var panelSnapshot = SnapshotStable(panels, panelCount, "panel");
+            var openingSnapshot = SnapshotStable(openings, openingCount, "opening");
+            var clipped = CurtainWallOpeningFramePlanner.Plan(panelSnapshot, openingSnapshot, clearanceM);
             if (clipped.Pieces.Count > MaxOutputPieces)
                 throw new InvalidOperationException("Curtain panel interruption output exceeds " + MaxOutputPieces + " pieces.");
 
@@ -101,20 +99,18 @@ namespace QS3D.Core.Geometry
             };
         }
 
-        private sealed class CountSnapshotList<T> : IReadOnlyList<T>
+        private static T[] SnapshotStable<T>(IReadOnlyList<T> source, int expectedCount, string label)
         {
-            private readonly IReadOnlyList<T> _source;
-
-            public CountSnapshotList(IReadOnlyList<T> source, int count)
+            var snapshot = new T[expectedCount];
+            for (var index = 0; index < expectedCount; index++)
             {
-                _source = source ?? throw new ArgumentNullException(nameof(source));
-                Count = count;
+                if (source.Count != expectedCount)
+                    throw new InvalidOperationException("Curtain panel " + label + " input Count changed while it was being snapshotted.");
+                snapshot[index] = source[index];
             }
-
-            public int Count { get; }
-            public T this[int index] => _source[index];
-            public IEnumerator<T> GetEnumerator() => _source.GetEnumerator();
-            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            if (source.Count != expectedCount)
+                throw new InvalidOperationException("Curtain panel " + label + " input Count changed while it was being snapshotted.");
+            return snapshot;
         }
     }
 }
