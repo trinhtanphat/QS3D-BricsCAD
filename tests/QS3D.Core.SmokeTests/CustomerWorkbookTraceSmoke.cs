@@ -284,7 +284,7 @@ namespace QS3D.Core.SmokeTests
             if (CellXml(sheet, cellRef) != null) throw new Exception(message);
         }
 
-        private static string CellXml(string sheet, string cellRef)
+        private static string? CellXml(string sheet, string cellRef)
         {
             var marker = "<c r=\"" + cellRef + "\"";
             var start = sheet.IndexOf(marker, StringComparison.Ordinal);
