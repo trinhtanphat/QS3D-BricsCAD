@@ -120,7 +120,9 @@ namespace QS3D.BricsCAD.V25
                 var imported = 0;
                 foreach (var candidate in ready)
                 {
-                    if (!SemanticCaptureService.CaptureSnapshot(document, candidate.Snapshot, candidate.Category.Value)) continue;
+                    var category = candidate.Category;
+                    if (!category.HasValue) continue;
+                    if (!SemanticCaptureService.CaptureSnapshot(document, candidate.Snapshot, category.Value)) continue;
                     ApplyLegacyEvidence(document, candidate);
                     imported++;
                 }
@@ -211,7 +213,7 @@ namespace QS3D.BricsCAD.V25
                 " • unknown-category=" + unknown.ToString(CultureInfo.InvariantCulture) + ".");
 
             foreach (var group in candidates.Where(x => x.Category.HasValue)
-                         .GroupBy(x => x.Category.Value)
+                         .GroupBy(x => x.Category.GetValueOrDefault())
                          .OrderBy(x => x.Key.ToString(), StringComparer.Ordinal))
                 document.Editor.WriteMessage("\n  " + group.Key + ": " + group.Count().ToString(CultureInfo.InvariantCulture));
         }
@@ -358,7 +360,8 @@ namespace QS3D.BricsCAD.V25
                 var property = target.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
                 if (property == null || property.GetIndexParameters().Length != 0) return;
                 var value = property.GetValue(target, null) as string;
-                if (!string.IsNullOrWhiteSpace(value)) Put(snapshot, metadataKey, value);
+                if (string.IsNullOrWhiteSpace(value)) return;
+                Put(snapshot, metadataKey, value);
             }
             catch { }
         }
