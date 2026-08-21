@@ -205,7 +205,7 @@ namespace QS3D.Core.Legacy
             return false;
         }
 
-        private static bool ContainsBltMarker(string value)
+        private static bool ContainsBltMarker(string? value)
         {
             var normalized = Normalize(value);
             return normalized.Contains("blt3d") || normalized.StartsWith("blt") || normalized.Contains(" blt");
@@ -244,7 +244,7 @@ namespace QS3D.Core.Legacy
             return only.Key;
         }
 
-        private static void AddExplicitCategoryCode(string key, string value, IDictionary<ElementCategory, string> matches)
+        private static void AddExplicitCategoryCode(string? key, string? value, IDictionary<ElementCategory, string> matches)
         {
             var normalizedKey = NormalizeKey(key);
             if (!CategoryKeyAliases.Any(alias => normalizedKey.Contains(alias))) return;
@@ -257,7 +257,7 @@ namespace QS3D.Core.Legacy
             else if (code == 701) Add(matches, ElementCategory.StructuralWall, "legacy-code:701");
         }
 
-        private static void AddCategoryTextMatch(string raw, string source, IDictionary<ElementCategory, string> matches)
+        private static void AddCategoryTextMatch(string? raw, string source, IDictionary<ElementCategory, string> matches)
         {
             var value = Normalize(raw);
             if (value.Length == 0) return;
@@ -311,20 +311,20 @@ namespace QS3D.Core.Legacy
                 foreach (Match match in EmbeddedPair.Matches(pairValue))
                 {
                     if (!KeyMatches(match.Groups["key"].Value, aliases)) continue;
-                    var value = match.Groups["value"].Value.Trim();
+                    var value = (match.Groups["value"].Value ?? string.Empty).Trim();
                     if (value.Length != 0) return Bound(value, 200);
                 }
             }
             return string.Empty;
         }
 
-        private static bool KeyMatches(string raw, IEnumerable<string> aliases)
+        private static bool KeyMatches(string? raw, IEnumerable<string> aliases)
         {
             var key = NormalizeKey(raw);
             return aliases.Any(alias => key.Contains(NormalizeKey(alias)));
         }
 
-        private static bool TryFiniteNonNegative(string raw, out double value)
+        private static bool TryFiniteNonNegative(string? raw, out double value)
         {
             value = 0d;
             if (string.IsNullOrWhiteSpace(raw)) return false;
@@ -342,9 +342,9 @@ namespace QS3D.Core.Legacy
             metadata[key] = Bound(value ?? string.Empty, 512);
         }
 
-        private static string NormalizeKey(string value) => Compact(Normalize(value));
+        private static string NormalizeKey(string? value) => Compact(Normalize(value));
 
-        private static string Normalize(string value)
+        private static string Normalize(string? value)
         {
             if (string.IsNullOrWhiteSpace(value)) return string.Empty;
             var decomposed = value.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);
@@ -365,7 +365,7 @@ namespace QS3D.Core.Legacy
             return builder.ToString();
         }
 
-        private static string Bound(string value, int max)
+        private static string Bound(string? value, int max)
         {
             if (string.IsNullOrEmpty(value)) return string.Empty;
             return value.Length <= max ? value : value.Substring(0, max);
