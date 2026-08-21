@@ -18,6 +18,12 @@ namespace QS3D.Core.Audit
     public sealed class AuditTrail
     {
         private const int MaxStoredEvents = 10_000;
+        // Keep audit text materially below the existing 64 MiB QSDB file ceiling so
+        // routine audit operations fail closed before a pathological history can
+        // dominate later XML materialization. This is an aggregate safety budget,
+        // not a claim that every history below it is guaranteed to serialize below
+        // the project-file byte ceiling.
+        private const long MaxStoredTextCharacters = 8L * 1024L * 1024L;
 
         private readonly IList<AuditEvent> _events;
         private readonly ProjectState? _project;
@@ -37,6 +43,7 @@ namespace QS3D.Core.Audit
                 var storedCount = RequireSupportedHistoryCount(requireAppendCapacity: false);
                 var snapshot = new List<AuditEvent>(storedCount);
                 var observed = 0;
+                long textCharacters = 0L;
                 foreach (var item in _events)
                 {
                     observed++;
@@ -45,6 +52,7 @@ namespace QS3D.Core.Audit
 
                     var validationError = GetStoredEventValidationError(item);
                     if (validationError != null) throw new InvalidOperationException(validationError);
+                    AccumulateTextCharacters(item!, ref textCharacters);
                     snapshot.Add(Clone(item!));
                 }
                 RequireObservedHistoryCount(storedCount, observed);
@@ -60,7 +68,10 @@ namespace QS3D.Core.Audit
 
         public void Record(string action, string elementId, string detail, string actor = "", string correlationId = "")
         {
-            var normalizedAction = (action ?? string.Empty).Trim();
+            var rawAction = action ?? string.Empty;
+            if (rawAction.Length > MaxStoredTextCharacters)
+                throw new ArgumentException("Audit action exceeds the supported audit text budget.", nameof(action));
+            var normalizedAction = rawAction.Trim();
             if (normalizedAction.Length == 0)
                 throw new ArgumentException("Audit action is required.", nameof(action));
             if (ContainsControlCharacter(normalizedAction))
@@ -77,7 +88,17 @@ namespace QS3D.Core.Audit
             RequireXmlCharacters(safeDetail, nameof(detail), "Audit detail");
             RequireXmlCharacters(safeActor, nameof(actor), "Audit actor");
             RequireXmlCharacters(safeCorrelationId, nameof(correlationId), "Audit correlation id");
-            ValidateExistingHistory(requireAppendCapacity: true);
+
+            var newTextCharacters = CountTextCharacters(
+                normalizedAction,
+                safeElementId,
+                safeDetail,
+                safeActor,
+                safeCorrelationId);
+            if (newTextCharacters > MaxStoredTextCharacters)
+                throw new ArgumentException("Audit event exceeds the supported aggregate text budget.", nameof(detail));
+
+            ValidateExistingHistory(requireAppendCapacity: true, additionalTextCharacters: newTextCharacters);
 
             var item = new AuditEvent
             {
@@ -100,11 +121,15 @@ namespace QS3D.Core.Audit
             _events.Clear();
         }
 
-        private int ValidateExistingHistory(bool requireAppendCapacity)
+        private int ValidateExistingHistory(bool requireAppendCapacity, long additionalTextCharacters = 0L)
         {
+            if (additionalTextCharacters < 0L || additionalTextCharacters > MaxStoredTextCharacters)
+                throw new InvalidOperationException("Audit trail additional text exceeds the supported aggregate text budget.");
+
             var storedCount = RequireSupportedHistoryCount(requireAppendCapacity);
 
             var observed = 0;
+            long textCharacters = 0L;
             foreach (var existing in _events)
             {
                 observed++;
@@ -114,9 +139,12 @@ namespace QS3D.Core.Audit
                 var validationError = GetStoredEventValidationError(existing);
                 if (validationError != null)
                     throw new InvalidOperationException(validationError + " Repair the existing audit history before modifying it.");
+                AccumulateTextCharacters(existing!, ref textCharacters);
             }
 
             RequireObservedHistoryCount(storedCount, observed);
+            if (additionalTextCharacters > MaxStoredTextCharacters - textCharacters)
+                throw TextBudgetExceeded();
             if (requireAppendCapacity && observed >= MaxStoredEvents)
                 throw AppendCapacityExceeded();
             return observed;
@@ -145,6 +173,36 @@ namespace QS3D.Core.Audit
 
         private static InvalidOperationException AppendCapacityExceeded()
             => new InvalidOperationException("Audit trail already contains 10000 events and cannot record another event.");
+
+        private static InvalidOperationException TextBudgetExceeded()
+            => new InvalidOperationException("Audit trail text exceeds the supported aggregate text budget. Repair the existing audit history before reading or modifying it.");
+
+        private static void AccumulateTextCharacters(AuditEvent item, ref long total)
+        {
+            var itemCharacters = CountTextCharacters(
+                item.Action,
+                item.ElementId,
+                item.Detail,
+                item.Actor,
+                item.CorrelationId);
+            if (itemCharacters > MaxStoredTextCharacters - total)
+                throw TextBudgetExceeded();
+            total += itemCharacters;
+        }
+
+        private static long CountTextCharacters(
+            string? action,
+            string? elementId,
+            string? detail,
+            string? actor,
+            string? correlationId)
+        {
+            return (long)(action?.Length ?? 0) +
+                   (elementId?.Length ?? 0) +
+                   (detail?.Length ?? 0) +
+                   (actor?.Length ?? 0) +
+                   (correlationId?.Length ?? 0);
+        }
 
         private static string? GetStoredEventValidationError(AuditEvent? item)
         {

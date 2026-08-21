@@ -47,6 +47,8 @@ required_markers = (
     "StartCenterUserStateStore.RecordProject(normalized);",
     "RefreshRecentProjects();",
     "catch (Exception ex)",
+    '_statusText.Text = "Không thể mở: " + ex.Message;',
+    '_statusText.Text = "Đã mở " + Path.GetFileName(normalized) + ".";',
 )
 for marker in required_markers:
     require(marker in snippet, f"OpenRecentProject must retain expected behavior: {marker}")
@@ -58,10 +60,22 @@ forbidden_markers = (
 for marker in forbidden_markers:
     require(marker not in snippet, f"OpenRecentProject must not bypass the shared project-open route: {marker}")
 
+open_index = snippet.index("ProjectFileUiService.OpenProject(normalized);")
+failure_index = snippet.index('_statusText.Text = "Không thể mở: " + ex.Message;')
+success_index = snippet.index('_statusText.Text = "Đã mở " + Path.GetFileName(normalized) + ".";')
+record_index = snippet.index("StartCenterUserStateStore.RecordProject(normalized);")
+
 require(
-    snippet.index("ProjectFileUiService.OpenProject(normalized);")
-    < snippet.index("StartCenterUserStateStore.RecordProject(normalized);"),
-    "The recent project entry must only be recorded after the shared open service succeeds.",
+    open_index < failure_index < success_index < record_index,
+    "Open failure handling must finish before success is declared and before recent-project bookkeeping begins.",
+)
+require(
+    "return;" in snippet[failure_index:success_index],
+    "A failed shared open must return before the success/bookkeeping path.",
+)
+require(
+    "catch (Exception ex)" not in snippet[success_index:record_index],
+    "The open-failure catch must not wrap post-open recent-project bookkeeping.",
 )
 
 open_drawing = method_block(
@@ -76,4 +90,4 @@ project_route_markers = (
 for marker in project_route_markers:
     require(marker in open_drawing, f"Shared DWG open route must preserve project sidecar behavior: {marker}")
 
-print("[OK] Start Center recent projects route through ProjectFileUiService.")
+print("[OK] Start Center recent-project opens preserve shared routing and cannot be misreported by post-open bookkeeping failures.")

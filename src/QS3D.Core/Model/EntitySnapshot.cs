@@ -13,7 +13,7 @@ namespace QS3D.Core.Model
 
         public EntitySnapshot(string handle, string entityType, string layer)
         {
-            Handle = CanonicalIdentifier(handle, nameof(handle), "Handle is required.", "Handle must not contain control characters.");
+            Handle = CanonicalHandle(handle, nameof(handle));
             EntityType = CanonicalIdentifier(entityType, nameof(entityType), "Entity type is required.", "Entity type must not contain control characters.");
             Layer = layer ?? string.Empty;
             Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -47,6 +47,24 @@ namespace QS3D.Core.Model
         }
         public bool HasQs3dGeneratedOwnershipMarker { get; set; }
         public IDictionary<string, string> Metadata { get; }
+
+        private static string CanonicalHandle(string value, string parameterName)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("Handle is required.", parameterName);
+
+            var canonical = value.Trim();
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new ArgumentException("Handle must not contain leading or trailing whitespace.", parameterName);
+
+            for (var index = 0; index < canonical.Length; index++)
+            {
+                if (char.IsControl(canonical[index]))
+                    throw new ArgumentException("Handle must not contain control characters.", parameterName);
+            }
+
+            return canonical;
+        }
 
         private static string CanonicalIdentifier(string value, string parameterName, string requiredMessage, string controlMessage)
         {
