@@ -2,6 +2,7 @@ using System;
 using QS3D.Core.Domain;
 using QS3D.Core.Legacy;
 using QS3D.Core.Model;
+using QS3D.Core.Services;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -13,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             EmbeddedLegacyQuantitiesArePreserved();
             AmbiguousCategoryFailsClosed();
             GenericProxyIsNotClaimedAsBlt();
+            LegacyEvidenceSurvivesMeasuredQuantityPass();
         }
 
         private static void ExactProxySolidCanImport()
@@ -46,7 +48,7 @@ namespace QS3D.Core.SmokeTests
             Require(candidate.LegacyFormworkM2.HasValue && Math.Abs(candidate.LegacyFormworkM2.Value - 10.5d) < 1e-12, "FormworkM2 was not parsed exactly.");
             Require(candidate.FloorHint == "T2", "Floor hint was not preserved.");
             Require(candidate.FamilyHint == "D300x500", "Family hint was not preserved.");
-            Require(!candidate.CanImport, "Proxy with legacy quantities but no host primary metric must remain blocked until host capture eligibility is proven.");
+            Require(candidate.CanImport, "Explicit BLT ConcreteM3 must allow material-volume Proxy capture even when host geometry is unavailable.");
         }
 
         private static void AmbiguousCategoryFailsClosed()
@@ -76,6 +78,30 @@ namespace QS3D.Core.SmokeTests
             var candidate = BltLegacyEntityAdapter.Adapt(snapshot);
             Require(!candidate.HasLegacySignal, "Generic third-party proxy must not be claimed as BLT.");
             Require(!candidate.CanImport, "Generic third-party proxy must not import through BLT adapter.");
+        }
+
+        private static void LegacyEvidenceSurvivesMeasuredQuantityPass()
+        {
+            var exact = new ProjectElement("BLT-A", ElementCategory.Beam);
+            exact.Properties["CAD.BLT.SourceSystem"] = "BLT3D";
+            exact.Properties["CAD.BLT.LegacyConcreteM3"] = "1.25";
+            exact.Properties["CAD.BLT.LegacyFormworkM2"] = "10.5";
+            exact.Properties[MeasuredSolidQuantityPolicy.VolumeProperty] = "99";
+            exact.SetQuantity("GrossVolumeM3", 99d);
+            exact.SetQuantity("NetVolumeM3", 99d);
+            exact.SetQuantity("FormworkM2", 999d);
+
+            Require(MeasuredSolidQuantityPolicy.Apply(exact), "Legacy evidence policy was not handled through measured quantity pass.");
+            Require(Math.Abs(exact.Quantities["GrossVolumeM3"] - 1.25d) < 1e-12, "Exact legacy concrete did not override regenerated/measured volume.");
+            Require(Math.Abs(exact.Quantities["NetVolumeM3"] - 1.25d) < 1e-12, "Exact legacy net concrete did not persist.");
+            Require(Math.Abs(exact.Quantities["FormworkM2"] - 10.5d) < 1e-12, "Exact legacy formwork did not persist.");
+
+            var pendingFormwork = new ProjectElement("BLT-B", ElementCategory.Column);
+            pendingFormwork.Properties["CAD.BLT.SourceSystem"] = "BLT3D";
+            pendingFormwork.SetQuantity("FormworkM2", 123d);
+            MeasuredSolidQuantityPolicy.Apply(pendingFormwork);
+            Require(!pendingFormwork.Quantities.ContainsKey("FormworkM2"), "Unqualified legacy formwork must remain absent after regeneration policy.");
+            Require(pendingFormwork.Properties["CAD.BLT.FormworkStatus"] == "PENDING_EXACT_EVIDENCE", "Pending formwork status was not preserved.");
         }
 
         private static void Require(bool condition, string message)
