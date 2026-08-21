@@ -7,6 +7,8 @@ using System.Runtime.InteropServices;
 public static class Qs3dBricsCadRunnerWindowInterop
 {
     private const uint WmClose = 0x0010;
+    private const uint WmCommand = 0x0111;
+    private const int IdNo = 7;
 
     private delegate bool EnumWindowsProc(IntPtr window, IntPtr state);
 
@@ -52,6 +54,31 @@ public static class Qs3dBricsCadRunnerWindowInterop
         }, IntPtr.Zero);
         return closed;
     }
+
+    public static int DiscardUnsavedProjectChangesDialogs(int processId)
+    {
+        if (processId <= 0) throw new ArgumentOutOfRangeException("processId");
+        var discarded = 0;
+        EnumWindows((window, state) =>
+        {
+            uint ownerProcessId;
+            GetWindowThreadProcessId(window, out ownerProcessId);
+            if (ownerProcessId != (uint)processId || !IsWindowVisible(window)) return true;
+
+            var title = new StringBuilder(256);
+            var className = new StringBuilder(64);
+            GetWindowText(window, title, title.Capacity);
+            GetClassName(window, className, className.Capacity);
+            if (string.Equals(title.ToString(), "QS3D \u2014 Unsaved project changes", StringComparison.Ordinal) &&
+                string.Equals(className.ToString(), "#32770", StringComparison.Ordinal) &&
+                PostMessage(window, WmCommand, (IntPtr)IdNo, IntPtr.Zero))
+            {
+                discarded++;
+            }
+            return true;
+        }, IntPtr.Zero);
+        return discarded;
+    }
 }
 "@
 }
@@ -63,6 +90,19 @@ function Close-Qs3dProxyInformationDialog {
         $Process.Refresh()
         if ($Process.HasExited) { return 0 }
         return [Qs3dBricsCadRunnerWindowInterop]::CloseProxyInformationDialogs($Process.Id)
+    }
+    catch [InvalidOperationException] {
+        return 0
+    }
+}
+
+function Close-Qs3dUnsavedProjectChangesDialog {
+    param([AllowNull()][Diagnostics.Process]$Process)
+    if ($null -eq $Process) { return 0 }
+    try {
+        $Process.Refresh()
+        if ($Process.HasExited) { return 0 }
+        return [Qs3dBricsCadRunnerWindowInterop]::DiscardUnsavedProjectChangesDialogs($Process.Id)
     }
     catch [InvalidOperationException] {
         return 0

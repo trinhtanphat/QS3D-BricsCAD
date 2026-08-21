@@ -146,6 +146,8 @@ if RUNNER.is_file():
         'Assembly was not built from ExpectedSourceSha',
         '. $windowInteropPath',
         'Close-Qs3dProxyInformationDialog -Process $process',
+        'Close-Qs3dUnsavedProjectChangesDialog -Process $process',
+        'if ($unsavedProjectChangesDialogsDiscarded -eq 0)',
         '"_.OPEN", (\'"\' + $DrawingCopy + \'"\')',
         '"QS3DLEVELZPROBE"',
         '"Millimeter" { "4" }',
@@ -160,10 +162,12 @@ if RUNNER.is_file():
         'function Restore-Qs3dLevelDrawingAndPrivateState {',
         'Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath -OriginalDrawingAttributes $originalDrawingAttributes',
         'Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue',
-        '$gracefulExit = $process.WaitForExit($GracefulExitTimeoutSeconds * 1000)',
+        '$gracefulDeadline = (Get-Date).AddSeconds($GracefulExitTimeoutSeconds)',
+        'if ($process.WaitForExit(250))',
         'BricsCAD did not exit gracefully within $GracefulExitTimeoutSeconds seconds after the Level Z marker.',
         'graceful_exit = $gracefulExit',
         'graceful_exit_timeout_seconds = $GracefulExitTimeoutSeconds',
+        'unsaved_project_changes_dialogs_discarded = $unsavedProjectChangesDialogsDiscarded',
         'drawing_copy_sha256_before',
         'drawing_copy_sha256_after',
         'process_cleanup_verified = $processCleanupVerified',
@@ -213,6 +217,16 @@ if RUNNER.is_file():
     for forbidden in ("Get-Process -Name '*'", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
         if forbidden in text:
             errors.append("Level-Z runner contains broad process/window action: " + forbidden)
+    helper_text = HELPER.read_text(encoding="utf-8")
+    for token in (
+        'DiscardUnsavedProjectChangesDialogs(int processId)',
+        '"QS3D \\u2014 Unsaved project changes"',
+        'private const int IdNo = 7;',
+        'PostMessage(window, WmCommand, (IntPtr)IdNo, IntPtr.Zero)',
+        'function Close-Qs3dUnsavedProjectChangesDialog',
+    ):
+        if token not in helper_text:
+            errors.append("Level-Z runner interop is missing guarded unsaved-project discard token: " + token)
     if "rev-parse HEAD 2>$null | Select-Object -First 1" in text:
         errors.append("Level-Z runner must not pipe rev-parse through Select-Object because early pipeline closure can corrupt LASTEXITCODE")
     if '$argumentParts.Add(\'"\' + $DrawingCopy + \'"\')' in text:

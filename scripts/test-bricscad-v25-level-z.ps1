@@ -272,6 +272,7 @@ $oldNonce = [Environment]::GetEnvironmentVariable("QS3D_LEVEL_Z_NONCE", "Process
 $oldSourceSha = [Environment]::GetEnvironmentVariable("QS3D_LEVEL_Z_SOURCE_SHA", "Process")
 $process = $null
 $proxyInformationDialogsDismissed = 0
+$unsavedProjectChangesDialogsDiscarded = 0
 $gracefulExit = $false
 $processCleanupVerified = $false
 $scriptCleanupVerified = $false
@@ -335,7 +336,16 @@ try {
 
     $process.Refresh()
     if (-not $process.HasExited) {
-        $gracefulExit = $process.WaitForExit($GracefulExitTimeoutSeconds * 1000)
+        $gracefulDeadline = (Get-Date).AddSeconds($GracefulExitTimeoutSeconds)
+        while ((Get-Date) -lt $gracefulDeadline) {
+            if ($unsavedProjectChangesDialogsDiscarded -eq 0) {
+                $unsavedProjectChangesDialogsDiscarded += Close-Qs3dUnsavedProjectChangesDialog -Process $process
+            }
+            if ($process.WaitForExit(250)) {
+                $gracefulExit = $true
+                break
+            }
+        }
     }
     else {
         $gracefulExit = $true
@@ -427,6 +437,7 @@ $metadata = [ordered]@{
     drawing_copy_sha256_before = $drawingHashBefore
     drawing_copy_sha256_after = $drawingHashAfter
     proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed
+    unsaved_project_changes_dialogs_discarded = $unsavedProjectChangesDialogsDiscarded
     graceful_exit = $gracefulExit
     graceful_exit_timeout_seconds = $GracefulExitTimeoutSeconds
     process_cleanup_verified = $processCleanupVerified
