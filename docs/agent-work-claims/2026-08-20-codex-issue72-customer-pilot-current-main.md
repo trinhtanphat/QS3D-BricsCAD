@@ -7,13 +7,15 @@
 - Canonical issue: `#72`
 - Canonical PR: `#3402`
 - Validated publication baseline main SHA:
-  `577d835872ada46f6521fff1c2e85a4f15cedd46`
+  `600f6734f264a1474954811b623c26885b165f28`
 - Refreshed: 2026-08-21 (UTC+7), after fetching the GitHub remote, merging the
   then-current `main`, and re-running the licensed exact-candidate gates.
 - Runtime target: licensed BricsCAD V25.2.10 x64 on disposable synthetic
-  copies only. Exact task candidate `0ae7fb4369172198d25347b9b0d75bdbceead2bb`
-  passes the official NETLOAD/Ribbon/Palette baseline and the bounded Level,
-  project-lifecycle, Source Reconcile and Curtain P10/P11/P12 gates below.
+  copies only. Exact task candidate `598fe6d46198d49bc2a9af1a681dc6149e23134b`
+  passes the official NETLOAD/Ribbon/Palette baseline plus the current curved
+  structural and Curtain P04/P10 gates below. Earlier exact-SHA Level,
+  project-lifecycle, Source Reconcile and Curtain P11/P12 evidence remains
+  bounded to the commits explicitly recorded below.
 - Supersedes the closed, unmerged branch-only carrier
   `agent/codex/local-only-closeout-20260816` / PR #2143 for this exact #72
   pilot; that older carrier is not an implementation dependency.
@@ -227,11 +229,99 @@ This preview package is intentionally Authenticode `NotSigned`; checksum,
 manifest and loaded-binary integrity are verified, but no publisher/timestamp
 or commercial trust claim is made.
 
+## Current-main refresh and curved structural probe correction — 2026-08-21
+
+The carrier first merged `main@e207a05d77d8619094f72e63064866da0b596506`
+and froze intermediate exact candidate
+`b4741a0130856f8b01251b2dd1ffa05a186f12c9`. Its official qualification passed
+all `962/962` feature gates, registered 844 smoke classes, completed Core and
+V25 Release builds with zero warnings/errors, passed Core smoke `ALL PASS`,
+offline WPF and licensed NETLOAD/Ribbon/Palette. On the same exact candidate,
+fresh guarded evidence also passed Curtain P04, representative Level Z in
+Millimeter and Meter, the Level/Curtain P11 two-process lifecycle, Curtain P10
+and P12, Project Lifecycle schema 3 and the warm-cache sidecar revision matrix.
+Those rows retain their exact-`b4741a0` evidence boundary and are not silently
+promoted to the later final candidate.
+
+The curved/round structural matrix initially returned sanitized failure
+`positive_cases / beam_line` on `b4741a0`. Current production
+`StructuralSolidBuilder` now enters the native semantic Undo bridge and
+therefore correctly requires the canonical document-bound project; the older
+probe still constructed a detached `ProjectState`, so it failed before geometry
+build. The minimum automation-only correction is confined to
+`CurvedStructuralRuntimeProbeCommands.cs` and its focused preflight:
+
+- bind through `ProjectContextCoordinator.GetOrCreate(document)` and require a
+  pristine canonical probe project;
+- preserve the unchanged production build/rebuild path for every case;
+- clear implied selection and call `ProjectContextCoordinator.Forget(document)`
+  in `finally` before PASS marker construction, preventing the test project from
+  opening the real unsaved-sidecar modal during scripted Close;
+- require canonical bind/cleanup ordering and forbid a detached probe project in
+  the static guard.
+
+The corrected exact commit `9e6a731e652e41d685a4f35100af6226291d3a7d`
+passed the official qualification and both curved structural unit runs. The
+carrier then fetched and merged the newer
+`main@600f6734f264a1474954811b623c26885b165f28`, including the Curtain frame
+fingerprint boundary hardening, and froze final exact candidate
+`598fe6d46198d49bc2a9af1a681dc6149e23134b`. Matching adapter/Core
+ProductVersion is
+`0.1.0-preview.10081+598fe6d46198d49bc2a9af1a681dc6149e23134b`; adapter
+SHA-256 is
+`B31D1B8E3503FF7DDB4B10B0401D980C2FFDE2F8B72B143896A30383B5C3F1FE` and
+Core SHA-256 is
+`4A2402A14EF5A7AE427F092C168268D597103095ED1B20AAA6572EB0407555C9`.
+
+The official exact-final report is `PASS`:
+
+- manual-only policy and generic preflight: `PASS`;
+- aggregate feature preflight: `962/962 PASS`;
+- smoke registration: `846/846` runnable classes accounted for;
+- Core Release and V25 `Release|x64`: `0 warnings / 0 errors`;
+- deterministic Core smoke: `ALL PASS`;
+- offline WPF Theme/Workspace/RightPanel: `PASS`;
+- licensed BricsCAD V25.2.10 NETLOAD/Ribbon/Palette and screenshot: `PASS`.
+
+The final curved/round matrix passed separately in native Millimeter
+(`INSUNITS=4`) and Meter (`INSUNITS=6`): seven positive cases and seven stale
+replacements covered Beam LINE/ARC/CIRCLE/straight-open-POLYLINE/
+curved-open-POLYLINE plus CIRCLE Slab/Column; closed Beam POLYLINE and non-WCS
+Beam CIRCLE failed closed. All expected length/area/Z/positive-volume checks
+passed, and 66 common mm/m marker fields matched within tolerance with zero
+differences. Both synthetic copies remained/restored at SHA-256
+`CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`;
+both hosts exited gracefully with process, script and private-state cleanup.
+
+Because the latest `main` changed Curtain frame fingerprint behavior, the final
+candidate also reran the affected native review paths:
+
+- Curtain P04 passed 50 curved tessellation segments plus one straight segment,
+  24 source panel cells, 168 authoritative/native panel pieces, 215 frames, 168
+  panels, one canonical owner/Locate and zero health issues. The bounded probe
+  intentionally keeps `exact_swept_curve_qualified=false` and
+  `production_local002_qualified=false`;
+- Curtain P10 passed one selected live panel, one canonical GlassWall owner,
+  matching Family review, active Instance scope, Health All and Release Check
+  readiness, zero health issues, unchanged project/source and complete DWG/UI
+  restoration. `production_local002_qualified=false` remains intentional.
+
+DemandLoad was temporarily disabled only around exact-candidate NETLOAD gates
+and restored after every run to the fixed preview installation with
+`LoadCtrls=2`. Final process count is zero. The P04 runner verified process,
+script, sidecar and backup cleanup; two BricsCAD `.dwl/.dwl2` files remain only
+beside ignored disposable P04 copies and are not source, installed-plugin or
+user-drawing state. No production builder, Core behavior, release workflow,
+private/customer DWG or manual GitHub Actions operation was changed by this
+probe correction.
+
 ## Qualification gap
 
-The current candidate now has exact cross-DWG Curtain evidence and the base
-native Source Reconcile/Undo/Redo/cold-reopen matrix, superseding those older
-gaps. It still does not prove the complete requested one-floor customer pilot
+The final candidate now has exact official runtime smoke, curved/round
+structural coverage and Curtain P04/P10 review. Earlier exact candidates carry
+the documented Level, project lifecycle, Source Reconcile and Curtain P11/P12
+evidence, but those rows are not a single-final-SHA product matrix. The work
+therefore still does not prove the complete requested one-floor customer pilot
 on one exact SHA. Remaining work includes BQ Locate/export continuity across
 the full pilot, all requested authoring categories and repeated regeneration,
 interactive prompt/grip/jig/cancel ordering, broader Family/H.1 and LOCAL_ONLY
@@ -256,13 +346,14 @@ and production signing/clean-machine release qualification.
 - Update this claim and the existing `LOCAL-001` handoff/status documentation
   only after exact runtime evidence exists.
 
-## Initial implementation boundary
+## Implementation boundary
 
-This is a runtime-qualification lane. No production, adapter, Core, shared
-runner, probe, workflow or release source is reserved initially. If licensed
-execution exposes a product or reusable-runner defect, stop, publish the
-smallest sanitized evidence and register a separate concrete Issue/Lane-Key
-before any source edit.
+This remains a runtime-qualification lane. Licensed execution exposed one
+automation-only curved-probe drift already covered by the historical LOCAL-003
+Issue #72 claim's explicit probe/preflight correction allowance. The bounded
+fix above changes only that probe and focused guard; production adapter/Core,
+shared runner, workflow and release behavior remain unchanged. Any ordinary
+product defect still requires a separate non-overlapping source lane.
 
 ## Exclusions
 
