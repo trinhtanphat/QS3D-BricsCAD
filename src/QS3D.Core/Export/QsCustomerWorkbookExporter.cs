@@ -350,8 +350,10 @@ namespace QS3D.Core.Export
 
         private static void Text(StringBuilder sb, string cell, string value, int style)
         {
+            var text = value ?? string.Empty;
+            if (text.Length > 32767) throw new InvalidDataException("Customer workbook text cell exceeds the Excel 32,767-character limit: " + cell + ".");
             sb.Append("<c r=\"").Append(cell).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is>");
-            XlsxXmlText.AppendTextElement(sb, value ?? string.Empty);
+            XlsxXmlText.AppendTextElement(sb, text);
             sb.Append("</is></c>");
         }
 
