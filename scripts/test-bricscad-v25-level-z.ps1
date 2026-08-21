@@ -96,6 +96,21 @@ function Require-Qs3dLevelFailure {
     )
     $failureCode = [string]$Marker["error_code"]
     if (-not ($allowedCodes -contains $failureCode)) { throw "Level Z marker has an invalid sanitized failure code." }
+    if ($failureCode -eq "LEVEL_Z_RUNTIME_HOST_BUILD_FAILED") {
+        $allowedHostBuildStages = @("legacy_wall_build", "bounded_wall_build", "glass_wall_build", "beam_build", "range_read")
+        if (-not $Marker.ContainsKey("host_build_stage") -or -not ($allowedHostBuildStages -contains [string]$Marker["host_build_stage"])) {
+            throw "Level Z marker has an invalid sanitized host build stage."
+        }
+        foreach ($key in @("exception_type", "exception_target", "exception_hresult")) {
+            if (-not $Marker.ContainsKey($key)) { throw "Level Z marker is missing sanitized exception classification." }
+        }
+        if ([string]$Marker["exception_type"] -notmatch '^[A-Za-z0-9_.+`]+$' -or
+            [string]$Marker["exception_target"] -notmatch '^[A-Za-z0-9_.<>+`]*$' -or
+            [string]$Marker["exception_hresult"] -notmatch '^0x[0-9A-F]{8}$') {
+            throw "Level Z marker contains an invalid sanitized exception classification."
+        }
+        throw "Level Z runtime probe reported sanitized host build failure at stage '$([string]$Marker["host_build_stage"])'."
+    }
     if ($failureCode -ne "LEVEL_Z_RUNTIME_REBAR_FAILED") { throw "Level Z runtime probe reported sanitized failure '$failureCode'." }
 
     $allowedStages = @(
