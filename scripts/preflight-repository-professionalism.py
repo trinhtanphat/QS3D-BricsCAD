@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import os
 import re
+import stat
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,12 +32,88 @@ FORBIDDEN_EXTERNAL_ORCHESTRATION_PATH_MARKERS = (
     "controller-worker-pool",
 )
 ORCHESTRATION_SCAN_SUFFIXES = {".md", ".txt", ".yml", ".yaml", ".json", ".toml", ".py", ".ps1", ".sh"}
-MAX_ORCHESTRATION_SCAN_BYTES = 1024 * 1024
+MAX_REPOSITORY_TEXT_BYTES = 1024 * 1024
+MAX_ORCHESTRATION_SCAN_BYTES = MAX_REPOSITORY_TEXT_BYTES
+WINDOWS_REPARSE_POINT_ATTRIBUTE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
 SELF_PATH = "scripts/preflight-repository-professionalism.py"
 
 
-def read(relative: str) -> str:
-    return (ROOT / relative).read_text(encoding="utf-8")
+def _metadata_type_error(metadata) -> str | None:
+    if stat.S_ISLNK(metadata.st_mode):
+        return "must not be a symlink"
+    if getattr(metadata, "st_file_attributes", 0) & WINDOWS_REPARSE_POINT_ATTRIBUTE:
+        return "must not be a Windows reparse point"
+    if not stat.S_ISREG(metadata.st_mode):
+        return "must be a regular file"
+    return None
+
+
+def _same_opened_file(before, opened) -> bool:
+    before_dev = getattr(before, "st_dev", 0)
+    before_ino = getattr(before, "st_ino", 0)
+    opened_dev = getattr(opened, "st_dev", 0)
+    opened_ino = getattr(opened, "st_ino", 0)
+    if before_dev and before_ino and opened_dev and opened_ino:
+        return (before_dev, before_ino) == (opened_dev, opened_ino)
+    return True
+
+
+def read_repository_text(path: Path, root: Path = ROOT, maximum_bytes: int = MAX_REPOSITORY_TEXT_BYTES) -> tuple[str | None, str | None]:
+    if maximum_bytes < 0:
+        return None, "invalid negative text-size bound"
+
+    try:
+        root_resolved = root.resolve(strict=True)
+        metadata = path.lstat()
+    except OSError as exc:
+        return None, f"cannot inspect repository text input: {exc}"
+
+    type_error = _metadata_type_error(metadata)
+    if type_error is not None:
+        return None, type_error
+    if metadata.st_size > maximum_bytes:
+        return None, f"exceeds {maximum_bytes} byte safety bound ({metadata.st_size} bytes)"
+
+    try:
+        resolved = path.resolve(strict=True)
+        resolved.relative_to(root_resolved)
+    except (OSError, ValueError) as exc:
+        return None, f"escapes repository root or cannot be resolved safely: {exc}"
+
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    fd = None
+    try:
+        fd = os.open(path, flags)
+        opened_metadata = os.fstat(fd)
+        opened_type_error = _metadata_type_error(opened_metadata)
+        if opened_type_error is not None:
+            return None, opened_type_error
+        if not _same_opened_file(metadata, opened_metadata):
+            return None, "changed identity between filesystem validation and open"
+        if opened_metadata.st_size > maximum_bytes:
+            return None, f"exceeds {maximum_bytes} byte safety bound ({opened_metadata.st_size} bytes)"
+
+        chunks: list[bytes] = []
+        total = 0
+        while total <= maximum_bytes:
+            chunk = os.read(fd, min(64 * 1024, maximum_bytes + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+        if total > maximum_bytes:
+            return None, f"exceeds {maximum_bytes} byte safety bound while reading"
+        payload = b"".join(chunks)
+    except OSError as exc:
+        return None, f"cannot open/read repository text input safely: {exc}"
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+    try:
+        return payload.decode("utf-8"), None
+    except UnicodeDecodeError as exc:
+        return None, f"is not valid UTF-8: {exc}"
 
 
 def require(text: str, tokens: tuple[str, ...], label: str, failures: list[str]) -> None:
@@ -46,7 +124,7 @@ def require(text: str, tokens: tuple[str, ...], label: str, failures: list[str])
 
 def reject_external_orchestration_artifacts(failures: list[str]) -> None:
     for path in ROOT.rglob("*"):
-        if not path.is_file() or ".git" in path.parts:
+        if ".git" in path.parts:
             continue
 
         relative = path.relative_to(ROOT).as_posix()
@@ -62,23 +140,9 @@ def reject_external_orchestration_artifacts(failures: list[str]) -> None:
         if relative == SELF_PATH or path.suffix.lower() not in ORCHESTRATION_SCAN_SUFFIXES:
             continue
 
-        try:
-            size = path.stat().st_size
-        except OSError as exc:
-            failures.append(f"cannot inspect orchestration-scanned repository file metadata: {relative}: {exc}")
-            continue
-        if size > MAX_ORCHESTRATION_SCAN_BYTES:
-            failures.append(
-                f"orchestration-scanned repository file exceeds {MAX_ORCHESTRATION_SCAN_BYTES} byte safety bound: {relative} ({size} bytes)"
-            )
-            continue
-
-        try:
-            text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue
-        except OSError as exc:
-            failures.append(f"cannot read orchestration-scanned repository file: {relative}: {exc}")
+        text, error = read_repository_text(path, ROOT, MAX_ORCHESTRATION_SCAN_BYTES)
+        if error is not None:
+            failures.append(f"unsafe orchestration-scanned repository file: {relative}: {error}")
             continue
 
         if "QS3D-CONTROL" in text and "QS3D-WORKER-" in text:
@@ -89,11 +153,14 @@ def reject_external_orchestration_artifacts(failures: list[str]) -> None:
 
 def main() -> int:
     failures: list[str] = []
+    texts: dict[str, str] = {}
 
     for relative in REQUIRED:
-        path = ROOT / relative
-        if not path.is_file():
-            failures.append(f"missing repository professionalism file: {relative}")
+        text, error = read_repository_text(ROOT / relative)
+        if error is not None:
+            failures.append(f"unsafe or missing repository professionalism file: {relative}: {error}")
+        else:
+            texts[relative] = text
 
     reject_external_orchestration_artifacts(failures)
 
@@ -103,7 +170,7 @@ def main() -> int:
             print(" -", failure)
         return 1
 
-    pr = read(".github/pull_request_template.md")
+    pr = texts[".github/pull_request_template.md"]
     require(
         pr,
         (
@@ -115,7 +182,7 @@ def main() -> int:
         failures,
     )
 
-    codeowners = read(".github/CODEOWNERS")
+    codeowners = texts[".github/CODEOWNERS"]
     require(
         codeowners,
         (
@@ -130,7 +197,7 @@ def main() -> int:
         failures,
     )
 
-    dependabot = read(".github/dependabot.yml")
+    dependabot = texts[".github/dependabot.yml"]
     require(
         dependabot,
         (
@@ -144,7 +211,7 @@ def main() -> int:
     if "registries:" in dependabot or "target-branch:" in dependabot:
         failures.append("Dependabot must not introduce private registries or a non-default integration target without an explicit repository decision")
 
-    contributing = read("CONTRIBUTING.md")
+    contributing = texts["CONTRIBUTING.md"]
     require(
         contributing,
         (
@@ -156,7 +223,7 @@ def main() -> int:
         failures,
     )
 
-    security = read("SECURITY.md")
+    security = texts["SECURITY.md"]
     require(
         security,
         (
@@ -168,7 +235,7 @@ def main() -> int:
         failures,
     )
 
-    bug = read(".github/ISSUE_TEMPLATE/bug_report.yml")
+    bug = texts[".github/ISSUE_TEMPLATE/bug_report.yml"]
     require(
         bug,
         (
@@ -179,7 +246,7 @@ def main() -> int:
         failures,
     )
 
-    feature = read(".github/ISSUE_TEMPLATE/feature_request.yml")
+    feature = texts[".github/ISSUE_TEMPLATE/feature_request.yml"]
     require(
         feature,
         ("name: Feature request", "id: target", "id: problem", "id: acceptance", "id: coordination", "existing issue/PR"),
@@ -187,11 +254,11 @@ def main() -> int:
         failures,
     )
 
-    issue_config = read(".github/ISSUE_TEMPLATE/config.yml")
+    issue_config = texts[".github/ISSUE_TEMPLATE/config.yml"]
     if not re.search(r"(?m)^blank_issues_enabled:\s*true\s*$", issue_config):
         failures.append("issue-template config must keep blank issues enabled for coordination/integration work")
 
-    main_auth = read("docs/MAIN-WRITE-AUTHORIZATION.md")
+    main_auth = texts["docs/MAIN-WRITE-AUTHORIZATION.md"]
     require(
         main_auth,
         (
@@ -202,7 +269,7 @@ def main() -> int:
         failures,
     )
 
-    ci_policy = read("CI_POLICY.md")
+    ci_policy = texts["CI_POLICY.md"]
     require(
         ci_policy,
         (
@@ -224,7 +291,7 @@ def main() -> int:
         failures,
     )
 
-    ci = read(".github/workflows/ci.yml")
+    ci = texts[".github/workflows/ci.yml"]
     require(
         ci,
         (
@@ -250,8 +317,16 @@ def main() -> int:
     forbidden_merge_tokens = (
         "pull_request_target:", "gh pr merge", "enablepullrequestautomerge", "enable-pull-request-auto-merge",
     )
-    for workflow in sorted((ROOT / ".github" / "workflows").glob("*.y*ml")):
-        text = workflow.read_text(encoding="utf-8")
+    workflows_dir = ROOT / ".github" / "workflows"
+    workflow_paths = sorted(
+        (path for path in workflows_dir.iterdir() if path.suffix.lower() in {".yml", ".yaml"}),
+        key=lambda path: (path.name.casefold(), path.name),
+    )
+    for workflow in workflow_paths:
+        text, error = read_repository_text(workflow)
+        if error is not None:
+            failures.append(f"unsafe workflow source for autonomous-merge scan: {workflow.name}: {error}")
+            continue
         lowered = text.lower()
         for token in forbidden_merge_tokens:
             if token in lowered:
