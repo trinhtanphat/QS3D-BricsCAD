@@ -34,20 +34,19 @@ def method_block(source: str, signature: str) -> str:
 source = SOURCE.read_text(encoding="utf-8")
 
 require(
-    "private volatile bool _invalidated;" in source,
-    "Document-bound windows must publish the permanent invalidated/fail-closed state across host/UI threads.",
+    "using System.Threading;" in source and "private int _invalidated;" in source,
+    "Document-bound windows must use an atomic invalidation state shared across host/UI threads.",
 )
 
 ensure = method_block(source, "private bool EnsureProjectAffinity()")
 require(
-    "if (_invalidated) return false;" in ensure,
-    "Project-affinity checks must reject all later interaction after invalidation.",
+    "Volatile.Read(ref _invalidated) != 0" in ensure,
+    "Project-affinity checks must observe all later invalidation across host/UI threads.",
 )
 
 project_change = method_block(source, "private void CloseForProjectChange()")
 for marker in (
-    "if (_invalidated) return;",
-    "_invalidated = true;",
+    "Interlocked.Exchange(ref _invalidated, 1) != 0",
     "DetachDocumentManagerHandler();",
     "TryCloseWindow();",
 ):
@@ -57,8 +56,9 @@ require(
     "Project-change close must not detach window input guards before the window actually closes.",
 )
 require(
-    project_change.index("_invalidated = true;") < project_change.index("TryCloseWindow();"),
-    "The stale-window fail-closed flag must be set before attempting Window.Close().",
+    project_change.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
+    < project_change.index("TryCloseWindow();"),
+    "The stale-window fail-closed state must transition atomically before attempting Window.Close().",
 )
 
 teardown = method_block(
@@ -66,7 +66,7 @@ teardown = method_block(
     "private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)",
 )
 for marker in (
-    "_invalidated = true;",
+    "Interlocked.Exchange(ref _invalidated, 1) != 0",
     "DetachDocumentManagerHandler();",
     "TryCloseWindow();",
 ):
@@ -76,8 +76,10 @@ require(
     "Document teardown must keep window-local input guards attached when close fails.",
 )
 require(
-    teardown.index("DetachDocumentManagerHandler();") < teardown.index("TryCloseWindow();"),
-    "Document teardown must release the global DocumentManager subscription before best-effort close.",
+    teardown.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
+    < teardown.index("DetachDocumentManagerHandler();")
+    < teardown.index("TryCloseWindow();"),
+    "Document teardown must atomically invalidate, release the global subscription, then best-effort close.",
 )
 
 request_close = method_block(source, "private void TryCloseWindow()")
@@ -110,4 +112,4 @@ require(
     "Successful/actual Window.Closed must remain the authoritative full-detach path.",
 )
 
-print("[OK] Document-bound modeless windows remain fail-closed when project/document close attempts fail.")
+print("[OK] Document-bound modeless windows remain atomically fail-closed when project/document close attempts fail.")

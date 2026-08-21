@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Windows;
 using System.Windows.Input;
 using Bricscad.ApplicationServices;
@@ -25,7 +26,7 @@ namespace QS3D.BricsCAD.V25.UI
             private readonly Document _document;
             private bool _attached;
             private bool _projectAffinityBound;
-            private volatile bool _invalidated;
+            private int _invalidated;
             private string _projectId = string.Empty;
 
             public Registration(Window window, Document document)
@@ -57,7 +58,7 @@ namespace QS3D.BricsCAD.V25.UI
                     _attached = true;
                     Detach();
                     _projectAffinityBound = false;
-                    _invalidated = false;
+                    Volatile.Write(ref _invalidated, 0);
                     _projectId = string.Empty;
                     throw;
                 }
@@ -73,7 +74,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             private bool EnsureProjectAffinity()
             {
-                if (_invalidated) return false;
+                if (Volatile.Read(ref _invalidated) != 0) return false;
 
                 try
                 {
@@ -111,8 +112,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void CloseForProjectChange()
             {
-                if (_invalidated) return;
-                _invalidated = true;
+                if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
                 DetachDocumentManagerHandler();
 
                 const string message = "QS3D project của cửa sổ modeless này đã thay đổi hoặc không còn được nạp. Cửa sổ đã đóng để tránh thao tác lên semantic state khác; hãy mở lại cửa sổ trong project hiện hành.";
@@ -123,11 +123,11 @@ namespace QS3D.BricsCAD.V25.UI
             private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
             {
                 if (!ReferenceEquals(e.Document, _document)) return;
+                if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
 
                 // The global document manager must not retain a stale modeless window after this
                 // document is gone. Keep the window-local input guards attached until Closed so a
                 // failed close cannot make the stale UI actionable again.
-                _invalidated = true;
                 DetachDocumentManagerHandler();
                 TryCloseWindow();
             }
@@ -143,7 +143,7 @@ namespace QS3D.BricsCAD.V25.UI
                 }
                 catch
                 {
-                    // Fail closed: if scheduling/closing fails, _invalidated remains true and the
+                    // Fail closed: if scheduling/closing fails, _invalidated remains set and the
                     // still-attached mouse/key guards continue rejecting interaction.
                 }
             }
