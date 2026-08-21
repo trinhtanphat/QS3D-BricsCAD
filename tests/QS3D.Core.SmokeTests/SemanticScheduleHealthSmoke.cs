@@ -79,10 +79,20 @@ namespace QS3D.Core.SmokeTests
         private static void InvalidTemplateAndCatalogAreReportedReadOnly()
         {
             var project = Project();
+
+            Throws<FormatException>(() =>
+                Definition("S-DIRECT-BAD-TEMPLATE", "", "", Array.Empty<string>(), Array.Empty<string>(), "{Unsupported}"));
+
             SemanticScheduleCatalog.Save(project, new[]
             {
-                Definition("S-BAD-TEMPLATE", "", "", Array.Empty<string>(), Array.Empty<string>(), "{Unsupported}")
+                Definition("S-BAD-TEMPLATE", "", "", Array.Empty<string>(), Array.Empty<string>(), "{Id}")
             });
+            var validPayload = project.Metadata[SemanticScheduleCatalog.MetadataKey];
+            project.Metadata[SemanticScheduleCatalog.MetadataKey] = validPayload.Replace(
+                "template=\"{Id}\"",
+                "template=\"{Unsupported}\"",
+                StringComparison.Ordinal);
+
             var version = project.ChangeVersion;
             var payload = project.Metadata[SemanticScheduleCatalog.MetadataKey];
             Has(new SemanticScheduleHealthService().Inspect(project), "SEMANTIC_SCHEDULE_TEMPLATE_INVALID");
