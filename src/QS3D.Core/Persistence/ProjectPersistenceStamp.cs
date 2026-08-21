@@ -50,13 +50,22 @@ namespace QS3D.Core.Persistence
         public void MarkSaved(ProjectState project)
         {
             EnsureSameProject(project);
-            _savedChangeVersion = project.ChangeVersion;
-            _savedDrawingPath = project.DrawingPath;
-            _savedDrawingFingerprint = project.DrawingFingerprint;
-            _savedActiveZoneId = project.ActiveZoneId;
-            _savedActiveFloorId = project.ActiveFloorId;
-            _savedMetadata = SnapshotMetadata(project.Metadata);
-            _savedNestedPersistedContent = SnapshotNestedPersistedContent(project);
+
+            var savedChangeVersion = project.ChangeVersion;
+            var savedDrawingPath = project.DrawingPath;
+            var savedDrawingFingerprint = project.DrawingFingerprint;
+            var savedActiveZoneId = project.ActiveZoneId;
+            var savedActiveFloorId = project.ActiveFloorId;
+            var savedMetadata = SnapshotMetadata(project.Metadata);
+            var savedNestedPersistedContent = SnapshotNestedPersistedContent(project);
+
+            _savedChangeVersion = savedChangeVersion;
+            _savedDrawingPath = savedDrawingPath;
+            _savedDrawingFingerprint = savedDrawingFingerprint;
+            _savedActiveZoneId = savedActiveZoneId;
+            _savedActiveFloorId = savedActiveFloorId;
+            _savedMetadata = savedMetadata;
+            _savedNestedPersistedContent = savedNestedPersistedContent;
         }
 
         private void EnsureSameProject(ProjectState project)
