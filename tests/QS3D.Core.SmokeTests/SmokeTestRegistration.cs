@@ -178,6 +178,7 @@ namespace QS3D.Core.SmokeTests
             FamilyTemplateImportSmoke.Run();
             ProjectFamilyQuickSchemaSmoke.Run();
             ProjectOnboardingRegression.Run();
+            ProjectOnboardingActiveFloorCanonicalSmoke.Run();
             ProjectFamilyActivationRevisionSmoke.Run();
             RegenerationAtomicitySmoke.Run();
             HostLinkCanonicalizationSmoke.Run();
