@@ -217,10 +217,11 @@ namespace QS3D.Core.Legacy
             AddCategoryTextMatch(snapshot.EntityType, "runtime-class", matches);
             foreach (var pair in snapshot.Metadata)
             {
+                var pairValue = pair.Value ?? string.Empty;
                 AddCategoryTextMatch(pair.Key, "metadata-key:" + Bound(pair.Key, 80), matches);
-                AddCategoryTextMatch(pair.Value, "metadata-value:" + Bound(pair.Value, 120), matches);
-                AddExplicitCategoryCode(pair.Key, pair.Value, matches);
-                foreach (Match match in EmbeddedPair.Matches(pair.Value ?? string.Empty))
+                AddCategoryTextMatch(pairValue, "metadata-value:" + Bound(pairValue, 120), matches);
+                AddExplicitCategoryCode(pair.Key, pairValue, matches);
+                foreach (Match match in EmbeddedPair.Matches(pairValue))
                 {
                     var key = match.Groups["key"].Value;
                     var value = match.Groups["value"].Value;
@@ -290,8 +291,9 @@ namespace QS3D.Core.Legacy
             value = 0d;
             foreach (var pair in metadata)
             {
-                if (KeyMatches(pair.Key, aliases) && TryFiniteNonNegative(pair.Value, out value)) return true;
-                foreach (Match match in EmbeddedPair.Matches(pair.Value ?? string.Empty))
+                var pairValue = pair.Value ?? string.Empty;
+                if (KeyMatches(pair.Key, aliases) && TryFiniteNonNegative(pairValue, out value)) return true;
+                foreach (Match match in EmbeddedPair.Matches(pairValue))
                 {
                     if (!KeyMatches(match.Groups["key"].Value, aliases)) continue;
                     if (TryFiniteNonNegative(match.Groups["value"].Value, out value)) return true;
@@ -304,8 +306,9 @@ namespace QS3D.Core.Legacy
         {
             foreach (var pair in metadata)
             {
-                if (KeyMatches(pair.Key, aliases) && !string.IsNullOrWhiteSpace(pair.Value)) return Bound(pair.Value.Trim(), 200);
-                foreach (Match match in EmbeddedPair.Matches(pair.Value ?? string.Empty))
+                var pairValue = pair.Value ?? string.Empty;
+                if (KeyMatches(pair.Key, aliases) && !string.IsNullOrWhiteSpace(pairValue)) return Bound(pairValue.Trim(), 200);
+                foreach (Match match in EmbeddedPair.Matches(pairValue))
                 {
                     if (!KeyMatches(match.Groups["key"].Value, aliases)) continue;
                     var value = match.Groups["value"].Value.Trim();
