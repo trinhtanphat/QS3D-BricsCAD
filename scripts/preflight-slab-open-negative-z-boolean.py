@@ -37,7 +37,8 @@ def main():
                 "CutterTopM",
                 "CutterBottomM",
                 'Add(bottom, -clearance, "cutter bottom")',
-                'Finite(-cutterHeight, "negative-Z extrusion")',
+                'Add(cutterBottom, -top, "negative-Z extrusion")',
+                'Positive(Finite(-extrusionZ, "cutter height"), "cutter height")',
                 "ExtrusionZM = extrusionZ",
             ),
         )
