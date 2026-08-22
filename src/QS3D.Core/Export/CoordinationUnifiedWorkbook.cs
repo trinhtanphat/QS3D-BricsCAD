@@ -297,7 +297,7 @@ namespace QS3D.Core.Export
             IReadOnlyList<CoordinationClashExportRow> clashes,
             IReadOnlyList<CoordinationDuplicateExportRow> duplicates)
         {
-            string fingerprint = null;
+            string? fingerprint = null;
             foreach (var value in clashes.Select(row => row.DrawingFingerprint).Concat(duplicates.Select(row => row.DrawingFingerprint)))
             {
                 var canonical = CoordinationWorkbookIdentity.Required(value, "Drawing Fingerprint");
@@ -729,7 +729,7 @@ namespace QS3D.Core.Export
             return CoordinationWorkbookIdentity.Required(value, label);
         }
 
-        private static ZipArchiveEntry UniqueEntry(ZipArchive archive, string name)
+        private static ZipArchiveEntry? UniqueEntry(ZipArchive archive, string name)
         {
             var matches = archive.Entries.Where(entry => string.Equals(entry.FullName.Replace('\\', '/'), name, StringComparison.OrdinalIgnoreCase)).ToList();
             if (matches.Count > 1) throw new InvalidDataException("Coordination workbook contains duplicate package entry: " + name + ".");
