@@ -61,7 +61,8 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("PlanImport mutated canonical source issues before persistence commit.");
             if (!string.Equals(changed.LeftSemanticId, source.LeftSemanticId, StringComparison.Ordinal) ||
                 !string.Equals(changed.RightSemanticId, source.RightSemanticId, StringComparison.Ordinal) ||
-                changed.LeftCadReference != source.LeftCadReference || changed.RightCadReference != source.RightCadReference)
+                !SameCadReference(changed.LeftCadReference, source.LeftCadReference) ||
+                !SameCadReference(changed.RightCadReference, source.RightCadReference))
                 throw new InvalidOperationException("Coordination Excel import changed immutable semantic/CAD trace.");
         }
 
@@ -198,6 +199,14 @@ namespace QS3D.Core.SmokeTests
                 "Level-01",
                 0d,
                 created);
+        }
+
+        private static bool SameCadReference(CadReference? left, CadReference? right)
+        {
+            if (left.HasValue != right.HasValue) return false;
+            if (!left.HasValue) return true;
+            return left.Value.DrawingId.Value == right.Value.DrawingId.Value &&
+                   string.Equals(left.Value.Handle.Value, right.Value.Handle.Value, StringComparison.Ordinal);
         }
 
         private static void Expect<T>(Action action) where T : Exception
