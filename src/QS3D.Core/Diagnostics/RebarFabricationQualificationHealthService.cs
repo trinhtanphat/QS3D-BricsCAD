@@ -34,6 +34,13 @@ namespace QS3D.Core.Diagnostics
             }
             if (!required) return issues.AsReadOnly();
 
+            if (validRequirement)
+            {
+                foreach (var element in project.Elements)
+                    if (element == null)
+                        throw new InvalidOperationException("Rebar fabrication qualification diagnostics cannot inspect a project containing a null semantic element.");
+            }
+
             var standardCode = Read(project.Metadata, StandardCodeMetadataKey);
             var detailingRevision = Read(project.Metadata, DetailingRevisionMetadataKey);
 

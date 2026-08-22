@@ -33,12 +33,18 @@ for filename, command in EXPORTS.items():
     if "RegenerateDirty(project)" in text:
         errors.append(f"{filename}: pure export must not mutate the live/read-only project")
 
-    cancel = text.find("if (dialog.ShowDialog() != true) return;")
+    confirm = text.find("if (dialog.ShowDialog() != true) return;")
     lookup = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
     snapshot = text.find("ProjectStateSnapshot.CreateDetachedCopy(project)")
     regen = text.find("RegenerateDirty(snapshot)")
-    if min(cancel, lookup, snapshot, regen) < 0 or not cancel < lookup < snapshot < regen:
-        errors.append(f"{filename}: lifecycle order must be dialog cancel -> read-only lookup -> detached copy -> regenerate")
+    if filename == "BbsCsvCommands.cs":
+        export = text.find("RebarCsvExporter.Export(dialog.FileName, rows)", confirm + 1)
+        if min(confirm, lookup, snapshot, regen, export) < 0 or not lookup < snapshot < regen < confirm < export:
+            errors.append(f"{filename}: lifecycle order must be read-only lookup -> detached copy -> regenerate/validate -> dialog confirmation -> export")
+        if confirm >= 0 and "RebarCsvExporter.Export(" in text[:confirm]:
+            errors.append(f"{filename}: persistent CSV write must remain after Save confirmation")
+    elif min(confirm, lookup, snapshot, regen) < 0 or not confirm < lookup < snapshot < regen:
+        errors.append(f"{filename}: lifecycle order must be dialog confirmation -> read-only lookup -> detached copy -> regenerate")
 
 if errors:
     for error in errors:
@@ -46,4 +52,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: regeneration-based CSV/XLSX exports regenerate detached snapshots and never mutate/bind live project state.")
+print("PASS: regeneration-based CSV/XLSX exports stay read-only on detached snapshots; BBS CSV validates before Save while persistent writes remain confirmation-gated, and the other schedule exports retain destination-first ordering.")

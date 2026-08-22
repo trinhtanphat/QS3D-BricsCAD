@@ -21,8 +21,8 @@ for relative in required:
 
 checks = {
     "src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs": [
-        "using QS3D.Core.Persistence;", "using QS3D.Core.Geometry;", "ProjectStateSnapshot.Capture(project)", "var cadCommitted = false;",
-        "foreach (var update in pending) CommitSemanticUpdate(project, update);", "if (pending.Count > 0) project.Touch();",
+        "using QS3D.Core.Persistence;", "using QS3D.Core.Geometry;", "using QS3D.Core.Audit;", "ProjectStateSnapshot.Capture(project)", "var cadCommitted = false;",
+        "foreach (var update in pending) CommitSemanticUpdate(project, update);",
         "rollback.Restore(project)", "AggregateException(operationError, restoreError)",
         "RectangularSlabMeshPlanner.Plan", "PolygonalSlabMeshPlanner.Plan", "ElementCategory.Foundation", "GeneratedFoundationMeshHandles",
         "GeneratedRebarOwnershipGuard.Build", "ownership.EnsureOwned", "RebarFoundationXNotation", "RebarFoundationYNotation",
@@ -31,6 +31,8 @@ checks = {
         "duplicateSelectedSource", "checked(batchBars + count)", "CadGeometryGuard.Multiply", "CadGeometryGuard.Subtract",
         "ReadPolygonFootprint", "ValidateCommonFootprint", "polygonal Foundation mesh chưa hỗ trợ bulge/curved boundary",
         "polyline.Normal.Z < 1d - 1e-9d", "ClearGeneratedFoundationMeshStale",
+        "ErasePrevious(document, transaction, project, element, ownership)",
+        "GeneratedRebarNativeOwnershipService.MarkFreshGeneratedHandles(document, transaction, project, element, HandlesKey",
         'AuditTrail.ForProject(project).Record('
     ],
     "src/QS3D.BricsCAD.V25/FoundationMeshCommands.cs": [
@@ -59,7 +61,10 @@ checks = {
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs": ["CoreOwnershipPolicy.IsOwnerSlot", "CoreOwnershipPolicy.IsRebarOwnerSlot", "CoreOwnershipPolicy.RebarHandleKeys"],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedTieRebarOwnershipGuard.cs": ["CoreOwnershipPolicy.IsOwnerSlot", "CoreOwnershipPolicy.IsRebarOwnerSlot", "CoreOwnershipPolicy.RebarHandleKeys"],
     "src/QS3D.BricsCAD.V25/Cad/GeneratedCurtainFrameOwnershipGuard.cs": ["CoreOwnershipPolicy.IsOwnerSlot", "GeneratedCurtainFrameHandles"],
-    "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs": ["CoreOwnershipPolicy.RebarHandleKeys", "MetadataPrefixForHandleKey", "RemoveByPrefix"],
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs": [
+        "CoreOwnershipPolicy.RebarHandleKeys", "MetadataPrefixForHandleKey", "RemoveByPrefix",
+        "GeneratedRebarNativeOwnershipService.RequireMatchingOwnership"
+    ],
     "src/QS3D.Core/Domain/ProjectElement.cs": [
         "GeneratedFoundationMeshStateKey", "GeneratedFoundationMeshStaleSnapshotKey", "IsGeneratedFoundationMeshStale", "ClearGeneratedFoundationMeshStale"
     ],
@@ -70,7 +75,7 @@ checks = {
     "src/QS3D.BricsCAD.V25/RebarHealthAllCommands.cs": ["GeneratedFoundationMeshHealthService", "FoundationMeshSolidBuilder.HandlesKey"],
     "src/QS3D.BricsCAD.V25/HealthAllCommands.cs": ["GeneratedFoundationMeshHealthService", "FoundationMeshSolidBuilder.HandlesKey"],
     "src/QS3D.BricsCAD.V25/ReleaseReadinessCommands.cs": ["GeneratedFoundationMeshHealthService().Inspect", "GeneratedRebarModeHealthService().Inspect", "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)"],
-    "src/QS3D.BricsCAD.V25/ReviewCommands.cs": ["CollectGeneratedHandles(project)", "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)"],
+    "src/QS3D.BricsCAD.V25/ReviewCommands.cs": ["CollectGeneratedHandles(previewProject)", "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)"],
     "src/QS3D.BricsCAD.V25/Cad/BeamRebarSolidBuilder.cs": ["0.005d", "beam horizontal tolerance"],
     "tests/QS3D.Core.SmokeTests/FoundationMeshHealthSmoke.cs": [
         "IsGeneratedFoundationMeshStale", "GeneratedRebarModeHealthService", "GeneratedRebarOwnershipHealthService",
@@ -98,6 +103,9 @@ for relative, needles in checks.items():
 foundation_builder = ROOT / "src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs"
 if foundation_builder.is_file():
     text = foundation_builder.read_text(encoding="utf-8")
+    if "project.Touch();" in text:
+        errors.append("Foundation mesh revision must remain per-element AuditTrail-owned; standalone project.Touch is redundant")
+
     start = text.find("public static FoundationMeshBuildResult BuildSelected(Document document, ProjectState project)")
     end = text.find("private static PendingUpdate CreateUpdate", start + 1) if start >= 0 else -1
     if start < 0 or end < 0:
@@ -105,28 +113,29 @@ if foundation_builder.is_file():
     else:
         body = text[start:end]
         semantic_token = "foreach (var update in pending) CommitSemanticUpdate(project, update);"
-        touch_token = "if (pending.Count > 0) project.Touch();"
         commit_token = "transaction.Commit();\n                    cadCommitted = true;"
+        erase_token = "ErasePrevious(document, transaction, project, element, ownership)"
         semantic = body.find(semantic_token)
-        touch = body.find(touch_token, semantic if semantic >= 0 else 0)
         commit = body.find(commit_token)
         restore = body.find("rollback.Restore(project)")
-        if min(semantic, touch, commit, restore) < 0:
+        if min(semantic, commit, restore) < 0:
             errors.append("foundation mesh atomicity ordering tokens are incomplete")
-        elif not semantic < touch < commit < restore:
-            errors.append("Foundation mesh must commit handles/metadata/revision before CAD commit and restore project state only on the pre-commit failure path")
+        elif not semantic < commit < restore:
+            errors.append("Foundation mesh must commit handles/metadata/audit revision before CAD commit and restore project state only on the pre-commit failure path")
         if commit >= 0 and semantic_token in body[commit + len(commit_token):]:
             errors.append("Foundation mesh still mutates generated semantic ownership after CAD commit")
         if body.count(semantic_token) != 1 or body.count(commit_token) != 1:
             errors.append("Foundation mesh requires exactly one semantic replacement phase and one CAD commit/flag boundary")
         if "Editor.Regen(" in body:
             errors.append("Foundation native mesh builder must remain UI-free; viewport regen belongs to FoundationMeshCommands post-commit FinalizeUi")
-        if body.find("ReserveBatchBars(ref batchBars, layout.Count)") > body.find("ErasePrevious(document, transaction, element, ownership)"):
-            errors.append("Rectangle Foundation mesh must reserve the batch limit before destructive replacement")
+        rectangle_reserve = body.find("ReserveBatchBars(ref batchBars, layout.Count)")
+        rectangle_erase = body.find(erase_token, rectangle_reserve if rectangle_reserve >= 0 else 0)
+        if rectangle_reserve < 0 or rectangle_erase < 0 or rectangle_reserve > rectangle_erase:
+            errors.append("Rectangle Foundation mesh must reserve the batch limit before project-aware destructive replacement")
         polygon_reserve = body.find("ReserveBatchBars(ref batchBars, polygonLayout.Count)")
-        polygon_erase = body.find("ErasePrevious(document, transaction, element, ownership)", polygon_reserve if polygon_reserve >= 0 else 0)
+        polygon_erase = body.find(erase_token, polygon_reserve if polygon_reserve >= 0 else 0)
         if polygon_reserve < 0 or polygon_erase < 0 or polygon_reserve > polygon_erase:
-            errors.append("Polygon Foundation mesh must reserve the batch limit before destructive replacement")
+            errors.append("Polygon Foundation mesh must reserve the batch limit before project-aware destructive replacement")
 
     helper_start = text.find("private static void CommitSemanticUpdate")
     helper_end = text.find("private sealed class RectangleFrame", helper_start + 1) if helper_start >= 0 else -1
@@ -139,6 +148,8 @@ if foundation_builder.is_file():
     ):
         if token not in helper:
             errors.append("Foundation mesh semantic commit helper missing metadata/audit contract: " + token)
+    if "project.Touch();" in helper:
+        errors.append("Foundation mesh semantic helper must not double-advance revision outside AuditTrail")
 
 resolver = ROOT / "src/QS3D.Core/Services/SemanticHandleOwnershipResolver.cs"
 if resolver.is_file():
@@ -178,4 +189,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Foundation mesh preserves the legacy rotated-rectangle local-axis path and adds guarded straight simple polygon clipping through the shared polygonal planner; batch reservation precedes destructive replacement, generated ownership/count/spacing/faces/footprint-mode/audit/revision advance while CAD is rollback-capable, pre-commit failures restore the deep project snapshot, footprint health accepts only RectangleLocalXY/PolygonGlobalXY, and curved/bulged/holes/local-axis-generalization plus exact V25 runtime proof remain explicit gates.")
+print("PASS: Foundation mesh preserves rectangle/polygon behavior, reserves batch limits before project-aware native-ownership replacement, commits per-element AuditTrail-owned semantic revisions while CAD is rollback-capable, and retains health/runtime qualification gates.")

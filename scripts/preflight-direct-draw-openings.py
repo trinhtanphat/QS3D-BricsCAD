@@ -22,19 +22,20 @@ else:
         'createdElement.SetProperty("BooleanClearanceM"',
         "ProjectStateSnapshot.Capture(project)",
         "EnsureActive(document, \"Direct Draw \" + label + \" / Auto Host\")",
-        "new AutoHostLinkCommands().AutoLinkHosts()",
-        'createdElement.Properties.TryGetValue("HostWallId"',
+        "AutoHostLinkCommands.LinkSingleOpening(document, project, createdElementId)",
+        'createdElement.Properties.TryGetValue("HostWallId", out var recordedHostId)',
+        'string.Equals(recordedHostId.Trim(), hostId, StringComparison.OrdinalIgnoreCase)',
         "regenerated += new RegenerationEngine",
         "EraseSource(document, sourceId)",
         "rollback.Restore(project)",
         "CadHandleService.GetLiveHandles(document, new[] { handle })",
         "PlanarityToleranceM = 0.005d",
         "CadGeometryGuard.ToMeters(document, widthDrawing",
-        "ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject)",
-        "FamilyPositiveNumber(defaultsProject, category, \"HeightM\"",
-        "FamilyNonNegativeNumber(defaultsProject, category, \"BottomOffsetM\"",
-        "FamilyNonNegativeNumber(defaultsProject, category, \"SillHeightM\"",
-        "FamilyNonNegativeNumber(defaultsProject, category, \"BooleanClearanceM\"",
+        "DirectDrawProjectPreviewContext.Capture(document)",
+        "FamilyPositiveNumber(defaultsProject!, category, \"HeightM\"",
+        "FamilyNonNegativeNumber(defaultsProject!, category, \"BottomOffsetM\"",
+        "FamilyNonNegativeNumber(defaultsProject!, category, \"SillHeightM\"",
+        "FamilyNonNegativeNumber(defaultsProject!, category, \"BooleanClearanceM\"",
         "FamilyConfiguredNumber",
         "PreferredFamily(project, category)",
         "Sửa Family trước khi Direct Draw.",
@@ -55,6 +56,7 @@ else:
         "FamilyNumber(",
         'createdElement.Properties["WidthM"] =',
         'createdElement.Properties["HeightM"] =',
+        "new AutoHostLinkCommands().AutoLinkHosts()",
     )
     for token in forbidden:
         if token in text:
@@ -64,8 +66,12 @@ else:
         errors.append("Door/Opening Direct Draw must not invoke the global physical-cut path")
     if "SendStringToExecute(\"QS3DCUTOPENINGS" in text:
         errors.append("Door/Opening Direct Draw must not queue global QS3DCUTOPENINGS")
-    if text.count("new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project)") < 2:
-        errors.append("Door/Opening Direct Draw must validate semantic state both before and after Auto Host")
+    first_subset = '.RegenerateDirtySubset(project, new[] { createdElementId });'
+    second_subset = '.RegenerateDirtySubset(project, new[] { createdElementId, hostId });'
+    if first_subset not in text or second_subset not in text or text.find(first_subset) >= text.find(second_subset):
+        errors.append("Door/Opening Direct Draw must validate only the authored opening, then the exact opening+host closure after Auto Host")
+    if ".RegenerateDirty(project)" in text:
+        errors.append("Door/Opening Direct Draw must not clean unrelated dirty semantic elements")
     if text.count("Sửa Family trước khi Direct Draw.") < 3:
         errors.append("Configured positive/non-negative Door/Opening Family values must fail closed with a repair message")
 
@@ -89,7 +95,7 @@ if not ribbon.is_file():
     errors.append("missing RibbonBootstrapper.cs")
 else:
     ribbon_text = ribbon.read_text(encoding="utf-8")
-    for needle in ('new RibbonButtonSpec("Vẽ Cửa", "QS3DDRAWDOOR")', 'new RibbonButtonSpec("Vẽ Lỗ Mở", "QS3DDRAWOPENING")'):
+    for needle in ('Button("Vẽ Cửa", "QS3DDRAWDOOR")', 'Button("Vẽ Lỗ Mở", "QS3DDRAWOPENING")'):
         if needle not in ribbon_text:
             errors.append("Ribbon missing Door/Opening Direct Draw action: " + needle)
 
@@ -108,4 +114,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Door/Opening Direct Draw uses canonical SetProperty writes, active-DWG guards, operation-owned ObjectId cleanup before project restore, post-link semantic verification and non-destructive post-commit UI sync; it exposes Ribbon/Hub actions and never invokes global physical cutting.")
+print("PASS: Door/Opening Direct Draw uses exact single-opening AutoHost on the authorized project, canonical SetProperty writes, active-DWG guards, operation-owned ObjectId cleanup before project restore, post-link semantic verification and non-destructive post-commit UI sync; it exposes Ribbon/Hub actions and never invokes global physical cutting.")

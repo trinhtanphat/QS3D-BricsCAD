@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using Bricscad.ApplicationServices;
@@ -58,7 +59,8 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("định vị BBS");
-                _locate(row);
+                var currentRow = ResolveCurrentRow(row);
+                _locate(currentRow);
             }
             catch (Exception ex)
             {
@@ -74,11 +76,8 @@ namespace QS3D.BricsCAD.V25.UI
                 var dialog = new SaveFileDialog { Title = "Xuất BBS QS3D", Filter = "Excel Workbook (*.xlsx)|*.xlsx", FileName = _defaultFileName, AddExtension = true, DefaultExt = ".xlsx", OverwritePrompt = true };
                 if (dialog.ShowDialog(this) != true) return;
 
-                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
-                    throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Đóng bảng BBS và mở lại trước khi xuất.");
-                var snapshot = ProjectStateSnapshot.CreateDetachedCopy(project);
-                new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(snapshot);
-                _rows = ProjectRebarScheduleBuilder.Build(snapshot);
+                EnsureActive("xuất BBS XLSX");
+                _rows = BuildCurrentRows();
                 BindRows();
                 if (_rows.Count == 0) throw new InvalidOperationException("BBS hiện chưa có dòng để xuất.");
 
@@ -86,6 +85,49 @@ namespace QS3D.BricsCAD.V25.UI
                 MessageBox.Show(this, "Đã làm mới dữ liệu read-only hiện hành và xuất BBS XLSX.", "QS3D", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex) { MessageBox.Show(this, ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Error); }
+        }
+
+        private RebarScheduleRow ResolveCurrentRow(RebarScheduleRow displayedRow)
+        {
+            var currentRows = BuildCurrentRows();
+            var matches = currentRows
+                .Where(x => x != null &&
+                            string.Equals(x.ElementId, displayedRow.ElementId, StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(x.BarMark, displayedRow.BarMark, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (matches.Count != 1)
+                throw new InvalidOperationException("Dòng BBS đã cũ hoặc không còn định danh duy nhất trong project hiện hành. Đóng bảng và chạy lại QS3DBBSVIEW.");
+            if (!SameRow(displayedRow, matches[0]))
+                throw new InvalidOperationException("Dòng BBS đã thay đổi kể từ lúc bảng được mở. Đóng bảng và chạy lại QS3DBBSVIEW trước khi định vị.");
+            return matches[0];
+        }
+
+        private IReadOnlyList<RebarScheduleRow> BuildCurrentRows()
+        {
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
+                throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng. Đóng bảng BBS và mở lại.");
+            var snapshot = ProjectStateSnapshot.CreateDetachedCopy(project);
+            new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(snapshot);
+            return ProjectRebarScheduleBuilder.Build(snapshot);
+        }
+
+        private static bool SameRow(RebarScheduleRow left, RebarScheduleRow right)
+        {
+            return string.Equals(left.ElementId, right.ElementId, StringComparison.Ordinal) &&
+                   string.Equals(left.BarMark, right.BarMark, StringComparison.Ordinal) &&
+                   string.Equals(left.ShapeCode, right.ShapeCode, StringComparison.Ordinal) &&
+                   string.Equals(left.Notation, right.Notation, StringComparison.Ordinal) &&
+                   left.DiameterMm.Equals(right.DiameterMm) &&
+                   left.Quantity == right.Quantity &&
+                   left.CuttingLengthM.Equals(right.CuttingLengthM) &&
+                   left.TotalLengthM.Equals(right.TotalLengthM) &&
+                   left.UnitWeightKgM.Equals(right.UnitWeightKgM) &&
+                   left.NetWeightKg.Equals(right.NetWeightKg) &&
+                   left.WastePercent.Equals(right.WastePercent) &&
+                   left.TotalWeightKg.Equals(right.TotalWeightKg) &&
+                   string.Equals(left.FabricationStatus, right.FabricationStatus, StringComparison.Ordinal) &&
+                   string.Equals(left.FabricationStandardCode, right.FabricationStandardCode, StringComparison.Ordinal) &&
+                   string.Equals(left.FabricationDetailingRevision, right.FabricationDetailingRevision, StringComparison.Ordinal);
         }
 
         private void EnsureActive(string operation)

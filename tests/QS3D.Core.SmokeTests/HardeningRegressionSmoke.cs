@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Xml;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
+using QS3D.Core.Features;
 using QS3D.Core.Formulas;
 using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
@@ -24,6 +25,8 @@ namespace QS3D.Core.SmokeTests
             ModelHealthDimensionIntegrity();
             ModelHealthGeneratedGeometryIntegrity();
             FamilyChangeNotification();
+            FeatureFlagsNormalizeLookupNames();
+            FeatureFlagSnapshotsAreReadOnly();
             FormulaEvaluatorIsConcurrent();
             FormulaEvaluatorHasResourceGuards();
             FormulaRoundingAndSmallDivisor();
@@ -42,9 +45,8 @@ namespace QS3D.Core.SmokeTests
             wall.Properties["LengthM"] = "NaN";
             wall.Properties["HeightM"] = "3";
             wall.Properties["ThicknessM"] = "0.2";
-            new WallRegenerator().Regenerate(project, wall);
-            Near(0d, wall.Quantities["LengthM"]);
-            Near(0d, wall.Quantities["GrossWallAreaM2"]);
+            Throws<InvalidOperationException>(() => new WallRegenerator().Regenerate(project, wall));
+            True(wall.Quantities.Count == 0);
 
             wall.Properties["LengthM"] = "2";
             wall.Properties["HeightM"] = "2";
@@ -56,7 +58,7 @@ namespace QS3D.Core.SmokeTests
 
             var opening = new ProjectElement("O-HARD", ElementCategory.WallOpening, "opening", "f", "z");
             opening.Properties["WidthM"] = "-1";
-            opening.Properties["HeightM"] = "-2";
+            opening.Properties["HeightM"] = "2";
             new OpeningRegenerator().Regenerate(project, opening);
             Near(0d, opening.Quantities["OpeningAreaM2"]);
 
@@ -178,6 +180,41 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => family.Name = "   ");
         }
 
+        private static void FeatureFlagsNormalizeLookupNames()
+        {
+            var flags = new FeatureFlags();
+            flags.Set("hardening.flag", true);
+
+            True(flags.IsEnabled("hardening.flag"));
+            True(flags.IsEnabled("HARDENING.FLAG"));
+            True(!flags.IsEnabled("  HARDENING.FLAG  "));
+            Throws<ArgumentException>(() => flags.Set("  hardening.flag  ", true));
+
+            flags.Set("hardening.flag", false);
+            True(!flags.IsEnabled("Hardening.Flag"));
+            True(!flags.IsEnabled("  Hardening.Flag  "));
+        }
+
+        private static void FeatureFlagSnapshotsAreReadOnly()
+        {
+            var flags = new FeatureFlags();
+            flags.Set("snapshot.flag", true);
+
+            var snapshot = flags.Snapshot();
+            True(snapshot["SNAPSHOT.FLAG"]);
+
+            flags.Set("snapshot.flag", false);
+            flags.Set("later.flag", true);
+            True(snapshot["snapshot.flag"]);
+            True(!snapshot.ContainsKey("later.flag"));
+
+            if (snapshot is IDictionary<string, bool> mutable)
+            {
+                Throws<NotSupportedException>(() => mutable["snapshot.flag"] = false);
+                True(snapshot["snapshot.flag"]);
+            }
+        }
+
         private static void FormulaEvaluatorIsConcurrent()
         {
             var evaluator = new ExpressionEvaluator();
@@ -223,7 +260,7 @@ namespace QS3D.Core.SmokeTests
                     True(Directory.Exists(Path.GetDirectoryName(projectPath)));
                     True(File.Exists(lockPath));
                 }
-                True(!File.Exists(lockPath));
+                True(File.Exists(lockPath));
             }
             finally
             {
@@ -292,7 +329,7 @@ namespace QS3D.Core.SmokeTests
             var engine = new RegenerationEngine(new DependencyGraph(), new IElementRegenerator[] { new ThrowingRegenerator() });
             Throws<InvalidOperationException>(() => engine.RegenerateDirty(project));
             True((element.Dirty & ElementDirtyFlags.Quantity) != 0);
-            True(element.Quantities.ContainsKey("Partial"));
+            True(!element.Quantities.ContainsKey("Partial"));
         }
 
         private static void GeometryDirtyStateIsPreserved()

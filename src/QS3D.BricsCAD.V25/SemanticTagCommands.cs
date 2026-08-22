@@ -14,18 +14,31 @@ namespace QS3D.BricsCAD.V25
     {
         private const double UcsAxisTolerance = 1e-9d;
 
-        [CommandMethod("QS3DTAG", CommandFlags.Modal)]
+        [CommandMethod("QS3DTAG", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void PlaceSemanticTag()
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
             try
             {
-                var project = ExistingProjectMutationContext.Require(document, "Semantic Tag");
-                var element = PromptSourceElement(document, project);
-                if (element == null) return;
+                var sourceHandle = AcquireSourceHandle(document, "\nChọn authoritative CAD source của semantic element cần tag: ");
+                if (sourceHandle == null) return;
+
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
+                    throw new InvalidOperationException("Semantic Tag yêu cầu QS3D project hiện hữu; lệnh không tạo project mới.");
+                var previewElement = ResolveSourceElement(previewProject, sourceHandle);
+                var expectedProjectId = previewProject.ProjectId;
+                var expectedElementId = previewElement.Id;
+
                 var placement = PromptPlacement(document);
                 if (placement == null) return;
+
+                var project = ExistingProjectMutationContext.Require(document, "Semantic Tag");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("QS3D project đã thay đổi trong lúc đặt Semantic Tag. Hãy chạy lại lệnh.");
+                var element = ResolveSourceElement(project, sourceHandle);
+                if (!string.Equals(element.Id, expectedElementId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Semantic source đã đổi owner trong lúc đặt tag. Hãy chạy lại lệnh.");
 
                 var handle = SemanticTagBuilder.Build(document, project, element, placement.Value.Position, placement.Value.RotationRadians);
                 FinalizeUi(document, "Semantic Tag: đã tạo/cập nhật MText " + handle + " cho " + element.Id + ".");
@@ -36,16 +49,18 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        [CommandMethod("QS3DTAGREFRESH", CommandFlags.Modal)]
+        [CommandMethod("QS3DTAGREFRESH", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void RefreshSemanticTag()
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
             try
             {
+                var sourceHandle = AcquireSourceHandle(document, "\nChọn authoritative CAD source của semantic element cần refresh tag: ");
+                if (sourceHandle == null) return;
+
                 var project = ExistingProjectMutationContext.Require(document, "Semantic Tag refresh");
-                var element = PromptSourceElement(document, project);
-                if (element == null) return;
+                var element = ResolveSourceElement(project, sourceHandle);
                 if (!element.Properties.TryGetValue(GeneratedSemanticTagHealthService.HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw))
                     throw new InvalidOperationException("Element " + element.Id + " chưa có generated semantic tag. Dùng QS3DTAG để đặt tag trước.");
 
@@ -60,12 +75,31 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static ProjectElement? PromptSourceElement(Document document, ProjectState project)
+        private static string? AcquireSourceHandle(Document document, string message)
         {
-            var result = document.Editor.GetEntity(new PromptEntityOptions("\nChọn authoritative CAD source của semantic element cần tag: "));
-            if (result.Status != PromptStatus.OK) return null;
-            var handle = result.ObjectId.Handle.ToString();
+            var implied = EntitySnapshotReader.ReadCurrentSelection(document);
+            if (implied.Count > 1)
+                throw new InvalidOperationException("Semantic Tag PICKFIRST yêu cầu chọn đúng một authoritative CAD source; bỏ bớt selection rồi chạy lại.");
+            if (implied.Count == 1)
+            {
+                var handle = (implied[0].Handle ?? string.Empty).Trim();
+                if (handle.Length == 0)
+                    throw new InvalidOperationException("Semantic Tag PICKFIRST không đọc được CAD handle hợp lệ từ selection.");
+                return handle;
+            }
 
+            return PromptEntityHandle(document, message);
+        }
+
+        private static string? PromptEntityHandle(Document document, string message)
+        {
+            var result = document.Editor.GetEntity(new PromptEntityOptions(message));
+            if (result.Status != PromptStatus.OK) return null;
+            return result.ObjectId.Handle.ToString();
+        }
+
+        private static ProjectElement ResolveSourceElement(ProjectState project, string handle)
+        {
             var generated = GeneratedHandleOwnershipIndex.Build(project);
             if (generated.TryFindOwner(handle, out var generatedOwner, out var generatedSlot) && generatedOwner != null)
                 throw new InvalidOperationException("Đối tượng chọn là QS3D-generated output của " + generatedOwner.Id + "/" + generatedSlot + ". Hãy chọn CAD source gốc.");

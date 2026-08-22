@@ -25,12 +25,23 @@ namespace QS3D.Core.Diagnostics
             }
             catch (Exception ex) when (IsCatalogDataFailure(ex))
             {
+                if (ContainsTemplateFailure(ex))
+                {
+                    return new[]
+                    {
+                        new ModelHealthIssue(
+                            "SEMANTIC_SCHEDULE_TEMPLATE_INVALID",
+                            HealthSeverity.Error,
+                            "Catalog SemanticSchedule chứa template cột không hợp lệ.")
+                    };
+                }
+
                 return new[]
                 {
                     new ModelHealthIssue(
                         "SEMANTIC_SCHEDULE_CATALOG_INVALID",
                         HealthSeverity.Error,
-                        "Catalog SemanticSchedule không hợp lệ và không thể chẩn đoán chi tiết: " + ex.Message)
+                        "Catalog SemanticSchedule không hợp lệ và không thể chẩn đoán chi tiết.")
                 };
             }
 
@@ -116,7 +127,7 @@ namespace QS3D.Core.Diagnostics
                 }
                 catch (Exception ex) when (IsTemplateFailure(ex))
                 {
-                    invalid.Add(column.Header + " (" + ex.Message + ")");
+                    invalid.Add(column.Header);
                 }
             }
 
@@ -158,7 +169,8 @@ namespace QS3D.Core.Diagnostics
             var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             foreach (var value in values)
             {
-                if (value == null) continue;
+                if (value == null)
+                    throw new InvalidOperationException("Semantic Schedule health cannot inspect a null semantic identity entry.");
                 var id = (selector(value) ?? string.Empty).Trim();
                 if (id.Length == 0) continue;
                 result[id] = result.TryGetValue(id, out var count) ? count + 1 : 1;
@@ -184,6 +196,21 @@ namespace QS3D.Core.Diagnostics
             return ordered.Length > MaxExamples
                 ? shown + " (+" + (ordered.Length - MaxExamples) + " mục khác)"
                 : shown;
+        }
+
+        private static bool ContainsTemplateFailure(Exception ex)
+        {
+            for (Exception? current = ex; current != null; current = current.InnerException)
+            {
+                if (!IsTemplateFailure(current)) continue;
+                var message = current.Message ?? string.Empty;
+                if (message.StartsWith("Semantic tag ", StringComparison.Ordinal) ||
+                    message.StartsWith("Unsupported semantic tag token:", StringComparison.Ordinal) ||
+                    message.StartsWith("P: semantic tag token ", StringComparison.Ordinal) ||
+                    message.StartsWith("Q: semantic tag token ", StringComparison.Ordinal))
+                    return true;
+            }
+            return false;
         }
 
         private static bool IsCatalogDataFailure(Exception ex)

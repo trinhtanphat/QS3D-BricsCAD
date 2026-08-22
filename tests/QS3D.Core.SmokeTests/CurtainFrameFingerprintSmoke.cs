@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             DeterministicForSameConfiguration();
+            CanonicalizesSignedZero();
             ChangesWhenGridOrDepthChanges();
             RejectsInvalidConfiguration();
         }
@@ -33,6 +34,25 @@ namespace QS3D.Core.SmokeTests
             var b = CurtainWallFrameFingerprint.Compute(Baseline());
             Equal(a, b);
             True(a.Length == 64);
+        }
+
+        private static void CanonicalizesSignedZero()
+        {
+            var positive = Baseline(); positive.BottomOffsetM = 0d;
+            var negative = Baseline(); negative.BottomOffsetM = -0d;
+            Equal(CurtainWallFrameFingerprint.Compute(positive), CurtainWallFrameFingerprint.Compute(negative));
+
+            positive = Baseline(); positive.PerimeterFrameWidthM = 0d;
+            negative = Baseline(); negative.PerimeterFrameWidthM = -0d;
+            Equal(CurtainWallFrameFingerprint.Compute(positive), CurtainWallFrameFingerprint.Compute(negative));
+
+            positive = Baseline(); positive.MullionWidthM = 0d;
+            negative = Baseline(); negative.MullionWidthM = -0d;
+            Equal(CurtainWallFrameFingerprint.Compute(positive), CurtainWallFrameFingerprint.Compute(negative));
+
+            positive = Baseline(); positive.TransomWidthM = 0d;
+            negative = Baseline(); negative.TransomWidthM = -0d;
+            Equal(CurtainWallFrameFingerprint.Compute(positive), CurtainWallFrameFingerprint.Compute(negative));
         }
 
         private static void ChangesWhenGridOrDepthChanges()

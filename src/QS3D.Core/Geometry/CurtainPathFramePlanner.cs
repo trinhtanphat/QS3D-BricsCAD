@@ -81,10 +81,15 @@ namespace QS3D.Core.Geometry
         {
             if (centerline == null) throw new ArgumentNullException(nameof(centerline));
             if (frames == null) throw new ArgumentNullException(nameof(frames));
+            var sourceFrameCount = frames.Count;
+            if (sourceFrameCount < 0)
+                throw new InvalidOperationException("Curtain path frame input Count cannot be negative.");
+            if (sourceFrameCount > MaxPieces)
+                throw new InvalidOperationException("Curtain path frame input cannot exceed " + MaxPieces + " rectangles.");
             var path = BuildPath(centerline);
             var pieces = new List<CurtainPathFramePiece>();
 
-            for (var frameIndex = 0; frameIndex < frames.Count; frameIndex++)
+            for (var frameIndex = 0; frameIndex < sourceFrameCount; frameIndex++)
             {
                 var frame = frames[frameIndex] ?? throw new InvalidOperationException("Curtain frame rectangle cannot be null.");
                 var start = Finite(frame.X_M, "curtain frame start station");
@@ -112,7 +117,7 @@ namespace QS3D.Core.Geometry
                     if (pieces.Count >= MaxPieces)
                         throw new InvalidOperationException("Curtain path frame mapping requires more than " + MaxPieces + " native pieces.");
 
-                    var centerStation = (overlapStart + overlapEnd) / 2d;
+                    var centerStation = Midpoint(overlapStart, overlapEnd, "curtain path split center");
                     var ratio = (centerStation - segment.StartStationM) / segment.LengthM;
                     var centerX = Add(segment.Start.X, Multiply(segment.Dx, ratio, "curtain path center X delta"), "curtain path center X");
                     var centerY = Add(segment.Start.Y, Multiply(segment.Dy, ratio, "curtain path center Y delta"), "curtain path center Y");
@@ -133,7 +138,7 @@ namespace QS3D.Core.Geometry
                     throw new InvalidOperationException("Curtain frame rectangle could not be mapped to any host path segment.");
             }
 
-            return new CurtainPathFramePlan(path.TotalLengthM, path.Segments.Count, frames.Count, pieces.AsReadOnly());
+            return new CurtainPathFramePlan(path.TotalLengthM, path.Segments.Count, sourceFrameCount, pieces.AsReadOnly());
         }
 
         public static CurtainPathProjection ProjectPoint(IReadOnlyList<Point2> centerline, Point2 point)
@@ -146,14 +151,9 @@ namespace QS3D.Core.Geometry
             for (var index = 0; index < path.Segments.Count; index++)
             {
                 var segment = path.Segments[index];
-                var px = point.X - segment.Start.X;
-                var py = point.Y - segment.Start.Y;
-                var denominator = Add(Multiply(segment.Dx, segment.Dx, "curtain projection dx2"), Multiply(segment.Dy, segment.Dy, "curtain projection dy2"), "curtain projection denominator");
-                var numerator = Add(Multiply(px, segment.Dx, "curtain projection dot X"), Multiply(py, segment.Dy, "curtain projection dot Y"), "curtain projection numerator");
-                var ratio = numerator / denominator;
-                if (ratio < 0d) ratio = 0d;
-                else if (ratio > 1d) ratio = 1d;
-                ratio = Finite(ratio, "curtain projection ratio");
+                var px = Finite(point.X - segment.Start.X, "curtain projection point delta X");
+                var py = Finite(point.Y - segment.Start.Y, "curtain projection point delta Y");
+                var ratio = ProjectionRatio(segment, px, py);
 
                 var projected = new Point2(
                     Add(segment.Start.X, Multiply(segment.Dx, ratio, "curtain projection X delta"), "curtain projection X"),
@@ -170,6 +170,40 @@ namespace QS3D.Core.Geometry
         }
 
         public static double Length(IReadOnlyList<Point2> centerline) => BuildPath(centerline).TotalLengthM;
+
+        private static double ProjectionRatio(PathSegment segment, double px, double py)
+        {
+            var segmentScale = Positive(Math.Max(Math.Abs(segment.Dx), Math.Abs(segment.Dy)), "curtain projection segment scale");
+            var dx = Finite(segment.Dx / segmentScale, "curtain projection normalized dx");
+            var dy = Finite(segment.Dy / segmentScale, "curtain projection normalized dy");
+            var denominator = Add(
+                Multiply(dx, dx, "curtain projection normalized dx2"),
+                Multiply(dy, dy, "curtain projection normalized dy2"),
+                "curtain projection normalized denominator");
+
+            var pointScale = Math.Max(Math.Abs(px), Math.Abs(py));
+            if (pointScale == 0d) return 0d;
+            pointScale = Positive(pointScale, "curtain projection point scale");
+            var nx = Finite(px / pointScale, "curtain projection normalized point X");
+            var ny = Finite(py / pointScale, "curtain projection normalized point Y");
+            var dot = Add(
+                Multiply(nx, dx, "curtain projection normalized dot X"),
+                Multiply(ny, dy, "curtain projection normalized dot Y"),
+                "curtain projection normalized numerator");
+            if (!(dot > 0d)) return 0d;
+
+            var normalizedRatio = Finite(dot / denominator, "curtain projection normalized ratio");
+            if (pointScale >= segmentScale)
+            {
+                var inverseScaleRatio = Finite(segmentScale / pointScale, "curtain projection inverse scale ratio");
+                if (!(inverseScaleRatio > 0d) || normalizedRatio >= inverseScaleRatio) return 1d;
+                return Finite(normalizedRatio / inverseScaleRatio, "curtain projection ratio");
+            }
+
+            var scaleRatio = Finite(pointScale / segmentScale, "curtain projection scale ratio");
+            var ratio = Multiply(scaleRatio, normalizedRatio, "curtain projection ratio");
+            return ratio >= 1d ? 1d : ratio;
+        }
 
         private static PathData BuildPath(IReadOnlyList<Point2> centerline)
         {
@@ -233,6 +267,14 @@ namespace QS3D.Core.Geometry
             value = Finite(value, label);
             if (!(value > 0d)) throw new InvalidOperationException(label + " must be greater than zero.");
             return value;
+        }
+
+        private static double Midpoint(double left, double right, string label)
+        {
+            left = Finite(left, label + " left");
+            right = Finite(right, label + " right");
+            var delta = Finite(right - left, label + " delta");
+            return Add(left, delta / 2d, label);
         }
 
         private static double Add(double left, double right, string label) => Finite(Finite(left, label + " left") + Finite(right, label + " right"), label);

@@ -12,6 +12,9 @@ namespace QS3D.Core.SmokeTests
             EndpointTouchIsAcceptedButOverlapFailsClosed();
             LineArcRespectsArcSweep();
             ArcArcProducesTwoPointsWhenBothSweepsContainThem();
+            LargeFiniteArcArcProducesFinitePoints();
+            LargeFiniteArcArcAllowsRadialRoundoff();
+            LargeFiniteArcSweepEndpointAllowsAngularRoundoff();
             CoincidentArcSupportFailsClosed();
             DuplicateElementIdsFailClosed();
             ElementIdsAreCanonicalizedBeforeDuplicateCheck();
@@ -74,6 +77,64 @@ namespace QS3D.Core.SmokeTests
             Near(4.0, result[1].Point.Y);
         }
 
+        private static void LargeFiniteArcArcProducesFinitePoints()
+        {
+            const double radius = 1e200;
+            var first = GridReferenceCurve.Arc("G-LARGE-A", new Point2(0.0, 0.0), radius, 0.0, Math.PI * 2.0);
+            var second = GridReferenceCurve.Arc("G-LARGE-B", new Point2(radius, 0.0), radius, 0.0, Math.PI * 2.0);
+
+            var result = GridIntersectionPlanner.FindIntersections(new[] { first, second });
+
+            Equal(2, result.Count);
+            NearRelative(5e199, result[0].Point.X, 1e-14);
+            NearRelative(-8.660254037844386e199, result[0].Point.Y, 1e-14);
+            NearRelative(5e199, result[1].Point.X, 1e-14);
+            NearRelative(8.660254037844386e199, result[1].Point.Y, 1e-14);
+        }
+
+        private static void LargeFiniteArcArcAllowsRadialRoundoff()
+        {
+            const double firstRadius = 1e200;
+            const double secondRadius = 5e199;
+            const double centerDistance = 7.5e199;
+            const double centerAngle = 0.1;
+            var secondCenter = new Point2(
+                centerDistance * Math.Cos(centerAngle),
+                centerDistance * Math.Sin(centerAngle));
+            var first = GridReferenceCurve.Arc("G-ROUND-A", new Point2(0.0, 0.0), firstRadius, 0.0, Math.PI * 2.0);
+            var second = GridReferenceCurve.Arc("G-ROUND-B", secondCenter, secondRadius, 0.0, Math.PI * 2.0);
+
+            var result = GridIntersectionPlanner.FindIntersections(new[] { first, second });
+
+            Equal(2, result.Count);
+            NearRelative(8.222969996097536e199, result[0].Point.X, 1e-14);
+            NearRelative(5.690585597570753e199, result[0].Point.Y, 1e-14);
+            NearRelative(9.189602896267915e199, result[1].Point.X, 1e-14);
+            NearRelative(-3.943500806251261e199, result[1].Point.Y, 1e-14);
+        }
+
+        private static void LargeFiniteArcSweepEndpointAllowsAngularRoundoff()
+        {
+            const double firstRadius = 1e200;
+            const double secondRadius = 5e199;
+            const double centerDistance = 6e199;
+            const double centerAngle = 0.05;
+            const double endpointSweep = 5.943424574382111;
+            var secondCenter = new Point2(
+                centerDistance * Math.Cos(centerAngle),
+                centerDistance * Math.Sin(centerAngle));
+            var first = GridReferenceCurve.Arc("G-SWEEP-A", new Point2(0.0, 0.0), firstRadius, 0.0, endpointSweep);
+            var second = GridReferenceCurve.Arc("G-SWEEP-B", secondCenter, secondRadius, 0.0, Math.PI * 2.0);
+
+            var result = GridIntersectionPlanner.FindIntersections(new[] { first, second });
+
+            Equal(2, result.Count);
+            NearRelative(9.04853550665272e199, result[0].Point.X, 1e-14);
+            NearRelative(4.257229754763658e199, result[0].Point.Y, 1e-14);
+            NearRelative(9.428344310654162e199, result[1].Point.X, 1e-14);
+            NearRelative(-3.3326151232561086e199, result[1].Point.Y, 1e-14);
+        }
+
         private static void CoincidentArcSupportFailsClosed()
         {
             Throws<InvalidOperationException>(() => GridIntersectionPlanner.FindIntersections(new[]
@@ -120,6 +181,15 @@ namespace QS3D.Core.SmokeTests
         private static void Near(double expected, double actual)
         {
             if (Math.Abs(expected - actual) > 1e-7) throw new Exception("Expected " + expected + ", got " + actual + ".");
+        }
+
+        private static void NearRelative(double expected, double actual, double relativeTolerance)
+        {
+            if (double.IsNaN(actual) || double.IsInfinity(actual))
+                throw new Exception("Expected a finite value, got " + actual + ".");
+            var scale = Math.Max(1.0, Math.Abs(expected));
+            if (Math.Abs(expected - actual) > scale * relativeTolerance)
+                throw new Exception("Expected " + expected + ", got " + actual + ".");
         }
 
         private static void Equal<T>(T expected, T actual)

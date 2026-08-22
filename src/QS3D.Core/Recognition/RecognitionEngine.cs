@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -8,11 +9,54 @@ using QS3D.Core.Model;
 
 namespace QS3D.Core.Recognition
 {
+    internal static class RecognitionInputBounds
+    {
+        internal const int MaxRules = 10000;
+        internal const int MaxTermsPerCollection = 10000;
+        internal const int MaxBatchItems = 250000;
+
+        internal static List<T> Materialize<T>(IEnumerable<T> source, int maxCount, string label)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (maxCount <= 0) throw new ArgumentOutOfRangeException(nameof(maxCount));
+
+            var knownCount = ReadKnownCount(source, maxCount, label);
+            var materialized = source.Take(maxCount + 1).ToList();
+            if (materialized.Count > maxCount)
+                throw new InvalidOperationException(label + " supports at most " + maxCount + " items.");
+            if (knownCount.HasValue && materialized.Count != knownCount.Value)
+                throw new InvalidOperationException(label + " reported Count " + knownCount.Value + " but enumerated " + materialized.Count + " items.");
+            return materialized;
+        }
+
+        private static int? ReadKnownCount<T>(IEnumerable<T> source, int maxCount, string label)
+        {
+            var counts = new List<int>(3);
+            if (source is ICollection<T> collection) counts.Add(collection.Count);
+            if (source is IReadOnlyCollection<T> readOnlyCollection) counts.Add(readOnlyCollection.Count);
+            if (source is ICollection nonGenericCollection) counts.Add(nonGenericCollection.Count);
+
+            if (counts.Any(count => count > maxCount))
+                throw new InvalidOperationException(label + " supports at most " + maxCount + " items.");
+            if (counts.Any(count => count < 0))
+                throw new InvalidOperationException(label + " reported a negative Count.");
+            if (counts.Count > 1 && counts.Any(count => count != counts[0]))
+                throw new InvalidOperationException(label + " reported conflicting Count values.");
+            return counts.Count == 0 ? (int?)null : counts[0];
+        }
+    }
+
     public sealed class RecognitionRule
     {
         public RecognitionRule(string id, ElementCategory category, IEnumerable<string>? layerTerms = null, IEnumerable<string>? textTerms = null, IEnumerable<string>? entityTypes = null)
         {
-            Id = string.IsNullOrWhiteSpace(id) ? throw new ArgumentException("Rule id is required.", nameof(id)) : id.Trim();
+            if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Rule id is required.", nameof(id));
+            var canonicalId = id.Trim();
+            if (!string.Equals(id, canonicalId, StringComparison.Ordinal))
+                throw new ArgumentException("Rule id must not contain leading or trailing whitespace.", nameof(id));
+            if (canonicalId.Any(char.IsControl)) throw new ArgumentException("Rule id must not contain control characters.", nameof(id));
+            Id = canonicalId;
+            if (!Enum.IsDefined(typeof(ElementCategory), category)) throw new ArgumentOutOfRangeException(nameof(category), "Recognition rule category must be defined.");
             Category = category;
             LayerTerms = NormalizeTerms(layerTerms);
             TextTerms = NormalizeTerms(textTerms);
@@ -23,13 +67,44 @@ namespace QS3D.Core.Recognition
         public IReadOnlyList<string> LayerTerms { get; }
         public IReadOnlyList<string> TextTerms { get; }
         public IReadOnlyList<string> EntityTypes { get; }
-        private static IReadOnlyList<string> NormalizeTerms(IEnumerable<string>? source) => (source ?? Array.Empty<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Select(RecognitionText.Normalize).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        private static IReadOnlyList<string> NormalizeTerms(IEnumerable<string>? source)
+        {
+            var materialized = RecognitionInputBounds.Materialize(
+                source ?? Array.Empty<string>(),
+                RecognitionInputBounds.MaxTermsPerCollection,
+                "Recognition rule term collection");
+            return materialized
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(NormalizeRequiredTerm)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
+                .AsReadOnly();
+        }
+
+        private static string NormalizeRequiredTerm(string value)
+        {
+            var normalized = RecognitionText.Normalize(value);
+            if (normalized.Length == 0)
+                throw new ArgumentException("Recognition rule term must contain at least one letter or digit after normalization.", nameof(value));
+            return normalized;
+        }
     }
 
     public sealed class RecognitionCandidate
     {
+        private ElementCategory _category;
+
         public string RuleId { get; set; } = string.Empty;
-        public ElementCategory Category { get; set; }
+        public ElementCategory Category
+        {
+            get => _category;
+            set
+            {
+                if (!Enum.IsDefined(typeof(ElementCategory), value)) throw new ArgumentOutOfRangeException(nameof(value), "Recognition candidate category must be defined.");
+                _category = value;
+            }
+        }
         public double Confidence { get; set; }
         public IList<string> Evidence { get; } = new List<string>();
         public string EvidenceText => string.Join("; ", Evidence);
@@ -41,24 +116,53 @@ namespace QS3D.Core.Recognition
         {
             Snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
             if (candidates == null) throw new ArgumentNullException(nameof(candidates));
-            ValidateCandidates(candidates);
-            Candidates = candidates.ToList().AsReadOnly();
+            var materialized = RecognitionInputBounds.Materialize(
+                candidates,
+                RecognitionInputBounds.MaxRules,
+                "Recognition candidate list");
+            ValidateCandidates(materialized);
+            Candidates = materialized.AsReadOnly();
         }
         public EntitySnapshot Snapshot { get; }
         public IReadOnlyList<RecognitionCandidate> Candidates { get; }
-        public RecognitionCandidate? TopCandidate => Candidates.Count == 0 ? null : Candidates[0];
-        public double Margin => Candidates.Count < 2 ? (TopCandidate?.Confidence ?? 0d) : Candidates[0].Confidence - Candidates[1].Confidence;
-        public bool IsCaptureReady => TopCandidate != null && EntitySnapshotCaptureEligibility.IsReady(Snapshot, TopCandidate.Category, out _);
+        public RecognitionCandidate? TopCandidate => CurrentTopTwo().Top;
+        public double Margin
+        {
+            get
+            {
+                var current = CurrentTopTwo();
+                if (current.Top == null) return 0d;
+                return current.RunnerUp == null ? current.Top.Confidence : current.Top.Confidence - current.RunnerUp.Confidence;
+            }
+        }
+        public bool IsCaptureReady
+        {
+            get
+            {
+                var top = TopCandidate;
+                return top != null && EntitySnapshotCaptureEligibility.IsReady(Snapshot, top.Category, out _);
+            }
+        }
         public string CaptureReadinessReason
         {
             get
             {
-                if (TopCandidate == null) return "No recognition candidate is available.";
-                EntitySnapshotCaptureEligibility.IsReady(Snapshot, TopCandidate.Category, out var reason);
+                var top = TopCandidate;
+                if (top == null) return "No recognition candidate is available.";
+                EntitySnapshotCaptureEligibility.IsReady(Snapshot, top.Category, out var reason);
                 return reason;
             }
         }
-        public bool RequiresReview => TopCandidate == null || TopCandidate.Confidence < 0.82d || Margin < 0.15d || !IsCaptureReady;
+        public bool RequiresReview
+        {
+            get
+            {
+                var current = CurrentTopTwo();
+                if (current.Top == null) return true;
+                var margin = current.RunnerUp == null ? current.Top.Confidence : current.Top.Confidence - current.RunnerUp.Confidence;
+                return current.Top.Confidence < 0.82d || margin < 0.15d || !EntitySnapshotCaptureEligibility.IsReady(Snapshot, current.Top.Category, out _);
+            }
+        }
         public string Handle => Snapshot.Handle;
         public string SuggestedCategory => TopCandidate?.Category.ToString() ?? string.Empty;
         public double Confidence => TopCandidate?.Confidence ?? 0d;
@@ -66,11 +170,48 @@ namespace QS3D.Core.Recognition
 
         internal void ValidateCurrentCandidates() => ValidateCandidates(Candidates);
 
+        private (RecognitionCandidate? Top, RecognitionCandidate? RunnerUp) CurrentTopTwo()
+        {
+            ValidateCurrentCandidates();
+            RecognitionCandidate? top = null;
+            RecognitionCandidate? runnerUp = null;
+            foreach (var candidate in Candidates)
+            {
+                if (top == null || RanksBefore(candidate, top))
+                {
+                    runnerUp = top;
+                    top = candidate;
+                }
+                else if (runnerUp == null || RanksBefore(candidate, runnerUp))
+                {
+                    runnerUp = candidate;
+                }
+            }
+            return (top, runnerUp);
+        }
+
+        private static bool RanksBefore(RecognitionCandidate candidate, RecognitionCandidate incumbent)
+        {
+            if (candidate.Confidence != incumbent.Confidence) return candidate.Confidence > incumbent.Confidence;
+            return StringComparer.OrdinalIgnoreCase.Compare(candidate.RuleId, incumbent.RuleId) < 0;
+        }
+
         private static void ValidateCandidates(IEnumerable<RecognitionCandidate> candidates)
         {
+            var seenRuleIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var candidate in candidates)
             {
                 if (candidate == null) throw new ArgumentException("Recognition candidate list cannot contain null.", nameof(candidates));
+                if (string.IsNullOrWhiteSpace(candidate.RuleId))
+                    throw new ArgumentException("Recognition candidate rule id is required.", nameof(candidates));
+                if (!string.Equals(candidate.RuleId, candidate.RuleId.Trim(), StringComparison.Ordinal))
+                    throw new ArgumentException("Recognition candidate rule id must be canonical.", nameof(candidates));
+                if (candidate.RuleId.Any(char.IsControl))
+                    throw new ArgumentException("Recognition candidate rule id must not contain control characters.", nameof(candidates));
+                if (!seenRuleIds.Add(candidate.RuleId))
+                    throw new ArgumentException("Duplicate recognition candidate rule id: " + candidate.RuleId, nameof(candidates));
+                if (!Enum.IsDefined(typeof(ElementCategory), candidate.Category))
+                    throw new ArgumentOutOfRangeException(nameof(candidates), "Recognition candidate category must be defined.");
                 if (double.IsNaN(candidate.Confidence) || double.IsInfinity(candidate.Confidence) || candidate.Confidence < 0d || candidate.Confidence > 1d)
                     throw new ArgumentOutOfRangeException(nameof(candidates), "Recognition confidence must be finite and between 0 and 1.");
             }
@@ -79,21 +220,39 @@ namespace QS3D.Core.Recognition
 
     public sealed class RecognitionBatch
     {
+        private readonly double _autoAcceptConfidence;
+        private readonly double _minimumMargin;
+
         public RecognitionBatch(IEnumerable<RecognitionResult> results, double autoAcceptConfidence = 0.92d, double minimumMargin = 0.15d)
         {
             if (results == null) throw new ArgumentNullException(nameof(results));
             ValidateProbability(autoAcceptConfidence, nameof(autoAcceptConfidence));
             ValidateProbability(minimumMargin, nameof(minimumMargin));
-            var materialized = results.ToList();
+            var materialized = RecognitionInputBounds.Materialize(results, RecognitionInputBounds.MaxBatchItems, "Recognition result batch");
             if (materialized.Any(x => x == null)) throw new ArgumentException("Recognition results cannot contain null.", nameof(results));
             foreach (var result in materialized) result.ValidateCurrentCandidates();
+            _autoAcceptConfidence = autoAcceptConfidence;
+            _minimumMargin = minimumMargin;
             Results = materialized.AsReadOnly();
-            AutoAccepted = Results.Where(x => x.TopCandidate is RecognitionCandidate candidate && candidate.Confidence >= autoAcceptConfidence && x.Margin >= minimumMargin && x.IsCaptureReady).ToList().AsReadOnly();
-            ReviewRequired = Results.Except(AutoAccepted).ToList().AsReadOnly();
         }
         public IReadOnlyList<RecognitionResult> Results { get; }
-        public IReadOnlyList<RecognitionResult> AutoAccepted { get; }
-        public IReadOnlyList<RecognitionResult> ReviewRequired { get; }
+        public IReadOnlyList<RecognitionResult> AutoAccepted => CurrentPartition(autoAccepted: true);
+        public IReadOnlyList<RecognitionResult> ReviewRequired => CurrentPartition(autoAccepted: false);
+
+        private IReadOnlyList<RecognitionResult> CurrentPartition(bool autoAccepted)
+        {
+            foreach (var result in Results) result.ValidateCurrentCandidates();
+            return Results
+                .Where(x => IsAutoAccepted(x) == autoAccepted)
+                .ToList()
+                .AsReadOnly();
+        }
+
+        private bool IsAutoAccepted(RecognitionResult result) =>
+            result.TopCandidate is RecognitionCandidate candidate &&
+            candidate.Confidence >= _autoAcceptConfidence &&
+            result.Margin >= _minimumMargin &&
+            result.IsCaptureReady;
 
         private static void ValidateProbability(double value, string name)
         {
@@ -109,7 +268,10 @@ namespace QS3D.Core.Recognition
 
         public RecognitionEngine(IEnumerable<RecognitionRule>? rules = null)
         {
-            var materialized = (rules ?? DefaultRules()).ToList();
+            var materialized = RecognitionInputBounds.Materialize(
+                rules ?? DefaultRules(),
+                RecognitionInputBounds.MaxRules,
+                "Recognition rule collection");
             if (materialized.Any(x => x == null)) throw new ArgumentException("Recognition rules cannot contain null.", nameof(rules));
             var duplicate = materialized.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicate != null) throw new ArgumentException("Duplicate recognition rule id: " + duplicate.Key, nameof(rules));
@@ -133,7 +295,12 @@ namespace QS3D.Core.Recognition
             return new RecognitionResult(snapshot, candidates.OrderByDescending(x => x.Confidence).ThenBy(x => x.RuleId, StringComparer.OrdinalIgnoreCase).ToList());
         }
 
-        public RecognitionBatch SuggestBatch(IEnumerable<EntitySnapshot> snapshots, double autoAcceptConfidence = 0.92d, double minimumMargin = 0.15d) => new RecognitionBatch((snapshots ?? throw new ArgumentNullException(nameof(snapshots))).Select(Suggest), autoAcceptConfidence, minimumMargin);
+        public RecognitionBatch SuggestBatch(IEnumerable<EntitySnapshot> snapshots, double autoAcceptConfidence = 0.92d, double minimumMargin = 0.15d)
+        {
+            if (snapshots == null) throw new ArgumentNullException(nameof(snapshots));
+            var materialized = RecognitionInputBounds.Materialize(snapshots, RecognitionInputBounds.MaxBatchItems, "Recognition snapshot batch");
+            return new RecognitionBatch(materialized.Select(Suggest), autoAcceptConfidence, minimumMargin);
+        }
 
         public static bool IsEntityTypeCompatible(ElementCategory category, string entityType)
         {

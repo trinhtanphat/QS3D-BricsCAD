@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
@@ -19,13 +21,19 @@ namespace QS3D.Core.SmokeTests
             ScheduleRejectsArithmeticOverflow();
             SpacingRejectsArithmeticOverflow();
             SpacingNearIntegerDoesNotAddPhantomBar();
+            SpacingRealOverrunIsNotSnappedAtLargeScale();
             DecimalNotationIsInvariantAndRoundTrips();
             AggregateRejectsOverflow();
             ProjectScheduleRejectsNullSemanticEntry();
             ProjectScheduleRejectsDuplicateSemanticIdentity();
             CuttingLengthFallbackIsLazy();
             FabricationProvenanceFlowsToExports();
+            CsvPreservesNonzeroSubSixDecimalValues();
             CsvRejectsInvalidRowsBeforeReplace();
+            XlsxPreservesNonzeroSubEightDecimalValues();
+            XlsxRejectsWorksheetOverflowBeforeMutation();
+            XlsxRejectsCountDriftBeforeReplace();
+            XlsxRejectsCountDriftBeforeDirectoryCreation();
         }
 
         private static void RebarWeightRejectsNonFiniteValues()
@@ -77,6 +85,22 @@ namespace QS3D.Core.SmokeTests
                 new RebarScheduleInput { ElementId = "OVER", Notation = "D8@150", CuttingLengthM = 1d, DistributionLengthM = 16.350001d }
             }).Single();
             Equal(111, actualOverrun.Quantity);
+        }
+
+        private static void SpacingRealOverrunIsNotSnappedAtLargeScale()
+        {
+            var actualOverrun = RebarScheduleBuilder.Build(new[]
+            {
+                new RebarScheduleInput
+                {
+                    ElementId = "LARGE-OVER",
+                    Notation = "D8@1",
+                    CuttingLengthM = 1d,
+                    DistributionLengthM = 2000000.000001d
+                }
+            }).Single();
+
+            Equal(2000000002, actualOverrun.Quantity);
         }
 
         private static void DecimalNotationIsInvariantAndRoundTrips()
@@ -195,6 +219,39 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void CsvPreservesNonzeroSubSixDecimalValues()
+        {
+            const double tiny = 0.0000004d;
+            var row = new RebarScheduleRow
+            {
+                ElementId = "E-TINY",
+                BarMark = "B-TINY",
+                ShapeCode = "00",
+                Notation = "1D16",
+                DiameterMm = 16d,
+                Quantity = 1,
+                CuttingLengthM = tiny,
+                TotalLengthM = tiny,
+                UnitWeightKgM = tiny,
+                NetWeightKg = tiny,
+                WastePercent = tiny,
+                TotalWeightKg = tiny
+            };
+
+            var lines = RebarCsvExporter.ToCsv(new[] { row })
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            Equal(2, lines.Length);
+            var fields = lines[1].Split(',');
+            Equal(15, fields.Length);
+            Equal("16", fields[4]);
+            for (var index = 6; index <= 11; index++)
+            {
+                var parsed = double.Parse(fields[index], NumberStyles.Float, CultureInfo.InvariantCulture);
+                Equal(tiny, parsed);
+                if (parsed == 0d) throw new Exception("BBS CSV converted a validated non-zero numeric value to zero at column " + index + ".");
+            }
+        }
+
         private static void CsvRejectsInvalidRowsBeforeReplace()
         {
             var directory = Path.Combine(Path.GetTempPath(), "qs3d-bbs-csv-" + Guid.NewGuid().ToString("N"));
@@ -216,6 +273,205 @@ namespace QS3D.Core.SmokeTests
             {
                 try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
             }
+        }
+
+        private static void XlsxPreservesNonzeroSubEightDecimalValues()
+        {
+            const double tiny = 0.000000004d;
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-bbs-xlsx-tiny-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "bbs.xlsx");
+            try
+            {
+                var row = new RebarScheduleRow
+                {
+                    ElementId = "E-XLSX-TINY",
+                    BarMark = "B-XLSX-TINY",
+                    ShapeCode = "00",
+                    Notation = "1D16",
+                    DiameterMm = 16d,
+                    Quantity = 1,
+                    CuttingLengthM = tiny,
+                    TotalLengthM = tiny,
+                    UnitWeightKgM = tiny,
+                    NetWeightKg = tiny,
+                    WastePercent = tiny,
+                    TotalWeightKg = tiny
+                };
+                XlsxRebarScheduleExporter.Export(path, new[] { row });
+
+                string sheet;
+                using (var stream = File.OpenRead(path))
+                using (var archive = new ZipArchive(stream, ZipArchiveMode.Read, false))
+                using (var reader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open()))
+                    sheet = reader.ReadToEnd();
+
+                Equal(16d, XlsxNumber(sheet, "E2"));
+                Equal(1d, XlsxNumber(sheet, "F2"));
+                foreach (var cell in new[] { "G2", "H2", "I2", "J2", "K2", "L2" })
+                {
+                    var parsed = XlsxNumber(sheet, cell);
+                    Equal(tiny, parsed);
+                    if (parsed == 0d) throw new Exception("BBS XLSX converted a validated non-zero numeric value to zero at cell " + cell + ".");
+                }
+            }
+            finally
+            {
+                try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
+            }
+        }
+
+        private static double XlsxNumber(string sheet, string cellRef)
+        {
+            var cellToken = "<c r=\"" + cellRef + "\"";
+            var cellStart = sheet.IndexOf(cellToken, StringComparison.Ordinal);
+            if (cellStart < 0) throw new Exception("Expected BBS XLSX numeric cell: " + cellRef);
+            var valueStart = sheet.IndexOf("<v>", cellStart, StringComparison.Ordinal);
+            var valueEnd = valueStart < 0 ? -1 : sheet.IndexOf("</v>", valueStart + 3, StringComparison.Ordinal);
+            if (valueStart < 0 || valueEnd < 0) throw new Exception("Expected BBS XLSX numeric value in cell: " + cellRef);
+            return double.Parse(sheet.Substring(valueStart + 3, valueEnd - valueStart - 3), NumberStyles.Float, CultureInfo.InvariantCulture);
+        }
+
+        private static void XlsxRejectsWorksheetOverflowBeforeMutation()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-bbs-xlsx-limit-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "bbs.xlsx");
+            try
+            {
+                File.WriteAllText(path, "ORIGINAL");
+                var oversized = new OversizedBbsRows(1048576);
+                Throws<ArgumentOutOfRangeException>(() => XlsxRebarScheduleExporter.Export(path, oversized));
+                Equal(0, oversized.IndexerReads);
+                Equal("ORIGINAL", File.ReadAllText(path));
+            }
+            finally
+            {
+                try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
+            }
+        }
+
+        private static void XlsxRejectsCountDriftBeforeReplace()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-bbs-xlsx-count-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "bbs.xlsx");
+            try
+            {
+                const string sentinel = "preserve-existing-rebar-xlsx-destination";
+                File.WriteAllText(path, sentinel);
+                AssertXlsxCountDrift(path);
+                Equal(sentinel, File.ReadAllText(path));
+            }
+            finally
+            {
+                try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
+            }
+        }
+
+        private static void XlsxRejectsCountDriftBeforeDirectoryCreation()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-bbs-xlsx-count-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var untouchedDirectory = Path.Combine(root, "must-not-be-created");
+                AssertXlsxCountDrift(Path.Combine(untouchedDirectory, "bbs.xlsx"));
+                if (Directory.Exists(untouchedDirectory))
+                    throw new Exception("BBS XLSX row-count drift touched the filesystem before failing.");
+            }
+            finally
+            {
+                try { if (Directory.Exists(root)) Directory.Delete(root, true); } catch { }
+            }
+        }
+
+        private static void AssertXlsxCountDrift(string path)
+        {
+            try
+            {
+                XlsxRebarScheduleExporter.Export(path, new CountDriftingBbsRows(ValidXlsxRow()));
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("row count changed during snapshot", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new Exception("BBS XLSX row-count drift must identify snapshot count instability.", ex);
+                return;
+            }
+
+            throw new Exception("BBS XLSX exporter accepted a source whose row count changed during snapshot.");
+        }
+
+        private static RebarScheduleRow ValidXlsxRow()
+        {
+            return new RebarScheduleRow
+            {
+                ElementId = "E-COUNT",
+                BarMark = "B-COUNT",
+                ShapeCode = "00",
+                Notation = "1D16",
+                DiameterMm = 16d,
+                Quantity = 1,
+                CuttingLengthM = 2d,
+                TotalLengthM = 2d,
+                UnitWeightKgM = 1d,
+                NetWeightKg = 2d,
+                WastePercent = 0d,
+                TotalWeightKg = 2d
+            };
+        }
+
+        private sealed class CountDriftingBbsRows : IReadOnlyList<RebarScheduleRow>
+        {
+            private readonly RebarScheduleRow _row;
+            private int _countReads;
+
+            public CountDriftingBbsRows(RebarScheduleRow row)
+            {
+                _row = row;
+            }
+
+            public int Count
+            {
+                get
+                {
+                    _countReads++;
+                    return _countReads == 1 ? 1 : 2;
+                }
+            }
+
+            public RebarScheduleRow this[int index]
+            {
+                get
+                {
+                    if (index != 0) throw new ArgumentOutOfRangeException(nameof(index));
+                    return _row;
+                }
+            }
+
+            public IEnumerator<RebarScheduleRow> GetEnumerator()
+            {
+                yield return _row;
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class OversizedBbsRows : IReadOnlyList<RebarScheduleRow>
+        {
+            public OversizedBbsRows(int count) { Count = count; }
+            public int Count { get; }
+            public int IndexerReads { get; private set; }
+            public RebarScheduleRow this[int index]
+            {
+                get
+                {
+                    IndexerReads++;
+                    throw new InvalidOperationException("Oversized BBS rows must be rejected before indexing.");
+                }
+            }
+            public IEnumerator<RebarScheduleRow> GetEnumerator() => throw new InvalidOperationException("Oversized BBS rows must be rejected before enumeration.");
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private static void Require(string text, string token)

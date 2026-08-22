@@ -11,6 +11,7 @@ required = [
     "src/QS3D.BricsCAD.V25/Cad/GeneratedGeometryService.cs",
     "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs",
     "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs",
+    "src/QS3D.BricsCAD.V25/Cad/GridAnnotationBuilder.cs",
     "src/QS3D.BricsCAD.V25/GeneratedGeometryHealthCommands.cs",
     "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs",
     "src/QS3D.BricsCAD.V25/WallJunctionSnapCommands.cs",
@@ -60,7 +61,7 @@ if invalidator.is_file():
     for needle in (
         "CoreOwnershipPolicy.RebarHandleKeys", "MetadataPrefixForHandleKey", "RemoveByPrefix",
         "ClearGeneratedGeometryStale",
-        "EnsureCompleteLiveHandleSets(document, project, targets, rebarOwnership, curtainOwnership);",
+        "EnsureCompleteLiveHandleSets(document, project, targets, rebarOwnership, curtainOwnership, curtainPanelOwnership);",
         "ParseExpectedHandles", "CadHandleService.NormalizeHexHandle",
         "ResolveCompleteSet", "ids.Count != expected.Count",
         "Refusing destructive invalidation before any generated geometry is erased.",
@@ -68,7 +69,7 @@ if invalidator.is_file():
     ):
         if needle not in text: errors.append("dependent generated-geometry invalidation missing: " + needle)
 
-    strict_index = text.find("EnsureCompleteLiveHandleSets(document, project, targets, rebarOwnership, curtainOwnership);")
+    strict_index = text.find("EnsureCompleteLiveHandleSets(document, project, targets, rebarOwnership, curtainOwnership, curtainPanelOwnership);")
     mutation_index = text.find("GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);")
     if strict_index < 0 or mutation_index < 0 or strict_index >= mutation_index:
         errors.append("dependent generated-geometry invalidation must validate every expected live handle set before the first destructive replacement")
@@ -76,6 +77,31 @@ if invalidator.is_file():
     for fail_open in ("if (ids.Count == 0) continue;", "if (ids.Count == 0) return;"):
         if fail_open in text:
             errors.append("dependent generated-geometry invalidation still silently skips missing CAD handles: " + fail_open)
+
+grid = ROOT / "src/QS3D.BricsCAD.V25/Cad/GridAnnotationBuilder.cs"
+if grid.is_file():
+    text = grid.read_text(encoding="utf-8")
+    for needle in (
+        "ValidatePrevious", "CadHandleService.NormalizeHexHandle", "OpenMode.ForRead",
+        "result.Count != expected.Count",
+        "Refusing destructive replacement before any Grid annotation is erased.",
+        "Refusing partial destructive replacement",
+    ):
+        if needle not in text: errors.append("Grid annotation exact-set replacement guard missing: " + needle)
+
+    validate_index = text.find("var previous = ValidatePrevious(document.Database, transaction, project, element);")
+    erase_index = text.find("ErasePrevious(transaction, project, element, previous);")
+    metadata_index = text.find("element.Properties[HandlesKey] = string.Join(\";\", generatedHandles);")
+    if validate_index < 0 or erase_index < 0 or metadata_index < 0 or not (validate_index < erase_index < metadata_index):
+        errors.append("Grid annotation replacement must validate the complete previous handle set before erase and metadata replacement")
+
+    for fail_open in (
+        "allowMissing: true",
+        "if (id.IsNull || !id.IsValid) continue;",
+        "if (entity == null || entity.IsErased) continue;",
+    ):
+        if fail_open in text:
+            errors.append("Grid annotation replacement still silently skips missing CAD handles: " + fail_open)
 
 ownership = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs"
 if ownership.is_file():
@@ -89,8 +115,10 @@ if ownership.is_file():
 workspace = ROOT / "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs"
 if workspace.is_file():
     text = workspace.read_text(encoding="utf-8")
-    for needle in ("element.SetProperty(key, next)", "element.MarkDirty(ElementDirtyFlags.All)"):
+    for needle in ("element.SetProperty(key, next)",):
         if needle not in text: errors.append("Workspace semantic edit must flow through stale-aware element mutation: " + needle)
+    if "element.MarkDirty(ElementDirtyFlags.All)" in text:
+        errors.append("Workspace must preserve ProjectElement.SetProperty property-specific dirty/geometry invalidation")
 
 wall_snap = ROOT / "src/QS3D.BricsCAD.V25/WallJunctionSnapCommands.cs"
 if wall_snap.is_file():
@@ -108,8 +136,8 @@ smoke = ROOT / "tests/QS3D.Core.SmokeTests/GeneratedGeometryStaleSmoke.cs"
 if smoke.is_file():
     text = smoke.read_text(encoding="utf-8")
     for needle in (
-        "GeneratedOutputsBecomeStaleAfterSemanticEdit();", "ReplacedHandleAutoResolvesOnlyItsOwnStaleKind();",
-        "ExplicitClearPreservesOtherStaleKinds();", "StaleHealthReportsAllGeneratedKinds();",
+        "GeneratedOutputsBecomeStaleAfterSemanticEdit();", "ReplacedHandlesRemainAsObsoleteMetadataUntilExplicitClear();",
+        "CurtainPanelObsoleteMarkerIsQueryPure();", "ExplicitClearPreservesOtherStaleKinds();", "StaleHealthReportsAllGeneratedKinds();",
         "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles",
     ):
         if needle not in text: errors.append("generated stale regression missing: " + needle)
@@ -123,4 +151,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: stale snapshots, exact live-handle prevalidation before destructive invalidation, auto-resolution, five generated output kinds, cross-set ownership, UI mutation path, health command and regression coverage are present.")
+print("PASS: stale snapshots, exact live-handle prevalidation before destructive invalidation/replacement, query-pure obsolete markers until explicit cleanup, cross-set ownership, UI mutation path, health command and regression coverage are present.")

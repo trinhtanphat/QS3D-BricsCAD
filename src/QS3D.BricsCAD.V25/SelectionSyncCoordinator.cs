@@ -16,9 +16,31 @@ namespace QS3D.BricsCAD.V25
 
         public static void Attach(Document? document)
         {
-            if (document == null || !Attached.Add(document)) return;
-            document.ImpliedSelectionChanged += OnImpliedSelectionChanged;
-            Refresh(document);
+            if (document == null || Attached.Contains(document)) return;
+            var subscribed = false;
+            try
+            {
+                document.ImpliedSelectionChanged += OnImpliedSelectionChanged;
+                subscribed = true;
+                if (!Attached.Add(document))
+                {
+                    document.ImpliedSelectionChanged -= OnImpliedSelectionChanged;
+                    return;
+                }
+                Refresh(document);
+            }
+            catch
+            {
+                if (subscribed)
+                {
+                    try { document.ImpliedSelectionChanged -= OnImpliedSelectionChanged; }
+                    catch { }
+                }
+                RemovePending(document);
+                Refreshing.Remove(document);
+                Attached.Remove(document);
+                throw;
+            }
         }
 
         public static void Detach(Document? document)

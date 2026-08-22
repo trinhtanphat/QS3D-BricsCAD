@@ -73,8 +73,8 @@ The path planner is bounded to 8,192 tessellated points and 20,000 planned piece
 
 If a path/grid/opening combination exceeds those budgets, the command fails instead of allocating an unbounded native-solid batch.
 
-## Deliberate remaining boundary
+## Related native panel contract
 
-This batch does **not** implement panel-by-panel backing glass solids. `QS3DCURTAIN3D` still keeps the existing single backing GlassWall host solid and adds separate generated frame overlays.
+The later Curtain native-panel source batch keeps the single backing GlassWall host and adds a third, independently-owned layer under `GeneratedCurtainPanelHandles`. `QS3DCURTAIN3D` clips `CurtainWallDetailPlanner.Panels` around linked openings and maps guarded path panel pieces with the same bounded station model described above. `QS3DCURTAINFRAMES3D` remains a frame-only command.
 
-It also does not claim current BricsCAD V25 runtime validation. Exact final-SHA adapter compilation and licensed interactive NETLOAD/runtime testing remain required before release qualification.
+Read `docs/CURTAIN-NATIVE-PANELS.md` for ownership, stale/health, transaction and exact local evidence requirements. Neither the path-frame nor native-panel source batch claims current BricsCAD V25 runtime validation. Exact final-SHA adapter compilation and licensed interactive NETLOAD/runtime testing remain required before release qualification.

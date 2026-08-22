@@ -30,6 +30,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private sealed class PendingUpdate
         {
             public ProjectElement Element { get; set; } = null!;
+            public CadElementVerticalPlacement VerticalPlacement { get; set; } = null!;
             public List<string> Handles { get; } = new List<string>();
             public int Columns { get; set; }
             public int Rows { get; set; }
@@ -41,13 +42,15 @@ namespace QS3D.BricsCAD.V25.Cad
             public string ConfigFingerprint { get; set; } = string.Empty;
         }
 
-        public static CurtainFrameBuildResult BuildSelectedLineWalls(Document document, ProjectState project)
+        public static CurtainFrameBuildResult BuildSelectedLineWalls(Document document, ProjectState project, bool allowInteractiveSelection = true)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
             var selection = document.Editor.SelectImplied();
             if (selection.Status != PromptStatus.OK || selection.Value == null)
             {
+                if (!allowInteractiveSelection)
+                    throw new InvalidOperationException("Curtain LINE frame build requires the canonical implied selection; interactive selection is disabled inside QS3DCURTAIN3D.");
                 selection = document.Editor.GetSelection();
                 if (selection.Status != PromptStatus.OK || selection.Value == null) return new CurtainFrameBuildResult();
                 document.Editor.SetImpliedSelection(selection.Value.GetObjectIds());
@@ -93,9 +96,16 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (dzM > 1e-6d) throw new InvalidOperationException("Curtain frame 3D hiện yêu cầu GlassWall LINE nằm ngang: " + element.Id);
 
                         var lengthM = CadGeometryGuard.Positive(CadGeometryGuard.ToMeters(document, lengthDrawing, element.Id + "/LengthM"), element.Id + "/LengthM");
-                        var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3.6d), element.Id + "/HeightM");
+                        var verticalPlacement = CadElementVerticalPlacement.Resolve(
+                            document,
+                            project,
+                            element,
+                            family,
+                            line.StartPoint.Z,
+                            "HeightM",
+                            3.6d);
+                        var heightM = verticalPlacement.HeightM;
                         var hostThicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", 0.012d), element.Id + "/ThicknessM");
-                        var bottomOffsetM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
                         var frameDepthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "CurtainFrameDepthM", 0.05d), element.Id + "/CurtainFrameDepthM");
                         var input = new CurtainWallLayoutInput
                         {
@@ -111,7 +121,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         {
                             LengthM = lengthM,
                             HeightM = heightM,
-                            BottomOffsetM = bottomOffsetM,
+                            BottomOffsetM = verticalPlacement.FingerprintBottomM,
                             MaxPanelWidthM = input.MaxPanelWidthM,
                             MaxPanelHeightM = input.MaxPanelHeightM,
                             PerimeterFrameWidthM = input.PerimeterFrameWidthM,
@@ -123,18 +133,20 @@ namespace QS3D.BricsCAD.V25.Cad
                         var baseFrames = detail.VerticalFrames.Concat(detail.HorizontalFrames).ToList();
                         var ux = dx / lengthDrawing;
                         var uy = dy / lengthDrawing;
-                        var openingRects = ReadLinkedOpenings(document, transaction, project, element, family, line, lengthDrawing, ux, uy, lengthM, heightM, hostThicknessM);
+                        var openingRects = ReadLinkedOpenings(document, transaction, project, element, verticalPlacement, line, lengthDrawing, ux, uy, lengthM, heightM, hostThicknessM);
                         var frames = CurtainFrameOpeningPlanner.Interrupt(baseFrames, openingRects).ToList();
                         var frameCount = frames.Count;
                         if (frameCount > MaxFramesPerElement) throw new InvalidOperationException(element.Id + " cần " + frameCount + " curtain frame fragment solids, vượt giới hạn native " + MaxFramesPerElement + ". Tăng panel size, giảm opening hoặc chia vách.");
                         if (batchFrames > MaxFramesPerBatch - frameCount) throw new InvalidOperationException("Curtain frame batch vượt giới hạn " + MaxFramesPerBatch + " solid.");
 
-                        ErasePrevious(document, transaction, element, ownership);
+                        var previous = ValidatePrevious(document, transaction, project, element, ownership);
+                        ErasePrevious(transaction, project, element, previous);
                         var angle = CadGeometryGuard.Finite(Math.Atan2(uy, ux), element.Id + "/curtain angle");
-                        var baseZ = CadGeometryGuard.Add(line.StartPoint.Z, CadGeometryGuard.ToDrawingUnits(document, bottomOffsetM, element.Id + "/BottomOffsetM"), element.Id + "/curtain base Z");
+                        var baseZ = verticalPlacement.BottomDrawing;
                         var update = new PendingUpdate
                         {
                             Element = element,
+                            VerticalPlacement = verticalPlacement,
                             Columns = detail.Layout.Columns,
                             Rows = detail.Layout.Rows,
                             BaseFrameCount = baseFrames.Count,
@@ -147,12 +159,13 @@ namespace QS3D.BricsCAD.V25.Cad
 
                         foreach (var frame in frames)
                         {
-                            Solid3d? solid = CreateFrame(document, line, frame, frameDepthM, baseZ, angle, ux, uy, element.Id);
+                            Solid3d? solid = CreateFrame(document, line, frame, frameDepthM, baseZ, verticalPlacement.UsesBottomLevel, angle, ux, uy, element.Id);
                             try
                             {
                                 solid.Layer = line.Layer;
                                 modelSpace.AppendEntity(solid);
                                 transaction.AddNewlyCreatedDBObject(solid, true);
+                                GeneratedCurtainFrameNativeOwnershipService.MarkGenerated(document, transaction, solid, project, element);
                                 update.Handles.Add(solid.Handle.ToString());
                                 solid = null;
                             }
@@ -163,7 +176,6 @@ namespace QS3D.BricsCAD.V25.Cad
                     }
 
                     foreach (var update in pending) CommitSemanticUpdate(project, update);
-                    if (pending.Count > 0) project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
                 }
@@ -199,6 +211,8 @@ namespace QS3D.BricsCAD.V25.Cad
             update.Element.Properties["GeneratedCurtainFrameHeightM"] = update.HeightM.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedCurtainFrameConfigFingerprint"] = update.ConfigFingerprint;
             update.Element.Properties["GeneratedCurtainFrameMode"] = update.OpeningCount > 0 ? OpeningAwareMode : Mode;
+            CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedCurtainFrame", update.VerticalPlacement);
+            update.Element.Properties.Remove("GeneratedCurtainFrameLiveFingerprint");
             update.Element.ClearGeneratedCurtainFrameStale();
             AuditTrail.ForProject(project).Record("geometry.curtain.frames", update.Element.Id,
                 update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " frame fragments • base=" + update.BaseFrameCount.ToString(CultureInfo.InvariantCulture) + " • openings=" + update.OpeningCount.ToString(CultureInfo.InvariantCulture));
@@ -209,7 +223,7 @@ namespace QS3D.BricsCAD.V25.Cad
             Transaction transaction,
             ProjectState project,
             ProjectElement host,
-            ProjectFamily? hostFamily,
+            CadElementVerticalPlacement hostPlacement,
             Line hostLine,
             double hostLengthDrawing,
             double ux,
@@ -228,8 +242,6 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 var openingFamily = project.FindFamily(opening.FamilyId);
                 var widthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(opening, openingFamily, "WidthM", 0d), opening.Id + "/WidthM");
-                var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(opening, openingFamily, "HeightM", 0d), opening.Id + "/HeightM");
-                var sillM = NonNegative(CadGeometryGuard.Number(opening, openingFamily, "SillHeightM", opening.Category == ElementCategory.Door ? 0d : 0.9d), opening.Id + "/SillHeightM");
                 var clearanceM = NonNegative(CadGeometryGuard.Number(opening, openingFamily, "BooleanClearanceM", 0.01d), opening.Id + "/BooleanClearanceM");
                 var sourceIds = CadHandleService.Resolve(document, opening.SourceHandles);
                 if (sourceIds.Count == 0) throw new InvalidOperationException("Linked opening " + opening.Id + " không còn live CAD source để ngắt curtain frame an toàn.");
@@ -239,6 +251,17 @@ namespace QS3D.BricsCAD.V25.Cad
                 Extents3d extents;
                 try { extents = entity.GeometricExtents; }
                 catch (Exception ex) { throw new InvalidOperationException("Không đọc được extents cho linked opening " + opening.Id + ".", ex); }
+                var openingPlacement = CadHostedOpeningVerticalPlacement.Resolve(
+                    document,
+                    project,
+                    opening,
+                    openingFamily,
+                    extents.MinPoint.Z,
+                    hostPlacement,
+                    0d,
+                    opening.Category == ElementCategory.Door ? 0d : 0.9d);
+                var heightM = openingPlacement.HeightM;
+                var sillM = openingPlacement.SillHeightM;
                 var centerX = CadGeometryGuard.Midpoint(extents.MinPoint.X, extents.MaxPoint.X, opening.Id + "/opening center X");
                 var centerY = CadGeometryGuard.Midpoint(extents.MinPoint.Y, extents.MaxPoint.Y, opening.Id + "/opening center Y");
                 var fromStartX = CadGeometryGuard.Subtract(centerX, hostLine.StartPoint.X, opening.Id + "/from start X");
@@ -268,7 +291,7 @@ namespace QS3D.BricsCAD.V25.Cad
             return result.AsReadOnly();
         }
 
-        private static Solid3d CreateFrame(Document document, Line line, CurtainWallRect frame, double depthM, double baseZ, double angle, double ux, double uy, string label)
+        private static Solid3d CreateFrame(Document document, Line line, CurtainWallRect frame, double depthM, double baseZ, bool usesLevelPlacement, double angle, double ux, double uy, string label)
         {
             var width = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, frame.WidthM, label + "/frame width"), label + "/frame width drawing");
             var depth = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, depthM, label + "/frame depth"), label + "/frame depth drawing");
@@ -285,7 +308,8 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 solid.SetDatabaseDefaults(document.Database);
                 solid.CreateBox(width, depth, height);
-                solid.TransformBy(Matrix3d.Displacement(new Vector3d(-width / 2d, -depth / 2d, -height / 2d)));
+                var originOffsetZ = usesLevelPlacement ? 0d : -height / 2d;
+                solid.TransformBy(Matrix3d.Displacement(new Vector3d(-width / 2d, -depth / 2d, originOffsetZ)));
                 solid.TransformBy(Matrix3d.Rotation(angle, Vector3d.ZAxis, Point3d.Origin));
                 solid.TransformBy(Matrix3d.Displacement(new Vector3d(centerX, centerY, centerZ)));
                 var complete = solid;
@@ -295,18 +319,59 @@ namespace QS3D.BricsCAD.V25.Cad
             finally { solid?.Dispose(); }
         }
 
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedCurtainFrameOwnershipGuard.OwnershipIndex ownership)
+        private static IReadOnlyList<KeyValuePair<string, ObjectId>> ValidatePrevious(
+            Document document,
+            Transaction transaction,
+            ProjectState project,
+            ProjectElement element,
+            GeneratedCurtainFrameOwnershipGuard.OwnershipIndex ownership)
         {
-            if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
-            foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
+            if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw))
+                return Array.Empty<KeyValuePair<string, ObjectId>>();
+
+            var expected = new List<KeyValuePair<string, string>>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var token in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
             {
-                ownership.EnsureOwned(handle, element);
-                var ids = CadHandleService.Resolve(document, new[] { handle });
-                if (ids.Count == 0) continue;
-                if (ids.Count > 1) throw new InvalidOperationException("Generated curtain frame handle " + handle + " resolves to multiple live CAD objects.");
-                var entity = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Entity;
-                if (entity == null || entity.IsErased) continue;
-                if (!(entity is Solid3d solid)) throw new InvalidOperationException("Generated curtain frame handle " + handle + " is live but is not a Solid3d. Refusing destructive erase.");
+                var original = token.Trim();
+                if (original.Length == 0) continue;
+                ownership.EnsureOwned(original, element);
+                var canonical = CadHandleService.NormalizeHexHandle(original);
+                if (canonical == null)
+                    throw new InvalidOperationException("Generated curtain LINE frame metadata contains an invalid handle. Refusing destructive replacement before any frame is erased: " + original + ".");
+                if (seen.Add(canonical)) expected.Add(new KeyValuePair<string, string>(canonical, original));
+            }
+            if (expected.Count == 0)
+                throw new InvalidOperationException("Generated curtain LINE frame metadata contains no valid handles. Refusing destructive replacement before any frame is erased.");
+
+            var ids = CadHandleService.Resolve(document, expected.Select(x => x.Key));
+            if (ids.Count != expected.Count)
+                throw new InvalidOperationException("Generated curtain LINE frame live-handle set is incomplete. Refusing destructive replacement before any frame is erased.");
+
+            var result = new List<KeyValuePair<string, ObjectId>>(expected.Count);
+            for (var i = 0; i < expected.Count; i++)
+            {
+                var entity = transaction.GetObject(ids[i], OpenMode.ForRead, false) as Entity;
+                if (!(entity is Solid3d solid) || solid.IsErased)
+                    throw new InvalidOperationException("Generated curtain LINE frame is missing, erased, or not a Solid3d. Refusing destructive replacement before any frame is erased: " + expected[i].Key + ".");
+                GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership(solid, project, element, "validate generated curtain LINE frame " + expected[i].Key);
+                result.Add(new KeyValuePair<string, ObjectId>(expected[i].Key, ids[i]));
+            }
+            return result;
+        }
+
+        private static void ErasePrevious(
+            Transaction transaction,
+            ProjectState project,
+            ProjectElement element,
+            IReadOnlyList<KeyValuePair<string, ObjectId>> previous)
+        {
+            foreach (var item in previous)
+            {
+                var entity = transaction.GetObject(item.Value, OpenMode.ForWrite, false) as Entity;
+                if (!(entity is Solid3d solid) || solid.IsErased)
+                    throw new InvalidOperationException("Generated curtain LINE frame changed after validation. Refusing partial destructive replacement: " + item.Key + ".");
+                GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership(solid, project, element, "erase generated curtain LINE frame " + item.Key);
                 solid.Erase();
             }
         }

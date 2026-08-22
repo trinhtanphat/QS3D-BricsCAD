@@ -1,6 +1,6 @@
 # Manual BricsCAD V25 build and release runbook
 
-Updated 2026-08-10.
+Updated 2026-08-11.
 
 ## Policy
 
@@ -32,7 +32,8 @@ Required inputs:
 
 - `release_tag` — semantic-style tag such as `v0.1.0` or `v0.1.0-rc.1`;
 - `confirm_release` — must be exactly `RELEASE` or the release job is skipped;
-- `run_runtime` — normally `true` for a release candidate/final release when the licensed interactive V25 runner is available;
+- `run_runtime` — normally `true` for a release candidate/final release when the licensed interactive V25 runner is available; stable releases require it;
+- `sign_package` — Authenticode-sign/timestamp the release payload; stable releases require it;
 - `prerelease` — `true` for RC/beta builds, otherwise `false`.
 
 The workflow deliberately has no automatic/event-driven trigger. Its release job also checks `github.event_name == 'workflow_dispatch'` and `confirm_release=RELEASE` before execution.
@@ -46,11 +47,15 @@ The workflow deliberately has no automatic/event-driven trigger. Its release job
 5. runs deterministic Core smoke tests;
 6. verifies `BRICSCAD_V25_DIR` and required licensed V25 runtime files;
 7. compiles `QS3D.BricsCAD.V25` Release/x64 **plugin DLL** against the installed V25 assemblies;
-8. optionally performs real V25 NETLOAD/runtime validation and captures evidence;
-9. runs `scripts/package-v25.ps1` against `bin/x64/Release/net48`;
-10. creates `dist/QS3D-BricsCAD-V25.zip` plus `dist/QS3D-BricsCAD-V25.zip.sha256`;
-11. uploads build/runtime artifacts;
-12. publishes a GitHub Release and attaches ZIP/checksum only after required preceding steps succeed.
+8. for an explicitly unsigned prerelease with `run_runtime=true`, runtime-tests the unsigned build output before packaging;
+9. runs `scripts/package-v25.ps1` against `bin/x64/Release/net48` and validates release-tag/package version binding;
+10. when `sign_package=true`, Authenticode-signs the executable payload, verifies publisher/timestamp, and finalizes the signed package/ZIP;
+11. when both `run_runtime=true` and `sign_package=true`, runs the real V25 NETLOAD/runtime gate against **`dist/QS3D-BricsCAD-V25/QS3D.BricsCAD.V25.dll`**, the exact signed plugin payload staged into the published package;
+12. for signed releases, creates the schema-v2 `QS3D-BricsCAD-V25.update.json` manifest after the signed-runtime gate succeeds;
+13. creates the release ZIP checksum and uploads package/runtime evidence artifacts;
+14. creates a draft GitHub Release, uploads each expected release asset, requires exactly one exact-name draft asset with the same byte length as the local artifact, re-downloads it through the GitHub asset API and requires matching SHA-256, then publishes the draft only after every required asset passes those byte-integrity checks and all earlier gates succeed.
+
+A stable release is forced to `run_runtime=true` and `sign_package=true`. Therefore stable runtime evidence must refer to the finalized signed plugin payload, not only the pre-sign build output. Authenticode signing changes PE bytes even when managed code is unchanged, so the signed staged DLL is the release binary that matters for publication evidence.
 
 The package script generates `COMMANDS.txt` from current `[CommandMethod]` source declarations, verifies required QS3D DLLs, includes synthetic sample fixtures/install-update helpers and excludes BricsCAD-owned runtime assemblies. It does not expect a standalone QS3D executable.
 
@@ -66,9 +71,14 @@ The release workflow uses:
 The machine must have a licensed BricsCAD V25 installation and repository variables configured for:
 
 - `BRICSCAD_V25_DIR`
-- `BRICSCAD_V25_PROFILE` when runtime validation uses a dedicated profile.
+- `BRICSCAD_V25_PROFILE` when runtime validation uses a dedicated profile;
+- `QS3D_SIGNING_CERT_THUMBPRINT` and `QS3D_TIMESTAMP_SERVER` when `sign_package=true`.
+
+The production signing helper requires the selected CurrentUser certificate to be currently valid, expose an accessible private key and include an explicit Enhanced Key Usage extension containing the Code Signing OID `1.3.6.1.5.5.7.3.3`. EKU authorization is read from the structured OID collection, not localized certificate display text.
 
 Runtime/screenshot validation requires an interactive Windows session.
+
+For provisioning a dedicated Windows runner from a local/cached MSI, `scripts/install-bricscad-v25.ps1` treats the filename only as an advisory. Before invoking `msiexec`, the helper verifies the optional requested SHA-256, enforces the configured Authenticode publisher policy, reads the MSI Property table, requires ProductName to identify BricsCAD, and requires ProductVersion major 25. A renamed Bricsys-signed MSI for another BricsCAD major version must therefore fail before installation. This source-side identity check does not replace licensed first-launch/runtime qualification.
 
 ## Project/DWG readiness before publication
 
@@ -81,9 +91,14 @@ A blank drawing is not meaningful private-DWG release evidence. `QS3DRELEASECHEC
 The source-side install/update path is hardened, but a production release should exercise it with an actually signed package before publication:
 
 - per-user DemandLoad installation/replacement snapshots the targeted prior payload and registry registration;
+- a forced replacement of an existing `InstallDirectory` must first prove that directory is a canonical QS3D BricsCAD V25 installation from its package metadata plus managed DLL assembly/product identities; `-Force` alone never authorizes moving/deleting an arbitrary existing file or foreign directory;
+- uninstall file removal always requires canonical QS3D V25 metadata plus matching plugin/Core assembly and ProductVersion identity; `-Force` only authorizes an intentional verified custom path outside the default QS3D LocalAppData scope and never bypasses ownership validation;
 - if a replacement fails, the installer restores the previous files/registration; if a first install fails, partial new state is removed;
+- signed-package finalization requires a `.zip` output outside `PackageDirectory`, then revalidates `QS3D / BricsCAD V25 x64`, metadata AssemblyVersion/productVersion and exact plugin/Core managed identities after executable signature verification and before mutating metadata, regenerating hashes, deleting any prior output ZIP or rebuilding the release ZIP;
+- signed update-manifest generation requires an external `.json` output that is outside signed staging and distinct from the package ZIP, and binds metadata AssemblyVersion/productVersion exactly to both signed plugin/Core managed identities before ZIP/staging verification or manifest writing;
 - the updater accepts only the intended HTTPS/package-host path and verifies archive/path/size limits, SHA-256 and Authenticode signer expectations;
-- update version decisions are bound to the Authenticode-verified manifest/payload metadata rather than trusting a mutable unsigned version label;
+- update manifests use schema 2 and carry the already-verified signed plugin product/assembly version after plugin/Core identity equality has been established;
+- product SemVer must advance monotonically; equal-AssemblyVersion prerelease upgrades are allowed only when product SemVer is strictly newer, and replay/downgrade is rejected;
 - expected-version mismatch, package substitution or replay/relabel conditions must fail before install;
 - installer/updater must never lower BricsCAD `SECURELOAD`.
 
@@ -93,8 +108,9 @@ Production certificate/key custody, timestamping and publication infrastructure 
 
 - Never publish from an ambiguous moving head. Resolve the exact commit/tag first.
 - Never dispatch a release merely because source landed; owner approval is a separate action.
-- Never mark a release runtime-verified unless the V25 runtime step actually completed successfully for the release source.
+- Never mark a signed release runtime-verified unless the V25 runtime step actually completed successfully against the signed staged plugin payload that is packaged for publication.
 - Never silently skip a failed preflight/build/runtime step to force a release.
+- Never publish a draft whose expected GitHub assets have only been name-checked; require exact-name uniqueness, remote/local size equality and SHA-256 equality after re-downloading each asset from GitHub.
 - Never replace an existing release tag from this workflow.
 - Keep `confirm_release=RELEASE` as an explicit publication gate.
 - Keep `scripts/preflight-ci-manual-only.py` in the aggregate gate.
@@ -115,9 +131,9 @@ Use the exact requested commit/tag, run `release-v25.yml` manually, keep runtime
 - source/preflight result;
 - Core build/smoke result;
 - V25 plugin adapter build result;
-- runtime/NETLOAD result;
+- runtime/NETLOAD result, explicitly identifying whether the tested payload was unsigned preview or finalized signed release DLL;
 - representative-DWG / `QS3DRELEASECHECK` result when performed;
-- install/update rollback + signed-manifest/version-binding qualification when performed;
+- install/update rollback + signed-manifest/product-version-binding qualification when performed;
 - package SHA-256;
 - GitHub Release tag and attached artifact names.
 

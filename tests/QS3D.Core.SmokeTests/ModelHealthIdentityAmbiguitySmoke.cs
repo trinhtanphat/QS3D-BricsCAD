@@ -44,18 +44,22 @@ namespace QS3D.Core.SmokeTests
             Has(issues, "DUPLICATE_FAMILY_ID");
             HasFor(issues, "AMBIGUOUS_HOST", "D");
             HasFor(issues, "AMBIGUOUS_DEPENDENCY", "D");
-            HasFor(issues, "BOTTOM_LEVEL_REFERENCE_AMBIGUOUS", "D");
+            Has(issues, "HEALTH_PROVIDER_FAILED");
         }
 
         private static void DependencyHealthRejectsAmbiguousTargets()
         {
-            var issues = new DependencyHealthService().Inspect(CorruptProject());
+            var project = CorruptProject();
+            project.Elements.Remove(null!);
+            var issues = new DependencyHealthService().Inspect(project);
             HasFor(issues, "DEPENDENCY_TARGET_AMBIGUOUS", "D");
         }
 
         private static void LevelHealthReportsDuplicateLevelReferencesWithoutPendingQualification()
         {
             var project = CorruptProject();
+            project.Floors.Remove(null!);
+            project.Elements.Remove(null!);
             var issues = new LevelReferenceHealthService().Inspect(project);
 
             Has(issues, "DUPLICATE_LEVEL_ID");

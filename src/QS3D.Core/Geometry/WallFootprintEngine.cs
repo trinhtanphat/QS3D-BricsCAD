@@ -7,7 +7,7 @@ namespace QS3D.Core.Geometry
     {
         public WallFootprintResult(IReadOnlyList<Point2> polygon, double centerlineLength, double area, double perimeter, bool usedBevelJoin)
         {
-            Polygon = polygon ?? throw new ArgumentNullException(nameof(polygon));
+            Polygon = new List<Point2>(polygon ?? throw new ArgumentNullException(nameof(polygon))).AsReadOnly();
             CenterlineLength = centerlineLength;
             Area = area;
             Perimeter = perimeter;
@@ -247,26 +247,42 @@ namespace QS3D.Core.Geometry
 
         private static double SignedAreaRelative(IReadOnlyList<Point2> polygon)
         {
-            var origin = polygon[0];
-            var twice = 0d;
-            for (var i = 1; i < polygon.Count - 1; i++)
-            {
-                var ax = polygon[i].X - origin.X;
-                var ay = polygon[i].Y - origin.Y;
-                var bx = polygon[i + 1].X - origin.X;
-                var by = polygon[i + 1].Y - origin.Y;
-                var cross = ax * by - ay * bx;
-                if (!Finite(cross)) throw new OverflowException("wall footprint area overflowed.");
-                twice = CheckedAdd(twice, cross, "wall footprint area");
-            }
-            return twice / 2d;
+            return PolylineMetrics.SignedArea(polygon);
         }
 
         private static double ClosedPerimeter(IReadOnlyList<Point2> polygon)
         {
-            var value = 0d;
-            for (var i = 0; i < polygon.Count; i++) value = CheckedAdd(value, polygon[i].DistanceTo(polygon[(i + 1) % polygon.Count]), "wall footprint perimeter");
-            return value;
+            var sum = 0d;
+            var compensation = 0d;
+            for (var i = 0; i < polygon.Count; i++)
+                AddCompensated(ref sum, ref compensation, polygon[i].DistanceTo(polygon[(i + 1) % polygon.Count]), "wall footprint perimeter");
+            return FinalizeCompensated(sum, compensation, "wall footprint perimeter");
+        }
+
+        private static void AddCompensated(ref double sum, ref double compensation, double value, string label)
+        {
+            if (!Finite(sum) || !Finite(compensation) || !Finite(value))
+                throw new OverflowException(label + " contains a non-finite value.");
+
+            var next = sum + value;
+            if (!Finite(next)) throw new OverflowException(label + " overflowed.");
+            var correction = Math.Abs(sum) >= Math.Abs(value)
+                ? (sum - next) + value
+                : (value - next) + sum;
+            var nextCompensation = compensation + correction;
+            if (!Finite(nextCompensation)) throw new OverflowException(label + " overflowed.");
+
+            sum = next == 0d ? 0d : next;
+            compensation = nextCompensation == 0d ? 0d : nextCompensation;
+        }
+
+        private static double FinalizeCompensated(double sum, double compensation, string label)
+        {
+            if (!Finite(sum) || !Finite(compensation))
+                throw new OverflowException(label + " contains a non-finite value.");
+            var result = sum + compensation;
+            if (!Finite(result)) throw new OverflowException(label + " overflowed.");
+            return result == 0d ? 0d : result;
         }
 
         private static double CheckedAdd(double left, double right, string label)
@@ -277,7 +293,24 @@ namespace QS3D.Core.Geometry
             return value;
         }
 
-        private static double Cross(double ax, double ay, double bx, double by) => ax * by - ay * bx;
+        private static double Cross(double ax, double ay, double bx, double by)
+        {
+            var scaleA = Math.Max(Math.Abs(ax), Math.Abs(ay));
+            var scaleB = Math.Max(Math.Abs(bx), Math.Abs(by));
+            if (!Finite(scaleA) || !Finite(scaleB)) throw new OverflowException("wall footprint determinant input exceeds the supported numeric range.");
+            if (scaleA == 0d || scaleB == 0d) return 0d;
+
+            var normalized = ax / scaleA * (by / scaleB) - ay / scaleA * (bx / scaleB);
+            if (!Finite(normalized)) throw new OverflowException("wall footprint determinant exceeds the supported numeric range.");
+            var smallerScale = Math.Min(scaleA, scaleB);
+            var largerScale = Math.Max(scaleA, scaleB);
+            var scaled = normalized * smallerScale;
+            if (!Finite(scaled)) throw new OverflowException("wall footprint determinant exceeds the supported numeric range.");
+            var value = scaled * largerScale;
+            if (!Finite(value)) throw new OverflowException("wall footprint determinant exceeds the supported numeric range.");
+            return value;
+        }
+
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
         private static void Validate(Point2 point, string label)
         {

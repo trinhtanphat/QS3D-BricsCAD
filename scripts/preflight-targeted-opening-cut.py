@@ -21,6 +21,9 @@ required = {
         'CommandMethod("QS3DCUTOPENINGS"',
         'CommandMethod("QS3DCUTSELECTEDOPENINGS"',
         "EntitySnapshotReader.ReadCurrentSelection(document)",
+        "ResolveOpeningIds(previewProject, handles)",
+        "ResolveOpeningIds(project, handles)",
+        "expectedTargets.SetEquals(currentOpeningIds)",
         "SemanticReferenceHandles.MatchesSelection(x, handles)",
         "OpeningBooleanService.CutLinkedOpenings(document, project, openingIds)",
         "private static void FinalizeUi(Document document, string message)",
@@ -29,10 +32,10 @@ required = {
     "src/QS3D.BricsCAD.V25/DirectDrawOpeningCommands.cs": [
         'CommandMethod("QS3DDRAWDOOR"',
         'CommandMethod("QS3DDRAWOPENING"',
-        "new AutoHostLinkCommands().AutoLinkHosts()",
+        "AutoHostLinkCommands.LinkSingleOpening(document, project, createdElementId)",
     ],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
-        'RibbonButtonSpec("Khoét Cửa/Lỗ chọn", "QS3DCUTSELECTEDOPENINGS")',
+        'Button("Khoét Cửa/Lỗ chọn", "QS3DCUTSELECTEDOPENINGS")',
     ],
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": [
         'Content="Khoét Cửa/Lỗ đang chọn" Tag="QS3DCUTSELECTEDOPENINGS"',
@@ -85,12 +88,35 @@ if commands_file.is_file():
     selected_entry = selected.split("private static void Execute", 1)[0]
     if "OpeningBooleanService.CutLinkedOpenings(document, project)" in selected_entry:
         errors.append("Selected-opening command must not fall back to the global all-linked cut API")
-    if "Where(IsOpening)" not in selected_entry or ".Distinct(StringComparer.OrdinalIgnoreCase)" not in selected_entry:
-        errors.append("Selected-opening command must resolve a deduplicated semantic Door/WallOpening target set")
+    for token in (
+        "openingIds = ResolveOpeningIds(previewProject, handles)",
+        "currentOpeningIds = ResolveOpeningIds(project, handles)",
+        "expectedTargets.SetEquals(currentOpeningIds)",
+        'Execute(document, openingIds, "QS3DCUTSELECTEDOPENINGS"',
+    ):
+        if token not in selected_entry:
+            errors.append("Selected-opening command missing target freshness/binding token: " + token)
+
+    helper_start = text.find("private static IReadOnlyList<string> ResolveOpeningIds")
+    helper_end = text.find("private static bool IsOpening", helper_start + 1)
+    helper = text[helper_start:helper_end] if helper_start >= 0 and helper_end > helper_start else ""
+    if not helper:
+        errors.append("Selected-opening command must expose a bounded ResolveOpeningIds helper")
+    else:
+        for token in (
+            ".Where(IsOpening)",
+            "SemanticReferenceHandles.MatchesSelection(x, handles)",
+            ".Distinct(StringComparer.OrdinalIgnoreCase)",
+            ".OrderBy(x => x, StringComparer.OrdinalIgnoreCase)",
+        ):
+            if token not in helper:
+                errors.append("ResolveOpeningIds missing deduplicated semantic Door/WallOpening target contract: " + token)
 
 opening_direct = ROOT / "src/QS3D.BricsCAD.V25/DirectDrawOpeningCommands.cs"
 if opening_direct.is_file():
     text = opening_direct.read_text(encoding="utf-8")
+    if "new AutoHostLinkCommands().AutoLinkHosts()" in text:
+        errors.append("Direct Draw Door/Opening must not re-enter broad AutoHost command selection; use exact LinkSingleOpening lifecycle")
     for forbidden in (
         r"OpeningBooleanService\s*\.\s*CutLinkedOpenings\s*\(",
         r"OpeningBooleanCommands\s*\(\s*\)\s*\.\s*(?:CutSelectedOpenings|CutOpenings)\s*\(",
@@ -106,4 +132,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: legacy all-linked cut remains available, selected Door/WallOpening ids are validated before mutation and cut through a targeted overload, UI exposes the safer subset path, accumulated host state remains fail-closed, and Direct Draw does not silently mutate host solids.")
+print("PASS: legacy all-linked cut remains available, selected Door/WallOpening ids are helper-deduplicated and freshness-revalidated before targeted mutation, Direct Draw auto-links only its exact created opening, and physical boolean cutting remains explicit.")

@@ -13,10 +13,16 @@ for path in (COMMAND, WINDOW):
 
 if COMMAND.is_file():
     text = COMMAND.read_text(encoding="utf-8")
-    if "ProjectContextCoordinator.GetOrCreate(document);" not in text:
-        errors.append("explicit QS3DMATERIALS entry point must initialize the authoring project before opening the modeless catalog")
-    if "new MaterialCatalogWindow(document)" not in text:
-        errors.append("QS3DMATERIALS must keep binding the catalog to its source Document")
+    for token in (
+        'CommandMethod("QS3DMATERIALS"',
+        "ExistingProjectMutationContext.TryGet(document, out var project)",
+        "new MaterialCatalogWindow(document, project)",
+        "Application.ShowModelessWindow",
+    ):
+        if token not in text:
+            errors.append("QS3DMATERIALS launcher missing lifecycle token: " + token)
+    if "ProjectContextCoordinator.GetOrCreate(document)" in text:
+        errors.append("opening Material Catalog must not create/cache project state")
 
 if WINDOW.is_file():
     text = WINDOW.read_text(encoding="utf-8")
@@ -46,13 +52,49 @@ if WINDOW.is_file():
             errors.append(method + " must bind canonical existing project before mutation")
 
     refresh = text.find("private void RefreshAll")
+    load_editor = text.find("private void LoadEditor", refresh)
+    clear_editor = text.find("private void ClearEditor", load_editor)
+    refresh_after_commit = text.find("private void RefreshAfterCommit", clear_editor)
     read_only = text.find("ProjectContextCoordinator.TryGetReadOnly(_document, out var project)", refresh)
     if min(refresh, read_only) < 0 or not refresh < read_only:
         errors.append("Material Catalog RefreshAll must resolve project read-only")
+
+    if min(refresh, load_editor, clear_editor, refresh_after_commit) < 0:
+        errors.append("Material Catalog refresh/editor helper boundaries are missing")
+    else:
+        refresh_block = text[refresh:load_editor]
+        selected = refresh_block.find("var selectedMaterial = materials.FirstOrDefault")
+        load_current = refresh_block.find("LoadEditor(selectedMaterial, false)")
+        clear_missing = refresh_block.find("else ClearEditor()")
+        bind_project = refresh_block.find("_boundProject = project;")
+        if min(selected, load_current, clear_missing, bind_project) < 0:
+            errors.append("Material Catalog RefreshAll must resolve current material, synchronize/clear editor state, then bind the refreshed project")
+        elif not selected < load_current < clear_missing < bind_project:
+            errors.append("Material Catalog RefreshAll must synchronize/clear editor state before accepting the refreshed project binding")
+
+        load_editor_block = text[load_editor:clear_editor]
+        for token in (
+            "_editingId = material.IsBuiltIn ? string.Empty : material.Id;",
+            "NameBox.Text = material.Name;",
+            "UnitBox.Text = material.Unit;",
+            "DescriptionBox.Text = material.Description;",
+        ):
+            if token not in load_editor_block:
+                errors.append("Material Catalog LoadEditor must synchronize canonical editor field: " + token)
+
+        clear_editor_block = text[clear_editor:refresh_after_commit]
+        for token in (
+            "_editingId = string.Empty;",
+            "NameBox.Text = string.Empty;",
+            "UnitBox.Text = string.Empty;",
+            "DescriptionBox.Text = string.Empty;",
+        ):
+            if token not in clear_editor_block:
+                errors.append("Material Catalog ClearEditor must clear stale editor field: " + token)
 
 if errors:
     for error in errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] Material Catalog creates project only on explicit open; read-only refresh stays observational; Save/Delete/Apply bind canonical existing state and retain rollback")
+print("[PASS] Material Catalog open is non-creating and canonical; Refresh synchronizes or clears editor state before rebinding; Save/Delete/Apply revalidate existing state and retain rollback")

@@ -27,19 +27,39 @@ if SOURCE.is_file():
         "ResolvedErrorCount",
         "Model health baselines belong to different projects",
         "StringComparer.Ordinal",
+        'code.EndsWith("_STALE", StringComparison.OrdinalIgnoreCase)',
+        "KeyPart(((int)issue.Severity).ToString(System.Globalization.CultureInfo.InvariantCulture))",
+        "KeyPart(code.ToUpperInvariant())",
+        "KeyPart((issue.ElementId ?? string.Empty).ToUpperInvariant())",
+        "key + KeyPart(issue.Message ?? string.Empty)",
+        "private static string KeyPart(string value)",
+        'return text.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + text;',
     ):
         if token not in text:
-            errors.append("ModelHealthBaselineService missing deterministic diff token: " + token)
+            errors.append("ModelHealthBaselineService missing deterministic collision-safe diff token: " + token)
+
+    if ': key + "\\n" + (issue.Message ?? string.Empty)' in text:
+        errors.append("ModelHealthBaselineService regressed to delimiter-concatenated issue identity.")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     for token in (
         "NewResolvedAndPersistentIssuesAreClassified();",
         "DuplicateIssuesAreStable();",
+        "DelimiterCollisionIssuesRemainDistinct();",
+        "MalformedIssuesFailClosed();",
+        "StaleMessageChangesRemainPersistent();",
         "CrossProjectDiffFailsClosed();",
         "SemanticCaptureIsReadOnly();",
+        'new ModelHealthIssue("A\\nB", HealthSeverity.Warning, "message", "C")',
+        'new ModelHealthIssue("A", HealthSeverity.Warning, "message", "B\\nC")',
         "NEW_ERROR",
         "OLD_ERROR",
+        "GENERATED_SOLID_STALE",
+        "ORDINARY_WARNING",
+        "reason B",
+        "message A",
+        "message B",
         "[ModuleInitializer]",
     ):
         if token not in text:
@@ -52,4 +72,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: model health can be captured read-only and compared deterministically as new, resolved, and persistent issues with cross-project fail-closed semantics.")
+print("PASS: model health baseline uses length-prefixed collision-safe identity, preserves stale diagnostics across reason-message changes, and keeps ordinary diagnostics message-sensitive.")

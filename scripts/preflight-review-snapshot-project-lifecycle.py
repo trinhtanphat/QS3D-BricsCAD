@@ -20,7 +20,6 @@ if REVIEW.is_file():
         'ExistingProjectMutationContext.Require(doc, "Revision baseline")',
         "ProjectContextCoordinator.TryGetReadOnly(doc, out _)",
         "RevisionCoordinator.CaptureCurrent(doc)",
-        "TryRecordRevisionCompare(doc, before, after, rows.Count)",
     ):
         if token not in text:
             errors.append("ReviewCommands missing lifecycle token: " + token)
@@ -30,12 +29,38 @@ if REVIEW.is_file():
         bbs = text[bbs_start:recognize_start]
         if "ProjectContextCoordinator.GetOrCreate(doc)" in bbs:
             errors.append("BBS View must not create/cache project state merely to display a schedule.")
+
     diff_start = text.find('CommandMethod("QS3DREVDIFF"')
-    locate_start = text.find("private static void TryRecordRevisionCompare", diff_start)
-    if diff_start >= 0 and locate_start > diff_start:
+    locate_start = text.find("private static int LocateCurrentElement", diff_start)
+    if diff_start < 0 or locate_start <= diff_start:
+        errors.append("cannot isolate QS3DREVDIFF review lifecycle")
+    else:
         diff = text[diff_start:locate_start]
-        if "ProjectContextCoordinator.GetOrCreate(doc)" in diff or "Regenerate(project)" in diff:
-            errors.append("Revision Diff must not create or regenerate canonical project state for review snapshot capture.")
+        for token in (
+            "ProjectContextCoordinator.TryGetReadOnly(doc, out _)",
+            "RevisionCoordinator.LoadBaseline(doc)",
+            "RevisionCoordinator.CaptureCurrent(doc)",
+            "new QuantityRevisionReport().Build(before, after)",
+            "new RevisionWindow(doc, before, after, rows, locate)",
+        ):
+            if token not in diff:
+                errors.append("Revision Diff missing read-only review token: " + token)
+        for forbidden in (
+            "ProjectContextCoordinator.GetOrCreate",
+            "ExistingProjectMutationContext",
+            "AuditTrail.ForProject",
+            "TryRecordRevisionCompare",
+            "Regenerate(project)",
+            "ProjectContextCoordinator.Save(",
+            "ProjectContextCoordinator.TrySavePending",
+            ".Touch(",
+            ".Record(",
+        ):
+            if forbidden in diff:
+                errors.append("Revision Diff must remain read-only; forbidden mutation surface: " + forbidden)
+
+    if "TryRecordRevisionCompare" in text:
+        errors.append("Revision compare audit helper must not reintroduce project mutation for QS3DREVDIFF")
 
 if REVISION.is_file():
     text = REVISION.read_text(encoding="utf-8")
@@ -61,4 +86,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: BBS View and Revision Diff use read-only/detached snapshots, Revision baseline requires an existing canonical project, and current revision capture never creates project state.")
+print("PASS: BBS View and Revision Diff use read-only/detached snapshots without mutating compare telemetry, Revision baseline requires an existing canonical project, and current revision capture never creates project state.")

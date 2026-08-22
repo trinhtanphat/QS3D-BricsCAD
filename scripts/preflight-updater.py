@@ -26,230 +26,213 @@ signed_payload_tokens = [
     "update-v25.ps1",
 ]
 
-checks = {
-    "scripts/update-v25.ps1": [
-        "[ValidatePattern('^https://')]",
-        "ExpectedSignerThumbprint",
-        "AllowedPackageHost",
-        "MaxPackageSizeMB",
-        "MaxExpandedPackageSizeMB",
-        "MaxArchiveEntries",
-        "$SignedPayloadNames",
-        "embedded credentials",
-        "Read-InstalledVersion",
-        "Installed QS3D plugin assembly version is unreadable",
-        "does not match installed plugin assembly version",
-        "Refusing update until installed state is repaired",
-        "Refusing downgrade",
-        "AllowSameVersion",
-        "65536",
-        "Get-FileHash -LiteralPath $zipPath -Algorithm SHA256",
-        "Assert-SafeArchive",
-        "System.IO.Compression.ZipFile",
-        "Unsafe package archive entry",
-        "Assert-PackageRoot",
-        "Assert-AuthenticodeSigner",
-        "Read-SignedPluginVersion",
-        "[Reflection.AssemblyName]::GetAssemblyName",
-        "$signedPluginVersion",
-        "does not match manifest version",
-        "metadata version",
-        "Refusing replay/downgrade metadata substitution",
-        "SHA256SUMS.txt",
-        "$name.Split('/')",
-        "Unsafe SHA256SUMS entry",
-        "StartsWith($packageRoot",
-        "RequireSigned = $true",
-        "ExpectedSignerThumbprint = $expectedSigner",
-        "Get-Process -Name bricscad",
-        "finally",
-        "Remove-Item -LiteralPath $tempRoot",
-    ],
-    "scripts/new-v25-update-manifest.ps1": [
-        "PackageUri",
-        "ExpectedSignerThumbprint",
-        "$SignedPayloadNames",
-        "embedded credentials",
-        "PACKAGE-METADATA.json",
-        "Assert-AuthenticodeSigner",
-        "Read-PluginAssemblyVersion",
-        "$signedPluginVersion",
-        "does not match signed QS3D plugin assembly version",
-        "version = $signedPluginVersion.ToString()",
-        "Assert-ZipPayloadMatchesSignedStaging",
-        "Zipped QS3D executable payload",
-        "Package ZIP payload does not match signed staging file",
-        "Get-FileHash -LiteralPath $zip -Algorithm SHA256",
-        "schemaVersion = 1",
-        "signerThumbprint = $expectedSigner",
-    ],
-    "scripts/finalize-v25-signed-package.ps1": [
-        "ExpectedSignerThumbprint",
-        "$SignedPayloadNames",
-        "Assert-AuthenticodeSigner",
-        "Read-PluginAssemblyVersion",
-        "$signedPluginVersion",
-        "does not match signed QS3D plugin assembly version",
-        "signedPluginAssemblyVersion",
-        "signedExecutablePayload",
-        "signedPayloadSignerThumbprint",
-        "SHA256SUMS.txt",
-        "Compress-Archive",
-        "ZIP SHA256",
-    ],
-    "scripts/install-v25-autoload.ps1": [
-        "ExpectedSignerThumbprint",
-        "$signedPayloadNames",
-        "Assert-AuthenticodeSigner",
-        "Required executable payload is missing",
-        "SHA256SUMS.txt",
-        "$name.Split('/')",
-        "Unsafe SHA256SUMS entry",
-        "StartsWith($packageRoot",
-        "Get-Process -Name bricscad",
-        ".qs3d-stage-",
-        ".backup-",
-        "Get-DemandLoadSnapshot",
-        "Get-RegistryValueSnapshot",
-        "Get-RegistryValuesSnapshot",
-        "Restore-DemandLoadSnapshot",
-        "$registrySnapshots",
-        "$payloadCommitted",
-        "$originalError",
-        "$rollbackFailures",
-        "for ($index = $registrySnapshots.Count - 1; $index -ge 0; $index--)",
-        "Remove-Item -LiteralPath $installFull -Recurse -Force",
-        "Move-Item -LiteralPath $backup -Destination $installFull",
-        "throw $originalError",
-    ],
-    "scripts/uninstall-v25-autoload.ps1": [
-        "Assert-InstallDirectorySafeToRemove",
-        "Join-Path $env:LOCALAPPDATA 'QS3D'",
-        "PACKAGE-METADATA.json",
-        "QS3D.BricsCAD.V25.dll",
-        "BricsCAD V25 x64",
-        "Refusing recursive removal",
-        "$installFull = Assert-InstallDirectorySafeToRemove",
-        "$root = 'HKCU:\\Software\\Bricsys\\BricsCAD'",
-        "Remove-Item -LiteralPath $installFull -Recurse -Force",
-    ],
-    "scripts/package-v25.ps1": [
-        "update-v25.ps1",
-        "[Reflection.AssemblyName]::GetAssemblyName",
-        "version = $assemblyVersion.ToString()",
-        "pluginSignerThumbprint",
-        "Installer/updater never weaken BricsCAD security settings.",
-        "Get-ChildItem $dist -Recurse -File",
-        ".Replace([IO.Path]::DirectorySeparatorChar, '/')",
-    ],
-    "scripts/sign-v25.ps1": [
-        "HashAlgorithm SHA256",
-        "TimestampServer",
-        "Get-AuthenticodeSignature",
-        "Code Signing",
-        "'.ps1'",
-        "'.dll'",
-    ],
-}
 
-for relative, needles in checks.items():
+def read(relative):
     path = ROOT / relative
-    if not path.is_file():
-        continue
-    text = path.read_text(encoding="utf-8")
-    for needle in needles:
-        if needle not in text:
-            errors.append(relative + " missing updater guard/token: " + needle)
+    return path.read_text(encoding="utf-8") if path.is_file() else ""
 
-for relative in (
-    "scripts/update-v25.ps1",
-    "scripts/new-v25-update-manifest.ps1",
-    "scripts/finalize-v25-signed-package.ps1",
-    "scripts/install-v25-autoload.ps1",
+
+def require(text, token, label):
+    if token not in text:
+        errors.append(label + " missing updater guard/token: " + token)
+
+
+updater = read("scripts/update-v25.ps1")
+manifest = read("scripts/new-v25-update-manifest.ps1")
+finalizer = read("scripts/finalize-v25-signed-package.ps1")
+installer = read("scripts/install-v25-autoload.ps1")
+uninstaller = read("scripts/uninstall-v25-autoload.ps1")
+package = read("scripts/package-v25.ps1")
+signer = read("scripts/sign-v25.ps1")
+
+for label, text in (
+    ("scripts/update-v25.ps1", updater),
+    ("scripts/new-v25-update-manifest.ps1", manifest),
+    ("scripts/finalize-v25-signed-package.ps1", finalizer),
+    ("scripts/install-v25-autoload.ps1", installer),
 ):
-    path = ROOT / relative
-    if not path.is_file():
-        continue
-    text = path.read_text(encoding="utf-8")
     for token in signed_payload_tokens:
-        if token not in text:
-            errors.append(relative + " must cover signed executable payload: " + token)
+        require(text, token, label + " signed payload")
 
-updater = ROOT / "scripts/update-v25.ps1"
-if updater.is_file():
-    text = updater.read_text(encoding="utf-8")
+for token in (
+    "[ValidatePattern('^https://')]",
+    "ExpectedSignerThumbprint",
+    "AllowedPackageHost",
+    "MaxPackageSizeMB",
+    "MaxExpandedPackageSizeMB",
+    "MaxArchiveEntries",
+    "function Invoke-BoundedHttpsDownload",
+    "Invoke-BoundedHttpsDownload -Address $manifestAddress",
+    "Invoke-BoundedHttpsDownload -Address $packageAddress",
+    "embedded credentials",
+    "function Read-InstalledVersion",
+    "function Read-InstalledProductVersion",
+    "function Convert-ToStrictSemVer",
+    "function Compare-StrictSemVer",
+    "schemaVersion -ne 2",
+    "Refusing product-version downgrade",
+    "Assert-SafeArchive",
+    "Assert-PackageRoot",
+    "Assert-AuthenticodeSigner",
+    "Read-SignedPluginVersion",
+    "Downloaded PACKAGE-METADATA.json is missing productVersion",
+    "does not match signed plugin product version",
+    "does not match manifest productVersion",
+    "Installed QS3D productVersion changed during update preparation",
+    "SHA256SUMS.txt",
+    "Unsafe SHA256SUMS entry",
+    "RequireSigned = $true",
+    "ExpectedSignerThumbprint = $expectedSigner",
+    "Get-Process -Name bricscad",
+    "$updateMutex = Enter-Qs3dUpdateMutex",
+    "Exit-Qs3dUpdateMutex -Mutex $updateMutex",
+    "Remove-Item -LiteralPath $tempRoot",
+):
+    require(updater, token, "scripts/update-v25.ps1")
+
+for token in (
+    "PackageUri",
+    "ExpectedSignerThumbprint",
+    "function Convert-ToStrictSemVerText",
+    "function Read-ManagedAssemblyVersion",
+    "function Read-ManagedProductVersion",
+    "managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')",
+    "PACKAGE-METADATA is missing productVersion",
+    "Assert-AuthenticodeSigner",
+    "Assert-ZipPayloadMatchesSignedStaging",
+    "Package ZIP payload does not match signed staging file",
+    "schemaVersion = 2",
+    "productVersion = $signedPluginProductVersion",
+    "signerThumbprint = $expectedSigner",
+):
+    require(manifest, token, "scripts/new-v25-update-manifest.ps1")
+if "schemaVersion = 1" in manifest:
+    errors.append("new-v25-update-manifest.ps1 must not regress to legacy schemaVersion 1")
+
+for token in (
+    "ExpectedSignerThumbprint",
+    "Assert-AuthenticodeSigner",
+    "function Read-ManagedAssemblyVersion",
+    "function Read-ManagedProductVersion",
+    "managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')",
+    "PACKAGE-METADATA productVersion",
+    "signedExecutablePayload",
+    "signedPayloadSignerThumbprint",
+    "SHA256SUMS.txt",
+    "Compress-Archive",
+    "ZIP SHA256",
+):
+    require(finalizer, token, "scripts/finalize-v25-signed-package.ps1")
+
+for token in (
+    "ExpectedSignerThumbprint",
+    "Assert-PackageIntegrity",
+    "Assert-PackageIdentity",
+    "Get-DemandLoadSnapshot",
+    "Restore-DemandLoadSnapshot",
+    "$registrySnapshots",
+    ".qs3d-stage-",
+    ".backup-",
+    "$payloadCommitted",
+    "$originalError",
+    "$rollbackFailures",
+    "for ($index = $registrySnapshots.Count - 1; $index -ge 0; $index--)",
+    "Move-Item -LiteralPath $backup -Destination $installFull",
+    "elseif ($payloadCommitted -and (Test-Path -LiteralPath $installFull))",
+    "throw $originalError",
+    "$updateMutex = Enter-Qs3dUpdateMutex",
+    "Exit-Qs3dUpdateMutex -Mutex $updateMutex",
+):
+    require(installer, token, "scripts/install-v25-autoload.ps1")
+
+for token in (
+    "Assert-InstallDirectorySafeToRemove",
+    "PACKAGE-METADATA.json",
+    "QS3D.BricsCAD.V25.dll",
+    "BricsCAD V25 x64",
+    "$registryPlan = @()",
+    "Get-RegistryTreeSnapshot",
+    "Restore-RegistryTreeSnapshot",
+    ".qs3d-uninstall-",
+    "Move-Item -LiteralPath $installFull -Destination $quarantine -ErrorAction Stop",
+    "Move-Item -LiteralPath $quarantine -Destination $installFull -ErrorAction Stop",
+    "Remove-Item -LiteralPath $entry.Target.AppKey -Recurse -Force -ErrorAction Stop",
+    "throw $originalError",
+    "$updateMutex = Enter-Qs3dUpdateMutex",
+    "Exit-Qs3dUpdateMutex -Mutex $updateMutex",
+):
+    require(uninstaller, token, "scripts/uninstall-v25-autoload.ps1")
+
+for token in (
+    "update-v25.ps1",
+    "[Reflection.AssemblyName]::GetAssemblyName",
+    "version = $assemblyVersion.ToString()",
+    "pluginSignerThumbprint",
+    "Installer/updater never weaken BricsCAD security settings.",
+):
+    require(package, token, "scripts/package-v25.ps1")
+for token in ("HashAlgorithm SHA256", "TimestampServer", "Get-AuthenticodeSignature", "Code Signing", "'.ps1'", "'.dll'"):
+    require(signer, token, "scripts/sign-v25.ps1")
+
+for label, text in (("updater", updater), ("installer", installer), ("uninstaller", uninstaller)):
     lower = text.lower()
-    for token in ("http://", "-skipcertificatecheck", "trustallcertificates", "certificatepolicy", "executionpolicy bypass"):
+    for token in ("-skipcertificatecheck", "trustallcertificates", "certificatepolicy", "executionpolicy bypass"):
         if token in lower:
-            errors.append("updater contains forbidden insecure token: " + token)
-    installed_state = text.find("$installedVersion = Read-InstalledVersion -Directory $InstallDirectory")
-    downgrade_check = text.find("if ($targetVersion -lt $installedVersion)")
-    should_process = text.find("$PSCmdlet.ShouldProcess($InstallDirectory")
-    if min(installed_state, downgrade_check, should_process) < 0 or not (installed_state < downgrade_check < should_process):
-        errors.append("updater must reconcile installed DLL/metadata before downgrade/same-version decisions and before mutation")
-    archive_check = text.find("Assert-SafeArchive -ZipPath $zipPath")
-    extraction = text.find("Expand-Archive -LiteralPath $zipPath")
-    if archive_check < 0 or extraction < 0 or archive_check > extraction:
-        errors.append("updater must validate archive paths/expanded limits before Expand-Archive")
-    package_check = text.find("Assert-PackageRoot -Directory $extractRoot")
-    signed_version = text.find("$signedPluginVersion = Read-SignedPluginVersion")
-    metadata_check = text.find("$packageVersion -ne $signedPluginVersion")
-    installer_execute = text.find("& $installer @arguments")
-    if package_check < 0 or signed_version < 0 or metadata_check < 0 or installer_execute < 0:
-        errors.append("updater must verify signatures, signed plugin version, metadata binding, then execute installer")
-    elif not (package_check < signed_version < metadata_check < installer_execute):
-        errors.append("updater version binding must happen after signature verification and before installer execution")
+            errors.append(label + " contains forbidden insecure token: " + token)
+    if "Stop-Process" in text or "taskkill" in text or ".Kill(" in text:
+        errors.append(label + " must never force-terminate BricsCAD/processes")
 
-manifest = ROOT / "scripts/new-v25-update-manifest.ps1"
-if manifest.is_file():
-    text = manifest.read_text(encoding="utf-8")
-    signer_check = text.find("Assert-AuthenticodeSigner -Path (Join-Path $package $name)")
-    signed_version = text.find("$signedPluginVersion = Read-PluginAssemblyVersion")
-    verification = text.find("Assert-ZipPayloadMatchesSignedStaging -ZipPath $zip")
-    package_hash = text.find("$zipHash =")
-    if min(signer_check, signed_version, verification, package_hash) < 0 or not (signer_check < signed_version < verification < package_hash):
-        errors.append("manifest generation must bind version to signed plugin before verifying/hashing the ZIP")
+installed_state = updater.find("$installedVersion = Read-InstalledVersion -Directory $InstallDirectory")
+product_state = updater.find("$installedProductVersion = Read-InstalledProductVersion -Directory $InstallDirectory")
+should_process = updater.find("$PSCmdlet.ShouldProcess($InstallDirectory")
+archive_check = updater.find("Assert-SafeArchive -ZipPath $zipPath")
+extraction = updater.find("Expand-Archive -LiteralPath $zipPath")
+package_check = updater.find("Assert-PackageRoot -Directory $extractRoot")
+signed_version = updater.find("$signedPluginVersion = Read-SignedPluginVersion")
+metadata_check = updater.find("$packageVersion -ne $signedPluginVersion")
+installer_execute = updater.find("& $installer @arguments")
+if min(installed_state, product_state, should_process) < 0 or not (installed_state < product_state < should_process):
+    errors.append("updater must reconcile installed assembly/product identities before mutation approval")
+if min(archive_check, extraction) < 0 or archive_check > extraction:
+    errors.append("updater must validate archive paths/expanded limits before Expand-Archive")
+if min(package_check, signed_version, metadata_check, installer_execute) < 0 or not (package_check < signed_version < metadata_check < installer_execute):
+    errors.append("updater must verify signatures, signed plugin identity and metadata binding before installer execution")
 
-finalizer = ROOT / "scripts/finalize-v25-signed-package.ps1"
-if finalizer.is_file():
-    text = finalizer.read_text(encoding="utf-8")
-    signer_check = text.find("Assert-AuthenticodeSigner -Path $path")
-    signed_version = text.find("$signedPluginVersion = Read-PluginAssemblyVersion")
-    should_process = text.find("$PSCmdlet.ShouldProcess($zip")
-    if min(signer_check, signed_version, should_process) < 0 or not (signer_check < signed_version < should_process):
-        errors.append("signed package finalization must validate signer and signed plugin version before mutating metadata/ZIP")
+manifest_signer = manifest.find("Assert-AuthenticodeSigner -Path (Join-Path $package $name)")
+manifest_identity = manifest.find("$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')")
+manifest_zip_verify = manifest.find("Assert-ZipPayloadMatchesSignedStaging -ZipPath $zip")
+manifest_hash = manifest.find("$zipHash =")
+if min(manifest_signer, manifest_identity, manifest_zip_verify, manifest_hash) < 0 or not (manifest_signer < manifest_identity < manifest_zip_verify < manifest_hash):
+    errors.append("manifest generation must bind both signed managed identities before verifying/hashing the ZIP")
 
-installer = ROOT / "scripts/install-v25-autoload.ps1"
-if installer.is_file():
-    original = installer.read_text(encoding="utf-8")
-    lower = original.lower()
-    for token in ("secureload 0", "setvar('secureload'", 'setvar("secureload"'):
-        if token in lower:
-            errors.append("installer must not weaken SECURELOAD: " + token)
-    snapshot = original.find("$registrySnapshots = @($targets | ForEach-Object { Get-DemandLoadSnapshot")
-    payload_swap = original.find("Move-Item -LiteralPath $stage -Destination $installFull")
-    registry_write = original.find("New-ItemProperty -Path $target.AppKey -Name 'Loader'")
-    catch_block = original.find("$originalError = $_")
-    registry_rollback = original.find("Restore-DemandLoadSnapshot -Snapshot $registrySnapshots[$index]")
-    payload_rollback = original.find("Move-Item -LiteralPath $backup -Destination $installFull", catch_block)
-    rethrow = original.find("throw $originalError")
-    if min(snapshot, payload_swap, registry_write, catch_block, registry_rollback, payload_rollback, rethrow) < 0:
-        errors.append("installer must snapshot DemandLoad state and rollback registry/payload on any failure")
-    elif not (snapshot < payload_swap < registry_write < catch_block < registry_rollback < payload_rollback < rethrow):
-        errors.append("installer transactional ordering must snapshot before mutation and rollback before rethrow")
-    if "elseif ($payloadCommitted -and (Test-Path -LiteralPath $installFull))" not in original:
-        errors.append("fresh-install failure must remove the newly committed payload")
+finalizer_signer = finalizer.find("Assert-AuthenticodeSigner -Path $path")
+finalizer_identity = finalizer.find("$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')")
+finalizer_mutation = finalizer.find("$PSCmdlet.ShouldProcess($zip")
+if min(finalizer_signer, finalizer_identity, finalizer_mutation) < 0 or not (finalizer_signer < finalizer_identity < finalizer_mutation):
+    errors.append("signed package finalization must validate signer and both managed identities before metadata/ZIP mutation")
 
-uninstaller = ROOT / "scripts/uninstall-v25-autoload.ps1"
-if uninstaller.is_file():
-    original = uninstaller.read_text(encoding="utf-8")
-    safety = original.find("$installFull = Assert-InstallDirectorySafeToRemove -Directory $InstallDirectory")
-    registry_scan = original.find("$root = 'HKCU:\\Software\\Bricsys\\BricsCAD'")
-    recursive_delete = original.find("Remove-Item -LiteralPath $installFull -Recurse -Force")
-    if min(safety, registry_scan, recursive_delete) < 0 or not (safety < registry_scan < recursive_delete):
-        errors.append("uninstaller must validate install scope/package identity before registry or recursive file deletion")
-    if "IndexOf('\\QS3D\\'" in original:
-        errors.append("uninstaller must scope normal deletion to the canonical LocalAppData/QS3D root, not any path containing a QS3D segment")
+install_snapshot = installer.find("$registrySnapshots = @(")
+install_swap = installer.find("Move-Item -LiteralPath $stage -Destination $installFull")
+install_registry = installer.find("New-ItemProperty -Path $target.AppKey -Name 'Loader'")
+install_catch = installer.find("$originalError = $_")
+install_restore = installer.find("Restore-DemandLoadSnapshot -Snapshot $registrySnapshots[$index]")
+install_payload_restore = installer.find("Move-Item -LiteralPath $backup -Destination $installFull", install_catch)
+install_rethrow = installer.find("throw $originalError")
+if min(install_snapshot, install_swap, install_registry, install_catch, install_restore, install_payload_restore, install_rethrow) < 0 or not (
+    install_snapshot < install_swap < install_registry < install_catch < install_restore < install_payload_restore < install_rethrow
+):
+    errors.append("installer must snapshot before payload/registry mutation and rollback registry/payload before rethrow")
+
+uninstall_identity = uninstaller.find("Assert-InstallDirectorySafeToRemove -Directory $InstallDirectory")
+uninstall_plan = uninstaller.find("$registryPlan = @()")
+uninstall_quarantine = uninstaller.find("Move-Item -LiteralPath $installFull -Destination $quarantine -ErrorAction Stop")
+uninstall_registry = uninstaller.find("Remove-Item -LiteralPath $entry.Target.AppKey -Recurse -Force -ErrorAction Stop")
+uninstall_restore_files = uninstaller.find("Move-Item -LiteralPath $quarantine -Destination $installFull -ErrorAction Stop")
+uninstall_restore_registry = uninstaller.find("Restore-RegistryTreeSnapshot -Snapshot $removedSnapshots[$index]")
+if min(uninstall_identity, uninstall_plan, uninstall_quarantine, uninstall_registry, uninstall_restore_files, uninstall_restore_registry) < 0:
+    errors.append("uninstaller must validate identity, snapshot plan, quarantine files and provide file/registry rollback")
+elif not (uninstall_identity < uninstall_plan < uninstall_quarantine < uninstall_registry < uninstall_restore_files < uninstall_restore_registry):
+    errors.append("uninstaller transaction ordering must validate/snapshot before mutation and restore files before registry on failure")
 
 if errors:
     for error in errors:
@@ -257,4 +240,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: secure V25 updates reconcile installed DLL/metadata before downgrade decisions; installer rollback stays transactional; uninstall validates canonical scope and QS3D package identity before destructive cleanup.")
+print("PASS: secure V25 update uses bounded HTTPS, schema-2 dual managed identity binding, signed/hash-verified packages, shared update serialization, transactional install rollback and quarantine-safe uninstall rollback.")

@@ -11,7 +11,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
     {
         private const string AssemblyName = "BrxMgd";
         private const string TabId = "QS3D_AUTHOR";
-        private const string PanelSourceId = "QS3D_AUTHOR_PANEL_SOURCE";
+        private const string PanelSourceId = "QS3D_AUTHOR_ARCHITECTURE_PANEL_SOURCE";
         private const string ButtonId = "QS3D_AUTHOR_DRAWWALLREF";
         private const string ButtonText = "Vẽ Tường tham chiếu";
         private const string Command = "QS3DDRAWWALLREF";
@@ -39,30 +39,18 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
                 var panels = GetProperty(authorTab, "Panels");
                 if (!(panels is IEnumerable panelItems)) return false;
-                object? source = null;
-                foreach (var panel in panelItems)
-                {
-                    if (panel == null) continue;
-                    var candidate = GetProperty(panel, "Source");
-                    if (candidate == null) continue;
-                    if (string.Equals(GetProperty(candidate, "Id") as string, PanelSourceId, StringComparison.OrdinalIgnoreCase))
-                    {
-                        source = candidate;
-                        break;
-                    }
-                    if (source == null) source = candidate;
-                }
+                var source = FindPanelSource(panelItems, PanelSourceId);
                 if (source == null) return false;
 
                 var items = GetProperty(source, "Items");
                 if (items == null) return false;
-                if (CollectionContainsId(items, ButtonId) || CollectionContainsCommand(items, Command))
+                var button = FindById(items, ButtonId) ?? FindByCommand(items, Command);
+                if (button == null)
                 {
-                    _initialized = true;
-                    return true;
+                    button = Create("Bricscad.Windows.RibbonButton");
+                    Add(items, button);
                 }
 
-                var button = Create("Bricscad.Windows.RibbonButton");
                 SetProperty(button, "Id", ButtonId);
                 SetProperty(button, "Name", ButtonText);
                 SetProperty(button, "Text", ButtonText);
@@ -70,7 +58,6 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 SetProperty(button, "ShowImage", false);
                 SetProperty(button, "CommandParameter", Command);
                 SetProperty(button, "CommandHandler", new CommandHandler());
-                Add(items, button);
                 _initialized = true;
                 return true;
             }
@@ -81,6 +68,19 @@ namespace QS3D.BricsCAD.V25.Ribbon
         }
 
         public static void Reset() => _initialized = false;
+
+        private static object? FindPanelSource(IEnumerable panels, string sourceId)
+        {
+            foreach (var panel in panels)
+            {
+                if (panel == null) continue;
+                var source = GetProperty(panel, "Source");
+                if (source == null) continue;
+                if (string.Equals(GetProperty(source, "Id") as string, sourceId, StringComparison.OrdinalIgnoreCase))
+                    return source;
+            }
+            return null;
+        }
 
         private static object? FindRibbonControl()
         {
@@ -124,26 +124,26 @@ namespace QS3D.BricsCAD.V25.Ribbon
             method.Invoke(collection, new[] { item });
         }
 
-        private static bool CollectionContainsId(object collection, string id)
+        private static object? FindById(object collection, string id)
         {
-            if (!(collection is IEnumerable enumerable)) return false;
+            if (!(collection is IEnumerable enumerable)) return null;
             foreach (var item in enumerable)
             {
                 if (item == null) continue;
-                if (string.Equals(GetProperty(item, "Id") as string, id, StringComparison.OrdinalIgnoreCase)) return true;
+                if (string.Equals(GetProperty(item, "Id") as string, id, StringComparison.OrdinalIgnoreCase)) return item;
             }
-            return false;
+            return null;
         }
 
-        private static bool CollectionContainsCommand(object collection, string command)
+        private static object? FindByCommand(object collection, string command)
         {
-            if (!(collection is IEnumerable enumerable)) return false;
+            if (!(collection is IEnumerable enumerable)) return null;
             foreach (var item in enumerable)
             {
                 if (item == null) continue;
-                if (string.Equals(GetProperty(item, "CommandParameter") as string, command, StringComparison.OrdinalIgnoreCase)) return true;
+                if (string.Equals(GetProperty(item, "CommandParameter") as string, command, StringComparison.OrdinalIgnoreCase)) return item;
             }
-            return false;
+            return null;
         }
 
         private sealed class CommandHandler : ICommand

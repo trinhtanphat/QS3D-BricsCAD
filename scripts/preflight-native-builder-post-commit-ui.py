@@ -13,13 +13,13 @@ BUILDERS = [
     ),
     (
         ROOT / "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs",
-        "public static int BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)",
+        "public static int BuildSelectedLineWalls(\n            Document document,\n            ProjectState project,\n            ElementCategory category,\n            bool allowPostCommitUi = true)",
         "private static SourceBatchKind ValidateSourceBatch",
         'CadPostCommitUi.TryRegen(document, "LINE wall native 3D");',
     ),
     (
         ROOT / "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs",
-        "public static int BuildSelected(Document document, ProjectState project, ElementCategory category)",
+        "public static int BuildSelected(\n            Document document,\n            ProjectState project,\n            ElementCategory category,\n            bool allowPostCommitUi = true)",
         "private static void CommitWallPierPathSnapshot",
         'CadPostCommitUi.TryRegen(document, "Polyline wall native 3D");',
     ),
@@ -65,7 +65,7 @@ for path, start_token, end_token, regen_call in BUILDERS:
     method = text[start:end]
 
     ownership = method.rfind("GeneratedGeometryService.CommitReplacement(")
-    touch = method.find("if (pending.Count > 0) project.Touch();", ownership + 1)
+    touch = method.find("project.Touch();", ownership + 1)
     commit = method.find("transaction.Commit();", touch + 1)
     committed = method.find("cadCommitted = true;", commit + 1)
     regen = method.find(regen_call, committed + 1)

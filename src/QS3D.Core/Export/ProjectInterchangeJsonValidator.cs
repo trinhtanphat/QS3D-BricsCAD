@@ -6,6 +6,8 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
+using System.Xml;
+using System.Xml.Linq;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
@@ -90,7 +92,7 @@ namespace QS3D.Core.Export
             if (!info.Exists) throw new FileNotFoundException("Semantic snapshot file does not exist.", fullPath);
             if (info.Length > MaxFileBytes) throw new InvalidDataException("Semantic snapshot exceeds the guarded " + MaxFileBytes.ToString(CultureInfo.InvariantCulture) + " byte limit.");
 
-            var bytes = File.ReadAllBytes(fullPath);
+            var bytes = ReadFileBytesBounded(fullPath);
             try
             {
                 return Validate(StrictUtf8.GetString(bytes));
@@ -103,6 +105,30 @@ namespace QS3D.Core.Export
             }
         }
 
+        private static byte[] ReadFileBytesBounded(string fullPath)
+        {
+            using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var buffer = new MemoryStream())
+            {
+                var chunk = new byte[81920];
+                long total = 0;
+                while (total < MaxFileBytes)
+                {
+                    var remaining = MaxFileBytes - total;
+                    var count = (int)Math.Min((long)chunk.Length, remaining);
+                    var read = stream.Read(chunk, 0, count);
+                    if (read == 0) return buffer.ToArray();
+                    buffer.Write(chunk, 0, read);
+                    total += read;
+                }
+
+                if (stream.ReadByte() != -1)
+                    throw new InvalidDataException("Semantic snapshot exceeds the guarded " + MaxFileBytes.ToString(CultureInfo.InvariantCulture) + " byte limit.");
+
+                return buffer.ToArray();
+            }
+        }
+
         public static ProjectInterchangeValidationResult Validate(string json)
         {
             var issues = new IssueCollector();
@@ -111,11 +137,22 @@ namespace QS3D.Core.Export
                 issues.Error("JSON_EMPTY", "Semantic snapshot JSON is empty.", "$.");
                 return Result(null, issues);
             }
-            if (Encoding.UTF8.GetByteCount(json) > MaxFileBytes)
+            int utf8ByteCount;
+            try
+            {
+                utf8ByteCount = StrictUtf8.GetByteCount(json);
+            }
+            catch (EncoderFallbackException ex)
+            {
+                issues.Error("JSON_UTF16", "Semantic snapshot JSON string contains invalid UTF-16: " + ex.Message, "$.");
+                return Result(null, issues);
+            }
+            if (utf8ByteCount > MaxFileBytes)
             {
                 issues.Error("JSON_TOO_LARGE", "Semantic snapshot exceeds the guarded size limit.", "$.");
                 return Result(null, issues);
             }
+            var utf8 = StrictUtf8.GetBytes(json);
 
             SnapshotContract? snapshot;
             try
@@ -125,7 +162,7 @@ namespace QS3D.Core.Export
                     MaxItemsInObjectGraph = 1000000,
                     UseSimpleDictionaryFormat = true
                 });
-                using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json), false))
+                using (var stream = new MemoryStream(utf8, false))
                     snapshot = serializer.ReadObject(stream) as SnapshotContract;
             }
             catch (Exception ex) when (ex is SerializationException || ex is FormatException || ex is InvalidCastException)
@@ -140,6 +177,15 @@ namespace QS3D.Core.Export
                 return Result(null, issues);
             }
 
+            try
+            {
+                ValidateNoUnknownMembers(utf8, issues);
+            }
+            catch (Exception ex) when (ex is SerializationException || ex is XmlException)
+            {
+                issues.Error("JSON_PARSE", "Semantic snapshot JSON shape cannot be inspected: " + ex.Message, "$.");
+                return Result(null, issues);
+            }
             ValidateHeader(snapshot, issues);
             ValidateProject(snapshot.Project, issues);
             RequireCollection(snapshot.Zones, "zones", issues);
@@ -159,6 +205,7 @@ namespace QS3D.Core.Export
             var elementIndex = ValidateElements(elements, familyIndex, floorIds, zoneIds, issues);
             ValidateDependencies(elements, elementIndex, issues);
             ValidateDependencyCycles(elementIndex, issues);
+            ValidateSemanticPropertyReferences(elements, zones, floors, families, elementIndex, issues);
 
             return new ProjectInterchangeValidationResult(
                 snapshot.Format ?? string.Empty,
@@ -169,6 +216,68 @@ namespace QS3D.Core.Export
                 elements.Count,
                 issues.Items);
         }
+
+        private static void ValidateNoUnknownMembers(byte[] utf8, IssueCollector issues)
+        {
+            XDocument document;
+            using (var reader = JsonReaderWriterFactory.CreateJsonReader(utf8, XmlDictionaryReaderQuotas.Max))
+                document = XDocument.Load(reader, LoadOptions.None);
+
+            var root = document.Root;
+            if (root == null) return;
+            ValidateObjectMembers(root, "$", RootMembers, issues);
+            ValidateObjectMembers(Member(root, "units"), "$.units", UnitsMembers, issues);
+            ValidateObjectMembers(Member(root, "project"), "$.project", ProjectMembers, issues);
+            ValidateArrayObjectMembers(Member(root, "zones"), "$.zones", ZoneMembers, issues);
+            ValidateArrayObjectMembers(Member(root, "floors"), "$.floors", FloorMembers, issues);
+            ValidateArrayObjectMembers(Member(root, "families"), "$.families", FamilyMembers, issues);
+            ValidateArrayObjectMembers(Member(root, "elements"), "$.elements", ElementMembers, issues);
+        }
+
+        private static void ValidateObjectMembers(XElement? value, string path, ISet<string> allowedMembers, IssueCollector issues)
+        {
+            if (value == null) return;
+            foreach (var member in value.Elements())
+            {
+                if (issues.Full) return;
+                var name = JsonMemberName(member);
+                if (!allowedMembers.Contains(name))
+                    issues.Error("JSON_UNKNOWN_MEMBER", "Semantic snapshot contains a JSON member outside the supported v1 object contract: " + name + ".", path);
+            }
+        }
+
+        private static void ValidateArrayObjectMembers(XElement? value, string path, ISet<string> allowedMembers, IssueCollector issues)
+        {
+            if (value == null) return;
+            var index = 0;
+            foreach (var item in value.Elements())
+            {
+                if (issues.Full) return;
+                ValidateObjectMembers(item, path + "[" + index.ToString(CultureInfo.InvariantCulture) + "]", allowedMembers, issues);
+                index++;
+            }
+        }
+
+        private static XElement? Member(XElement value, string name) =>
+            value.Elements().FirstOrDefault(x => string.Equals(JsonMemberName(x), name, StringComparison.Ordinal));
+
+        private static string JsonMemberName(XElement value)
+        {
+            var encodedName = value.Attribute("item");
+            return string.Equals(value.Name.NamespaceName, "item", StringComparison.Ordinal) && encodedName != null
+                ? encodedName.Value
+                : value.Name.LocalName;
+        }
+
+        private static readonly ISet<string> RootMembers = Members("format", "formatVersion", "units", "project", "zones", "floors", "families", "elements");
+        private static readonly ISet<string> UnitsMembers = Members("length", "area", "volume", "mass");
+        private static readonly ISet<string> ProjectMembers = Members("id", "name", "schemaVersion", "drawingFingerprint", "updatedUtc");
+        private static readonly ISet<string> ZoneMembers = Members("id", "name");
+        private static readonly ISet<string> FloorMembers = Members("id", "name", "elevationM");
+        private static readonly ISet<string> FamilyMembers = Members("id", "name", "category", "properties");
+        private static readonly ISet<string> ElementMembers = Members("id", "category", "familyId", "floorId", "zoneId", "drawingFingerprint", "updatedUtc", "sourceRefScope", "sourceHandles", "dependencies", "properties", "quantities");
+
+        private static ISet<string> Members(params string[] values) => new HashSet<string>(values, StringComparer.Ordinal);
 
         private static void ValidateHeader(SnapshotContract snapshot, IssueCollector issues)
         {
@@ -191,7 +300,7 @@ namespace QS3D.Core.Export
 
         private static void RequireUnit(string? actual, string expected, string name, IssueCollector issues)
         {
-            if (!string.Equals((actual ?? string.Empty).Trim(), expected, StringComparison.Ordinal))
+            if (!string.Equals(actual ?? string.Empty, expected, StringComparison.Ordinal))
                 issues.Error("UNIT_" + name.ToUpperInvariant(), "Expected " + name + " unit '" + expected + "'.", "$.units." + name);
         }
 
@@ -363,7 +472,7 @@ namespace QS3D.Core.Export
                 {
                     if (!string.Equals(raw, handle, StringComparison.Ordinal)) issues.Error("SOURCE_HANDLE_NON_CANONICAL", "Source handle must not contain leading/trailing whitespace.", itemPath);
                     if (handle.Length > MaxSourceHandleLength) issues.Error("SOURCE_HANDLE_TOO_LONG", "Source handle is too long.", itemPath);
-                    else if (!seen.Add(handle)) issues.Error("SOURCE_HANDLE_DUPLICATE", "Duplicate source handle within one element: " + handle, itemPath);
+                    else if (!seen.Add(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle))) issues.Error("SOURCE_HANDLE_DUPLICATE", "Duplicate source handle within one element: " + handle, itemPath);
                 }
             }
         }
@@ -455,6 +564,145 @@ namespace QS3D.Core.Export
                 "$.elements");
         }
 
+        private static void ValidateSemanticPropertyReferences(
+            IReadOnlyList<ElementContract> elements,
+            IReadOnlyList<ZoneContract> zones,
+            IReadOnlyList<FloorContract> floors,
+            IReadOnlyList<FamilyContract> families,
+            IReadOnlyDictionary<string, ElementContract> elementIndex,
+            IssueCollector issues)
+        {
+            if (issues.Full) return;
+            var zoneIds = new HashSet<string>(zones.Where(x => x != null).Select(x => (x.Id ?? string.Empty).Trim()).Where(x => x.Length > 0), StringComparer.OrdinalIgnoreCase);
+            var familyIds = new HashSet<string>(families.Where(x => x != null).Select(x => (x.Id ?? string.Empty).Trim()).Where(x => x.Length > 0), StringComparer.OrdinalIgnoreCase);
+            var floorById = floors
+                .Where(x => x != null && !string.IsNullOrWhiteSpace(x.Id))
+                .GroupBy(x => (x.Id ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(x => x.Key, x => x.First().ElevationM, StringComparer.OrdinalIgnoreCase);
+
+            for (var i = 0; i < elements.Count && !issues.Full; i++)
+            {
+                var element = elements[i];
+                if (element == null || element.Properties == null) continue;
+                var elementId = (element.Id ?? string.Empty).Trim();
+                var propertyPath = "$.elements[" + i.ToString(CultureInfo.InvariantCulture) + "].properties";
+
+                foreach (var reference in ProjectInterchangeSemanticReferencePolicy.KnownPropertyReferences)
+                {
+                    if (!TryProperty(element.Properties, reference.PropertyKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+                    var id = raw.Trim();
+                    if (!string.Equals(raw, id, StringComparison.Ordinal))
+                    {
+                        issues.Error(
+                            "SEMANTIC_PROPERTY_REF_NON_CANONICAL",
+                            "Element " + elementId + " property " + reference.PropertyKey + " must not contain leading/trailing whitespace in its " + reference.Kind + " identity reference.",
+                            propertyPath + "." + reference.PropertyKey);
+                        continue;
+                    }
+                    bool exists;
+                    switch (reference.Kind)
+                    {
+                        case InterchangeRemapIdentityKind.Zone: exists = zoneIds.Contains(id); break;
+                        case InterchangeRemapIdentityKind.Floor: exists = floorById.ContainsKey(id); break;
+                        case InterchangeRemapIdentityKind.Family: exists = familyIds.Contains(id); break;
+                        case InterchangeRemapIdentityKind.Element: exists = elementIndex.ContainsKey(id); break;
+                        default:
+                            issues.Error("SEMANTIC_PROPERTY_REF_KIND", "Unsupported registered semantic reference kind: " + reference.Kind + ".", propertyPath + "." + reference.PropertyKey);
+                            continue;
+                    }
+                    if (!exists)
+                        issues.Error(
+                            "SEMANTIC_PROPERTY_REF_MISSING",
+                            "Element " + elementId + " property " + reference.PropertyKey + " references missing " + reference.Kind + " identity " + id + ".",
+                            propertyPath + "." + reference.PropertyKey);
+                }
+
+                ValidateLevelReferenceConsistency(element, floorById, propertyPath, issues);
+            }
+        }
+
+        private static void ValidateLevelReferenceConsistency(
+            ElementContract element,
+            IReadOnlyDictionary<string, double> floorById,
+            string propertyPath,
+            IssueCollector issues)
+        {
+            if (element.Properties == null || issues.Full) return;
+            var elementId = (element.Id ?? string.Empty).Trim();
+            var bottomId = Property(element.Properties, ProjectFloorService.BottomLevelIdKey);
+            var topId = Property(element.Properties, ProjectFloorService.TopLevelIdKey);
+            var hasBottomOffset = HasConfiguredProperty(element.Properties, ProjectFloorService.BottomLevelOffsetKey);
+            var hasTopOffset = HasConfiguredProperty(element.Properties, ProjectFloorService.TopLevelOffsetKey);
+
+            if (bottomId.Length == 0)
+            {
+                if (topId.Length > 0)
+                    issues.Error("LEVEL_RELATION", "Element " + elementId + " has TopLevelId without BottomLevelId.", propertyPath + "." + ProjectFloorService.TopLevelIdKey);
+                if (hasBottomOffset || hasTopOffset)
+                    issues.Error("LEVEL_RELATION", "Element " + elementId + " has a level offset without its level reference.", propertyPath);
+                return;
+            }
+
+            if (!floorById.TryGetValue(bottomId, out var bottomBase)) return;
+            if (!TryLevelOffset(element.Properties, ProjectFloorService.BottomLevelOffsetKey, out var bottomOffset))
+            {
+                issues.Error("LEVEL_OFFSET", "Element " + elementId + " bottom level offset must be a finite invariant-culture number.", propertyPath + "." + ProjectFloorService.BottomLevelOffsetKey);
+                return;
+            }
+            var bottom = bottomBase + bottomOffset;
+            if (!Finite(bottom))
+            {
+                issues.Error("LEVEL_OFFSET", "Element " + elementId + " bottom level elevation must be finite.", propertyPath + "." + ProjectFloorService.BottomLevelOffsetKey);
+                return;
+            }
+
+            if (topId.Length == 0)
+            {
+                if (hasTopOffset)
+                    issues.Error("LEVEL_RELATION", "Element " + elementId + " has TopLevelOffsetM without TopLevelId.", propertyPath + "." + ProjectFloorService.TopLevelOffsetKey);
+                return;
+            }
+            if (!floorById.TryGetValue(topId, out var topBase)) return;
+            if (!TryLevelOffset(element.Properties, ProjectFloorService.TopLevelOffsetKey, out var topOffset))
+            {
+                issues.Error("LEVEL_OFFSET", "Element " + elementId + " top level offset must be a finite invariant-culture number.", propertyPath + "." + ProjectFloorService.TopLevelOffsetKey);
+                return;
+            }
+            var top = topBase + topOffset;
+            if (!Finite(top))
+            {
+                issues.Error("LEVEL_OFFSET", "Element " + elementId + " top level elevation must be finite.", propertyPath + "." + ProjectFloorService.TopLevelOffsetKey);
+                return;
+            }
+            if (top <= bottom)
+                issues.Error("LEVEL_ORDER", "Element " + elementId + " top level elevation must be above bottom level elevation.", propertyPath);
+        }
+
+        private static bool TryLevelOffset(IDictionary<string, string> properties, string key, out double value)
+        {
+            value = 0d;
+            if (!TryProperty(properties, key, out var raw) || string.IsNullOrWhiteSpace(raw)) return true;
+            return double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value) && Finite(value);
+        }
+
+        private static bool HasConfiguredProperty(IDictionary<string, string> properties, string key) =>
+            TryProperty(properties, key, out var raw) && !string.IsNullOrWhiteSpace(raw);
+
+        private static string Property(IDictionary<string, string> properties, string key) =>
+            TryProperty(properties, key, out var raw) ? (raw ?? string.Empty).Trim() : string.Empty;
+
+        private static bool TryProperty(IDictionary<string, string> properties, string key, out string value)
+        {
+            foreach (var pair in properties)
+            {
+                if (!string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase)) continue;
+                value = pair.Value ?? string.Empty;
+                return true;
+            }
+            value = string.Empty;
+            return false;
+        }
+
         private static void ValidateProperties(IDictionary<string, string>? properties, string path, IssueCollector issues)
         {
             if (properties == null) return;
@@ -482,6 +730,7 @@ namespace QS3D.Core.Export
             if (key.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)) return true;
             if (key.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)) return true;
             if (key.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.StartsWith("QS3D.PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
             return false;
         }
 
@@ -549,6 +798,8 @@ namespace QS3D.Core.Export
         {
             var raw = value ?? string.Empty;
             if (string.IsNullOrWhiteSpace(raw)) issues.Error(emptyCode, "Value is required.", path);
+            else if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                issues.Error("NAME_NON_CANONICAL", "Structural name must not contain leading/trailing whitespace.", path);
             if (raw.Length > maxLength) issues.Error(tooLongCode, "Value exceeds " + maxLength.ToString(CultureInfo.InvariantCulture) + " characters.", path);
         }
 
@@ -573,19 +824,12 @@ namespace QS3D.Core.Export
                 issues.Error("TIMESTAMP_INVALID", "Timestamp must not contain leading/trailing whitespace.", path);
                 return;
             }
-            if (!HasExplicitUtcOffset(raw) || !DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+            if (!DateTime.TryParseExact(raw, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed) ||
+                parsed.Kind != DateTimeKind.Utc ||
+                !string.Equals(raw, parsed.ToString("O", CultureInfo.InvariantCulture), StringComparison.Ordinal))
             {
-                issues.Error("TIMESTAMP_NOT_UTC", "Timestamp must include an explicit Z or numeric timezone offset.", path);
+                issues.Error("TIMESTAMP_NOT_UTC", "Timestamp must use the canonical UTC round-trip form emitted by QS3D.", path);
             }
-        }
-
-        private static bool HasExplicitUtcOffset(string value)
-        {
-            if (value.EndsWith("Z", StringComparison.OrdinalIgnoreCase)) return true;
-            var timeSeparator = value.IndexOf('T');
-            if (timeSeparator < 0) return false;
-            var offsetSeparator = Math.Max(value.LastIndexOf('+'), value.LastIndexOf('-'));
-            return offsetSeparator > timeSeparator;
         }
 
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);

@@ -13,7 +13,7 @@ namespace QS3D.Core.Rebar
             var length = RebarMath.NonNegative(totalLengthMeters, nameof(totalLengthMeters));
             var waste = RebarMath.NonNegative(wastePercent, nameof(wastePercent));
             var net = RebarMath.Multiply(KilogramsPerMeter(diameterMm), length, "rebar net weight");
-            var wasteFactor = RebarMath.Add(1d, waste / 100d, nameof(wastePercent));
+            var wasteFactor = RebarMath.Add(1d, RebarMath.Divide(waste, 100d, nameof(wastePercent)), nameof(wastePercent));
             return RebarMath.Multiply(net, wasteFactor, "rebar total weight");
         }
     }

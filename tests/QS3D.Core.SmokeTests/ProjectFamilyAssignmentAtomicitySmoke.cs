@@ -1,5 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Xml.Linq;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using QS3D.Core.Services;
 
 namespace QS3D.Core.SmokeTests
@@ -8,14 +12,87 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
+            ActiveFamilyMutationAdvancesExactlyOnce();
+            SetActiveUsesLastAvailableRevision();
             DuplicatePreviousFamilyBlocksWholeAssignmentBatch();
             DuplicatePreviousFamilyBlocksBulkEditBatch();
             DanglingPreviousFamilyBlocksWholeAssignmentBatch();
             DanglingPreviousFamilyBlocksBulkEditBatch();
+            CanonicalCaseInsensitiveTargetAssignmentIsNoOp();
+            PaddedTargetFamilyIdFailsClosedBeforeEnumeration();
+            PaddedPersistedFamilyIdFailsClosedBeforeMutation();
+            MalformedPreviousFamilyBlocksWholeAssignmentBeforeMutation();
+            LazyAssignmentTargetsRejectStaleProjectInput();
             CorruptProjectElementListBlocksPropertyPropagationBeforeMutation();
             CorruptProjectElementListBlocksFamilyDeleteBeforeMutation();
             UndefinedProjectFamilyCategoryFailsClosed();
             UndefinedFamilyDefinitionCategoryFailsClosed();
+        }
+
+        private static void ActiveFamilyMutationAdvancesExactlyOnce()
+        {
+            var project = new ProjectState("family-activation-revision", "Family activation revision");
+            var family = new ProjectFamily("F1", "Family", ElementCategory.ArchitecturalWall);
+            project.Families.Add(family);
+
+            var beforeSetVersion = project.ChangeVersion;
+            ProjectFamilyActivationService.SetActive(project, family.Id);
+            if (project.ChangeVersion != beforeSetVersion + 1L)
+                throw new Exception("Setting the active Family must advance project ChangeVersion exactly once.");
+            Equal(family.Id, project.Metadata["ActiveFamilyId"], "Active Family metadata mismatch after SetActive.");
+
+            var afterSetVersion = project.ChangeVersion;
+            var afterSetUpdatedUtc = project.UpdatedUtc;
+            ProjectFamilyActivationService.SetActive(project, family.Id);
+            if (project.ChangeVersion != afterSetVersion || project.UpdatedUtc != afterSetUpdatedUtc)
+                throw new Exception("Setting the already-active Family must remain revision-neutral.");
+
+            project.Families.Clear();
+            var beforeClearVersion = project.ChangeVersion;
+            ProjectFamilyActivationService.ClearIfMissing(project);
+            if (project.ChangeVersion != beforeClearVersion + 1L)
+                throw new Exception("Clearing a missing active Family must advance project ChangeVersion exactly once.");
+            if (project.Metadata.ContainsKey("ActiveFamilyId"))
+                throw new Exception("ClearIfMissing retained stale active Family metadata.");
+        }
+
+        private static void SetActiveUsesLastAvailableRevision()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-family-activation-revision-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                var project = new ProjectState("family-activation-ceiling", "Family activation ceiling");
+                project.Families.Add(new ProjectFamily("F1", "Family", ElementCategory.ArchitecturalWall));
+                var store = new QsdbProjectStore();
+                store.Save(project, path);
+
+                var document = XDocument.Load(path, LoadOptions.None);
+                var root = document.Root ?? throw new Exception("Serialized QSDB root was not found for Family activation revision-ceiling fixture.");
+                root.SetAttributeValue(
+                    "changeVersion",
+                    (long.MaxValue - 1L).ToString(System.Globalization.CultureInfo.InvariantCulture));
+                document.Save(path, SaveOptions.DisableFormatting);
+
+                var loaded = store.Load(path);
+                if (loaded.ChangeVersion != long.MaxValue - 1L)
+                    throw new Exception("Family activation revision-ceiling fixture did not restore the persisted ChangeVersion.");
+                if (loaded.Metadata.ContainsKey("ActiveFamilyId"))
+                    throw new Exception("Family activation revision-ceiling fixture unexpectedly started with active Family metadata.");
+
+                ProjectFamilyActivationService.SetActive(loaded, "F1");
+
+                if (loaded.ChangeVersion != long.MaxValue)
+                    throw new Exception("SetActive did not consume exactly the final available project revision.");
+                Equal("F1", loaded.Metadata["ActiveFamilyId"], "SetActive did not persist active Family metadata at the revision ceiling.");
+                var active = ProjectFamilyActivationService.GetActive(loaded);
+                if (active == null || !string.Equals(active.Id, "F1", StringComparison.Ordinal))
+                    throw new Exception("SetActive did not resolve the persisted active Family at the revision ceiling.");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+                try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
+            }
         }
 
         private static void DuplicatePreviousFamilyBlocksWholeAssignmentBatch()
@@ -52,6 +129,160 @@ namespace QS3D.Core.SmokeTests
 
             Throws<InvalidOperationException>(() => new BulkEditService().AssignFamily(setup.Project, new[] { setup.First.Id, setup.Second.Id }, setup.Target.Id));
             AssertDanglingUnchanged(setup, beforeUpdated, "BulkEditService.AssignFamily");
+        }
+
+        private static void CanonicalCaseInsensitiveTargetAssignmentIsNoOp()
+        {
+            var project = new ProjectState("family-canonical-noop", "Canonical family assignment no-op");
+            var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
+            target.Properties["ThicknessM"] = "0.3";
+            project.Families.Add(target);
+
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, target.Id, string.Empty, string.Empty);
+            element.FamilyId = "target";
+            element.Properties["InstanceOverride"] = "keep";
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            var beforeProjectVersion = project.ChangeVersion;
+            var beforeProjectUpdated = project.UpdatedUtc;
+            var beforeElementUpdated = element.UpdatedUtc;
+            var beforeDirty = element.Dirty;
+
+            var changed = ProjectFamilyService.Assign(project, "target", new[] { element });
+
+            if (changed != 0) throw new Exception("Canonical case-insensitive target Family assignment must report zero changes.");
+            Equal("target", element.FamilyId, "Canonical case-insensitive no-op assignment rewrote the stored FamilyId.");
+            Equal("keep", element.Properties["InstanceOverride"], "Canonical case-insensitive no-op assignment changed instance properties.");
+            if (element.Properties.Count != 1) throw new Exception("Canonical case-insensitive no-op assignment changed the element property set.");
+            if (element.Dirty != beforeDirty || element.UpdatedUtc != beforeElementUpdated)
+                throw new Exception("Canonical case-insensitive no-op assignment dirtied or timestamped the element.");
+            if (project.ChangeVersion != beforeProjectVersion || project.UpdatedUtc != beforeProjectUpdated)
+                throw new Exception("Canonical case-insensitive no-op assignment touched project persistence state.");
+        }
+
+        private static void PaddedTargetFamilyIdFailsClosedBeforeEnumeration()
+        {
+            var project = new ProjectState("family-padded-target", "Padded target Family identity");
+            var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
+            project.Families.Add(target);
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdated = project.UpdatedUtc;
+
+            Throws<ArgumentException>(() => ProjectFamilyService.Assign(project, " TARGET ", ThrowIfEnumerated()));
+
+            if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdated)
+                throw new Exception("Rejected padded target Family identity touched project persistence state.");
+        }
+
+        private static IEnumerable<ProjectElement> ThrowIfEnumerated()
+        {
+            throw new InvalidOperationException("Assignment targets were enumerated before target Family identity validation.");
+#pragma warning disable CS0162
+            yield break;
+#pragma warning restore CS0162
+        }
+
+        private static void PaddedPersistedFamilyIdFailsClosedBeforeMutation()
+        {
+            var project = new ProjectState("family-padded-existing", "Padded persisted Family identity");
+            var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
+            target.Properties["ThicknessM"] = "0.3";
+            var previous = new ProjectFamily("PREV", "Previous", ElementCategory.ArchitecturalWall);
+            previous.Properties["ThicknessM"] = "0.2";
+            project.Families.Add(target);
+            project.Families.Add(previous);
+
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, previous.Id, string.Empty, string.Empty);
+            SetRawFamilyId(element, " PREV ");
+            element.Properties["ThicknessM"] = "0.2";
+            element.Properties["InstanceOverride"] = "keep";
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            var beforeProjectVersion = project.ChangeVersion;
+            var beforeProjectUpdated = project.UpdatedUtc;
+            var beforeElementUpdated = element.UpdatedUtc;
+            var beforeDirty = element.Dirty;
+
+            Throws<InvalidOperationException>(() => ProjectFamilyService.Assign(project, target.Id, new[] { element }));
+
+            Equal(" PREV ", element.FamilyId, "Rejected padded persisted Family identity rewrote FamilyId.");
+            Equal("0.2", element.Properties["ThicknessM"], "Rejected padded persisted Family identity changed inherited properties.");
+            Equal("keep", element.Properties["InstanceOverride"], "Rejected padded persisted Family identity changed instance overrides.");
+            if (element.Properties.Count != 2) throw new Exception("Rejected padded persisted Family identity changed the element property set.");
+            if (element.Dirty != beforeDirty || element.UpdatedUtc != beforeElementUpdated)
+                throw new Exception("Rejected padded persisted Family identity dirtied or timestamped the element.");
+            if (project.ChangeVersion != beforeProjectVersion || project.UpdatedUtc != beforeProjectUpdated)
+                throw new Exception("Rejected padded persisted Family identity touched project persistence state.");
+        }
+
+        private static void MalformedPreviousFamilyBlocksWholeAssignmentBeforeMutation()
+        {
+            var project = new ProjectState("family-previous-malformed", "Malformed previous family atomicity");
+            var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
+            target.Properties["ThicknessM"] = "0.3";
+            var previous = new ProjectFamily("PREV", "Previous", ElementCategory.ArchitecturalWall);
+            previous.Properties[" ThicknessM "] = "0.2";
+            project.Families.Add(target);
+            project.Families.Add(previous);
+
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, previous.Id, string.Empty, string.Empty);
+            element.Properties[" ThicknessM "] = "0.2";
+            element.Properties["InstanceOverride"] = "keep";
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            var beforeUpdated = project.UpdatedUtc;
+            var beforeVersion = project.ChangeVersion;
+            var beforeElementUpdated = element.UpdatedUtc;
+            var beforeDirty = element.Dirty;
+
+            Throws<InvalidOperationException>(() => ProjectFamilyService.Assign(project, target.Id, new[] { element }));
+
+            Equal(previous.Id, element.FamilyId, "Rejected previous-Family corruption changed FamilyId.");
+            Equal("0.2", element.Properties[" ThicknessM "], "Rejected previous-Family corruption changed inherited property data.");
+            Equal("keep", element.Properties["InstanceOverride"], "Rejected previous-Family corruption changed instance override data.");
+            if (element.Properties.Count != 2) throw new Exception("Rejected previous-Family corruption changed the element property set.");
+            if (element.Dirty != beforeDirty || element.UpdatedUtc != beforeElementUpdated)
+                throw new Exception("Rejected previous-Family corruption dirtied or timestamped the element.");
+            if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdated)
+                throw new Exception("Rejected previous-Family corruption touched project persistence state.");
+        }
+
+        private static void LazyAssignmentTargetsRejectStaleProjectInput()
+        {
+            var project = new ProjectState("family-stale-input", "Family stale input");
+            var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
+            target.Properties["ThicknessM"] = "0.3";
+            var previous = new ProjectFamily("PREV", "Previous", ElementCategory.ArchitecturalWall);
+            previous.Properties["ThicknessM"] = "0.2";
+            project.Families.Add(target);
+            project.Families.Add(previous);
+
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, previous.Id, string.Empty, string.Empty);
+            element.Properties["ThicknessM"] = "0.2";
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+
+            var beforeVersion = project.ChangeVersion;
+            var beforeElementUpdated = element.UpdatedUtc;
+            var beforeDirty = element.Dirty;
+
+            Throws<InvalidOperationException>(() => ProjectFamilyService.Assign(project, target.Id, TouchProjectWhileEnumerating(project, element)));
+
+            if (project.ChangeVersion != beforeVersion + 1)
+                throw new Exception("Rejected stale Family assignment must preserve only the caller's deliberate project mutation.");
+            Equal(previous.Id, element.FamilyId, "Rejected stale Family assignment changed FamilyId.");
+            Equal("0.2", element.Properties["ThicknessM"], "Rejected stale Family assignment changed inherited properties.");
+            if (element.Dirty != beforeDirty || element.UpdatedUtc != beforeElementUpdated)
+                throw new Exception("Rejected stale Family assignment dirtied or timestamped the element.");
+        }
+
+        private static IEnumerable<ProjectElement> TouchProjectWhileEnumerating(ProjectState project, ProjectElement element)
+        {
+            project.Touch();
+            yield return element;
         }
 
         private static void CorruptProjectElementListBlocksPropertyPropagationBeforeMutation()
@@ -160,6 +391,15 @@ namespace QS3D.Core.SmokeTests
             Equal("MISSING", setup.Second.FamilyId, operation + " overwrote a dangling family reference instead of failing closed.");
             Equal("legacy", setup.Second.Properties["ThicknessM"], operation + " changed ambiguous properties on a dangling family reference.");
             if (setup.Project.UpdatedUtc != beforeUpdated) throw new Exception(operation + " touched project timestamp on a rejected dangling-family batch.");
+        }
+
+        private static void SetRawFamilyId(ProjectElement element, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_familyId", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement FamilyId backing field was not found for the raw identity fixture.");
+            if (field.FieldType != typeof(string))
+                throw new Exception("ProjectElement FamilyId backing field must remain a string.");
+            field.SetValue(element, value);
         }
 
         private static void Equal(string expected, string actual, string message)

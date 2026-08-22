@@ -40,6 +40,7 @@ namespace QS3D.Core.Domain
         private const int MaxFloorNameLength = 120;
         private const string OwnerTokenPrefix = "LVO1:";
         private const string StateTokenPrefix = "LVS1:";
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static FloorGeneratedIdentity Create(FloorDefinition floor)
         {
@@ -47,6 +48,7 @@ namespace QS3D.Core.Domain
             var floorId = CanonicalFloorId(floor.Id);
             var displayName = NormalizeName(floor.Name);
             var elevation = Finite(floor.ElevationM, nameof(floor.ElevationM));
+            if (elevation == 0d) elevation = 0d;
 
             var ownerKey = floorId.Length + ":" + floorId;
             var ownerToken = OwnerTokenPrefix + Sha256Hex(ownerKey);
@@ -75,7 +77,9 @@ namespace QS3D.Core.Domain
             var normalized = (value ?? string.Empty).Trim();
             if (normalized.Length == 0 || normalized.Length > MaxFloorIdLength)
                 throw new ArgumentException("Floor id must contain 1.." + MaxFloorIdLength + " characters.", nameof(value));
-            return normalized.ToUpperInvariant();
+            var canonical = normalized.ToUpperInvariant();
+            RequireWellFormedUnicode(canonical, nameof(value), "Floor id");
+            return canonical;
         }
 
         private static string NormalizeName(string value)
@@ -83,7 +87,20 @@ namespace QS3D.Core.Domain
             var normalized = (value ?? string.Empty).Trim();
             if (normalized.Length == 0 || normalized.Length > MaxFloorNameLength)
                 throw new ArgumentException("Floor name must contain 1.." + MaxFloorNameLength + " characters.", nameof(value));
+            RequireWellFormedUnicode(normalized, nameof(value), "Floor name");
             return normalized;
+        }
+
+        private static void RequireWellFormedUnicode(string value, string parameterName, string label)
+        {
+            try
+            {
+                StrictUtf8.GetByteCount(value);
+            }
+            catch (EncoderFallbackException ex)
+            {
+                throw new ArgumentException(label + " must contain well-formed Unicode text.", parameterName, ex);
+            }
         }
 
         private static double Finite(double value, string parameterName)
@@ -95,7 +112,7 @@ namespace QS3D.Core.Domain
 
         private static string Sha256Hex(string value)
         {
-            var bytes = Encoding.UTF8.GetBytes(value);
+            var bytes = StrictUtf8.GetBytes(value);
             using (var sha = SHA256.Create())
             {
                 var hash = sha.ComputeHash(bytes);

@@ -130,7 +130,7 @@ namespace QS3D.Core.Export
 
     public static class ProjectInterchangeImportResolutionPlanner
     {
-        private const int MaxPlanItems = 50000;
+        private const int MaxPlanItems = ProjectInterchangeJsonValidator.MaxCollectionItems;
         private const int MaxZones = 2000;
         private const int MaxFloors = 2000;
         private const int MaxFamilies = 10000;

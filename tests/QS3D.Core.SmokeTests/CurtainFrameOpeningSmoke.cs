@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
             NonIntersectingOpeningLeavesFrameIntact();
             ClearanceExpandsInterruptedRegion();
             MultipleOpeningsRemainDeterministic();
+            OpeningDerivedBoundsMustRemainFinite();
+            FrameDerivedBoundsMustRemainFinite();
         }
 
         private static void DoorInterruptsVerticalAndHorizontalFrames()
@@ -79,6 +81,44 @@ namespace QS3D.Core.SmokeTests
                 Near(first[i].X_M, second[i].X_M);
                 Near(first[i].WidthM, second[i].WidthM);
             }
+        }
+
+        private static void OpeningDerivedBoundsMustRemainFinite()
+        {
+            Throws<OverflowException>(
+                () => new CurtainOpeningRect(double.MaxValue, 0d, double.MaxValue, 1d),
+                "Opening right bound overflow must fail closed.");
+            Throws<OverflowException>(
+                () => new CurtainOpeningRect(-double.MaxValue, 0d, 1d, 1d, double.MaxValue),
+                "Clearance-expanded opening left bound overflow must fail closed.");
+            Throws<OverflowException>(
+                () => new CurtainOpeningRect(0d, double.MaxValue, 1d, double.MaxValue),
+                "Opening top bound overflow must fail closed.");
+        }
+
+        private static void FrameDerivedBoundsMustRemainFinite()
+        {
+            Throws<OverflowException>(
+                () => new CurtainWallRect(double.MaxValue, 0d, double.MaxValue, 1d),
+                "Frame right bound overflow must fail closed at the rectangle boundary.");
+            Throws<OverflowException>(
+                () => new CurtainWallRect(0d, double.MaxValue, 1d, double.MaxValue),
+                "Frame top bound overflow must fail closed at the rectangle boundary.");
+        }
+
+        private static void Throws<TException>(Action action, string message)
+            where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+
+            throw new Exception(message);
         }
 
         private static void Near(double expected, double actual, double tolerance = 1e-10d)

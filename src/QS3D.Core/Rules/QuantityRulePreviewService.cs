@@ -4,6 +4,7 @@ using System.Linq;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
+using QS3D.Core.Services;
 
 namespace QS3D.Core.Rules
 {
@@ -96,15 +97,17 @@ namespace QS3D.Core.Rules
         public QuantityRuleElementPreview PreviewElement(ProjectState project, ProjectElement element)
         {
             RequireOwnedElement(project, element);
+            var sourceChangeVersion = project.ChangeVersion;
             var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
             var detachedElement = detached.FindElement(element.Id)
                 ?? throw new InvalidOperationException("Detached quantity-rule preview lost element " + element.Id + ".");
-            return PreviewDetached(detached, detachedElement, project.ChangeVersion);
+            return PreviewDetached(detached, detachedElement, sourceChangeVersion);
         }
 
         public QuantityRuleProjectPreview PreviewProject(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            ValidateUniqueElementIds(project);
             var sourceChangeVersion = project.ChangeVersion;
             var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
             var previews = detached.Elements
@@ -124,7 +127,14 @@ namespace QS3D.Core.Rules
             var current = PreviewElement(project, element);
             if (!Equivalent(preview, current))
                 throw new InvalidOperationException("Quantity-rule preview is stale for element " + element.Id + "; recompute preview before applying.");
-            return _engine.ApplyMatching(project, element);
+            if (!preview.HasChanges) return 0;
+
+            return ProjectSemanticMutationExecutor.Execute(project, "quantity-rule-preview.apply-element", () =>
+            {
+                var applied = _engine.ApplyMatching(project, element);
+                if (applied > 0) project.Touch();
+                return applied;
+            });
         }
 
         public int ApplyProject(ProjectState project, QuantityRuleProjectPreview preview)
@@ -187,6 +197,7 @@ namespace QS3D.Core.Rules
                     ?? throw new InvalidOperationException("Quantity-rule apply lost element " + item.ElementId + ".");
                 applied = checked(applied + _engine.ApplyMatching(project, element));
             }
+            if (applied > 0) project.Touch();
             return applied;
         }
 
@@ -258,9 +269,22 @@ namespace QS3D.Core.Rules
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
+            ValidateUniqueElementIds(project);
             var owned = project.FindElement(element.Id);
             if (owned == null || !ReferenceEquals(owned, element))
                 throw new InvalidOperationException("Quantity-rule preview/apply requires the exact element instance owned by the project.");
+        }
+
+        private static void ValidateUniqueElementIds(ProjectState project)
+        {
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null element.");
+                if (!seenIds.Add(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
+            }
         }
 
         private static void RequirePreviewIdentity(ProjectState project, ProjectElement element, QuantityRuleElementPreview preview)

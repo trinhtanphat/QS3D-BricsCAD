@@ -81,7 +81,7 @@ The validator currently checks, fail-closed where applicable:
 - exact SI unit declarations `m`, `m2`, `m3`, `kg`;
 - guarded file/object-graph/collection limits;
 - required top-level `zones`, `floors`, `families` and `elements` collections, even when legitimately empty;
-- required project/catalog names and stable IDs;
+- required canonical project/catalog names with no leading/trailing whitespace, plus stable IDs;
 - required Family `properties` and element `sourceHandles` / `dependencies` / `properties` / `quantities` containers, even when empty;
 - project identity/schema/timestamps;
 - case-insensitive uniqueness of Zone/Floor/Family/element IDs;

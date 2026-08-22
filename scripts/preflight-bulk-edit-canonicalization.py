@@ -14,18 +14,18 @@ for path in (SERVICE, SMOKE, REG):
 
 if SERVICE.is_file():
     text = SERVICE.read_text(encoding="utf-8")
-    if text.count("var key = propertyName.Trim();") < 2:
-        errors.append("BulkEditService must canonicalize propertyName in both set and multiply paths")
+    if text.count("var key = SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName);") < 2:
+        errors.append("BulkEditService must canonicalize and validate propertyName through the shared edit policy in both set and multiply paths")
     for token in (
         "element.Properties.TryGetValue(key, out var before)",
-        "element.Properties[key] = next;",
-        "element.MarkDirty(DirtyFlags(element, key));",
         "element.Properties.TryGetValue(key, out var text)",
-        "update.Element.Properties[key] = update.Value;",
-        "update.Element.MarkDirty(DirtyFlags(update.Element, key));",
+        'ProjectSemanticMutationExecutor.Execute(project, "bulk.set-property"',
+        'ProjectSemanticMutationExecutor.Execute(project, "bulk.multiply-numeric-property"',
     ):
         if token not in text:
             errors.append("BulkEditService.cs missing canonical key token: " + token)
+    if text.count("update.Element.SetProperty(key, update.Value);") < 2:
+        errors.append("BulkEditService must route both property mutation paths through ProjectElement.SetProperty so canonical dirty policy remains centralized")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -47,4 +47,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] bulk property edit/multiply paths are statically guarded to use trimmed canonical keys and preserve geometry-dirty policy")
+print("[PASS] bulk property edit/multiply paths use the shared canonical property policy, route writes through ProjectElement.SetProperty, and retain geometry-dirty regression coverage")

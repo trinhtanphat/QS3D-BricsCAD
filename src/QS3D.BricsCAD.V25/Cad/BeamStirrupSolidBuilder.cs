@@ -38,6 +38,7 @@ namespace QS3D.BricsCAD.V25.Cad
             public double HookTailAngleDeg { get; set; }
             public bool HasHookTails { get; set; }
             public string Notation { get; set; } = string.Empty;
+            public CadElementVerticalPlacement VerticalPlacement { get; set; } = null!;
         }
 
         public static BeamStirrupBuildResult BuildSelected(Document document, ProjectState project)
@@ -104,7 +105,9 @@ namespace QS3D.BricsCAD.V25.Cad
 
                         var family = project.FindFamily(element.FamilyId);
                         var widthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "WidthM", .3d), element.Id + "/WidthM");
-                        var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", .5d), element.Id + "/HeightM");
+                        var vertical = CadElementVerticalPlacement.Resolve(
+                            document, project, element, family, source.StartPoint.Z, "HeightM", .5d);
+                        var heightM = vertical.HeightM;
                         var sectionCoverM = CadGeometryGuard.Number(element, family, "RebarStirrupCoverM", CadGeometryGuard.Number(element, family, "RebarCoverM", .025d));
                         var endCoverM = CadGeometryGuard.Number(element, family, "RebarStirrupEndCoverM", sectionCoverM);
                         var bendRadiusM = CadGeometryGuard.Number(element, family, "RebarStirrupBendRadiusM", 0d);
@@ -115,7 +118,6 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (endCoverM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupEndCoverM phải >= 0.");
                         if (bendRadiusM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupBendRadiusM phải >= 0.");
                         if (hookLengthM < 0d) throw new InvalidOperationException(element.Id + "/RebarStirrupHookLengthM phải >= 0.");
-                        var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
 
                         var dx = CadGeometryGuard.Subtract(source.EndPoint.X, source.StartPoint.X, element.Id + "/beam dx");
                         var dy = CadGeometryGuard.Subtract(source.EndPoint.Y, source.StartPoint.Y, element.Id + "/beam dy");
@@ -156,7 +158,8 @@ namespace QS3D.BricsCAD.V25.Cad
                             HookLengthM = hookLengthM,
                             HookTailAngleDeg = hookTailAngleDeg,
                             HasHookTails = layout.HasHookTails,
-                            Notation = notation.Trim()
+                            Notation = notation.Trim(),
+                            VerticalPlacement = vertical
                         };
 
                         var ux = dx / lengthDrawing;
@@ -164,8 +167,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         var perpendicular = new Vector3d(-uy, ux, 0d);
                         var midX = CadGeometryGuard.Midpoint(source.StartPoint.X, source.EndPoint.X, element.Id + "/beam mid X");
                         var midY = CadGeometryGuard.Midpoint(source.StartPoint.Y, source.EndPoint.Y, element.Id + "/beam mid Y");
-                        var baseZ = CadGeometryGuard.Add(source.StartPoint.Z, CadGeometryGuard.ToDrawingUnits(document, bottomM, element.Id + "/BottomOffsetM"), element.Id + "/beam base Z");
-                        var centerZ = CadGeometryGuard.Add(baseZ, CadGeometryGuard.ToDrawingUnits(document, heightM / 2d, element.Id + "/half height"), element.Id + "/beam center Z");
+                        var centerZ = vertical.CenterDrawing;
                         var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, group.DiameterMm / 2000d, element.Id + "/stirrup radius"), element.Id + "/stirrup radius drawing");
 
                         foreach (var stationM in layout.StationOffsetsM)
@@ -193,7 +195,6 @@ namespace QS3D.BricsCAD.V25.Cad
                     }
 
                     foreach (var update in pending) CommitSemanticUpdate(project, update);
-                    if (pending.Count > 0) project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
                 }
@@ -231,6 +232,7 @@ namespace QS3D.BricsCAD.V25.Cad
             update.Element.Properties["GeneratedBeamStirrupHookTailAngleDeg"] = update.HookTailAngleDeg.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedBeamStirrupNotation"] = update.Notation;
             update.Element.Properties["GeneratedBeamStirrupMode"] = update.HasHookTails ? "Beam.Line.RectangularHookedPath" : (update.BendRadiusM > 1e-12d ? "Beam.Line.RectangularRoundedLoop" : "Beam.Line.RectangularClosedLoop");
+            CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedBeamStirrup", update.VerticalPlacement);
             update.Element.ClearGeneratedBeamStirrupStale();
             AuditTrail.ForProject(project).Record("geometry.rebar.beam.stirrup", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " stirrups");
         }
@@ -297,6 +299,10 @@ namespace QS3D.BricsCAD.V25.Cad
             var startX = CadGeometryGuard.Finite(start.X, label + "/start X");
             var startY = CadGeometryGuard.Finite(start.Y, label + "/start Y");
             var startZ = CadGeometryGuard.Finite(start.Z, label + "/start Z");
+            var halfLength = length / 2d;
+            var centerX = CadGeometryGuard.Add(startX, CadGeometryGuard.Multiply(unit.X, halfLength, label + "/center offset X"), label + "/center X");
+            var centerY = CadGeometryGuard.Add(startY, CadGeometryGuard.Multiply(unit.Y, halfLength, label + "/center offset Y"), label + "/center Y");
+            var centerZ = CadGeometryGuard.Add(startZ, CadGeometryGuard.Multiply(unit.Z, halfLength, label + "/center offset Z"), label + "/center Z");
             var solid = new Solid3d();
             try
             {
@@ -307,7 +313,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 var rotationAxis = Vector3d.ZAxis.CrossProduct(unit);
                 if (rotationAxis.Length > 1e-12d) solid.TransformBy(Matrix3d.Rotation(angle, rotationAxis, Point3d.Origin));
                 else if (unit.Z < 0d) solid.TransformBy(Matrix3d.Rotation(Math.PI, Vector3d.XAxis, Point3d.Origin));
-                solid.TransformBy(Matrix3d.Displacement(new Vector3d(startX, startY, startZ)));
+                solid.TransformBy(Matrix3d.Displacement(new Vector3d(centerX, centerY, centerZ)));
                 var complete = solid;
                 solid = null!;
                 return complete;

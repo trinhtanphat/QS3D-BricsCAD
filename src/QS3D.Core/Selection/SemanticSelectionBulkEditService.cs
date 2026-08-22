@@ -26,53 +26,36 @@ namespace QS3D.Core.Selection
 
     public sealed class SemanticSelectionBulkEditService
     {
-        private static readonly HashSet<string> SourceDerivedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "LengthM",
-            "AreaM2",
-            "VolumeM3",
-            "PerimeterM",
-            "Layer",
-            MeasuredSolidQuantityPolicy.VolumeProperty,
-            MeasuredSolidQuantityPolicy.SurfaceAreaProperty
-        };
-
-        private static readonly HashSet<string> ReservedIdentityKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "Id",
-            "ElementId",
-            "Category",
-            "FamilyId",
-            "FloorId",
-            "ZoneId"
-        };
-
         public SemanticSelectionBulkEditResult SetProperty(ProjectState project, IEnumerable<string> elementIds, string propertyName, string value)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var key = EditablePropertyKey(propertyName);
+            var key = SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName);
             var selection = ResolveSelection(project, elementIds);
             var next = value ?? string.Empty;
             var updates = new List<ProjectElement>();
 
             foreach (var element in selection.Elements)
             {
-                var current = EffectivePropertyValue(project, element, key, out var present);
-                if (present && string.Equals(current, next, StringComparison.Ordinal)) continue;
-                if (!present && next.Length == 0) continue;
+                if (element.Properties.TryGetValue(key, out var current) &&
+                    string.Equals(current ?? string.Empty, next, StringComparison.Ordinal))
+                    continue;
                 updates.Add(element);
             }
 
-            foreach (var element in updates) element.SetProperty(key, next);
-            if (updates.Count > 0) project.Touch();
-            return Result("SetProperty", key, selection.Count, updates);
+            if (updates.Count == 0) return Result("SetProperty", key, selection.Count, updates);
+            return ProjectSemanticMutationExecutor.Execute(project, "selection.bulk.set-property", () =>
+            {
+                foreach (var element in updates) element.SetProperty(key, next);
+                project.Touch();
+                return Result("SetProperty", key, selection.Count, updates);
+            });
         }
 
         public SemanticSelectionBulkEditResult MultiplyNumericProperty(ProjectState project, IEnumerable<string> elementIds, string propertyName, double factor)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (double.IsNaN(factor) || double.IsInfinity(factor)) throw new ArgumentOutOfRangeException(nameof(factor));
-            var key = EditablePropertyKey(propertyName);
+            var key = SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName);
             var selection = ResolveSelection(project, elementIds);
             var updates = new List<PendingValue>();
 
@@ -83,39 +66,53 @@ namespace QS3D.Core.Selection
                     throw new InvalidOperationException("Selected element is missing numeric property " + key + ": " + element.Id + ".");
                 if (!double.TryParse(current, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) || double.IsNaN(number) || double.IsInfinity(number))
                     throw new FormatException("Invalid numeric property " + key + " on " + element.Id + ": " + current);
+                if (number == 0d && HasNonZeroSignificand(current))
+                    throw new InvalidOperationException("Semantic selection numeric property underflow for " + element.Id + "/" + key + ": " + current);
                 var next = number * factor;
                 if (double.IsNaN(next) || double.IsInfinity(next))
                     throw new OverflowException("Bulk property multiplication overflow for " + element.Id + "/" + key + ".");
+                if (next == 0d && number != 0d && factor != 0d)
+                    throw new InvalidOperationException("Semantic selection property multiplication underflow for " + element.Id + "/" + key + ".");
+                if (next.Equals(number) && number != 0d && factor != 1d)
+                    throw new InvalidOperationException("Semantic selection property multiplication lost a non-unit factor at floating-point precision for " + element.Id + "/" + key + ".");
+                if (next.Equals(number)) continue;
                 var formatted = next.ToString("R", CultureInfo.InvariantCulture);
-                if (string.Equals(current, formatted, StringComparison.Ordinal)) continue;
                 updates.Add(new PendingValue(element, formatted));
             }
 
-            foreach (var update in updates) update.Element.SetProperty(key, update.Value);
-            if (updates.Count > 0) project.Touch();
-            return new SemanticSelectionBulkEditResult(
-                "MultiplyNumericProperty",
-                key,
-                selection.Count,
-                updates.Select(x => x.Element.Id).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ThenBy(x => x, StringComparer.Ordinal).ToArray());
+            if (updates.Count == 0)
+                return new SemanticSelectionBulkEditResult("MultiplyNumericProperty", key, selection.Count, Array.Empty<string>());
+
+            return ProjectSemanticMutationExecutor.Execute(project, "selection.bulk.multiply-numeric-property", () =>
+            {
+                foreach (var update in updates) update.Element.SetProperty(key, update.Value);
+                project.Touch();
+                return new SemanticSelectionBulkEditResult(
+                    "MultiplyNumericProperty",
+                    key,
+                    selection.Count,
+                    updates.Select(x => x.Element.Id).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ThenBy(x => x, StringComparer.Ordinal).ToArray());
+            });
         }
 
         public SemanticSelectionBulkEditResult AssignFamily(ProjectState project, IEnumerable<string> elementIds, string familyId)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            if (string.IsNullOrWhiteSpace(familyId)) throw new ArgumentException("Family id is required.", nameof(familyId));
+            var canonicalFamilyId = RequireCanonicalFamilyId(familyId, nameof(familyId));
             var selection = ResolveSelection(project, elementIds);
-            var normalizedFamilyId = familyId.Trim();
-            var family = project.FindFamily(normalizedFamilyId) ?? throw new KeyNotFoundException("Unknown family: " + normalizedFamilyId);
+            var family = project.FindFamily(canonicalFamilyId) ?? throw new KeyNotFoundException("Unknown family: " + canonicalFamilyId);
             if (!Enum.IsDefined(typeof(ElementCategory), family.Category))
                 throw new InvalidOperationException("Target family has an undefined category: " + family.Id + ".");
 
             foreach (var element in selection.Elements)
+            {
+                RequireCanonicalExistingFamilyId(element.FamilyId, element.Id);
                 if (element.Category != family.Category)
                     throw new InvalidOperationException("Cannot assign family " + family.Id + " to mixed/incompatible selection; element " + element.Id + " is " + element.Category + " while family is " + family.Category + ".");
+            }
 
             var changedIds = selection.Elements
-                .Where(x => !string.Equals(x.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase))
+                .Where(x => !string.Equals(x.FamilyId ?? string.Empty, family.Id, StringComparison.OrdinalIgnoreCase))
                 .Select(x => x.Id)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x, StringComparer.Ordinal)
@@ -134,31 +131,6 @@ namespace QS3D.Core.Selection
             return new Selection(inspection.ElementIds, elements);
         }
 
-        private static string EditablePropertyKey(string propertyName)
-        {
-            if (string.IsNullOrWhiteSpace(propertyName)) throw new ArgumentException("Property name is required.", nameof(propertyName));
-            var key = propertyName.Trim();
-            if (SourceDerivedKeys.Contains(key) || key.StartsWith("CAD.", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Property is derived from CAD/source geometry and is read-only in multi-selection: " + key + ".");
-            if (ReservedIdentityKeys.Contains(key) || LooksLikeIdentityReferenceKey(key))
-                throw new InvalidOperationException("Semantic identity/reference field cannot be edited as a generic property: " + key + ".");
-            if (key.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                key.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase) ||
-                key.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Native/generated ownership state is read-only in multi-selection: " + key + ".");
-            return key;
-        }
-
-        private static bool LooksLikeIdentityReferenceKey(string key)
-        {
-            return key.EndsWith("Id", StringComparison.OrdinalIgnoreCase) ||
-                   key.EndsWith("Ids", StringComparison.OrdinalIgnoreCase) ||
-                   key.EndsWith("Ref", StringComparison.OrdinalIgnoreCase) ||
-                   key.EndsWith("Refs", StringComparison.OrdinalIgnoreCase) ||
-                   key.EndsWith("RefId", StringComparison.OrdinalIgnoreCase) ||
-                   key.EndsWith("RefIds", StringComparison.OrdinalIgnoreCase);
-        }
-
         private static string EffectivePropertyValue(ProjectState project, ProjectElement element, string key, out bool present)
         {
             if (element.Properties.TryGetValue(key, out var instanceValue))
@@ -167,7 +139,7 @@ namespace QS3D.Core.Selection
                 return instanceValue ?? string.Empty;
             }
 
-            var familyId = (element.FamilyId ?? string.Empty).Trim();
+            var familyId = RequireCanonicalExistingFamilyId(element.FamilyId, element.Id);
             if (familyId.Length > 0)
             {
                 var family = project.FindFamily(familyId) ?? throw new InvalidOperationException("Selected element references missing family id: " + element.Id + "/" + familyId + ".");
@@ -180,6 +152,35 @@ namespace QS3D.Core.Selection
 
             present = false;
             return string.Empty;
+        }
+
+        private static string RequireCanonicalFamilyId(string familyId, string parameterName)
+        {
+            if (string.IsNullOrWhiteSpace(familyId))
+                throw new ArgumentException("Family id is required.", parameterName);
+            if (!string.Equals(familyId, familyId.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Family id must be canonical and contain no leading or trailing whitespace.", parameterName);
+            return familyId;
+        }
+
+        private static string RequireCanonicalExistingFamilyId(string familyId, string elementId)
+        {
+            var value = familyId ?? string.Empty;
+            if (value.Length == 0) return string.Empty;
+            if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Element " + elementId + " references a non-canonical family id: '" + value + "'. Repair the relation before bulk editing.");
+            return value;
+        }
+
+        private static bool HasNonZeroSignificand(string value)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                var character = value[i];
+                if (character == 'e' || character == 'E') break;
+                if (character >= '1' && character <= '9') return true;
+            }
+            return false;
         }
 
         private static SemanticSelectionBulkEditResult Result(string operation, string target, int selectedCount, IEnumerable<ProjectElement> changed)

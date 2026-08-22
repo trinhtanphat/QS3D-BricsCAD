@@ -8,19 +8,37 @@ namespace QS3D.BricsCAD.V25.Services
 {
     internal sealed class UserUiLayout
     {
-        public int WorkspacePaletteWidth { get; set; } = 540;
+        public int WorkspacePaletteWidth { get; set; } = 640;
         public int WorkspacePaletteHeight { get; set; } = 720;
+        public int PropertiesPaletteWidth { get; set; } = 320;
+        public int PropertiesPaletteHeight { get; set; } = 720;
         public int RightPaletteWidth { get; set; } = 300;
         public int RightPaletteHeight { get; set; } = 720;
-        public double ModelColumnWidth { get; set; } = 150d;
-        public double FamilyColumnWidth { get; set; } = 180d;
-        public double FamilyTopHeight { get; set; } = 235d;
-        public double RoomTopHeight { get; set; } = 210d;
+        public int QuantityPaletteWidth { get; set; } = 330;
+        public int QuantityPaletteHeight { get; set; } = 720;
+        public double ModelColumnWidth { get; set; } = 160d;
+        public double FamilyColumnWidth { get; set; } = 245d;
+        public double FamilyTopHeight { get; set; } = 250d;
+        public double RoomTopHeight { get; set; } = 218d;
     }
 
     internal static class UserUiLayoutStore
     {
+        internal const int WorkspacePaletteMinWidth = 460;
+        internal const int WorkspacePaletteMinHeight = 420;
+        internal const int PropertiesPaletteMinWidth = 260;
+        internal const int PropertiesPaletteMinHeight = 360;
+        internal const int RightPaletteMinWidth = 255;
+        internal const int RightPaletteMinHeight = 480;
+        internal const int QuantityPaletteMinWidth = 280;
+        internal const int QuantityPaletteMinHeight = 360;
+
         private const int MaxFileBytes = 16 * 1024;
+#if BRICSCAD_V26
+        private const string HostMajorDirectory = "BricsCAD-V26";
+#else
+        private const string HostMajorDirectory = "BricsCAD-V25";
+#endif
         private static readonly object Gate = new object();
         private static UserUiLayout _current = LoadCore();
 
@@ -37,6 +55,7 @@ namespace QS3D.BricsCAD.V25.Services
                 var next = Clone(_current);
                 update(next);
                 Normalize(next);
+                if (Equivalent(_current, next)) return;
                 _current = next;
                 TrySaveCore(next);
             }
@@ -65,8 +84,12 @@ namespace QS3D.BricsCAD.V25.Services
 
                 layout.WorkspacePaletteWidth = Int(values, "WorkspacePaletteWidth", layout.WorkspacePaletteWidth);
                 layout.WorkspacePaletteHeight = Int(values, "WorkspacePaletteHeight", layout.WorkspacePaletteHeight);
+                layout.PropertiesPaletteWidth = Int(values, "PropertiesPaletteWidth", layout.PropertiesPaletteWidth);
+                layout.PropertiesPaletteHeight = Int(values, "PropertiesPaletteHeight", layout.PropertiesPaletteHeight);
                 layout.RightPaletteWidth = Int(values, "RightPaletteWidth", layout.RightPaletteWidth);
                 layout.RightPaletteHeight = Int(values, "RightPaletteHeight", layout.RightPaletteHeight);
+                layout.QuantityPaletteWidth = Int(values, "QuantityPaletteWidth", layout.QuantityPaletteWidth);
+                layout.QuantityPaletteHeight = Int(values, "QuantityPaletteHeight", layout.QuantityPaletteHeight);
                 layout.ModelColumnWidth = Double(values, "ModelColumnWidth", layout.ModelColumnWidth);
                 layout.FamilyColumnWidth = Double(values, "FamilyColumnWidth", layout.FamilyColumnWidth);
                 layout.FamilyTopHeight = Double(values, "FamilyTopHeight", layout.FamilyTopHeight);
@@ -132,8 +155,12 @@ namespace QS3D.BricsCAD.V25.Services
             builder.AppendLine("# QS3D per-user UI layout v1");
             builder.Append("WorkspacePaletteWidth=").AppendLine(layout.WorkspacePaletteWidth.ToString(invariant));
             builder.Append("WorkspacePaletteHeight=").AppendLine(layout.WorkspacePaletteHeight.ToString(invariant));
+            builder.Append("PropertiesPaletteWidth=").AppendLine(layout.PropertiesPaletteWidth.ToString(invariant));
+            builder.Append("PropertiesPaletteHeight=").AppendLine(layout.PropertiesPaletteHeight.ToString(invariant));
             builder.Append("RightPaletteWidth=").AppendLine(layout.RightPaletteWidth.ToString(invariant));
             builder.Append("RightPaletteHeight=").AppendLine(layout.RightPaletteHeight.ToString(invariant));
+            builder.Append("QuantityPaletteWidth=").AppendLine(layout.QuantityPaletteWidth.ToString(invariant));
+            builder.Append("QuantityPaletteHeight=").AppendLine(layout.QuantityPaletteHeight.ToString(invariant));
             builder.Append("ModelColumnWidth=").AppendLine(layout.ModelColumnWidth.ToString("R", invariant));
             builder.Append("FamilyColumnWidth=").AppendLine(layout.FamilyColumnWidth.ToString("R", invariant));
             builder.Append("FamilyTopHeight=").AppendLine(layout.FamilyTopHeight.ToString("R", invariant));
@@ -145,19 +172,39 @@ namespace QS3D.BricsCAD.V25.Services
         {
             var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (string.IsNullOrWhiteSpace(root)) throw new InvalidOperationException("LocalApplicationData is unavailable.");
-            return Path.Combine(root, "QS3D", "BricsCAD-V25", "ui-layout-v1.txt");
+            return Path.Combine(root, "QS3D", HostMajorDirectory, "ui-layout-v1.txt");
         }
 
         private static void Normalize(UserUiLayout layout)
         {
-            layout.WorkspacePaletteWidth = Clamp(layout.WorkspacePaletteWidth, 460, 1600);
-            layout.WorkspacePaletteHeight = Clamp(layout.WorkspacePaletteHeight, 420, 2000);
-            layout.RightPaletteWidth = Clamp(layout.RightPaletteWidth, 255, 1200);
-            layout.RightPaletteHeight = Clamp(layout.RightPaletteHeight, 420, 2000);
-            layout.ModelColumnWidth = Clamp(layout.ModelColumnWidth, 125d, 500d, 150d);
-            layout.FamilyColumnWidth = Clamp(layout.FamilyColumnWidth, 150d, 700d, 180d);
-            layout.FamilyTopHeight = Clamp(layout.FamilyTopHeight, 145d, 900d, 235d);
-            layout.RoomTopHeight = Clamp(layout.RoomTopHeight, 130d, 900d, 210d);
+            layout.WorkspacePaletteWidth = Clamp(layout.WorkspacePaletteWidth, WorkspacePaletteMinWidth, 1600);
+            layout.WorkspacePaletteHeight = Clamp(layout.WorkspacePaletteHeight, WorkspacePaletteMinHeight, 2000);
+            layout.PropertiesPaletteWidth = Clamp(layout.PropertiesPaletteWidth, PropertiesPaletteMinWidth, 1000);
+            layout.PropertiesPaletteHeight = Clamp(layout.PropertiesPaletteHeight, PropertiesPaletteMinHeight, 2000);
+            layout.RightPaletteWidth = Clamp(layout.RightPaletteWidth, RightPaletteMinWidth, 1200);
+            layout.RightPaletteHeight = Clamp(layout.RightPaletteHeight, RightPaletteMinHeight, 2000);
+            layout.QuantityPaletteWidth = Clamp(layout.QuantityPaletteWidth, QuantityPaletteMinWidth, 1200);
+            layout.QuantityPaletteHeight = Clamp(layout.QuantityPaletteHeight, QuantityPaletteMinHeight, 2000);
+            layout.ModelColumnWidth = Clamp(layout.ModelColumnWidth, 135d, 500d, 160d);
+            layout.FamilyColumnWidth = Clamp(layout.FamilyColumnWidth, 220d, 700d, 245d);
+            layout.FamilyTopHeight = Clamp(layout.FamilyTopHeight, 160d, 900d, 250d);
+            layout.RoomTopHeight = Clamp(layout.RoomTopHeight, 135d, 900d, 218d);
+        }
+
+        private static bool Equivalent(UserUiLayout left, UserUiLayout right)
+        {
+            return left.WorkspacePaletteWidth == right.WorkspacePaletteWidth &&
+                   left.WorkspacePaletteHeight == right.WorkspacePaletteHeight &&
+                   left.PropertiesPaletteWidth == right.PropertiesPaletteWidth &&
+                   left.PropertiesPaletteHeight == right.PropertiesPaletteHeight &&
+                   left.RightPaletteWidth == right.RightPaletteWidth &&
+                   left.RightPaletteHeight == right.RightPaletteHeight &&
+                   left.QuantityPaletteWidth == right.QuantityPaletteWidth &&
+                   left.QuantityPaletteHeight == right.QuantityPaletteHeight &&
+                   left.ModelColumnWidth == right.ModelColumnWidth &&
+                   left.FamilyColumnWidth == right.FamilyColumnWidth &&
+                   left.FamilyTopHeight == right.FamilyTopHeight &&
+                   left.RoomTopHeight == right.RoomTopHeight;
         }
 
         private static int Int(IDictionary<string, string> values, string key, int fallback) =>
@@ -178,8 +225,12 @@ namespace QS3D.BricsCAD.V25.Services
         {
             WorkspacePaletteWidth = source.WorkspacePaletteWidth,
             WorkspacePaletteHeight = source.WorkspacePaletteHeight,
+            PropertiesPaletteWidth = source.PropertiesPaletteWidth,
+            PropertiesPaletteHeight = source.PropertiesPaletteHeight,
             RightPaletteWidth = source.RightPaletteWidth,
             RightPaletteHeight = source.RightPaletteHeight,
+            QuantityPaletteWidth = source.QuantityPaletteWidth,
+            QuantityPaletteHeight = source.QuantityPaletteHeight,
             ModelColumnWidth = source.ModelColumnWidth,
             FamilyColumnWidth = source.FamilyColumnWidth,
             FamilyTopHeight = source.FamilyTopHeight,

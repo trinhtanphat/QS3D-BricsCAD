@@ -37,8 +37,10 @@ namespace QS3D.Core.Rebar
             bool hasHookTails,
             double bendRadiusM)
         {
-            StationOffsetsM = stationOffsetsM ?? throw new ArgumentNullException(nameof(stationOffsetsM));
-            SectionLoop = sectionLoop ?? throw new ArgumentNullException(nameof(sectionLoop));
+            if (stationOffsetsM == null) throw new ArgumentNullException(nameof(stationOffsetsM));
+            if (sectionLoop == null) throw new ArgumentNullException(nameof(sectionLoop));
+            StationOffsetsM = new List<double>(stationOffsetsM).AsReadOnly();
+            SectionLoop = new List<Point2>(sectionLoop).AsReadOnly();
             if (SectionLoop.Count < 5) throw new ArgumentException("Beam stirrup section path requires at least five points.", nameof(sectionLoop));
             ActualSpacingM = Finite(actualSpacingM, nameof(actualSpacingM));
             CenterlineLengthM = Positive(centerlineLengthM, nameof(centerlineLengthM));
@@ -119,6 +121,9 @@ namespace QS3D.Core.Rebar
                 SpacingMm = input.SpacingMm,
                 Count = input.Count
             });
+            var diameterM = RebarMath.Divide(diameterMm, 1000d, "beam stirrup diameter");
+            if (stations.Count > 1 && stations.ActualSpacingM + 1e-12d < diameterM)
+                throw new InvalidOperationException("Beam stirrup centers are closer than one stirrup diameter.");
 
             var radiusM = RebarMath.Divide(diameterMm, 2000d, "beam stirrup radius");
             var centerCoverM = RebarMath.Add(sectionCoverM, radiusM, "beam stirrup center cover");
@@ -147,7 +152,10 @@ namespace QS3D.Core.Rebar
             var closure = new Point2(0d, -halfHeightM);
             if (hookLengthM > 1e-12d)
             {
-                var angle = hookTailAngleDeg * Math.PI / 180d;
+                var angle = RebarMath.Divide(
+                    RebarMath.Multiply(hookTailAngleDeg, Math.PI, "beam stirrup hook tail angle radians"),
+                    180d,
+                    "beam stirrup hook tail angle radians");
                 var startTail = new Point2(
                     closure.X + hookLengthM * Math.Cos(Math.PI - angle),
                     closure.Y + hookLengthM * Math.Sin(Math.PI - angle));
@@ -185,7 +193,10 @@ namespace QS3D.Core.Rebar
             Append(points, closure);
             if (hookLengthM > 1e-12d)
             {
-                var angle = hookTailAngleDeg * Math.PI / 180d;
+                var angle = RebarMath.Divide(
+                    RebarMath.Multiply(hookTailAngleDeg, Math.PI, "beam stirrup hook tail angle radians"),
+                    180d,
+                    "beam stirrup hook tail angle radians");
                 var endTail = new Point2(
                     closure.X + hookLengthM * Math.Cos(angle),
                     closure.Y + hookLengthM * Math.Sin(angle));

@@ -6,21 +6,23 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILDERS = [
     (
         ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs",
-        "public static CurtainFrameBuildResult BuildSelectedLineWalls(Document document, ProjectState project)",
+        "public static CurtainFrameBuildResult BuildSelectedLineWalls(Document document, ProjectState project, bool allowInteractiveSelection = true)",
         "private static void CommitSemanticUpdate",
+        'AuditTrail.ForProject(project).Record("geometry.curtain.frames"',
         "Curtain LINE frame",
     ),
     (
         ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallPathFrameSolidBuilder.cs",
-        "public static CurtainFrameBuildResult BuildSelectedOpenPolylines(Document document, ProjectState project)",
+        "public static CurtainFrameBuildResult BuildSelectedOpenPolylines(Document document, ProjectState project, bool allowInteractiveSelection = true)",
         "private static void CommitSemanticUpdate",
+        'AuditTrail.ForProject(project).Record("geometry.curtain.path.frames"',
         "Curtain path frame",
     ),
 ]
 
 errors = []
 
-for path, start_token, end_token, label in BUILDERS:
+for path, start_token, end_token, audit_token, label in BUILDERS:
     if not path.is_file():
         errors.append("missing " + str(path.relative_to(ROOT)))
         continue
@@ -34,25 +36,25 @@ for path, start_token, end_token, label in BUILDERS:
 
     method = text[start:end]
     semantic = method.find("foreach (var update in pending) CommitSemanticUpdate(project, update);")
-    touch = method.find("if (pending.Count > 0) project.Touch();", semantic + 1)
-    commit = method.find("transaction.Commit();", touch + 1)
+    commit = method.find("transaction.Commit();", semantic + 1)
     committed = method.find("cadCommitted = true;", commit + 1)
     restore = method.find("rollback.Restore(project)", committed + 1)
     ret = method.rfind("return new CurtainFrameBuildResult")
 
-    if min(semantic, touch, commit, committed, restore, ret) < 0:
-        errors.append(path.name + ": missing semantic/touch/commit/rollback lifecycle token")
-    elif not semantic < touch < commit < committed < restore < ret:
-        errors.append(path.name + ": expected semantic update -> Touch -> CAD commit -> cadCommitted -> rollback catch -> return")
+    if min(semantic, commit, committed, restore, ret) < 0:
+        errors.append(path.name + ": missing semantic/commit/rollback lifecycle token")
+    elif not semantic < commit < committed < restore < ret:
+        errors.append(path.name + ": expected semantic update -> CAD commit -> cadCommitted -> rollback catch -> return")
 
-    if method.count("project.Touch();") != 1:
-        errors.append(path.name + ": curtain build method must Touch project exactly once")
-    if method.find("project.Touch();", commit + 1) >= 0:
-        errors.append(path.name + ": project.Touch must not run after CAD commit")
+    if "project.Touch();" in method:
+        errors.append(path.name + ": redundant project.Touch must stay removed; CommitSemanticUpdate audit owns revision advancement")
     if "ProjectStateSnapshot.Capture(project)" not in method:
         errors.append(path.name + ": project snapshot capture missing")
     if "if (!cadCommitted)" not in method:
         errors.append(path.name + ": rollback must remain guarded by CAD commit state")
+    helper = text[end:]
+    if audit_token not in helper:
+        errors.append(path.name + ": CommitSemanticUpdate must retain AuditTrail-owned revision advancement")
 
 print("QS3D curtain frame transaction-boundary preflight")
 if errors:
@@ -61,4 +63,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: curtain LINE/path semantic metadata and project timestamp commit inside the rollback-capable phase before native CAD commit.")
+print("PASS: curtain LINE/path semantic metadata and AuditTrail-owned project revision commit inside the rollback-capable phase before native CAD commit, without a redundant batch project.Touch().")

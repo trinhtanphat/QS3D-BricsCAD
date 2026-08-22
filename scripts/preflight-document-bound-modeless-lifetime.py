@@ -17,11 +17,6 @@ files = {
     "room_schedule": UI / "RoomFinishScheduleWindow.xaml.cs",
     "domain_hub": UI / "DomainHubWindow.xaml.cs",
     "rebar_hub": UI / "Rebar3DHubWindow.xaml.cs",
-    "commands": ADAPTER / "Commands.cs",
-    "review": ADAPTER / "ReviewCommands.cs",
-    "families": ADAPTER / "FamilyManagerCommands.cs",
-    "levels": ADAPTER / "FloorLevelCommands.cs",
-    "zones": ADAPTER / "ZoneManagerCommands.cs",
     "family_window": UI / "FamilyManagerWindow.xaml.cs",
     "level_window": UI / "FloorLevelWindow.xaml.cs",
     "zone_window": UI / "ZoneManagerWindow.xaml.cs",
@@ -29,6 +24,11 @@ files = {
     "project_tools_window": UI / "ProjectToolsWindow.xaml.cs",
     "schedule_hub_window": UI / "ScheduleHubWindow.xaml.cs",
     "curtain_hub_window": UI / "CurtainWallWindow.xaml.cs",
+    "commands": ADAPTER / "Commands.cs",
+    "review": ADAPTER / "ReviewCommands.cs",
+    "families": ADAPTER / "FamilyManagerCommands.cs",
+    "levels": ADAPTER / "FloorLevelCommands.cs",
+    "zones": ADAPTER / "ZoneManagerCommands.cs",
     "materials": ADAPTER / "MaterialCatalogCommands.cs",
     "project_tools": ADAPTER / "ProjectToolsCommands.cs",
     "schedule_hub": ADAPTER / "ScheduleHubCommands.cs",
@@ -48,7 +48,8 @@ if not errors:
         "_window.Closed += OnWindowClosed",
         "_window.Closed -= OnWindowClosed",
         "_window.Dispatcher.CheckAccess()",
-        "_window.Dispatcher.BeginInvoke(new Action(_window.Close))",
+        "_window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher))",
+        "private void TryCloseWindowOnDispatcher()",
     ):
         if needle not in text["lifetime"]:
             errors.append("document-bound lifetime coordinator missing: " + needle)
@@ -80,37 +81,25 @@ if not errors:
         errors.append("QS3DBBSVIEW launcher must pass its source Document to RebarScheduleWindow")
 
     manager_contracts = {
-        "families": "new FamilyManagerWindow(document)",
-        "levels": "new FloorLevelWindow(document)",
-        "zones": "new ZoneManagerWindow(document)",
-        "materials": "new MaterialCatalogWindow(document)",
-        "project_tools": "new ProjectToolsWindow(document)",
-        "schedule_hub": "new ScheduleHubWindow(document)",
-        "curtain_hub": "new CurtainWallWindow(document)",
+        "families": ("new FamilyManagerWindow(document)", "family_window"),
+        "levels": ("new FloorLevelWindow(document)", "level_window"),
+        "zones": ("new ZoneManagerWindow(document)", "zone_window"),
+        "materials": ("new MaterialCatalogWindow(document, project)", "material_window"),
+        "project_tools": ("new ProjectToolsWindow(document)", "project_tools_window"),
+        "schedule_hub": ("new ScheduleHubWindow(document)", "schedule_hub_window"),
+        "curtain_hub": ("new CurtainWallWindow(document)", "curtain_hub_window"),
     }
-    self_attaching_managers = {
-        "families": "family_window",
-        "levels": "level_window",
-        "zones": "zone_window",
-        "materials": "material_window",
-        "project_tools": "project_tools_window",
-        "schedule_hub": "schedule_hub_window",
-        "curtain_hub": "curtain_hub_window",
-    }
-    for key, constructor in manager_contracts.items():
+    for key, (constructor, window_key) in manager_contracts.items():
         source = text[key]
+        window_source = text[window_key]
         if constructor not in source:
             errors.append(key + " launcher lost its explicit source Document constructor")
-        if key in self_attaching_managers:
-            window_source = text[self_attaching_managers[key]]
-            if "DocumentBoundWindowLifetime.Attach(this, _document);" not in window_source:
-                errors.append(key + " modeless window must attach its own document-bound lifetime")
-            if "DocumentBoundWindowLifetime.Attach(window, document);" in source:
-                errors.append(key + " launcher must not duplicate the lifetime already owned by its window")
-        elif "DocumentBoundWindowLifetime.Attach(window, document);" not in source:
-            errors.append(key + " launcher must attach its document-bound modeless window lifetime")
         if "Application.ShowModelessWindow(IntPtr.Zero, window, true);" not in source:
             errors.append(key + " launcher must show the same registered window instance")
+        if "DocumentBoundWindowLifetime.Attach(window, document);" in source:
+            errors.append(key + " launcher must not duplicate lifetime attachment owned by the window constructor")
+        if "DocumentBoundWindowLifetime.Attach(this, _document);" not in window_source:
+            errors.append(window_key + " must own its source-DWG lifetime attachment in the window constructor")
 
     # These command hubs are intentionally active-document dynamic. Binding either hub to the
     # document that happened to be active when the hub opened would break intended multi-DWG UX.
@@ -134,4 +123,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: document-bound review/health/BQ/BBS/schedule/manager/hub windows close with their source DWG, while Domain Hub and Rebar 3D Hub remain intentionally active-document dynamic across DWGs.")
+print("PASS: document-bound review/health/BQ/BBS/schedule/manager windows own one source-DWG lifetime attachment in their constructors; launchers do not duplicate it, while dynamic hubs remain active-document based.")

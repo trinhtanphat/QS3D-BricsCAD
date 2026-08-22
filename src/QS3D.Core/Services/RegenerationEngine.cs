@@ -16,14 +16,14 @@ namespace QS3D.Core.Services
 
     public static class RegeneratorCatalog
     {
-        public static IReadOnlyList<IElementRegenerator> CreateDefault() => new IElementRegenerator[]
+        public static IReadOnlyList<IElementRegenerator> CreateDefault() => Array.AsReadOnly(new IElementRegenerator[]
         {
             new OpeningRegenerator(),
             new WallRegenerator(),
             new StructuralRegenerator(),
             new RoomRegenerator(),
             new GenericTakeoffRegenerator()
-        };
+        });
     }
 
     public sealed class RegenerationEngine
@@ -35,18 +35,27 @@ namespace QS3D.Core.Services
         public RegenerationEngine(DependencyGraph graph, IEnumerable<IElementRegenerator> regenerators)
         {
             _graph = graph ?? throw new ArgumentNullException(nameof(graph));
-            _regenerators = new List<IElementRegenerator>(regenerators ?? throw new ArgumentNullException(nameof(regenerators)));
+            if (regenerators == null) throw new ArgumentNullException(nameof(regenerators));
+            var materialized = new List<IElementRegenerator>(regenerators);
+            if (materialized.Any(x => x == null))
+                throw new ArgumentException("Regenerator collection cannot contain null entries.", nameof(regenerators));
+            _regenerators = materialized;
             _ruleEngine = new QuantityRuleEngine();
         }
 
         public void MarkChanged(ProjectState project, string elementId, ElementDirtyFlags flags)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            _graph.Rebuild(project.Elements);
+            var normalizedId = elementId ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(normalizedId))
+                throw new ArgumentException("Regeneration changed element id cannot be blank.", nameof(elementId));
+            if (!string.Equals(normalizedId, normalizedId.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Regeneration changed element id must be canonical without surrounding whitespace: " + normalizedId + ".", nameof(elementId));
 
-            var normalizedId = (elementId ?? string.Empty).Trim();
+            _graph.Rebuild(project.Elements);
             if (!_graph.TryGetElement(normalizedId, out var source) || source == null)
                 throw new KeyNotFoundException("Unknown element: " + elementId);
+            if (flags == ElementDirtyFlags.None) return;
 
             var dependents = new List<ProjectElement>();
             foreach (var dependentId in _graph.GetDependentsTransitive(source.Id))
@@ -56,16 +65,21 @@ namespace QS3D.Core.Services
                 dependents.Add(dependent);
             }
 
-            source.MarkDirty(flags);
-            foreach (var dependent in dependents)
-                dependent.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
-            project.Touch();
+            ProjectSemanticMutationExecutor.Execute(project, "regeneration.mark-changed", () =>
+            {
+                source.MarkDirty(flags);
+                foreach (var dependent in dependents)
+                    dependent.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
+                project.Touch();
+                return true;
+            });
         }
 
         public int RegenerateDirty(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             ValidateProjectElements(project.Elements);
+            _graph.Rebuild(project.Elements);
             return RegenerateTransactional(project, project.Elements, project.Elements.Count);
         }
 
@@ -74,15 +88,20 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
-            var unresolved = CanonicalTargetIds(elementIds);
+            var inputVersion = project.ChangeVersion;
+            var sourceElements = project.Elements.ToArray();
+            var unresolved = CanonicalTargetIds(elementIds, sourceElements.Length);
+            if (project.ChangeVersion != inputVersion)
+                throw new InvalidOperationException("Project state changed while materializing regeneration target ids.");
+            RequireElementStructureFresh(project, sourceElements);
             if (unresolved.Count == 0) return 0;
 
-            // Resolve the requested subset in one project-order scan. The previous implementation
-            // built a full by-id dictionary and then scanned project.Elements again to recover
-            // project order, which doubled O(project-size) work on every targeted regeneration pass.
+            // Resolve the requested subset in one captured project-order scan. The previous implementation
+            // scanned live project.Elements after caller target enumeration, which could silently switch to
+            // replacement same-id instances when callers directly edited the public collection without Touch().
             var targets = new List<ProjectElement>(unresolved.Count);
             var seenProjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var element in project.Elements)
+            foreach (var element in sourceElements)
             {
                 if (element == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
                 if (!seenProjectIds.Add(element.Id))
@@ -94,6 +113,10 @@ namespace QS3D.Core.Services
                 var missing = unresolved.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).First();
                 throw new KeyNotFoundException("Unknown regeneration target: " + missing);
             }
+            ValidateSubsetDependencyExistence(targets, seenProjectIds);
+            if (project.ChangeVersion != inputVersion)
+                throw new InvalidOperationException("Project state changed while materializing regeneration target ids.");
+            RequireElementStructureFresh(project, sourceElements);
 
             return RegenerateTransactional(project, targets, targets.Count);
         }
@@ -109,8 +132,54 @@ namespace QS3D.Core.Services
             }
         }
 
-        private static HashSet<string> CanonicalTargetIds(IEnumerable<string> elementIds)
+        private static void RequireElementStructureFresh(ProjectState project, IReadOnlyList<ProjectElement> sourceElements)
         {
+            if (project.Elements.Count != sourceElements.Count)
+                throw StructuralFreshnessError();
+            for (var index = 0; index < sourceElements.Count; index++)
+                if (!ReferenceEquals(project.Elements[index], sourceElements[index]))
+                    throw StructuralFreshnessError();
+        }
+
+        private static InvalidOperationException StructuralFreshnessError()
+        {
+            return new InvalidOperationException(
+                "Project element structure changed while materializing regeneration target ids. Retry targeted regeneration against the current project state.");
+        }
+
+        private static void ValidateSubsetDependencyExistence(
+            IEnumerable<ProjectElement> targets,
+            ISet<string> projectIds)
+        {
+            foreach (var target in targets)
+            {
+                var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var canonicalUnique = true;
+                foreach (var dependencyRaw in target.DependsOn)
+                {
+                    var dependency = dependencyRaw ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(dependency) ||
+                        !string.Equals(dependency, dependency.Trim(), StringComparison.Ordinal) ||
+                        !dependencies.Add(dependency))
+                    {
+                        canonicalUnique = false;
+                        break;
+                    }
+                }
+                if (!canonicalUnique) continue;
+
+                foreach (var dependency in dependencies)
+                {
+                    if (projectIds.Contains(dependency)) continue;
+                    throw new InvalidOperationException(
+                        "Semantic element " + target.Id + " depends on missing semantic element: " + dependency + ". Repair semantic relations before graph evaluation.");
+                }
+            }
+        }
+
+        private static HashSet<string> CanonicalTargetIds(IEnumerable<string> elementIds, int maxCount)
+        {
+            var knownCount = ValidateKnownTargetIdCounts(elementIds);
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var value in elementIds)
@@ -120,11 +189,43 @@ namespace QS3D.Core.Services
                     throw new ArgumentException("Regeneration target id cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
                 if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
                     throw new ArgumentException("Regeneration target id must be canonical without surrounding whitespace: " + raw + ".", nameof(elementIds));
-                if (!result.Add(raw))
+                if (result.Contains(raw))
                     throw new ArgumentException("Duplicate regeneration target id: " + raw + ".", nameof(elementIds));
+                if (result.Count >= maxCount)
+                    throw new ArgumentException("Regeneration target set cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
+                result.Add(raw);
                 index++;
             }
+
+            if (knownCount.HasValue && knownCount.Value != index)
+                throw new InvalidOperationException("Regeneration target id count changed during enumeration.");
             return result;
+        }
+
+        private static int? ValidateKnownTargetIdCounts(IEnumerable<string> elementIds)
+        {
+            var genericCount = elementIds is ICollection<string> collection ? (int?)collection.Count : null;
+            var readOnlyCount = elementIds is IReadOnlyCollection<string> readOnlyCollection ? (int?)readOnlyCollection.Count : null;
+            var nonGenericCount = elementIds is System.Collections.ICollection nonGenericCollection ? (int?)nonGenericCollection.Count : null;
+
+            ValidateKnownTargetIdCount(genericCount, nameof(elementIds));
+            ValidateKnownTargetIdCount(readOnlyCount, nameof(elementIds));
+            ValidateKnownTargetIdCount(nonGenericCount, nameof(elementIds));
+
+            var expected = genericCount ?? readOnlyCount ?? nonGenericCount;
+            if (!expected.HasValue) return null;
+            if ((genericCount.HasValue && genericCount.Value != expected.Value) ||
+                (readOnlyCount.HasValue && readOnlyCount.Value != expected.Value) ||
+                (nonGenericCount.HasValue && nonGenericCount.Value != expected.Value))
+                throw new ArgumentException("Regeneration target ids report conflicting known counts.", nameof(elementIds));
+            return expected;
+        }
+
+        private static void ValidateKnownTargetIdCount(int? count, string parameterName)
+        {
+            if (!count.HasValue) return;
+            if (count.Value < 0)
+                throw new ArgumentException("Regeneration target ids report an invalid negative known count.", parameterName);
         }
 
         private int RegenerateTransactional(ProjectState project, IEnumerable<ProjectElement> candidates, int passBasis)

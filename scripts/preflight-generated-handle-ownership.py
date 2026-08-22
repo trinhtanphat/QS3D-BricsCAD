@@ -14,15 +14,18 @@ checks = {
     "src/QS3D.Core/Diagnostics/SafeGeneratedHandleOwnershipHealthService.cs": [
         "SourceHandles",
         "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element)",
+        "GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(value)",
+        "GeneratedHandleOwnershipPolicy.AreSameLogicalOwnerSlots(x.Slot, slot)",
         "GENERATED_HANDLE_OWNERSHIP_CONFLICT",
-        "GroupBy(x => x.Token",
-        "StringComparer.OrdinalIgnoreCase",
+        "GroupBy(x => x.Value, StringComparer.OrdinalIgnoreCase)",
     ],
     "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs": [
         "public static class GeneratedHandleOwnershipPolicy",
         "EnumerateOwnerHandles",
         "CollectOwnerHandles",
         "TryFindOwner",
+        "NormalizeHandleIdentity",
+        "AreSameLogicalOwnerSlots",
         'StartsWith("Generated"',
         'EndsWith("Handle"',
         'EndsWith("Handles"',
@@ -77,4 +80,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: generated ownership health, selection and future generated families share one Core owner-slot enumeration contract.")
+print("PASS: generated ownership health, selection and future generated families share normalized CAD identity and one Core owner-slot enumeration contract.")

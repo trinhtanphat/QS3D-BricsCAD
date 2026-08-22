@@ -14,8 +14,10 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                ProjectContextCoordinator.GetOrCreate(document);
-                var window = new MaterialCatalogWindow(document);
+                if (!ExistingProjectMutationContext.TryGet(document, out var project))
+                    throw new InvalidOperationException("Material Catalog cần QS3D project hiện hữu. Hãy chạy QS3DINIT hoặc mở/nạp project trước.");
+
+                var window = new MaterialCatalogWindow(document, project);
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
                 PaletteCoordinator.SetStatus("Material Catalog: built-in + custom + apply theo semantic selection • khóa theo bản vẽ đang mở.");
             }

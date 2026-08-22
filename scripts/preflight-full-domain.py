@@ -67,7 +67,7 @@ if room_engine.exists():
         errors.append("room boundary bridge detection must remain iterative so large graphs cannot overflow the call stack")
     if "BuildSourceLookup" not in text or "IReadOnlyDictionary<string, ISet<string>> sourceLookup" not in text:
         errors.append("room boundary source evidence lookup must avoid scanning all edges during each face step")
-    if "SegmentBounds" not in text or "bounds[i].Overlaps(bounds[j])" not in text:
+    if "SegmentBounds" not in text or "other.Overlaps(current)" not in text:
         errors.append("room boundary pair subdivision must retain the tolerance-aware broad-phase bounds rejection")
 
 bulge = ROOT / "src/QS3D.Core/Geometry/BulgeArcTessellator.cs"
@@ -105,7 +105,7 @@ if room_hub.exists() and 'Tag="QS3DROOMAUTO"' not in room_hub.read_text(encoding
 room_ribbon = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs"
 if room_ribbon.exists():
     text = room_ribbon.read_text(encoding="utf-8")
-    if 'new RibbonButtonSpec("Phòng Auto", "QS3DROOMAUTO")' not in text:
+    if 'Button("Phòng Auto", "QS3DROOMAUTO")' not in text:
         errors.append("Ribbon does not expose QS3DROOMAUTO")
 
 completion = ROOT / "tests/QS3D.Core.SmokeTests/CompletionRegressionSmoke.cs"

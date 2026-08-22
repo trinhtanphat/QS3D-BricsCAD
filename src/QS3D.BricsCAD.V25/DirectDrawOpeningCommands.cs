@@ -26,20 +26,29 @@ namespace QS3D.BricsCAD.V25
         private const double UcsAxisTolerance = 1e-9d;
 
         [CommandMethod("QS3DDRAWDOOR", CommandFlags.Modal)]
-        public void DrawDoor() => DrawOpening(ElementCategory.Door, "Cửa Đi", defaultSillM: 0d);
+        public void DrawDoor() => DrawOpening(ElementCategory.Door, "Cửa Đi", defaultSillM: 0d, promptParameters: false, operation: "QS3DDRAWDOOR");
+
+        [CommandMethod("QS3DDRAWDOORADV", CommandFlags.Modal)]
+        public void DrawDoorAdvanced() => DrawOpening(ElementCategory.Door, "Cửa Đi", defaultSillM: 0d, promptParameters: true, operation: "QS3DDRAWDOORADV");
 
         [CommandMethod("QS3DDRAWOPENING", CommandFlags.Modal)]
-        public void DrawWallOpening() => DrawOpening(ElementCategory.WallOpening, "Lỗ Mở Vách", defaultSillM: 0d);
+        public void DrawWallOpening() => DrawOpening(ElementCategory.WallOpening, "Lỗ Mở Vách", defaultSillM: 0d, promptParameters: false, operation: "QS3DDRAWOPENING");
 
-        private static void DrawOpening(ElementCategory category, string label, double defaultSillM)
+        [CommandMethod("QS3DDRAWOPENINGADV", CommandFlags.Modal)]
+        public void DrawWallOpeningAdvanced() => DrawOpening(ElementCategory.WallOpening, "Lỗ Mở Vách", defaultSillM: 0d, promptParameters: true, operation: "QS3DDRAWOPENINGADV");
+
+        private static void DrawOpening(ElementCategory category, string label, double defaultSillM, bool promptParameters, string operation)
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
-            Guard(document, "QS3DDRAW" + (category == ElementCategory.Door ? "DOOR" : "OPENING"), () =>
+            Guard(document, operation, () =>
             {
                 RequireModelSpace(document);
-                var points = AcquireTwoPoints(document, label);
+                var promptUnit = (object)CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
+                var points = AcquireTwoPoints(document, label + (promptParameters ? " tùy chỉnh" : " nhanh"));
                 if (points == null) return;
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, operation);
 
                 var widthDrawing = CadGeometryGuard.Hypot(
                     CadGeometryGuard.Subtract(points[1].X, points[0].X, label + "/dx"),
@@ -47,29 +56,51 @@ namespace QS3D.BricsCAD.V25
                     label + "/plan width");
                 var widthM = CadGeometryGuard.Positive(CadGeometryGuard.ToMeters(document, widthDrawing, label + "/width"), label + "/WidthM");
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
                 var heightDefault = hasDefaultsProject
-                    ? FamilyPositiveNumber(defaultsProject, category, "HeightM", 2.2d)
+                    ? FamilyPositiveNumber(defaultsProject!, category, "HeightM", 2.2d)
                     : 2.2d;
-                var heightM = PromptPositiveMeters(document.Editor, "Chiều cao " + label + " (m)", heightDefault);
-                if (!heightM.HasValue) return;
-
                 var bottomOffsetDefault = hasDefaultsProject
-                    ? FamilyNonNegativeNumber(defaultsProject, category, "BottomOffsetM", defaultSillM)
+                    ? FamilyNonNegativeNumber(defaultsProject!, category, "BottomOffsetM", defaultSillM)
                     : defaultSillM;
                 var sillDefault = hasDefaultsProject
-                    ? FamilyNonNegativeNumber(defaultsProject, category, "SillHeightM", bottomOffsetDefault)
+                    ? FamilyNonNegativeNumber(defaultsProject!, category, "SillHeightM", bottomOffsetDefault)
                     : bottomOffsetDefault;
-                var sillM = PromptNonNegativeMeters(document.Editor, "Cao độ bậu " + label + " so với đáy host (m)", sillDefault);
-                if (!sillM.HasValue) return;
-
                 var clearanceDefault = hasDefaultsProject
-                    ? FamilyNonNegativeNumber(defaultsProject, category, "BooleanClearanceM", 0.01d)
+                    ? FamilyNonNegativeNumber(defaultsProject!, category, "BooleanClearanceM", 0.01d)
                     : 0.01d;
-                var clearanceM = PromptNonNegativeMeters(document.Editor, "Khe hở boolean (m)", clearanceDefault);
-                if (!clearanceM.HasValue) return;
 
-                Execute(document, category, label, points[0], points[1], widthM, heightM.Value, sillM.Value, clearanceM.Value);
+                var heightM = heightDefault;
+                var sillM = sillDefault;
+                var clearanceM = clearanceDefault;
+                if (promptParameters)
+                {
+                    var promptedHeight = PromptPositiveMeters(document.Editor, "Chiều cao " + label + " (m)", heightDefault);
+                    if (!promptedHeight.HasValue) return;
+                    heightM = promptedHeight.Value;
+
+                    var promptedSill = PromptNonNegativeMeters(document.Editor, "Cao độ bậu " + label + " so với đáy host (m)", sillDefault);
+                    if (!promptedSill.HasValue) return;
+                    sillM = promptedSill.Value;
+
+                    var promptedClearance = PromptNonNegativeMeters(document.Editor, "Khe hở boolean (m)", clearanceDefault);
+                    if (!promptedClearance.HasValue) return;
+                    clearanceM = promptedClearance.Value;
+                }
+                else
+                {
+                    document.Editor.WriteMessage(
+                        "\nQS3D " + label + " nhanh: width theo 2 điểm, dùng Family hiện tại (cao " +
+                        heightM.ToString("0.###", CultureInfo.InvariantCulture) + " m, bậu " +
+                        sillM.ToString("0.###", CultureInfo.InvariantCulture) + " m, clearance " +
+                        clearanceM.ToString("0.###", CultureInfo.InvariantCulture) + " m). Dùng " +
+                        (category == ElementCategory.Door ? "QS3DDRAWDOORADV" : "QS3DDRAWOPENINGADV") +
+                        " khi cần nhập tham số riêng.");
+                }
+
+                Execute(document, category, label, points[0], points[1], widthM, heightM, sillM, clearanceM, projectPreview);
             });
         }
 
@@ -82,10 +113,13 @@ namespace QS3D.BricsCAD.V25
             double widthM,
             double heightM,
             double sillM,
-            double clearanceM)
+            double clearanceM,
+            DirectDrawProjectPreviewContext projectPreview)
         {
-            EnsureActive(document, "Direct Draw " + label);
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            var operation = "Direct Draw " + label;
+            EnsureActive(document, operation);
+            var projectExistedBeforeAuthoring = projectPreview.HasProject;
+            var project = projectPreview.ResolveForMutation(document, operation);
             var rollback = ProjectStateSnapshot.Capture(project);
             var sourceId = ObjectId.Null;
             ProjectElement? createdElement = null;
@@ -113,30 +147,29 @@ namespace QS3D.BricsCAD.V25
                 createdElement.SetProperty("BottomOffsetM", sillM.ToString("R", CultureInfo.InvariantCulture));
                 createdElement.SetProperty("BooleanClearanceM", clearanceM.ToString("R", CultureInfo.InvariantCulture));
 
-                regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
+                    .RegenerateDirtySubset(project, new[] { createdElementId });
 
-                // QS3DAUTOLINKHOSTS resolves the active document internally. Re-check immediately
-                // before delegating and keep only the newly-created source selected so no unrelated
-                // Door/Opening can be re-hosted by this Direct Draw operation.
+                // Direct Draw owns exactly one canonical opening. Link only that opening against
+                // the exact project already authorized by this authoring operation; do not re-enter
+                // the broad pick-set command surface or let unrelated selection participate.
                 EnsureActive(document, "Direct Draw " + label + " / Auto Host");
-                document.Editor.SetImpliedSelection(new[] { sourceId });
-                new AutoHostLinkCommands().AutoLinkHosts();
+                hostId = AutoHostLinkCommands.LinkSingleOpening(document, project, createdElementId);
                 EnsureActive(document, "Direct Draw " + label + " / post Auto Host");
 
-                // AutoHost may rollback its ProjectState snapshot and command-surface errors are
-                // intentionally swallowed there. Never trust the pre-AutoHost element reference:
-                // resolve the canonical element again from the current project by stable Id.
                 createdElement = project.Elements.SingleOrDefault(x =>
                     string.Equals(x.Id, createdElementId, StringComparison.OrdinalIgnoreCase));
                 if (createdElement == null)
                     throw new InvalidOperationException(label + " vừa tạo không còn tồn tại sau Auto Host; operation được rollback.");
 
-                if (!createdElement.Properties.TryGetValue("HostWallId", out hostId) || string.IsNullOrWhiteSpace(hostId))
+                if (!createdElement.Properties.TryGetValue("HostWallId", out var recordedHostId) ||
+                    string.IsNullOrWhiteSpace(recordedHostId) ||
+                    !string.Equals(recordedHostId.Trim(), hostId, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException(label + " chưa tìm được host duy nhất trong phạm vi Auto Host; operation được rollback để không tạo opening mồ côi.");
-
-                // AutoHostLinkCommands catches its command-surface failures. A second deterministic
-                // regeneration forces any semantic/link inconsistency back into this outer rollback.
-                regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                // Keep the deterministic second pass inside the created opening + resolved host scope
+                // so unrelated dirty project elements remain untouched by one Direct Draw operation.
+                regenerated += new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
+                    .RegenerateDirtySubset(project, new[] { createdElementId, hostId });
                 project.Touch();
             }
             catch (Exception operationError)
@@ -147,6 +180,7 @@ namespace QS3D.BricsCAD.V25
                 catch (Exception ex) { cleanupError = ex; }
                 try { rollback.Restore(project); }
                 catch (Exception ex) { restoreError = ex; }
+                if (!projectExistedBeforeAuthoring) ProjectContextCoordinator.Forget(document);
                 try { document.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
                 catch { }
 
@@ -241,7 +275,7 @@ namespace QS3D.BricsCAD.V25
         {
             if (double.IsNaN(defaultValue) || double.IsInfinity(defaultValue) || defaultValue <= 0d)
                 throw new InvalidOperationException(label + " default phải là số hữu hạn > 0.");
-            var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
+            var options = new PromptDoubleOptions("\n" + label + ": ")
             {
                 AllowNegative = false,
                 AllowZero = false,
@@ -261,7 +295,7 @@ namespace QS3D.BricsCAD.V25
         {
             if (double.IsNaN(defaultValue) || double.IsInfinity(defaultValue) || defaultValue < 0d)
                 throw new InvalidOperationException(label + " default phải là số hữu hạn >= 0.");
-            var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
+            var options = new PromptDoubleOptions("\n" + label + ": ")
             {
                 AllowNegative = false,
                 AllowZero = true,
@@ -314,6 +348,16 @@ namespace QS3D.BricsCAD.V25
                 if (active != null && active.Category == category) return active;
             }
             return project.Families.FirstOrDefault(x => x.Category == category);
+        }
+
+        private static void RequirePromptContextUnchanged(Document document, object promptUnit, Matrix3d promptUcs, string operation)
+        {
+            EnsureActive(document, operation + " / geometry prompt freshness");
+            RequireModelSpace(document);
+            if (!Equals(CadUnitService.GetLengthUnit(document), promptUnit))
+                throw new InvalidOperationException("Drawing unit policy đã thay đổi trong lúc chọn geometry cho " + operation + ". Hãy chạy lại lệnh.");
+            if (!document.Editor.CurrentUserCoordinateSystem.Equals(promptUcs))
+                throw new InvalidOperationException("Current UCS đã thay đổi trong lúc chọn geometry cho " + operation + ". Hãy chạy lại lệnh.");
         }
 
         private static void RequireModelSpace(Document document)

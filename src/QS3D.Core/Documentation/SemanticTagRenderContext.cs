@@ -32,8 +32,11 @@ namespace QS3D.Core.Documentation
 
         public ProjectElement ResolveElement(string id)
         {
-            var normalized = (id ?? string.Empty).Trim();
+            var raw = id ?? string.Empty;
+            var normalized = raw.Trim();
             if (normalized.Length == 0) throw new InvalidOperationException("Semantic documentation element id is required.");
+            if (!string.Equals(raw, normalized, StringComparison.Ordinal))
+                throw new InvalidOperationException("Semantic documentation element id is non-canonical: \"" + id + "\".");
             if (_ambiguousElementIds.Contains(normalized))
                 throw new InvalidOperationException("Semantic documentation element id is ambiguous: " + normalized + ".");
             if (!_elements.TryGetValue(normalized, out var element))
@@ -52,7 +55,7 @@ namespace QS3D.Core.Documentation
 
         public string ResolveFamily(ProjectElement element)
         {
-            if (string.IsNullOrWhiteSpace(element.FamilyId)) return string.Empty;
+            if (string.IsNullOrEmpty(element.FamilyId)) return string.Empty;
             EnsureFamilyIndex();
             return ResolveReference(
                 element.FamilyId,
@@ -65,7 +68,7 @@ namespace QS3D.Core.Documentation
 
         public string ResolveFloor(ProjectElement element)
         {
-            if (string.IsNullOrWhiteSpace(element.FloorId)) return string.Empty;
+            if (string.IsNullOrEmpty(element.FloorId)) return string.Empty;
             EnsureFloorIndex();
             return ResolveReference(
                 element.FloorId,
@@ -78,7 +81,7 @@ namespace QS3D.Core.Documentation
 
         public string ResolveZone(ProjectElement element)
         {
-            if (string.IsNullOrWhiteSpace(element.ZoneId)) return string.Empty;
+            if (string.IsNullOrEmpty(element.ZoneId)) return string.Empty;
             EnsureZoneIndex();
             return ResolveReference(
                 element.ZoneId,
@@ -127,8 +130,11 @@ namespace QS3D.Core.Documentation
 
         private static void Add<T>(IDictionary<string, T> index, ISet<string> ambiguous, string rawId, T value)
         {
-            var id = (rawId ?? string.Empty).Trim();
-            if (id.Length == 0) throw new InvalidOperationException("Semantic documentation index contains an empty id.");
+            var id = rawId ?? string.Empty;
+            var canonicalId = id.Trim();
+            if (canonicalId.Length == 0) throw new InvalidOperationException("Semantic documentation index contains an empty id.");
+            if (!string.Equals(id, canonicalId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Semantic documentation index contains a non-canonical id: \"" + rawId + "\".");
             if (index.ContainsKey(id))
             {
                 ambiguous.Add(id);
@@ -146,6 +152,8 @@ namespace QS3D.Core.Documentation
             Func<T, string> nameSelector)
         {
             var id = (rawId ?? string.Empty).Trim();
+            if (!string.Equals(rawId, id, StringComparison.Ordinal))
+                throw new InvalidOperationException("Semantic tag references non-canonical " + label + " \"" + rawId + "\" on element " + elementId + ".");
             if (ambiguous.Contains(id))
                 throw new InvalidOperationException("Semantic tag references ambiguous " + label + " " + id + " on element " + elementId + ".");
             if (!index.TryGetValue(id, out var match))

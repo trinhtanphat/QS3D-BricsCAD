@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
             GroupsDoorsByDimensionsAndDistinctHosts();
             InstanceOverrideSplitsFamilyInheritedRow();
             RejectsInvalidSemanticDimensions();
+            RejectsDerivedAreaUnderflow();
+            RejectsPrecisionLosingAreaAggregation();
         }
 
         private static void GroupsDoorsByDimensionsAndDistinctHosts()
@@ -26,6 +28,9 @@ namespace QS3D.Core.SmokeTests
             family.Properties["Material"] = "Gỗ";
             project.Families.Add(family);
 
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
+            project.Elements.Add(new ProjectElement("wall-a", ElementCategory.ArchitecturalWall));
+            project.Elements.Add(new ProjectElement("wall-b", ElementCategory.ArchitecturalWall));
             var first = Door("d1", family.Id, "f1", "wall-a");
             first.Quantities["OpeningAreaM2"] = 1.95d;
             var second = Door("d2", family.Id, "f1", "wall-b");
@@ -57,6 +62,8 @@ namespace QS3D.Core.SmokeTests
             family.Properties["BottomOffsetM"] = "0.15";
             project.Families.Add(family);
 
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
+            project.Elements.Add(new ProjectElement("wall-a", ElementCategory.ArchitecturalWall));
             var inherited = new ProjectElement("o1", ElementCategory.WallOpening, family.Id, "f1", "z");
             inherited.Properties["HostWallId"] = "wall-a";
             var overridden = new ProjectElement("o2", ElementCategory.WallOpening, family.Id, "f1", "z");
@@ -83,12 +90,67 @@ namespace QS3D.Core.SmokeTests
             family.Properties["WidthM"] = "-0.9";
             family.Properties["HeightM"] = "2.2";
             project.Families.Add(family);
+            project.Floors.Add(new FloorDefinition("f", "Floor", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
             project.Elements.Add(new ProjectElement("d1", ElementCategory.Door, family.Id, "f", "z"));
             Throws<InvalidOperationException>(() => DoorOpeningScheduleBuilder.Build(project));
 
             family.Properties["WidthM"] = "0.9";
             family.Properties["HeightM"] = "NaN";
             Throws<InvalidOperationException>(() => DoorOpeningScheduleBuilder.Build(project));
+        }
+
+        private static void RejectsDerivedAreaUnderflow()
+        {
+            var project = new ProjectState("p4", "Tiny opening");
+            var family = new ProjectFamily("tiny-door", "Tiny Door", ElementCategory.Door);
+            family.Properties["WidthM"] = "1e-200";
+            family.Properties["HeightM"] = "1e-200";
+            project.Families.Add(family);
+            project.Floors.Add(new FloorDefinition("f", "Floor", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
+            project.Elements.Add(new ProjectElement("tiny", ElementCategory.Door, family.Id, "f", "z"));
+
+            Throws<InvalidOperationException>(() => DoorOpeningScheduleBuilder.Build(project));
+
+            var explicitArea = new ProjectState("p5", "Explicit tiny area");
+            explicitArea.Floors.Add(new FloorDefinition("f", "Floor", 0d));
+            explicitArea.Zones.Add(new ZoneDefinition("z", "Zone"));
+            var explicitFamily = new ProjectFamily("tiny-door", "Tiny Door", ElementCategory.Door);
+            explicitFamily.Properties["WidthM"] = "1e-200";
+            explicitFamily.Properties["HeightM"] = "1e-200";
+            explicitArea.Families.Add(explicitFamily);
+            var element = new ProjectElement("tiny", ElementCategory.Door, explicitFamily.Id, "f", "z");
+            element.Quantities["OpeningAreaM2"] = 0d;
+            explicitArea.Elements.Add(element);
+            var rows = DoorOpeningScheduleBuilder.Build(explicitArea);
+            if (rows.Count != 1 || rows[0].OpeningAreaM2 != 0d)
+                throw new Exception("Explicit stored zero OpeningAreaM2 must retain existing semantics.");
+        }
+
+        private static void RejectsPrecisionLosingAreaAggregation()
+        {
+            var project = new ProjectState("p6", "Opening area precision");
+            project.Floors.Add(new FloorDefinition("f", "Floor", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
+            var family = new ProjectFamily("door", "Door", ElementCategory.Door);
+            family.Properties["WidthM"] = "1";
+            family.Properties["HeightM"] = "1";
+            project.Families.Add(family);
+
+            var large = new ProjectElement("a-large", ElementCategory.Door, family.Id, "f", "z");
+            large.Quantities["OpeningAreaM2"] = 1e16d;
+            var small = new ProjectElement("b-small", ElementCategory.Door, family.Id, "f", "z");
+            small.Quantities["OpeningAreaM2"] = 1d;
+            project.Elements.Add(large);
+            project.Elements.Add(small);
+
+            Throws<OverflowException>(() => DoorOpeningScheduleBuilder.Build(project));
+
+            small.Quantities["OpeningAreaM2"] = 0d;
+            var rows = DoorOpeningScheduleBuilder.Build(project);
+            if (rows.Count != 1 || rows[0].OpeningAreaM2 != 1e16d || rows[0].Count != 2)
+                throw new Exception("Explicit zero area must remain a valid grouped contribution.");
         }
 
         private static ProjectElement Door(string id, string familyId, string floorId, string hostId)

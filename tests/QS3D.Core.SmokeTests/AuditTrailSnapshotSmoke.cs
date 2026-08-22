@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -10,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             EventsDoNotLeakBackingCollectionOrMutableEntries();
+            BoundMutationsFailAtomicallyAtMaxChangeVersion();
         }
 
         private static void EventsDoNotLeakBackingCollectionOrMutableEntries()
@@ -33,9 +36,48 @@ namespace QS3D.Core.SmokeTests
             Require(trail.Events[0].Action == "first", "Fresh audit snapshot did not preserve authoritative event values.");
         }
 
+        private static void BoundMutationsFailAtomicallyAtMaxChangeVersion()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-audit-overflow-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                File.WriteAllText(path,
+                    "<qs3d schema=\"3\" projectId=\"audit-overflow\" name=\"Audit overflow\" updatedUtc=\"2026-08-11T00:00:00.0000000Z\" changeVersion=\"9223372036854775807\" drawingPath=\"\" drawingFingerprint=\"\" activeZoneId=\"\" activeFloorId=\"\">" +
+                    "<metadata/><zones/><floors/><families/><rules/><elements/><audit>" +
+                    "<event utc=\"2026-08-11T00:00:00.0000000Z\" action=\"seed\" elementId=\"\" detail=\"before\" actor=\"\" correlationId=\"\"/>" +
+                    "</audit></qs3d>");
+                var project = new QsdbProjectStore().Load(path);
+                var trail = AuditTrail.ForProject(project);
+                var expectedUpdatedUtc = project.UpdatedUtc;
+
+                Throws<OverflowException>(() => trail.Record("overflow", string.Empty, "must-not-commit"));
+                Require(project.AuditEvents.Count == 1, "Failed bound audit Record appended an event before version overflow.");
+                Require(project.AuditEvents[0].Action == "seed", "Failed bound audit Record changed authoritative audit history.");
+                Require(project.ChangeVersion == long.MaxValue, "Failed bound audit Record changed the maximum project version.");
+                Require(project.UpdatedUtc == expectedUpdatedUtc, "Failed bound audit Record changed UpdatedUtc.");
+
+                Throws<OverflowException>(() => trail.Clear());
+                Require(project.AuditEvents.Count == 1, "Failed bound audit Clear removed history before version overflow.");
+                Require(project.AuditEvents[0].Action == "seed", "Failed bound audit Clear changed authoritative audit history.");
+                Require(project.ChangeVersion == long.MaxValue, "Failed bound audit Clear changed the maximum project version.");
+                Require(project.UpdatedUtc == expectedUpdatedUtc, "Failed bound audit Clear changed UpdatedUtc.");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+            }
+        }
+
         private static void Require(bool value, string message)
         {
             if (!value) throw new Exception(message);
+        }
+
+        private static void Throws<T>(Action action) where T : Exception
+        {
+            try { action(); }
+            catch (T) { return; }
+            throw new Exception("Expected exception " + typeof(T).Name + ".");
         }
     }
 }

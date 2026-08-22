@@ -2,12 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Reporting
 {
     public sealed class RoomFinishScheduleRow
     {
+        public string ProjectId { get; set; } = string.Empty;
+        public string DrawingFingerprint { get; set; } = string.Empty;
         public string Floor { get; set; } = string.Empty;
         public string Room { get; set; } = string.Empty;
         public string Category { get; set; } = string.Empty;
@@ -20,6 +23,7 @@ namespace QS3D.Core.Reporting
         public double PrimaryQuantity { get; set; }
         public IList<string> ElementIds { get; } = new List<string>();
         public IList<string> RoomIds { get; } = new List<string>();
+        public IList<string> SourceHandles { get; } = new List<string>();
     }
 
     public static class RoomFinishScheduleBuilder
@@ -36,6 +40,7 @@ namespace QS3D.Core.Reporting
         public static IReadOnlyList<RoomFinishScheduleRow> Build(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Room finish schedule");
             RoomFinishIdentityService.ValidateProject(project);
             var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
@@ -49,23 +54,35 @@ namespace QS3D.Core.Reporting
             foreach (var element in project.Elements.Where(x => FinishCategories.Contains(x.Category)).OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
                 if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
-                families.TryGetValue(element.FamilyId, out var family);
+                var floorId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FloorId);
+                var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
+                families.TryGetValue(familyId, out var family);
+                if (family != null && family.Category != element.Category)
+                    throw new InvalidOperationException("Room finish schedule element " + element.Id + " category " + element.Category + " does not match Family " + family.Id + " category " + family.Category + ". Repair the Family relation before reporting.");
                 var material = Effective(element, family, "Material");
                 var roomId = AutoRoomLifecycle.ResolveRoomReferenceId(project, element);
                 var roomLabel = RoomLabel(roomId, rooms);
-                var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
-                var familyName = family?.Name ?? element.FamilyId;
+                var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
+                var familyName = family?.Name ?? familyId;
                 var metrics = Metrics(element);
                 var unitHint = metrics.DefaultUnit;
                 if (material.Length > 0 && units.TryGetValue(material, out var unit) && SameDimension(unit, metrics.DefaultUnit)) unitHint = unit;
                 var primary = Primary(unitHint, metrics.LengthM, metrics.AreaM2);
 
                 var roomKey = roomId.Length > 0 ? roomId : "(unlinked)";
-                var key = string.Join("\u001f", element.FloorId, roomKey, element.Category.ToString(), element.FamilyId, material, unitHint);
+                var key = GroupKey(
+                    floorId,
+                    roomKey,
+                    element.Category.ToString(),
+                    familyId,
+                    material,
+                    unitHint);
                 if (!rows.TryGetValue(key, out var row))
                 {
                     row = new RoomFinishScheduleRow
                     {
+                        ProjectId = project.ProjectId,
+                        DrawingFingerprint = project.DrawingFingerprint,
                         Floor = floor,
                         Room = roomLabel,
                         Category = element.Category.ToString(),
@@ -81,9 +98,23 @@ namespace QS3D.Core.Reporting
                 row.AreaM2 = Add(row.AreaM2, metrics.AreaM2, element.Id + "/finish area");
                 row.PrimaryQuantity = Add(row.PrimaryQuantity, primary, element.Id + "/finish primary quantity");
                 row.ElementIds.Add(element.Id);
+                ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
                 if (roomId.Length > 0 && !row.RoomIds.Contains(roomId, StringComparer.OrdinalIgnoreCase)) row.RoomIds.Add(roomId);
             }
             return order.Select(x => rows[x]).ToList().AsReadOnly();
+        }
+
+        private static string GroupKey(params string[] tokens)
+        {
+            var key = new StringBuilder();
+            foreach (var raw in tokens)
+            {
+                var token = raw ?? string.Empty;
+                key.Append(token.Length.ToString(CultureInfo.InvariantCulture))
+                    .Append(':')
+                    .Append(token);
+            }
+            return key.ToString();
         }
 
         private sealed class FinishMetrics
@@ -171,9 +202,7 @@ namespace QS3D.Core.Reporting
 
         private static double Add(double left, double right, string label)
         {
-            var result = left + right;
-            if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " overflowed.");
-            return result;
+            return QuantityReportMath.Add(left, right, label);
         }
     }
 }

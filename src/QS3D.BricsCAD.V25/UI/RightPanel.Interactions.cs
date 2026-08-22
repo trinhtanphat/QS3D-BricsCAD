@@ -7,24 +7,6 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class RightPanel
     {
-        private void OnRightPanelPreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            var modifiers = Keyboard.Modifiers;
-            if (modifiers == ModifierKeys.Control && e.Key == Key.F)
-            {
-                LayerSearchBox.Focus();
-                LayerSearchBox.SelectAll();
-                e.Handled = true;
-                return;
-            }
-
-            if (modifiers == ModifierKeys.None && e.Key == Key.F5)
-            {
-                OnRefreshClick(this, new RoutedEventArgs());
-                e.Handled = true;
-            }
-        }
-
         private void OnDrawingListPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
             var item = FindRightPanelContainer<ListViewItem>(DrawingList, e.OriginalSource as DependencyObject);

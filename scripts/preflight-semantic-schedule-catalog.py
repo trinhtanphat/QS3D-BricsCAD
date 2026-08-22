@@ -42,13 +42,41 @@ for token in (
     "FindZone",
     "IncludeElementIds",
     "ExcludeElementIds",
-    "new List<ElementCategory>",
+    "Categories = SnapshotBounded(",
+    "var categories = raw.Categories.ToArray();",
+    "var uniqueCategories = new HashSet<ElementCategory>();",
+    "if (!uniqueCategories.Add(category))",
+    'throw new InvalidOperationException("Semantic schedule contains duplicate category " + category + ".");',
+    "categories = uniqueCategories.OrderBy(x => x.ToString(), StringComparer.Ordinal).ToArray();",
     ".AsReadOnly()",
     "Project contains a null semantic element.",
     "allowEmpty: true",
+    "ParseCategory",
+    "Enum.TryParse(raw, false",
+    "category.ToString()",
+    "EnsureRequiredAttributes",
+    "RequireExactlyOneChild",
+    "MaterializeScheduleNodesBounded",
+    "var scheduleNodes = MaterializeScheduleNodesBounded(root);",
+    "ValidateSchema(root, scheduleNodes);",
+    "var definitions = scheduleNodes.Select(ReadDefinition).ToList();",
 ):
     if token not in source:
         errors.append("semantic schedule source missing contract token: " + token)
+
+if "Enum.Parse(typeof(ElementCategory)" in source:
+    errors.append("persisted semantic schedule categories must not use permissive Enum.Parse")
+
+load_start = source.find("public static IReadOnlyList<SemanticScheduleDefinition> Load(ProjectState project)")
+save_start = source.find("public static void Save(ProjectState project", load_start)
+load = source[load_start:save_start] if load_start >= 0 and save_start > load_start else ""
+materialize = load.find("var scheduleNodes = MaterializeScheduleNodesBounded(root);")
+schema = load.find("ValidateSchema(root, scheduleNodes);")
+definitions = load.find("var definitions = scheduleNodes.Select(ReadDefinition).ToList();")
+if min(materialize, schema, definitions) < 0 or not materialize < schema < definitions:
+    errors.append("semantic schedule load must apply capacity before detailed schema and definition parsing")
+if 'root.Elements("schedule").Select(ReadDefinition).ToList()' in source:
+    errors.append("legacy unbounded semantic schedule load materialization remains")
 
 for token in (
     "bool allowEmpty",
@@ -71,6 +99,13 @@ for token in (
 
 for token in (
     "SaveLoadRoundTripIsDeterministic",
+    "PersistedCategoriesRequireCanonicalNames",
+    "DuplicateCategoriesFailClosedAndDistinctCategoriesRoundTrip",
+    "new[] { ElementCategory.Beam, ElementCategory.Beam }",
+    "new[] { ElementCategory.Column, ElementCategory.Beam }",
+    'categoryContainer.Elements("category").First()',
+    "Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));",
+    "PersistedSchemaRequiresCanonicalShape",
     "UpsertAndRemoveSupportMultipleDefinitions",
     "BuildFiltersAndUsesCanonicalTemplateRenderer",
     "EmptySelectionBuildsHeaderOnlyTable",
@@ -78,6 +113,14 @@ for token in (
     "NullProjectElementsFailClosed",
     "StaleReferencesFailClosedAtRenderTime",
     "DuplicateDefinitionsAndOverlappingListsFailClosed",
+    "LoadAcceptsCapacityAndRejectsMalformedExcessByCapacity",
+    "MalformedScheduleWithinCapacityKeepsSchemaFailure",
+    "Equal(128, SemanticScheduleCatalog.Load(project).Count);",
+    "unsupported-excess-detail",
+    "The malformed 129th schedule reached detailed schema validation before the catalog capacity guard.",
+    "unsupported-within-capacity",
+    "Semantic schedule catalog exceeds the supported 128 definitions.",
+    "InvalidDataException",
     "{Q:LengthM}",
     "ModuleInitializer",
 ):
@@ -104,8 +147,10 @@ for token in (
     "null semantic Element",
     "template syntax",
     "generated/native ownership",
+    "canonical ElementCategory names",
+    "exactly one canonical",
     "portable interchange",
-    "native BricsCAD Table",
+    "Native BricsCAD Table",
 ):
     if token not in doc:
         errors.append("semantic schedule documentation missing boundary token: " + token)
@@ -119,4 +164,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: custom semantic schedules are bounded/persisted, immutable, fail closed on corrupt model/template state, support header-only zero-match output, and remain on the canonical documentation renderer.")
+print("PASS: custom semantic schedules are bounded/persisted, immutable, strict-canonical on v1 XML shape/category names, fail closed on corrupt model/template state, support header-only zero-match output, and remain on the canonical documentation renderer.")

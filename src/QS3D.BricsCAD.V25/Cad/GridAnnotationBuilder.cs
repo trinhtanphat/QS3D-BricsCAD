@@ -44,6 +44,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 if (element.Category != ElementCategory.Grid) throw new InvalidOperationException("Grid annotation chỉ nhận ElementCategory.Grid: " + element.Id + ".");
                 if (!distinctIds.Add(element.Id)) throw new InvalidOperationException("Grid annotation batch chứa Grid trùng: " + element.Id + ".");
             }
+            RequireCanonicalElements(project, elements, "Grid annotation build");
 
             var rollback = ProjectStateSnapshot.Capture(project);
             try
@@ -52,7 +53,6 @@ namespace QS3D.BricsCAD.V25.Cad
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
                     foreach (var element in elements) ReplaceOne(document, transaction, project, element);
-                    project.Touch();
                     transaction.Commit();
                 }
             }
@@ -86,8 +86,31 @@ namespace QS3D.BricsCAD.V25.Cad
                 throw new InvalidOperationException("Grid annotation rebuild yêu cầu DWG đích vẫn là MdiActiveDocument.");
             if (element.Category != ElementCategory.Grid)
                 throw new InvalidOperationException("Grid annotation rebuild chỉ nhận ElementCategory.Grid: " + element.Id + ".");
+            RequireCanonicalElements(project, new[] { element }, "Grid annotation rebuild");
 
             ReplaceOne(document, transaction, project, element);
+        }
+
+        private static void RequireCanonicalElements(ProjectState project, IReadOnlyList<ProjectElement> elements, string operation)
+        {
+            var canonical = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var candidate in project.Elements)
+            {
+                if (candidate == null)
+                    throw new InvalidOperationException(operation + " refused a project containing a null semantic element.");
+                if (candidate.Category != ElementCategory.Grid) continue;
+                if (canonical.ContainsKey(candidate.Id))
+                    throw new InvalidOperationException(operation + " refused duplicate semantic Grid Id: " + candidate.Id + ".");
+                canonical.Add(candidate.Id, candidate);
+            }
+
+            foreach (var element in elements)
+            {
+                if (!canonical.TryGetValue(element.Id, out var current))
+                    throw new InvalidOperationException(operation + " target is no longer present in the current project: " + element.Id + ".");
+                if (!ReferenceEquals(current, element))
+                    throw new InvalidOperationException(operation + " refused a stale/detached Grid instance: " + element.Id + ". Re-resolve it from the current project and retry.");
+            }
         }
 
         private static void ReplaceOne(Document document, Transaction transaction, ProjectState project, ProjectElement element)
@@ -147,7 +170,8 @@ namespace QS3D.BricsCAD.V25.Cad
             if (textHeight > radius * 1.8d)
                 throw new InvalidOperationException("GridTextHeightM quá lớn so với GridBubbleRadiusM cho " + element.Id + ".");
 
-            ErasePrevious(document, transaction, project, element);
+            var previous = ValidatePrevious(document.Database, transaction, project, element);
+            ErasePrevious(transaction, project, element, previous);
 
             var owner = transaction.GetObject(source.OwnerId, OpenMode.ForWrite, false) as BlockTableRecord;
             if (owner == null) throw new InvalidOperationException("Không mở được owner space của Grid source " + element.Id + ".");
@@ -250,37 +274,85 @@ namespace QS3D.BricsCAD.V25.Cad
             handles.Add(generated.Handle.ToString());
         }
 
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectState project, ProjectElement element)
+        private static IReadOnlyList<KeyValuePair<string, ObjectId>> ValidatePrevious(
+            Database database,
+            Transaction transaction,
+            ProjectState project,
+            ProjectElement element)
         {
-            if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
+            if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw))
+                return Array.Empty<KeyValuePair<string, ObjectId>>();
+
+            var expected = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var token in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
             {
-                var handle = token.Trim();
-                if (handle.Length == 0 || !seen.Add(handle)) continue;
-                var id = ResolveHandle(document.Database, handle, "generated Grid annotation " + element.Id, allowMissing: true);
-                if (id.IsNull || !id.IsValid) continue;
-                var entity = transaction.GetObject(id, OpenMode.ForWrite, true) as Entity;
-                if (entity == null || entity.IsErased) continue;
-                GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "erase Grid annotation " + handle);
+                var canonical = CadHandleService.NormalizeHexHandle(token);
+                if (canonical == null)
+                    throw new InvalidOperationException(
+                        "Generated Grid annotation metadata chứa Handle không hợp lệ. Refusing destructive replacement before any Grid annotation is erased: " + token + ".");
+                if (seen.Add(canonical)) expected.Add(canonical);
+            }
+
+            if (expected.Count == 0)
+                throw new InvalidOperationException(
+                    "Generated Grid annotation metadata không chứa Handle hợp lệ. Refusing destructive replacement before any Grid annotation is erased.");
+
+            var result = new List<KeyValuePair<string, ObjectId>>(expected.Count);
+            foreach (var handle in expected)
+            {
+                var id = ResolveHandle(database, handle, "generated Grid annotation " + element.Id);
+                var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+                if (entity == null || entity.IsErased)
+                    throw new InvalidOperationException(
+                        "Generated Grid annotation không còn live. Refusing destructive replacement before any Grid annotation is erased: " + handle + ".");
+                if (!(entity is Line) && !(entity is Circle) && !(entity is DBText))
+                    throw new InvalidOperationException(
+                        "Generated Grid annotation có loại CAD object không hợp lệ. Refusing destructive replacement before any Grid annotation is erased: " + handle + "/" + entity.GetType().Name + ".");
+                GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "validate Grid annotation " + handle);
+                result.Add(new KeyValuePair<string, ObjectId>(handle, id));
+            }
+
+            if (result.Count != expected.Count)
+                throw new InvalidOperationException(
+                    "Generated Grid annotation live-handle set không đầy đủ. Refusing destructive replacement before any Grid annotation is erased.");
+            return result;
+        }
+
+        private static void ErasePrevious(
+            Transaction transaction,
+            ProjectState project,
+            ProjectElement element,
+            IReadOnlyList<KeyValuePair<string, ObjectId>> previous)
+        {
+            foreach (var item in previous)
+            {
+                var entity = transaction.GetObject(item.Value, OpenMode.ForWrite, false) as Entity;
+                if (entity == null || entity.IsErased)
+                    throw new InvalidOperationException(
+                        "Generated Grid annotation changed after validation. Refusing partial destructive replacement: " + item.Key + ".");
+                if (!(entity is Line) && !(entity is Circle) && !(entity is DBText))
+                    throw new InvalidOperationException(
+                        "Generated Grid annotation type changed after validation. Refusing partial destructive replacement: " + item.Key + ".");
+                GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "erase Grid annotation " + item.Key);
                 entity.Erase();
             }
         }
 
-        private static ObjectId ResolveHandle(Database database, string text, string label, bool allowMissing = false)
+        private static ObjectId ResolveHandle(Database database, string text, string label)
         {
-            if (!long.TryParse((text ?? string.Empty).Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
+            var canonical = CadHandleService.NormalizeHexHandle(text);
+            if (canonical == null || !long.TryParse(canonical, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
                 throw new InvalidOperationException(label + " Handle không hợp lệ: " + text + ".");
             try
             {
                 var id = database.GetObjectId(false, new Handle(value), 0);
                 if (!id.IsNull && id.IsValid) return id;
             }
-            catch
+            catch (Exception ex)
             {
-                if (!allowMissing) throw;
+                throw new InvalidOperationException("Không resolve được " + label + " Handle: " + text + ".", ex);
             }
-            if (allowMissing) return ObjectId.Null;
             throw new InvalidOperationException("Không resolve được " + label + " Handle: " + text + ".");
         }
 

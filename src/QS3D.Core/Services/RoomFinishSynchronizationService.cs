@@ -56,6 +56,7 @@ namespace QS3D.Core.Services
         {
             ValidateRoom(project, room);
             ValidateFinish(project, finish);
+            ValidateUniqueElementIds(project);
             var rollback = ProjectStateSnapshot.Capture(project);
             try
             {
@@ -77,15 +78,30 @@ namespace QS3D.Core.Services
             if (linkedRoomId.Length > 0 && !string.Equals(linkedRoomId, room.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Room finish " + finish.Id + " references another Room: " + linkedRoomId + ".");
 
-            finish.FloorId = room.FloorId;
-            finish.ZoneId = room.ZoneId;
-            finish.DrawingFingerprint = room.DrawingFingerprint;
-            finish.Properties[AutoRoomLifecycle.RoomSourceIdKey] = room.Id;
-            EnsureSingleRoomDependency(finish, room.Id);
+            var changed = false;
+            if (!string.Equals(finish.FloorId, room.FloorId, StringComparison.Ordinal))
+            {
+                finish.FloorId = room.FloorId;
+                changed = true;
+            }
+            if (!string.Equals(finish.ZoneId, room.ZoneId, StringComparison.Ordinal))
+            {
+                finish.ZoneId = room.ZoneId;
+                changed = true;
+            }
+            if (!string.Equals(finish.DrawingFingerprint, room.DrawingFingerprint, StringComparison.Ordinal))
+            {
+                finish.DrawingFingerprint = room.DrawingFingerprint;
+                changed = true;
+            }
+
+            changed |= ReplaceProperty(finish, AutoRoomLifecycle.RoomSourceIdKey, room.Id);
+            changed |= EnsureSingleRoomDependency(finish, room.Id);
 
             foreach (var key in RoomMetricKeys)
-                ReplaceMetric(room, finish, key);
+                changed |= ReplaceMetric(room, finish, key);
 
+            if (!changed) return;
             finish.MarkDirty(ElementDirtyFlags.All);
             project.Touch();
         }
@@ -109,6 +125,18 @@ namespace QS3D.Core.Services
             EnsureOwned(project, finish, nameof(finish));
         }
 
+        private static void ValidateUniqueElementIds(ProjectState project)
+        {
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry.");
+                if (!seenIds.Add(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + element.Id + ".");
+            }
+        }
+
         private static void EnsureOwned(ProjectState project, ProjectElement element, string parameterName)
         {
             var owned = project.FindElement(element.Id);
@@ -116,14 +144,31 @@ namespace QS3D.Core.Services
                 throw new ArgumentException("Element must be the ProjectElement instance owned by the supplied project: " + element.Id + ".", parameterName);
         }
 
-        private static void EnsureSingleRoomDependency(ProjectElement finish, string roomId)
+        private static bool EnsureSingleRoomDependency(ProjectElement finish, string roomId)
         {
+            var matchingCount = 0;
+            var matchingIndex = -1;
+            var matchingIsCanonical = false;
+            for (var index = 0; index < finish.DependsOn.Count; index++)
+            {
+                var raw = finish.DependsOn[index] ?? string.Empty;
+                var dependency = raw.Trim();
+                if (!string.Equals(dependency, roomId, StringComparison.OrdinalIgnoreCase)) continue;
+                matchingCount++;
+                matchingIndex = index;
+                matchingIsCanonical = string.Equals(raw, roomId, StringComparison.Ordinal);
+            }
+
+            if (matchingCount == 1 && matchingIndex == finish.DependsOn.Count - 1 && matchingIsCanonical)
+                return false;
+
             for (var index = finish.DependsOn.Count - 1; index >= 0; index--)
             {
                 var dependency = (finish.DependsOn[index] ?? string.Empty).Trim();
                 if (string.Equals(dependency, roomId, StringComparison.OrdinalIgnoreCase)) finish.DependsOn.RemoveAt(index);
             }
             finish.DependsOn.Add(roomId);
+            return true;
         }
 
         private static void RestoreOrThrow(ProjectState project, ProjectStateSnapshot rollback, Exception operationError, string operation)
@@ -140,14 +185,19 @@ namespace QS3D.Core.Services
             }
         }
 
-        private static void ReplaceMetric(ProjectElement room, ProjectElement finish, string key)
+        private static bool ReplaceMetric(ProjectElement room, ProjectElement finish, string key)
         {
             if (TryMetric(room, key, out var value))
-            {
-                finish.Properties[key] = value.ToString("R", CultureInfo.InvariantCulture);
-                return;
-            }
-            finish.Properties.Remove(key);
+                return ReplaceProperty(finish, key, value.ToString("R", CultureInfo.InvariantCulture));
+            return finish.Properties.Remove(key);
+        }
+
+        private static bool ReplaceProperty(ProjectElement finish, string key, string value)
+        {
+            if (finish.Properties.TryGetValue(key, out var existing) && string.Equals(existing, value, StringComparison.Ordinal))
+                return false;
+            finish.Properties[key] = value;
+            return true;
         }
 
         private static bool TryMetric(ProjectElement room, string key, out double value)

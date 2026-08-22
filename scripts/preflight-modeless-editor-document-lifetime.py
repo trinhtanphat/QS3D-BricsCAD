@@ -158,7 +158,7 @@ else:
 
 single_attach_commands = [
     ("CurtainWallHubCommands.cs", "new CurtainWallWindow(document)"),
-    ("MaterialCatalogCommands.cs", "new MaterialCatalogWindow(document)"),
+    ("MaterialCatalogCommands.cs", "new MaterialCatalogWindow(document, project)"),
     ("ScheduleHubCommands.cs", "new ScheduleHubWindow(document)"),
 ]
 for command_name, constructor_token in single_attach_commands:

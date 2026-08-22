@@ -11,7 +11,13 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
-            var elements = project.Elements.Where(x => x != null).ToList();
+            var elements = new List<ProjectElement>(project.Elements.Count);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Room-finish diagnostics cannot inspect a project containing a null semantic element.");
+                elements.Add(element);
+            }
             var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             var byId = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in elements)
@@ -33,12 +39,12 @@ namespace QS3D.Core.Diagnostics
                 {
                     roomId = AutoRoomLifecycle.ResolveRoomReferenceId(project, finish);
                 }
-                catch (InvalidOperationException ex)
+                catch (InvalidOperationException)
                 {
                     issues.Add(new ModelHealthIssue(
                         "ROOM_PROVENANCE_CONFLICT",
                         HealthSeverity.Error,
-                        "HT_Phòng có Room provenance không thể phân giải an toàn: " + ex.Message,
+                        "HT_Phòng có Room provenance mâu thuẫn và không thể phân giải an toàn. Cần sửa Room provenance trước khi quantity/release.",
                         finish.Id));
                     continue;
                 }

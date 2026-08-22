@@ -69,8 +69,14 @@ namespace QS3D.Core.Rebar
             var yRadius = RebarMath.Divide(yDiameter, 2000d, "slab Y radius");
             var xEndCover = RebarMath.Add(cover, xRadius, "slab X end center cover");
             var yEndCover = RebarMath.Add(cover, yRadius, "slab Y end center cover");
-            var xLength = spanX - 2d * xEndCover;
-            var yLength = spanY - 2d * yEndCover;
+            var xEndDeduction = 2d * xEndCover;
+            var yEndDeduction = 2d * yEndCover;
+            var xLength = spanX - xEndDeduction;
+            var yLength = spanY - yEndDeduction;
+            if (xEndDeduction > 0d && xLength == spanX)
+                throw new OverflowException("Slab X bar length lost positive end clearance at the current numeric scale.");
+            if (yEndDeduction > 0d && yLength == spanY)
+                throw new OverflowException("Slab Y bar length lost positive end clearance at the current numeric scale.");
             if (!FinitePositive(xLength)) throw new InvalidOperationException("Slab X span is too short for cover + bar radius.");
             if (!FinitePositive(yLength)) throw new InvalidOperationException("Slab Y span is too short for cover + bar radius.");
 
@@ -120,18 +126,27 @@ namespace QS3D.Core.Rebar
             ValidateFinite(topX, "top X elevation");
             ValidateFinite(topY, "top Y elevation");
 
+            var usableLow = -half + cover;
+            var usableHigh = half - cover;
             if (input.IncludeBottom && input.IncludeTop)
             {
                 var bottomHigh = Math.Max(bottomX + xRadius, bottomY + yRadius);
                 var topLow = Math.Min(topX - xRadius, topY - yRadius);
                 if (!(topLow > bottomHigh)) throw new InvalidOperationException("Slab thickness is insufficient for the requested top + bottom two-direction mesh and cover.");
             }
-            else
+            else if (input.IncludeBottom)
             {
                 var low = Math.Min(bottomX - xRadius, bottomY - yRadius);
+                var high = Math.Max(bottomX + xRadius, bottomY + yRadius);
+                if (low < usableLow - 1e-12d || high > usableHigh + 1e-12d)
+                    throw new InvalidOperationException("Bottom slab mesh does not fit within the concrete cover envelope.");
+            }
+            else if (input.IncludeTop)
+            {
+                var low = Math.Min(topX - xRadius, topY - yRadius);
                 var high = Math.Max(topX + xRadius, topY + yRadius);
-                if (input.IncludeBottom && low < -half + cover - 1e-12d) throw new InvalidOperationException("Bottom slab mesh violates concrete cover.");
-                if (input.IncludeTop && high > half - cover + 1e-12d) throw new InvalidOperationException("Top slab mesh violates concrete cover.");
+                if (low < usableLow - 1e-12d || high > usableHigh + 1e-12d)
+                    throw new InvalidOperationException("Top slab mesh does not fit within the concrete cover envelope.");
             }
 
             var bars = new List<SlabMeshBarPlacement>((int)projectedBars);

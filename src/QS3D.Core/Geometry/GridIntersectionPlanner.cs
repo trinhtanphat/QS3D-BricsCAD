@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace QS3D.Core.Geometry
 {
@@ -13,6 +14,7 @@ namespace QS3D.Core.Geometry
     public sealed class GridReferenceCurve
     {
         private const int MaxElementIdLength = 128;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         private GridReferenceCurve(
             string elementId,
@@ -71,6 +73,14 @@ namespace QS3D.Core.Geometry
             var normalized = elementId.Trim();
             if (normalized.Length > MaxElementIdLength)
                 throw new ArgumentException("Grid element id exceeds " + MaxElementIdLength + " characters.", nameof(elementId));
+            try
+            {
+                StrictUtf8.GetByteCount(normalized);
+            }
+            catch (EncoderFallbackException)
+            {
+                throw new ArgumentException("Grid element id must contain well-formed Unicode text.", nameof(elementId));
+            }
             return normalized;
         }
     }
@@ -94,6 +104,7 @@ namespace QS3D.Core.Geometry
         private const int MaxCurves = 2000;
         private const int MaxIntersections = 100000;
         private const double TwoPi = Math.PI * 2.0;
+        private const double RelativeNumericTolerance = 3.5527136788005009e-15;
 
         public static IReadOnlyList<GridIntersection> FindIntersections(
             IEnumerable<GridReferenceCurve> curves,
@@ -102,9 +113,8 @@ namespace QS3D.Core.Geometry
             if (curves == null) throw new ArgumentNullException(nameof(curves));
             if (!IsFinite(tolerance) || tolerance <= 0.0) throw new ArgumentOutOfRangeException(nameof(tolerance));
 
-            var list = curves.ToList();
+            var list = curves.Take(MaxCurves + 1).ToList();
             if (list.Count > MaxCurves) throw new InvalidOperationException("Grid intersection planning supports at most " + MaxCurves + " curves.");
-            if (list.Count < 2) return Array.Empty<GridIntersection>();
 
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (var i = 0; i < list.Count; i++)
@@ -113,6 +123,7 @@ namespace QS3D.Core.Geometry
                 if (!ids.Add(list[i].ElementId))
                     throw new InvalidOperationException("Grid intersection input contains duplicate element id: " + list[i].ElementId + ".");
             }
+            if (list.Count < 2) return Array.Empty<GridIntersection>();
 
             var result = new List<GridIntersection>();
             for (var i = 0; i < list.Count - 1; i++)
@@ -163,10 +174,7 @@ namespace QS3D.Core.Geometry
             EnsureFiniteDerived("Grid LINE offset", qpx, qpy);
             var rLength = Length(rx, ry);
             var sLength = Length(sx, sy);
-            var scale = rLength * sLength;
-            EnsureFiniteDerived("Grid LINE direction scale", scale);
-            var crossTolerance = tolerance * Math.Max(1.0, scale);
-            EnsureFiniteDerived("Grid LINE cross tolerance", crossTolerance);
+            var crossTolerance = LineCrossTolerance(tolerance, rLength, sLength);
 
             if (Math.Abs(rxs) <= crossTolerance)
             {
@@ -207,13 +215,55 @@ namespace QS3D.Core.Geometry
             var fx = line.Start.X - arc.Center.X;
             var fy = line.Start.Y - arc.Center.Y;
             EnsureFiniteDerived("Grid LINE/ARC delta", dx, dy, fx, fy);
+
             var a = dx * dx + dy * dy;
             var b = 2.0 * (fx * dx + fy * dy);
             var c = fx * fx + fy * fy - arc.Radius * arc.Radius;
-            EnsureFiniteDerived("Grid LINE/ARC quadratic", a, b, c);
             var discriminant = b * b - 4.0 * a * c;
-            var discTolerance = tolerance * Math.Max(1.0, b * b + Math.Abs(4.0 * a * c));
-            EnsureFiniteDerived("Grid LINE/ARC discriminant", discriminant, discTolerance);
+            var discriminantScale = b * b + Math.Abs(4.0 * a * c);
+            var discTolerance = tolerance * Math.Max(1.0, discriminantScale);
+            var usesScaledDistanceRoots = false;
+            var directionScale = 1.0;
+            var geometryScale = 1.0;
+            var normalizedDx = 0.0;
+            var normalizedDy = 0.0;
+
+            if (!IsFinite(a) || !(a > 0.0) || !IsFinite(b) || !IsFinite(c) ||
+                !IsFinite(discriminant) || !IsFinite(discriminantScale) || !IsFinite(discTolerance))
+            {
+                directionScale = Math.Max(Math.Abs(dx), Math.Abs(dy));
+                geometryScale = Math.Max(Math.Max(Math.Abs(fx), Math.Abs(fy)), arc.Radius);
+                if (!(directionScale > 0.0) || !(geometryScale > 0.0) ||
+                    !IsFinite(directionScale) || !IsFinite(geometryScale))
+                    throw new OverflowException("Grid LINE/ARC fallback scales are outside the supported numeric range.");
+
+                normalizedDx = dx / directionScale;
+                normalizedDy = dy / directionScale;
+                var normalizedFx = fx / geometryScale;
+                var normalizedFy = fy / geometryScale;
+                var normalizedRadius = arc.Radius / geometryScale;
+                EnsureFiniteDerived(
+                    "Grid LINE/ARC normalized geometry",
+                    directionScale,
+                    geometryScale,
+                    normalizedDx,
+                    normalizedDy,
+                    normalizedFx,
+                    normalizedFy,
+                    normalizedRadius);
+
+                a = normalizedDx * normalizedDx + normalizedDy * normalizedDy;
+                b = 2.0 * (normalizedFx * normalizedDx + normalizedFy * normalizedDy);
+                c = normalizedFx * normalizedFx + normalizedFy * normalizedFy - normalizedRadius * normalizedRadius;
+                discriminant = b * b - 4.0 * a * c;
+                discriminantScale = b * b + Math.Abs(4.0 * a * c);
+                discTolerance = tolerance * Math.Max(1.0, discriminantScale);
+                usesScaledDistanceRoots = true;
+            }
+
+            EnsureFiniteDerived("Grid LINE/ARC quadratic", a, b, c);
+            if (!(a > 0.0)) throw new OverflowException("Grid LINE/ARC quadratic direction is outside the supported numeric range.");
+            EnsureFiniteDerived("Grid LINE/ARC discriminant", discriminant, discriminantScale, discTolerance);
             if (discriminant < -discTolerance) return Array.Empty<Point2>();
             if (Math.Abs(discriminant) <= discTolerance) discriminant = 0.0;
 
@@ -238,12 +288,37 @@ namespace QS3D.Core.Geometry
             var lineLength = Length(dx, dy);
             var paramTolerance = tolerance / Math.Max(tolerance, lineLength);
             EnsureFiniteDerived("Grid LINE/ARC parameter tolerance", paramTolerance);
+            var componentTolerance = usesScaledDistanceRoots ? paramTolerance * directionScale : 0.0;
+            EnsureFiniteDerived("Grid LINE/ARC fallback component tolerance", componentTolerance);
             var points = new List<Point2>(2);
             foreach (var root in roots)
             {
-                if (root < -paramTolerance || root > 1.0 + paramTolerance) continue;
-                var t = Clamp01(root);
-                var point = new Point2(line.Start.X + t * dx, line.Start.Y + t * dy);
+                Point2 point;
+                if (!usesScaledDistanceRoots)
+                {
+                    if (root < -paramTolerance || root > 1.0 + paramTolerance) continue;
+                    var t = Clamp01(root);
+                    point = new Point2(line.Start.X + t * dx, line.Start.Y + t * dy);
+                }
+                else
+                {
+                    var directionDistance = root * geometryScale;
+                    if (!IsFinite(directionDistance)) continue;
+                    if (directionDistance < -componentTolerance) continue;
+                    if (directionDistance < 0.0) directionDistance = 0.0;
+                    if (directionDistance > directionScale)
+                    {
+                        var beyondEnd = directionDistance - directionScale;
+                        EnsureFiniteDerived("Grid LINE/ARC fallback beyond-end distance", beyondEnd);
+                        if (beyondEnd > componentTolerance) continue;
+                        directionDistance = directionScale;
+                    }
+
+                    point = new Point2(
+                        line.Start.X + directionDistance * normalizedDx,
+                        line.Start.Y + directionDistance * normalizedDy);
+                }
+
                 EnsureFinitePoint(point, "Grid LINE/ARC intersection");
                 if (!IsOnArc(point, arc, tolerance)) continue;
                 points.Add(point);
@@ -262,32 +337,57 @@ namespace QS3D.Core.Geometry
             if (distance <= tolerance && Math.Abs(first.Radius - second.Radius) <= tolerance)
                 throw Ambiguous(first, second, "coincident ARC support circles are intentionally rejected; split/review the Grid references explicitly");
             if (distance <= tolerance) return Array.Empty<Point2>();
-            var outerLimit = first.Radius + second.Radius + tolerance;
-            var innerLimit = Math.Abs(first.Radius - second.Radius) - tolerance;
-            EnsureFiniteDerived("Grid ARC separation limits", outerLimit, innerLimit);
-            if (distance > outerLimit) return Array.Empty<Point2>();
-            if (distance < innerLimit) return Array.Empty<Point2>();
 
-            var a = (first.Radius * first.Radius - second.Radius * second.Radius + distance * distance) / (2.0 * distance);
-            var h2 = first.Radius * first.Radius - a * a;
-            var hTolerance = tolerance * Math.Max(1.0, first.Radius * first.Radius);
+            var scale = Math.Max(distance, Math.Max(first.Radius, second.Radius));
+            if (!(scale > 0.0) || !IsFinite(scale))
+                throw new OverflowException("Grid ARC intersection scale is outside the supported numeric range.");
+            var inverseScale = 1.0 / scale;
+            var normalizedDistance = distance * inverseScale;
+            var normalizedFirstRadius = first.Radius * inverseScale;
+            var normalizedSecondRadius = second.Radius * inverseScale;
+            var normalizedTolerance = tolerance * inverseScale;
+            EnsureFiniteDerived(
+                "Grid ARC normalized geometry",
+                inverseScale,
+                normalizedDistance,
+                normalizedFirstRadius,
+                normalizedSecondRadius,
+                normalizedTolerance);
+
+            var outerLimit = normalizedFirstRadius + normalizedSecondRadius + normalizedTolerance;
+            var innerLimit = Math.Abs(normalizedFirstRadius - normalizedSecondRadius) - normalizedTolerance;
+            EnsureFiniteDerived("Grid ARC separation limits", outerLimit, innerLimit);
+            if (normalizedDistance > outerLimit) return Array.Empty<Point2>();
+            if (normalizedDistance < innerLimit) return Array.Empty<Point2>();
+
+            var a = (normalizedFirstRadius * normalizedFirstRadius -
+                     normalizedSecondRadius * normalizedSecondRadius +
+                     normalizedDistance * normalizedDistance) / (2.0 * normalizedDistance);
+            var h2 = normalizedFirstRadius * normalizedFirstRadius - a * a;
+            var inverseScaleSquared = inverseScale * inverseScale;
+            var hTolerance = tolerance * Math.Max(inverseScaleSquared, normalizedFirstRadius * normalizedFirstRadius);
             EnsureFiniteDerived("Grid ARC intersection geometry", a, h2, hTolerance);
             if (h2 < -hTolerance) return Array.Empty<Point2>();
             if (h2 < 0.0) h2 = 0.0;
             var h = Math.Sqrt(h2);
             var ux = dx / distance;
             var uy = dy / distance;
-            var px = first.Center.X + a * ux;
-            var py = first.Center.Y + a * uy;
-            EnsureFiniteDerived("Grid ARC intersection basis", h, ux, uy, px, py);
+            EnsureFiniteDerived("Grid ARC intersection basis", h, ux, uy);
+
+            var firstOffsetX = scale * (a * ux - h * uy);
+            var firstOffsetY = scale * (a * uy + h * ux);
+            EnsureFiniteDerived("Grid ARC first intersection offset", firstOffsetX, firstOffsetY);
+            var p1 = new Point2(first.Center.X + firstOffsetX, first.Center.Y + firstOffsetY);
+            EnsureFinitePoint(p1, "Grid ARC intersection");
 
             var points = new List<Point2>(2);
-            var p1 = new Point2(px - h * uy, py + h * ux);
-            EnsureFinitePoint(p1, "Grid ARC intersection");
             if (IsOnArc(p1, first, tolerance) && IsOnArc(p1, second, tolerance)) points.Add(p1);
-            if (h > tolerance)
+            if (h > normalizedTolerance)
             {
-                var p2 = new Point2(px + h * uy, py - h * ux);
+                var secondOffsetX = scale * (a * ux + h * uy);
+                var secondOffsetY = scale * (a * uy - h * ux);
+                EnsureFiniteDerived("Grid ARC second intersection offset", secondOffsetX, secondOffsetY);
+                var p2 = new Point2(first.Center.X + secondOffsetX, first.Center.Y + secondOffsetY);
                 EnsureFinitePoint(p2, "Grid ARC intersection");
                 if (IsOnArc(p2, first, tolerance) && IsOnArc(p2, second, tolerance)) points.Add(p2);
             }
@@ -307,12 +407,17 @@ namespace QS3D.Core.Geometry
             var dy = point.Y - arc.Center.Y;
             EnsureFiniteDerived("Grid ARC point delta", dx, dy);
             var radius = Length(dx, dy);
-            if (Math.Abs(radius - arc.Radius) > tolerance) return false;
-            if (arc.SweepAngleRad >= TwoPi - tolerance / Math.Max(arc.Radius, tolerance)) return true;
+            var radialTolerance = Math.Max(tolerance, RelativeNumericTolerance * Math.Max(radius, arc.Radius));
+            EnsureFiniteDerived("Grid ARC radial tolerance", radialTolerance);
+            if (Math.Abs(radius - arc.Radius) > radialTolerance) return false;
+            var angularTolerance = Math.Max(
+                tolerance / Math.Max(arc.Radius, tolerance),
+                RelativeNumericTolerance);
+            EnsureFiniteDerived("Grid ARC angular tolerance", angularTolerance);
+            if (arc.SweepAngleRad >= TwoPi - angularTolerance) return true;
             var angle = NormalizeAngle(Math.Atan2(dy, dx));
             var start = NormalizeAngle(arc.StartAngleRad);
             var delta = NormalizeAngle(angle - start);
-            var angularTolerance = tolerance / Math.Max(arc.Radius, tolerance);
             EnsureFiniteDerived("Grid ARC angular test", angle, start, delta, angularTolerance);
             return delta <= arc.SweepAngleRad + angularTolerance;
         }
@@ -334,13 +439,17 @@ namespace QS3D.Core.Geometry
             var crossTolerance = tolerance * Math.Max(1.0, length);
             EnsureFiniteDerived("Grid LINE point tolerance", crossTolerance);
             if (Math.Abs(Cross(px, py, dx, dy)) > crossTolerance) return false;
-            var dot = px * dx + py * dy;
-            var length2 = dx * dx + dy * dy;
-            var paramTolerance = tolerance / Math.Max(tolerance, length);
-            var lower = -paramTolerance * length2;
-            var upper = (1.0 + paramTolerance) * length2;
-            EnsureFiniteDerived("Grid LINE point projection", dot, length2, paramTolerance, lower, upper);
-            return dot >= lower && dot <= upper;
+
+            var ux = dx / length;
+            var uy = dy / length;
+            EnsureFiniteDerived("Grid LINE point direction", ux, uy);
+            var along = DotWithUnit(px, py, ux, uy);
+            var projectionTolerance = Math.Min(tolerance, length);
+            if (along < -projectionTolerance) return false;
+            if (along <= length) return true;
+            var beyondEnd = along - length;
+            EnsureFiniteDerived("Grid LINE point beyond-end projection", beyondEnd);
+            return beyondEnd <= projectionTolerance;
         }
 
         private static void Validate(GridReferenceCurve curve, double tolerance, int index)
@@ -403,9 +512,90 @@ namespace QS3D.Core.Geometry
         private static double Cross(double ax, double ay, double bx, double by)
         {
             EnsureFiniteDerived("Grid intersection cross-product input", ax, ay, bx, by);
-            var value = ax * by - ay * bx;
+
+            var firstProduct = ax * by;
+            var secondProduct = ay * bx;
+            if (IsFinite(firstProduct) && IsFinite(secondProduct))
+            {
+                var direct = firstProduct - secondProduct;
+                if (IsFinite(direct)) return direct;
+            }
+
+            if (TryDifferenceFactoredCross(ax, ay, bx, by, out var factored))
+                return factored;
+
+            var scaleA = Math.Max(Math.Abs(ax), Math.Abs(ay));
+            var scaleB = Math.Max(Math.Abs(bx), Math.Abs(by));
+            if (scaleA == 0.0 || scaleB == 0.0) return 0.0;
+
+            var normalized = ax / scaleA * (by / scaleB) - ay / scaleA * (bx / scaleB);
+            if (!IsFinite(normalized)) throw new OverflowException("Grid intersection cross product exceeds the supported numeric range.");
+            var smallerScale = Math.Min(scaleA, scaleB);
+            var largerScale = Math.Max(scaleA, scaleB);
+            var scaled = normalized * smallerScale;
+            if (!IsFinite(scaled)) throw new OverflowException("Grid intersection cross product exceeds the supported numeric range.");
+            var value = scaled * largerScale;
             if (!IsFinite(value)) throw new OverflowException("Grid intersection cross product exceeds the supported numeric range.");
             return value;
+        }
+
+        private static bool TryDifferenceFactoredCross(
+            double ax,
+            double ay,
+            double bx,
+            double by,
+            out double value)
+        {
+            // These identities keep the small component difference explicit when
+            // the two raw products overflow.  Trying both pairings avoids forcing
+            // a cancellation-sensitive normalized-ratio subtraction.
+            if (TryFiniteSum(ax * (by - bx), bx * (ax - ay), out value)) return true;
+            if (TryFiniteSum(ax * (by - ay), ay * (ax - bx), out value)) return true;
+            if (TryFiniteSum(by * (ax - ay), ay * (by - bx), out value)) return true;
+            if (TryFiniteSum(by * (ax - bx), bx * (by - ay), out value)) return true;
+            value = 0.0;
+            return false;
+        }
+
+        private static bool TryFiniteSum(double first, double second, out double value)
+        {
+            value = first + second;
+            return IsFinite(first) && IsFinite(second) && IsFinite(value);
+        }
+
+        private static double DotWithUnit(double x, double y, double ux, double uy)
+        {
+            EnsureFiniteDerived("Grid LINE point projection input", x, y, ux, uy);
+            var scale = Math.Max(Math.Abs(x), Math.Abs(y));
+            if (scale == 0.0) return 0.0;
+            var normalized = x / scale * ux + y / scale * uy;
+            if (!IsFinite(normalized)) throw new OverflowException("Grid LINE point projection exceeds the supported numeric range.");
+            var value = normalized * scale;
+            if (!IsFinite(value)) throw new OverflowException("Grid LINE point projection exceeds the supported numeric range.");
+            return value;
+        }
+
+        private static double LineCrossTolerance(double tolerance, double rLength, double sLength)
+        {
+            EnsureFiniteDerived("Grid LINE cross tolerance input", tolerance, rLength, sLength);
+            if (!(rLength > 0.0) || !(sLength > 0.0))
+                throw new InvalidOperationException("Grid LINE cross tolerance requires positive finite line lengths.");
+
+            var lengthProduct = rLength * sLength;
+            if (IsFinite(lengthProduct))
+            {
+                var value = tolerance * Math.Max(1.0, lengthProduct);
+                if (!IsFinite(value)) throw new OverflowException("Grid LINE cross tolerance exceeds the supported numeric range.");
+                return value;
+            }
+
+            var smallerLength = Math.Min(rLength, sLength);
+            var largerLength = Math.Max(rLength, sLength);
+            var scaled = tolerance * smallerLength;
+            if (!IsFinite(scaled)) throw new OverflowException("Grid LINE cross tolerance exceeds the supported numeric range.");
+            var overflowSafeValue = scaled * largerLength;
+            if (!IsFinite(overflowSafeValue)) throw new OverflowException("Grid LINE cross tolerance exceeds the supported numeric range.");
+            return overflowSafeValue;
         }
 
         private static double Length(double x, double y)

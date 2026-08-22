@@ -19,7 +19,7 @@ The major deterministic/Core gaps that had clear contracts have been implemented
 - `ENGINEERING_REQUIRED`: a governing engineering standard/revision and engineering approval are required;
 - `FORMAT_SCOPE_REQUIRED`: external interoperability schema/vendor/product scope must be explicitly selected.
 
-Remote agents must not turn these boundaries into fake completion by inventing native behavior, merge precedence, engineering design values, licensing policy or signing credentials.
+Remote agents must not turn these boundaries into fake completion by inventing native behavior, unreviewed merge precedence, engineering design values, licensing policy or signing credentials.
 
 ## 2. Source-safe implementation delivered in this wave
 
@@ -33,16 +33,21 @@ The following coherent batches were merged:
 - `174366e153a39264d401f11b49ff307acac04550` — UseSource + provenance while preserving the exact native-cleanup authorization boundary.
 - `faf30228187d034dd06ac9cea0576de58997a9a9` — KeepTarget + provenance, with no false target lineage for source identities rejected by KeepTarget collision policy.
 - `a7443d25936a85f6a9b18dd4e16b880f084e0844` — unified Core import coordinator for explicit AppendOnly / KeepTarget / ImportAsNew / UseSourceSemanticData modes plus reviewed provenance selection; no implicit policy fallback.
+- `0ff97a919e7a2bdf6e7bd7f17d8232cab7cc0cce` — deterministic same-ID field-level precedence execution with target/source/decision freshness, exact generated-handle cleanup requirements and `ProjectStateSnapshot` rollback.
+- `295e25c69770f8803c30f6e35a2327ed4679475a` — dedicated BricsCAD FieldMerge native transaction service: prepare generated-dependent erasure while reviewed target ownership is intact, run exact authorized Core field apply, sweep ownership metadata, then commit CAD with semantic snapshot rollback on pre-commit failure.
+- `b36b9e7fb36d93a149f6280585dcfc1204a159dd` — dedicated reviewed `QS3DINTERCHANGEFIELDMERGE` command for the explicit group-level policy contract.
+- `91d6990bc8a6ba3c15cc7fd8f4a0ed280b48cedb` — defer FieldMerge canonical project binding until all field-policy prompts and final confirmation complete; recheck ProjectId/drawing fingerprint/ChangeVersion before native mutation.
 
-The coordinator is now the preferred source-level policy entry point. It delegates to canonical importers rather than implementing another merge engine.
+The unified Core coordinator remains the preferred source-level entry point for its four generic import modes. FieldMerge remains a **dedicated reviewed command**, not a fifth generic coordinator mode. Its source-level BricsCAD orchestration now exists, but exact licensed V25 transaction/Undo/save-reopen/multi-DWG qualification remains separate.
 
 Important boundaries preserved:
 
 - imported source handles never become target `ProjectElement.SourceHandles` merely because provenance is retained;
 - imported source drawing fingerprints never become target Element ownership;
 - provenance metadata remains separate from portable semantic Element ownership;
-- UseSource native-cleanup authorization remains mandatory where affected target owners contain generated/native output;
-- Core does not erase or rebuild BricsCAD entities;
+- UseSource and field-level execution retain exact reviewed generated-handle cleanup requirements where affected target owners contain generated/native output;
+- FieldMerge native erasure is prepared under the BricsCAD transaction before Core clears semantic ownership metadata, and successful source execution still leaves generated outputs explicitly invalidated for later rebuild instead of silently rebuilding/saving;
+- Core itself does not erase or rebuild BricsCAD entities;
 - no requested import policy silently falls back to another policy.
 
 ### Polygon/multi-region reinforcement / issue #83
@@ -64,15 +69,17 @@ Merged:
 
 The regression suite includes a real composed interchange mutation followed by an injected pre-commit fault and verifies semantic elements, provenance metadata, audit, `UpdatedUtc` and `ChangeVersion` return to the captured state.
 
-This is semantic rollback only. It does not convert native DWG side effects into a transaction.
+This is semantic rollback only. It does not convert arbitrary native DWG side effects into a transaction.
 
 ### User-defined semantic documentation / issue #77
 
-Merged:
+Merged source now includes:
 
 - `3d0dd8bbd3df3450f1baf97c97076c468af230fb` — persisted bounded `SemanticScheduleDefinition` catalog with deterministic category/Floor/Zone/include/exclude filtering and rendering through the existing authoritative semantic documentation table/tag renderer.
+- `07e3a62405ecb69c4d27a90c307657d9808e067b` — dedicated native custom semantic schedule Table lifecycle source with per-schedule `QS3DDOC` ownership/fingerprint, header-only zero-match support, prompt-before-bind freshness, snapshot/native rollback, Schedule Hub integration and Health/Release diagnostics.
+- `430d61322891adf1e0f640480b88e82071b9ae09` — fail closed in Health/Release on malformed dynamic custom-schedule owner slots instead of silently filtering them out.
 
-Custom schedules do not become a second BQ/BBS calculator. `{Q:...}` displays existing semantic quantities; authoritative BQ/BBS/Room/Material/Door-Opening calculators remain separate.
+Custom schedules do not become a second BQ/BBS calculator. `{Q:...}` displays existing semantic quantities; authoritative BQ/BBS/Room/Material/Door-Opening calculators remain separate. Native custom-schedule **source** is implemented; exact licensed V25 rendering/ownership/Undo/save-reopen/Unicode/multi-DWG proof remains `LOCAL_ONLY`.
 
 ## 3. Current open-issue classification
 
@@ -115,8 +122,8 @@ Standards-neutral provenance and geometry infrastructure exist. Fabrication nume
 
 Status:
 
-- Core semantic tags/tables/View/Sheet/custom-schedule planning: `REMOTE_DONE` for current defined source contracts;
-- native custom Table materialization, Layout/Viewport/title block/PaperSpace workflows and host UI/runtime: `LOCAL_ONLY`.
+- Core semantic tags/tables/View/Sheet/custom-schedule planning and dedicated native custom SemanticSchedule Table source lifecycle: `REMOTE_DONE / SOURCE_IMPLEMENTED` for current defined contracts;
+- exact V25 execution of current native tags/tables/custom schedules plus MLeader, Layout/Viewport/title block/PaperSpace workflows and remaining host UI/runtime: `LOCAL_ONLY`.
 
 Do not add another documentation calculator or detached decorative annotations.
 
@@ -166,12 +173,14 @@ Status:
 Status:
 
 - current guarded semantic snapshot execution policies, provenance compositions and unified Core coordinator: `REMOTE_DONE` for the explicit policies implemented on `main`;
-- native replacement cleanup/rebuild transaction/compensation, Undo/session/save-reopen/multi-DWG and customer/private-DWG qualification: `LOCAL_ONLY`;
-- broader field-level merge/precedence: `POLICY_REQUIRED`;
+- deterministic same-ID field-level precedence planner plus reviewed rollback-safe Core executor: `REMOTE_DONE` for the current explicit group-level policy contract;
+- dedicated `QS3DINTERCHANGEFIELDMERGE` BricsCAD source orchestration — read-only preview/prompt lifecycle, target freshness, generated-dependent native prepare, exact authorized Core apply, metadata parity sweep, CAD commit and semantic pre-commit rollback: `REMOTE_DONE / SOURCE_IMPLEMENTED`;
+- exact licensed V25 FieldMerge transaction/failure injection, Undo, save-reopen, multi-DWG, generated-output rebuild verification and customer/private-DWG qualification: `LOCAL_ONLY / COORDINATED`;
+- generic coordinator exposure of FieldMerge remains intentionally gated; it is not a fifth generic import mode;
 - target-DWG source-handle adoption/rebinding: `POLICY_REQUIRED + LOCAL_ONLY`;
 - IFC/Revit/BCF/vendor/cloud formats: `FORMAT_SCOPE_REQUIRED` before implementation.
 
-Do not invent one global field-merge precedence. The correct behavior may differ for Family catalog properties, Element overrides, quantities, references and provenance. A reviewed product policy is required first.
+Do not invent a new or broader field-merge precedence contract beyond the reviewed source model. Current field merge is explicit group-level KeepTarget/UseSource/Unspecified precedence for same-ID semantic collisions; source-only identities remain routed to AppendOnly or ImportAsNew. Per-key mixed policy, native ownership adoption and new precedence categories require their own reviewed product contract before implementation.
 
 ## 4. Workstream closure by execution wave
 
@@ -179,7 +188,7 @@ Do not invent one global field-merge precedence. The correct behavior may differ
 
 Current assessment: `REMOTE_DONE` or sufficiently implemented for the explicitly defined contracts. New remote work should be evidence-driven regression hardening, not feature-count expansion.
 
-Includes Interchange Core/coordinator/provenance, semantic documentation/custom schedules, dependency/performance harnesses, deterministic diagnostics and source-safe fault testing.
+Includes Interchange Core/coordinator/provenance/field-merge planner+executor, semantic documentation/custom schedules, dependency/performance harnesses, deterministic diagnostics and source-safe fault testing.
 
 ### Wave B — coordinated shared platform
 
@@ -189,9 +198,9 @@ Do not independently rewrite `ProjectState`, ownership policy, regeneration, lif
 
 ### Wave C — native V25 product work
 
-Status: `LOCAL_ONLY`.
+Status: source implementations are broad; **runtime qualification remains `LOCAL_ONLY`**.
 
-Includes DrawJig/repeated authoring, native edit/grips, Curtain whole-operation atomicity/panels, physical wall junctions, native Level Z-chain, native polygon-loop/materialization, Layout/Viewport, DPI polish, real performance and exact-SHA qualification.
+Includes DrawJig/repeated authoring, native edit/grips, Curtain whole-operation atomicity/panels, physical wall junctions, native Level Z-chain, native polygon-loop/materialization, Layout/Viewport, DPI polish, real performance, current native custom-schedule Table proof, dedicated FieldMerge transaction/failure proof and exact-SHA qualification.
 
 ### Wave D — release/engineering/commercial policy
 
@@ -212,8 +221,8 @@ When a local agent with licensed BricsCAD V25 x64 is available:
 7. run Door/Opening booleans, Room/HT_PHONG, Curtain and wall-junction native failure cases;
 8. run Grid/Level/native vertical-placement scenarios;
 9. run Slab/Foundation polygon/hole/multi-region + rebar native materialization scenarios;
-10. run BQ/BBS/Excel/documentation/Layout/Viewport scenarios;
-11. run interchange confirmation, UseSource native cleanup/rebuild, Undo, save/reopen and multi-DWG scenarios;
+10. run BQ/BBS/Excel/documentation/custom-schedule Table/Layout/Viewport scenarios;
+11. run interchange confirmation, UseSource and `QS3DINTERCHANGEFIELDMERGE` cancel/freshness/native Prepare/Core-apply/metadata-sweep/CAD-commit failure matrix, generated-output rebuild verification, Undo, save/reopen and multi-DWG scenarios;
 12. run UI screenshot/DPI/Unicode/keyboard/focus/Ribbon/context-menu matrix;
 13. run representative large/private-DWG performance measurements;
 14. only after the candidate remains stable, run clean install/upgrade/rollback/uninstall and production signing checks when approved credentials exist;

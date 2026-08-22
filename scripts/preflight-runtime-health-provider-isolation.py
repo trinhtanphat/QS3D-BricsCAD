@@ -17,7 +17,8 @@ if SERVICE.is_file():
     current_provider_tokens = (
         "InspectGeneratedSolidOwnership(document, project)",
         '"GeneratedSolidOwnershipRuntimeHealth"',
-        "if (element == null) continue;",
+        "if (element == null)",
+        'throw new InvalidOperationException("Generated solid runtime health cannot inspect a project containing a null semantic element.");',
         "GeneratedGridAnnotationRuntimeHealthService.Inspect(document, project)",
         '"GeneratedGridAnnotationRuntimeHealthService"',
         "GeneratedSemanticTagRuntimeHealthService.Inspect(document, project)",
@@ -98,4 +99,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: all current native runtime-health providers are isolated, generated-solid ownership scanning skips corrupt null element entries, future Foo.Inspect(document, project) providers cannot bypass AddProviderSafely unnoticed, recoverable provider failures become diagnostics, and fatal runtime failures still bubble.")
+print("PASS: all current native runtime-health providers are isolated, corrupt null semantic entries fail visibly through provider isolation, future Foo.Inspect(document, project) providers cannot bypass AddProviderSafely unnoticed, recoverable provider failures become diagnostics, and fatal runtime failures still bubble.")

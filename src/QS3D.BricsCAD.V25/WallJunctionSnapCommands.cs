@@ -24,6 +24,8 @@ namespace QS3D.BricsCAD.V25
         private const string PreviewSourceFingerprintKey = "WallJunctionSnapPreviewSourceFingerprint";
         private const string PreviewCountKey = "WallJunctionSnapPreviewCount";
         private const string PreviewUtcKey = "WallJunctionSnapPreviewUtc";
+        private const string PreviewProjectIdKey = "WallJunctionSnapPreviewProjectId";
+        private const string PreviewChangeVersionKey = "WallJunctionSnapPreviewChangeVersion";
 
         private sealed class EditableSegment
         {
@@ -67,21 +69,28 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             Guard(document, "QS3DWALLSNAPPREVIEW", () =>
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var plan = BuildPlan(document, project, true);
+                var observedProject = RequireReadOnlyProject(document, "Wall Snap Preview");
+                var expectedProjectId = observedProject.ProjectId;
+                var expectedChangeVersion = observedProject.ChangeVersion;
+                var plan = BuildPlan(document, observedProject, true);
                 if (plan.Segments.Count == 0)
                 {
                     document.Editor.WriteMessage("\nQS3D Wall Snap: chọn semantic wall source LINE/open straight POLYLINE trước.");
                     return;
                 }
 
+                var project = RequireFreshMutationProject(document, "Wall Snap Preview", expectedProjectId, expectedChangeVersion);
+                RequireTouchHeadroom(project, 2, "Wall Snap Preview");
                 project.Metadata[PreviewPlanHashKey] = plan.PlanHash;
                 project.Metadata[PreviewSourceFingerprintKey] = plan.SourceFingerprint;
                 project.Metadata[PreviewCountKey] = plan.Edits.Count.ToString(CultureInfo.InvariantCulture);
                 project.Metadata[PreviewUtcKey] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
-                project.Touch();
+                project.Metadata[PreviewProjectIdKey] = project.ProjectId;
                 AuditTrail.ForProject(project).Record("wall.junction.snap.preview", string.Empty,
                     plan.Edits.Count.ToString(CultureInfo.InvariantCulture) + " endpoint edit(s) • tolerance=" + plan.ToleranceM.ToString("R", CultureInfo.InvariantCulture));
+                var approvedVersion = NextChangeVersion(project.ChangeVersion);
+                project.Metadata[PreviewChangeVersionKey] = approvedVersion.ToString(CultureInfo.InvariantCulture);
+                project.Touch();
 
                 var summary = "Wall Snap preview: " + plan.Edits.Count + " endpoint(s) cần chỉnh trong tolerance " + plan.ToleranceM.ToString("0.###", CultureInfo.InvariantCulture) + " m.";
                 PaletteCoordinator.SetStatus(summary);
@@ -102,22 +111,34 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             Guard(document, "QS3DWALLSNAPAPPLY", () =>
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var plan = BuildPlan(document, project, true);
+                var observedProject = RequireReadOnlyProject(document, "Wall Snap Apply");
+                var expectedProjectId = observedProject.ProjectId;
+                var expectedChangeVersion = observedProject.ChangeVersion;
+                var plan = BuildPlan(document, observedProject, true);
                 if (plan.Segments.Count == 0)
                 {
                     document.Editor.WriteMessage("\nQS3D Wall Snap: selection không có semantic wall source có thể chỉnh.");
                     return;
                 }
+
+                var project = RequireFreshMutationProject(document, "Wall Snap Apply", expectedProjectId, expectedChangeVersion);
+                if (!project.Metadata.TryGetValue(PreviewProjectIdKey, out var previewProjectId)
+                    || !string.Equals(previewProjectId, project.ProjectId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Preview thuộc QS3D project khác. Chạy QS3DWALLSNAPPREVIEW lại trước khi apply.");
+                if (!project.Metadata.TryGetValue(PreviewChangeVersionKey, out var previewVersionText)
+                    || !long.TryParse(previewVersionText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var previewVersion)
+                    || previewVersion != project.ChangeVersion)
+                    throw new InvalidOperationException("QS3D project đã thay đổi từ lúc preview. Chạy QS3DWALLSNAPPREVIEW lại trước khi apply.");
                 if (!project.Metadata.TryGetValue(PreviewSourceFingerprintKey, out var previewSource) || !string.Equals(previewSource, plan.SourceFingerprint, StringComparison.Ordinal))
                     throw new InvalidOperationException("Source fingerprint không còn khớp preview. Chạy QS3DWALLSNAPPREVIEW lại trước khi apply.");
                 if (!project.Metadata.TryGetValue(PreviewPlanHashKey, out var previewPlan) || !string.Equals(previewPlan, plan.PlanHash, StringComparison.Ordinal))
                     throw new InvalidOperationException("Preview không còn khớp selection/geometry hiện tại. Chạy QS3DWALLSNAPPREVIEW lại trước khi apply.");
                 if (project.Metadata.TryGetValue(PreviewCountKey, out var countText) && int.TryParse(countText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var previewCount) && previewCount != plan.Edits.Count)
                     throw new InvalidOperationException("Số endpoint cần chỉnh đã thay đổi từ preview. Chạy preview lại.");
+                RequireTouchHeadroom(project, 1, "Wall Snap Apply");
                 if (plan.Edits.Count == 0)
                 {
-                    ClearPreview(project);
+                    if (ClearPreview(project)) project.Touch();
                     PaletteCoordinator.SetStatus("Wall Snap: geometry đã khớp junction; không có endpoint cần chỉnh.");
                     return;
                 }
@@ -170,7 +191,6 @@ namespace QS3D.BricsCAD.V25
                         }
                         var owners = touchedOwners.Count;
                         ClearPreview(project);
-                        project.Touch();
                         AuditTrail.ForProject(project).Record("wall.junction.snap.apply", string.Empty,
                             plan.Edits.Count.ToString(CultureInfo.InvariantCulture) + " endpoint edit(s) • owners=" + owners.ToString(CultureInfo.InvariantCulture) + " • invalidated3d=" + invalidatedElements.ToString(CultureInfo.InvariantCulture) + " • sourceLengthSynced=true");
 
@@ -418,12 +438,42 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void ClearPreview(ProjectState project)
+        private static ProjectState RequireReadOnlyProject(Document document, string operation)
         {
-            project.Metadata.Remove(PreviewPlanHashKey);
-            project.Metadata.Remove(PreviewSourceFingerprintKey);
-            project.Metadata.Remove(PreviewCountKey);
-            project.Metadata.Remove(PreviewUtcKey);
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                throw new InvalidOperationException(operation + " requires an existing QS3D project; selection/cancel must not create or recover one.");
+            return project;
+        }
+
+        private static ProjectState RequireFreshMutationProject(Document document, string operation, string expectedProjectId, long expectedChangeVersion)
+        {
+            var project = ExistingProjectMutationContext.Require(document, operation);
+            if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase)
+                || project.ChangeVersion != expectedChangeVersion)
+                throw new InvalidOperationException(operation + ": QS3D project changed while selecting walls. Run the command again.");
+            return project;
+        }
+
+        private static void RequireTouchHeadroom(ProjectState project, int requiredTouches, string operation)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (requiredTouches <= 0) throw new ArgumentOutOfRangeException(nameof(requiredTouches));
+            if (project.ChangeVersion > long.MaxValue - requiredTouches)
+                throw new InvalidOperationException(operation + ": project ChangeVersion is exhausted; refusing partial preview/apply mutation.");
+        }
+
+        private static long NextChangeVersion(long current) => checked(current + 1L);
+
+        private static bool ClearPreview(ProjectState project)
+        {
+            var changed = false;
+            changed |= project.Metadata.Remove(PreviewPlanHashKey);
+            changed |= project.Metadata.Remove(PreviewSourceFingerprintKey);
+            changed |= project.Metadata.Remove(PreviewCountKey);
+            changed |= project.Metadata.Remove(PreviewUtcKey);
+            changed |= project.Metadata.Remove(PreviewProjectIdKey);
+            changed |= project.Metadata.Remove(PreviewChangeVersionKey);
+            return changed;
         }
 
         private static void RequireSourceFingerprint(Transaction transaction, QS3D.Core.Units.ProjectUnitPolicy units, SnapPlan plan)

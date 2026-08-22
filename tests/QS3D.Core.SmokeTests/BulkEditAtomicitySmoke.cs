@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             InvalidLaterElementDoesNotPartiallyMutateBatch();
             ValidBatchStillAppliesAllChanges();
             AssignFamilyRejectsDuplicateProjectIdsWithoutMutation();
+            GenericSemanticReferencesFailClosed();
         }
 
         private static void InvalidLaterElementDoesNotPartiallyMutateBatch()
@@ -80,6 +81,8 @@ namespace QS3D.Core.SmokeTests
             second.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(first);
             project.Elements.Add(second);
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdated = project.UpdatedUtc;
 
             var threw = false;
             try
@@ -88,8 +91,10 @@ namespace QS3D.Core.SmokeTests
             }
             catch (InvalidOperationException ex)
             {
-                threw = ex.Message.IndexOf("duplicate", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                    ex.Message.IndexOf("element id", StringComparison.OrdinalIgnoreCase) >= 0;
+                var message = ex.Message ?? string.Empty;
+                threw =
+                    message.IndexOf("duplicate element id", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    message.IndexOf("duplicate semantic element id", StringComparison.OrdinalIgnoreCase) >= 0;
             }
 
             if (!threw) throw new Exception("AssignFamily must fail closed when the project contains duplicate semantic element IDs.");
@@ -99,6 +104,47 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Rejected duplicate-ID family assignment mutated inherited properties.");
             if (first.Dirty != ElementDirtyFlags.None || second.Dirty != ElementDirtyFlags.None)
                 throw new Exception("Rejected duplicate-ID family assignment dirtied project elements.");
+            if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdated)
+                throw new Exception("Rejected duplicate-ID family assignment touched project persistence state.");
+        }
+
+        private static void GenericSemanticReferencesFailClosed()
+        {
+            var project = new ProjectState("bulk-reference-guard", "Bulk reference guard");
+            var first = new ProjectElement("A", ElementCategory.Room, string.Empty, string.Empty, string.Empty);
+            var second = new ProjectElement("B", ElementCategory.Room, string.Empty, string.Empty, string.Empty);
+            first.Properties[ProjectFloorService.BottomLevelIdKey] = "L1";
+            second.Properties[ProjectFloorService.BottomLevelIdKey] = "L1";
+            first.Properties["HostRefId"] = "2";
+            second.Properties["HostRefId"] = "4";
+            first.MarkClean(ElementDirtyFlags.All);
+            second.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(first);
+            project.Elements.Add(second);
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdated = project.UpdatedUtc;
+            var service = new BulkEditService();
+
+            ThrowsInvalidOperation(() => service.SetProperty(project, new[] { first, second }, ProjectFloorService.BottomLevelIdKey, "L2"));
+            ThrowsInvalidOperation(() => service.MultiplyNumericProperty(project, new[] { first, second }, "HostRefId", 2d));
+
+            if (!string.Equals(first.Properties[ProjectFloorService.BottomLevelIdKey], "L1", StringComparison.Ordinal) ||
+                !string.Equals(second.Properties[ProjectFloorService.BottomLevelIdKey], "L1", StringComparison.Ordinal))
+                throw new Exception("Generic bulk property edit bypassed the Level relation service.");
+            if (!string.Equals(first.Properties["HostRefId"], "2", StringComparison.Ordinal) ||
+                !string.Equals(second.Properties["HostRefId"], "4", StringComparison.Ordinal))
+                throw new Exception("Generic numeric bulk edit mutated a semantic reference field.");
+            if (first.Dirty != ElementDirtyFlags.None || second.Dirty != ElementDirtyFlags.None)
+                throw new Exception("Rejected generic semantic-reference edits dirtied project elements.");
+            if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdated)
+                throw new Exception("Rejected generic semantic-reference edits touched project persistence state.");
+        }
+
+        private static void ThrowsInvalidOperation(Action action)
+        {
+            try { action(); }
+            catch (InvalidOperationException) { return; }
+            throw new Exception("Expected generic semantic-reference edit to fail closed.");
         }
     }
 

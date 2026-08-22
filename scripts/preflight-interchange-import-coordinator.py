@@ -26,7 +26,9 @@ for token in (
     "KeepTarget",
     "ImportAsNew",
     "UseSourceSemanticData",
+    "FieldMerge = 4",
     "PreserveSourceHandleProvenance",
+    "FieldMergePolicy",
     "No fallback mode was attempted",
     "ProjectInterchangeAppendOnlyImporter.Import",
     "ProjectInterchangeAppendProvenanceImporter.Import",
@@ -36,11 +38,24 @@ for token in (
     "ProjectInterchangeRemapProvenanceImporter.Import",
     "ProjectInterchangeUseSourceSemanticImporter.Import",
     "ProjectInterchangeUseSourceProvenanceImporter.Import",
+    "ProjectInterchangeFieldMergeImporter.Plan",
+    "ProjectInterchangeFieldMergeImporter.Import",
     "nativeCleanupAuthorization.ElementIds.Count",
     "NativeCleanupRequirements",
     "NativeCleanupElementIds",
     "CreateNativeCleanupAuthorization",
     "ProjectInterchangeNativeCleanupAuthorization.ForPlan(_useSourceSemanticPlan)",
+    "CreateFieldMergeAuthorization",
+    "_fieldMergeExecutionPlan.CreateAuthorization()",
+    "FieldMergeSourceFieldsToApply",
+    "FieldMergeTargetFieldsToKeep",
+    "FieldMergeUnresolvedDecisionCount",
+    "FieldMergeSourceOnlyIdentityCount",
+    "FieldMergeAffectedTargetElements",
+    "FieldMergeNativeCleanupHandlesRequired",
+    "FieldMerge execution requires authorization created from the exact reviewed FieldMerge coordinator plan",
+    "FieldMerge does not support source-handle provenance",
+    "FieldMergePolicy is accepted only for FieldMerge mode",
     "Enum.IsDefined",
 ):
     if token not in source:
@@ -53,10 +68,16 @@ for token in (
     "ExecuteRejectsCleanupAuthorityForOtherModes",
     "UseSourceExecuteRequiresAndConsumesExplicitAuthorization",
     "ProvenanceToggleSelectsCombinedExecution",
+    "FieldMergePlanRequiresExplicitPolicyAndNoProvenance",
+    "FieldMergePlanSurfacesDedicatedReviewMetrics",
+    "FieldMergeExecuteRequiresExactAuthorization",
     "InvalidModeFailsClosed",
     "plan.NativeCleanupRequirements[0].OwnerHandles.Single()",
     "coordinatorPlan.CreateNativeCleanupAuthorization()",
     "appendPlan.CreateNativeCleanupAuthorization()",
+    "plan.CreateFieldMergeAuthorization()",
+    "wrongAuthorization",
+    "FieldMergeNativeCleanupHandlesRequired",
     "ModuleInitializer",
 ):
     if token not in test:
@@ -89,4 +110,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: one Core coordinator selects an explicit import policy/provenance mode, exposes exact UseSource cleanup handles, creates reviewed handle-bound authority, and never falls back silently.")
+print("PASS: one Core coordinator selects an explicit import policy/provenance mode, exposes exact UseSource cleanup handles plus reviewed FieldMerge authorization/metrics, and never falls back silently.")

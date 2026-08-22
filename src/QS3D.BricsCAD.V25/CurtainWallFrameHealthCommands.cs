@@ -30,6 +30,9 @@ namespace QS3D.BricsCAD.V25
                 var live = CadHandleService.GetLiveSolidHandles(document, handles);
                 var issues = new List<ModelHealthIssue>(new GeneratedCurtainFrameHealthService().Inspect(project, live));
                 issues.AddRange(CurtainWallFrameLiveStateService.Inspect(document, project));
+                issues.AddRange(new GeneratedCurtainPanelHealthService().Inspect(project, live));
+                issues.AddRange(CurtainWallPanelLiveStateService.Inspect(document, project));
+                issues.AddRange(GeneratedCurtainPanelRuntimeHealthService.Inspect(document, project));
                 var summary = new HealthSummary(issues);
                 var message = "Curtain Frame Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(message);
@@ -44,9 +47,9 @@ namespace QS3D.BricsCAD.V25
                     if (count > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
                 }), true);
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                var message = "QS3DCURTAINFRAMEHEALTH lỗi: " + ex.Message;
+                var message = "QS3DCURTAINFRAMEHEALTH lỗi: không thể hoàn tất health check.";
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\n" + message);
             }
@@ -54,8 +57,9 @@ namespace QS3D.BricsCAD.V25
 
         private static IEnumerable<string> ParseHandles(QS3D.Core.Domain.ProjectElement element)
         {
-            if (!element.Properties.TryGetValue("GeneratedCurtainFrameHandles", out var raw) || string.IsNullOrWhiteSpace(raw)) return Array.Empty<string>();
-            return raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0);
+            var frames = element.Properties.TryGetValue("GeneratedCurtainFrameHandles", out var frameRaw) ? frameRaw : string.Empty;
+            var panels = element.Properties.TryGetValue("GeneratedCurtainPanelHandles", out var panelRaw) ? panelRaw : string.Empty;
+            return (frames + ";" + panels).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0);
         }
     }
 }

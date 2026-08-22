@@ -53,11 +53,20 @@
         </Border>
 
         <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="11,7" BorderThickness="0,1,0,0">
-            <DockPanel>
-                <Border Background="{StaticResource WarningBrush}" CornerRadius="5" Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                <TextBlock x:Name="Status" TextTrimming="CharacterEllipsis" Foreground="{StaticResource MutedBrush}"/>
-                <TextBlock DockPanel.Dock="Right" Text="LOW CONFIDENCE = REVIEW" Style="{StaticResource Caption}" Margin="12,0,0,0"/>
-            </DockPanel>
+            <Grid x:Name="RecognitionStatusGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="{StaticResource WarningBrush}" CornerRadius="5"
+                        Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                <TextBlock Grid.Column="1" x:Name="Status" MinWidth="0"
+                           TextTrimming="CharacterEllipsis" Foreground="{StaticResource MutedBrush}"/>
+                <TextBlock Grid.Column="2" Text="LOW CONFIDENCE = REVIEW"
+                           HorizontalAlignment="Right" TextWrapping="NoWrap"
+                           Style="{StaticResource Caption}" Margin="12,0,0,0"/>
+            </Grid>
         </Border>
     </Grid>
 </Window>

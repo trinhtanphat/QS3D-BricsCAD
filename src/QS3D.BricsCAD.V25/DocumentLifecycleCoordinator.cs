@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Windows.Threading;
 using Bricscad.ApplicationServices;
+using QS3D.Core.Persistence;
 using Teigha.DatabaseServices;
 using Application = Bricscad.ApplicationServices.Application;
 
@@ -14,52 +16,111 @@ namespace QS3D.BricsCAD.V25
         private static bool _started;
         private static readonly Dictionary<Document, DatabaseIOEventHandler> SaveCompleteHandlers = new Dictionary<Document, DatabaseIOEventHandler>();
         private static readonly Dictionary<Document, DocumentBeginCloseEventHandler> BeginCloseHandlers = new Dictionary<Document, DocumentBeginCloseEventHandler>();
+        private static readonly Dictionary<Document, bool> PendingReconciliation = new Dictionary<Document, bool>();
+        private static readonly Dictionary<Document, FailedProjectReconcile> FailedProjectReconciliations = new Dictionary<Document, FailedProjectReconcile>();
+        private static DispatcherOperation? _lifecycleIdleOperation;
+        private static bool _pendingNoDocumentReset;
 
         public static void Start()
         {
             if (_started) return;
             var docs = Application.DocumentManager;
-            docs.DocumentCreated += OnDocumentCreated;
-            docs.DocumentActivated += OnDocumentActivated;
-            docs.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
-            docs.DocumentDestroyed += OnDocumentDestroyed;
-            AttachProjectPersistence(docs.MdiActiveDocument);
-            SelectionSyncCoordinator.Attach(docs.MdiActiveDocument);
-            _started = true;
+            try
+            {
+                docs.DocumentCreated += OnDocumentCreated;
+                docs.DocumentActivated += OnDocumentActivated;
+                docs.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
+                docs.DocumentDestroyed += OnDocumentDestroyed;
+
+                // Keep save/close and Undo observers attached before NETLOAD returns so a
+                // higher-priority input/command cannot outrun the lifecycle hooks.
+                AttachCriticalServices(docs.MdiActiveDocument);
+                _started = true;
+
+                // Project/selection/UI reconciliation is the potentially expensive part.
+                // Queue it so NETLOAD can return before sidecar/palette work runs.
+                ScheduleReconcile(docs.MdiActiveDocument, false);
+            }
+            catch
+            {
+                try { docs.DocumentCreated -= OnDocumentCreated; } catch { }
+                try { docs.DocumentActivated -= OnDocumentActivated; } catch { }
+                try { docs.DocumentToBeDestroyed -= OnDocumentToBeDestroyed; } catch { }
+                try { docs.DocumentDestroyed -= OnDocumentDestroyed; } catch { }
+                StopPendingLifecycleWork();
+                foreach (var document in SaveCompleteHandlers.Keys.ToArray()) DetachProjectPersistence(document);
+                SourceReconcileUndoCoordinator.Stop();
+                CurtainWallUndoCoordinator.Stop();
+                SelectionSyncCoordinator.Stop();
+                _started = false;
+                throw;
+            }
         }
 
         public static void Stop()
         {
             if (!_started) return;
-            var docs = Application.DocumentManager;
-            docs.DocumentCreated -= OnDocumentCreated;
-            docs.DocumentActivated -= OnDocumentActivated;
-            docs.DocumentToBeDestroyed -= OnDocumentToBeDestroyed;
-            docs.DocumentDestroyed -= OnDocumentDestroyed;
-            foreach (var document in SaveCompleteHandlers.Keys.ToArray()) DetachProjectPersistence(document);
-            SelectionSyncCoordinator.Stop();
             _started = false;
+            var docs = Application.DocumentManager;
+            try { docs.DocumentCreated -= OnDocumentCreated; } catch { }
+            try { docs.DocumentActivated -= OnDocumentActivated; } catch { }
+            try { docs.DocumentToBeDestroyed -= OnDocumentToBeDestroyed; } catch { }
+            try { docs.DocumentDestroyed -= OnDocumentDestroyed; } catch { }
+            StopPendingLifecycleWork();
+            try
+            {
+                foreach (var document in SaveCompleteHandlers.Keys.ToArray()) DetachProjectPersistence(document);
+            }
+            catch
+            {
+                // Continue teardown even if native document bookkeeping is already unavailable.
+            }
+            try { SourceReconcileUndoCoordinator.Stop(); }
+            catch { }
+            try { CurtainWallUndoCoordinator.Stop(); }
+            catch { }
+            try { SelectionSyncCoordinator.Stop(); }
+            catch { }
         }
 
         private static void OnDocumentCreated(object sender, DocumentCollectionEventArgs e)
         {
-            AttachProjectPersistence(e.Document);
-            SelectionSyncCoordinator.Attach(e.Document);
-            EnsureProject(e.Document, false);
+            try
+            {
+                AttachCriticalServices(e.Document);
+                ScheduleReconcile(e.Document, false);
+            }
+            catch (Exception ex)
+            {
+                ReportLifecycleError(e.Document, ex);
+            }
         }
 
         private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
         {
-            AttachProjectPersistence(e.Document);
-            SelectionSyncCoordinator.Attach(e.Document);
-            EnsureProject(e.Document, true);
-            SelectionSyncCoordinator.Refresh(e.Document);
+            try
+            {
+                AttachCriticalServices(e.Document);
+                ScheduleReconcile(e.Document, true);
+            }
+            catch (Exception ex)
+            {
+                ReportLifecycleError(e.Document, ex);
+            }
         }
 
         private static void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
         {
             var document = e.Document;
+
+            // Teardown is intentionally synchronous: native handlers must be gone before
+            // BricsCAD destroys the document. Any queued reconcile for this document is
+            // cancelled first so an idle callback can never touch the destroyed document.
+            CancelPendingReconcile(document);
+            FailedProjectReconciliations.Remove(document);
             DetachProjectPersistence(document);
+            SourceReconcileUndoCoordinator.Detach(document);
+            CurtainWallUndoCoordinator.Detach(document);
             SelectionSyncCoordinator.Detach(document);
             ProjectContextCoordinator.Forget(document);
         }
@@ -69,17 +130,114 @@ namespace QS3D.BricsCAD.V25
             var docs = Application.DocumentManager;
             if (docs.Count == 0)
             {
-                SelectionSyncCoordinator.Refresh(null);
-                PaletteCoordinator.ResetForNoDocument();
+                PendingReconciliation.Clear();
+                _pendingNoDocumentReset = true;
+                ScheduleLifecycleIdleDrain();
                 return;
             }
 
             var active = docs.MdiActiveDocument;
             if (active == null) return;
-            AttachProjectPersistence(active);
-            SelectionSyncCoordinator.Attach(active);
-            EnsureProject(active, true);
-            SelectionSyncCoordinator.Refresh(active);
+            try
+            {
+                AttachCriticalServices(active);
+                ScheduleReconcile(active, true);
+            }
+            catch (Exception ex)
+            {
+                ReportLifecycleError(active, ex);
+            }
+        }
+
+        private static void AttachCriticalServices(Document? document)
+        {
+            if (document == null) return;
+            AttachProjectPersistence(document);
+            SourceReconcileUndoCoordinator.Attach(document);
+            CurtainWallUndoCoordinator.Attach(document);
+        }
+
+        private static void ScheduleReconcile(Document? document, bool refreshUi)
+        {
+            if (!_started || document == null) return;
+            if (PendingReconciliation.TryGetValue(document, out var pendingRefresh))
+                PendingReconciliation[document] = pendingRefresh || refreshUi;
+            else
+                PendingReconciliation.Add(document, refreshUi);
+            _pendingNoDocumentReset = false;
+            ScheduleLifecycleIdleDrain();
+        }
+
+        private static void CancelPendingReconcile(Document? document)
+        {
+            if (document == null) return;
+            PendingReconciliation.Remove(document);
+            if (PendingReconciliation.Count == 0 && !_pendingNoDocumentReset)
+                CancelLifecycleIdleDrain();
+        }
+
+        private static void ScheduleLifecycleIdleDrain()
+        {
+            if (!_started || _lifecycleIdleOperation != null) return;
+            _lifecycleIdleOperation = Dispatcher.CurrentDispatcher.BeginInvoke(
+                DispatcherPriority.ApplicationIdle,
+                new Action(OnLifecycleIdle));
+        }
+
+        private static void CancelLifecycleIdleDrain()
+        {
+            var operation = _lifecycleIdleOperation;
+            _lifecycleIdleOperation = null;
+            if (operation == null) return;
+            try { operation.Abort(); } catch { }
+        }
+
+        private static void StopPendingLifecycleWork()
+        {
+            CancelLifecycleIdleDrain();
+            PendingReconciliation.Clear();
+            FailedProjectReconciliations.Clear();
+            _pendingNoDocumentReset = false;
+        }
+
+        private static void OnLifecycleIdle()
+        {
+            _lifecycleIdleOperation = null;
+            if (!_started) return;
+
+            var pending = PendingReconciliation.ToArray();
+            PendingReconciliation.Clear();
+            var resetForNoDocument = _pendingNoDocumentReset;
+            _pendingNoDocumentReset = false;
+
+            if (resetForNoDocument && Application.DocumentManager.Count == 0)
+            {
+                try { SelectionSyncCoordinator.Refresh(null); } catch { }
+                try { PaletteCoordinator.ResetForNoDocument(); } catch { }
+            }
+
+            foreach (var pair in pending)
+            {
+                if (!_started) break;
+                ReconcileDocument(pair.Key, pair.Value);
+            }
+
+            if (_started && (PendingReconciliation.Count > 0 || _pendingNoDocumentReset))
+                ScheduleLifecycleIdleDrain();
+        }
+
+        private static void ReconcileDocument(Document document, bool refreshUi)
+        {
+            try
+            {
+                SelectionSyncCoordinator.Attach(document);
+                EnsureProject(document, refreshUi);
+                if (refreshUi) SelectionSyncCoordinator.Refresh(document);
+            }
+            catch (Exception ex)
+            {
+                ReportLifecycleError(document, ex);
+            }
         }
 
         private static void AttachProjectPersistence(Document? document)
@@ -209,20 +367,126 @@ namespace QS3D.BricsCAD.V25
             catch { }
         }
 
+        private static void ReportLifecycleError(Document document, Exception error)
+        {
+            Report(document, "QS3D document lifecycle reconcile error: " + error.Message);
+        }
+
         private static void EnsureProject(Document? document, bool refreshUi)
         {
             if (document == null) return;
+            if (TryUseStableFailedProjectReconcile(document, refreshUi)) return;
+
+            ProjectSidecarRevisionStamp? attemptedRevision = null;
+            TryCaptureProjectRevision(document, out attemptedRevision);
             try
             {
-                ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out _))
+                {
+                    FailedProjectReconciliations.Remove(document);
+                    if (refreshUi)
+                        PaletteCoordinator.ResetForUnavailableProject(
+                            "No QS3D project is available for this drawing. Use an authoring command to create one.");
+                    return;
+                }
+
+                FailedProjectReconciliations.Remove(document);
                 if (refreshUi) PaletteCoordinator.RefreshAll();
+            }
+            catch (InvalidDataException ex)
+            {
+                var message = "QS3D project load error: " + ex.Message;
+                RememberStableProjectLoadFailure(document, attemptedRevision, message);
+                try { PaletteCoordinator.ResetForUnavailableProject(message); }
+                catch { }
             }
             catch (Exception ex)
             {
+                FailedProjectReconciliations.Remove(document);
                 var message = "QS3D project load error: " + ex.Message;
-                document.Editor.WriteMessage("\n" + message);
-                PaletteCoordinator.SetStatus(message);
+                try { PaletteCoordinator.ResetForUnavailableProject(message); }
+                catch { }
             }
+        }
+
+        private static bool TryUseStableFailedProjectReconcile(Document document, bool refreshUi)
+        {
+            if (!FailedProjectReconciliations.TryGetValue(document, out var failed)) return false;
+
+            try
+            {
+                if (ProjectContextCoordinator.TryGetCached(document, out _))
+                {
+                    FailedProjectReconciliations.Remove(document);
+                    return false;
+                }
+            }
+            catch
+            {
+                FailedProjectReconciliations.Remove(document);
+                return false;
+            }
+
+            if (!TryCaptureProjectRevision(document, out var current) || current == null || !failed.Revision.Equals(current))
+            {
+                FailedProjectReconciliations.Remove(document);
+                return false;
+            }
+
+            if (refreshUi)
+            {
+                try { PaletteCoordinator.ResetForUnavailableProject(failed.Message); }
+                catch { }
+            }
+            return true;
+        }
+
+        private static void RememberStableProjectLoadFailure(
+            Document document,
+            ProjectSidecarRevisionStamp? attemptedRevision,
+            string message)
+        {
+            if (attemptedRevision == null || !attemptedRevision.HasAnyFile)
+            {
+                FailedProjectReconciliations.Remove(document);
+                return;
+            }
+
+            if (!TryCaptureProjectRevision(document, out var current) || current == null || !attemptedRevision.Equals(current))
+            {
+                FailedProjectReconciliations.Remove(document);
+                return;
+            }
+
+            FailedProjectReconciliations[document] = new FailedProjectReconcile(current, message);
+        }
+
+        private static bool TryCaptureProjectRevision(Document document, out ProjectSidecarRevisionStamp? revision)
+        {
+            revision = null;
+            if (!IsNamedDrawing(document)) return false;
+            try
+            {
+                revision = ProjectSidecarRevisionStamp.Capture(ProjectContextCoordinator.GetProjectPath(document));
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException || ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException)
+            {
+                revision = null;
+                return false;
+            }
+        }
+
+        private sealed class FailedProjectReconcile
+        {
+            public FailedProjectReconcile(ProjectSidecarRevisionStamp revision, string message)
+            {
+                Revision = revision ?? throw new ArgumentNullException(nameof(revision));
+                Message = message ?? string.Empty;
+            }
+
+            public ProjectSidecarRevisionStamp Revision { get; }
+            public string Message { get; }
         }
     }
 }

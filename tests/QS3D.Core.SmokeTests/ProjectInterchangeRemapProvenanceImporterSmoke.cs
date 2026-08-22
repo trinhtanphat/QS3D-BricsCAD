@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
@@ -14,6 +16,9 @@ namespace QS3D.Core.SmokeTests
             ImportKeepsRawHandlesOutsideMappedTargetOwnership();
             MissingSourceFingerprintFailsBeforeMutation();
             TargetMapRejectsMissingTargetElement();
+            TargetMapRejectsNegativeKnownCountBeforeEnumeration();
+            TargetMapRejectsOversizedKnownCountBeforeEnumeration();
+            TargetMapAllowsExactMappingLimitToReachEnumeration();
         }
 
         private static void PlanBuildsOneToOneSourceTargetLineage()
@@ -93,12 +98,48 @@ namespace QS3D.Core.SmokeTests
         private static void TargetMapRejectsMissingTargetElement()
         {
             var target = TargetProject();
-            var mapping = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            var mapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["SOURCE-E"] = "MISSING-TARGET"
             };
             Throws<InvalidOperationException>(() => ProjectInterchangeProvenanceTargetMap.Store(target, "SOURCE", "SOURCE-DWG", mapping));
             Equal(string.Empty, ProjectInterchangeProvenanceTargetMap.ReadTargetElementId(target, "SOURCE", "SOURCE-E"));
+        }
+
+        private static void TargetMapRejectsNegativeKnownCountBeforeEnumeration()
+        {
+            var target = TargetProject();
+            var mapping = new KnownCountDictionary(-1);
+
+            Throws<InvalidOperationException>(() => ProjectInterchangeProvenanceTargetMap.Store(target, "SOURCE", "SOURCE-DWG", mapping));
+
+            Equal(1, mapping.CountReads);
+            False(mapping.EnumerationAttempted);
+            Equal(0, target.Metadata.Count);
+        }
+
+        private static void TargetMapRejectsOversizedKnownCountBeforeEnumeration()
+        {
+            var target = TargetProject();
+            var mapping = new KnownCountDictionary(50001);
+
+            Throws<InvalidOperationException>(() => ProjectInterchangeProvenanceTargetMap.Store(target, "SOURCE", "SOURCE-DWG", mapping));
+
+            Equal(1, mapping.CountReads);
+            False(mapping.EnumerationAttempted);
+            Equal(0, target.Metadata.Count);
+        }
+
+        private static void TargetMapAllowsExactMappingLimitToReachEnumeration()
+        {
+            var target = TargetProject();
+            var mapping = new KnownCountDictionary(50000);
+
+            Throws<Exception>(() => ProjectInterchangeProvenanceTargetMap.Store(target, "SOURCE", "SOURCE-DWG", mapping));
+
+            Equal(1, mapping.CountReads);
+            True(mapping.EnumerationAttempted);
+            Equal(0, target.Metadata.Count);
         }
 
         private static ProjectState TargetProject()
@@ -162,6 +203,42 @@ namespace QS3D.Core.SmokeTests
         {
             try { action(); } catch (T) { return; }
             throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private sealed class KnownCountDictionary : IReadOnlyDictionary<string, string>
+        {
+            private readonly int _count;
+
+            public KnownCountDictionary(int count)
+            {
+                _count = count;
+            }
+
+            public bool EnumerationAttempted { get; private set; }
+            public int CountReads { get; private set; }
+            public int Count
+            {
+                get
+                {
+                    CountReads++;
+                    return _count;
+                }
+            }
+
+            public IEnumerable<string> Keys => throw new Exception("Keys must not be read for an invalid known Count.");
+            public IEnumerable<string> Values => throw new Exception("Values must not be read for an invalid known Count.");
+            public string this[string key] => throw new Exception("Indexer must not be read for an invalid known Count.");
+
+            public bool ContainsKey(string key) => throw new Exception("ContainsKey must not be called for an invalid known Count.");
+            public bool TryGetValue(string key, out string value) => throw new Exception("TryGetValue must not be called for an invalid known Count.");
+
+            public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+            {
+                EnumerationAttempted = true;
+                throw new Exception("Enumeration must not start for an invalid known Count.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
     }
 

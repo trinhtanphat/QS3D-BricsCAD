@@ -30,7 +30,6 @@ for label, contract in contracts.items():
         "ProjectStateSnapshot.Capture(project)",
         "var cadCommitted = false;",
         "foreach (var update in pending) CommitSemanticUpdate(project, update);",
-        "if (pending.Count > 0) project.Touch();",
         "transaction.Commit();",
         "cadCommitted = true;",
         "if (!cadCommitted)",
@@ -48,17 +47,18 @@ for label, contract in contracts.items():
             errors.append(label + " opening boolean atomicity guard missing: " + needle)
 
     semantic = text.find("foreach (var update in pending) CommitSemanticUpdate(project, update);")
-    touch = text.find("if (pending.Count > 0) project.Touch();", semantic)
     commit = text.find("transaction.Commit();", semantic)
     committed = text.find("cadCommitted = true;", commit)
     restore = text.find("rollback.Restore(project)", committed)
-    if min(semantic, touch, commit, committed, restore) < 0 or not (semantic < touch < commit < committed < restore):
-        errors.append(label + " opening boolean semantic/touch/CAD commit/rollback ordering is not rollback-safe")
+    if min(semantic, commit, committed, restore) < 0 or not (semantic < commit < committed < restore):
+        errors.append(label + " opening boolean semantic/audit/CAD commit/rollback ordering is not rollback-safe")
+    if semantic >= 0 and restore >= 0 and "project.Touch();" in text[semantic:restore]:
+        errors.append(label + " opening boolean must keep redundant project.Touch removed because AuditTrail.Record owns revision advancement")
 
     post_commit = text[committed:] if committed >= 0 else ""
     if "document.Editor.Regen();" in post_commit and "TryRegen(document);" not in post_commit:
         errors.append(label + " opening boolean still performs fatal Editor.Regen after native commit")
-    if semantic >= 0 and "CommitSemanticUpdate(project, update)" in text[commit + len("transaction.Commit();"):]:
+    if semantic >= 0 and commit >= 0 and "CommitSemanticUpdate(project, update)" in text[commit + len("transaction.Commit();"):]:
         errors.append(label + " opening boolean still advances physical-cut semantic metadata after CAD commit")
 
 print("QS3D physical opening boolean atomicity preflight")
@@ -68,4 +68,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: straight/non-bulged and curved/bulged physical opening cuts advance PhysicalOpeningCut metadata/audit/touch while native boolean transactions remain rollback-capable, restore deep project state on pre-commit failure, and keep post-commit viewport regen non-fatal.")
+print("PASS: straight/non-bulged and curved/bulged physical opening cuts advance PhysicalOpeningCut metadata and AuditTrail-owned revision while native boolean transactions remain rollback-capable, restore deep project state on pre-commit failure, and keep post-commit viewport regen non-fatal.")

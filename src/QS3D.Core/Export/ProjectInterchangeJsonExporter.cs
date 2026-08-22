@@ -19,6 +19,9 @@ namespace QS3D.Core.Export
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             ValidateProjectIdentity(project);
+            ValidateExportCollectionBounds(project);
+            ProjectInterchangeSemanticReferenceValidator.Validate(project);
+            ValidateSemanticCollections(project);
 
             var json = new StringBuilder(32768);
             json.Append("{\n");
@@ -80,12 +83,16 @@ namespace QS3D.Core.Export
             }
             json.Append("  ]\n");
             json.Append("}\n");
-            return json.ToString();
+
+            var snapshot = json.ToString();
+            RequireCanonicalSnapshot(snapshot);
+            return snapshot;
         }
 
         public static void Export(string path, ProjectState project)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Interchange export path is required.", nameof(path));
+            var content = Build(project);
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
@@ -95,7 +102,7 @@ namespace QS3D.Core.Export
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
                 {
-                    writer.Write(Build(project));
+                    writer.Write(content);
                     writer.Flush();
                     stream.Flush(true);
                 }
@@ -105,6 +112,20 @@ namespace QS3D.Core.Export
             {
                 AtomicFileCommit.TryDelete(tempPath);
             }
+        }
+
+        private static void RequireCanonicalSnapshot(string snapshot)
+        {
+            var validation = ProjectInterchangeJsonValidator.Validate(snapshot);
+            if (validation.IsValid) return;
+
+            var issue = validation.Issues.FirstOrDefault(x => x.Severity == InterchangeValidationSeverity.Error);
+            if (issue == null)
+                throw new InvalidDataException("Interchange export produced a snapshot rejected by canonical validation.");
+
+            var path = string.IsNullOrWhiteSpace(issue.Path) ? string.Empty : " at " + issue.Path;
+            throw new InvalidDataException(
+                "Interchange export produced a snapshot rejected by canonical validation (" + issue.Code + path + "): " + issue.Message);
         }
 
         private static void AppendElement(StringBuilder json, ProjectElement element)
@@ -126,7 +147,7 @@ namespace QS3D.Core.Export
             AppendStringArray(json, element.DependsOn, "dependencies");
             json.Append(",\n");
             json.Append("      \"properties\": ");
-            AppendStringMap(json, element.Properties.Where(x => IsInterchangeProperty(x.Key)), 3);
+            AppendStringMap(json, element.Properties.Where(x => ProjectInterchangeElementPropertyPolicy.IsPortable(x.Key)), 3);
             json.Append(",\n");
             json.Append("      \"quantities\": ");
             AppendNumberMap(json, element.Quantities);
@@ -141,6 +162,7 @@ namespace QS3D.Core.Export
             if (normalized.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)) return false;
             if (normalized.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)) return false;
             if (normalized.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return false;
+            if (normalized.StartsWith("QS3D.PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return false;
             return true;
         }
 
@@ -206,6 +228,44 @@ namespace QS3D.Core.Export
             if (project.SchemaVersion <= 0) throw new InvalidDataException("Interchange export requires a positive project schema version.");
         }
 
+        private static void ValidateExportCollectionBounds(ProjectState project)
+        {
+            var total = (long)project.Zones.Count + project.Floors.Count + project.Families.Count + project.Elements.Count;
+            if (total > ProjectInterchangeJsonValidator.MaxCollectionItems)
+                throw new InvalidDataException(
+                    "Interchange export collection count exceeds the guarded " +
+                    ProjectInterchangeJsonValidator.MaxCollectionItems.ToString(CultureInfo.InvariantCulture) +
+                    "-item limit.");
+            if (project.Elements.Count > ProjectInterchangeJsonValidator.MaxElements)
+                throw new InvalidDataException(
+                    "Interchange export contains more than " +
+                    ProjectInterchangeJsonValidator.MaxElements.ToString(CultureInfo.InvariantCulture) +
+                    " elements.");
+        }
+
+        private static void ValidateSemanticCollections(ProjectState project)
+        {
+            ValidateUniqueIds(project.Zones, x => x.Id, "Zone");
+            ValidateUniqueIds(project.Floors, x => x.Id, "Floor");
+            ValidateUniqueIds(project.Families, x => x.Id, "Family");
+            ValidateUniqueIds(project.Elements, x => x.Id, "element");
+        }
+
+        private static void ValidateUniqueIds<T>(IEnumerable<T> source, Func<T, string> idSelector, string label) where T : class
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in source)
+            {
+                if (item == null)
+                    throw new InvalidDataException("Interchange export " + label + " collection contains a null entry.");
+                var id = (idSelector(item) ?? string.Empty).Trim();
+                if (id.Length == 0)
+                    throw new InvalidDataException("Interchange export " + label + " collection contains an empty id.");
+                if (!seen.Add(id))
+                    throw new InvalidDataException("Interchange export contains duplicate " + label + " id: " + id + ".");
+            }
+        }
+
         private static void Property(StringBuilder json, int indent, string name, string value, bool comma)
         {
             json.Append(new string(' ', indent * 2)).Append('"').Append(Escape(name)).Append("\":\"").Append(Escape(value ?? string.Empty)).Append('"');
@@ -235,8 +295,19 @@ namespace QS3D.Core.Export
         {
             var input = value ?? string.Empty;
             var result = new StringBuilder(input.Length + 8);
-            foreach (var ch in input)
+            for (var index = 0; index < input.Length; index++)
             {
+                var ch = input[index];
+                if (char.IsHighSurrogate(ch))
+                {
+                    if (index + 1 >= input.Length || !char.IsLowSurrogate(input[index + 1]))
+                        throw new InvalidDataException("Interchange export strings cannot contain unpaired UTF-16 surrogates.");
+                    result.Append(ch).Append(input[++index]);
+                    continue;
+                }
+                if (char.IsLowSurrogate(ch))
+                    throw new InvalidDataException("Interchange export strings cannot contain unpaired UTF-16 surrogates.");
+
                 switch (ch)
                 {
                     case '"': result.Append("\\\""); break;

@@ -10,44 +10,112 @@ errors = []
 
 for path in (SESSION, SMOKE, REG):
     if not path.is_file():
-        errors.append("missing project-session audit contract file: " + str(path.relative_to(ROOT)))
+        errors.append("missing project-session recovery contract file: " + str(path.relative_to(ROOT)))
 
 if SESSION.is_file():
     text = SESSION.read_text(encoding="utf-8")
     for token in (
         "Audit = AuditTrail.ForProject(Project);",
         "public AuditTrail Audit { get; private set; }",
+        "private bool _recoveredFromBackup;",
         "var snapshot = ProjectStateSnapshot.Capture(Project);",
-        'Audit.Record("PROJECT_SAVE", string.Empty, Path);',
-        "_store.Save(Project, Path);",
+        'Audit.Record("PROJECT_SAVE", string.Empty, string.Empty);',
         "snapshot.Restore(Project);",
-        "Project = _store.Load(Path);",
-        'Audit.Record("PROJECT_RELOAD", string.Empty, Path);',
     ):
         if token not in text:
-            errors.append("ProjectSession.cs missing bound/persisted audit token: " + token)
-    if text.index('Audit.Record("PROJECT_SAVE", string.Empty, Path);') > text.index("_store.Save(Project, Path);"):
-        errors.append("PROJECT_SAVE audit must be staged before store save so the same successful save persists it")
+            errors.append("ProjectSession.cs missing recovery/audit token: " + token)
+
+    save_marker = "public void Save()"
+    reload_marker = "public void Reload()"
+    dispose_marker = "public void Dispose()"
+    if save_marker not in text or reload_marker not in text or dispose_marker not in text:
+        errors.append("ProjectSession.cs is missing Save/Reload/Dispose method markers")
+    else:
+        save = text.split(save_marker, 1)[1].split(reload_marker, 1)[0]
+        reload = text.split(reload_marker, 1)[1].split(dispose_marker, 1)[0]
+
+        for token in (
+            "if (_recoveredFromBackup)",
+            "_store.SavePreservingValidatedBackup(Project, Path);",
+            "_store.Save(Project, Path);",
+            "_recoveredFromBackup = false;",
+        ):
+            if token not in save:
+                errors.append("ProjectSession.Save missing recovery publication token: " + token)
+
+        if all(token in save for token in (
+            'Audit.Record("PROJECT_SAVE", string.Empty, string.Empty);',
+            "_store.SavePreservingValidatedBackup(Project, Path);",
+            "_store.Save(Project, Path);",
+            "_recoveredFromBackup = false;",
+        )):
+            audit_index = save.index('Audit.Record("PROJECT_SAVE", string.Empty, string.Empty);')
+            preserve_index = save.index("_store.SavePreservingValidatedBackup(Project, Path);")
+            normal_index = save.index("_store.Save(Project, Path);")
+            clear_index = save.index("_recoveredFromBackup = false;")
+            if audit_index > min(preserve_index, normal_index):
+                errors.append("PROJECT_SAVE audit must be staged before either store publication path")
+            if clear_index < max(preserve_index, normal_index):
+                errors.append("ProjectSession recovery provenance must clear only after successful store publication")
+
+        for token in (
+            "var result = _store.LoadWithBackupFallback(Path);",
+            "var project = result.Project;",
+            "var audit = AuditTrail.ForProject(project);",
+            'audit.Record("PROJECT_RELOAD", string.Empty, string.Empty);',
+            "Project = project;",
+            "Audit = audit;",
+            "_recoveredFromBackup = result.RecoveredFromBackup;",
+        ):
+            if token not in reload:
+                errors.append("ProjectSession.Reload missing recovery staging token: " + token)
+
+        if all(token in reload for token in (
+            'audit.Record("PROJECT_RELOAD", string.Empty, string.Empty);',
+            "Project = project;",
+            "Audit = audit;",
+            "_recoveredFromBackup = result.RecoveredFromBackup;",
+        )):
+            audit_index = reload.index('audit.Record("PROJECT_RELOAD", string.Empty, string.Empty);')
+            project_index = reload.index("Project = project;")
+            audit_bind_index = reload.index("Audit = audit;")
+            provenance_index = reload.index("_recoveredFromBackup = result.RecoveredFromBackup;")
+            if audit_index > min(project_index, audit_bind_index, provenance_index):
+                errors.append("Reload must finish staging audit state before swapping live session bindings/provenance")
+            if provenance_index < max(project_index, audit_bind_index):
+                errors.append("Reload recovery provenance must publish with the staged project/audit bindings")
+
+        for leaked in (
+            'Audit.Record("PROJECT_SAVE", string.Empty, Path);',
+            'audit.Record("PROJECT_RELOAD", string.Empty, Path);',
+        ):
+            if leaked in text:
+                errors.append("ProjectSession audit must not persist machine-local project paths: " + leaked)
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     for token in (
         "SavePersistsAuditAndReloadRebindsTrail();",
-        "new QsdbProjectStore().Load(path)",
-        'RequireAction(persisted, "PROJECT_SAVE");',
-        'RequireAction(session.Project, "PROJECT_RELOAD");',
-        'session.Audit.Record("AFTER_RELOAD"',
-        "session.Audit.Events.Count != session.Project.AuditEvents.Count",
+        "FailedReloadKeepsExistingSessionBinding();",
+        "BothInvalidReloadKeepsExistingSessionBinding();",
+        "BackupRecoverySavePreservesValidatedBackupAndClearsMode();",
+        "PrimaryReloadClearsRecoveryPublicationMode();",
+        "FailedRecoverySaveRollsBackAndKeepsValidatedBackup();",
+        'File.WriteAllText(path + ".bak", "<broken-backup");',
+        "store.SavePreservingValidatedBackup(new ProjectState",
+        "ThrowsIoFailure(() => session.Save());",
+        'Require(store.Load(path + ".bak").Name == "Known Good"',
+        'RequireAction(session.Project, "PROJECT_SAVE");',
     ):
         if token not in text:
-            errors.append("ProjectSessionAuditSmoke.cs missing persistence/rebind regression token: " + token)
+            errors.append("ProjectSessionAuditSmoke.cs missing recovery regression token: " + token)
 
 if REG.is_file() and "ProjectSessionAuditSmoke.Run();" not in REG.read_text(encoding="utf-8"):
-    errors.append("project-session audit smoke is not registered")
+    errors.append("project-session recovery smoke is not registered")
 
 if errors:
     for error in errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] project-session audit is statically guarded to bind to current project state, persist save events, rollback failed-save audit mutation and rebind after reload")
+print("[PASS] project-session recovery is statically guarded for redacted audit events, fallback reload, atomic binding, validated-backup publication, failure rollback and recovery-mode clearing")

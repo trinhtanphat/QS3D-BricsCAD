@@ -16,8 +16,10 @@ def main():
     require(text, "ValidateSchema(root);", "load must validate schema before materializing views and sheets")
     require(text, "root.Name.NamespaceName.Length != 0", "root namespaces must fail closed")
     require(text, 'ValidateElement(root, "documentation", new[] { "version" }, new[] { "views", "sheets" });', "root schema allowlist")
-    require(text, 'EnsureAtMostOneChild(root, "views");', "duplicate views guard")
-    require(text, 'EnsureAtMostOneChild(root, "sheets");', "duplicate sheets guard")
+    require(text, 'RequireExactlyOneChild(root, "views");', "required views container guard")
+    require(text, 'RequireExactlyOneChild(root, "sheets");', "required sheets container guard")
+    require(text, "private static void RequireExactlyOneChild(XElement parent, string childName)", "exactly-one root helper")
+    require(text, "parent.Elements(childName).Take(2).Count() != 1", "exactly-one root cardinality")
     require(text, 'ValidateElement(view, "view", new[] { "id", "name", "kind", "floorId", "zoneId" }, new[] { "categories", "include", "exclude" });', "view schema allowlist")
     require(text, 'ValidateElement(sheet, "sheet", new[] { "id", "number", "name", "widthMm", "heightMm", "titleBlockName" }, new[] { "placements" });', "sheet schema allowlist")
     require(text, 'ValidateElement(placement, "placement", new[] { "viewId", "xMm", "yMm", "widthMm", "heightMm" }, Array.Empty<string>());', "placement schema allowlist")
@@ -34,7 +36,7 @@ def main():
     require(text, "string.IsNullOrWhiteSpace(text.Value)", "only insignificant text is tolerated")
     require(text, "contains unsupported XML content", "comments, processing instructions, and semantic text must fail closed")
 
-    print("PASS: semantic documentation catalog XML is strict and fail-closed against lossy forward/foreign schema.")
+    print("PASS: semantic documentation catalog XML is strict and fail-closed against lossy forward/foreign schema, with exactly one views/sheets root container.")
     return 0
 
 

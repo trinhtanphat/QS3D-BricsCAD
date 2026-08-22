@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("p", "Curtain schedule");
             project.Floors.Add(new FloorDefinition("f1", "Tầng 1", 0d));
             project.Families.Add(new ProjectFamily("cw", "Vách kính 12mm", ElementCategory.GlassWall));
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
             Add(project, "g1", 6d, 18d, 2d, 14.3d, 1.7d, 33d, 8, 5, 3, 1.4d, 1.45d, 1.4d, 1.45d);
             Add(project, "g2", 3d, 9d, 0d, 8.2d, 0.8d, 18d, 4, 3, 3, 1.3d, 1.4d, 1.35d, 1.45d);
 
@@ -41,6 +42,9 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsNonIntegerPanelCounts()
         {
             var project = new ProjectState("p2", "Bad curtain schedule");
+            project.Floors.Add(new FloorDefinition("f1", "Floor", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
+            project.Families.Add(new ProjectFamily("cw", "Curtain", ElementCategory.GlassWall));
             var wall = new ProjectElement("g1", ElementCategory.GlassWall, "cw", "f1", "z");
             wall.Quantities["CurtainPanelCount"] = 2.5d;
             project.Elements.Add(wall);

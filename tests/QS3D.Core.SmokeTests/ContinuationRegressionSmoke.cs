@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
@@ -109,10 +110,20 @@ namespace QS3D.Core.SmokeTests
 
         private static void QuantityEngineRejectsInvalidSnapshotMetrics()
         {
-            var invalidLength = new EntitySnapshot("A", "Line", "0") { LengthDrawingUnits = double.NaN };
-            Throws<InvalidOperationException>(() => QuantityEngine.Calculate(invalidLength, TakeoffKind.Length, DrawingUnit.Millimeter));
-            var invalidArea = new EntitySnapshot("B", "Polyline", "0") { AreaDrawingUnitsSquared = -1d };
+            var invalidLength = new EntitySnapshot("A", "Line", "0");
+            Throws<ArgumentOutOfRangeException>(() => invalidLength.LengthDrawingUnits = double.NaN);
+
+            var invalidArea = new EntitySnapshot("B", "Polyline", "0");
+            Throws<ArgumentOutOfRangeException>(() => invalidArea.AreaDrawingUnitsSquared = -1d);
+            SetLegacyMetric(invalidArea, "_areaDrawingUnitsSquared", -1d);
             Throws<InvalidOperationException>(() => QuantityEngine.Calculate(invalidArea, TakeoffKind.Area, DrawingUnit.Meter));
+        }
+
+        private static void SetLegacyMetric(EntitySnapshot snapshot, string fieldName, double value)
+        {
+            var field = typeof(EntitySnapshot).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new Exception("Expected private legacy metric field '" + fieldName + "'.");
+            field.SetValue(snapshot, value);
         }
 
         private static void ReportingRejectsNonFiniteState()
@@ -126,8 +137,8 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => ProjectQuantityReportBuilder.Group(project));
 
             var legacyFamily = new FamilyDefinition("Legacy", ElementCategory.ArchitecturalWall);
-            var legacy = new ElementInstance("LEGACY", legacyFamily, "Floor") { GrossConcreteM3 = double.PositiveInfinity };
-            Throws<InvalidOperationException>(() => QuantityReportBuilder.Group(new[] { legacy }));
+            var legacy = new ElementInstance("LEGACY", legacyFamily, "Floor");
+            Throws<ArgumentOutOfRangeException>(() => legacy.GrossConcreteM3 = double.PositiveInfinity);
 
             var badRow = new QuantityReportRow { Count = 1, LengthM = double.NaN };
             Throws<InvalidOperationException>(() => QuantityReportTotals.FromRows(new[] { badRow }));

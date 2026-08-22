@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
@@ -64,6 +66,7 @@ namespace QS3D.Core.SmokeTests
             var qs3dBlankHandlePath = Path.Combine(directory, "qs3d-blank-handle.xlsx");
             var invalidHandlePath = Path.Combine(directory, "qs3d-invalid-handle.xlsx");
             var ed2Path = Path.Combine(directory, "ed2.xlsx");
+            var downgradedEd2Path = Path.Combine(directory, "ed2-header-downgrade.xlsx");
             var reorderedEd2Path = Path.Combine(directory, "ed2-reordered.xlsx");
             var bltPath = Path.Combine(directory, "blt.xlsx");
             try
@@ -80,6 +83,7 @@ namespace QS3D.Core.SmokeTests
                     Note = "ED2 note",
                     DensityKgM3 = 2400d,
                     MassKg = 4500d,
+                    GrossConcreteM3 = 1e-9d,
                     DrawingFingerprint = "DWG-FINGERPRINT-1",
                     Count = 1
                 };
@@ -102,9 +106,17 @@ namespace QS3D.Core.SmokeTests
 
                 var secondDetail = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "Finish", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1 };
                 secondDetail.ElementIds.Add("WF-2"); secondDetail.SourceHandles.Add("40AA");
-                var summary = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "Finish", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 2 };
-                summary.ElementIds.Add("WF-1"); summary.ElementIds.Add("WF-2"); summary.SourceHandles.Add("AB12"); summary.SourceHandles.Add("30DE"); summary.SourceHandles.Add("40AA");
-                XlsxQuantityExporter.ExportEd2(ed2Path, new[] { row, secondDetail }, new[] { summary });
+                row.Note = "$123";
+                var summary = new QuantityReportRow
+                {
+                    Floor = "F", Zone = "Z", Category = "WallFinish", FamilyId = "finish-family",
+                    FamilyName = "$12510 cost note", Material = "Concrete", DensityKgM3 = 2400d,
+                    MassKg = 4500d, DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1, GrossConcreteM3 = 1e-9d
+                };
+                summary.ElementIds.Add("WF-1"); summary.SourceHandles.Add("AB12"); summary.SourceHandles.Add("30DE");
+                var secondSummary = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "Finish", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1 };
+                secondSummary.ElementIds.Add("WF-2"); secondSummary.SourceHandles.Add("40AA");
+                XlsxQuantityExporter.ExportEd2(ed2Path, new[] { row, secondDetail }, new[] { summary, secondSummary });
                 using (var archive = ZipFile.OpenRead(ed2Path))
                 {
                     True(archive.GetEntry("xl/worksheets/sheet1.xml") != null);
@@ -122,14 +134,36 @@ namespace QS3D.Core.SmokeTests
                         True(detailSheet.Contains("Tầng/Zone")); True(detailSheet.Contains("Khối lượng riêng (kg/m³)"));
                         True(detailSheet.Contains("Khối lượng (kg)")); True(detailSheet.Contains("Ghi chú"));
                         True(detailSheet.Contains(">2400<")); True(detailSheet.Contains(">4500<"));
+                        True(detailSheet.Contains("r=\"A2\" s=\"4\"><v>1</v>"));
+                        True(detailSheet.Contains("r=\"G2\" s=\"4\"><v>1</v>"));
+                        True(detailSheet.Contains("r=\"H2\" s=\"5\"><v>1E-09</v>"));
+                        True(detailSheet.Contains("r=\"T2\" s=\"2\"><v>2400</v>"));
+                        True(detailSheet.Contains("r=\"U2\" s=\"2\"><v>4500</v>"));
                         True(!detailSheet.Contains("r=\"T3\"")); True(!detailSheet.Contains("r=\"U3\""));
                         True(detailSheet.Contains("QS3D Element ID")); True(detailSheet.Contains("CAD Handle (hex)"));
                         True(detailSheet.Contains("QS3D Drawing Fingerprint"));
+                    }
+                    using (var reader = new StreamReader(archive.GetEntry("xl/styles.xml")!.Open(), Encoding.UTF8))
+                    {
+                        var styles = reader.ReadToEnd();
+                        True(styles.Contains("numFmtId=\"164\" formatCode=\"#,##0.000\""));
+                        True(styles.Contains("cellXfs count=\"6\""));
                     }
                 }
                 var ed2Detail = XlsxHandleReader.ReadHandleLookup(ed2Path, 3);
                 Equal(1, ed2Detail.Handles.Count); Equal("40AA", ed2Detail.Handles[0]); Equal(1, ed2Detail.ElementIds.Count); Equal("WF-2", ed2Detail.ElementIds[0]); Equal("DWG-FINGERPRINT-1", ed2Detail.DrawingFingerprint);
                 Equal("CHI_TIET", ed2Detail.WorksheetName); True(ed2Detail.IsModernSchema); True(ed2Detail.IsEd2Detail);
+                CloneWorkbookReplacingText(
+                    ed2Path,
+                    downgradedEd2Path,
+                    "xl/worksheets/sheet1.xml",
+                    new[]
+                    {
+                        ("QS3D Element ID", "Removed Element Header"),
+                        ("QS3D Drawing Fingerprint", "Removed Fingerprint Header"),
+                    });
+                Throws<InvalidDataException>(() => XlsxHandleReader.ReadHandleLookup(downgradedEd2Path, 2));
+                summary.Count = 2;
                 Throws<InvalidDataException>(() => XlsxQuantityExporter.ExportEd2(ed2Path, new[] { summary }, new[] { summary }));
 
                 CreateReorderedEd2Workbook(reorderedEd2Path);
@@ -142,8 +176,8 @@ namespace QS3D.Core.SmokeTests
                 using (var writer = new StreamWriter(archive.CreateEntry("xl/worksheets/sheet1.xml").Open(), new UTF8Encoding(false)))
                     writer.Write("<?xml version=\"1.0\" encoding=\"UTF-8\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"E1\" t=\"inlineStr\"><is><t>Handle</t></is></c></row><row r=\"5\"><c r=\"A5\" t=\"inlineStr\"><is><t>$12510$12512</t></is></c><c r=\"E5\" t=\"inlineStr\"><is><t>CF4</t></is></c></row></sheetData></worksheet>");
                 var legacy = XlsxHandleReader.ReadHandleLookup(bltPath, 5);
-                Equal(2, legacy.Handles.Count); Equal("30DE", legacy.Handles[0]); Equal("30E0", legacy.Handles[1]);
-                Equal(string.Empty, legacy.DrawingFingerprint); True(legacy.UsesLegacyDecimalHandles);
+                Equal(1, legacy.Handles.Count); Equal("CF4", legacy.Handles[0]);
+                Equal(string.Empty, legacy.DrawingFingerprint); True(!legacy.UsesLegacyDecimalHandles);
             }
             finally { DeleteDirectory(directory); }
         }
@@ -216,10 +250,16 @@ namespace QS3D.Core.SmokeTests
             {
                 var project = NewRevisionProject(); var store = new QsdbProjectStore(); store.Save(project, path);
                 var original = File.ReadAllText(path);
-                project.Metadata[string.Empty] = "invalid";
+                Throws<ArgumentException>(() => project.Metadata[string.Empty] = "invalid");
+                var metadataItemsField = project.Metadata.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?? throw new InvalidOperationException("Project metadata backing dictionary field is unavailable.");
+                var metadataItems = metadataItemsField.GetValue(project.Metadata) as IDictionary<string, string>
+                    ?? throw new InvalidOperationException("Project metadata backing dictionary is unavailable.");
+                metadataItems[string.Empty] = "invalid";
+                Equal("invalid", project.Metadata[string.Empty]);
                 Throws<InvalidDataException>(() => store.Save(project, path));
                 Equal(original, File.ReadAllText(path));
-                project.Metadata.Remove(string.Empty);
+                metadataItems.Remove(string.Empty);
                 var zone = project.Zones.Single(); var originalZoneName = zone.Name;
                 Throws<ArgumentException>(() => zone.Name = string.Empty);
                 Equal(originalZoneName, zone.Name);
@@ -257,11 +297,20 @@ namespace QS3D.Core.SmokeTests
                 }));
                 Equal("quantity-sentinel", File.ReadAllText(quantityPath));
 
-                Throws<System.Xml.XmlException>(() => XlsxQuantityExporter.Export(quantityPath, new[]
+                XlsxQuantityExporter.Export(quantityPath, new[]
                 {
                     new QuantityReportRow { Floor = "F", Category = "Beam", FamilyName = "Bad\u0001Name", Count = 1 }
-                }));
-                Equal("quantity-sentinel", File.ReadAllText(quantityPath));
+                });
+                using (var archive = ZipFile.OpenRead(quantityPath))
+                {
+                    var worksheet = archive.GetEntry("xl/worksheets/sheet1.xml") ?? throw new Exception("Sanitized quantity worksheet is missing.");
+                    using (var reader = new StreamReader(worksheet.Open()))
+                    {
+                        var xml = reader.ReadToEnd();
+                        True(xml.IndexOf('\u0001') < 0);
+                        True(xml.IndexOf('\uFFFD') >= 0);
+                    }
+                }
 
                 File.WriteAllText(rebarPath, "rebar-sentinel");
                 Throws<ArgumentOutOfRangeException>(() => XlsxRebarScheduleExporter.Export(rebarPath, new[]
@@ -277,6 +326,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState(Guid.NewGuid().ToString("N"), "Revision");
             project.Zones.Add(new ZoneDefinition("z", "Vùng")); project.Floors.Add(new FloorDefinition("f", "Tầng", 0));
+            project.Families.Add(new ProjectFamily("beam-family", "Beam", ElementCategory.Beam));
             var element = new ProjectElement("B1", ElementCategory.Beam, "beam-family", "f", "z"); element.Properties["Material"] = "C30"; element.SourceHandles.Add("A1"); element.SetQuantity("NetVolumeM3", 1.25d); project.Elements.Add(element);
             return project;
         }
@@ -296,6 +346,39 @@ namespace QS3D.Core.SmokeTests
         private static void WriteEntry(ZipArchive archive, string path, string contents)
         {
             using (var writer = new StreamWriter(archive.CreateEntry(path).Open(), new UTF8Encoding(false))) writer.Write(contents);
+        }
+
+        private static void CloneWorkbookReplacingText(
+            string sourcePath,
+            string destinationPath,
+            string entryPath,
+            IReadOnlyList<(string From, string To)> replacements)
+        {
+            using (var source = ZipFile.OpenRead(sourcePath))
+            using (var destinationStream = new FileStream(destinationPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+            using (var destination = new ZipArchive(destinationStream, ZipArchiveMode.Create, false, Encoding.UTF8))
+            {
+                foreach (var entry in source.Entries)
+                {
+                    var output = destination.CreateEntry(entry.FullName, CompressionLevel.Optimal);
+                    using (var inputStream = entry.Open())
+                    using (var outputStream = output.Open())
+                    {
+                        if (!string.Equals(entry.FullName, entryPath, StringComparison.Ordinal))
+                        {
+                            inputStream.CopyTo(outputStream);
+                            continue;
+                        }
+                        using (var reader = new StreamReader(inputStream, Encoding.UTF8, true, 1024, true))
+                        using (var writer = new StreamWriter(outputStream, new UTF8Encoding(false), 1024, true))
+                        {
+                            var text = reader.ReadToEnd();
+                            foreach (var replacement in replacements) text = text.Replace(replacement.From, replacement.To);
+                            writer.Write(text);
+                        }
+                    }
+                }
+            }
         }
 
         private static string TempDirectory(string name)

@@ -50,8 +50,6 @@ if not errors:
         if needle in s:
             errors.append(f"provenance-only store crosses native ownership boundary: {needle}")
 
-    # Project metadata is intentionally absent from the interchange exporter. Otherwise an imported
-    # provenance record could be serialized again as if it were local drawing authority.
     if "project.Metadata" in e or "project.Metadata".lower() in e.lower():
         errors.append("semantic snapshot exporter must not serialize Project.Metadata provenance records")
     if "Interchange.Provenance" in o:
@@ -59,7 +57,13 @@ if not errors:
 
     required_command = [
         '[CommandMethod("QS3DINTERCHANGEPROVENANCE", CommandFlags.Modal)]',
-        "ProjectInterchangeSourceHandleProvenance.Plan(project, json)",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var reviewProject)",
+        "ProjectInterchangeSourceHandleProvenance.Plan(reviewProject, json)",
+        "var reviewProjectId = reviewProject.ProjectId;",
+        "var reviewUpdatedUtc = reviewProject.UpdatedUtc;",
+        "var reviewChangeVersion = reviewProject.ChangeVersion;",
+        "var reviewDrawingFingerprint = reviewProject.DrawingFingerprint ?? string.Empty;",
+        'ExistingProjectMutationContext.Require(document, "Interchange provenance import")',
         "ProjectInterchangeSourceHandleProvenance.Store(project, json)",
         "ProjectInterchangeJsonValidator.MaxFileBytes",
         "new UTF8Encoding(false, true)",
@@ -69,7 +73,16 @@ if not errors:
     ]
     for needle in required_command:
         if needle not in c:
-            errors.append(f"provenance command missing guarded UX contract: {needle}")
+            errors.append(f"provenance command missing guarded UX/freshness contract: {needle}")
+    if "ProjectContextCoordinator.GetOrCreate(document)" in c:
+        errors.append("provenance review/commit must not create/cache replacement project state")
+
+    plan = c.find("ProjectInterchangeSourceHandleProvenance.Plan(reviewProject, json)")
+    confirm = c.find("MessageBoxButton.YesNo", plan if plan >= 0 else 0)
+    bind = c.find('ExistingProjectMutationContext.Require(document, "Interchange provenance import")')
+    store_pos = c.find("ProjectInterchangeSourceHandleProvenance.Store(project, json)")
+    if min(plan, confirm, bind, store_pos) < 0 or not plan < confirm < bind < store_pos:
+        errors.append("provenance command must review/plan first, confirm, rebind canonical existing state, validate snapshot stamps, then store")
 
     all_cs = "\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in (root / "src").rglob("*.cs"))
     registrations = len(re.findall(r'\[CommandMethod\("QS3DINTERCHANGEPROVENANCE"', all_cs))
@@ -89,4 +102,4 @@ if errors:
     sys.exit(1)
 
 print("preflight-interchange-source-provenance: PASS")
-print("Imported source handles are stored only as project provenance metadata; identity lookup is case-stable, they cannot become target DWG source/generated ownership, and they are not re-exported by SemanticSnapshot v1.")
+print("Imported source handles are reviewed on a read-only snapshot, committed only after canonical existing-project rebind/freshness validation, stored solely as provenance metadata, and never become target DWG ownership.")

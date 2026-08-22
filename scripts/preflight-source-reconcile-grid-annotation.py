@@ -21,15 +21,16 @@ required = {
     "grid text type guard": "entity is DBText",
     "grid CAD erase": "entity.Erase();",
     "grid metadata cleanup": 'RemoveByPrefix(element, "GeneratedGridAnnotation")',
+    "semantic tag metadata cleanup": 'RemoveByPrefix(element, "GeneratedSemanticTag")',
+    "semantic tag live validation": "EnsureSemanticTagsLive(document, project, element);",
+    "semantic tag transactional erase": "EraseSemanticTags(document, transaction, project, element);",
+    "semantic tag owner slot": "GeneratedSemanticTagHealthService.HandlesKey",
+    "semantic tag type guard": "entity is MText",
+    "semantic tag ownership verification": 'GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "erase stale Semantic Tag " + id.Handle)',
 }
 for label, token in required.items():
     if token not in text:
         raise SystemExit(f"source-reconcile grid annotation preflight failed: missing {label}: {token}")
-
-if 'RemoveByPrefix(element, "GeneratedSemanticTag")' in text:
-    raise SystemExit("source-reconcile grid annotation preflight failed: semantic tags must not be removed by generic source reconcile")
-if "GeneratedSemanticTagHandles" in text:
-    raise SystemExit("source-reconcile grid annotation preflight failed: semantic tag handles must remain outside spatial generated-output invalidation")
 
 for token in (
     "internal static void RebuildInTransaction(",

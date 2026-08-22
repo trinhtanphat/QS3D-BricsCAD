@@ -20,7 +20,7 @@ namespace QS3D.Core.Geometry
             To = to;
             Distance = distance;
             JunctionKind = junctionKind;
-            JunctionSegmentIds = junctionSegmentIds ?? throw new ArgumentNullException(nameof(junctionSegmentIds));
+            JunctionSegmentIds = new List<string>(junctionSegmentIds ?? throw new ArgumentNullException(nameof(junctionSegmentIds))).AsReadOnly();
         }
 
         public string SegmentId { get; }
@@ -36,8 +36,8 @@ namespace QS3D.Core.Geometry
     {
         public WallJunctionAdjustmentPlan(IReadOnlyList<WallJunction> junctions, IReadOnlyList<WallEndpointAdjustment> adjustments)
         {
-            Junctions = junctions ?? throw new ArgumentNullException(nameof(junctions));
-            Adjustments = adjustments ?? throw new ArgumentNullException(nameof(adjustments));
+            Junctions = new List<WallJunction>(junctions ?? throw new ArgumentNullException(nameof(junctions))).AsReadOnly();
+            Adjustments = new List<WallEndpointAdjustment>(adjustments ?? throw new ArgumentNullException(nameof(adjustments))).AsReadOnly();
         }
 
         public IReadOnlyList<WallJunction> Junctions { get; }
@@ -46,13 +46,17 @@ namespace QS3D.Core.Geometry
 
     public sealed class WallJunctionAdjustmentPlanner
     {
+        private const int MaxSegments = 10000;
+
         public WallJunctionAdjustmentPlan Plan(IEnumerable<WallAxisSegment> source, double junctionTolerance = 0.005d, double movementEpsilon = 1e-9d)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             if (!Finite(junctionTolerance) || junctionTolerance <= 0d) throw new ArgumentOutOfRangeException(nameof(junctionTolerance));
             if (!Finite(movementEpsilon) || movementEpsilon < 0d || movementEpsilon >= junctionTolerance) throw new ArgumentOutOfRangeException(nameof(movementEpsilon));
 
-            var segments = source.ToList();
+            var segments = source.Take(MaxSegments + 1).ToList();
+            if (segments.Count > MaxSegments)
+                throw new InvalidOperationException("Wall junction planning supports at most " + MaxSegments + " segments per batch.");
             var junctions = new WallJunctionPlanner().Plan(segments, junctionTolerance);
             var segmentsById = segments.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             foreach (var junction in junctions.Where(x => x.SegmentIds.Count > 1))

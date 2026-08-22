@@ -31,7 +31,7 @@ if theme.is_file():
         'Property="TextOptions.TextFormattingMode" Value="Display"',
         'Property="IsKeyboardFocused" Value="True"',
         'Property="IsKeyboardFocusWithin" Value="True"',
-        'VirtualizingStackPanel.VirtualizationMode" Value="Recycling"',
+        'VirtualizingPanel.VirtualizationMode" Value="Recycling"',
         'Property="EnableRowVirtualization" Value="True"',
         'Property="EnableColumnVirtualization" Value="True"',
         'Property="ScrollViewer.CanContentScroll" Value="True"',
@@ -43,7 +43,10 @@ workspace = files["workspace"]
 if workspace.is_file():
     text = workspace.read_text(encoding="utf-8")
     for needle in (
-        'MinWidth="485"', 'MinHeight="520"', 'ResourceDictionary Source="Theme.xaml"',
+        'MinWidth="0"', 'MinHeight="0"', 'x:Name="WorkspaceContentRoot"', 'MinWidth="560"',
+        'HorizontalScrollBarVisibility="Auto"', 'VerticalScrollBarVisibility="Disabled"',
+        'Width="{Binding ViewportWidth, ElementName=WorkspaceOverflow}"',
+        'ResourceDictionary Source="Theme.xaml"',
         'TextTrimming="CharacterEllipsis"', 'ToolTip="{Binding Status}"',
         'ToolTip="Reset override về giá trị Family"', 'VIEWPORT BRICSCAD',
     ):

@@ -42,23 +42,44 @@ namespace QS3D.Core.Geometry
             Finite(input.CenterAlongHostM, nameof(input.CenterAlongHostM));
 
             var halfWidth = input.OpeningWidthM / 2d;
+            Finite(halfWidth, nameof(halfWidth));
+            if (halfWidth == 0d)
+                throw new OverflowException("Opening half-width underflowed to zero.");
+
             var start = input.CenterAlongHostM - halfWidth;
             var end = input.CenterAlongHostM + halfWidth;
             Finite(start, nameof(start));
             Finite(end, nameof(end));
+            if (!(start < input.CenterAlongHostM) || !(end > input.CenterAlongHostM))
+                throw new OverflowException("Opening width cannot be represented at the requested center coordinate.");
             if (start < 0d || end > input.HostLengthM)
                 throw new InvalidOperationException("Opening width/position extends beyond the host wall length.");
 
             var openingTop = Add(input.SillHeightM, input.OpeningHeightM, "opening top");
+            if (!(openingTop > input.SillHeightM))
+                throw new OverflowException("Opening height cannot be represented at the requested sill elevation.");
             if (openingTop > input.HostHeightM)
                 throw new InvalidOperationException("Opening height/sill extends above the host wall height.");
 
-            var cutterWidth = Add(input.OpeningWidthM, Multiply(input.ClearanceM, 2d, "opening horizontal clearance"), "cutter width");
-            var cutterDepth = Add(input.HostThicknessM, Multiply(input.ClearanceM, 2d, "opening depth clearance"), "cutter depth");
-            var cutterHeight = Add(input.OpeningHeightM, Multiply(input.ClearanceM, 2d, "opening vertical clearance"), "cutter height");
+            var doubledClearance = Multiply(input.ClearanceM, 2d, "opening cutter clearance");
+            var cutterWidth = Add(input.OpeningWidthM, doubledClearance, "cutter width");
+            var cutterDepth = Add(input.HostThicknessM, doubledClearance, "cutter depth");
+            var cutterHeight = Add(input.OpeningHeightM, doubledClearance, "cutter height");
             var baseElevation = input.SillHeightM - input.ClearanceM;
             Finite(baseElevation, nameof(baseElevation));
             var topElevation = Add(openingTop, input.ClearanceM, "cutter top");
+
+            if (input.ClearanceM > 0d)
+            {
+                RequireStrictExpansion(input.OpeningWidthM, cutterWidth, "cutter width");
+                RequireStrictExpansion(input.HostThicknessM, cutterDepth, "cutter depth");
+                RequireStrictExpansion(input.OpeningHeightM, cutterHeight, "cutter height");
+                if (!(baseElevation < input.SillHeightM))
+                    throw new OverflowException("Positive cutter clearance cannot be represented below the opening sill.");
+                if (!(topElevation > openingTop))
+                    throw new OverflowException("Positive cutter clearance cannot be represented above the opening top.");
+            }
+
             var centerElevation = Midpoint(baseElevation, topElevation, "cutter center elevation");
 
             return new OpeningCutPlan
@@ -73,6 +94,12 @@ namespace QS3D.Core.Geometry
                 CenterAlongHostM = input.CenterAlongHostM,
                 CenterElevationM = centerElevation
             };
+        }
+
+        private static void RequireStrictExpansion(double original, double expanded, string label)
+        {
+            if (!(expanded > original))
+                throw new OverflowException("Positive clearance for " + label + " was lost to floating-point precision.");
         }
 
         private static double Midpoint(double a, double b, string label)

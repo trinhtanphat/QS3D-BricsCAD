@@ -32,7 +32,8 @@ def require_count(text, token, count, label):
 
 sources = {name: read(path) for name, path in FILES.items()}
 get_or_create = "ProjectContextCoordinator.GetOrCreate(document)"
-read_only_defaults = "ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject)"
+preview_capture = "DirectDrawProjectPreviewContext.Capture(document)"
+preview_resolve = "projectPreview.ResolveForMutation(document, operation)"
 
 commands = {
     "p0": ("QS3DDRAWWALL", "QS3DDRAWBEAM", "QS3DDRAWSLAB", "QS3DDRAWCOLUMN"),
@@ -46,11 +47,12 @@ for name, names in commands.items():
     for command in names:
         require(text, command, name)
 
-# P0/P1/Opening entrypoints may read defaults from an existing project, but must not
+# P0/P1 entrypoints may read defaults from an existing project, but must not
 # create/cache a project until their private execution helper begins.
-for name, helper in (("p0", "private static void ExecuteDirect"), ("p1", "private static void Execute("), ("opening", "private static void Execute(")):
+for name, helper in (("p0", "private static void ExecuteDirect"), ("p1", "private static void Execute(")):
     text = sources[name]
-    require(text, read_only_defaults, name)
+    require(text, preview_capture, name)
+    require(text, preview_resolve, name)
     require_count(text, get_or_create, 1, name)
     helper_index = text.find(helper)
     create_index = text.find(get_or_create)
@@ -59,14 +61,28 @@ for name, helper in (("p0", "private static void ExecuteDirect"), ("p1", "privat
     if helper_index >= 0 and get_or_create in text[:helper_index]:
         errors.append(name + " command entrypoints must not create/cache a project before parameter prompts complete")
 
-# Reference-wall authoring creates the project in the public command, so lock the
-# explicit ordering relative to every numeric prompt and the execute-boundary guard.
+# Opening resolves a captured preview in its executor; it must not bypass prompt
+# cancellation or identity freshness with command-local GetOrCreate.
+opening = sources["opening"]
+require(opening, "DirectDrawProjectPreviewContext.Capture(document)", "opening")
+require(opening, "projectPreview.ResolveForMutation(document, operation)", "opening")
+if get_or_create in opening:
+    errors.append("opening must not bypass preview project freshness with direct GetOrCreate")
+opening_resolve = opening.find("projectPreview.ResolveForMutation(document, operation)")
+opening_snapshot = opening.find("ProjectStateSnapshot.Capture(project)")
+if min(opening_resolve, opening_snapshot) < 0 or opening_resolve > opening_snapshot:
+    errors.append("opening must resolve the preview project before semantic mutation")
+
+# Reference-wall authoring resolves the captured preview after every numeric
+# prompt and the execute-boundary guard.
 # Use prompt labels rather than whitespace-sensitive whole call expressions.
 reference = sources["reference"]
-require(reference, read_only_defaults, "reference")
-require_count(reference, get_or_create, 1, "reference")
-create_index = reference.find(get_or_create)
-boundary_index = reference.find('EnsureActive(document, "QS3DDRAWWALLREF / execute boundary")')
+require(reference, "DirectDrawProjectPreviewContext.Capture(document)", "reference")
+require(reference, "projectPreview.ResolveForMutation(document, operation)", "reference")
+if get_or_create in reference:
+    errors.append("reference must not bypass preview project freshness with direct GetOrCreate")
+create_index = reference.find("projectPreview.ResolveForMutation(document, operation)")
+boundary_index = reference.find('EnsureActive(document, operation + " / execute boundary")')
 prompt_labels = (
     '"Chiều dài Tường (m)"',
     '"Bề dày Tường (m)"',
@@ -78,9 +94,9 @@ for token in prompt_labels:
     if index < 0:
         errors.append("reference missing parameter prompt label: " + token)
     elif create_index >= 0 and index > create_index:
-        errors.append("reference must not GetOrCreate before prompt completes: " + token)
+        errors.append("reference must not resolve a mutation project before prompt completes: " + token)
 if create_index < 0 or boundary_index < 0 or create_index < boundary_index:
-    errors.append("reference GetOrCreate must occur only after the explicit execute-boundary active-DWG guard")
+    errors.append("reference project resolution must occur only after the explicit execute-boundary active-DWG guard")
 
 # Preserve clean-DWG fallback defaults when no project exists; read-only lookup must
 # not turn a cancel into project creation merely to obtain Family defaults.
@@ -99,4 +115,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Direct Draw reads existing Family defaults without creating a project and defers GetOrCreate until all authoring prompts have completed successfully.")
+print("PASS: Direct Draw captures non-creating Family defaults, resolves the guarded project preview only after prompts, and keeps fallback GetOrCreate inside the private execution helper.")

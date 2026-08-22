@@ -33,26 +33,69 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWGLASSWALL", () =>
             {
                 RequireModelSpace(document);
+                var points = AcquirePath(document, "Vách Kính nhanh", 2, false);
+                if (points == null) return;
+
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
+                var thicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.GlassWall, "ThicknessM", 0.012d) : 0.012d;
+                var heightM = hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.GlassWall, "HeightM", 3.6d) : 3.6d;
+                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.GlassWall, "BottomOffsetM", 0d) : 0d;
+
+                document.Editor.WriteMessage(
+                    "\nQS3D Vách Kính nhanh: dùng Family hiện tại (dày " + thicknessM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m, cao " + heightM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m, offset " + bottomOffsetM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m). Dùng QS3DDRAWGLASSWALLADV khi cần nhập tham số riêng.");
+
+                Execute(
+                    document,
+                    ElementCategory.GlassWall,
+                    () => points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false),
+                    element =>
+                    {
+                        element.SetProperty("ThicknessM", thicknessM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
+                    },
+                    projectPreview);
+            });
+        }
+
+        [CommandMethod("QS3DDRAWGLASSWALLADV", CommandFlags.Modal)]
+        public void DrawGlassWallAdvanced()
+        {
+            var document = Active();
+            if (document == null) return;
+            Guard(document, "QS3DDRAWGLASSWALLADV", () =>
+            {
+                RequireModelSpace(document);
+                var promptUnit = CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var points = AcquirePath(document, "Vách Kính", 2, false);
                 if (points == null) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
                 var thicknessM = PromptPositiveMeters(
                     document.Editor,
                     "Bề dày Vách Kính (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.GlassWall, "ThicknessM", 0.012d) : 0.012d);
+                    hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.GlassWall, "ThicknessM", 0.012d) : 0.012d);
                 if (!thicknessM.HasValue) return;
                 var heightM = PromptPositiveMeters(
                     document.Editor,
                     "Chiều cao Vách Kính (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.GlassWall, "HeightM", 3.6d) : 3.6d);
+                    hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.GlassWall, "HeightM", 3.6d) : 3.6d);
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(
                     document.Editor,
                     "Offset đáy Vách Kính so với Z source (m)",
-                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.GlassWall, "BottomOffsetM", 0d) : 0d);
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.GlassWall, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWGLASSWALLADV");
                 Execute(
                     document,
                     ElementCategory.GlassWall,
@@ -62,7 +105,8 @@ namespace QS3D.BricsCAD.V25
                         element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 
@@ -75,26 +119,70 @@ namespace QS3D.BricsCAD.V25
             {
                 RequireModelSpace(document);
                 // WallPier stays LINE-only so QS3DBUILD3D reaches the specialized profile builder.
+                var points = AcquireFixedPath(document, "Trụ Tường nhanh", 2);
+                if (points == null) return;
+
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
+                var thicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.WallPier, "ThicknessM", 0.2d) : 0.2d;
+                var heightM = hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.WallPier, "HeightM", 3.6d) : 3.6d;
+                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.WallPier, "BottomOffsetM", 0d) : 0d;
+
+                document.Editor.WriteMessage(
+                    "\nQS3D Trụ Tường nhanh: dùng Family hiện tại (dày " + thicknessM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m, cao " + heightM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m, offset " + bottomOffsetM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m). Dùng QS3DDRAWWALLPIERADV khi cần nhập tham số riêng.");
+
+                Execute(
+                    document,
+                    ElementCategory.WallPier,
+                    () => CreateLine(document, points[0], points[1]),
+                    element =>
+                    {
+                        element.SetProperty("ThicknessM", thicknessM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
+                    },
+                    projectPreview);
+            });
+        }
+
+        [CommandMethod("QS3DDRAWWALLPIERADV", CommandFlags.Modal)]
+        public void DrawWallPierAdvanced()
+        {
+            var document = Active();
+            if (document == null) return;
+            Guard(document, "QS3DDRAWWALLPIERADV", () =>
+            {
+                RequireModelSpace(document);
+                var promptUnit = CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
+                // Advanced WallPier keeps the same specialized two-point LINE geometry contract.
                 var points = AcquireFixedPath(document, "Trụ Tường", 2);
                 if (points == null) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
                 var thicknessM = PromptPositiveMeters(
                     document.Editor,
                     "Bề dày Trụ Tường (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.WallPier, "ThicknessM", 0.2d) : 0.2d);
+                    hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.WallPier, "ThicknessM", 0.2d) : 0.2d);
                 if (!thicknessM.HasValue) return;
                 var heightM = PromptPositiveMeters(
                     document.Editor,
                     "Chiều cao Trụ Tường (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.WallPier, "HeightM", 3.6d) : 3.6d);
+                    hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.WallPier, "HeightM", 3.6d) : 3.6d);
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(
                     document.Editor,
                     "Offset đáy Trụ Tường so với Z source (m)",
-                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.WallPier, "BottomOffsetM", 0d) : 0d);
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.WallPier, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWWALLPIERADV");
                 Execute(
                     document,
                     ElementCategory.WallPier,
@@ -104,7 +192,8 @@ namespace QS3D.BricsCAD.V25
                         element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 
@@ -116,26 +205,69 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWSTRUCTWALL", () =>
             {
                 RequireModelSpace(document);
+                var points = AcquireFixedPath(document, "Vách BTCT nhanh", 2);
+                if (points == null) return;
+
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
+                var thicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.StructuralWall, "ThicknessM", 0.2d) : 0.2d;
+                var heightM = hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.StructuralWall, "HeightM", 3.6d) : 3.6d;
+                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.StructuralWall, "BottomOffsetM", 0d) : 0d;
+
+                document.Editor.WriteMessage(
+                    "\nQS3D Vách BTCT nhanh: dùng Family hiện tại (dày " + thicknessM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m, cao " + heightM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m, offset " + bottomOffsetM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m). Dùng QS3DDRAWSTRUCTWALLADV khi cần nhập tham số riêng.");
+
+                Execute(
+                    document,
+                    ElementCategory.StructuralWall,
+                    () => CreateLine(document, points[0], points[1]),
+                    element =>
+                    {
+                        element.SetProperty("ThicknessM", thicknessM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("HeightM", heightM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
+                    },
+                    projectPreview);
+            });
+        }
+
+        [CommandMethod("QS3DDRAWSTRUCTWALLADV", CommandFlags.Modal)]
+        public void DrawStructuralWallAdvanced()
+        {
+            var document = Active();
+            if (document == null) return;
+            Guard(document, "QS3DDRAWSTRUCTWALLADV", () =>
+            {
+                RequireModelSpace(document);
+                var promptUnit = CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var points = AcquireFixedPath(document, "Vách BTCT", 2);
                 if (points == null) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
                 var thicknessM = PromptPositiveMeters(
                     document.Editor,
                     "Bề dày Vách BTCT (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.StructuralWall, "ThicknessM", 0.2d) : 0.2d);
+                    hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.StructuralWall, "ThicknessM", 0.2d) : 0.2d);
                 if (!thicknessM.HasValue) return;
                 var heightM = PromptPositiveMeters(
                     document.Editor,
                     "Chiều cao Vách BTCT (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.StructuralWall, "HeightM", 3.6d) : 3.6d);
+                    hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.StructuralWall, "HeightM", 3.6d) : 3.6d);
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(
                     document.Editor,
                     "Offset đáy Vách BTCT so với Z source (m)",
-                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.StructuralWall, "BottomOffsetM", 0d) : 0d);
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.StructuralWall, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWSTRUCTWALLADV");
                 Execute(
                     document,
                     ElementCategory.StructuralWall,
@@ -145,7 +277,8 @@ namespace QS3D.BricsCAD.V25
                         element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 
@@ -157,21 +290,61 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWFOUNDATION", () =>
             {
                 RequireModelSpace(document);
+                var points = AcquirePath(document, "Móng nhanh", 3, true);
+                if (points == null) return;
+
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
+                var thicknessM = hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.Foundation, "ThicknessM", 0.5d) : 0.5d;
+                var bottomOffsetM = hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Foundation, "BottomOffsetM", 0d) : 0d;
+
+                document.Editor.WriteMessage(
+                    "\nQS3D Móng nhanh: dùng Family hiện tại (dày " + thicknessM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m, offset " + bottomOffsetM.ToString("0.###", CultureInfo.InvariantCulture) +
+                    " m). Dùng QS3DDRAWFOUNDATIONADV khi cần nhập tham số riêng.");
+
+                Execute(
+                    document,
+                    ElementCategory.Foundation,
+                    () => CreatePolyline(document, points, true),
+                    element =>
+                    {
+                        element.SetProperty("ThicknessM", thicknessM.ToString("R", CultureInfo.InvariantCulture));
+                        element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
+                    },
+                    projectPreview);
+            });
+        }
+
+        [CommandMethod("QS3DDRAWFOUNDATIONADV", CommandFlags.Modal)]
+        public void DrawFoundationAdvanced()
+        {
+            var document = Active();
+            if (document == null) return;
+            Guard(document, "QS3DDRAWFOUNDATIONADV", () =>
+            {
+                RequireModelSpace(document);
+                var promptUnit = CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var points = AcquirePath(document, "Móng", 3, true);
                 if (points == null) return;
 
-                var hasDefaultsProject = ProjectContextCoordinator.TryGetReadOnly(document, out var defaultsProject);
+                var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
+                var defaultsProject = projectPreview.DefaultsProject;
+                var hasDefaultsProject = projectPreview.HasProject;
                 var thicknessM = PromptPositiveMeters(
                     document.Editor,
                     "Bề dày Móng (m)",
-                    hasDefaultsProject ? FamilyNumber(defaultsProject, ElementCategory.Foundation, "ThicknessM", 0.5d) : 0.5d);
+                    hasDefaultsProject ? FamilyNumber(defaultsProject!, ElementCategory.Foundation, "ThicknessM", 0.5d) : 0.5d);
                 if (!thicknessM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(
                     document.Editor,
                     "Offset đáy Móng so với Z source (m)",
-                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject, ElementCategory.Foundation, "BottomOffsetM", 0d) : 0d);
+                    hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Foundation, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
 
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWFOUNDATIONADV");
                 Execute(
                     document,
                     ElementCategory.Foundation,
@@ -180,14 +353,26 @@ namespace QS3D.BricsCAD.V25
                     {
                         element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
-                    });
+                    },
+                    projectPreview);
             });
         }
 
-        private static void Execute(Document document, ElementCategory category, Func<ObjectId> createSource, Action<ProjectElement> configureElement)
+        private static void Execute(
+            Document document,
+            ElementCategory category,
+            Func<ObjectId> createSource,
+            Action<ProjectElement> configureElement,
+            DirectDrawProjectPreviewContext? projectPreview = null)
         {
-            EnsureActive(document, "Direct Draw P1 " + category);
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            var operation = "Direct Draw P1 " + category;
+            EnsureActive(document, operation);
+            var projectExistedBeforeAuthoring = projectPreview != null
+                ? projectPreview.HasProject
+                : ProjectContextCoordinator.TryGetReadOnly(document, out _);
+            var project = projectPreview != null
+                ? projectPreview.ResolveForMutation(document, operation)
+                : ProjectContextCoordinator.GetOrCreate(document);
             var rollback = ProjectStateSnapshot.Capture(project);
             var sourceId = ObjectId.Null;
             var sourceHandle = string.Empty;
@@ -212,10 +397,10 @@ namespace QS3D.BricsCAD.V25
 
                 // QS3DBUILD3D resolves the active document internally. Re-check immediately before
                 // delegating so a document switch can never redirect this P1 operation to another DWG.
-                EnsureActive(document, "Direct Draw P1 " + category + " / QS3DBUILD3D");
+                EnsureActive(document, operation + " / QS3DBUILD3D");
                 document.Editor.SetImpliedSelection(new[] { sourceId });
                 new Build3DCommands().Build3D();
-                EnsureActive(document, "Direct Draw P1 " + category + " / post QS3DBUILD3D");
+                EnsureActive(document, operation + " / post QS3DBUILD3D");
 
                 // QS3DBUILD3D may restore its own ProjectState snapshot and report the failure at its
                 // command surface instead of throwing to this wrapper. A restore replaces element
@@ -255,6 +440,7 @@ namespace QS3D.BricsCAD.V25
                 catch (Exception ex) { cleanupError = ex; }
                 try { rollback.Restore(project); }
                 catch (Exception ex) { restoreError = ex; }
+                if (!projectExistedBeforeAuthoring) ProjectContextCoordinator.Forget(document);
                 try { document.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
                 catch { }
 
@@ -383,7 +569,7 @@ namespace QS3D.BricsCAD.V25
 
         private static double? PromptPositiveMeters(Editor editor, string label, double defaultValue)
         {
-            var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
+            var options = new PromptDoubleOptions("\n" + label + ": ")
             {
                 AllowNegative = false,
                 AllowZero = false,
@@ -401,7 +587,7 @@ namespace QS3D.BricsCAD.V25
 
         private static double? PromptFiniteMeters(Editor editor, string label, double defaultValue)
         {
-            var options = new PromptDoubleOptions("\n" + label + " <" + defaultValue.ToString("0.###", CultureInfo.InvariantCulture) + ">: ")
+            var options = new PromptDoubleOptions("\n" + label + ": ")
             {
                 AllowNegative = true,
                 AllowZero = true,
@@ -444,6 +630,20 @@ namespace QS3D.BricsCAD.V25
                 if (active != null && active.Category == category) return active;
             }
             return project.Families.FirstOrDefault(x => x.Category == category);
+        }
+
+        private static void RequirePromptContextUnchanged(
+            Document document,
+            QS3D.Core.Units.LengthUnit promptUnit,
+            Matrix3d promptUcs,
+            string operation)
+        {
+            EnsureActive(document, operation + " / prompt freshness");
+            RequireModelSpace(document);
+            if (!document.Editor.CurrentUserCoordinateSystem.Equals(promptUcs))
+                throw new InvalidOperationException(operation + " dừng vì Current UCS đã thay đổi trong lúc chờ nhập tham số. Hãy chạy lại lệnh.");
+            if (CadUnitService.GetLengthUnit(document) != promptUnit)
+                throw new InvalidOperationException(operation + " dừng vì drawing unit policy đã thay đổi trong lúc chờ nhập tham số. Hãy chạy lại lệnh.");
         }
 
         private static void RequireModelSpace(Document document)

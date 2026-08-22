@@ -62,7 +62,7 @@ Do **not** create repository files containing vendor DLLs, installers, or licens
 8. execute `NETLOAD` against the newly built `QS3D.BricsCAD.V25.dll`;
 9. execute the in-host `QS3DRUNTIMEPROBE` command;
 10. require a `status=PASS` marker proving the expected plugin DLL is loaded in 64-bit BricsCAD and both QS3D ribbon and palette initialization succeeded;
-11. bring the BricsCAD window to the foreground and capture `bricscad-v25-qs3d.png`;
+11. capture the BricsCAD HWND directly with `PrintWindow` into `bricscad-v25-qs3d.png`;
 12. upload the plugin DLLs and the complete runtime-evidence directory.
 
 The runtime evidence artifact contains, when successful:
@@ -71,6 +71,10 @@ The runtime evidence artifact contains, when successful:
 - `runtime-metadata.json` — host/plugin version, SHA-256, runner and timing metadata;
 - `runtime.scr` — exact NETLOAD command script used for the test;
 - `bricscad-v25-qs3d.png` — screenshot of the real BricsCAD V25 window with QS3D requested visible.
+
+The runtime helper must capture only the target BricsCAD HWND. It must not capture a desktop rectangle as a fallback, because an unrelated overlapping application could leak private UI into the qualification artifact. If `PrintWindow` cannot capture the host, the screenshot gate fails closed. `runtime-metadata.json` records `screenshot_capture=PrintWindow(hwnd)` for a successful capture.
+
+For a separately installed exact package, the same helper supports `-DemandLoadOnly -SkipScreenshot`. That mode omits the explicit load command, invokes `QS3DRUNTIMEPROBE` directly, and still requires the in-host assembly path to match the registered installed loader supplied through `-PluginDll`. Metadata records `load_mode=DemandLoad`; the normal exact-build probe records `load_mode=NETLOAD`.
 
 A build-only success is not a runtime success. Gate D is PASS only when the in-host marker and screenshot are both produced and the marker validates the expected DLL, x64 host, ribbon, and palette state.
 

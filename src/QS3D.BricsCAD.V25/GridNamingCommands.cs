@@ -22,23 +22,18 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
-            ProjectState project;
-            try
-            {
-                project = ExistingProjectMutationContext.Require(document, "Grid Renumber");
-            }
-            catch (Exception ex)
-            {
-                ReportOperationFailure(document, "QS3DGRIDNUMBER lỗi: " + ex.Message);
-                return;
-            }
 
-            IReadOnlyList<string>? orderedIds;
+            GridSelectionPlan? selectionPlan;
             GridNamingOptions? options;
+            string expectedProjectId;
             try
             {
-                orderedIds = AcquireOrderedGridIds(document, project);
-                if (orderedIds == null || orderedIds.Count == 0) return;
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
+                    throw new InvalidOperationException("Grid Renumber yêu cầu QS3D project hiện hữu; lệnh không tạo project mới.");
+                expectedProjectId = previewProject.ProjectId;
+
+                selectionPlan = AcquireOrderedGridSelection(document, previewProject);
+                if (selectionPlan == null || selectionPlan.Handles.Count == 0) return;
                 options = AcquireOptions(document.Editor);
                 if (options == null) return;
             }
@@ -48,14 +43,23 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
+            ProjectState project;
+            IReadOnlyList<string> orderedIds;
             IReadOnlyList<string> annotatedIds;
             try
             {
+                project = ExistingProjectMutationContext.Require(document, "Grid Renumber");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("QS3D project đã thay đổi trong lúc chọn Grid/naming options. Hãy chạy lại lệnh.");
+
+                orderedIds = ResolveOrderedGridIds(project, selectionPlan.Handles);
+                if (!SameGridIdentityPlan(selectionPlan.ElementIds, orderedIds))
+                    throw new InvalidOperationException("Grid renumber selection không còn khớp semantic source ownership hiện tại. Không áp dụng; hãy chọn lại.");
                 annotatedIds = CaptureAnnotatedGridIds(project, orderedIds);
             }
             catch (Exception ex)
             {
-                ReportOperationFailure(document, "QS3DGRIDNUMBER không thể xác định annotation hiện hữu: " + ex.Message);
+                ReportOperationFailure(document, "QS3DGRIDNUMBER không thể xác nhận project/selection hiện tại: " + ex.Message);
                 return;
             }
 
@@ -139,27 +143,28 @@ namespace QS3D.BricsCAD.V25
             return result;
         }
 
-        private static IReadOnlyList<string>? AcquireOrderedGridIds(Document document, ProjectState project)
+        private static GridSelectionPlan? AcquireOrderedGridSelection(Document document, ProjectState previewProject)
         {
             var editor = document.Editor;
-            var orderedIds = new List<string>();
+            var handles = new List<string>();
+            var elementIds = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            while (orderedIds.Count < MaxGridBatch)
+            while (handles.Count < MaxGridBatch)
             {
-                var prompt = orderedIds.Count == 0
+                var prompt = handles.Count == 0
                     ? "\nChọn Grid source thứ 1 theo thứ tự đánh nhãn: "
-                    : "\nChọn Grid source thứ " + (orderedIds.Count + 1).ToString(CultureInfo.InvariantCulture) + " hoặc Enter để kết thúc: ";
-                var options = new PromptEntityOptions(prompt)
+                    : "\nChọn Grid source thứ " + (handles.Count + 1).ToString(CultureInfo.InvariantCulture) + " hoặc Enter để kết thúc: ";
+                var promptOptions = new PromptEntityOptions(prompt)
                 {
-                    AllowNone = orderedIds.Count > 0
+                    AllowNone = handles.Count > 0
                 };
-                var result = editor.GetEntity(options);
-                if (result.Status == PromptStatus.None && orderedIds.Count > 0) break;
+                var result = editor.GetEntity(promptOptions);
+                if (result.Status == PromptStatus.None && handles.Count > 0) break;
                 if (result.Status != PromptStatus.OK) return null;
 
                 var handle = result.ObjectId.Handle.ToString();
-                var matches = project.Elements
+                var matches = previewProject.Elements
                     .Where(x => x != null && x.Category == ElementCategory.Grid && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
                     .Take(2)
                     .ToList();
@@ -177,12 +182,47 @@ namespace QS3D.BricsCAD.V25
                     TryWriteMessage(document, "\nGrid " + element.Id + " đã có trong thứ tự; chọn Grid khác hoặc Enter để kết thúc.");
                     continue;
                 }
-                orderedIds.Add(element.Id);
+                handles.Add(handle);
+                elementIds.Add(element.Id);
             }
 
-            if (orderedIds.Count >= MaxGridBatch)
+            if (handles.Count >= MaxGridBatch)
                 TryWriteMessage(document, "\nĐã đạt giới hạn " + MaxGridBatch.ToString(CultureInfo.InvariantCulture) + " Grid trong một batch.");
-            return orderedIds.AsReadOnly();
+            return new GridSelectionPlan(handles.AsReadOnly(), elementIds.AsReadOnly());
+        }
+
+        private static IReadOnlyList<string> ResolveOrderedGridIds(ProjectState project, IReadOnlyList<string> handles)
+        {
+            var result = new List<string>(handles.Count);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var rawHandle in handles)
+            {
+                var handle = (rawHandle ?? string.Empty).Trim();
+                if (handle.Length == 0)
+                    throw new InvalidOperationException("Grid source handle trống trong selection plan.");
+                var matches = project.Elements
+                    .Where(x => x != null && x.Category == ElementCategory.Grid && x.SourceHandles.Any(h => string.Equals(h, handle, StringComparison.OrdinalIgnoreCase)))
+                    .Take(2)
+                    .ToList();
+                if (matches.Count == 0)
+                    throw new InvalidOperationException("Grid source " + handle + " không còn thuộc semantic Grid hiện tại.");
+                if (matches.Count > 1)
+                    throw new InvalidOperationException("Grid source handle " + handle + " hiện thuộc nhiều semantic Grid; không thể renumber.");
+                if (!seen.Add(matches[0].Id))
+                    throw new InvalidOperationException("Nhiều selected source hiện resolve về cùng Grid: " + matches[0].Id + ".");
+                result.Add(matches[0].Id);
+            }
+            return result.AsReadOnly();
+        }
+
+        private static bool SameGridIdentityPlan(IReadOnlyList<string> previewIds, IReadOnlyList<string> currentIds)
+        {
+            if (previewIds == null || currentIds == null || previewIds.Count != currentIds.Count) return false;
+            for (var i = 0; i < previewIds.Count; i++)
+            {
+                if (!string.Equals(previewIds[i], currentIds[i], StringComparison.OrdinalIgnoreCase)) return false;
+            }
+            return true;
         }
 
         private static GridNamingOptions? AcquireOptions(Editor editor)
@@ -280,6 +320,18 @@ namespace QS3D.BricsCAD.V25
         private static void TryWriteMessage(Document document, string message)
         {
             try { document.Editor.WriteMessage(message); } catch { }
+        }
+
+        private sealed class GridSelectionPlan
+        {
+            public GridSelectionPlan(IReadOnlyList<string> handles, IReadOnlyList<string> elementIds)
+            {
+                Handles = handles;
+                ElementIds = elementIds;
+            }
+
+            public IReadOnlyList<string> Handles { get; }
+            public IReadOnlyList<string> ElementIds { get; }
         }
     }
 }

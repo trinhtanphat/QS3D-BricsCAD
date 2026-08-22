@@ -116,8 +116,7 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                document.Editor.SetImpliedSelection(sourceIds.ToArray());
-                var sourceSnapshots = EntitySnapshotReader.ReadImpliedSelection(document);
+                var sourceSnapshots = EntitySnapshotReader.ReadHandles(document, sourceHandles);
                 if (sourceSnapshots.Count != sourceHandles.Count)
                 {
                     Write(document, "QS3DBUILD3D: không đọc đủ source CAD sau khi resolve semantic selection. Đã dừng trước khi thay solid.");
@@ -135,19 +134,26 @@ namespace QS3D.BricsCAD.V25
                     .Select(x => x.Id)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
+                var regenerationScope = BuildRegenerationScope(project, selectedElements);
                 var semanticRollback = ProjectStateSnapshot.Capture(project);
                 var ownershipBefore = CaptureGeneratedSolidHandles(project, elementIds);
                 int regenerated;
                 int built;
                 try
                 {
-                    // Semantic validation/regeneration can fail on rules/dependencies. Run it before
-                    // committing any replacement Solid3d so those blockers cannot leave a partial CAD rebuild.
-                    regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                    // Semantic validation/regeneration can fail on rules/dependencies. Regenerate only
+                    // the selected elements plus their transitive upstream dependencies before committing
+                    // any replacement Solid3d. Unrelated dirty/downstream elements stay outside this build.
+                    regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
+                        .RegenerateDirtySubset(project, regenerationScope);
 
                     var sourceType = NativeBuildCapability.IsWallCategory(category)
                         ? sourceSnapshots.Select(x => x.EntityType).Distinct(StringComparer.OrdinalIgnoreCase).Single()
                         : string.Empty;
+
+                    // Native builders consume SelectImplied(). Handoff the already-validated live source IDs
+                    // only at dispatch time so every preflight/regeneration failure leaves PICKFIRST untouched.
+                    document.Editor.SetImpliedSelection(sourceIds.ToArray());
                     built = BuildCategory(document, project, category, sourceType);
                     if (built <= 0)
                         throw new InvalidOperationException("Không tạo được solid từ source đang chọn. Tường KT cần LINE hoặc open POLYLINE; các cấu kiện khác phải đúng source profile được builder hỗ trợ.");
@@ -179,14 +185,51 @@ namespace QS3D.BricsCAD.V25
                 project.Touch();
 
                 // At this point native CAD + semantic ownership already committed successfully.
-                // Palette/selection/regen/view dispatch are convenience UI and must never turn a
-                // completed rebuild into a false QS3DBUILD3D failure report.
+                // Palette/selection/regen are convenience UI and must never turn a completed rebuild
+                // into a false QS3DBUILD3D failure report or replace the user's current viewport.
                 FinalizeUi(document, elementIds, sourceHandles, built, regenerated, category, project);
             }
             catch (Exception ex)
             {
                 Report(document, "QS3DBUILD3D lỗi: " + ex.Message);
             }
+        }
+
+        private static IReadOnlyList<string> BuildRegenerationScope(
+            ProjectState project,
+            IReadOnlyCollection<ProjectElement> selectedElements)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (selectedElements == null) throw new ArgumentNullException(nameof(selectedElements));
+
+            var scope = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var pending = new Queue<ProjectElement>(selectedElements.Where(x => x != null));
+            while (pending.Count > 0)
+            {
+                var element = pending.Dequeue();
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (elementId.Length == 0)
+                    throw new InvalidOperationException("QS3DBUILD3D: regeneration scope contains a semantic element with an empty ID.");
+                if (!scope.Add(elementId)) continue;
+
+                foreach (var rawDependencyId in element.DependsOn)
+                {
+                    var dependencyId = (rawDependencyId ?? string.Empty).Trim();
+                    if (dependencyId.Length == 0)
+                        throw new InvalidOperationException("QS3DBUILD3D: semantic element " + elementId + " contains an empty dependency ID.");
+                    var dependency = project.FindElement(dependencyId);
+                    if (dependency == null)
+                        throw new InvalidOperationException(
+                            "QS3DBUILD3D: semantic dependency " + dependencyId + " referenced by " + elementId + " is missing. Run Health/repair dependencies before native rebuild.");
+                    pending.Enqueue(dependency);
+                }
+            }
+
+            return scope
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x, StringComparer.Ordinal)
+                .ToList()
+                .AsReadOnly();
         }
 
         private static Dictionary<string, string> CaptureGeneratedSolidHandles(ProjectState project, IEnumerable<string> elementIds)
@@ -329,7 +372,6 @@ namespace QS3D.BricsCAD.V25
 
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
-                document.SendStringToExecute("QS3DVIEW3D ", true, false, false);
             }
             catch (Exception ex)
             {

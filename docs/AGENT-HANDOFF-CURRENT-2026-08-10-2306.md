@@ -2,6 +2,44 @@
 
 This is the newest short canonical source delta for agents continuing from `main`. Always fetch current `main` first; current source wins over this text if concurrent commits move ahead.
 
+## LOCAL-003 Level Z-chain source candidate — 2026-08-13
+
+The coherent vertical-placement source chain is now assembled around `ElementVerticalPlacementService` plus one branch-lazy BricsCAD adapter, `CadElementVerticalPlacement`. No-Level geometry preserves the legacy source-Z + `BottomOffsetM` path; Bottom-only uses Level elevation + explicit Level offset with legacy height; Bottom+Top derives the complete range; Top-only, missing/ambiguous Levels, non-finite offsets and invalid ranges fail closed before native ownership mutation.
+
+The candidate covers qualified wall/structural hosts, Door/WallOpening straight/curved cuts and Auto Host, Curtain LINE/path frames/panels/live state, generated rebar/ties/stirrups/mesh/shape placement, effective semantic quantities, generated vertical snapshots and Level-edit stale propagation. The Floor/Level modeless window exposes guarded Bottom/Top/Clear actions while preserving exact bound-project identity across stale document/project replacement.
+
+`LevelReferenceNativeIntegrationPolicy.IsQualified(...)` now means the category may leave the source integration gate; it is not a customer-release verdict. `QS3DLEVELZPROBE` plus `scripts/test-bricscad-v25-level-z.ps1` is the focused exact-SHA native probe. Until that probe and the wider mm/m, full-category, Undo, save/reopen, multi-DWG and private-DWG matrix pass against the same SHA/DLL, `LOCAL-003` remains `IN_PROGRESS / PENDING_LOCAL / NOT_LOCAL_PASS`.
+
+## Superseding Direct Draw productivity delta — 2026-08-11
+
+Owner feedback identifies excessive modeling interaction as the current product bottleneck. Current source therefore uses a **Quick by default / Advanced for exceptions** authoring pattern while preserving the existing semantic/native safety pipeline.
+
+Primary quick commands now include:
+
+- `QS3DDRAWWALL` — two-point straight wall using compatible ArchitecturalWall Family values;
+- `QS3DDRAWBEAM` — two-point Beam using Family Width/Height/BottomOffset;
+- `QS3DDRAWCOLUMN` — center-point Column using Family Width/Depth/Height/BottomOffset;
+- `QS3DDRAWSLAB` — picked closed boundary, then Family Thickness/BottomOffset without post-boundary numeric prompts;
+- `QS3DDRAWGLASSWALL`, `QS3DDRAWWALLPIER`, `QS3DDRAWSTRUCTWALL`, `QS3DDRAWFOUNDATION` — guarded P1 geometry with compatible Family values and no normal numeric prompt sequence after accepted geometry;
+- `QS3DDRAWDOOR`, `QS3DDRAWOPENING` — picked two-point width plus Family Height/Sill/Clearance, then the established selection-scoped Auto Host lifecycle;
+- `QS3DDRAWWINDOW` — picked two-point width plus WallOpening WindowHeight/Sill/Clearance, `OpeningUsage=Window`, then the same guarded Auto Host lifecycle;
+- `QS3DDRAWWALLREF` — read-only reference LINE length/direction plus compatible ArchitecturalWall Family values.
+
+The prior explicit parameter-entry behavior is retained under corresponding `*ADV` commands (`QS3DDRAWWALLADV`, `QS3DDRAWBEAMADV`, `QS3DDRAWCOLUMNADV`, `QS3DDRAWSLABADV`, the four guarded P1 `*ADV` commands, `QS3DDRAWDOORADV`, `QS3DDRAWOPENINGADV`, `QS3DDRAWWINDOWADV`, and `QS3DDRAWWALLREFADV`). The existing primary Ribbon/Domain Hub buttons intentionally keep the primary command names, so the normal UI becomes faster without duplicating rows of buttons.
+
+This wave does **not** introduce a second geometry/model system. It preserves real DWG source provenance, compatible Family lookup, `SemanticCaptureService`, `ProjectStateSnapshot`, `ProjectElement.SetProperty()` where applicable, deterministic regeneration, canonical wall/structural builders or `QS3DBUILD3D`, generated ownership verification, operation-scoped rollback, Door/Opening/Window Auto Host guards and explicit physical opening cutting. The existing `QS3DCONVERT2D` / `QS3DPLAN2WALLS` batch path remains the fast conversion route for pre-existing 2D wall centerlines.
+
+Focused static-contract sources are in:
+
+- `scripts/preflight-quick-wall-authoring.py`;
+- `scripts/preflight-quick-structure-authoring.py`;
+- `scripts/preflight-quick-p1-authoring.py`;
+- `scripts/preflight-quick-opening-authoring.py`;
+- `scripts/preflight-quick-window-authoring.py`;
+- `scripts/preflight-quick-reference-wall-authoring.py`.
+
+Focused docs are `docs/DIRECT-DRAW-QUICK-*.md`. Exact BricsCAD V25 editor/cancel/Auto-Host/reference behavior, transient DrawJig preview and repeated authoring remain `LOCAL-008 / PENDING_LOCAL / DO_NOT_RETRY_REMOTE`; current source/static review must not be promoted to runtime qualification.
+
 ## Product/source wave added in this continue-all batch
 
 The owner requested a detailed product-logic review plus implementation of meaningful remote-safe features. The source wave deliberately focused on BLT-style review-before-mutation, semantic transaction safety and supportability rather than adding cosmetic features or pretending LOCAL_ONLY native gaps are complete.
@@ -100,7 +138,7 @@ Local qualification must prove `QS3DRULEPREVIEW` and `QS3DREGENPREVIEW` do not m
 Do not mark these complete from source inspection:
 
 - physical L/T/X/Multi wall-solid reconciliation under safe one-owner semantics;
-- Curtain panel-by-panel native glass and remaining exact V25 curved/path proof;
+- Curtain panel-by-panel native glass is now source/static-implemented for guarded LINE/open-bulged paths with opening clipping, independent ownership/stale/health and the six-phase outer transaction; exact V25 geometry/nested-rollback/Undo/save-reopen proof remains LOCAL-002 `PENDING_LOCAL`;
 - native generalized polygon/hole loop ownership and disconnected-region policy;
 - richer freeform WallPier/native geometry where the current specialized subset is insufficient;
 - standard-specific fabrication rebar rules without an approved governing standard/revision;

@@ -5,7 +5,9 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using Application = Bricscad.ApplicationServices.Application;
 using QS3D.Core.Domain;
+using QS3D.Core.Services;
 
 namespace QS3D.BricsCAD.V25.UI.ViewModels
 {
@@ -20,7 +22,9 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             "AreaM2",
             "VolumeM3",
             "PerimeterM",
-            "Layer"
+            "Layer",
+            MeasuredSolidQuantityPolicy.VolumeProperty,
+            MeasuredSolidQuantityPolicy.SurfaceAreaProperty
         };
 
         private string _status = "Sẵn sàng";
@@ -62,7 +66,6 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             ValidateWorkspaceCatalogs(project);
-            SynchronizeActiveCatalogs(project);
 
             _project = project;
             _selectedElement = null;
@@ -94,41 +97,44 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
 
         public void SetActiveZone(string? name)
         {
-            if (_project == null || string.IsNullOrWhiteSpace(name)) return;
-            var matches = _project.Zones.Where(x => string.Equals(x.Name, name, StringComparison.CurrentCultureIgnoreCase)).Take(2).ToList();
+            if (string.IsNullOrWhiteSpace(name)) return;
+            if (!TryGetCurrentProjectForMutation("Đổi Zone làm việc", out var project)) return;
+            var matches = project.Zones.Where(x => string.Equals(x.Name, name, StringComparison.CurrentCultureIgnoreCase)).Take(2).ToList();
             if (matches.Count > 1)
             {
                 Status = "Không thể chọn Zone vì tên bị trùng: " + name;
                 return;
             }
             var zone = matches.Count == 1 ? matches[0] : null;
-            if (zone == null || string.Equals(_project.ActiveZoneId, zone.Id, StringComparison.OrdinalIgnoreCase)) return;
-            ProjectZoneService.SetActive(_project, zone.Id);
+            if (zone == null || string.Equals(project.ActiveZoneId, zone.Id, StringComparison.OrdinalIgnoreCase)) return;
+            ProjectZoneService.SetActive(project, zone.Id);
             Status = "Zone làm việc: " + zone.Name;
         }
 
         public void SetActiveFloor(string? name)
         {
-            if (_project == null || string.IsNullOrWhiteSpace(name)) return;
-            var matches = _project.Floors.Where(x => string.Equals(x.Name, name, StringComparison.CurrentCultureIgnoreCase)).Take(2).ToList();
+            if (string.IsNullOrWhiteSpace(name)) return;
+            if (!TryGetCurrentProjectForMutation("Đổi tầng làm việc", out var project)) return;
+            var matches = project.Floors.Where(x => string.Equals(x.Name, name, StringComparison.CurrentCultureIgnoreCase)).Take(2).ToList();
             if (matches.Count > 1)
             {
                 Status = "Không thể chọn tầng vì tên bị trùng: " + name;
                 return;
             }
             var floor = matches.Count == 1 ? matches[0] : null;
-            if (floor == null || string.Equals(_project.ActiveFloorId, floor.Id, StringComparison.OrdinalIgnoreCase)) return;
-            ProjectFloorService.SetActive(_project, floor.Id);
+            if (floor == null || string.Equals(project.ActiveFloorId, floor.Id, StringComparison.OrdinalIgnoreCase)) return;
+            ProjectFloorService.SetActive(project, floor.Id);
             Status = "Tầng làm việc: " + floor.Name;
         }
 
         public void SetActiveFamily(ProjectFamily? family)
         {
-            if (_project == null || family == null) return;
+            if (family == null) return;
+            if (!TryGetCurrentProjectForMutation("Đổi Family active", out var project)) return;
             ProjectFamily? ownedFamily;
             try
             {
-                ownedFamily = _project.FindFamily(family.Id);
+                ownedFamily = project.FindFamily(family.Id);
             }
             catch (InvalidOperationException ex)
             {
@@ -149,7 +155,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 _selectedPropertyScope = FamilyScope;
                 OnChanged(nameof(SelectedPropertyScope));
             }
-            ProjectFamilyActivationService.SetActive(_project, family.Id);
+            ProjectFamilyActivationService.SetActive(project, family.Id);
             SelectedFamilyName = family.Name;
             LoadCurrentProperties();
         }
@@ -205,7 +211,6 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             _selectedElement = ownedElement;
             _selectedFamily = family;
             SelectedFamilyName = family.Name;
-            ProjectFamilyActivationService.SetActive(_project, family.Id);
             _selectedPropertyScope = InstanceScope;
             OnChanged(nameof(SelectedPropertyScope));
             LoadCurrentProperties();
@@ -256,10 +261,10 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 var current = hasInstance ? stored ?? string.Empty : familyValue;
                 var unit = UnitFor(key);
                 var row = CreatePropertyRow(key, current, unit);
-                var isSourceDerived = hasInstance && IsSourceDerivedInstanceKey(key);
-                if (isSourceDerived)
+                var isReadOnlyInstanceProperty = !SemanticPropertyEditPolicy.IsEditablePropertyKey(key);
+                if (isReadOnlyInstanceProperty)
                 {
-                    row.Group = "NGUỒN CAD / ĐO ĐẠC";
+                    row.Group = IsSourceDerivedInstanceKey(key) ? "NGUỒN CAD / ĐO ĐẠC" : "HỆ THỐNG / CHỈ ĐỌC";
                     row.IsReadOnly = true;
                     row.CanReset = false;
                     row.Value = ToDisplayValue(key, current);
@@ -270,7 +275,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                     row.CanReset = hasInstance && !string.Equals(current, familyValue, StringComparison.Ordinal);
                     row.Value = ToDisplayValue(key, current);
                     row.Apply = value => ToDisplayValue(key, ApplyInstanceProperty(element, family, key, unit, row, value));
-                    row.Reset = () => row.Value = ToDisplayValue(key, familyValue);
+                    row.Reset = () => ResetInstanceProperty(element, family, key, row);
                 }
                 Properties.Add(row);
             }
@@ -310,21 +315,17 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 return previous;
             }
             if (string.Equals(previous, next, StringComparison.Ordinal)) return previous;
-            if (_project == null)
-            {
-                Status = "Không thể đổi tên Family vì project không còn được mở.";
-                return previous;
-            }
+            if (!TryGetCurrentProjectForMutation("Đổi tên Family", out var project)) return previous;
 
             try
             {
-                var owned = _project.FindFamily(family.Id);
+                var owned = project.FindFamily(family.Id);
                 if (owned == null || !ReferenceEquals(owned, family))
                 {
                     Status = "Không thể đổi tên Family vì lựa chọn đã stale hoặc không thuộc project đang mở.";
                     return previous;
                 }
-                var renamed = ProjectFamilyService.Rename(_project, owned.Id, next);
+                var renamed = ProjectFamilyService.Rename(project, owned.Id, next);
                 SelectedFamilyName = renamed.Name;
                 Status = "Đã đổi tên Family: " + renamed.Name;
                 return renamed.Name;
@@ -342,22 +343,18 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             var next = NormalizePropertyValue(key, unit, previousFamilyValue, value, out var valid);
             if (!valid) return previousFamilyValue;
             if (string.Equals(previousFamilyValue, next, StringComparison.Ordinal)) return previousFamilyValue;
-            if (_project == null)
-            {
-                Status = "Không thể cập nhật Family vì project không còn được mở.";
-                return previousFamilyValue;
-            }
+            if (!TryGetCurrentProjectForMutation("Cập nhật Family property", out var project)) return previousFamilyValue;
 
             try
             {
-                var owned = _project.FindFamily(family.Id);
+                var owned = project.FindFamily(family.Id);
                 if (owned == null || !ReferenceEquals(owned, family))
                 {
                     Status = "Không thể cập nhật Family vì lựa chọn đã stale hoặc không thuộc project đang mở.";
                     return previousFamilyValue;
                 }
 
-                var result = ProjectFamilyService.SetProperty(_project, owned.Id, key, next);
+                var result = ProjectFamilyService.SetProperty(project, owned.Id, key, next);
                 Status = "Đã cập nhật " + DisplayNameFor(key) + " • kế thừa " + result.InheritedInstancesUpdated + " cấu kiện" +
                          (result.OverridesPreserved > 0 ? " • giữ " + result.OverridesPreserved + " instance override" : string.Empty);
                 return owned.Properties.TryGetValue(key, out var stored) ? stored ?? next : next;
@@ -373,16 +370,17 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         {
             var familyValue = family.Properties.TryGetValue(key, out var familyRaw) ? familyRaw ?? string.Empty : string.Empty;
             var current = element.Properties.TryGetValue(key, out var stored) ? stored ?? string.Empty : familyValue;
-            if (_project == null)
+            if (!SemanticPropertyEditPolicy.IsEditablePropertyKey(key))
             {
-                Status = "Không thể cập nhật Instance vì project không còn được mở.";
+                Status = "Không thể cập nhật " + DisplayNameFor(key) + ": đây là thuộc tính nguồn/identity/ownership chỉ đọc.";
                 return current;
             }
+            if (!TryGetCurrentProjectForMutation("Cập nhật Instance property", out var project)) return current;
 
             try
             {
-                var ownedElement = _project.FindElement(element.Id);
-                var ownedFamily = _project.FindFamily(family.Id);
+                var ownedElement = project.FindElement(element.Id);
+                var ownedFamily = project.FindFamily(family.Id);
                 if (ownedElement == null || !ReferenceEquals(ownedElement, element) || ownedFamily == null || !ReferenceEquals(ownedFamily, family))
                 {
                     Status = "Không thể cập nhật Instance vì lựa chọn đã stale hoặc không thuộc project đang mở.";
@@ -403,15 +401,101 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 return current;
             }
 
-            element.SetProperty(key, next);
-            element.MarkDirty(ElementDirtyFlags.All);
-            _project.Touch();
+            try
+            {
+                ProjectSemanticMutationExecutor.Execute(
+                    project,
+                    "Workspace single-instance property edit",
+                    () =>
+                    {
+                        element.SetProperty(key, next);
+                        project.Touch();
+                        return 0;
+                    });
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is ArgumentException || ex is OverflowException)
+            {
+                Status = "Không thể cập nhật " + DisplayNameFor(key) + ": " + ex.Message;
+                return current;
+            }
+
             row.CanReset = !string.Equals(next, familyValue, StringComparison.Ordinal);
             var displayValue = ToDisplayValue(key, next);
             Status = row.CanReset
                 ? "Instance override: " + DisplayNameFor(key) + " = " + displayValue + (unit.Length > 0 ? " " + unit : string.Empty)
                 : "Đã đưa " + DisplayNameFor(key) + " về giá trị Family.";
             return next;
+        }
+
+        private void ResetInstanceProperty(ProjectElement element, ProjectFamily family, string key, PropertyRowViewModel row)
+        {
+            if (!SemanticPropertyEditPolicy.IsEditablePropertyKey(key))
+            {
+                Status = "Không thể đặt lại " + DisplayNameFor(key) + ": đây là thuộc tính nguồn/identity/ownership chỉ đọc.";
+                return;
+            }
+            if (!TryGetCurrentProjectForMutation("Đặt lại Instance property", out var project)) return;
+
+            try
+            {
+                var ownedElement = project.FindElement(element.Id);
+                var ownedFamily = project.FindFamily(family.Id);
+                if (ownedElement == null || !ReferenceEquals(ownedElement, element) || ownedFamily == null || !ReferenceEquals(ownedFamily, family))
+                {
+                    Status = "Không thể đặt lại Instance vì lựa chọn đã stale hoặc không thuộc project đang mở.";
+                    return;
+                }
+                if (!ownedFamily.Properties.TryGetValue(key, out var liveFamilyRaw))
+                {
+                    Status = "Không thể đặt lại " + DisplayNameFor(key) + " vì property không còn tồn tại trên Family hiện hành. Hãy Refresh Workspace.";
+                    return;
+                }
+
+                row.Value = ToDisplayValue(key, liveFamilyRaw ?? string.Empty);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Status = "Không thể đặt lại Instance: " + ex.Message;
+            }
+        }
+
+        private bool TryGetCurrentProjectForMutation(string operation, out ProjectState project)
+        {
+            project = null!;
+            if (_project == null)
+            {
+                Status = operation + ": project không còn được mở.";
+                return false;
+            }
+
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null)
+            {
+                Status = operation + ": không có bản vẽ BricsCAD đang active.";
+                return false;
+            }
+
+            try
+            {
+                if (!global::QS3D.BricsCAD.V25.ExistingProjectMutationContext.TryGet(document, out var current))
+                {
+                    Status = operation + ": QS3D project hiện hành không còn khả dụng; không tạo project thay thế.";
+                    return false;
+                }
+                if (!ReferenceEquals(current, _project))
+                {
+                    Status = operation + ": Workspace đang giữ project stale sau reload/thay thế. Hãy Refresh Workspace rồi thử lại.";
+                    return false;
+                }
+
+                project = current;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Status = operation + " bị từ chối: " + ex.Message;
+                return false;
+            }
         }
 
         private string NormalizePropertyValue(string key, string unit, string previousValue, string value, out bool valid)
@@ -596,33 +680,6 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 var nameKey = family.Category + "\u001f" + family.Name;
                 if (!familyNames.Add(nameKey))
                     throw new InvalidOperationException("Project contains duplicate " + family.Category + " Family name: " + family.Name);
-            }
-        }
-
-        private static void SynchronizeActiveCatalogs(ProjectState project)
-        {
-            var zone = project.FindZone(project.ActiveZoneId);
-            if (zone == null)
-            {
-                if (project.Zones.Count > 0) ProjectZoneService.SetActive(project, project.Zones[0].Id);
-                else if (!string.IsNullOrWhiteSpace(project.ActiveZoneId)) { project.ActiveZoneId = string.Empty; project.Touch(); }
-            }
-
-            var floor = project.FindFloor(project.ActiveFloorId);
-            if (floor == null)
-            {
-                if (project.Floors.Count > 0) ProjectFloorService.SetActive(project, project.Floors.OrderBy(x => x.ElevationM).First().Id);
-                else if (!string.IsNullOrWhiteSpace(project.ActiveFloorId)) { project.ActiveFloorId = string.Empty; project.Touch(); }
-            }
-
-            ProjectFamily? family = null;
-            if (project.Metadata.TryGetValue("ActiveFamilyId", out var activeFamilyId) && !string.IsNullOrWhiteSpace(activeFamilyId))
-                family = project.FindFamily(activeFamilyId);
-            if (family == null)
-            {
-                if (project.Families.Count > 0)
-                    ProjectFamilyActivationService.SetActive(project, project.Families.OrderBy(x => x.Category).ThenBy(x => x.Name).First().Id);
-                else if (project.Metadata.Remove("ActiveFamilyId")) project.Touch();
             }
         }
 

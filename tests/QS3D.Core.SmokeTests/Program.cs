@@ -26,7 +26,18 @@ namespace QS3D.Core.SmokeTests
 
         private static int Main()
         {
-            SmokeTestRegistration.RunAll();
+            try
+            {
+                SmokeTestRegistration.RunAll();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("FAIL registered smoke phase: " + ex.GetType().FullName + ": " + ex.Message);
+                if (!string.IsNullOrWhiteSpace(ex.StackTrace))
+                    Console.Error.WriteLine(ex.StackTrace);
+                return 1;
+            }
+
             Test("PolylineMetrics rectangle", PolylineRectangle);
             Test("UnitScale mm length", UnitScaleLength);
             Test("ProjectUnitPolicy", ProjectUnitPolicyTest);

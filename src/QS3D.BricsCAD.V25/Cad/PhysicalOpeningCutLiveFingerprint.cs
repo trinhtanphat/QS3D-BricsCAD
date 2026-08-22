@@ -28,8 +28,18 @@ namespace QS3D.BricsCAD.V25.Cad
 
             var hostFamily = project.FindFamily(host.FamilyId);
             var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, hostFamily, "ThicknessM", 0.2d), host.Id + "/ThicknessM");
-            var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(host, hostFamily, "HeightM", 3.6d), host.Id + "/HeightM");
-            var bottomOffsetM = CadGeometryGuard.Finite(CadGeometryGuard.Number(host, hostFamily, "BottomOffsetM", 0d), host.Id + "/BottomOffsetM");
+            double sourceBaseDrawing;
+            if (hostSource is Line sourceLine) sourceBaseDrawing = sourceLine.StartPoint.Z;
+            else if (hostSource is Polyline sourcePolyline) sourceBaseDrawing = sourcePolyline.Elevation;
+            else throw new InvalidOperationException("Physical opening cut live fingerprint chỉ hỗ trợ host LINE/POLYLINE.");
+            var hostPlacement = CadElementVerticalPlacement.Resolve(
+                document,
+                project,
+                host,
+                hostFamily,
+                sourceBaseDrawing,
+                "HeightM",
+                3.6d);
 
             var linked = (openings ?? project.Elements.Where(x => IsLinkedOpening(x, host.Id)))
                 .Where(x => IsLinkedOpening(x, host.Id))
@@ -43,8 +53,8 @@ namespace QS3D.BricsCAD.V25.Cad
                 .Append('|').Append(host.Category)
                 .Append('|').Append(hostSource.Handle.ToString())
                 .Append("|thickness=").Append(Number(thicknessM))
-                .Append("|height=").Append(Number(heightM))
-                .Append("|bottom=").Append(Number(bottomOffsetM))
+                .Append("|height=").Append(Number(hostPlacement.HeightM))
+                .Append("|bottom=").Append(Number(hostPlacement.FingerprintBottomM))
                 .Append('|');
             AppendHostGeometry(text, hostSource);
 
@@ -58,7 +68,7 @@ namespace QS3D.BricsCAD.V25.Cad
             }
 
             foreach (var opening in linked)
-                AppendOpening(document, transaction, project, text, opening);
+                AppendOpening(document, transaction, project, text, opening, hostPlacement);
 
             using (var sha = SHA256.Create())
             {
@@ -69,15 +79,16 @@ namespace QS3D.BricsCAD.V25.Cad
             }
         }
 
-        private static void AppendOpening(Document document, Transaction transaction, ProjectState project, StringBuilder text, ProjectElement opening)
+        private static void AppendOpening(
+            Document document,
+            Transaction transaction,
+            ProjectState project,
+            StringBuilder text,
+            ProjectElement opening,
+            CadElementVerticalPlacement hostPlacement)
         {
             var family = project.FindFamily(opening.FamilyId);
             var widthM = CadGeometryGuard.Positive(CadGeometryGuard.Number(opening, family, "WidthM", 0.9d), opening.Id + "/WidthM");
-            var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(opening, family, "HeightM", 2.2d), opening.Id + "/HeightM");
-            var sillM = CadGeometryGuard.Finite(
-                CadGeometryGuard.Number(opening, family, "SillHeightM", CadGeometryGuard.Number(opening, family, "BottomOffsetM", 0d)),
-                opening.Id + "/SillHeightM");
-            if (sillM < 0d) throw new InvalidOperationException(opening.Id + "/SillHeightM phải >= 0.");
             var clearanceM = CadGeometryGuard.Finite(CadGeometryGuard.Number(opening, family, "BooleanClearanceM", 0.01d), opening.Id + "/BooleanClearanceM");
             if (clearanceM < 0d) throw new InvalidOperationException(opening.Id + "/BooleanClearanceM phải >= 0.");
 
@@ -91,13 +102,22 @@ namespace QS3D.BricsCAD.V25.Cad
             Extents3d extents;
             try { extents = entity.GeometricExtents; }
             catch (Exception ex) { throw new InvalidOperationException("Không đọc được extents của opening " + opening.Id + ".", ex); }
+            var openingPlacement = CadHostedOpeningVerticalPlacement.Resolve(
+                document,
+                project,
+                opening,
+                family,
+                extents.MinPoint.Z,
+                hostPlacement,
+                2.2d,
+                0d);
 
             text.Append("|opening=").Append(opening.Id)
                 .Append(':').Append(opening.Category)
                 .Append(':').Append(ids[0].Handle.ToString())
                 .Append(':').Append(Number(widthM))
-                .Append(':').Append(Number(heightM))
-                .Append(':').Append(Number(sillM))
+                .Append(':').Append(Number(openingPlacement.HeightM))
+                .Append(':').Append(Number(openingPlacement.SillHeightM))
                 .Append(':').Append(Number(clearanceM))
                 .Append(':');
             Point(text, extents.MinPoint);

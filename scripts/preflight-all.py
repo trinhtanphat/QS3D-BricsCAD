@@ -1,24 +1,160 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import os
+import stat
 import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SELF = Path(__file__).resolve()
+CHILD_TIMEOUT_SECONDS = 180
+MAX_FEATURE_GATES = 1024
+MAX_FEATURE_GATE_SOURCE_BYTES = 512 * 1024
+PYTHON_ENVIRONMENT_CONTROLS = (
+    "PYTHONBREAKPOINT",
+    "PYTHONHOME",
+    "PYTHONINSPECT",
+    "PYTHONPATH",
+    "PYTHONPYCACHEPREFIX",
+    "PYTHONSTARTUP",
+    "PYTHONUSERBASE",
+    "PYTHONWARNINGS",
+)
+
+
+def _relative_candidate(path):
+    try:
+        return path.relative_to(ROOT)
+    except ValueError as exc:
+        raise RuntimeError("feature preflight gate is outside repository root: " + str(path)) from exc
+
+
+def validate_candidates(candidates):
+    candidates = list(candidates)
+    if len(candidates) > MAX_FEATURE_GATES:
+        raise RuntimeError(
+            "feature preflight discovery count "
+            + str(len(candidates))
+            + " exceeds maximum "
+            + str(MAX_FEATURE_GATES)
+        )
+
+    unsafe = []
+    by_casefold = {}
+
+    for path in candidates:
+        rel = _relative_candidate(path)
+        try:
+            file_stat = os.lstat(path)
+        except OSError as exc:
+            raise RuntimeError("cannot inspect feature preflight gate " + str(rel) + ": " + str(exc)) from exc
+
+        mode = file_stat.st_mode
+        if path.is_symlink():
+            unsafe.append((str(rel), "symlink"))
+        elif not stat.S_ISREG(mode):
+            unsafe.append((str(rel), "non-regular"))
+        elif file_stat.st_size > MAX_FEATURE_GATE_SOURCE_BYTES:
+            unsafe.append(
+                (
+                    str(rel),
+                    "source size "
+                    + str(file_stat.st_size)
+                    + " bytes exceeds maximum "
+                    + str(MAX_FEATURE_GATE_SOURCE_BYTES),
+                )
+            )
+
+        key = path.name.casefold()
+        by_casefold.setdefault(key, []).append(path)
+
+    collisions = [paths for paths in by_casefold.values() if len(paths) > 1]
+    if unsafe or collisions:
+        messages = []
+        for rel, reason in sorted(unsafe):
+            messages.append(rel + " is " + reason)
+        for paths in sorted(collisions, key=lambda group: (group[0].name.casefold(), group[0].name)):
+            names = ", ".join(sorted(str(_relative_candidate(path)) for path in paths))
+            messages.append("case-insensitive preflight filename collision: " + names)
+        raise RuntimeError("unsafe or ambiguous feature preflight discovery: " + "; ".join(messages))
+
+    return sorted(candidates, key=lambda path: (path.name.casefold(), path.name))
+
+
+def _is_feature_gate_name(name):
+    folded = name.casefold()
+    return folded.startswith("preflight-") and folded.endswith(".py")
 
 
 def discover():
-    return [
-        path
-        for path in sorted(SCRIPTS.glob("preflight-*.py"), key=lambda p: p.name.lower())
-        if path.resolve() != SELF
-    ]
+    # Bound filesystem discovery itself. Use os.scandir() directly so the aggregate
+    # runner controls iteration and can reject the first candidate beyond the configured
+    # maximum without asking a higher-level glob implementation to enumerate/materialize
+    # the whole directory first. Do not call DirEntry.is_file() here: symlink/non-regular/
+    # size checks remain in validate_candidates() and happen only after the count gate.
+    candidates = []
+    try:
+        with os.scandir(SCRIPTS) as entries:
+            for entry in entries:
+                if not _is_feature_gate_name(entry.name):
+                    continue
+                path = Path(entry.path)
+                if str(path) == str(SELF):
+                    continue
+                if entry.name.casefold() == SELF.name.casefold():
+                    raise RuntimeError(
+                        "case-insensitive preflight filename collision with aggregate runner: "
+                        + entry.name
+                    )
+                candidates.append(path)
+                if len(candidates) > MAX_FEATURE_GATES:
+                    raise RuntimeError(
+                        "feature preflight discovery count "
+                        + str(len(candidates))
+                        + " exceeds maximum "
+                        + str(MAX_FEATURE_GATES)
+                    )
+    except OSError as exc:
+        raise RuntimeError("cannot scan feature preflight directory " + str(SCRIPTS) + ": " + str(exc)) from exc
+    return validate_candidates(candidates)
+
+
+def build_child_env(source=None):
+    child_env = dict(os.environ if source is None else source)
+    for name in PYTHON_ENVIRONMENT_CONTROLS:
+        child_env.pop(name, None)
+    child_env["PYTHONUTF8"] = "1"
+    child_env["PYTHONIOENCODING"] = "utf-8"
+    child_env["PYTHONNOUSERSITE"] = "1"
+    child_env["PYTHONDONTWRITEBYTECODE"] = "1"
+    return child_env
+
+
+def escape_actions_data(value):
+    return str(value).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def escape_actions_property(value):
+    return escape_actions_data(value).replace(":", "%3A").replace(",", "%2C")
+
+
+def emit_failure_annotation(path, reason):
+    if os.environ.get("GITHUB_ACTIONS", "").lower() != "true":
+        return
+    rel = str(path).replace("\\", "/")
+    file_property = escape_actions_property(rel)
+    message = escape_actions_data("Feature preflight failed: " + rel + " (" + str(reason) + ")")
+    print("::error file=" + file_property + "::" + message)
 
 
 def main():
-    gates = discover()
+    try:
+        gates = discover()
+    except RuntimeError as exc:
+        print("ERROR:", exc)
+        return 1
+
     if not gates:
         print("ERROR: no feature preflight gates were discovered.")
         return 1
@@ -29,9 +165,7 @@ def main():
         print(" -", path.relative_to(ROOT))
 
     failed = []
-    child_env = os.environ.copy()
-    child_env["PYTHONUTF8"] = "1"
-    child_env["PYTHONIOENCODING"] = "utf-8"
+    child_env = build_child_env()
     for path in gates:
         rel = path.relative_to(ROOT)
         print("\n===", rel, "===")
@@ -41,10 +175,10 @@ def main():
                 cwd=str(ROOT),
                 check=False,
                 env=child_env,
-                timeout=180,
+                timeout=CHILD_TIMEOUT_SECONDS,
             )
         except subprocess.TimeoutExpired:
-            print("ERROR:", rel, "timed out after 180 seconds.")
+            print("ERROR:", rel, "timed out after", CHILD_TIMEOUT_SECONDS, "seconds.")
             failed.append((str(rel), "timeout"))
             continue
         except OSError as exc:
@@ -59,6 +193,7 @@ def main():
         print("\nAggregate preflight FAILED:")
         for path, reason in failed:
             print(" -", path, reason)
+            emit_failure_annotation(path, reason)
         print("FAILED with", len(failed), "feature gate failure(s).")
         return 1
 

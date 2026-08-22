@@ -1,6 +1,6 @@
 # QS3D Premium UI/UX Progress
 
-**Updated:** 2026-08-10 (UTC+7)  
+**Updated:** 2026-08-12 (UTC+7)
 **Scope:** BricsCAD V25 hosted WPF palettes and modeless windows.
 
 ## Current direction
@@ -31,6 +31,11 @@ The root contrast regression from the reference screenshot is guarded in `Theme.
 - Selected-object inspector keeps `Focus`, isolate/unisolate, locate and top-view workflows while adding a clear `CAD + SEMANTIC` marker.
 - Persistent bottom navigation remains tied to the native BricsCAD viewport.
 - Layout structure remains compatible with `WorkspacePanel.LayoutPersistence.cs`: root row 1 still exposes the 5-column main grid; Family remains column 2 and selected/room remains column 4 with split rows.
+- Compact host sizing is separate from content sizing: BricsCAD may dock/restore the Workspace at `460 x 420`, while the three-column surface retains its `560`-DIP design width behind an explicit horizontal overflow viewport. The vertical axis stays constrained by the host so TreeView/ListView virtualization and native scrolling are preserved.
+- Property editing commits on Enter as well as the existing focus-loss path, with a static regression guard.
+- Palette minimum sizes are centralized and enforced from layout policy, avoiding drift between persisted layout and host palette constraints.
+- Responsive compact-header breakpoints collapse only decorative badges/shorten display labels when space is tight, preserving handlers/tooltips and keeping the status column ellipsis-safe.
+- The `MÔ HÌNH` section reserves independent space for its title/caption and `Làm mới` action so narrow docking does not cause overlap.
 
 ### P2 — Drawing / Xref / Layer palette
 
@@ -41,14 +46,18 @@ The root contrast regression from the reference screenshot is guarded in `Theme.
 - Native layer color and lock state remain live (`ColorBrush`, `IsLocked`); no fake accent swatch was reintroduced.
 - Long layer names remain ellipsized with tooltip.
 - Status footer has a compact persistent state indicator.
+- Layer filtering operates on the cached view instead of rebuilding layer rows for every search update, with regression coverage preventing allocation-heavy refresh behavior.
+- Search feedback reports filtered and total layer counts so the result scope is visible without additional dialogs.
+- Empty-document and vanished-Xref refresh paths clear stale visual selection/state rather than leaving a misleading prior-DWG context.
+- Luxury hierarchy uses shared `PremiumCard` / `StatusPill` primitives and restrained champagne section markers while preserving all current Xref/layer handlers, context menus, keyboard routing and the `Tỉ lệ` / `ScaleText` surface.
 
 ### P3 — Modeless-window consistency, source pass complete
 
-All modeless WPF windows currently present under `src/QS3D.BricsCAD.V25/UI` now consume the shared premium theme and follow the same CAD-first hierarchy. Existing command handlers, x:Names and command tags are preserved.
+All modeless WPF windows currently present under `src/QS3D.BricsCAD.V25/UI` consume the shared premium theme and follow the same CAD-first hierarchy. Existing command handlers, x:Names and command tags are preserved.
 
 Upgraded surfaces include:
 
-- `DomainHubWindow` — two-column workflow cards for Direct Draw, wall/opening, structural, project/template, recognition, rebar/quantity, section/revision and release workflows.
+- `DomainHubWindow` — workflow cards for Direct Draw, wall/opening, structural, project/template, recognition, rebar/quantity, section/revision and release workflows.
 - `FamilyManagerWindow` — catalog/detail cards, active-family context, explicit destructive actions and semantic assignment flow.
 - `DoorOpeningScheduleWindow` — KPI cards, labeled search, read-only schedule card and export footer.
 - `ProjectToolsWindow` — project snapshot metrics plus project data, module and maintenance control cards.
@@ -62,9 +71,9 @@ Upgraded surfaces include:
 - `ZoneManagerWindow` — zone catalog, edit form, active/reference metrics and semantic scope assignment.
 - `MaterialCatalogWindow` — project catalog, custom material form, usage context and fail-closed assignment semantics.
 - `RecognitionWindow` — review-gated recognition table and confidence-sensitive apply actions.
-- `RevisionWindow` — quantity-diff review table and CAD locate flow.
-- `ModelHealthWindow` — issue review table with CAD locate flow.
-- `AuditLogWindow` — searchable audit trail using the same premium table/status language.
+- `RevisionWindow` — premium read-only quantity/semantic review with CAD locate flow.
+- `ModelHealthWindow` — premium issue-review table with CAD locate flow.
+- `AuditLogWindow` — searchable premium audit trail using the same table/status language.
 - `RoomFinishScheduleWindow` — search + KPI cards + finish schedule + XLSX export flow.
 - `GeometryExtensionsWindow` — review-gated wall topology, opening boolean, rebar 3D and rebar-health cards.
 
@@ -75,23 +84,32 @@ Legacy hardcoded `#17191C` modeless-window backgrounds are removed from the prem
 - Existing shared theme focus, hover, pressed and disabled states remain in force.
 - Primary, secondary and destructive actions are visually distinct.
 - Review-gated/fail-closed workflows use explicit warning or status language instead of decorative effects.
-- Modeless windows now use persistent status/footer regions where the workflow benefits from state visibility.
+- Modeless windows use persistent status/footer regions where the workflow benefits from state visibility.
 - Long engineering tables stay DataGrid-based and virtualization remains owned by the shared theme.
 - No blur, acrylic, animated gradients, large shadow effects or continuous animation were introduced.
 
+## 2026-08-12 reconciliation audit
+
+The original screenshot defect and the broad source-side premium pass are no longer open remote work. The exact heading from the report is still rendered through `Style="{StaticResource PanelTitle}"` in `WorkspacePanel.xaml`, while `Theme.xaml` explicitly sets `PanelTitle.Foreground` to `TextBrush`; the source contract therefore remains fail-safe against the host/system black foreground leak.
+
+The later screenshot-visible UI refinement is also on `main`: responsive Workspace header work, premium diagnostics/revision surfaces and the luxury Right Panel hierarchy are integrated alongside the earlier broad modeless-window pass. The canonical premium plan has been reconciled so it no longer describes the completed Workspace and Right Panel UI lanes as active neighboring reservations.
+
+At this checkpoint there is no additional remote-only cosmetic rewrite required merely to satisfy the original premium/professional/luxury request. Future remote work should be evidence-driven correctness/performance hardening or a new explicit owner UI requirement, not another speculative full visual rewrite.
+
 ## Regression guard
 
-`scripts/preflight-ui-premium-layout.py` is auto-discovered by `scripts/preflight-all.py` and now validates the full V25 modeless-window premium source contract:
+`scripts/preflight-ui-premium-layout.py` is auto-discovered by `scripts/preflight-all.py` and validates the broad V25 modeless-window premium source contract. Focused theme/Workspace/RightPanel/diagnostics/revision guards add narrower protection for their presentation and behavior boundaries.
 
-- XAML/XML well-formedness for all premium core palettes/windows named by the guard;
-- every `*Window.xaml` in the UI folder merges `Theme.xaml`;
-- absence of legacy `Background="#17191C"` and explicit black foregrounds in modeless dark-host surfaces;
-- presence of premium layout primitives and status/badge semantics;
+The source/static guard set covers, among other things:
+
+- XAML/XML well-formedness for premium core palettes/windows;
+- `Theme.xaml` adoption across modeless windows;
+- absence of legacy `Background="#17191C"` and explicit black foregrounds in dark-host surfaces;
+- premium layout primitives and status/badge semantics;
 - preservation of critical workflow handlers and command tags;
-- live layer color/lock contracts in `RightPanel`;
-- Project/Schedule DWG-context-lock messaging;
-- wall-snap preview/apply, opening-host, generated-rebar and health/review gates;
-- required premium shared theme tokens, including the explicit `PanelTitle` foreground guard.
+- live layer/Xref state contracts in `RightPanel`;
+- required premium shared theme tokens, including explicit `PanelTitle` foreground ownership;
+- no heavy WPF effects or business/CAD logic leaking into presentation-only XAML.
 
 ## Remaining qualification work
 
@@ -105,6 +123,8 @@ The design-system source pass is broad, but production visual qualification is n
 6. Disabled/read-only/selected/hover/warning/error states.
 7. Representative private DWG flows for Family/Instance editing, Direct Draw, selection/focus/isolate, Xref/layer, BQ/Schedule and native geometry review.
 8. Before/after screenshots from the exact release SHA.
+
+These runtime items are already represented by the canonical local queue and remain `PENDING_LOCAL / DO_NOT_RETRY_REMOTE` until a compatible local agent has licensed BricsCAD V25 and the required real-host environment.
 
 Do not change CAD transaction semantics merely to make a screen look more polished. UI synchronization must remain isolated from valid post-commit CAD work.
 

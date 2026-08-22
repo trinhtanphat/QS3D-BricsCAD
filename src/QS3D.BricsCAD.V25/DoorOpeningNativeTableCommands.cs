@@ -20,10 +20,20 @@ namespace QS3D.BricsCAD.V25
             {
                 RequireModelSpace(document);
                 RequireSupportedUcs(document);
-                var project = RequireExistingProject(document, "Door/Opening Table");
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
+                {
+                    Report(document, "Door/Opening Table: BLOCKED • chưa có QS3D project state/sidecar; đặt Table không tạo project mới.");
+                    return;
+                }
+                var expectedProjectId = previewProject.ProjectId;
+                var expectedChangeVersion = previewProject.ChangeVersion;
                 var point = document.Editor.GetPoint("\nChọn điểm đặt QS3D Door / Opening Schedule Table: ");
                 if (point.Status != PromptStatus.OK) return;
                 var world = point.Value.TransformBy(document.Editor.CurrentUserCoordinateSystem);
+                var project = RequireExistingProject(document, "Door/Opening Table");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    project.ChangeVersion != expectedChangeVersion)
+                    throw new InvalidOperationException("Door/Opening Table: QS3D project/state đã thay đổi trong lúc chọn điểm đặt. Hãy chạy lại lệnh.");
                 var handle = DoorOpeningNativeTableBuilder.Build(document, project, world);
                 FinalizeUi(document, "Door/Opening Table: đã tạo/cập nhật native Table " + handle + ".");
             }

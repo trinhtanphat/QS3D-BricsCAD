@@ -17,7 +17,7 @@ if not errors:
 
     capture_id = "var createdElementId = createdElement.Id;"
     nested_build = "new Build3DCommands().Build3D();"
-    post_active = 'EnsureActive(document, "Direct Draw P1 " + category + " / post QS3DBUILD3D");'
+    post_active = 'EnsureActive(document, operation + " / post QS3DBUILD3D");'
     canonical_lookup = "string.Equals(x.Id, createdElementId, StringComparison.OrdinalIgnoreCase)"
     missing_guard = "Semantic element Direct Draw P1 không còn tồn tại sau QS3DBUILD3D; operation được rollback."
     handle_read = 'createdElement.Properties.TryGetValue("GeneratedSolidHandle"'

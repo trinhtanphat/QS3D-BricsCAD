@@ -28,8 +28,11 @@ if COMMAND.is_file():
         'editor.CurrentUserCoordinateSystem',
         'first.Value.TransformBy(ucs)',
         'second.Value.TransformBy(ucs)',
-        'GridSpatialOrderingPlanner.OrderParallelLines(extraction.Curves, orderingAxis.Value)',
-        'ConfirmPlan(document.Editor, ordered, namingOptions)',
+        'GridSpatialOrderingPlanner.OrderParallelLines(previewExtraction.Curves, orderingAxis.Value)',
+        'ConfirmPlan(document.Editor, previewOrdered, namingOptions)',
+        'ExistingProjectMutationContext.Require(document, "Grid Auto Number")',
+        'GridSpatialOrderingPlanner.OrderParallelLines(currentExtraction.Curves, orderingAxis.Value)',
+        'SamePreviewPlan(previewOrdered, currentOrdered)',
         'Áp dụng auto-number theo thứ tự này? [Yes/No] <No>',
         'if (confirm.Status == PromptStatus.None) return false;',
         'confirm.Status == PromptStatus.OK && string.Equals(confirm.StringResult, "Yes"',
@@ -57,12 +60,16 @@ if COMMAND.is_file():
         if token in text:
             errors.append("Grid auto-number must remain read-only CAD + Core-planner-owned ordering + explicit Yes-only confirmation: " + token)
 
-    planner = text.find('GridSpatialOrderingPlanner.OrderParallelLines(extraction.Curves, orderingAxis.Value)')
-    confirm = text.find('ConfirmPlan(document.Editor, ordered, namingOptions)')
+    preview_planner = text.find('GridSpatialOrderingPlanner.OrderParallelLines(previewExtraction.Curves, orderingAxis.Value)')
+    confirm = text.find('ConfirmPlan(document.Editor, previewOrdered, namingOptions)')
+    bind = text.find('ExistingProjectMutationContext.Require(document, "Grid Auto Number")')
+    current_planner = text.find('GridSpatialOrderingPlanner.OrderParallelLines(currentExtraction.Curves, orderingAxis.Value)')
+    freshness = text.find('SamePreviewPlan(previewOrdered, currentOrdered)')
     snapshot = text.find('ProjectStateSnapshot.Capture(project)')
     mutate = text.find('GridNamingService.Renumber(project, orderedIds, namingOptions)')
-    if min(planner, confirm, snapshot, mutate) < 0 or not (planner < confirm < snapshot < mutate):
-        errors.append("Grid auto-number must plan, confirm, snapshot, then mutate in that order")
+    ordered_steps = (preview_planner, confirm, bind, current_planner, freshness, snapshot, mutate)
+    if min(ordered_steps) < 0 or list(ordered_steps) != sorted(ordered_steps):
+        errors.append("Grid auto-number must preview, confirm, bind, re-read, freshness-check, snapshot, then mutate in that order")
 
 if PLANNER.is_file():
     text = PLANNER.read_text(encoding="utf-8")
@@ -111,4 +118,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Grid auto-number uses explicit WCS ordering axis, same-plane semantic LINE sources, Core fail-closed spatial ordering, explicit Yes-only confirmation and semantic rollback; runtime remains separately qualified.")
+print("PASS: Grid auto-number uses explicit WCS ordering, confirms a detached preview, then binds and revalidates live source order before rollback-guarded mutation; runtime remains separately qualified.")

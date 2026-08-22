@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using QS3D.Core.Export;
 
 namespace QS3D.Core.Revisions
 {
@@ -112,11 +113,14 @@ namespace QS3D.Core.Revisions
     public sealed class SemanticChangeReviewBuilder
     {
         private const string SourceHandlesField = "SourceHandles";
+        private const string PropertyFieldPrefix = "Property:";
 
         public SemanticChangeReview Build(RevisionSnapshot before, RevisionSnapshot after)
         {
             if (before == null) throw new ArgumentNullException(nameof(before));
             if (after == null) throw new ArgumentNullException(nameof(after));
+            var beforeRevisionId = CanonicalRevisionId(before.Id, "before revision id");
+            var afterRevisionId = CanonicalRevisionId(after.Id, "after revision id");
 
             var beforeIndex = Index(before, "before");
             var afterIndex = Index(after, "after");
@@ -138,7 +142,7 @@ namespace QS3D.Core.Revisions
                 {
                     if (field == null || string.IsNullOrWhiteSpace(field.Field))
                         throw new InvalidOperationException("Revision comparison returned an invalid field delta for " + delta.ElementId + ".");
-                    if (string.Equals(field.Field, SourceHandlesField, StringComparison.OrdinalIgnoreCase))
+                    if (!IsPortableReviewField(field.Field))
                     {
                         omittedSourceReferences++;
                         continue;
@@ -182,7 +186,23 @@ namespace QS3D.Core.Revisions
             if (summary.TotalElementCount != orderedElements.Count)
                 throw new InvalidOperationException("Semantic change review summary is inconsistent with its grouped elements.");
 
-            return new SemanticChangeReview(before.Id, after.Id, orderedElements, summary);
+            return new SemanticChangeReview(beforeRevisionId, afterRevisionId, orderedElements, summary);
+        }
+
+        private static string CanonicalRevisionId(string? value, string label)
+        {
+            var raw = value ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Revision " + label + " is required and must not contain leading/trailing whitespace.");
+            return raw;
+        }
+
+        private static bool IsPortableReviewField(string field)
+        {
+            if (string.Equals(field, SourceHandlesField, StringComparison.OrdinalIgnoreCase)) return false;
+            if (!field.StartsWith(PropertyFieldPrefix, StringComparison.OrdinalIgnoreCase)) return true;
+            var propertyKey = field.Substring(PropertyFieldPrefix.Length);
+            return ProjectInterchangeElementPropertyPolicy.IsPortable(propertyKey);
         }
 
         private static Dictionary<string, RevisionElementSnapshot> Index(RevisionSnapshot snapshot, string label)
@@ -208,7 +228,7 @@ namespace QS3D.Core.Revisions
                 string.Equals(field, "FloorId", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(field, "ZoneId", StringComparison.OrdinalIgnoreCase))
                 return SemanticChangeFieldKind.Identity;
-            if (field.StartsWith("Property:", StringComparison.OrdinalIgnoreCase))
+            if (field.StartsWith(PropertyFieldPrefix, StringComparison.OrdinalIgnoreCase))
                 return SemanticChangeFieldKind.Property;
             if (field.StartsWith("Quantity:", StringComparison.OrdinalIgnoreCase))
                 return SemanticChangeFieldKind.Quantity;

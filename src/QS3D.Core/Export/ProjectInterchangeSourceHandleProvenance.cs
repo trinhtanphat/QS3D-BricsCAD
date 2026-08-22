@@ -63,19 +63,17 @@ namespace QS3D.Core.Export
         private const string ProjectRecordSuffix = ".Project";
         private const string ElementRecordSegment = ".Element.";
         private const string RecordVersion = "v1";
+        private const string DrawingLocalSourceRefScope = "drawing-local";
+        private const int MaxSourceHandleLength = 128;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static ProjectInterchangeSourceHandleProvenancePlan Plan(ProjectState target, string json)
         {
             if (target == null) throw new ArgumentNullException(nameof(target));
             var source = ProjectInterchangeValidatedSnapshotReader.Read(json);
-            var elementsWithHandles = source.Elements.Count(x => x.SourceHandles.Count > 0);
-            var sourceHandleCount = source.Elements.Sum(x => x.SourceHandles.Count);
-            return new ProjectInterchangeSourceHandleProvenancePlan(
-                source.Project.Id,
-                source.Project.DrawingFingerprint,
-                elementsWithHandles,
-                sourceHandleCount,
-                source.Validation.WarningCount);
+            var plan = PlanFromValidated(source);
+            EnsureProvenanceCanBeScoped(plan);
+            return plan;
         }
 
         public static ProjectInterchangeSourceHandleProvenanceResult Store(ProjectState target, string json)
@@ -83,6 +81,7 @@ namespace QS3D.Core.Export
             if (target == null) throw new ArgumentNullException(nameof(target));
             var source = ProjectInterchangeValidatedSnapshotReader.Read(json);
             var plan = PlanFromValidated(source);
+            EnsureProvenanceCanBeScoped(plan);
             var rollback = ProjectStateSnapshot.Capture(target);
 
             try
@@ -161,12 +160,30 @@ namespace QS3D.Core.Export
             var fields = DecodeRecord(encoded);
             if (fields.Count < 4 || !string.Equals(fields[0], sourceElementId.Trim(), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Interchange provenance record does not match the requested source element identity.");
+            if (!string.Equals(fields[2], DrawingLocalSourceRefScope, StringComparison.Ordinal))
+                throw new InvalidOperationException("Interchange provenance record source-reference scope must be drawing-local.");
             if (!int.TryParse(fields[3], NumberStyles.None, CultureInfo.InvariantCulture, out var handleCount) || handleCount < 0)
                 throw new InvalidOperationException("Interchange provenance record contains an invalid source-handle count.");
             if (fields.Count != 4 + handleCount)
                 throw new InvalidOperationException("Interchange provenance record source-handle count does not match its encoded payload.");
 
-            return fields.Skip(4).ToList().AsReadOnly();
+            var handles = new List<string>(handleCount);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 4; i < fields.Count; i++)
+            {
+                var raw = fields[i] ?? string.Empty;
+                var handle = raw.Trim();
+                if (handle.Length == 0)
+                    throw new InvalidOperationException("Interchange provenance record contains an empty source handle.");
+                if (!string.Equals(raw, handle, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Interchange provenance record contains a non-canonical padded source handle.");
+                if (handle.Length > MaxSourceHandleLength)
+                    throw new InvalidOperationException("Interchange provenance record contains a source handle above the " + MaxSourceHandleLength + " character limit.");
+                if (!seen.Add(handle))
+                    throw new InvalidOperationException("Interchange provenance record contains duplicate source handle: " + handle + ".");
+                handles.Add(handle);
+            }
+            return handles.AsReadOnly();
         }
 
         private static ProjectInterchangeSourceHandleProvenancePlan PlanFromValidated(ProjectInterchangeValidatedSnapshot source)
@@ -177,6 +194,15 @@ namespace QS3D.Core.Export
                 source.Elements.Count(x => x.SourceHandles.Count > 0),
                 source.Elements.Sum(x => x.SourceHandles.Count),
                 source.Validation.WarningCount);
+        }
+
+        private static void EnsureProvenanceCanBeScoped(ProjectInterchangeSourceHandleProvenancePlan plan)
+        {
+            if (plan == null) throw new ArgumentNullException(nameof(plan));
+            if (plan.SourceHandleCount > 0 && string.IsNullOrWhiteSpace(plan.SourceDrawingFingerprint))
+                throw new InvalidOperationException(
+                    "Interchange source-handle provenance requires a source drawing fingerprint when drawing-local source handles are present. " +
+                    "The handles remain provenance only and cannot be safely scoped to an unnamed/unknown source drawing.");
         }
 
         private static void RemoveExistingSourceRecords(IDictionary<string, string> metadata, string sourcePrefix)
@@ -193,7 +219,7 @@ namespace QS3D.Core.Export
             // model. Canonicalizing before encoding keeps provenance lookup stable when caller casing
             // differs from the snapshot while leaving the original identity preserved inside records.
             var canonicalIdentity = (value ?? string.Empty).Trim().ToUpperInvariant();
-            var bytes = Encoding.UTF8.GetBytes(canonicalIdentity);
+            var bytes = StrictUtf8.GetBytes(canonicalIdentity);
             return Convert.ToBase64String(bytes)
                 .TrimEnd('=')
                 .Replace('+', '-')
@@ -219,11 +245,11 @@ namespace QS3D.Core.Export
             {
                 try
                 {
-                    fields.Add(Encoding.UTF8.GetString(Convert.FromBase64String(parts[i])));
+                    fields.Add(StrictUtf8.GetString(Convert.FromBase64String(parts[i])));
                 }
-                catch (FormatException ex)
+                catch (Exception ex) when (ex is FormatException || ex is DecoderFallbackException)
                 {
-                    throw new InvalidOperationException("Interchange provenance record contains invalid base64 data.", ex);
+                    throw new InvalidOperationException("Interchange provenance record contains invalid base64 or UTF-8 data.", ex);
                 }
             }
             return fields.AsReadOnly();

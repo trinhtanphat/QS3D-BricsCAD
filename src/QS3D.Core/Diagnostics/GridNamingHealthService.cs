@@ -19,11 +19,23 @@ namespace QS3D.Core.Diagnostics
 
             foreach (var element in project.Elements)
             {
-                if (element == null || element.Category != ElementCategory.Grid) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Grid-naming diagnostics cannot inspect a project containing a null semantic element.");
+                if (element.Category != ElementCategory.Grid) continue;
 
                 var hasLabelProperty = element.Properties.TryGetValue(GridNamingService.GridLabelKey, out var rawLabel);
-                var label = (rawLabel ?? string.Empty).Trim();
+                var labelText = rawLabel ?? string.Empty;
+                var label = labelText.Trim();
                 var hasSequenceProperty = element.Properties.TryGetValue(GridNamingService.GridSequenceIndexKey, out var rawSequence);
+
+                if (hasLabelProperty && !string.Equals(labelText, label, StringComparison.Ordinal))
+                {
+                    issues.Add(new ModelHealthIssue(
+                        "GRID_LABEL_NON_CANONICAL",
+                        HealthSeverity.Error,
+                        "GridLabel phải dùng đúng canonical text, không có khoảng trắng đầu/cuối.",
+                        element.Id));
+                }
 
                 if (hasLabelProperty && label.Length == 0)
                 {
@@ -64,8 +76,21 @@ namespace QS3D.Core.Diagnostics
                     }
                 }
 
-                if (!hasSequenceProperty) continue;
-                var sequenceText = (rawSequence ?? string.Empty).Trim();
+                if (!hasSequenceProperty)
+                {
+                    if (label.Length > 0)
+                    {
+                        issues.Add(new ModelHealthIssue(
+                            "GRID_LABEL_WITHOUT_SEQUENCE",
+                            HealthSeverity.Error,
+                            "Grid có nhãn semantic nhưng thiếu GridSequenceIndex metadata.",
+                            element.Id));
+                    }
+                    continue;
+                }
+
+                var sequenceRaw = rawSequence ?? string.Empty;
+                var sequenceText = sequenceRaw.Trim();
                 if (!int.TryParse(sequenceText, NumberStyles.None, CultureInfo.InvariantCulture, out var sequenceIndex) ||
                     sequenceIndex < 1 || sequenceIndex > MaxSequenceIndex)
                 {
@@ -75,6 +100,16 @@ namespace QS3D.Core.Diagnostics
                         "GridSequenceIndex phải là số nguyên từ 1 đến " + MaxSequenceIndex + ".",
                         element.Id));
                     continue;
+                }
+
+                var canonicalSequence = sequenceIndex.ToString(CultureInfo.InvariantCulture);
+                if (!string.Equals(sequenceRaw, canonicalSequence, StringComparison.Ordinal))
+                {
+                    issues.Add(new ModelHealthIssue(
+                        "GRID_SEQUENCE_NON_CANONICAL",
+                        HealthSeverity.Error,
+                        "GridSequenceIndex phải dùng đúng canonical invariant integer spelling.",
+                        element.Id));
                 }
 
                 if (label.Length == 0)

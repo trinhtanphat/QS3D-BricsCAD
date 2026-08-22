@@ -18,36 +18,47 @@ namespace QS3D.Core.Diagnostics
             var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Wall mesh health cannot inspect a null project element.");
                 if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
                 var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var validCount = 0;
-                foreach (var item in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                foreach (var item in raw.Split(new[] { ';' }, StringSplitOptions.None))
                 {
-                    var handle = (item ?? string.Empty).Trim();
+                    var rawHandle = item ?? string.Empty;
+                    var handle = rawHandle.Trim();
+                    if (handle.Length > 0 && !string.Equals(rawHandle, handle, StringComparison.Ordinal))
+                        issues.Add(new ModelHealthIssue("WALL_MESH_GENERATED_HANDLE_NON_CANONICAL", HealthSeverity.Error, HandlesKey + " không được có khoảng trắng quanh handle.", element.Id));
                     if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
                     {
                         issues.Add(new ModelHealthIssue("INVALID_WALL_MESH_GENERATED_HANDLE", HealthSeverity.Error, HandlesKey + " chứa handle không hợp lệ.", element.Id));
                         continue;
                     }
-                    if (!local.Add(handle))
+                    var identity = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
+                    if (!local.Add(identity))
                     {
                         issues.Add(new ModelHealthIssue("DUPLICATE_WALL_MESH_GENERATED_HANDLE", HealthSeverity.Error, "Một wall mesh handle bị lặp trong cùng element: " + handle, element.Id));
                         continue;
                     }
                     validCount++;
                     var expectedOwner = element.Id + "/" + HandlesKey;
-                    if (ownership.IsConflicted(handle, expectedOwner))
-                        issues.Add(new ModelHealthIssue("WALL_MESH_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated wall mesh solid xung đột owner/project handle khác: " + ownership.Describe(handle), element.Id));
-                    if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
+                    if (ownership.IsConflicted(identity, expectedOwner))
+                        issues.Add(new ModelHealthIssue("WALL_MESH_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated wall mesh solid xung đột owner/project handle khác: " + ownership.Describe(identity), element.Id));
+                    if (element.SourceHandles.Any(x => string.Equals(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x), identity, StringComparison.OrdinalIgnoreCase)))
                         issues.Add(new ModelHealthIssue("WALL_MESH_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated wall mesh handle không được nằm trong SourceHandles.", element.Id));
-                    if (liveSolidHandles != null && !liveSolidHandles.Contains(handle))
+                    if (liveSolidHandles != null && !ContainsLogicalHandle(liveSolidHandles, identity))
                         issues.Add(new ModelHealthIssue("WALL_MESH_GENERATED_SOLID_MISSING", HealthSeverity.Error, "Không còn tìm thấy generated wall mesh Solid3d: " + handle, element.Id));
                 }
 
                 if (!element.Properties.TryGetValue(CountKey, out var countText) ||
                     !int.TryParse(countText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) || count < 0 || count != validCount)
+                {
                     issues.Add(new ModelHealthIssue("WALL_MESH_GENERATED_COUNT_MISMATCH", HealthSeverity.Warning, CountKey + " không khớp số handle hợp lệ.", element.Id));
+                }
+                else if (!string.Equals(countText, count.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
+                {
+                    issues.Add(new ModelHealthIssue("WALL_MESH_GENERATED_COUNT_NON_CANONICAL", HealthSeverity.Warning, CountKey + " phải dùng canonical invariant integer text.", element.Id));
+                }
 
                 ValidatePositive(element, "GeneratedWallMeshHorizontalDiameterMm", "WALL_MESH_HORIZONTAL_DIAMETER_INVALID", issues);
                 ValidatePositive(element, "GeneratedWallMeshVerticalDiameterMm", "WALL_MESH_VERTICAL_DIAMETER_INVALID", issues);
@@ -72,6 +83,9 @@ namespace QS3D.Core.Diagnostics
             }
             return issues.AsReadOnly();
         }
+
+        private static bool ContainsLogicalHandle(IEnumerable<string> handles, string identity) =>
+            handles.Any(x => string.Equals(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x), identity, StringComparison.OrdinalIgnoreCase));
 
         private static void ValidatePositive(ProjectElement element, string key, string code, List<ModelHealthIssue> issues)
         {
@@ -112,7 +126,8 @@ namespace QS3D.Core.Diagnostics
             var index = new OwnershipIndex();
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Wall mesh health cannot inspect a null project element.");
                 foreach (var handle in element.SourceHandles) Reserve(index, handle, element.Id + "/SourceHandles");
                 foreach (var property in element.Properties)
                 {
@@ -132,7 +147,7 @@ namespace QS3D.Core.Diagnostics
 
         private static void Reserve(OwnershipIndex index, string? handle, string token)
         {
-            var normalized = (handle ?? string.Empty).Trim();
+            var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
             if (normalized.Length == 0) return;
             if (!index.Owners.TryGetValue(normalized, out var existing))
             {

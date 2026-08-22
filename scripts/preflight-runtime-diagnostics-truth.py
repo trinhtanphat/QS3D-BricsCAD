@@ -13,10 +13,9 @@ else:
     required = (
         'CommandMethod("QS3DRUNTIMECHECK"',
         "signatureMetadataRecorded",
-        "signature metadata=",
+        "Package signature metadata:",
         "Recorded signer thumbprint:",
         "Authenticode: metadata only here; cryptographic publisher/timestamp verification belongs to the signed installer/release gate.",
-        "use the signed installer/release gate for Authenticode verification",
     )
     for needle in required:
         if needle not in text:

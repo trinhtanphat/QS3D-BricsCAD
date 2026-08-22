@@ -16,7 +16,9 @@ else:
         'project.Metadata.TryGetValue(RecoveredFromBackupKey, out var recovered)',
         'string.Equals(recovered, "true", StringComparison.OrdinalIgnoreCase)',
         'return true;',
-        'return project.ChangeVersion != _savedChangeVersion;',
+        'return project.ChangeVersion != _savedChangeVersion ||',
+        '!PersistedScalarsMatch(project)',
+        '!MetadataMatches(project.Metadata, _savedMetadata)',
     ]
     for needle in required:
         if needle not in text:
@@ -30,9 +32,11 @@ else:
         body = text[requires_start:mark_start]
         marker_check = body.find("project.Metadata.TryGetValue(RecoveredFromBackupKey")
         recovery_pending = body.find("return true;", marker_check)
-        version_check = body.find("return project.ChangeVersion != _savedChangeVersion;")
-        if min(marker_check, recovery_pending, version_check) < 0 or not marker_check < recovery_pending < version_check:
-            errors.append("backup recovery must force pending before normal ChangeVersion comparison")
+        dirty_check = body.find("return project.ChangeVersion != _savedChangeVersion ||")
+        scalar_check = body.find("!PersistedScalarsMatch(project)", dirty_check)
+        metadata_check = body.find("!MetadataMatches(project.Metadata, _savedMetadata)", dirty_check)
+        if min(marker_check, recovery_pending, dirty_check, scalar_check, metadata_check) < 0 or not marker_check < recovery_pending < dirty_check < scalar_check < metadata_check:
+            errors.append("backup recovery must force pending before the complete persisted-state dirty comparison")
 
 if not COORDINATOR.is_file():
     errors.append("missing ProjectContextCoordinator.cs")

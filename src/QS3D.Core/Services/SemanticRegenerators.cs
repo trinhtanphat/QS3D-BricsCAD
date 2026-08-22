@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
 
@@ -9,11 +10,68 @@ namespace QS3D.Core.Services
     {
         public static double Get(ProjectElement element, string name, double fallback = 0d)
         {
-            if (element.Properties.TryGetValue(name, out var value) &&
-                double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) &&
-                !double.IsNaN(result) && !double.IsInfinity(result))
-                return result;
+            if (!element.Properties.TryGetValue(name, out var value)) return fallback;
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) ||
+                double.IsNaN(result) || double.IsInfinity(result))
+                throw new InvalidOperationException(element.Id + "/" + name + " must be a finite invariant numeric value.");
+            if (result == 0d && HasNonZeroSignificand(value))
+                throw new InvalidOperationException(element.Id + "/" + name + " underflowed to zero.");
+            return result;
+        }
+
+        public static double Resolve(ProjectState project, ProjectElement element, string name, double fallback)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (element == null) throw new ArgumentNullException(nameof(element));
+            if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Property name is required.", nameof(name));
+            if (element.Properties.TryGetValue(name, out var own))
+                return ParseFinite(own ?? string.Empty, element.Id + "/" + name);
+            var family = project.FindFamily(element.FamilyId);
+            if (family != null && family.Properties.TryGetValue(name, out var inherited))
+                return ParseFinite(inherited ?? string.Empty, "family " + family.Id + "/" + name);
+            if (double.IsNaN(fallback) || double.IsInfinity(fallback))
+                throw new InvalidOperationException("Fallback " + name + " must be finite.");
             return fallback;
+        }
+
+        private static double ParseFinite(string text, string label)
+        {
+            if (!double.TryParse(text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+                double.IsNaN(value) || double.IsInfinity(value))
+                throw new InvalidOperationException(label + " must be a finite invariant number.");
+            if (value == 0d && HasNonZeroSignificand(text))
+                throw new InvalidOperationException(label + " underflowed to zero.");
+            return value;
+        }
+
+        private static bool HasNonZeroSignificand(string value)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                var character = value[i];
+                if (character == 'e' || character == 'E') break;
+                if (character >= '1' && character <= '9') return true;
+            }
+            return false;
+        }
+    }
+
+    internal static class SemanticVertical
+    {
+        public static double Height(ProjectState project, ProjectElement element, string legacyHeightKey, double legacyFallback)
+        {
+            LevelReferenceNativeIntegrationPolicy.EnsureQualified(element, "Quantity regeneration with Level references");
+            if (!ElementVerticalPlacementService.HasAnyLevelConfiguration(element))
+                return QuantityMath.Positive(SemanticNumber.Get(element, legacyHeightKey));
+
+            var probe = ElementVerticalPlacementService.Resolve(project, element, 0d, 1d, 0d);
+            if (element.Properties.TryGetValue(ProjectFloorService.TopLevelIdKey, out var topLevelId) &&
+                !string.IsNullOrWhiteSpace(topLevelId))
+                return QuantityMath.Positive(probe.HeightM);
+
+            var resolvedLegacy = SemanticNumber.Resolve(project, element, legacyHeightKey, legacyFallback);
+            return QuantityMath.Positive(
+                ElementVerticalPlacementService.Resolve(project, element, 0d, resolvedLegacy, 0d).HeightM);
         }
     }
 
@@ -27,7 +85,7 @@ namespace QS3D.Core.Services
             if (element == null) throw new ArgumentNullException(nameof(element));
 
             var length = QuantityMath.Positive(SemanticNumber.Get(element, "LengthM"));
-            var height = QuantityMath.Positive(SemanticNumber.Get(element, "HeightM"));
+            var height = SemanticVertical.Height(project, element, "HeightM", 3.6d);
             var thickness = QuantityMath.Positive(SemanticNumber.Get(element, "ThicknessM"));
             var grossArea = QuantityMath.Multiply(length, height, element.Id + "/gross wall area");
             var linkedOpeningArea = LinkedOpeningArea(project, element);
@@ -39,6 +97,7 @@ namespace QS3D.Core.Services
             var netVolume = QuantityMath.Multiply(netArea, thickness, element.Id + "/net wall volume");
 
             element.SetQuantity("LengthM", length);
+            element.SetQuantity("HeightM", height);
             element.SetQuantity("GrossWallAreaM2", grossArea);
             element.SetQuantity("OpeningAreaM2", openingArea);
             element.SetQuantity("NetWallAreaM2", netArea);
@@ -202,19 +261,33 @@ namespace QS3D.Core.Services
             var total = 0d;
             foreach (var child in project.Elements)
             {
+                if (child == null)
+                    throw new InvalidOperationException("Wall quantity cannot inspect a project containing a null semantic element.");
                 if (child.Category != ElementCategory.WallOpening && child.Category != ElementCategory.Door) continue;
-                if (!child.Properties.TryGetValue("HostWallId", out var host) || !string.Equals(host, wall.Id, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!child.Properties.TryGetValue("HostWallId", out var host)) continue;
+                var hostId = CanonicalOptionalHostId(host, child.Id);
+                if (hostId.Length == 0 || !string.Equals(hostId, wall.Id, StringComparison.OrdinalIgnoreCase)) continue;
                 double area;
-                if (child.Quantities.TryGetValue("OpeningAreaM2", out var stored)) area = QuantityMath.Positive(stored);
+                if (child.Dirty == ElementDirtyFlags.None && child.Quantities.TryGetValue("OpeningAreaM2", out var stored)) area = QuantityMath.Positive(stored);
                 else
                 {
                     var width = QuantityMath.Positive(SemanticNumber.Get(child, "WidthM"));
-                    var height = QuantityMath.Positive(SemanticNumber.Get(child, "HeightM"));
+                    var height = SemanticVertical.Height(project, child, "HeightM", 2.2d);
                     area = QuantityMath.Multiply(width, height, child.Id + "/opening area");
                 }
                 total = QuantityMath.Add(total, area, wall.Id + "/linked opening area");
             }
             return total;
+        }
+
+        private static string CanonicalOptionalHostId(string? value, string elementId)
+        {
+            var raw = value ?? string.Empty;
+            if (raw.Length == 0) return string.Empty;
+            if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Wall quantity requires canonical HostWallId without surrounding whitespace on opening: " + elementId + ".");
+            return raw;
         }
     }
 
@@ -260,7 +333,7 @@ namespace QS3D.Core.Services
             if (element == null) throw new ArgumentNullException(nameof(element));
 
             var width = QuantityMath.Positive(SemanticNumber.Get(element, "WidthM"));
-            var height = QuantityMath.Positive(SemanticNumber.Get(element, "HeightM"));
+            var height = SemanticVertical.Height(project, element, "HeightM", 2.2d);
             var area = QuantityMath.Multiply(width, height, element.Id + "/opening area");
 
             element.SetQuantity("OpeningAreaM2", area);
@@ -272,7 +345,10 @@ namespace QS3D.Core.Services
                 {
                     host.MarkDirty(ElementDirtyFlags.Quantity);
                     if (host.Category == ElementCategory.GlassWall)
+                    {
                         host.MarkGeneratedCurtainFrameStale("Linked opening " + element.Id + " changed.");
+                        host.MarkGeneratedCurtainPanelStale("Linked opening " + element.Id + " changed.");
+                    }
                 }
             }
         }

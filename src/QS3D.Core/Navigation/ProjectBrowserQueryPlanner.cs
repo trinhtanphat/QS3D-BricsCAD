@@ -16,9 +16,9 @@ namespace QS3D.Core.Navigation
         {
             Query = query;
             DirtyOnly = dirtyOnly;
-            Categories = categories == null ? new List<ElementCategory>().AsReadOnly() : new List<ElementCategory>(categories).AsReadOnly();
-            FloorIds = floorIds == null ? new List<string>().AsReadOnly() : new List<string>(floorIds).AsReadOnly();
-            ZoneIds = zoneIds == null ? new List<string>().AsReadOnly() : new List<string>(zoneIds).AsReadOnly();
+            Categories = CopyBounded(categories, nameof(categories));
+            FloorIds = CopyBounded(floorIds, nameof(floorIds));
+            ZoneIds = CopyBounded(zoneIds, nameof(zoneIds));
         }
 
         public string? Query { get; }
@@ -26,6 +26,52 @@ namespace QS3D.Core.Navigation
         public IReadOnlyList<ElementCategory> Categories { get; }
         public IReadOnlyList<string> FloorIds { get; }
         public IReadOnlyList<string> ZoneIds { get; }
+
+        private static IReadOnlyList<T> CopyBounded<T>(IEnumerable<T>? values, string parameterName)
+        {
+            if (values == null) return new List<T>().AsReadOnly();
+            var knownCount = ValidateKnownCounts(values, parameterName);
+            var result = new List<T>();
+            foreach (var value in values)
+            {
+                if (result.Count >= ProjectBrowserQueryPlanner.MaxFilterIds)
+                    throw TooManyFilterValues(parameterName);
+                result.Add(value);
+            }
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw new InvalidOperationException(
+                    "Project browser query option " + parameterName + " Count " + knownCount.Value +
+                    " does not match traversed value count " + result.Count + ".");
+            return result.AsReadOnly();
+        }
+
+        private static int? ValidateKnownCounts<T>(IEnumerable<T> values, string parameterName)
+        {
+            int? knownCount = null;
+            ValidateKnownCount(values is ICollection<T> collection ? collection.Count : (int?)null, parameterName, ref knownCount);
+            ValidateKnownCount(values is IReadOnlyCollection<T> readOnlyCollection ? readOnlyCollection.Count : (int?)null, parameterName, ref knownCount);
+            ValidateKnownCount(values is System.Collections.ICollection nonGenericCollection ? nonGenericCollection.Count : (int?)null, parameterName, ref knownCount);
+            return knownCount;
+        }
+
+        private static void ValidateKnownCount(int? count, string parameterName, ref int? knownCount)
+        {
+            if (!count.HasValue) return;
+            if (count.Value < 0)
+                throw new InvalidOperationException("Project browser query option " + parameterName + " exposes an invalid negative Count.");
+            if (count.Value > ProjectBrowserQueryPlanner.MaxFilterIds)
+                throw TooManyFilterValues(parameterName);
+            if (knownCount.HasValue && knownCount.Value != count.Value)
+                throw new InvalidOperationException("Project browser query option " + parameterName + " exposes conflicting Count contracts.");
+            knownCount = count.Value;
+        }
+
+        private static InvalidOperationException TooManyFilterValues(string parameterName)
+        {
+            return new InvalidOperationException(
+                "Project browser query option " + parameterName + " supports at most " +
+                ProjectBrowserQueryPlanner.MaxFilterIds + " values.");
+        }
     }
 
     public sealed class ProjectBrowserQueryResult
@@ -46,8 +92,10 @@ namespace QS3D.Core.Navigation
     public static class ProjectBrowserQueryPlanner
     {
         private const int MaxElements = 250000;
+        private const int MaxFamilies = 10000;
+        private const int MaxReferenceDefinitions = 2000;
         private const int MaxQueryLength = 160;
-        private const int MaxFilterIds = 10000;
+        internal const int MaxFilterIds = 10000;
 
         public static ProjectBrowserQueryResult Build(
             ProjectState project,
@@ -61,16 +109,23 @@ namespace QS3D.Core.Navigation
             var query = NormalizeQuery(options.Query);
             var categories = NormalizeCategories(options.Categories);
             var isFiltered = query.Length > 0 || options.DirtyOnly || categories.Count > 0 || options.FloorIds.Count > 0 || options.ZoneIds.Count > 0;
-            if (!isFiltered)
-                return new ProjectBrowserQueryResult(ProjectBrowserPlanner.Build(project, grouping), project.Elements.Count, false);
 
             if (project.Elements.Count > MaxElements)
                 throw new InvalidOperationException("Project browser supports at most " + MaxElements + " semantic elements.");
+            if (project.Families.Count > MaxFamilies)
+                throw new InvalidOperationException("Project browser query supports at most " + MaxFamilies + " family definitions.");
+            if (project.Floors.Count > MaxReferenceDefinitions)
+                throw new InvalidOperationException("Project browser query supports at most " + MaxReferenceDefinitions + " floor definitions.");
+            if (project.Zones.Count > MaxReferenceDefinitions)
+                throw new InvalidOperationException("Project browser query supports at most " + MaxReferenceDefinitions + " zone definitions.");
 
             var familyIndex = BuildUniqueFamilyIndex(project);
             var floorIndex = BuildUniqueFloorIndex(project);
             var zoneIndex = BuildUniqueZoneIndex(project);
             ValidateElementReferences(project, familyIndex, floorIndex, zoneIndex);
+
+            if (!isFiltered)
+                return new ProjectBrowserQueryResult(ProjectBrowserPlanner.Build(project, grouping), project.Elements.Count, false);
 
             var floorIds = NormalizeReferenceIds(options.FloorIds, floorIndex, "floor");
             var zoneIds = NormalizeReferenceIds(options.ZoneIds, zoneIndex, "zone");
@@ -229,16 +284,30 @@ namespace QS3D.Core.Navigation
                 if (!ids.Add(elementId)) throw new InvalidOperationException("Project browser found duplicate semantic element id: " + elementId + ".");
                 if (!Enum.IsDefined(typeof(ElementCategory), element.Category)) throw new InvalidOperationException("Project browser found undefined element category on: " + elementId + ".");
 
-                var familyId = (element.FamilyId ?? string.Empty).Trim();
-                if (familyId.Length > 0 && !families.ContainsKey(familyId))
-                    throw new InvalidOperationException("Project browser found missing family reference " + familyId + " on element " + elementId + ".");
-                var floorId = (element.FloorId ?? string.Empty).Trim();
+                var familyId = CanonicalOptionalReference(element.FamilyId, "family", elementId);
+                if (familyId.Length > 0)
+                {
+                    if (!families.TryGetValue(familyId, out var family))
+                        throw new InvalidOperationException("Project browser found missing family reference " + familyId + " on element " + elementId + ".");
+                    if (family.Category != element.Category)
+                        throw new InvalidOperationException("Project browser found family/category mismatch on element " + elementId + ": family " + family.Id + " is " + family.Category + " while element is " + element.Category + ".");
+                }
+                var floorId = CanonicalOptionalReference(element.FloorId, "floor", elementId);
                 if (floorId.Length > 0 && !floors.ContainsKey(floorId))
                     throw new InvalidOperationException("Project browser found missing floor reference " + floorId + " on element " + elementId + ".");
-                var zoneId = (element.ZoneId ?? string.Empty).Trim();
+                var zoneId = CanonicalOptionalReference(element.ZoneId, "zone", elementId);
                 if (zoneId.Length > 0 && !zones.ContainsKey(zoneId))
                     throw new InvalidOperationException("Project browser found missing zone reference " + zoneId + " on element " + elementId + ".");
             }
+        }
+
+        private static string CanonicalOptionalReference(string? value, string label, string elementId)
+        {
+            var raw = value ?? string.Empty;
+            if (raw.Length == 0) return string.Empty;
+            if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Project browser query requires canonical " + label + " references without surrounding whitespace on element " + elementId + ".");
+            return raw;
         }
     }
 }

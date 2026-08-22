@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 using QS3D.Core.Audit;
@@ -27,6 +28,36 @@ namespace QS3D.Core.Templates
         public const string LayerMappingPrefix = "QS3D.LayerMapping:";
         public const string VisibleBqColumnsKey = "QS3D.BqVisibleColumns";
         private const long MaxTemplateFileBytes = 8L * 1024L * 1024L;
+
+        private sealed class BoundedMemoryStream : MemoryStream
+        {
+            private readonly long _maxBytes;
+
+            public BoundedMemoryStream(long maxBytes)
+            {
+                if (maxBytes < 0) throw new ArgumentOutOfRangeException(nameof(maxBytes));
+                _maxBytes = maxBytes;
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                EnsureWritable(count);
+                base.Write(buffer, offset, count);
+            }
+
+            public override void WriteByte(byte value)
+            {
+                EnsureWritable(1);
+                base.WriteByte(value);
+            }
+
+            private void EnsureWritable(int count)
+            {
+                if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+                if (Position > _maxBytes - count)
+                    throw new InvalidDataException("QS3D template exceeds 8 MiB.");
+            }
+        }
 
         private sealed class FamilyApplyPlan
         {
@@ -61,9 +92,15 @@ namespace QS3D.Core.Templates
             }
             foreach (var rule in project.QuantityRules.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                 profile.QuantityRules.Add(new QuantityRule(rule.Id, rule.Category, rule.OutputName, rule.Expression, rule.Version));
-            foreach (var item in project.Metadata.Where(x => x.Key.StartsWith(LayerMappingPrefix, StringComparison.OrdinalIgnoreCase)).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+            var layerMappings = project.Metadata
+                .Where(x => x.Key.StartsWith(LayerMappingPrefix, StringComparison.OrdinalIgnoreCase))
+                .Select(x => new KeyValuePair<string, string>(x.Key.Substring(LayerMappingPrefix.Length), x.Value))
+                .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            ProjectRecognitionService.ValidateLayerMappings(layerMappings, "Project recognition mappings");
+            foreach (var item in layerMappings)
             {
-                var pattern = item.Key.Substring(LayerMappingPrefix.Length).Trim();
+                var pattern = item.Key.Trim();
                 if (pattern.Length > 0) profile.LayerMappings[pattern] = item.Value;
             }
             if (project.Metadata.TryGetValue(VisibleBqColumnsKey, out var columns))
@@ -76,77 +113,95 @@ namespace QS3D.Core.Templates
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (profile == null) throw new ArgumentNullException(nameof(profile));
             Validate(profile);
+            EnsureSerializedLowerBoundWithinLimit(profile);
+            EnsureSerializedPayloadWithinLimit(profile);
             var familyPlans = ValidateApply(project, profile);
+            var rollback = ProjectStateSnapshot.Capture(project);
 
-            var result = new TemplateApplyResult();
-            var affected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var changedCategories = new HashSet<ElementCategory>();
-
-            foreach (var plan in familyPlans)
+            try
             {
-                if (!plan.Changed) continue;
-                var target = plan.Existing;
-                if (target == null)
+                var result = new TemplateApplyResult();
+                var affected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var changedCategories = new HashSet<ElementCategory>();
+
+                foreach (var plan in familyPlans)
                 {
-                    target = new ProjectFamily(plan.Source.Id, plan.Source.Name, plan.Source.Category);
-                    foreach (var property in plan.Source.Properties) target.Properties[property.Key] = property.Value;
-                    project.Families.Add(target);
-                    result.FamiliesAdded++;
+                    if (!plan.Changed) continue;
+                    var target = plan.Existing;
+                    if (target == null)
+                    {
+                        target = new ProjectFamily(plan.Source.Id, plan.Source.Name, plan.Source.Category);
+                        foreach (var property in plan.Source.Properties) target.Properties[property.Key] = property.Value;
+                        project.Families.Add(target);
+                        result.FamiliesAdded++;
+                    }
+                    else
+                    {
+                        target.Name = plan.Source.Name;
+                        target.Category = plan.Source.Category;
+                        target.Properties.Clear();
+                        foreach (var property in plan.Source.Properties) target.Properties[property.Key] = property.Value;
+                        result.FamiliesUpdated++;
+                    }
+
+                    PropagateFamilyDefaults(project, plan.Source, plan.PreviousProperties, affected);
                 }
-                else
+
+                foreach (var source in profile.QuantityRules)
                 {
-                    target.Name = plan.Source.Name;
-                    target.Category = plan.Source.Category;
-                    target.Properties.Clear();
-                    foreach (var property in plan.Source.Properties) target.Properties[property.Key] = property.Value;
-                    result.FamiliesUpdated++;
+                    var existing = project.FindQuantityRule(source.Id);
+                    var same = existing != null && existing.Category == source.Category &&
+                               string.Equals(existing.OutputName, source.OutputName, StringComparison.OrdinalIgnoreCase) &&
+                               string.Equals(existing.Expression, source.Expression, StringComparison.Ordinal) &&
+                               string.Equals(existing.Version, source.Version, StringComparison.Ordinal);
+                    if (same) continue;
+
+                    if (existing != null)
+                    {
+                        changedCategories.Add(existing.Category);
+                        project.QuantityRules.Remove(existing);
+                        result.RulesUpdated++;
+                    }
+                    else result.RulesAdded++;
+
+                    project.QuantityRules.Add(new QuantityRule(source.Id, source.Category, source.OutputName, source.Expression, source.Version));
+                    changedCategories.Add(source.Category);
                 }
 
-                PropagateFamilyDefaults(project, plan.Source, plan.PreviousProperties, affected);
-            }
-
-            foreach (var source in profile.QuantityRules)
-            {
-                var existing = project.FindQuantityRule(source.Id);
-                var same = existing != null && existing.Category == source.Category &&
-                           string.Equals(existing.OutputName, source.OutputName, StringComparison.OrdinalIgnoreCase) &&
-                           string.Equals(existing.Expression, source.Expression, StringComparison.Ordinal) &&
-                           string.Equals(existing.Version, source.Version, StringComparison.Ordinal);
-                if (same) continue;
-
-                if (existing != null)
+                foreach (var mapping in profile.LayerMappings)
                 {
-                    changedCategories.Add(existing.Category);
-                    project.QuantityRules.Remove(existing);
-                    result.RulesUpdated++;
+                    if (!Enum.TryParse(mapping.Value, true, out ElementCategory category)) throw new InvalidDataException("Invalid template layer mapping category: " + mapping.Value);
+                    project.Metadata[LayerMappingPrefix + mapping.Key.Trim()] = category.ToString();
+                    result.LayerMappingsApplied++;
                 }
-                else result.RulesAdded++;
 
-                project.QuantityRules.Add(new QuantityRule(source.Id, source.Category, source.OutputName, source.Expression, source.Version));
-                changedCategories.Add(source.Category);
+                var visibleColumns = profile.VisibleBqColumns.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                if (visibleColumns.Length > 0) project.Metadata[VisibleBqColumnsKey] = string.Join("|", visibleColumns);
+                else project.Metadata.Remove(VisibleBqColumnsKey);
+
+                foreach (var element in project.Elements)
+                {
+                    if (!changedCategories.Contains(element.Category)) continue;
+                    element.MarkDirty(ElementDirtyFlags.Quantity);
+                    affected.Add(element.Id);
+                }
+
+                result.AffectedElements = affected.Count;
+                AuditTrail.ForProject(project).Record("template.apply", string.Empty, profile.Id + " • families +" + result.FamiliesAdded + "/~" + result.FamiliesUpdated + " • rules +" + result.RulesAdded + "/~" + result.RulesUpdated + " • mappings " + result.LayerMappingsApplied);
+                return result;
             }
-
-            foreach (var mapping in profile.LayerMappings)
+            catch (Exception applyError)
             {
-                if (!Enum.TryParse(mapping.Value, true, out ElementCategory category)) throw new InvalidDataException("Invalid template layer mapping category: " + mapping.Value);
-                project.Metadata[LayerMappingPrefix + mapping.Key.Trim()] = category.ToString();
-                result.LayerMappingsApplied++;
+                try
+                {
+                    rollback.Restore(project);
+                }
+                catch (Exception rollbackError)
+                {
+                    throw new AggregateException("Template apply failed and project rollback also failed.", applyError, rollbackError);
+                }
+                throw;
             }
-
-            var visibleColumns = profile.VisibleBqColumns.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-            if (visibleColumns.Length > 0) project.Metadata[VisibleBqColumnsKey] = string.Join("|", visibleColumns);
-
-            foreach (var element in project.Elements)
-            {
-                if (!changedCategories.Contains(element.Category)) continue;
-                element.MarkDirty(ElementDirtyFlags.Quantity);
-                affected.Add(element.Id);
-            }
-
-            result.AffectedElements = affected.Count;
-            project.Touch();
-            AuditTrail.ForProject(project).Record("template.apply", string.Empty, profile.Id + " • families +" + result.FamiliesAdded + "/~" + result.FamiliesUpdated + " • rules +" + result.RulesAdded + "/~" + result.RulesUpdated + " • mappings " + result.LayerMappingsApplied);
-            return result;
         }
 
         public void Save(TemplateProfile profile, string path)
@@ -154,14 +209,16 @@ namespace QS3D.Core.Templates
             if (profile == null) throw new ArgumentNullException(nameof(profile));
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Template path is required.", nameof(path));
             Validate(profile);
+            EnsureSerializedLowerBoundWithinLimit(profile);
             var full = Path.GetFullPath(path);
+            var payload = SerializeBounded(profile);
             var directory = Path.GetDirectoryName(full);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
             var temp = AtomicFileCommit.CreateTempPath(full);
             var backup = full + ".bak";
             try
             {
-                Serialize(profile).Save(temp, SaveOptions.DisableFormatting);
+                File.WriteAllBytes(temp, payload);
                 Load(temp);
                 AtomicFileCommit.ReplaceWithBackup(temp, full, backup);
             }
@@ -173,6 +230,7 @@ namespace QS3D.Core.Templates
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Template path is required.", nameof(path));
             var document = LoadDocument(path);
             var root = document.Root ?? throw new InvalidDataException("Template has no root element.");
+            TemplateProfileXmlSchemaValidator.Validate(root);
             if (!string.Equals(root.Name.LocalName, "qs3dTemplate", StringComparison.Ordinal)) throw new InvalidDataException("Invalid QS3D template root.");
             var schema = Required(root, "schema");
             if (!string.Equals(schema, "1", StringComparison.Ordinal)) throw new InvalidDataException("Unsupported QS3D template schema: " + schema);
@@ -180,28 +238,39 @@ namespace QS3D.Core.Templates
 
             foreach (var item in root.Element("families")?.Elements("family") ?? Enumerable.Empty<XElement>())
             {
-                if (!Enum.TryParse(Required(item, "category"), true, out ElementCategory category)) throw new InvalidDataException("Invalid template family category.");
+                var category = RequiredCanonicalCategory(item, "family");
                 var family = new ProjectFamily(Required(item, "id"), Required(item, "name"), category);
+                var propertyNames = new List<string>();
                 foreach (var property in item.Element("properties")?.Elements("p") ?? Enumerable.Empty<XElement>())
                 {
                     var propertyName = Required(property, "name");
                     if (family.Properties.ContainsKey(propertyName)) throw new InvalidDataException("Duplicate template family property: " + family.Id + "/" + propertyName);
                     family.Properties[propertyName] = Value(property, "value");
+                    propertyNames.Add(propertyName);
                 }
+                RequireCanonicalOrder(propertyNames, "family properties for " + family.Id);
                 profile.Families.Add(family);
             }
+            RequireCanonicalOrder(profile.Families.Select(x => x.Id), "families");
+
             foreach (var item in root.Element("rules")?.Elements("rule") ?? Enumerable.Empty<XElement>())
             {
-                if (!Enum.TryParse(Required(item, "category"), true, out ElementCategory category)) throw new InvalidDataException("Invalid template rule category.");
+                var category = RequiredCanonicalCategory(item, "rule");
                 profile.QuantityRules.Add(new QuantityRule(Required(item, "id"), category, Required(item, "output"), Required(item, "expression"), Required(item, "version")));
             }
+            RequireCanonicalOrder(profile.QuantityRules.Select(x => x.Id), "quantity rules");
+
+            var mappingPatterns = new List<string>();
             foreach (var item in root.Element("layerMappings")?.Elements("map") ?? Enumerable.Empty<XElement>())
             {
-                var pattern = Required(item, "pattern");
+                var pattern = RequiredCanonicalLayerMappingPattern(item);
                 if (profile.LayerMappings.ContainsKey(pattern)) throw new InvalidDataException("Duplicate template layer mapping: " + pattern);
-                profile.LayerMappings.Add(pattern, Required(item, "category"));
+                profile.LayerMappings.Add(pattern, RequiredCanonicalLayerMappingCategory(item));
+                mappingPatterns.Add(pattern);
             }
-            foreach (var item in root.Element("bqColumns")?.Elements("column") ?? Enumerable.Empty<XElement>()) profile.VisibleBqColumns.Add(Required(item, "name"));
+            RequireCanonicalOrder(mappingPatterns, "layer mappings");
+
+            foreach (var column in ReadCanonicalBqColumns(root.Element("bqColumns"))) profile.VisibleBqColumns.Add(column);
             Validate(profile);
             return profile;
         }
@@ -228,10 +297,16 @@ namespace QS3D.Core.Templates
             var duplicateOutput = projectedRules.Values.GroupBy(x => x.Category + "\u001f" + x.OutputName, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateOutput != null) throw new InvalidOperationException("Template would create multiple project rules for the same category/output: " + duplicateOutput.Key);
 
+            var projectMappings = project.Metadata
+                .Where(x => x.Key.StartsWith(LayerMappingPrefix, StringComparison.OrdinalIgnoreCase))
+                .Select(x => new KeyValuePair<string, string>(x.Key.Substring(LayerMappingPrefix.Length), x.Value))
+                .ToList();
+            ProjectRecognitionService.ValidateLayerMappings(projectMappings, "Project recognition mappings");
+
             var projectedMappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in project.Metadata.Where(x => x.Key.StartsWith(LayerMappingPrefix, StringComparison.OrdinalIgnoreCase)))
+            foreach (var item in projectMappings)
             {
-                var pattern = item.Key.Substring(LayerMappingPrefix.Length).Trim();
+                var pattern = item.Key.Trim();
                 if (pattern.Length > 0) projectedMappings[pattern] = item.Value;
             }
             foreach (var mapping in profile.LayerMappings) projectedMappings[mapping.Key.Trim()] = mapping.Value;
@@ -274,6 +349,32 @@ namespace QS3D.Core.Templates
             }
         }
 
+        private static void EnsureSerializedPayloadWithinLimit(TemplateProfile profile)
+        {
+            SerializeBounded(profile);
+        }
+
+        private static byte[] SerializeBounded(TemplateProfile profile)
+        {
+            try
+            {
+                using (var stream = new BoundedMemoryStream(MaxTemplateFileBytes))
+                {
+                    Serialize(profile).Save(stream, SaveOptions.DisableFormatting);
+                    return stream.ToArray();
+                }
+            }
+            catch (InvalidDataException) { throw; }
+            catch (XmlException ex)
+            {
+                throw new InvalidDataException("Template contains characters that are invalid in XML.", ex);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidDataException("Template contains data that cannot be represented as XML.", ex);
+            }
+        }
+
         private static XDocument Serialize(TemplateProfile profile) => new XDocument(
             new XElement("qs3dTemplate",
                 new XAttribute("schema", "1"),
@@ -286,6 +387,50 @@ namespace QS3D.Core.Templates
                     new XAttribute("id", x.Id), new XAttribute("category", x.Category), new XAttribute("output", x.OutputName), new XAttribute("expression", x.Expression), new XAttribute("version", x.Version)))),
                 new XElement("layerMappings", profile.LayerMappings.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).Select(x => new XElement("map", new XAttribute("pattern", x.Key), new XAttribute("category", x.Value)))),
                 new XElement("bqColumns", profile.VisibleBqColumns.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Select(x => new XElement("column", new XAttribute("name", x))))));
+
+        private static void EnsureSerializedLowerBoundWithinLimit(TemplateProfile profile)
+        {
+            long estimate = 128;
+            AddEstimatedBytes(ref estimate, profile.Id, 8);
+            AddEstimatedBytes(ref estimate, profile.Name, 8);
+            foreach (var family in profile.Families)
+            {
+                AddEstimatedBytes(ref estimate, family.Id, 32);
+                AddEstimatedBytes(ref estimate, family.Name, 16);
+                AddEstimatedBytes(ref estimate, family.Category.ToString(), 16);
+                foreach (var property in family.Properties)
+                {
+                    AddEstimatedBytes(ref estimate, property.Key, 16);
+                    AddEstimatedBytes(ref estimate, property.Value ?? string.Empty, 16);
+                }
+            }
+            foreach (var rule in profile.QuantityRules)
+            {
+                AddEstimatedBytes(ref estimate, rule.Id, 32);
+                AddEstimatedBytes(ref estimate, rule.Category.ToString(), 16);
+                AddEstimatedBytes(ref estimate, rule.OutputName, 16);
+                AddEstimatedBytes(ref estimate, rule.Expression, 16);
+                AddEstimatedBytes(ref estimate, rule.Version, 16);
+            }
+            foreach (var mapping in profile.LayerMappings)
+            {
+                AddEstimatedBytes(ref estimate, mapping.Key, 24);
+                AddEstimatedBytes(ref estimate, mapping.Value, 16);
+            }
+            foreach (var column in profile.VisibleBqColumns.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase))
+                AddEstimatedBytes(ref estimate, column, 16);
+        }
+
+        private static void AddEstimatedBytes(ref long estimate, string value, int markupBytes)
+        {
+            if (estimate > MaxTemplateFileBytes - markupBytes)
+                throw new InvalidDataException("QS3D template exceeds 8 MiB.");
+            estimate += markupBytes;
+            var textBytes = Encoding.UTF8.GetByteCount(value ?? string.Empty);
+            if (textBytes > MaxTemplateFileBytes - estimate)
+                throw new InvalidDataException("QS3D template exceeds 8 MiB.");
+            estimate += textBytes;
+        }
 
         private static XDocument LoadDocument(string path)
         {
@@ -303,6 +448,17 @@ namespace QS3D.Core.Templates
             if (profile.QuantityRules.Any(x => x == null)) throw new InvalidDataException("Template rule list cannot contain null entries.");
             var duplicateFamily = profile.Families.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateFamily != null) throw new InvalidDataException("Duplicate template family id: " + duplicateFamily.Key);
+            foreach (var family in profile.Families)
+            {
+                foreach (var property in family.Properties)
+                {
+                    var key = property.Key;
+                    if (string.IsNullOrWhiteSpace(key))
+                        throw new InvalidDataException("Template family property key cannot be empty: " + family.Id);
+                    if (!string.Equals(key, key.Trim(), StringComparison.Ordinal))
+                        throw new InvalidDataException("Template family property key must not contain leading/trailing whitespace: " + family.Id + "/" + key);
+                }
+            }
             var duplicateRule = profile.QuantityRules.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateRule != null) throw new InvalidDataException("Duplicate template rule id: " + duplicateRule.Key);
             var duplicateOutput = profile.QuantityRules.GroupBy(x => x.Category + "\u001f" + x.OutputName, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
@@ -310,15 +466,126 @@ namespace QS3D.Core.Templates
             foreach (var mapping in profile.LayerMappings)
             {
                 if (string.IsNullOrWhiteSpace(mapping.Key)) throw new InvalidDataException("Template layer mapping pattern is empty.");
-                if (!Enum.TryParse(mapping.Value, true, out ElementCategory _)) throw new InvalidDataException("Invalid template layer mapping category: " + mapping.Value);
+                if (string.IsNullOrWhiteSpace(mapping.Value) ||
+                    !Enum.TryParse(mapping.Value, false, out ElementCategory category) ||
+                    !Enum.IsDefined(typeof(ElementCategory), category) ||
+                    !string.Equals(mapping.Value, category.ToString(), StringComparison.Ordinal))
+                    throw new InvalidDataException("Invalid or non-canonical template layer mapping category: " + mapping.Value);
             }
             try { ProjectRecognitionService.ValidateLayerMappings(profile.LayerMappings, "Template layer mappings"); }
             catch (InvalidOperationException ex) { throw new InvalidDataException(ex.Message, ex); }
+            ValidateSerializedXmlText(profile);
+        }
+
+        private static void ValidateSerializedXmlText(TemplateProfile profile)
+        {
+            try
+            {
+                VerifyXmlText(profile.Id);
+                VerifyXmlText(profile.Name);
+                foreach (var family in profile.Families)
+                {
+                    VerifyXmlText(family.Id);
+                    VerifyXmlText(family.Name);
+                    foreach (var property in family.Properties)
+                    {
+                        VerifyXmlText(property.Key);
+                        VerifyXmlText(property.Value ?? string.Empty);
+                    }
+                }
+                foreach (var rule in profile.QuantityRules)
+                {
+                    VerifyXmlText(rule.Id);
+                    VerifyXmlText(rule.OutputName);
+                    VerifyXmlText(rule.Expression);
+                    VerifyXmlText(rule.Version);
+                }
+                foreach (var mapping in profile.LayerMappings)
+                {
+                    VerifyXmlText(mapping.Key);
+                    VerifyXmlText(mapping.Value);
+                }
+                foreach (var column in profile.VisibleBqColumns) VerifyXmlText(column ?? string.Empty);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidDataException("Template contains characters that are invalid in XML.", ex);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidDataException("Template contains data that cannot be represented as XML.", ex);
+            }
+        }
+
+        private static void VerifyXmlText(string value) => XmlConvert.VerifyXmlChars(value ?? string.Empty);
+
+        private static ElementCategory RequiredCanonicalCategory(XElement element, string label)
+        {
+            var raw = element.Attribute("category")?.Value;
+            if (string.IsNullOrWhiteSpace(raw) ||
+                !Enum.TryParse(raw, false, out ElementCategory category) ||
+                !Enum.IsDefined(typeof(ElementCategory), category) ||
+                !string.Equals(raw, category.ToString(), StringComparison.Ordinal))
+                throw new InvalidDataException("Invalid or non-canonical template " + label + " category.");
+            return category;
+        }
+
+        private static string RequiredCanonicalLayerMappingPattern(XElement element)
+        {
+            var raw = element.Attribute("pattern")?.Value;
+            if (raw == null || string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("Template layer mapping pattern is empty or non-canonical.");
+            return raw;
+        }
+
+        private static string RequiredCanonicalLayerMappingCategory(XElement element)
+        {
+            var raw = element.Attribute("category")?.Value;
+            if (string.IsNullOrWhiteSpace(raw) ||
+                !Enum.TryParse(raw, false, out ElementCategory category) ||
+                !Enum.IsDefined(typeof(ElementCategory), category) ||
+                !string.Equals(raw, category.ToString(), StringComparison.Ordinal))
+                throw new InvalidDataException("Invalid or non-canonical template layer mapping category.");
+            return category.ToString();
+        }
+
+        private static IReadOnlyList<string> ReadCanonicalBqColumns(XElement? container)
+        {
+            if (container == null) return Array.Empty<string>();
+            var values = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var column in container.Elements("column"))
+            {
+                var raw = column.Attribute("name")?.Value;
+                if (raw == null || string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                    throw new InvalidDataException("Template BQ column name is empty or non-canonical.");
+                if (!seen.Add(raw)) throw new InvalidDataException("Duplicate template BQ column: " + raw);
+                values.Add(raw);
+            }
+            var canonical = values.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+            if (!values.SequenceEqual(canonical, StringComparer.Ordinal))
+                throw new InvalidDataException("Template BQ columns are not in canonical order.");
+            return values.AsReadOnly();
+        }
+
+        private static void RequireCanonicalOrder(IEnumerable<string> values, string label)
+        {
+            var actual = values.ToList();
+            var canonical = actual.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+            if (!actual.SequenceEqual(canonical, StringComparer.Ordinal))
+                throw new InvalidDataException("Template " + label + " are not in canonical order.");
         }
 
         private static IEnumerable<string> SplitColumns(string value) => (value ?? string.Empty).Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase);
         private static bool SameMap(IDictionary<string, string> left, IDictionary<string, string> right) => left.Count == right.Count && left.All(x => right.TryGetValue(x.Key, out var value) && string.Equals(x.Value ?? string.Empty, value ?? string.Empty, StringComparison.Ordinal));
-        private static string Required(XElement element, string name) => !string.IsNullOrWhiteSpace(element.Attribute(name)?.Value) ? element.Attribute(name)!.Value.Trim() : throw new InvalidDataException("Missing attribute: " + name);
+        private static string Required(XElement element, string name)
+        {
+            var raw = element.Attribute(name)?.Value ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(raw)) throw new InvalidDataException("Missing attribute: " + name);
+            if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("Non-canonical attribute with leading or trailing whitespace: " + name);
+            return raw;
+        }
         private static string Value(XElement element, string name) => element.Attribute(name)?.Value ?? string.Empty;
     }
 }

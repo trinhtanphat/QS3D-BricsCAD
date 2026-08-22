@@ -36,21 +36,39 @@ namespace QS3D.BricsCAD.V25
                 }
                 if (selected.Count == 0) return;
 
-                if (!ExistingProjectMutationContext.TryGet(document, out var project))
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
                 {
                     Report(document, "Tie QTY: BLOCKED • chưa có QS3D project state/sidecar; lệnh không tạo project mới từ selection.");
                     return;
                 }
 
-                var targets = project.Elements
-                    .Where(x => x.Category == ElementCategory.Column && x.SourceHandles.Any(selected.Contains))
-                    .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-                if (targets.Count == 0)
+                var previewTargets = ResolveColumnTargets(previewProject, selected);
+                if (previewTargets.Count == 0)
                 {
                     Report(document, "Tie QTY: selection không chứa Column semantic.");
                     return;
                 }
+
+                var expectedProjectId = previewProject.ProjectId;
+                var expectedChangeVersion = previewProject.ChangeVersion;
+                var expectedTargetIds = new HashSet<string>(
+                    previewTargets.Select(x => x.Id),
+                    StringComparer.OrdinalIgnoreCase);
+
+                if (!ExistingProjectMutationContext.TryGet(document, out var project))
+                {
+                    Report(document, "Tie QTY: BLOCKED • QS3D project không còn khả dụng cho mutation; hãy chạy lại trên project hiện hành.");
+                    return;
+                }
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    project.ChangeVersion != expectedChangeVersion)
+                    throw new InvalidOperationException("Tie QTY: QS3D project đã thay đổi sau khi đọc selection; hãy chọn lại Column target.");
+
+                var targets = ResolveColumnTargets(project, selected);
+                if (targets.Count == 0)
+                    throw new InvalidOperationException("Tie QTY: Column target không còn tồn tại sau canonical project bind; hãy chọn lại.");
+                if (!expectedTargetIds.SetEquals(targets.Select(x => x.Id)))
+                    throw new InvalidOperationException("Tie QTY: Column target set đã thay đổi sau khi đọc selection; hãy chọn lại.");
 
                 var snapshot = ProjectStateSnapshot.Capture(project);
                 try
@@ -69,7 +87,6 @@ namespace QS3D.BricsCAD.V25
                             ";totalLengthM=" + quantity.TotalLengthM.ToString("R", CultureInfo.InvariantCulture) +
                             ";weightKg=" + quantity.TotalWeightKg.ToString("R", CultureInfo.InvariantCulture));
                     }
-                    project.Touch();
                 }
                 catch
                 {
@@ -85,6 +102,12 @@ namespace QS3D.BricsCAD.V25
                 Report(document, "QS3DREBARTIEQTY lỗi: " + ex.Message);
             }
         }
+
+        private static List<ProjectElement> ResolveColumnTargets(ProjectState project, HashSet<string> selected) =>
+            project.Elements
+                .Where(x => x.Category == ElementCategory.Column && x.SourceHandles.Any(selected.Contains))
+                .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
         private static void FinalizeUi(Document document, string message)
         {

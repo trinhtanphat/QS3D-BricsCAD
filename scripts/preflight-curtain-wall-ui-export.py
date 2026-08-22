@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 errors = []
 
 required = [
+    "src/QS3D.Core/Domain/ProjectFamilyService.cs",
     "src/QS3D.Core/Reporting/CurtainWallSchedule.cs",
     "src/QS3D.Core/Export/CurtainWallXlsxExporter.cs",
     "src/QS3D.BricsCAD.V25/CurtainWallScheduleCommands.cs",
@@ -25,6 +26,9 @@ for relative in required:
     if not (ROOT / relative).is_file(): errors.append("missing curtain hub/export file: " + relative)
 
 checks = {
+    "src/QS3D.Core/Domain/ProjectFamilyService.cs": [
+        "MaxPropertyValueLength = 1000", "SetProperty(ProjectState project", "InheritedInstancesUpdated", "OverridesPreserved",
+    ],
     "src/QS3D.Core/Reporting/CurtainWallSchedule.cs": [
         "CurtainWallScheduleRow", "CurtainWallScheduleBuilder", "ElementCategory.GlassWall", "CurtainPanelCount",
         "CurtainNetGlassAreaM2", "CurtainFrameLengthM", "MinimumClearPanelWidthM", "ElementIds",
@@ -49,7 +53,12 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs": [
         "GeneratedCurtainFrameOwnershipGuard.Build(project)", "CurtainWallDetailPlanner.Plan", "CurtainFrameDepthM",
-        "MaxFramesPerElement = 4096", "MaxFramesPerBatch = 8192", "ownership.EnsureOwned", "Refusing destructive erase",
+        "MaxFramesPerElement = 4096", "MaxFramesPerBatch = 8192",
+        "ValidatePrevious(document, transaction, project, element, ownership)",
+        "ownership.EnsureOwned(original, element)",
+        "GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership",
+        "ErasePrevious(transaction, project, element, previous)",
+        "Refusing destructive replacement before any frame is erased",
         "GeneratedCurtainFrameHandles", "ClearGeneratedCurtainFrameStale();",
     ],
     "src/QS3D.BricsCAD.V25/UI/CurtainWallWindow.xaml": [
@@ -60,8 +69,10 @@ checks = {
     "src/QS3D.BricsCAD.V25/UI/CurtainWallWindow.xaml.cs": [
         "private readonly Document _document", "CurtainWallWindow(Document document)",
         'EnsureActive("làm mới Vách Kính Hub")', 'EnsureActive("đổi Family đang xem trong Vách Kính Hub")',
-        '"CurtainFrameDepthM"', "FrameDepthBox.Text", "ApplyFamilyValue", "element.SetProperty(key, next)",
-        "element.MarkDirty(ElementDirtyFlags.All)", "RegenerationEngine", "CurtainPanelCount", "CurtainNetGlassAreaM2",
+        '"CurtainFrameDepthM"', "FrameDepthBox.Text", "ApplyFamilyValue",
+        "ProjectFamilyService.SetProperty(project, family.Id, key, next)",
+        "update.InheritedInstancesUpdated", "update.OverridesPreserved",
+        "RegenerationEngine", "CurtainPanelCount", "CurtainNetGlassAreaM2",
         "CurtainFrameLengthM", "QuantityReportMath.AddCount", "QuantityReportMath.Add", "SendStringToExecute",
         "phải là quantity hữu hạn và >= 0", "phải là số nguyên trong Int32",
     ],
@@ -80,8 +91,22 @@ for relative, needles in checks.items():
         if needle not in text: errors.append(relative + " missing curtain hub/export guard/token: " + needle)
 
 curtain_ui = ROOT / "src/QS3D.BricsCAD.V25/UI/CurtainWallWindow.xaml.cs"
-if curtain_ui.is_file() and ".Sum(" in curtain_ui.read_text(encoding="utf-8"):
-    errors.append("Curtain Hub summary must not use unchecked LINQ Sum")
+if curtain_ui.is_file():
+    curtain_text = curtain_ui.read_text(encoding="utf-8")
+    if ".Sum(" in curtain_text:
+        errors.append("Curtain Hub summary must not use unchecked LINQ Sum")
+    if "family.Properties[key] = next" in curtain_text:
+        errors.append("Curtain Hub must not bypass ProjectFamilyService.SetProperty with direct Family property writes")
+    save_start = curtain_text.find("private void OnSaveClick")
+    save_end = curtain_text.find("private void OnRecalculateClick", save_start)
+    if save_start < 0 or save_end < 0:
+        errors.append("Curtain Hub Save block could not be located")
+    else:
+        save_block = curtain_text[save_start:save_end]
+        if "project.Touch();" in save_block:
+            errors.append("Curtain Hub Save must not unconditionally Touch the project; canonical Family service owns change tracking")
+        if "ProjectFamilyService.SetProperty" not in curtain_text:
+            errors.append("Curtain Hub Save must route Family values through ProjectFamilyService.SetProperty")
 
 commands = []
 adapter = ROOT / "src/QS3D.BricsCAD.V25"
@@ -96,4 +121,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Curtain Hub is source-DWG-bound, summary arithmetic fails closed, native frame ownership/stale rebuild safety, frame health, schedule grouping and real XLSX export are present.")
+print("PASS: Curtain Hub uses canonical bounded Family property mutation without no-op Touch, while source-DWG binding, summary arithmetic, exact-set native frame ownership, frame health, schedule grouping and XLSX export remain guarded.")

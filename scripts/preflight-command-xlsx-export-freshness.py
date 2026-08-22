@@ -18,33 +18,60 @@ else:
         errors.append("Commands.cs missing ED2/BBS/REGEN method boundaries")
     else:
         ed2 = text[ed2_start:bbs_start]
-        confirm = ed2.find("if (dialog.ShowDialog() != true) return;")
-        regenerate = ed2.find("var regenerated = RegenerateProject(project);")
-        details = ed2.find("ProjectQuantityReportBuilder.Detail(project)")
-        summary = ed2.find("ProjectQuantityReportBuilder.Group(project)")
+        ed2_project_token = "ProjectContextCoordinator.TryGetReadOnly(doc, out var project)"
+        ed2_snapshot_token = "var previewProject = ProjectStateSnapshot.CreateDetachedCopy(project);"
+        ed2_regenerate_token = "var regenerated = RegenerateProject(previewProject);"
+        ed2_detail_token = "ProjectQuantityReportBuilder.Detail(previewProject"
+        project = ed2.find(ed2_project_token)
+        snapshot = ed2.find(ed2_snapshot_token)
+        regenerate = ed2.find(ed2_regenerate_token)
+        details = ed2.find(ed2_detail_token)
+        summary = ed2.find("ProjectQuantityReportBuilder.Group(previewProject")
         live = ed2.find("EnsureEd2HandlesAreLive(doc, details);")
-        export = ed2.find("XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary);")
-        if min(confirm, regenerate, details, summary, live, export) < 0:
-            errors.append("ED2 export missing save/regenerate/build/live/export contract token")
-        elif not confirm < regenerate < details < summary < live < export:
-            errors.append("ED2 must confirm Save before regeneration/report build/live-handle validation/export")
-        if "RegenerateProject(project)" in ed2[:confirm if confirm >= 0 else 0]:
-            errors.append("ED2 Cancel path must not regenerate project state")
+        dialog = ed2.find("var dialog = new SaveFileDialog")
+        confirm = ed2.find("if (dialog.ShowDialog() != true) return;", dialog + 1)
+        export = ed2.find("XlsxQuantityExporter.ExportEd2(dialog.FileName, details, summary);", confirm + 1)
+        if min(project, snapshot, regenerate, details, summary, live, dialog, confirm, export) < 0:
+            errors.append("ED2 export missing read-only/snapshot/regenerate/build/live/save/export contract token")
+        elif not project < snapshot < regenerate < details < summary < live < dialog < confirm < export:
+            errors.append("ED2 must validate existing detached report/live-handle exportability before SaveFileDialog, then export only after Save confirmation")
+        for forbidden in (
+            "ProjectContextCoordinator.GetOrCreate(doc)",
+            "RegenerateProject(project)",
+        ):
+            if forbidden in ed2:
+                errors.append("ED2 read-only export must not mutate/create live project state: " + forbidden)
+        before_confirm = ed2[:confirm if confirm >= 0 else 0]
+        if "XlsxQuantityExporter.ExportEd2(" in before_confirm:
+            errors.append("ED2 must not write XLSX before Save confirmation")
 
         bbs = text[bbs_start:regen_start]
-        confirm = bbs.find("if (dialog.ShowDialog() != true) return;")
-        project = bbs.find("ProjectContextCoordinator.GetOrCreate(doc)")
-        regenerate = bbs.find("RegenerateProject(project);")
-        build = bbs.find("ProjectRebarScheduleBuilder.Build(project)")
+        bbs_project_token = "ProjectContextCoordinator.TryGetReadOnly(doc, out var project)"
+        bbs_snapshot_token = "var previewProject = ProjectStateSnapshot.CreateDetachedCopy(project);"
+        bbs_regenerate_token = "RegenerateProject(previewProject);"
+        bbs_build_token = "ProjectRebarScheduleBuilder.Build(previewProject)"
+        project = bbs.find(bbs_project_token)
+        snapshot = bbs.find(bbs_snapshot_token)
+        regenerate = bbs.find(bbs_regenerate_token)
+        build = bbs.find(bbs_build_token)
         aggregate = bbs.find('QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS command total weight")')
-        export = bbs.find("XlsxRebarScheduleExporter.Export(dialog.FileName, rows);")
-        if min(confirm, project, regenerate, build, aggregate, export) < 0:
-            errors.append("BBS XLSX export missing save/project/regenerate/build/aggregate/export contract token")
-        elif not confirm < project < regenerate < build < aggregate < export:
-            errors.append("BBS XLSX must confirm Save before project lookup/regeneration/fresh build/aggregate/export")
-        for forbidden in ("ProjectContextCoordinator.GetOrCreate(doc)", "RegenerateProject(project);", "ProjectRebarScheduleBuilder.Build(project)"):
-            if forbidden in bbs[:confirm if confirm >= 0 else 0]:
-                errors.append("BBS XLSX Cancel path executes before Save confirmation: " + forbidden)
+        dialog = bbs.find("var dialog = new SaveFileDialog")
+        confirm = bbs.find("if (dialog.ShowDialog() != true) return;", dialog + 1)
+        export = bbs.find("XlsxRebarScheduleExporter.Export(dialog.FileName, rows);", confirm + 1)
+        if min(project, snapshot, regenerate, build, aggregate, dialog, confirm, export) < 0:
+            errors.append("BBS XLSX export missing read-only/snapshot/regenerate/build/aggregate/save/export contract token")
+        elif not project < snapshot < regenerate < build < aggregate < dialog < confirm < export:
+            errors.append("BBS XLSX must validate fresh detached rows and finite aggregate before SaveFileDialog, then export only after Save confirmation")
+        for forbidden in (
+            "ProjectContextCoordinator.GetOrCreate(doc)",
+            "RegenerateProject(project);",
+            "ProjectRebarScheduleBuilder.Build(project)",
+        ):
+            if forbidden in bbs:
+                errors.append("BBS read-only export must not mutate/create live project state: " + forbidden)
+        before_confirm = bbs[:confirm if confirm >= 0 else 0]
+        if "XlsxRebarScheduleExporter.Export(" in before_confirm:
+            errors.append("BBS XLSX must not write the export before Save confirmation")
 
 print("QS3D command XLSX export freshness preflight")
 if errors:
@@ -53,4 +80,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: ED2 and BBS XLSX confirm the destination before regeneration/fresh report work.")
+print("PASS: ED2 and BBS validate existing detached exportability before SaveFileDialog, regenerate only detached snapshots, write only after confirmation, and leave live semantic state read-only.")

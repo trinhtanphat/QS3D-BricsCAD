@@ -31,9 +31,9 @@ namespace QS3D.BricsCAD.V25
                     document.Editor.WriteMessage("\nQS3D " + issue.Code + " • " + issue.ElementId + " • " + issue.Message);
                 Report(document, "Generated Geometry Health: " + issues.Count + " stale output issue(s).");
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                Report(document, "QS3DGENERATEDHEALTH lỗi: " + ex.Message);
+                Report(document, "QS3DGENERATEDHEALTH lỗi: không thể hoàn tất health check.");
             }
         }
 

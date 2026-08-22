@@ -29,6 +29,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private const string RegAppName = "QS3DDOC";
         private const string OwnershipVersion = "1";
+        private const string ProjectIdentityTokenPrefix = "p1:";
         private const string DocumentKind = "SemanticElementTable";
         private const double TextHeightM = 0.0035d;
         private const double RowHeightM = 0.008d;
@@ -115,7 +116,6 @@ namespace QS3D.BricsCAD.V25.Cad
                     project.Metadata[RowCountKey] = semanticTable.Rows.Count.ToString(CultureInfo.InvariantCulture);
                     project.Metadata[ColumnCountKey] = semanticTable.Headers.Count.ToString(CultureInfo.InvariantCulture);
                     AuditTrail.ForProject(project).Record("BuildSemanticElementTable", string.Empty, "Generated native Table " + table.Handle + " from " + semanticTable.Rows.Count.ToString(CultureInfo.InvariantCulture) + " semantic elements.");
-                    project.Touch();
 
                     transaction.Commit();
                     committed = true;
@@ -157,7 +157,6 @@ namespace QS3D.BricsCAD.V25.Cad
                     ErasePrevious(document, transaction, project);
                     foreach (var key in StateKeys) project.Metadata.Remove(key);
                     AuditTrail.ForProject(project).Record("RemoveSemanticElementTable", string.Empty, "Removed project-owned native semantic element Table metadata/entity.");
-                    project.Touch();
                     transaction.Commit();
                     committed = true;
                 }
@@ -259,7 +258,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 throw new InvalidOperationException("Generated semantic element table metadata is partial. Refusing destructive replacement.");
             foreach (var key in StateKeys)
                 if (string.IsNullOrWhiteSpace(project.Metadata[key])) throw new InvalidOperationException(key + " is empty.");
-            if (!string.Equals(project.Metadata[OwnerProjectKey].Trim(), project.ProjectId, StringComparison.Ordinal))
+            if (!string.Equals(project.Metadata[OwnerProjectKey].Trim(), (project.ProjectId ?? string.Empty).Trim(), StringComparison.Ordinal))
                 throw new InvalidOperationException("Generated semantic element table owner project does not match the active project.");
             if (!string.Equals(project.Metadata[OwnershipVersionKey].Trim(), OwnershipVersion, StringComparison.Ordinal))
                 throw new InvalidOperationException("Unsupported semantic element table ownership version: " + project.Metadata[OwnershipVersionKey]);
@@ -299,7 +298,7 @@ namespace QS3D.BricsCAD.V25.Cad
             using (var marker = new ResultBuffer(
                 new TypedValue((int)DxfCode.ExtendedDataRegAppName, RegAppName),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, OwnershipVersion),
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, projectId.Trim()),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, ProjectIdentityToken(projectId)),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, DocumentId),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, DocumentKind),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, fingerprint)))
@@ -315,7 +314,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 return values.Length >= 6 &&
                     string.Equals(Convert.ToString(values[0].Value, CultureInfo.InvariantCulture), RegAppName, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(Convert.ToString(values[1].Value, CultureInfo.InvariantCulture), OwnershipVersion, StringComparison.Ordinal) &&
-                    string.Equals(Convert.ToString(values[2].Value, CultureInfo.InvariantCulture), projectId, StringComparison.Ordinal) &&
+                    MatchesProjectIdentity(Convert.ToString(values[2].Value, CultureInfo.InvariantCulture), projectId) &&
                     string.Equals(Convert.ToString(values[3].Value, CultureInfo.InvariantCulture), DocumentId, StringComparison.Ordinal) &&
                     string.Equals(Convert.ToString(values[4].Value, CultureInfo.InvariantCulture), DocumentKind, StringComparison.Ordinal) &&
                     string.Equals(Convert.ToString(values[5].Value, CultureInfo.InvariantCulture), fingerprint, StringComparison.OrdinalIgnoreCase);
@@ -342,6 +341,26 @@ namespace QS3D.BricsCAD.V25.Cad
                 return !id.IsNull && id.IsValid;
             }
             catch { return false; }
+        }
+
+        private static string ProjectIdentityToken(string projectId)
+        {
+            var normalized = (projectId ?? string.Empty).Trim();
+            using (var sha = SHA256.Create())
+            {
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(normalized));
+                var result = new StringBuilder(ProjectIdentityTokenPrefix.Length + hash.Length * 2);
+                result.Append(ProjectIdentityTokenPrefix);
+                foreach (var value in hash) result.Append(value.ToString("x2", CultureInfo.InvariantCulture));
+                return result.ToString();
+            }
+        }
+
+        private static bool MatchesProjectIdentity(string storedIdentity, string projectId)
+        {
+            var normalized = (projectId ?? string.Empty).Trim();
+            return string.Equals(storedIdentity, ProjectIdentityToken(normalized), StringComparison.Ordinal) ||
+                string.Equals(storedIdentity, normalized, StringComparison.Ordinal);
         }
 
         private static string ComputeFingerprint(SemanticDocumentationTable table)

@@ -41,15 +41,32 @@ namespace QS3D.BricsCAD.V25.Services
                 .ToList();
             if (snapshots.Count == 0) return new SourceReconcileResult();
 
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
+                throw new InvalidOperationException("Source Reconcile yêu cầu QS3D project hiện hữu; lệnh không tạo project mới.");
+
+            var expectedProjectId = previewProject.ProjectId;
+            var expectedChangeVersion = previewProject.ChangeVersion;
+            var previewTargets = ResolveTargets(previewProject, snapshots);
+            var expectedTargetIds = new HashSet<string>(
+                previewTargets.Select(x => x.Element.Id),
+                StringComparer.OrdinalIgnoreCase);
+
             var project = ExistingProjectMutationContext.Require(document, "Source Reconcile");
+            if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                project.ChangeVersion != expectedChangeVersion)
+                throw new InvalidOperationException("Source Reconcile: QS3D project đã thay đổi sau khi đọc selection; hãy chọn lại source target.");
+
             var targets = ResolveTargets(project, snapshots);
             if (targets.Count == 0) return new SourceReconcileResult();
+            if (!expectedTargetIds.SetEquals(targets.Select(x => x.Element.Id)))
+                throw new InvalidOperationException("Source Reconcile: semantic target set đã thay đổi sau khi đọc selection; hãy chọn lại source target.");
             EnsureActive(document, "Source reconcile / mutation");
 
             var invalidationTargets = ExpandInvalidationTargets(project, targets.Select(x => x.Element));
             var annotatedGridTargets = invalidationTargets.Where(HasGridAnnotationIntent).ToList();
             var sourceTargetIds = new HashSet<string>(targets.Select(x => x.Element.Id), StringComparer.OrdinalIgnoreCase);
             var rollback = ProjectStateSnapshot.Capture(project);
+            var rollbackStamp = SourceReconcileUndoCoordinator.ProjectRevisionStamp.Capture(project);
             var cadCommitted = false;
             var regenerated = 0;
 
@@ -57,7 +74,18 @@ namespace QS3D.BricsCAD.V25.Services
             {
                 using (document.LockDocument())
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
+                using (var undoTransition = SourceReconcileUndoCoordinator.BeginTransition(
+                    document,
+                    transaction,
+                    project,
+                    rollback,
+                    rollbackStamp))
                 {
+                    // The exact licensed discriminator proves the existing
+                    // BlockBegin marker participates in Undo only when written
+                    // before topology mutation. It remains transaction-private
+                    // until this complete reconcile commits.
+                    undoTransition.StageNativeMarker();
                     var invalidation = GeneratedDependentGeometryInvalidator.Prepare(document, transaction, project, invalidationTargets);
                     if (!CadUnitService.TryGetPolicy(document, out var units, out var unitResolution))
                         throw new InvalidOperationException("Drawing units are unresolved. Run QS3DUNITS before source reconcile.");
@@ -81,8 +109,14 @@ namespace QS3D.BricsCAD.V25.Services
                     foreach (var grid in annotatedGridTargets)
                         GridAnnotationBuilder.RebuildInTransaction(document, transaction, project, grid);
 
-                    project.Touch();
+                    // Complete every fallible reconcile/refusal check and allocate
+                    // the Redo snapshot before staging private semantic history.
+                    // A failed command aborts the native transaction and leaves
+                    // no published semantic revision.
+                    var afterSnapshot = ProjectStateSnapshot.Capture(project);
+                    undoTransition.StageAfter(project, afterSnapshot);
                     transaction.Commit();
+                    undoTransition.ConfirmCommitted();
                     cadCommitted = true;
                 }
             }
@@ -109,45 +143,39 @@ namespace QS3D.BricsCAD.V25.Services
             var targets = new List<Target>();
             var seenElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var generatedOwners = GeneratedHandleOwnershipIndex.Build(project);
-            var sourceOwners = BuildSourceOwnerIndex(project);
 
             foreach (var snapshot in snapshots)
             {
                 if (generatedOwners.TryFindOwner(snapshot.Handle, out var generatedOwner, out var generatedSlot))
                     throw new InvalidOperationException("Selected handle " + snapshot.Handle + " is QS3D-generated output owned by " + generatedOwner!.Id + "/" + generatedSlot + ". Select the authoritative source CAD instead.");
+            }
 
-                if (!sourceOwners.TryGetValue(snapshot.Handle, out var matches) || matches.Count == 0)
-                    throw new InvalidOperationException("Selected CAD source is not tracked by QS3D: " + snapshot.Handle + ". Capture it first instead of reconciling an unknown source.");
-                if (matches.Count > 1)
-                    throw new InvalidOperationException("Selected source handle " + snapshot.Handle + " belongs to multiple semantic elements. Repair source ownership before reconcile.");
-
-                var element = matches[0];
+            var resolvedElements = SemanticHandleOwnershipResolver.Resolve(
+                project,
+                snapshots.Select(x => x.Handle));
+            var sourceOwners = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in resolvedElements)
+            {
                 if (element.SourceHandles.Count != 1)
                     throw new InvalidOperationException("Source reconcile P0 requires exactly one authoritative source handle per semantic element: " + element.Id + ".");
+
+                var sourceHandle = QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(element.SourceHandles[0]);
+                if (sourceOwners.ContainsKey(sourceHandle))
+                    throw new InvalidOperationException("CAD source handle " + sourceHandle + " is claimed by multiple semantic elements. Repair source ownership before reconcile.");
+                sourceOwners.Add(sourceHandle, element);
+            }
+
+            foreach (var snapshot in snapshots)
+            {
+                var sourceHandle = QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(snapshot.Handle);
+                if (!sourceOwners.TryGetValue(sourceHandle, out var element))
+                    throw new InvalidOperationException("Selected CAD source is not tracked by QS3D: " + snapshot.Handle + ". Capture it first instead of reconciling an unknown source.");
+
                 if (!seenElements.Add(element.Id))
                     throw new InvalidOperationException("Multiple selected CAD objects resolve to semantic element " + element.Id + ". Reconcile one authoritative source per element.");
                 targets.Add(new Target { Snapshot = snapshot, Element = element });
             }
             return targets;
-        }
-
-        private static Dictionary<string, List<ProjectElement>> BuildSourceOwnerIndex(ProjectState project)
-        {
-            var index = new Dictionary<string, List<ProjectElement>>(StringComparer.OrdinalIgnoreCase);
-            foreach (var element in project.Elements)
-            {
-                foreach (var handle in element.SourceHandles.Distinct(StringComparer.OrdinalIgnoreCase))
-                {
-                    if (string.IsNullOrWhiteSpace(handle)) continue;
-                    if (!index.TryGetValue(handle, out var owners))
-                    {
-                        owners = new List<ProjectElement>(2);
-                        index.Add(handle, owners);
-                    }
-                    if (owners.Count < 2) owners.Add(element);
-                }
-            }
-            return index;
         }
 
         private static IReadOnlyList<ProjectElement> ExpandInvalidationTargets(ProjectState project, IEnumerable<ProjectElement> sourceTargets)
@@ -243,6 +271,13 @@ namespace QS3D.BricsCAD.V25.Services
                 throw new InvalidOperationException("Source snapshot no longer belongs to semantic element " + element.Id + ".");
 
             element.SetProperty("Layer", snapshot.Layer ?? string.Empty);
+            // CAD.* is a replace-on-capture namespace. Native edits can remove optional
+            // source metadata (for example clearing DBText/MText content), so retaining a
+            // key merely because the new snapshot omits it would leave stale semantic data.
+            foreach (var key in element.Properties.Keys
+                .Where(x => x.StartsWith("CAD.", StringComparison.OrdinalIgnoreCase))
+                .ToList())
+                element.Properties.Remove(key);
             element.SetProperty("CAD.EntityType", snapshot.EntityType.Trim());
             element.SetProperty("CAD.Layer", snapshot.Layer ?? string.Empty);
             UpdateOptionalCadMetadata(element, snapshot, "Color", "CAD.Color");

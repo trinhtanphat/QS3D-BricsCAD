@@ -14,13 +14,14 @@ required = {
         'CommandMethod("QS3DDRAWDOOR"',
         'CommandMethod("QS3DDRAWOPENING"',
         "ProjectStateSnapshot.Capture(project)",
-        "new AutoHostLinkCommands().AutoLinkHosts()",
+        "AutoHostLinkCommands.LinkSingleOpening(document, project, createdElementId)",
         'Properties.TryGetValue("HostWallId"',
     ],
     "src/QS3D.BricsCAD.V25/FamilyManagerCommands.cs": ['CommandMethod("QS3DFAMILIES"'],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
-        'RibbonTabSpec("QS3D_AUTHOR", "TẠO MỚI"',
-        'RibbonButtonSpec("Family / Type", "QS3DFAMILIES")',
+        '"QS3D_AUTHOR"',
+        '"TẠO MỚI"',
+        'Button("Family / Type", "QS3DFAMILIES")',
         '"QS3DDRAWDOOR"',
         '"QS3DDRAWOPENING"',
     ],
@@ -79,6 +80,12 @@ for name in (
     if count != 1:
         errors.append(name + " must be declared exactly once, found " + str(count))
 
+opening_source = ROOT / "src/QS3D.BricsCAD.V25/DirectDrawOpeningCommands.cs"
+if opening_source.is_file():
+    text = opening_source.read_text(encoding="utf-8")
+    if "new AutoHostLinkCommands().AutoLinkHosts()" in text:
+        errors.append("Direct Draw must not re-enter the broad pick-set AutoHost command; use exact LinkSingleOpening")
+
 handoff = ROOT / "docs/AGENT-HANDOFF-CURRENT-2026-08-10.md"
 if handoff.is_file():
     text = handoff.read_text(encoding="utf-8")
@@ -92,4 +99,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Direct Draw snapshot namespace, Family/Type discoverability, Door/Opening source status and Curtain path-frame status are synchronized; full DrawJig/runtime behavior remains a licensed V25 gate.")
+print("PASS: Direct Draw snapshot namespace, Family/Type discoverability, exact single-opening AutoHost, Door/Opening source status and Curtain path-frame status are synchronized; full DrawJig/runtime behavior remains a licensed V25 gate.")

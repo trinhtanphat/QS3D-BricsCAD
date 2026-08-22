@@ -88,7 +88,7 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!ClosestToFaceCheck.IsChecked.HasValue)
                     throw new InvalidOperationException("Chọn rõ phương nào nằm gần mặt bê tông hơn.");
 
-                var project = ProjectContextCoordinator.GetOrCreate(_document);
+                var project = ExistingProjectMutationContext.Require(_document, "Lưu Rebar Mesh Setup");
                 if (!ReferenceEquals(project, _project))
                     throw new InvalidOperationException("Project của DWG này đã được reload/thay thế trong khi Rebar Mesh Setup đang mở. Đóng và mở lại cửa sổ trước khi lưu.");
                 var element = project.FindElement(_element.Id) ?? throw new InvalidOperationException("Semantic element " + _element.Id + " không còn tồn tại trong project hiện tại. Đóng và mở lại Rebar Mesh Setup.");

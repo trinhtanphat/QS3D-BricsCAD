@@ -19,7 +19,18 @@ namespace QS3D.Core.Geometry
         public double Z_M { get; set; }
         public double WidthM { get; set; }
         public double HeightM { get; set; }
-        public double AreaM2 => WidthM * HeightM;
+        public double AreaM2
+        {
+            get
+            {
+                var area = WidthM * HeightM;
+                if (double.IsNaN(area) || double.IsInfinity(area))
+                    throw new OverflowException("Curtain frame piece area overflowed.");
+                if (area == 0d && WidthM != 0d && HeightM != 0d)
+                    throw new OverflowException("Curtain frame piece area underflowed to zero.");
+                return area == 0d ? 0d : area;
+            }
+        }
     }
 
     public sealed class CurtainWallOpeningFramePlan
@@ -27,7 +38,16 @@ namespace QS3D.Core.Geometry
         public IReadOnlyList<CurtainWallFramePiece> Pieces { get; set; } = Array.Empty<CurtainWallFramePiece>();
         public double OriginalFrameAreaM2 { get; set; }
         public double RemainingFrameAreaM2 { get; set; }
-        public double RemovedFrameAreaM2 => Math.Max(0d, OriginalFrameAreaM2 - RemainingFrameAreaM2);
+        public double RemovedFrameAreaM2
+        {
+            get
+            {
+                var removed = OriginalFrameAreaM2 - RemainingFrameAreaM2;
+                if (double.IsNaN(removed) || double.IsInfinity(removed))
+                    throw new OverflowException("Curtain removed frame area is not representable.");
+                return removed <= 0d ? 0d : removed;
+            }
+        }
         public int InterruptedFrameCount { get; set; }
     }
 
@@ -57,27 +77,50 @@ namespace QS3D.Core.Geometry
             if (frames == null) throw new ArgumentNullException(nameof(frames));
             if (openings == null) throw new ArgumentNullException(nameof(openings));
             FiniteNonNegative(clearanceM, nameof(clearanceM));
-            if (frames.Count > MaxInputFrames) throw new InvalidOperationException("Curtain frame interruption input exceeds " + MaxInputFrames + " frames.");
-            if (openings.Count > MaxOpenings) throw new InvalidOperationException("Curtain frame interruption input exceeds " + MaxOpenings + " openings.");
 
-            var expandedOpenings = new List<Rect>(openings.Count);
-            for (var i = 0; i < openings.Count; i++)
+            var frameCount = frames.Count;
+            var openingCount = openings.Count;
+            RequireSupportedInputCount(frameCount, MaxInputFrames, "frame");
+            RequireSupportedInputCount(openingCount, MaxOpenings, "opening");
+
+            var expandedOpenings = new List<Rect>(openingCount);
+            for (var i = 0; i < openingCount; i++)
             {
                 var opening = openings[i] ?? throw new InvalidOperationException("Curtain opening rectangle cannot be null.");
-                ValidateRect(opening.X_M, opening.Z_M, opening.WidthM, opening.HeightM, "opening[" + i + "]");
+                var label = "opening[" + i + "]";
+                ValidateRect(opening.X_M, opening.Z_M, opening.WidthM, opening.HeightM, label);
+                var openingRight = opening.X_M + opening.WidthM;
+                var openingTop = opening.Z_M + opening.HeightM;
+
+                var expandedX = opening.X_M - clearanceM;
+                var expandedZ = opening.Z_M - clearanceM;
+                var expandedWidth = opening.WidthM + clearanceM * 2d;
+                var expandedHeight = opening.HeightM + clearanceM * 2d;
+                ValidateRect(expandedX, expandedZ, expandedWidth, expandedHeight, "expandedOpening[" + i + "]");
+
+                if (clearanceM > 0d)
+                {
+                    var expandedRight = expandedX + expandedWidth;
+                    var expandedTop = expandedZ + expandedHeight;
+                    if (!(expandedX < opening.X_M) || !(expandedRight > openingRight))
+                        throw new OverflowException(label + " horizontal clearance is below the representable coordinate resolution.");
+                    if (!(expandedZ < opening.Z_M) || !(expandedTop > openingTop))
+                        throw new OverflowException(label + " vertical clearance is below the representable coordinate resolution.");
+                }
+
                 expandedOpenings.Add(new Rect
                 {
-                    X = opening.X_M - clearanceM,
-                    Z = opening.Z_M - clearanceM,
-                    Width = opening.WidthM + clearanceM * 2d,
-                    Height = opening.HeightM + clearanceM * 2d
+                    X = expandedX,
+                    Z = expandedZ,
+                    Width = expandedWidth,
+                    Height = expandedHeight
                 });
             }
 
             var output = new List<CurtainWallFramePiece>();
             var originalArea = 0d;
             var interrupted = 0;
-            for (var frameIndex = 0; frameIndex < frames.Count; frameIndex++)
+            for (var frameIndex = 0; frameIndex < frameCount; frameIndex++)
             {
                 var frame = frames[frameIndex] ?? throw new InvalidOperationException("Curtain frame rectangle cannot be null.");
                 ValidateRect(frame.X_M, frame.Z_M, frame.WidthM, frame.HeightM, "frame[" + frameIndex + "]");
@@ -105,7 +148,9 @@ namespace QS3D.Core.Geometry
                 if (changed) interrupted++;
                 foreach (var piece in pieces)
                 {
-                    if (piece.Width <= Epsilon || piece.Height <= Epsilon) continue;
+                    // Subtract already suppresses tolerance slivers. Preserve an untouched
+                    // valid input frame even when one of its dimensions is below Epsilon.
+                    if (!(piece.Width > 0d) || !(piece.Height > 0d)) continue;
                     output.Add(new CurtainWallFramePiece
                     {
                         SourceFrameIndex = frameIndex,
@@ -122,20 +167,30 @@ namespace QS3D.Core.Geometry
             var remainingArea = 0d;
             foreach (var piece in output)
                 remainingArea = CheckedAdd(remainingArea, CheckedMultiply(piece.WidthM, piece.HeightM, "frame piece area"), "remaining frame area");
+            if (interrupted > 0 && !(remainingArea < originalArea))
+                throw new OverflowException("Curtain removed frame area was lost at floating-point precision.");
 
             return new CurtainWallOpeningFramePlan
             {
-                Pieces = output
+                Pieces = Array.AsReadOnly(output
                     .OrderBy(x => x.SourceFrameIndex)
                     .ThenBy(x => x.Z_M)
                     .ThenBy(x => x.X_M)
                     .ThenBy(x => x.HeightM)
                     .ThenBy(x => x.WidthM)
-                    .ToArray(),
+                    .ToArray()),
                 OriginalFrameAreaM2 = originalArea,
                 RemainingFrameAreaM2 = remainingArea,
                 InterruptedFrameCount = interrupted
             };
+        }
+
+        private static void RequireSupportedInputCount(int count, int maximum, string label)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Curtain frame interruption input reports an invalid negative " + label + " Count.");
+            if (count > maximum)
+                throw new InvalidOperationException("Curtain frame interruption input exceeds " + maximum + " " + label + "s.");
         }
 
         private static List<Rect> Subtract(Rect source, Rect cut)
@@ -171,8 +226,14 @@ namespace QS3D.Core.Geometry
             Finite(z, label + ".Z_M");
             FinitePositive(width, label + ".WidthM");
             FinitePositive(height, label + ".HeightM");
-            Finite(x + width, label + ".Right");
-            Finite(z + height, label + ".Top");
+            var right = x + width;
+            var top = z + height;
+            Finite(right, label + ".Right");
+            Finite(top, label + ".Top");
+            if (!(right > x))
+                throw new OverflowException(label + " width is below the representable coordinate resolution.");
+            if (!(top > z))
+                throw new OverflowException(label + " height is below the representable coordinate resolution.");
         }
 
         private static void Finite(double value, string label)
@@ -196,14 +257,18 @@ namespace QS3D.Core.Geometry
         {
             var value = a * b;
             Finite(value, label);
-            return value;
+            if (value == 0d && a != 0d && b != 0d)
+                throw new OverflowException(label + " underflowed to zero.");
+            return value == 0d ? 0d : value;
         }
 
         private static double CheckedAdd(double a, double b, string label)
         {
             var value = a + b;
             Finite(value, label);
-            return value;
+            if (a > 0d && b > 0d && (value == a || value == b))
+                throw new OverflowException(label + " lost a positive contribution at floating-point precision.");
+            return value == 0d ? 0d : value;
         }
     }
 }

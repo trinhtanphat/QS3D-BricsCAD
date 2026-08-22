@@ -65,8 +65,16 @@ namespace QS3D.Core.Rebar
 
             var horizontalRadius = RebarMath.Divide(horizontalDiameter, 2000d, "wall horizontal radius");
             var verticalRadius = RebarMath.Divide(verticalDiameter, 2000d, "wall vertical radius");
-            var horizontalLength = length - 2d * RebarMath.Add(cover, horizontalRadius, "wall horizontal end center cover");
-            var verticalLength = height - 2d * RebarMath.Add(cover, verticalRadius, "wall vertical end center cover");
+            var horizontalEndCover = RebarMath.Add(cover, horizontalRadius, "wall horizontal end center cover");
+            var verticalEndCover = RebarMath.Add(cover, verticalRadius, "wall vertical end center cover");
+            var horizontalEndDeduction = 2d * horizontalEndCover;
+            var verticalEndDeduction = 2d * verticalEndCover;
+            var horizontalLength = length - horizontalEndDeduction;
+            var verticalLength = height - verticalEndDeduction;
+            if (horizontalEndDeduction > 0d && horizontalLength == length)
+                throw new OverflowException("Structural wall horizontal bar length lost positive end clearance at the current numeric scale.");
+            if (verticalEndDeduction > 0d && verticalLength == height)
+                throw new OverflowException("Structural wall vertical bar length lost positive end clearance at the current numeric scale.");
             if (!FinitePositive(horizontalLength)) throw new InvalidOperationException("Structural wall length is too short for horizontal-bar cover + radius.");
             if (!FinitePositive(verticalLength)) throw new InvalidOperationException("Structural wall height is too short for vertical-bar cover + radius.");
 
@@ -115,11 +123,27 @@ namespace QS3D.Core.Rebar
             ValidateFinite(farHorizontal, "far horizontal face offset");
             ValidateFinite(farVertical, "far vertical face offset");
 
+            var usableLow = -half + cover;
+            var usableHigh = half - cover;
             if (input.IncludeNear && input.IncludeFar)
             {
                 var nearInner = Math.Max(nearHorizontal + horizontalRadius, nearVertical + verticalRadius);
                 var farInner = Math.Min(farHorizontal - horizontalRadius, farVertical - verticalRadius);
                 if (!(farInner > nearInner)) throw new InvalidOperationException("Structural wall thickness is insufficient for the requested two-face mesh and cover.");
+            }
+            else if (input.IncludeNear)
+            {
+                var low = Math.Min(nearHorizontal - horizontalRadius, nearVertical - verticalRadius);
+                var high = Math.Max(nearHorizontal + horizontalRadius, nearVertical + verticalRadius);
+                if (low < usableLow - 1e-12d || high > usableHigh + 1e-12d)
+                    throw new InvalidOperationException("Near structural-wall mesh does not fit within the concrete cover envelope.");
+            }
+            else if (input.IncludeFar)
+            {
+                var low = Math.Min(farHorizontal - horizontalRadius, farVertical - verticalRadius);
+                var high = Math.Max(farHorizontal + horizontalRadius, farVertical + verticalRadius);
+                if (low < usableLow - 1e-12d || high > usableHigh + 1e-12d)
+                    throw new InvalidOperationException("Far structural-wall mesh does not fit within the concrete cover envelope.");
             }
 
             var bars = new List<WallMeshBarPlacement>((int)projectedBars);

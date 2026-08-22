@@ -16,7 +16,8 @@ namespace QS3D.Core.Rebar
     {
         public LinearRebarLayout(IReadOnlyList<double> offsetsM, double usableSpanM, double actualSpacingM)
         {
-            OffsetsM = offsetsM ?? throw new ArgumentNullException(nameof(offsetsM));
+            if (offsetsM == null) throw new ArgumentNullException(nameof(offsetsM));
+            OffsetsM = new List<double>(offsetsM).AsReadOnly();
             UsableSpanM = usableSpanM;
             ActualSpacingM = actualSpacingM;
         }
@@ -40,11 +41,14 @@ namespace QS3D.Core.Rebar
             if (input.Count.HasValue == input.SpacingMm.HasValue)
                 throw new InvalidOperationException("Specify exactly one of Count or SpacingMm for a linear rebar layout.");
 
-            var radiusM = RebarMath.Divide(diameterMm, 2000d, "linear rebar radius");
+            var diameterM = RebarMath.Divide(diameterMm, 1000d, "linear rebar diameter");
+            var radiusM = RebarMath.Divide(diameterM, 2d, "linear rebar radius");
             var edgeClearanceM = RebarMath.Add(coverM, radiusM, "linear rebar edge clearance");
             var twoEdgeClearanceM = RebarMath.Multiply(edgeClearanceM, 2d, "linear rebar two-side clearance");
             var usableSpanM = spanM - twoEdgeClearanceM;
             if (double.IsNaN(usableSpanM) || double.IsInfinity(usableSpanM)) throw new OverflowException("Linear rebar usable span is not finite.");
+            if (twoEdgeClearanceM > 0d && usableSpanM == spanM)
+                throw new OverflowException("Linear rebar usable span lost positive edge clearance at the current numeric scale.");
             if (usableSpanM < 0d) throw new InvalidOperationException("Cover + bar radius leaves no usable linear rebar span inside the host.");
 
             int count;
@@ -57,7 +61,8 @@ namespace QS3D.Core.Rebar
             {
                 var spacingMm = RebarMath.Positive(input.SpacingMm!.Value, nameof(input.SpacingMm));
                 var usableMm = RebarMath.Multiply(usableSpanM, 1000d, "linear rebar usable span mm");
-                var intervals = Math.Ceiling(RebarMath.Divide(usableMm, spacingMm, "linear rebar spacing intervals"));
+                var intervalRatio = RebarMath.Divide(usableMm, spacingMm, "linear rebar spacing intervals");
+                var intervals = RebarMath.CeilingNearInteger(intervalRatio, "linear rebar spacing intervals");
                 if (double.IsNaN(intervals) || double.IsInfinity(intervals) || intervals > MaxBars - 1d)
                     throw new InvalidOperationException("Linear rebar spacing requires too many bars.");
                 count = checked((int)intervals + 1);
@@ -70,6 +75,8 @@ namespace QS3D.Core.Rebar
             if (!(usableSpanM > 0d)) throw new InvalidOperationException("Multiple linear rebars require a positive usable span.");
 
             var actualSpacingM = RebarMath.Divide(usableSpanM, count - 1d, "linear rebar actual spacing");
+            if (actualSpacingM + 1e-12d < diameterM)
+                throw new InvalidOperationException("Linear rebar centers are closer than one bar diameter.");
             var halfSpanM = RebarMath.Divide(usableSpanM, 2d, "linear rebar half span");
             var offsets = new List<double>(count);
             for (var index = 0; index < count; index++)

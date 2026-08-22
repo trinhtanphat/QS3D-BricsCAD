@@ -1,7 +1,9 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Xml;
 
 namespace QS3D.Core.Domain
 {
@@ -54,14 +56,35 @@ namespace QS3D.Core.Domain
             if (orderedGridElementIds == null) throw new ArgumentNullException(nameof(orderedGridElementIds));
             options ??= new GridNamingOptions();
 
-            var ids = orderedGridElementIds
-                .Select((value, index) => Required(value, "orderedGridElementIds[" + index + "]", 128))
-                .ToList();
+            var targetEnumerationVersion = project.ChangeVersion;
+            var projectElementsAtStart = project.Elements.ToList();
+            var knownCount = TryGetKnownCount(orderedGridElementIds, out var conflictingKnownCounts, out var invalidNegativeKnownCount);
+            var versionAfterKnownCount = project.ChangeVersion;
+            if (versionAfterKnownCount != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while Grid renumber targets were being enumerated. Retry renumbering against the current project state.");
+            if (knownCount.HasValue && knownCount.Value > MaxGridBatch)
+                throw new InvalidOperationException("A Grid renumber batch supports at most " + MaxGridBatch + " elements.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Grid renumber target source exposes conflicting known Count values.");
+            if (invalidNegativeKnownCount)
+                throw new InvalidOperationException("Grid renumber target source exposes an invalid negative known count.");
+
+            var ids = new List<string>();
+            foreach (var value in orderedGridElementIds)
+            {
+                if (ids.Count == MaxGridBatch)
+                    throw new InvalidOperationException("A Grid renumber batch supports at most " + MaxGridBatch + " elements.");
+                ids.Add(Required(value, "orderedGridElementIds[" + ids.Count + "]", 128));
+            }
+            if (project.ChangeVersion != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while Grid renumber targets were being enumerated. Retry renumbering against the current project state.");
+            if (knownCount.HasValue && ids.Count != knownCount.Value)
+                throw new InvalidOperationException("Grid renumber target source Count does not match the enumerated element count.");
             if (ids.Count == 0) throw new InvalidOperationException("At least one Grid element is required for renumbering.");
-            if (ids.Count > MaxGridBatch) throw new InvalidOperationException("A Grid renumber batch supports at most " + MaxGridBatch + " elements.");
             if (ids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != ids.Count)
                 throw new InvalidOperationException("Grid renumber input contains duplicate element ids.");
 
+            var originalTargets = ResolveOriginalTargets(projectElementsAtStart, ids);
             var prefix = Optional(options.Prefix, nameof(options.Prefix), MaxAffixLength);
             var suffix = Optional(options.Suffix, nameof(options.Suffix), MaxAffixLength);
             if (options.StartIndex < 1 || options.StartIndex > MaxSequenceIndex)
@@ -79,6 +102,10 @@ namespace QS3D.Core.Domain
             {
                 if (!projectElements.TryGetValue(id, out var element))
                     throw new InvalidOperationException("Grid element does not exist: " + id);
+                if (!originalTargets.TryGetValue(id, out var originalElement) ||
+                    originalElement == null ||
+                    !ReferenceEquals(originalElement, element))
+                    throw new InvalidOperationException("Grid renumber target changed while Grid IDs were being enumerated: " + id + ". Retry against the current project state.");
                 if (element.Category != ElementCategory.Grid)
                     throw new InvalidOperationException("Element is not a Grid reference: " + element.Id);
                 targets.Add(element);
@@ -89,7 +116,9 @@ namespace QS3D.Core.Domain
             foreach (var grid in projectElements.Values.Where(x => x.Category == ElementCategory.Grid && !targetIds.Contains(x.Id)))
             {
                 if (!grid.Properties.TryGetValue(GridLabelKey, out var existing) || string.IsNullOrWhiteSpace(existing)) continue;
-                reservedLabels.Add(existing.Trim());
+                var normalizedExisting = existing.Trim();
+                if (!reservedLabels.Add(normalizedExisting))
+                    throw new InvalidOperationException("Grid label is duplicated outside the renumber batch: " + normalizedExisting);
             }
 
             var plannedLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -115,11 +144,22 @@ namespace QS3D.Core.Domain
             {
                 var element = targets[i];
                 var assignment = plan[i];
-                changed |= SetIfChanged(element, GridLabelKey, assignment.Label);
-                changed |= SetIfChanged(element, GridSequenceIndexKey, assignment.SequenceIndex.ToString(CultureInfo.InvariantCulture));
+                changed |= WouldChange(element, GridLabelKey, assignment.Label);
+                changed |= WouldChange(element, GridSequenceIndexKey, assignment.SequenceIndex.ToString(CultureInfo.InvariantCulture));
             }
-            if (changed) project.Touch();
-            return plan;
+
+            if (changed)
+            {
+                project.Touch();
+                for (var i = 0; i < targets.Count; i++)
+                {
+                    var element = targets[i];
+                    var assignment = plan[i];
+                    SetIfChanged(element, GridLabelKey, assignment.Label);
+                    SetIfChanged(element, GridSequenceIndexKey, assignment.SequenceIndex.ToString(CultureInfo.InvariantCulture));
+                }
+            }
+            return plan.AsReadOnly();
         }
 
         public static string FormatLabel(GridNamingOptions options, int sequenceIndex)
@@ -134,6 +174,57 @@ namespace QS3D.Core.Domain
             var result = prefix + core + suffix;
             if (result.Length > MaxLabelLength) throw new InvalidOperationException("Grid label exceeds " + MaxLabelLength + " characters.");
             return result;
+        }
+
+        private static int? TryGetKnownCount(
+            IEnumerable<string> source,
+            out bool conflictingKnownCounts,
+            out bool invalidNegativeKnownCount)
+        {
+            conflictingKnownCounts = false;
+            invalidNegativeKnownCount = false;
+            int? knownCount = null;
+            if (source is ICollection<string> collection)
+                knownCount = ObserveKnownCount(knownCount, collection.Count, ref conflictingKnownCounts, ref invalidNegativeKnownCount);
+            if (source is IReadOnlyCollection<string> readOnlyCollection)
+                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts, ref invalidNegativeKnownCount);
+            if (source is ICollection nonGenericCollection)
+                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts, ref invalidNegativeKnownCount);
+            return knownCount;
+        }
+
+        private static int ObserveKnownCount(
+            int? current,
+            int observed,
+            ref bool conflictingKnownCounts,
+            ref bool invalidNegativeKnownCount)
+        {
+            if (observed < 0)
+                invalidNegativeKnownCount = true;
+            if (current.HasValue && current.Value != observed)
+                conflictingKnownCounts = true;
+            return !current.HasValue || observed > current.Value ? observed : current.Value;
+        }
+
+        private static Dictionary<string, ProjectElement?> ResolveOriginalTargets(
+            IEnumerable<ProjectElement> projectElementsAtStart,
+            IEnumerable<string> targetIds)
+        {
+            var requested = new HashSet<string>(targetIds, StringComparer.OrdinalIgnoreCase);
+            var resolved = new Dictionary<string, ProjectElement?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in projectElementsAtStart)
+            {
+                if (element == null) continue;
+                var elementId = (element.Id ?? string.Empty).Trim();
+                if (!requested.Contains(elementId)) continue;
+                if (resolved.ContainsKey(elementId))
+                {
+                    resolved[elementId] = null;
+                    continue;
+                }
+                resolved[elementId] = element;
+            }
+            return resolved;
         }
 
         private static Dictionary<string, ProjectElement> ResolveProjectElements(ProjectState project)
@@ -153,9 +244,14 @@ namespace QS3D.Core.Domain
             return resolved;
         }
 
+        private static bool WouldChange(ProjectElement element, string key, string value)
+        {
+            return !element.Properties.TryGetValue(key, out var current) || !string.Equals(current, value, StringComparison.Ordinal);
+        }
+
         private static bool SetIfChanged(ProjectElement element, string key, string value)
         {
-            if (element.Properties.TryGetValue(key, out var current) && string.Equals(current, value, StringComparison.Ordinal)) return false;
+            if (!WouldChange(element, key, value)) return false;
             element.SetProperty(key, value);
             return true;
         }
@@ -192,7 +288,20 @@ namespace QS3D.Core.Domain
         private static string Optional(string? value, string name, int maxLength)
         {
             var normalized = value?.Trim() ?? string.Empty;
+            for (var index = 0; index < normalized.Length; index++)
+            {
+                if (char.IsControl(normalized[index]))
+                    throw new ArgumentException("Grid naming prefix/suffix cannot contain control characters.", name);
+            }
             if (normalized.Length > maxLength) throw new ArgumentException("Value exceeds " + maxLength + " characters.", name);
+            try
+            {
+                XmlConvert.VerifyXmlChars(normalized);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Grid naming prefix/suffix contains characters that are invalid in XML.", name, ex);
+            }
             return normalized;
         }
     }

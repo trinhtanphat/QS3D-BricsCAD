@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
             RadialSystemProducesRayRingIntersections();
             InvalidRectangularAxesFailClosed();
             DuplicateRadialAnglesFailClosed();
+            PrecisionCollapsedStationOffsetFailsClosed();
+            RepresentableLargeStationOffsetRemainsExact();
         }
 
         private static void RotatedRectangularSystemProducesDeterministicIntersections()
@@ -104,6 +106,44 @@ namespace QS3D.Core.SmokeTests
                 },
                 Rings = new[] { new GridRadialStation("C1", 2d) }
             }));
+        }
+
+        private static void PrecisionCollapsedStationOffsetFailsClosed()
+        {
+            Throws<OverflowException>(() => GridSystemPlanner.PlanRectangular(new RectangularGridSystemInput
+            {
+                OriginM = new Point2(10000000000000000d, 0d),
+                UAxis = new Point2(1d, 0d),
+                VAxis = new Point2(0d, 1d),
+                UMinM = 0d,
+                UMaxM = 2d,
+                VMinM = 0d,
+                VMaxM = 2d,
+                UStations = new[] { new GridLinearStation("U-COLLAPSE", 1d) },
+                VStations = new[] { new GridLinearStation("V-CONTROL", 0d) }
+            }));
+        }
+
+        private static void RepresentableLargeStationOffsetRemainsExact()
+        {
+            const double originX = 10000000000000000d;
+            const double expectedStationX = 10000000000000002d;
+            var curves = GridSystemPlanner.PlanRectangular(new RectangularGridSystemInput
+            {
+                OriginM = new Point2(originX, 0d),
+                UAxis = new Point2(1d, 0d),
+                VAxis = new Point2(0d, 1d),
+                UMinM = 0d,
+                UMaxM = 2d,
+                VMinM = 0d,
+                VMaxM = 2d,
+                UStations = new[] { new GridLinearStation("U-LARGE", 2d) },
+                VStations = new[] { new GridLinearStation("V-LARGE", 0d) }
+            });
+
+            var station = curves.Single(x => x.ElementId == "U-LARGE");
+            Require(station.Start.X == expectedStationX, "Representable large Grid station start coordinate changed.");
+            Require(station.End.X == expectedStationX, "Representable large Grid station end coordinate changed.");
         }
 
         private static bool IsRayRing(string first, string second)

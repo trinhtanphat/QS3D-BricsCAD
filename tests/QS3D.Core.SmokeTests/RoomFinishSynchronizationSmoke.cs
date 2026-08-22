@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             RepairsLegacyDependencyScopeAndFingerprint();
             RemovedRoomMetricsClearOldDeductions();
             QuantityFallbackIsCanonicalized();
+            RepeatedSynchronizationIsNoOpButRepairsDrift();
             BatchFailureRollsBackEarlierFinishMutation();
             RejectsInvalidRoomMetric();
             RejectsStaleAutoRoom();
@@ -91,6 +92,46 @@ namespace QS3D.Core.SmokeTests
 
             RoomFinishSynchronizationService.Synchronize(project, room, finish);
             Equal("12.5", finish.Properties["AreaM2"]);
+        }
+
+        private static void RepeatedSynchronizationIsNoOpButRepairsDrift()
+        {
+            var project = Project(out var room);
+            room.DrawingFingerprint = "ROOM-FP";
+            room.Properties["AreaM2"] = "12.5";
+            room.Properties["PerimeterM"] = "10";
+            room.Properties["HeightM"] = "3";
+
+            var finish = Finish("IDEMPOTENT", ElementCategory.WallFinish, room.FloorId, room.ZoneId);
+            project.Elements.Add(finish);
+
+            var beforeFirstVersion = project.ChangeVersion;
+            RoomFinishSynchronizationService.Synchronize(project, room, finish);
+            True(project.ChangeVersion == beforeFirstVersion + 1L);
+            finish.MarkClean(ElementDirtyFlags.All);
+
+            var canonicalVersion = project.ChangeVersion;
+            var canonicalProjectUpdatedUtc = project.UpdatedUtc;
+            var canonicalFinishUpdatedUtc = finish.UpdatedUtc;
+            RoomFinishSynchronizationService.Synchronize(project, room, finish);
+
+            True(project.ChangeVersion == canonicalVersion);
+            True(project.UpdatedUtc == canonicalProjectUpdatedUtc);
+            True(finish.UpdatedUtc == canonicalFinishUpdatedUtc);
+            True(finish.Dirty == ElementDirtyFlags.None);
+            True(finish.DependsOn.Count(x => string.Equals((x ?? string.Empty).Trim(), room.Id, StringComparison.OrdinalIgnoreCase)) == 1);
+            Equal(room.Id, finish.DependsOn[finish.DependsOn.Count - 1]);
+
+            finish.Properties["DoorWidthM"] = "0.9";
+            finish.DependsOn.Insert(0, room.Id.ToLowerInvariant());
+            var beforeRepairVersion = project.ChangeVersion;
+            RoomFinishSynchronizationService.Synchronize(project, room, finish);
+
+            True(project.ChangeVersion == beforeRepairVersion + 1L);
+            True(finish.Dirty == ElementDirtyFlags.All);
+            True(!finish.Properties.ContainsKey("DoorWidthM"));
+            True(finish.DependsOn.Count(x => string.Equals((x ?? string.Empty).Trim(), room.Id, StringComparison.OrdinalIgnoreCase)) == 1);
+            Equal(room.Id, finish.DependsOn[finish.DependsOn.Count - 1]);
         }
 
         private static void BatchFailureRollsBackEarlierFinishMutation()

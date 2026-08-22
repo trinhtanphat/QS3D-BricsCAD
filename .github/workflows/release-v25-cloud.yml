@@ -3,8 +3,12 @@ name: QS3D Cloud V25 Preview Build & Release
 on:
   workflow_dispatch:
     inputs:
+      source_sha:
+        description: "Optional exact 40-hex source commit; automatic dispatcher pins the triggering main integration SHA"
+        required: false
+        type: string
       release_tag:
-        description: "Prerelease tag matching source Version, for example v0.1.0-preview.2"
+        description: "Preview tag to publish, for example v0.1.0-preview.7; source identity is synchronized automatically"
         required: true
         type: string
       confirm_release:
@@ -28,22 +32,21 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}
     runs-on: windows-latest
     env:
+      SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
       RELEASE_TAG: ${{ inputs.release_tag }}
+      BRICSCAD_V25_MIRROR_MSI_URL: https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/25.2.10/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
       BRICSCAD_V25_PUBLIC_MSI_URL: https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/25.2.10/BricsCAD-V25.2.10-1-en_US%28x64%29.msi
+      BRICSCAD_V25_PINNED_MSI_SHA256: F44DF674C0E165D96BF579E243B20A8301E3F395F929779F47BF39A7D9DACDE1
       BRICSCAD_V25_MSI_URL: ${{ secrets.BRICSCAD_V25_MSI_URL }}
       BRICSCAD_V25_MSI_SHA256: ${{ vars.BRICSCAD_V25_MSI_SHA256 }}
+      NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.source_sha || github.sha }}
           fetch-depth: 0
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "8.0.x"
+          fetch-tags: true
+          persist-credentials: false
 
       - name: Validate cloud prerelease request
         shell: powershell
@@ -51,12 +54,37 @@ jobs:
           if ($env:GITHUB_REF -ne 'refs/heads/main') {
             throw "Cloud V25 preview releases must be dispatched from refs/heads/main. Current ref: $env:GITHUB_REF"
           }
-          if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+(?:\+[0-9A-Za-z.-]+)?$') {
-            throw "Cloud release is prerelease-only. Use a tag such as v0.1.0-preview.2."
+          $sourceSha = ([string]$env:SOURCE_SHA).Trim().ToLowerInvariant()
+          if ($sourceSha -notmatch '^[0-9a-f]{40}$') {
+            throw "Cloud release source_sha must be one exact 40-hex commit. Got: $env:SOURCE_SHA"
+          }
+          $head = ([string](git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $head -ne $sourceSha) {
+            throw "Cloud release checkout must equal SOURCE_SHA. Expected $sourceSha, got $head."
+          }
+          & git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not refresh origin/main for source ancestry validation.'
+          }
+          & git merge-base --is-ancestor $sourceSha origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Cloud release source SHA must be reachable from current main: $sourceSha"
+          }
+          if ($env:RELEASE_TAG -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)-preview\.[1-9][0-9]*$') {
+            throw "Cloud release accepts exact preview tags only, such as v0.1.0-preview.7."
           }
           git rev-parse --verify HEAD | Out-Null
           if (git tag --list $env:RELEASE_TAG) {
             throw "Tag already exists locally: $env:RELEASE_TAG"
+          }
+          $expectedMirror = 'https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/25.2.10/BricsCAD-V25.2.10-1-en_US%28x64%29.msi'
+          if (-not [string]::Equals($env:BRICSCAD_V25_MIRROR_MSI_URL, $expectedMirror, [StringComparison]::Ordinal)) {
+            throw "Pinned BricsCAD V25 mirror URL must match the approved V25.2.10 x64 en_US object exactly."
+          }
+          $mirrorUri = $null
+          if (-not [Uri]::TryCreate($env:BRICSCAD_V25_MIRROR_MSI_URL, [UriKind]::Absolute, [ref]$mirrorUri) -or
+              $mirrorUri.Scheme -ne 'https' -or $mirrorUri.Host -ne 'storage.googleapis.com') {
+            throw "Pinned BricsCAD V25 mirror URL is invalid."
           }
           if ([string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_PUBLIC_MSI_URL)) {
             throw "Pinned BricsCAD V25.2.10 public installer URL is missing from the workflow."
@@ -65,18 +93,66 @@ jobs:
           if (-not [Uri]::TryCreate($env:BRICSCAD_V25_PUBLIC_MSI_URL, [UriKind]::Absolute, [ref]$publicUri) -or $publicUri.Scheme -ne 'https') {
             throw "Pinned BricsCAD V25 public MSI URL must be absolute HTTPS."
           }
+          if ($env:BRICSCAD_V25_PINNED_MSI_SHA256 -notmatch '^[0-9A-Fa-f]{64}$') {
+            throw "Pinned BricsCAD V25 MSI SHA-256 must be a 64-hex value."
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256)) {
+            if ($env:BRICSCAD_V25_MSI_SHA256 -notmatch '^[0-9A-Fa-f]{64}$') {
+              throw "BRICSCAD_V25_MSI_SHA256 must be a 64-hex SHA-256 value when configured."
+            }
+            if (-not [string]::Equals($env:BRICSCAD_V25_MSI_SHA256, $env:BRICSCAD_V25_PINNED_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)) {
+              throw "BRICSCAD_V25_MSI_SHA256 conflicts with the pinned V25.2.10 installer digest."
+            }
+          }
           if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_URL)) {
             $fallbackUri = $null
             if (-not [Uri]::TryCreate($env:BRICSCAD_V25_MSI_URL, [UriKind]::Absolute, [ref]$fallbackUri) -or $fallbackUri.Scheme -ne 'https') {
               throw "BRICSCAD_V25_MSI_URL must be an absolute HTTPS URL when configured."
             }
-            if (-not $env:BRICSCAD_V25_MSI_URL.StartsWith($env:BRICSCAD_V25_PUBLIC_MSI_URL, [StringComparison]::OrdinalIgnoreCase)) {
+            if (-not [string]::IsNullOrEmpty($fallbackUri.UserInfo) -or -not [string]::IsNullOrEmpty($fallbackUri.Fragment)) {
+              throw "BRICSCAD_V25_MSI_URL must not contain embedded credentials or a fragment."
+            }
+            if (-not [string]::Equals($fallbackUri.Scheme, $publicUri.Scheme, [StringComparison]::OrdinalIgnoreCase) -or
+                -not [string]::Equals($fallbackUri.Host, $publicUri.Host, [StringComparison]::OrdinalIgnoreCase) -or
+                $fallbackUri.Port -ne $publicUri.Port -or
+                -not [string]::Equals($fallbackUri.AbsolutePath, $publicUri.AbsolutePath, [StringComparison]::Ordinal)) {
               throw "BRICSCAD_V25_MSI_URL must point to the pinned official BricsCAD V25.2.10 x64 en_US object; only its signed query string may differ."
             }
           }
-          if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256) -and $env:BRICSCAD_V25_MSI_SHA256 -notmatch '^[0-9A-Fa-f]{64}$') {
-            throw "BRICSCAD_V25_MSI_SHA256 must be a 64-hex SHA-256 value when configured."
+
+      - name: Prepare exact release source commit
+        shell: powershell
+        run: |
+          $releaseCommit = (& .\scripts\prepare-v25-cloud-release.ps1 -ReleaseTag $env:RELEASE_TAG -DispatchSha $env:SOURCE_SHA | Select-Object -Last 1)
+          if ([string]::IsNullOrWhiteSpace([string]$releaseCommit)) {
+            throw 'Release source preparation did not return an exact commit SHA.'
           }
+          $releaseCommit = ([string]$releaseCommit).Trim().ToLowerInvariant()
+          if ($releaseCommit -notmatch '^[0-9a-f]{40}$') {
+            throw "Release source preparation returned an invalid commit SHA: $releaseCommit"
+          }
+          $head = ([string](git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $head -ne $releaseCommit) {
+            throw "Release source preparation HEAD mismatch. Expected $releaseCommit, got $head."
+          }
+          "RELEASE_COMMIT_SHA=$releaseCommit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Exact release source commit: $releaseCommit"
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', 'nuget.config') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
 
       - name: Manual-only CI policy gate
         run: python scripts/preflight-ci-manual-only.py
@@ -87,59 +163,141 @@ jobs:
       - name: All discovered feature source guards
         run: python scripts/preflight-all.py
 
-      - name: Build Core Release
-        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
-
-      - name: Deterministic Core smoke tests
-        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
-
-      - name: Acquire official BricsCAD V25 compile references
+      - name: Materialize pinned Platform dependency
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $msi = Join-Path $env:RUNNER_TEMP 'BricsCAD-V25.2.10-x64.msi'
-          $extract = Join-Path $env:RUNNER_TEMP 'BricsCAD-V25-admin'
-          Remove-Item -LiteralPath $msi -Force -ErrorAction SilentlyContinue
-          Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Path $extract -Force | Out-Null
+          & git submodule sync -- external/QS3D-Platform
+          if ($LASTEXITCODE -ne 0) { throw 'Could not synchronize external/QS3D-Platform submodule metadata.' }
+          & git submodule update --init --recursive -- external/QS3D-Platform
+          if ($LASTEXITCODE -ne 0) { throw 'Could not materialize pinned external/QS3D-Platform dependency.' }
+          $treeLine = [string](& git ls-tree HEAD external/QS3D-Platform | Select-Object -First 1)
+          if ($LASTEXITCODE -ne 0 -or $treeLine -notmatch '^160000 commit ([0-9a-f]{40})\s+external/QS3D-Platform$') {
+            throw 'Could not resolve the exact Platform gitlink from the release source commit.'
+          }
+          $expectedPlatformSha = $Matches[1].ToLowerInvariant()
+          $actualPlatformSha = ([string](& git -C external/QS3D-Platform rev-parse HEAD)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $actualPlatformSha -ne $expectedPlatformSha) {
+            throw "Platform dependency SHA mismatch. Expected $expectedPlatformSha, got $actualPlatformSha."
+          }
+          $platformProject = 'external\QS3D-Platform\src\QS3D.Platform.Parity\QS3D.Platform.Parity.csproj'
+          if (-not (Test-Path -LiteralPath $platformProject -PathType Leaf)) {
+            throw "Pinned Platform project is missing after submodule materialization: $platformProject"
+          }
+          Write-Host "Materialized exact Platform dependency: $actualPlatformSha"
 
-          $candidates = @(
-            [pscustomobject]@{ Name = 'pinned-public'; Url = $env:BRICSCAD_V25_PUBLIC_MSI_URL }
-          )
-          if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_URL)) {
-            $candidates += [pscustomobject]@{ Name = 'signed-secret-fallback'; Url = $env:BRICSCAD_V25_MSI_URL }
+      - name: Restore Core smoke projects
+        run: dotnet restore tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj
+
+      - name: Build Core Release
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release --no-restore
+
+      - name: Build Core smoke harness
+        run: dotnet build tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release --no-restore
+
+      - name: Deterministic Core smoke tests
+        shell: powershell
+        run: |
+          $previousErrorActionPreference = $ErrorActionPreference
+          $ErrorActionPreference = 'Continue'
+          $smokeOutput = @(& dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release --no-build --no-restore 2>&1)
+          $smokeExitCode = $LASTEXITCODE
+          $ErrorActionPreference = $previousErrorActionPreference
+          foreach ($line in $smokeOutput) { Write-Host ([string]$line) }
+          if ($smokeExitCode -ne 0) {
+            $diagnostic = (($smokeOutput | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_.Length -gt 0 }) -join ' | ')
+            if ([string]::IsNullOrWhiteSpace($diagnostic)) { $diagnostic = "Core smoke process exited with code $smokeExitCode without captured output." }
+            if ($diagnostic.Length -gt 3500) { $diagnostic = $diagnostic.Substring(0, 3500) + '…' }
+            $diagnostic = $diagnostic.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Deterministic Core smoke failure::$diagnostic"
+            exit $smokeExitCode
           }
 
+      - name: Restore BricsCAD V25 installer cache
+        id: bricscad-msi-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/bricscad/BricsCAD-V25.2.10-x64.msi
+          key: bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}
+
+      - name: Acquire BricsCAD V25 compile references
+        timeout-minutes: 30
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cacheDir = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad'
+          $msi = Join-Path $cacheDir 'BricsCAD-V25.2.10-x64.msi'
+          $extract = Join-Path $env:RUNNER_TEMP 'BricsCAD-V25-admin'
+          $msiLog = Join-Path $env:RUNNER_TEMP 'BricsCAD-V25-admin.log'
+          New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+          Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -LiteralPath $msiLog -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $extract -Force | Out-Null
+
           $downloadedFrom = $null
-          foreach ($candidate in $candidates) {
-            Remove-Item -LiteralPath $msi -Force -ErrorAction SilentlyContinue
-            try {
-              Invoke-WebRequest -Uri $candidate.Url -OutFile $msi -MaximumRedirection 10
-              if ((Test-Path -LiteralPath $msi -PathType Leaf) -and (Get-Item -LiteralPath $msi).Length -gt 1048576) {
+          if ((Test-Path -LiteralPath $msi -PathType Leaf) -and (Get-Item -LiteralPath $msi).Length -gt 1048576) {
+            $cachedHash = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash
+            if ([string]::Equals($cachedHash, $env:BRICSCAD_V25_PINNED_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)) {
+              $downloadedFrom = 'actions-cache'
+              Write-Host ("Restored verified-size BricsCAD V25 MSI candidate from Actions cache. SHA256=" + $cachedHash)
+            }
+            else {
+              Write-Warning ("Discarding cached BricsCAD V25 MSI with unexpected SHA256: " + $cachedHash)
+              Remove-Item -LiteralPath $msi -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+          if ([string]::IsNullOrWhiteSpace($downloadedFrom)) {
+            $candidates = @(
+              [pscustomobject]@{ Name = 'pinned-official-primary'; Url = $env:BRICSCAD_V25_MIRROR_MSI_URL },
+              [pscustomobject]@{ Name = 'pinned-official-secondary'; Url = $env:BRICSCAD_V25_PUBLIC_MSI_URL }
+            )
+            if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_URL)) {
+              $candidates += [pscustomobject]@{ Name = 'signed-secret-fallback'; Url = $env:BRICSCAD_V25_MSI_URL }
+            }
+
+            foreach ($candidate in $candidates) {
+              Remove-Item -LiteralPath $msi -Force -ErrorAction SilentlyContinue
+              try {
+                Write-Host ("Downloading BricsCAD V25 installer from " + $candidate.Name + "...")
+                Invoke-WebRequest -Uri $candidate.Url -OutFile $msi -MaximumRedirection 10 -TimeoutSec 1200 -UseBasicParsing
+                if (-not (Test-Path -LiteralPath $msi -PathType Leaf) -or (Get-Item -LiteralPath $msi).Length -le 1048576) {
+                  Write-Warning ("BricsCAD V25 installer source returned an undersized file: " + $candidate.Name)
+                  continue
+                }
+                $candidateHash = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash
+                Write-Host ("Downloaded " + (Get-Item -LiteralPath $msi).Length + " bytes from " + $candidate.Name + ". SHA256=" + $candidateHash)
+                if (-not [string]::Equals($candidateHash, $env:BRICSCAD_V25_PINNED_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)) {
+                  Write-Warning ("BricsCAD V25 installer digest mismatch from " + $candidate.Name)
+                  continue
+                }
                 $downloadedFrom = $candidate.Name
                 break
               }
-            }
-            catch {
-              Write-Warning ("BricsCAD V25 installer source failed: " + $candidate.Name)
+              catch {
+                Write-Warning ("BricsCAD V25 installer source failed: " + $candidate.Name + " • " + $_.Exception.Message)
+              }
             }
           }
           if ([string]::IsNullOrWhiteSpace($downloadedFrom)) {
-            throw 'Unable to download the pinned official BricsCAD V25.2.10 x64 installer. If Bricsys requires a signed URL, refresh it and store the exact URL in repository secret BRICSCAD_V25_MSI_URL.'
+            throw 'Unable to obtain the pinned BricsCAD V25.2.10 x64 installer from Actions cache, pinned official HTTPS sources, or configured signed HTTPS fallback.'
           }
 
           $actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash
           Write-Host ("BricsCAD V25.2.10 MSI SHA256: " + $actual)
-          if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_SHA256) -and
-              -not [string]::Equals($actual, $env:BRICSCAD_V25_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)) {
-            throw "BricsCAD V25 MSI SHA-256 mismatch. Expected $env:BRICSCAD_V25_MSI_SHA256, got $actual."
+          if (-not [string]::Equals($actual, $env:BRICSCAD_V25_PINNED_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "BricsCAD V25 MSI SHA-256 mismatch. Expected $env:BRICSCAD_V25_PINNED_MSI_SHA256, got $actual."
           }
 
           $signature = Get-AuthenticodeSignature -FilePath $msi
           if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or -not $signature.SignerCertificate) {
             throw "BricsCAD V25 MSI Authenticode signature is not valid: $($signature.Status)."
           }
-          Write-Host ("Verified installer signer: " + $signature.SignerCertificate.Subject)
+          $signerSubject = [string]$signature.SignerCertificate.Subject
+          if ($signerSubject -notmatch '(^|,\s*)(CN|O)=Bricsys(,|$)') {
+            throw "BricsCAD V25 MSI signer is not Bricsys: $signerSubject"
+          }
+          Write-Host ("Verified installer signer: " + $signerSubject)
 
           $installer = New-Object -ComObject WindowsInstaller.Installer
           $database = $installer.OpenDatabase($msi, 0)
@@ -159,35 +317,54 @@ jobs:
           }
           Write-Host ("Verified MSI identity: " + $productName + " " + $productVersion)
 
-          $arguments = @('/a', ('"' + $msi + '"'), '/qn', '/norestart', ('TARGETDIR="' + $extract + '"'), 'REBOOT=ReallySuppress')
-          $process = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -Wait -PassThru
+          $arguments = @('/a', ('"' + $msi + '"'), '/qn', '/norestart', ('TARGETDIR="' + $extract + '"'), 'REBOOT=ReallySuppress', '/L*v', ('"' + $msiLog + '"'))
+          Write-Host 'Starting BricsCAD V25 MSI administrative extraction (15-minute process timeout)...'
+          $process = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -PassThru
+          $exited = $process.WaitForExit(900000)
+          if (-not $exited) {
+            try { $process.Kill() } catch { }
+            Write-Warning 'BricsCAD V25 MSI administrative extraction timed out. MSI log tail follows.'
+            if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
+            throw 'BricsCAD V25 MSI administrative extraction timed out after 15 minutes.'
+          }
           if ($process.ExitCode -notin @(0, 3010)) {
+            if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
             throw "BricsCAD V25 MSI administrative extraction failed with exit code $($process.ExitCode)."
           }
+          Write-Host ("BricsCAD V25 MSI administrative extraction completed with exit code " + $process.ExitCode + ".")
 
           $brx = @(Get-ChildItem -LiteralPath $extract -Recurse -File -Filter 'BrxMgd.dll')
           $td = @(Get-ChildItem -LiteralPath $extract -Recurse -File -Filter 'TD_Mgd.dll')
-          if ($brx.Count -lt 1 -or $td.Count -lt 1) {
-            throw 'Could not locate BrxMgd.dll and TD_Mgd.dll in the extracted official V25 installer.'
+          $brep = @(Get-ChildItem -LiteralPath $extract -Recurse -File -Filter 'TD_MgdBrep.dll')
+          if ($brx.Count -lt 1 -or $td.Count -lt 1 -or $brep.Count -lt 1) {
+            throw 'Could not locate BrxMgd.dll, TD_Mgd.dll, and TD_MgdBrep.dll in the extracted V25 installer.'
           }
 
           $candidateDirs = @($brx | ForEach-Object { $_.Directory.FullName } | Sort-Object -Unique)
           $bricsDir = $candidateDirs | Where-Object {
             (Test-Path -LiteralPath (Join-Path $_ 'BrxMgd.dll') -PathType Leaf) -and
-            (Test-Path -LiteralPath (Join-Path $_ 'TD_Mgd.dll') -PathType Leaf)
+            (Test-Path -LiteralPath (Join-Path $_ 'TD_Mgd.dll') -PathType Leaf) -and
+            (Test-Path -LiteralPath (Join-Path $_ 'TD_MgdBrep.dll') -PathType Leaf)
           } | Select-Object -First 1
           if ([string]::IsNullOrWhiteSpace($bricsDir)) {
-            throw 'BrxMgd.dll and TD_Mgd.dll were not found together in one extracted V25 runtime directory.'
+            throw 'BrxMgd.dll, TD_Mgd.dll, and TD_MgdBrep.dll were not found together in one extracted V25 runtime directory.'
           }
 
           "BRICSCAD_V25_DIR=$bricsDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host ("V25 compile references resolved from " + $downloadedFrom + ".")
 
+      - name: Save BricsCAD V25 installer cache
+        if: ${{ steps.bricscad-msi-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/bricscad/BricsCAD-V25.2.10-x64.msi
+          key: bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}
+
       - name: Validate BricsCAD V25 compile references
         shell: powershell
         run: |
-          if (-not $env:BRICSCAD_V25_DIR) { throw 'BRICSCAD_V25_DIR was not resolved from the official installer.' }
-          foreach ($name in @('BrxMgd.dll', 'TD_Mgd.dll')) {
+          if (-not $env:BRICSCAD_V25_DIR) { throw 'BRICSCAD_V25_DIR was not resolved from the pinned installer.' }
+          foreach ($name in @('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')) {
             if (-not (Test-Path -LiteralPath (Join-Path $env:BRICSCAD_V25_DIR $name) -PathType Leaf)) {
               throw "Required BricsCAD V25 compile reference is missing: $name"
             }
@@ -220,6 +397,16 @@ jobs:
           if ([string]::IsNullOrWhiteSpace([string]$metadata.version)) {
             throw 'PACKAGE-METADATA assembly version is missing.'
           }
+          if ([string]::IsNullOrWhiteSpace($env:RELEASE_COMMIT_SHA) -or $env:RELEASE_COMMIT_SHA -notmatch '^[0-9a-f]{40}$') {
+            throw 'Exact RELEASE_COMMIT_SHA is missing or invalid.'
+          }
+          $head = ([string](git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $head -ne $env:RELEASE_COMMIT_SHA.ToLowerInvariant()) {
+            throw "Package source HEAD must equal RELEASE_COMMIT_SHA. Expected $env:RELEASE_COMMIT_SHA, got $head."
+          }
+          if (-not [string]::Equals(([string]$metadata.gitCommit).Trim(), $head, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "PACKAGE-METADATA gitCommit must match exact release source commit. Expected $head, got $($metadata.gitCommit)."
+          }
 
       - name: Create package checksum
         shell: powershell
@@ -228,8 +415,22 @@ jobs:
           $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  QS3D-BricsCAD-V25.zip" | Set-Content 'dist\QS3D-BricsCAD-V25.zip.sha256' -Encoding ASCII
 
+      - name: Verify V25 package integrity before upload
+        shell: powershell
+        run: |
+          .\scripts\verify-v25-package.ps1 -ZipPath 'dist\QS3D-BricsCAD-V25.zip' -ChecksumPath 'dist\QS3D-BricsCAD-V25.zip.sha256' -RequiredEntries @(
+            'QS3D.BricsCAD.V25.dll',
+            'QS3D.Core.dll',
+            'PACKAGE-METADATA.json',
+            'README.txt',
+            'COMMANDS.txt',
+            'INSTALL-QS3D.cmd',
+            'UNBLOCK-QS3D.cmd',
+            'SHA256SUMS.txt'
+          )
+
       - name: Upload cloud preview artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: QS3D-BricsCAD-V25-${{ inputs.release_tag }}-cloud-preview
           if-no-files-found: error
@@ -242,6 +443,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          if ([string]::IsNullOrWhiteSpace($env:RELEASE_COMMIT_SHA) -or $env:RELEASE_COMMIT_SHA -notmatch '^[0-9a-f]{40}$') {
+            throw 'Exact RELEASE_COMMIT_SHA is required before publishing.'
+          }
+          $head = ([string](git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $head -ne $env:RELEASE_COMMIT_SHA.ToLowerInvariant()) {
+            throw "Publish source HEAD must equal RELEASE_COMMIT_SHA. Expected $env:RELEASE_COMMIT_SHA, got $head."
+          }
           $headers = @{
             Authorization = "Bearer $env:GH_TOKEN"
             Accept = 'application/vnd.github+json'
@@ -250,14 +458,17 @@ jobs:
           }
           $body = @{
             tag_name = $env:RELEASE_TAG
-            target_commitish = $env:GITHUB_SHA
+            target_commitish = $env:RELEASE_COMMIT_SHA
             name = "QS3D for BricsCAD V25 $env:RELEASE_TAG"
-            body = 'Owner-approved GitHub-hosted preview build. Source guards, Core build/smoke tests and the V25 adapter compile completed on windows-latest against managed references extracted from the pinned official BricsCAD V25.2.10 x64 installer. The installer Authenticode signature and MSI ProductVersion were verified before extraction; an optional configured SHA-256 pin is also enforced when present. Real BricsCAD NETLOAD/runtime validation was not executed in this cloud workflow. Package is an unsigned prerelease preview and intentionally excludes BricsCAD runtime assemblies.'
+            body = "GitHub-hosted BricsCAD V25 preview from exact source commit $env:RELEASE_COMMIT_SHA. Source guards, deterministic Core build/smoke tests, the V25 adapter compile, package SHA-256 checks, and draft-asset round-trip verification completed before publication. Real licensed BricsCAD NETLOAD/runtime validation is not executed in this cloud workflow. See docs/RELEASE_POLICY.md in this source revision for the full batching, provenance, installer-verification, and package-integrity policy."
             draft = $true
             prerelease = $true
             generate_release_notes = $true
           } | ConvertTo-Json
           $release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" -Headers $headers -ContentType 'application/json' -Body $body
+          if (-not [string]::Equals(([string]$release.target_commitish).Trim(), $env:RELEASE_COMMIT_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Draft prerelease target commit mismatch. Expected $env:RELEASE_COMMIT_SHA, got $($release.target_commitish)."
+          }
           $uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''
           foreach ($assetPath in @('dist\QS3D-BricsCAD-V25.zip', 'dist\QS3D-BricsCAD-V25.zip.sha256')) {
             $asset = (Resolve-Path $assetPath).Path
@@ -268,11 +479,54 @@ jobs:
           }
           $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$($release.id)"
           $draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
-          foreach ($expectedAsset in @('QS3D-BricsCAD-V25.zip', 'QS3D-BricsCAD-V25.zip.sha256')) {
-            if ($expectedAsset -notin @($draftRelease.assets | ForEach-Object { $_.name })) {
-              throw "Expected release asset was not uploaded: $expectedAsset. Release remains a draft."
+          $expectedAssets = @('QS3D-BricsCAD-V25.zip', 'QS3D-BricsCAD-V25.zip.sha256')
+          foreach ($expectedAsset in $expectedAssets) {
+            $matches = @($draftRelease.assets | Where-Object { [string]::Equals([string]$_.name, $expectedAsset, [StringComparison]::Ordinal) })
+            if ($matches.Count -ne 1) {
+              throw "Expected exactly one release asset named $expectedAsset, found $($matches.Count). Release remains a draft."
+            }
+            if ([int64]$matches[0].size -le 0) {
+              throw "Uploaded release asset is empty: $expectedAsset. Release remains a draft."
             }
           }
+
+          $verifyDir = Join-Path $env:RUNNER_TEMP ('qs3d-release-asset-verify-' + [Guid]::NewGuid().ToString('N'))
+          Remove-Item -LiteralPath $verifyDir -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $verifyDir -Force | Out-Null
+          $downloadHeaders = @{}
+          foreach ($key in $headers.Keys) { $downloadHeaders[$key] = $headers[$key] }
+          $downloadHeaders['Accept'] = 'application/octet-stream'
+
+          foreach ($expectedAsset in $expectedAssets) {
+            $assetInfo = @($draftRelease.assets | Where-Object { [string]::Equals([string]$_.name, $expectedAsset, [StringComparison]::Ordinal) })[0]
+            $downloadPath = Join-Path $verifyDir $expectedAsset
+            Invoke-WebRequest -Method Get -Uri $assetInfo.url -Headers $downloadHeaders -OutFile $downloadPath -MaximumRedirection 10 -UseBasicParsing
+            if (-not (Test-Path -LiteralPath $downloadPath -PathType Leaf)) {
+              throw "Downloaded release asset is missing: $expectedAsset. Release remains a draft."
+            }
+            $downloadInfo = Get-Item -LiteralPath $downloadPath
+            if ($downloadInfo.Length -ne [int64]$assetInfo.size) {
+              throw "Downloaded release asset size mismatch for $expectedAsset. API=$($assetInfo.size), downloaded=$($downloadInfo.Length). Release remains a draft."
+            }
+            $localPath = (Resolve-Path (Join-Path 'dist' $expectedAsset)).Path
+            $localHash = (Get-FileHash -LiteralPath $localPath -Algorithm SHA256).Hash
+            $downloadHash = (Get-FileHash -LiteralPath $downloadPath -Algorithm SHA256).Hash
+            if (-not [string]::Equals($localHash, $downloadHash, [StringComparison]::OrdinalIgnoreCase)) {
+              throw "Uploaded/downloaded release asset byte hash mismatch for $expectedAsset. Release remains a draft."
+            }
+          }
+
+          .\scripts\verify-v25-package.ps1 -ZipPath (Join-Path $verifyDir 'QS3D-BricsCAD-V25.zip') -ChecksumPath (Join-Path $verifyDir 'QS3D-BricsCAD-V25.zip.sha256') -RequiredEntries @(
+            'QS3D.BricsCAD.V25.dll',
+            'QS3D.Core.dll',
+            'PACKAGE-METADATA.json',
+            'README.txt',
+            'COMMANDS.txt',
+            'INSTALL-QS3D.cmd',
+            'UNBLOCK-QS3D.cmd',
+            'SHA256SUMS.txt'
+          )
+
           $publishBody = @{ draft = $false } | ConvertTo-Json
           $publishedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $publishBody
           if ($publishedRelease.draft -ne $false) {

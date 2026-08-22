@@ -3,6 +3,9 @@ from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="backslashreplace")
+
 ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI"
 errors = []
@@ -79,7 +82,7 @@ if right.is_file():
     text = right.read_text(encoding="utf-8")
     required = (
         'x:Key="RightBadge"', 'x:Key="RightToolbarBand"',
-        'Drawings.Count, StringFormat={}{0} bản vẽ', 'Layers.Count, StringFormat={}{0} lớp',
+        'Drawings.Count, StringFormat={}{0} bản vẽ', 'Text="{Binding LayerCountText}"',
         'Text="Xref / Drawing"', 'Text="Hiện / Ẩn / Khóa / Màu native"', 'Text="Tìm lớp"',
         'Background="{Binding ColorBrush}"', 'IsChecked="{Binding IsLocked}"',
         'Click="OnLockLayersClick"', 'Click="OnUnlockLayersClick"',
@@ -107,7 +110,7 @@ checks = {
     "project_tools": (
         'Text="PROJECT CONTROL"', 'x:Key="ProjectCard"', 'x:Key="ProjectMetric"',
         'Tag="QS3DLEVELS"', 'Tag="QS3DZONES"', 'Tag="QS3DFAMILIES"', 'Tag="QS3DMATERIALS"',
-        'Tag="QS3DHEALTHALL"', 'Text="PROJECT-SAFE • DWG CONTEXT LOCK"',
+        'Tag="QS3DHEALTHALL"', 'Text="PROJECT-SAFE • READ-ONLY SNAPSHOT • DWG CONTEXT LOCK"',
     ),
     "schedule_hub": (
         'Text="QUANTITY HUB"', 'x:Key="ScheduleCard"', 'x:Key="ScheduleMetric"',
@@ -117,8 +120,10 @@ checks = {
     "quantity": (
         'Text="BQ REVIEW"', 'x:Name="FloorCombo"', 'x:Name="SearchBox"',
         'x:Name="CategoryList"', 'x:Name="QuantityGrid"', 'x:Name="TotalsText"',
+        'x:Name="AutoRevealCheck"', 'Content="Bám 3D"',
+        'SelectionChanged="OnQuantityGridSelectionChanged"', 'MouseDoubleClick="OnQuantityGridDoubleClick"',
         'Checked="OnColumnVisibilityChanged"', 'Unchecked="OnColumnVisibilityChanged"',
-        'Text="DOUBLE-CLICK ROW TO LOCATE • EXPORT XLSX"',
+        'Text="BÁM 3D: CLICK → LOCATE • TẮT BÁM 3D: DOUBLE-CLICK / ĐỊNH VỊ • EXPORT XLSX"',
     ),
     "rebar_hub": (
         'Text="REBAR WORKFLOW"', 'x:Key="RebarCard"', 'Tag="QS3DREBAR3D"',
@@ -166,10 +171,11 @@ checks = {
     ),
     "health": (
         'Text="HEALTH REVIEW"', 'x:Name="SummaryText"', 'x:Name="IssueGrid"',
-        'Click="OnLocateClick"', 'MouseDoubleClick="OnGridDoubleClick"', 'Text="ISSUE → CAD LOCATE"',
+        'Click="OnLocateClick"', 'MouseDoubleClick="OnGridDoubleClick"',
+        'Text="READ-ONLY TRIAGE"', 'Text="DOUBLE-CLICK → CAD LOCATE"', 'Text="ISSUE → CAD LOCATE"',
     ),
     "audit": (
-        'Text="AUDIT TRAIL"', 'Text="Tìm nhật ký"', 'x:Name="SearchBox"',
+        'Text="AUDIT TRAIL"', 'Text="TÌM NHẬT KÝ"', 'x:Name="SearchBox"', 'TextChanged="OnSearchChanged"',
         'x:Name="Grid"', 'x:Name="Summary"', 'Text="MỚI NHẤT HIỂN THỊ TRƯỚC"',
     ),
     "room_finish": (

@@ -45,9 +45,9 @@ namespace QS3D.BricsCAD.V25
                 });
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                var status = "QS3DROOMFINISHHEALTH lỗi: " + ex.Message;
+                var status = "QS3DROOMFINISHHEALTH lỗi: không thể hoàn tất health check.";
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\n" + status);
             }

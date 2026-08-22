@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.UI;
+using QS3D.Core.Domain;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -15,7 +18,51 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
+                if (selectedIds.Length == 0)
+                {
+                    Report(document, "Shape Rebar 3D: chọn cấu kiện semantic có BBS/RebarNotation hợp lệ.");
+                    return;
+                }
+
+                var selectedHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var id in selectedIds)
+                {
+                    try { selectedHandles.Add(id.Handle.ToString()); }
+                    catch { }
+                }
+                if (selectedHandles.Count == 0)
+                {
+                    Report(document, "Shape Rebar 3D: selection không có source handle hợp lệ.");
+                    return;
+                }
+
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
+                {
+                    Report(document, "Shape Rebar 3D: BLOCKED • chưa có QS3D project hiện hữu; lệnh không tạo project mới từ selection.");
+                    return;
+                }
+
+                var previewTargets = ResolveShapeTargets(previewProject, selectedHandles);
+                if (previewTargets.Count == 0)
+                {
+                    Report(document, "Shape Rebar 3D: chọn cấu kiện semantic có BBS/RebarNotation hợp lệ.");
+                    return;
+                }
+
+                var expectedProjectId = previewProject.ProjectId;
+                var expectedChangeVersion = previewProject.ChangeVersion;
+                var expectedTargetIds = new HashSet<string>(previewTargets.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+
                 var project = ExistingProjectMutationContext.Require(document, "Shape Rebar 3D");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    project.ChangeVersion != expectedChangeVersion)
+                    throw new InvalidOperationException("Shape Rebar 3D: QS3D project đã thay đổi sau khi đọc selection; hãy chọn lại target.");
+
+                var targets = ResolveShapeTargets(project, selectedHandles);
+                if (!expectedTargetIds.SetEquals(targets.Select(x => x.Id)))
+                    throw new InvalidOperationException("Shape Rebar 3D: semantic target set đã thay đổi sau khi đọc selection; hãy chọn lại target.");
+
                 var result = ShapeRebarSolidBuilder.BuildSelected(document, project);
                 var message = result.Bars == 0
                     ? "Shape Rebar 3D: chọn cấu kiện semantic có BBS/RebarNotation hợp lệ."
@@ -27,6 +74,14 @@ namespace QS3D.BricsCAD.V25
                 Report(document, "QS3DREBAR3DSHAPE lỗi: " + ex.Message);
             }
         }
+
+        private static List<ProjectElement> ResolveShapeTargets(ProjectState project, HashSet<string> selectedHandles) =>
+            project.Elements
+                .Where(x => x.SourceHandles.Any(selectedHandles.Contains) &&
+                            x.Properties.TryGetValue("RebarNotation", out var notation) &&
+                            !string.IsNullOrWhiteSpace(notation))
+                .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
         private static void FinalizeUi(Document document, ShapeRebarBuildResult result, string message)
         {

@@ -108,7 +108,6 @@ namespace QS3D.BricsCAD.V25.Cad
                             "documentation.semantic-tag.replace",
                             element.Id,
                             generatedHandle + " • template=" + template);
-                        project.Touch();
                         transaction.Commit();
                         cadCommitted = true;
                     }

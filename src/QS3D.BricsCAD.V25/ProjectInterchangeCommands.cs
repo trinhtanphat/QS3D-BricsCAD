@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
+using QS3D.BricsCAD.V25.Services;
 using QS3D.Core.Export;
 using QS3D.Core.Persistence;
 using QS3D.Core.Services;
@@ -78,6 +79,7 @@ namespace QS3D.BricsCAD.V25
                 var validation = ProjectInterchangeJsonValidator.Validate(json);
                 if (!validation.IsValid)
                     throw new InvalidDataException("Snapshot không hợp lệ: " + validation.ErrorCount.ToString(CultureInfo.InvariantCulture) + " error(s). Chạy QS3DINTERCHANGEVALIDATE để xem chi tiết.");
+                ProjectInterchangeValidatedSnapshotReader.Read(json);
 
                 EnsureActive(document, "Interchange Append / preview");
                 var project = ProjectContextCoordinator.GetOrCreate(document);
@@ -114,11 +116,11 @@ namespace QS3D.BricsCAD.V25
                         System.Windows.MessageBoxButton.YesNo,
                         System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
 
-                EnsureActive(document, "Interchange Append / mutation");
-                var currentProject = ProjectContextCoordinator.GetOrCreate(document);
-                if (!ReferenceEquals(currentProject, project) || currentProject.ChangeVersion != previewChangeVersion)
-                    throw new InvalidOperationException(
-                        "Interchange Append target semantic project changed after preview. Run the command again to review a fresh append plan.");
+                var currentProject = InterchangeConfirmationGuard.RequireFresh(
+                    document,
+                    project,
+                    previewChangeVersion,
+                    "Interchange Append");
 
                 var result = ProjectInterchangeAppendOnlyImporter.Import(currentProject, json);
                 try { PaletteCoordinator.RefreshProject(); } catch { }

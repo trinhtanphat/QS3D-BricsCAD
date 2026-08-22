@@ -31,15 +31,14 @@ namespace QS3D.Core.Diagnostics
         public static GeneratedHandleOwnershipIndex Build(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            EnsureUniqueElementIds(project);
+            EnsureValidUniqueElementIds(project);
             var entries = new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
                 foreach (var ownerHandle in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(element))
                 {
-                    var handle = (ownerHandle.Key ?? string.Empty).Trim();
+                    var handle = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(ownerHandle.Key);
                     if (handle.Length == 0) continue;
 
                     if (!entries.TryGetValue(handle, out var existing))
@@ -65,7 +64,7 @@ namespace QS3D.Core.Diagnostics
 
         public bool TryFindOwner(string handle, out ProjectElement? owner, out string propertyKey)
         {
-            var normalized = (handle ?? string.Empty).Trim();
+            var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
             owner = null;
             propertyKey = string.Empty;
             if (normalized.Length == 0) return false;
@@ -77,14 +76,19 @@ namespace QS3D.Core.Diagnostics
             return true;
         }
 
-        private static void EnsureUniqueElementIds(ProjectState project)
+        private static void EnsureValidUniqueElementIds(ProjectState project)
         {
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
-                if (!seen.Add(element.Id))
-                    throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
+                if (element == null)
+                    throw new InvalidOperationException("Generated handle ownership index cannot inspect a null project element.");
+                if (string.IsNullOrWhiteSpace(element.Id))
+                    throw new InvalidOperationException("Generated handle ownership index requires non-empty semantic element IDs.");
+
+                var id = element.Id.Trim();
+                if (!seen.Add(id))
+                    throw new InvalidOperationException("Project contains duplicate element id: " + id);
             }
         }
     }

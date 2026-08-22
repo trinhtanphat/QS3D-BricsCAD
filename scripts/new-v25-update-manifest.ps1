@@ -31,6 +31,34 @@ function Normalize-Thumbprint {
     return $Thumbprint.Replace(' ', '').ToUpperInvariant()
 }
 
+function Convert-ToStrictSemVerText {
+    param([string]$Value, [string]$Label)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Label is missing." }
+    $text = $Value.Trim()
+    $match = [regex]::Match(
+        $text,
+        '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
+        [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+    if (-not $match.Success) { throw "$Label is not strict SemVer: $text" }
+
+    foreach ($index in 1..3) {
+        $parsed = 0
+        if (-not [int]::TryParse($match.Groups[$index].Value, [Globalization.NumberStyles]::None, [Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)) {
+            throw "$Label numeric component is outside the supported range: $text"
+        }
+    }
+
+    if ($match.Groups[4].Success) {
+        foreach ($identifier in $match.Groups[4].Value.Split('.')) {
+            if ($identifier -match '^[0-9]+$' -and $identifier.Length -gt 1 -and $identifier[0] -eq '0') {
+                throw "$Label has a numeric prerelease identifier with a leading zero: $text"
+            }
+        }
+    }
+    return $text
+}
+
 function Assert-AuthenticodeSigner {
     param([string]$Path, [string]$ExpectedSigner, [string]$Label)
     $signature = Get-AuthenticodeSignature -FilePath $Path
@@ -42,15 +70,41 @@ function Assert-AuthenticodeSigner {
     if ($actualSigner -ne $ExpectedSigner) { throw "$Label signer mismatch. Expected $ExpectedSigner, got $actualSigner." }
 }
 
-function Read-PluginAssemblyVersion {
-    param([string]$Path)
+function Read-ManagedAssemblyVersion {
+    param([string]$Path, [string]$Label)
     try {
         $version = [Reflection.AssemblyName]::GetAssemblyName($Path).Version
         if (-not $version) { throw 'assembly version is missing' }
         return $version
     }
     catch {
-        throw "QS3D plugin assembly version is unreadable: $($_.Exception.Message)"
+        throw "$Label assembly version is unreadable: $($_.Exception.Message)"
+    }
+}
+
+function Read-ManagedProductVersion {
+    param([string]$Path, [string]$Label)
+    try {
+        $productVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($Path).ProductVersion
+        return Convert-ToStrictSemVerText -Value ([string]$productVersion) -Label ("$Label product version")
+    }
+    catch {
+        throw "$Label product version is unreadable: $($_.Exception.Message)"
+    }
+}
+
+function Get-ZipEntrySha256 {
+    param([System.IO.Compression.ZipArchiveEntry]$Entry)
+
+    $input = $Entry.Open()
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = $sha.ComputeHash($input)
+        return ([BitConverter]::ToString($bytes)).Replace('-', '').ToUpperInvariant()
+    }
+    finally {
+        $sha.Dispose()
+        $input.Dispose()
     }
 }
 
@@ -61,22 +115,56 @@ function Assert-ZipPayloadMatchesSignedStaging {
     $archive = $null
     try {
         $archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
-        foreach ($name in @('PACKAGE-METADATA.json') + $SignedPayloadNames) {
-            $matches = @($archive.Entries | Where-Object { [string]::Equals($_.FullName, $name, [StringComparison]::Ordinal) })
-            if ($matches.Count -ne 1) { throw "Package ZIP must contain exactly one root entry named $name." }
+        $packageRootPath = [IO.Path]::GetFullPath($PackageRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        $packageRootPrefix = $packageRootPath + [IO.Path]::DirectorySeparatorChar
+        $stagedFiles = @(Get-ChildItem -LiteralPath $PackageRoot -File -Recurse)
+        if ($stagedFiles.Count -eq 0) { throw 'Signed staging package contains no regular files.' }
+
+        $stagedByName = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($stagedFile in $stagedFiles) {
+            $fullPath = [IO.Path]::GetFullPath($stagedFile.FullName)
+            if (-not $fullPath.StartsWith($packageRootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Staged package file escaped package root: $($stagedFile.FullName)"
+            }
+            $relative = $fullPath.Substring($packageRootPrefix.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')
+            if ($stagedByName.ContainsKey($relative)) { throw "Duplicate/case-colliding staged package path: $relative" }
+            $stagedByName.Add($relative, $fullPath)
+        }
+
+        $zipByName = [Collections.Generic.Dictionary[string,System.IO.Compression.ZipArchiveEntry]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($entry in $archive.Entries) {
+            if ([string]::IsNullOrEmpty([string]$entry.Name)) { continue }
+            $name = [string]$entry.FullName
+            if ([string]::IsNullOrWhiteSpace($name) -or $name.IndexOf([char]0) -ge 0 -or [IO.Path]::IsPathRooted($name) -or $name.Contains('\') -or $name.Contains(':')) {
+                throw "Unsafe package ZIP entry: $name"
+            }
+            $segments = @($name.Split('/'))
+            if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
+                throw "Unsafe package ZIP entry: $name"
+            }
+            if ($zipByName.ContainsKey($name)) { throw "Duplicate/case-colliding package ZIP path: $name" }
+            if (-not $stagedByName.ContainsKey($name)) { throw "Package ZIP contains file not present in signed staging: $name" }
+            $zipByName.Add($name, $entry)
+        }
+
+        foreach ($name in $stagedByName.Keys) {
+            if (-not $zipByName.ContainsKey($name)) { throw "Package ZIP is missing signed staging file: $name" }
+            $stagedHash = (Get-FileHash -LiteralPath $stagedByName[$name] -Algorithm SHA256).Hash.ToUpperInvariant()
+            $zippedHash = Get-ZipEntrySha256 -Entry $zipByName[$name]
+            if ($stagedHash -ne $zippedHash) { throw "Package ZIP payload does not match signed staging file: $name" }
+        }
+        if ($zipByName.Count -ne $stagedByName.Count) {
+            throw "Package ZIP/staging file-count mismatch. ZIP=$($zipByName.Count), staging=$($stagedByName.Count)."
+        }
+
+        foreach ($name in $SignedPayloadNames) {
+            if (-not $zipByName.ContainsKey($name)) { throw "Package ZIP is missing signed executable payload: $name" }
             $destination = Join-Path $temp $name
-            $input = $matches[0].Open()
+            $input = $zipByName[$name].Open()
             $output = [IO.File]::Create($destination)
             try { $input.CopyTo($output) }
             finally { $output.Dispose(); $input.Dispose() }
-
-            $staged = Join-Path $PackageRoot $name
-            $stagedHash = (Get-FileHash -LiteralPath $staged -Algorithm SHA256).Hash.ToUpperInvariant()
-            $zippedHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToUpperInvariant()
-            if ($stagedHash -ne $zippedHash) { throw "Package ZIP payload does not match signed staging file: $name" }
-        }
-        foreach ($name in $SignedPayloadNames) {
-            Assert-AuthenticodeSigner -Path (Join-Path $temp $name) -ExpectedSigner $ExpectedSigner -Label ("Zipped QS3D executable payload " + $name)
+            Assert-AuthenticodeSigner -Path $destination -ExpectedSigner $ExpectedSigner -Label ("Zipped QS3D executable payload " + $name)
         }
     }
     finally {
@@ -92,7 +180,24 @@ if (-not [Uri]::TryCreate($PackageUri, [UriKind]::Absolute, [ref]$uri) -or $uri.
 if ($uri.UserInfo) { throw 'PackageUri must not contain embedded credentials.' }
 
 $package = (Resolve-Path -LiteralPath $PackageDirectory).Path
+$packagePath = [IO.Path]::GetFullPath($package).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+$packageRoot = $packagePath + [IO.Path]::DirectorySeparatorChar
 $zip = (Resolve-Path -LiteralPath $PackageZip).Path
+$zipPath = [IO.Path]::GetFullPath($zip)
+$outputFull = [IO.Path]::GetFullPath($OutputPath)
+if (-not [string]::Equals([IO.Path]::GetExtension($outputFull), '.json', [StringComparison]::OrdinalIgnoreCase)) {
+    throw "OutputPath must use the .json extension: $outputFull"
+}
+if ([string]::Equals($outputFull, $packagePath, [StringComparison]::OrdinalIgnoreCase) -or
+    $outputFull.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'OutputPath must be outside PackageDirectory so manifest generation cannot overwrite signed staging.'
+}
+if ([string]::Equals($outputFull, $zipPath, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'OutputPath must not alias PackageZip.'
+}
+$outputParent = Split-Path -Parent $outputFull
+if ([string]::IsNullOrWhiteSpace($outputParent)) { throw 'OutputPath must have a parent directory.' }
+
 $metadataPath = Join-Path $package 'PACKAGE-METADATA.json'
 if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "Missing package artifact: $metadataPath" }
 foreach ($name in $SignedPayloadNames) {
@@ -104,24 +209,42 @@ $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
 if ([string]$metadata.product -ne 'QS3D') { throw 'PACKAGE-METADATA product must be QS3D.' }
 if ([string]$metadata.target -ne 'BricsCAD V25 x64') { throw 'PACKAGE-METADATA target must be BricsCAD V25 x64.' }
 if (-not $metadata.PSObject.Properties['version']) { throw 'PACKAGE-METADATA is missing version.' }
+if (-not $metadata.PSObject.Properties['productVersion']) { throw 'PACKAGE-METADATA is missing productVersion.' }
 try { $version = [Version]::Parse([string]$metadata.version) }
 catch { throw "PACKAGE-METADATA version is invalid: $($metadata.version)" }
+$productVersion = Convert-ToStrictSemVerText -Value ([string]$metadata.productVersion) -Label 'PACKAGE-METADATA productVersion'
 
 $expectedSigner = Normalize-Thumbprint $ExpectedSignerThumbprint
 foreach ($name in $SignedPayloadNames) {
     Assert-AuthenticodeSigner -Path (Join-Path $package $name) -ExpectedSigner $expectedSigner -Label ("QS3D executable payload " + $name)
 }
-$signedPluginVersion = Read-PluginAssemblyVersion -Path (Join-Path $package 'QS3D.BricsCAD.V25.dll')
-if ($version -ne $signedPluginVersion) {
-    throw "PACKAGE-METADATA version $version does not match signed QS3D plugin assembly version $signedPluginVersion."
+$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')
+$managedIdentities = @{}
+foreach ($name in $managedIdentityNames) {
+    $path = Join-Path $package $name
+    $assemblyVersion = Read-ManagedAssemblyVersion -Path $path -Label $name
+    if ($version -ne $assemblyVersion) {
+        throw "PACKAGE-METADATA version $version does not match signed $name assembly version $assemblyVersion."
+    }
+    $managedProductVersion = Read-ManagedProductVersion -Path $path -Label $name
+    if (-not [string]::Equals($productVersion, $managedProductVersion, [StringComparison]::Ordinal)) {
+        throw "PACKAGE-METADATA productVersion $productVersion does not match signed $name product version $managedProductVersion."
+    }
+    $managedIdentities[$name] = [pscustomobject]@{
+        AssemblyVersion = $assemblyVersion
+        ProductVersion = $managedProductVersion
+    }
 }
+$signedPluginVersion = $managedIdentities['QS3D.BricsCAD.V25.dll'].AssemblyVersion
+$signedPluginProductVersion = $managedIdentities['QS3D.BricsCAD.V25.dll'].ProductVersion
 Assert-ZipPayloadMatchesSignedStaging -ZipPath $zip -PackageRoot $package -ExpectedSigner $expectedSigner
 
 $zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()
 $manifest = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     product = 'QS3D'
     target = 'BricsCAD V25 x64'
+    productVersion = $signedPluginProductVersion
     version = $signedPluginVersion.ToString()
     packageUri = $uri.AbsoluteUri
     sha256 = $zipHash
@@ -129,15 +252,13 @@ $manifest = [ordered]@{
     generatedUtc = [DateTime]::UtcNow.ToString('o')
 }
 
-$outputFull = [IO.Path]::GetFullPath($OutputPath)
-$outputParent = Split-Path -Parent $outputFull
-if ([string]::IsNullOrWhiteSpace($outputParent)) { throw 'OutputPath must have a parent directory.' }
 if ($PSCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')) {
     New-Item -ItemType Directory -Path $outputParent -Force | Out-Null
     $manifest | ConvertTo-Json | Set-Content -LiteralPath $outputFull -Encoding UTF8
 }
 
 Write-Host "Update manifest: $outputFull"
-Write-Host "Version: $($signedPluginVersion.ToString())"
+Write-Host "Product version: $signedPluginProductVersion"
+Write-Host "Assembly version: $($signedPluginVersion.ToString())"
 Write-Host "Package SHA256: $zipHash"
 Write-Host "Signer: $expectedSigner"

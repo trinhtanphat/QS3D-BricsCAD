@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -13,6 +14,8 @@ namespace QS3D.Core.Geometry
             WidthM = Positive(widthM, nameof(widthM));
             HeightM = Positive(heightM, nameof(heightM));
             ClearanceM = NonNegative(clearanceM, nameof(clearanceM));
+
+            EnsureFiniteBounds();
         }
 
         public double X_M { get; }
@@ -21,10 +24,45 @@ namespace QS3D.Core.Geometry
         public double HeightM { get; }
         public double ClearanceM { get; }
 
+        internal double BaseRight => X_M + WidthM;
+        internal double BaseTop => Z_M + HeightM;
         internal double Left => X_M - ClearanceM;
         internal double Bottom => Z_M - ClearanceM;
-        internal double Right => X_M + WidthM + ClearanceM;
-        internal double Top => Z_M + HeightM + ClearanceM;
+        internal double Right => BaseRight + ClearanceM;
+        internal double Top => BaseTop + ClearanceM;
+
+        private void EnsureFiniteBounds()
+        {
+            var baseRight = BaseRight;
+            var baseTop = BaseTop;
+            var left = Left;
+            var bottom = Bottom;
+            var right = Right;
+            var top = Top;
+
+            if (!IsFinite(baseRight) ||
+                !IsFinite(baseTop) ||
+                !IsFinite(left) ||
+                !IsFinite(bottom) ||
+                !IsFinite(right) ||
+                !IsFinite(top))
+            {
+                throw new OverflowException("Curtain opening bounds must remain finite after applying size and clearance.");
+            }
+
+            if (!(baseRight > X_M))
+                throw new OverflowException("Curtain opening width is below the representable coordinate resolution.");
+            if (!(baseTop > Z_M))
+                throw new OverflowException("Curtain opening height is below the representable coordinate resolution.");
+
+            if (ClearanceM > 0d)
+            {
+                if (!(left < X_M) || !(right > baseRight))
+                    throw new OverflowException("Curtain opening horizontal clearance is below the representable coordinate resolution.");
+                if (!(bottom < Z_M) || !(top > baseTop))
+                    throw new OverflowException("Curtain opening vertical clearance is below the representable coordinate resolution.");
+            }
+        }
 
         private static double Positive(double value, string label)
         {
@@ -43,13 +81,13 @@ namespace QS3D.Core.Geometry
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(label, "Value must be finite.");
             return value;
         }
+        private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
     }
 
     public static class CurtainFrameOpeningPlanner
     {
         private const int MaxOpenings = 4096;
         private const int MaxOutputFragments = 20000;
-        private const double Epsilon = 1e-10d;
 
         public static IReadOnlyList<CurtainWallRect> Interrupt(
             IEnumerable<CurtainWallRect> frames,
@@ -57,19 +95,30 @@ namespace QS3D.Core.Geometry
         {
             if (frames == null) throw new ArgumentNullException(nameof(frames));
             if (openings == null) throw new ArgumentNullException(nameof(openings));
-            var result = new List<CurtainWallRect>();
+
+            var frameKnownCount = SnapshotKnownCount(frames, MaxOutputFragments, "frame");
+            var result = frameKnownCount.HasValue
+                ? new List<CurtainWallRect>(frameKnownCount.Value)
+                : new List<CurtainWallRect>();
             foreach (var frame in frames)
             {
                 if (result.Count >= MaxOutputFragments) throw new InvalidOperationException("Curtain frame input exceeds safety limit " + MaxOutputFragments + ".");
                 result.Add(ValidateFrame(frame));
             }
-            var cuts = new List<CurtainOpeningRect>();
+            RequireObservedCount(frameKnownCount, result.Count, "frame");
+
+            var openingKnownCount = SnapshotKnownCount(openings, MaxOpenings, "opening");
+            var cuts = openingKnownCount.HasValue
+                ? new List<CurtainOpeningRect>(openingKnownCount.Value)
+                : new List<CurtainOpeningRect>();
             foreach (var opening in openings)
             {
                 if (opening == null) throw new ArgumentException("Opening collection contains null.", nameof(openings));
                 if (cuts.Count >= MaxOpenings) throw new InvalidOperationException("Curtain opening input exceeds safety limit " + MaxOpenings + ".");
                 cuts.Add(opening);
             }
+            RequireObservedCount(openingKnownCount, cuts.Count, "opening");
+
             foreach (var opening in cuts)
             {
                 var next = new List<CurtainWallRect>();
@@ -84,6 +133,35 @@ namespace QS3D.Core.Geometry
             return result.AsReadOnly();
         }
 
+        private static int? SnapshotKnownCount<T>(IEnumerable<T> values, int maximum, string subject)
+        {
+            int? knownCount = null;
+            if (values is ICollection<T> genericCollection)
+                AcceptKnownCount(genericCollection.Count, maximum, subject, ref knownCount);
+            if (values is IReadOnlyCollection<T> readOnlyCollection)
+                AcceptKnownCount(readOnlyCollection.Count, maximum, subject, ref knownCount);
+            if (values is ICollection nonGenericCollection)
+                AcceptKnownCount(nonGenericCollection.Count, maximum, subject, ref knownCount);
+            return knownCount;
+        }
+
+        private static void AcceptKnownCount(int count, int maximum, string subject, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Curtain " + subject + " collection exposes an invalid negative count.");
+            if (count > maximum)
+                throw new InvalidOperationException("Curtain " + subject + " input exceeds safety limit " + maximum + ".");
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException("Curtain " + subject + " collection exposes conflicting known counts.");
+            knownCount = count;
+        }
+
+        private static void RequireObservedCount(int? knownCount, int observedCount, string subject)
+        {
+            if (knownCount.HasValue && knownCount.Value != observedCount)
+                throw new InvalidOperationException("Curtain " + subject + " collection count changed during enumeration.");
+        }
+
         private static CurtainWallRect ValidateFrame(CurtainWallRect frame)
         {
             if (frame == null) throw new ArgumentException("Frame collection contains null.", nameof(frame));
@@ -93,8 +171,20 @@ namespace QS3D.Core.Geometry
                 double.IsNaN(frame.HeightM) || double.IsInfinity(frame.HeightM) ||
                 frame.WidthM <= 0d || frame.HeightM <= 0d)
                 throw new InvalidOperationException("Curtain frame rectangle is invalid.");
+
+            var right = frame.X_M + frame.WidthM;
+            var top = frame.Z_M + frame.HeightM;
+            if (!IsFinite(right) || !IsFinite(top))
+                throw new InvalidOperationException("Curtain frame rectangle bounds must remain finite.");
+            if (!(right > frame.X_M))
+                throw new InvalidOperationException("Curtain frame rectangle width is below the representable coordinate resolution.");
+            if (!(top > frame.Z_M))
+                throw new InvalidOperationException("Curtain frame rectangle height is below the representable coordinate resolution.");
+
             return frame;
         }
+
+        private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
         private static void Subtract(CurtainWallRect frame, CurtainOpeningRect opening, ICollection<CurtainWallRect> output)
         {
@@ -106,7 +196,7 @@ namespace QS3D.Core.Geometry
             var cutRight = Math.Min(right, opening.Right);
             var cutBottom = Math.Max(bottom, opening.Bottom);
             var cutTop = Math.Min(top, opening.Top);
-            if (cutRight - cutLeft <= Epsilon || cutTop - cutBottom <= Epsilon)
+            if (cutRight - cutLeft <= 0d || cutTop - cutBottom <= 0d)
             {
                 output.Add(frame);
                 return;
@@ -120,7 +210,7 @@ namespace QS3D.Core.Geometry
 
         private static void Add(ICollection<CurtainWallRect> output, double x, double z, double width, double height)
         {
-            if (width <= Epsilon || height <= Epsilon) return;
+            if (width <= 0d || height <= 0d) return;
             output.Add(new CurtainWallRect(x, z, width, height));
         }
     }

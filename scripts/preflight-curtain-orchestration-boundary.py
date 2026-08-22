@@ -12,72 +12,93 @@ else:
     text = path.read_text(encoding="utf-8")
     required = (
         'CommandMethod("QS3DCURTAIN3D"',
-        'var phase = "semantic regeneration";',
+        "EntitySnapshotReader.ReadCurrentSelection(document)",
+        "if (selected.Count == 0)",
+        'ExistingProjectMutationContext.Require(document, "Curtain 3D")',
+        "ProjectStateSnapshot.Capture(project)",
+        "var nativeCommitted = false;",
+        "new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project)",
+        "using (var commandTransaction = document.Database.TransactionManager.StartTransaction())",
         'phase = "LINE host replacement";',
         'phase = "open-POLYLINE host replacement";',
         'phase = "LINE frame replacement";',
         'phase = "open/bulged path frame replacement";',
+        "WallSolidBuilder.BuildSelectedLineWalls(\n                            document,\n                            project,\n                            ElementCategory.GlassWall,\n                            allowPostCommitUi: false)",
+        "PolylineWallSolidBuilder.BuildSelected(\n                            document,\n                            project,\n                            ElementCategory.GlassWall,\n                            allowPostCommitUi: false)",
+        "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(\n                            document,\n                            project,\n                            allowInteractiveSelection: false)",
+        "CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines(\n                            document,\n                            project,\n                            allowInteractiveSelection: false)",
+        "commandTransaction.Commit();",
+        "nativeCommitted = true;",
+        "if (!nativeCommitted && rollback != null && project != null)",
+        "rollback.Restore(project);",
+        "ReportAtomicFailure(document, phase, nativeCommitted, ex)",
+        "private static void ReportAtomicFailure",
+        "ATOMIC ROLLBACK",
+        "không có phase Curtain 3D nào được commit",
         'phase = "live fingerprint stamp";',
-        "WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.GlassWall)",
-        "PolylineWallSolidBuilder.BuildSelected(document, project, ElementCategory.GlassWall)",
-        "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls(document, project)",
-        "CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines(document, project)",
         "CurtainWallFrameLiveStateService.TryStampSelected(document, project, out stampWarning)",
-        "ReportPhaseFailure(document, phase, lineHostSolids, pathHostSolids, lineFrames, pathFrames, ex)",
-        "private static void ReportPhaseFailure",
-        '"Curtain 3D PARTIAL COMMIT: host LINE="',
-        '". Các phase trước đã commit bằng transaction riêng và không bị giả vờ rollback. Chạy QS3DCURTAINFRAMEHEALTH/QS3DHEALTHALL, sửa lỗi rồi rebuild host hoặc chạy QS3DCURTAINFRAMES3D theo kết quả health."',
-        '"QS3DCURTAIN3D lỗi tại " + phase',
-        "FinalizeUi(document, hostSolids, frameSolids, stamped, regenerated, stampWarning)",
+        "FinalizeUi(document, hostSolids, frameSolids, panelSolids, checked(stamped + panelsStamped), regenerated, stampWarning)",
         "UI sync warning: ",
-        "TryWriteMessage",
     )
     for token in required:
         if token not in text:
-            errors.append("Curtain orchestration missing phase/recovery contract: " + token)
+            errors.append("Curtain atomic orchestration missing contract: " + token)
 
-    if "ProjectStateSnapshot" in text or "rollback.Restore" in text:
-        errors.append("QS3DCURTAIN3D command-level orchestration must not fake whole-command rollback with semantic snapshots after earlier native transactions may have committed")
-
-    order = [
-        text.find('phase = "LINE host replacement";'),
-        text.find("WallSolidBuilder.BuildSelectedLineWalls"),
-        text.find('phase = "open-POLYLINE host replacement";'),
-        text.find("PolylineWallSolidBuilder.BuildSelected"),
-        text.find('phase = "LINE frame replacement";'),
-        text.find("CurtainWallFrameSolidBuilder.BuildSelectedLineWalls"),
-        text.find('phase = "open/bulged path frame replacement";'),
-        text.find("CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines"),
-        text.find('phase = "live fingerprint stamp";'),
-        text.find("CurtainWallFrameLiveStateService.TryStampSelected"),
-    ]
-    if min(order) < 0 or order != sorted(order):
-        errors.append("Curtain orchestration phase markers must remain immediately ordered with their separate native transaction families")
-
-    report_start = text.find("private static void ReportPhaseFailure")
-    finalize_start = text.find("private static void FinalizeUi", report_start + 1) if report_start >= 0 else -1
-    report = text[report_start:finalize_start] if report_start >= 0 and finalize_start > report_start else ""
-    for token in (
-        "committedHosts == 0 && committedFrames == 0",
+    forbidden = (
         "Curtain 3D PARTIAL COMMIT",
-        "lineHostSolids",
-        "pathHostSolids",
-        "lineFrames?.Frames",
-        "pathFrames?.Frames",
-        "QS3DCURTAINFRAMEHEALTH/QS3DHEALTHALL",
-        "không bị giả vờ rollback",
-    ):
-        if token not in report:
-            errors.append("Curtain partial-commit reporter missing truthful recovery detail: " + token)
+        "ReportPhaseFailure",
+        "Các phase trước đã commit",
+        "transaction riêng và không bị giả vờ rollback",
+        "ProjectContextCoordinator.GetOrCreate(document)",
+    )
+    for token in forbidden:
+        if token in text:
+            errors.append("Curtain command still exposes obsolete/unsafe orchestration: " + token)
+
+    order_tokens = (
+        "EntitySnapshotReader.ReadCurrentSelection(document)",
+        'ExistingProjectMutationContext.Require(document, "Curtain 3D")',
+        "ProjectStateSnapshot.Capture(project)",
+        "RegenerateDirty(project)",
+        "using (var commandTransaction = document.Database.TransactionManager.StartTransaction())",
+        "WallSolidBuilder.BuildSelectedLineWalls",
+        "PolylineWallSolidBuilder.BuildSelected",
+        "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls",
+        "CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines",
+        "commandTransaction.Commit();",
+        "nativeCommitted = true;",
+        'phase = "live fingerprint stamp";',
+        "CurtainWallFrameLiveStateService.TryStampSelected",
+    )
+    positions = [text.find(token) for token in order_tokens]
+    if min(positions) < 0 or positions != sorted(positions):
+        errors.append("Curtain input/bind/snapshot/native phases must remain ordered, with fingerprint work only after command commit")
+
+    selection = text.find("EntitySnapshotReader.ReadCurrentSelection(document)")
+    empty_return = text.find("if (selected.Count == 0)", selection)
+    bind = text.find('ExistingProjectMutationContext.Require(document, "Curtain 3D")')
+    if selection < 0 or empty_return < selection or bind < empty_return:
+        errors.append("Curtain command must finish empty/cancel selection handling before canonical project binding")
+
+    catch_start = text.find("catch (Exception ex)")
+    reporter_start = text.find("private static void ReportAtomicFailure", catch_start + 1)
+    catch = text[catch_start:reporter_start] if catch_start >= 0 and reporter_start > catch_start else ""
+    restore = catch.find("rollback.Restore(project);")
+    report = catch.find("ReportAtomicFailure(document, phase, nativeCommitted, ex)")
+    if "if (!nativeCommitted && rollback != null && project != null)" not in catch or restore < 0 or report < 0 or restore > report:
+        errors.append("Curtain failure path must restore semantic state before reporting an uncommitted native failure")
+
+    if text.count("document.Database.TransactionManager.StartTransaction()") != 1:
+        errors.append("Curtain command must own exactly one outer native transaction; canonical builders keep their own nested transactions")
 
     if "CurtainWallFrameLiveStateService.StampSelected" in text:
-        errors.append("QS3DCURTAIN3D must keep live fingerprint stamping best-effort after committed geometry")
+        errors.append("Curtain live fingerprint stamping must remain best-effort after the atomic native commit")
 
-print("QS3D Curtain orchestration boundary preflight")
+print("QS3D Curtain orchestration atomicity preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DCURTAIN3D validates semantics before native work, preserves explicit LINE/path host and frame transaction phases, reports committed phase counts and recovery steps on later failure, never pretends a semantic snapshot can roll back already-committed Solid3d, and keeps post-commit fingerprint/UI work non-fatal. Whole host+frame orchestration remains intentionally non-atomic.")
+print("PASS: QS3DCURTAIN3D handles selection before canonical binding, snapshots semantic state, encloses ordered host/frame builders in one outer native transaction, restores semantic state when that transaction aborts, removes obsolete partial-commit reporting, and keeps fingerprint/UI work post-commit and non-fatal.")

@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
             OwnerIsStableAcrossNameAndElevationChanges();
             CaseAndWhitespaceCanonicalizeOwner();
             StateIsDeterministic();
+            SignedZeroCanonicalizesState();
             InvalidLegacyLengthsFailClosed();
             TokensStayCompact();
         }
@@ -48,6 +49,17 @@ namespace QS3D.Core.SmokeTests
             Equal(first.OwnerToken, second.OwnerToken);
             Equal(first.StateToken, second.StateToken);
             Equal(first.StateKey, second.StateKey);
+        }
+
+        private static void SignedZeroCanonicalizesState()
+        {
+            var negativeZero = BitConverter.Int64BitsToDouble(unchecked((long)0x8000000000000000UL));
+            var positive = FloorGeneratedIdentityPlanner.Create(new FloorDefinition("L0", "Level Zero", 0d));
+            var negative = FloorGeneratedIdentityPlanner.Create(new FloorDefinition("L0", "Level Zero", negativeZero));
+
+            Equal(positive.StateKey, negative.StateKey);
+            Equal(positive.StateToken, negative.StateToken);
+            Equal(0L, BitConverter.DoubleToInt64Bits(negative.ElevationM));
         }
 
         private static void InvalidLegacyLengthsFailClosed()

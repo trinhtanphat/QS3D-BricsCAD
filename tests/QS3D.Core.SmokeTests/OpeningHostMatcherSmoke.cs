@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Geometry;
 
@@ -18,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             EndpointDistanceIsHandled();
             NoMatchOutsideRange();
             InvalidInputsAreRejected();
+            OversizeSourcesAreBounded();
         }
 
         private static void NearestHostWins()
@@ -96,6 +98,25 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentOutOfRangeException>(() => new OpeningHostMatcher().Match(new Point2(0d, 0d), Array.Empty<OpeningHostSegment>(), -1d));
             Throws<ArgumentOutOfRangeException>(() => new OpeningHostSegment("W", new Point2(0d, 0d), new Point2(1d, 0d), 0d));
             Throws<ArgumentException>(() => new OpeningHostSegment("W", new Point2(0d, 0d), new Point2(0d, 0d), 0.2d));
+        }
+
+        private static void OversizeSourcesAreBounded()
+        {
+            var yielded = 0;
+
+            IEnumerable<OpeningHostSegment> Source()
+            {
+                var segment = new OpeningHostSegment("BOUND", new Point2(0d, 0d), new Point2(1d, 0d), 0.2d);
+                while (true)
+                {
+                    yielded++;
+                    if (yielded > 20001) throw new Exception("OpeningHostMatcher enumerated beyond the declared segment cap probe.");
+                    yield return segment;
+                }
+            }
+
+            Throws<InvalidOperationException>(() => new OpeningHostMatcher().Match(new Point2(0.5d, 0d), Source()));
+            Equal(20001, yielded);
         }
 
         private static void Near(double expected, double actual, double tolerance = 1e-9d)

@@ -16,18 +16,46 @@ namespace QS3D.Core.Persistence
 
         public void Save(ProjectState project, string path)
         {
+            SaveCore(project, path, SaveMode.ReplaceWithBackup, MaxProjectFileBytes);
+        }
+
+        private void Save(ProjectState project, string path, long maximumBytes)
+        {
+            SaveCore(project, path, SaveMode.ReplaceWithBackup, maximumBytes);
+        }
+
+        public void SaveNew(ProjectState project, string path)
+        {
+            SaveCore(project, path, SaveMode.PublishNew, MaxProjectFileBytes);
+        }
+
+        public void SavePreservingValidatedBackup(ProjectState project, string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
+            var fullPath = Path.GetFullPath(path);
+            var backupPath = fullPath + ".bak";
+            if (!File.Exists(backupPath))
+                throw new FileNotFoundException("A validated QSDB backup is required for recovery-safe publication.", backupPath);
+            Load(backupPath);
+            SaveCore(project, fullPath, SaveMode.ReplacePrimaryOnly, MaxProjectFileBytes);
+            Load(fullPath);
+            Load(backupPath);
+        }
+
+        private void SaveCore(ProjectState project, string path, SaveMode mode, long maximumBytes)
+        {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
+            if (maximumBytes <= 0L) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
 
             ValidateProject(project);
+            ValidateSerializedXmlText(project);
             var fullPath = Path.GetFullPath(path);
-            var directory = Path.GetDirectoryName(fullPath);
-            if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-            var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
             var backupPath = fullPath + ".bak";
             var previousSchemaVersion = project.SchemaVersion;
             var previousUpdatedUtc = project.UpdatedUtc;
             var previousChangeVersion = project.ChangeVersion;
+            string? tempPath = null;
             var committed = false;
 
             try
@@ -35,9 +63,22 @@ namespace QS3D.Core.Persistence
                 project.SchemaVersion = ProjectState.CurrentSchemaVersion;
                 project.Touch();
                 var document = Serialize(project);
-                document.Save(tempPath, SaveOptions.DisableFormatting);
+                ValidateSerializedSize(document, maximumBytes);
+
+                var directory = Path.GetDirectoryName(fullPath);
+                if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+                tempPath = AtomicFileCommit.CreateTempPath(fullPath);
+                using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    document.Save(stream, SaveOptions.DisableFormatting);
+                }
                 ValidateSerializedFile(tempPath);
-                AtomicFileCommit.ReplaceWithBackup(tempPath, fullPath, backupPath);
+                if (mode == SaveMode.PublishNew)
+                    AtomicFileCommit.PublishNew(tempPath, fullPath, backupPath);
+                else if (mode == SaveMode.ReplacePrimaryOnly)
+                    AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
+                else
+                    AtomicFileCommit.ReplaceWithBackup(tempPath, fullPath, backupPath);
                 committed = true;
             }
             finally
@@ -51,22 +92,31 @@ namespace QS3D.Core.Persistence
             }
         }
 
+        private enum SaveMode
+        {
+            ReplaceWithBackup,
+            PublishNew,
+            ReplacePrimaryOnly
+        }
+
         public ProjectState Load(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
             var document = LoadDocument(path);
             ProjectSchemaMigrator.MigrateToCurrent(document);
             var root = document.Root ?? throw new InvalidDataException("QSDB has no root element.");
+            var updatedUtc = Date(root.Attribute("updatedUtc")?.Value);
+            var changeVersion = ChangeVersion(root.Attribute("changeVersion")?.Value);
 
-            var project = new ProjectState(Required(root, "projectId"), Required(root, "name"))
+            var project = new ProjectState(RequiredCanonical(root, "projectId"), Required(root, "name"))
             {
                 SchemaVersion = ProjectState.CurrentSchemaVersion,
-                DrawingPath = Value(root, "drawingPath"),
-                DrawingFingerprint = Value(root, "drawingFingerprint"),
+                DrawingPath = RawValue(root, "drawingPath"),
+                DrawingFingerprint = RawValue(root, "drawingFingerprint"),
                 ActiveZoneId = Value(root, "activeZoneId"),
-                ActiveFloorId = Value(root, "activeFloorId"),
-                UpdatedUtc = Date(root.Attribute("updatedUtc")?.Value)
+                ActiveFloorId = Value(root, "activeFloorId")
             };
+            project.RestorePersistenceState(updatedUtc, changeVersion);
 
             var zones = root.Element("zones");
             if (zones != null)
@@ -107,7 +157,7 @@ namespace QS3D.Core.Persistence
                     var category = Category(item, "element");
                     var element = new ProjectElement(Required(item, "id"), category, Value(item, "familyId"), Value(item, "floorId"), Value(item, "zoneId"))
                     {
-                        DrawingFingerprint = Value(item, "drawingFingerprint")
+                        DrawingFingerprint = RawValue(item, "drawingFingerprint")
                     };
                     foreach (var handle in item.Element("handles")?.Elements("h") ?? Enumerable.Empty<XElement>())
                         if (!string.IsNullOrWhiteSpace(handle.Value)) element.SourceHandles.Add(handle.Value.Trim());
@@ -116,7 +166,16 @@ namespace QS3D.Core.Persistence
                     ReadStringMap(item.Element("properties"), "p", element.Properties);
                     var quantities = item.Element("quantities");
                     if (quantities != null)
-                        foreach (var q in quantities.Elements("q")) element.SetQuantity(Required(q, "name"), Double(q.Attribute("value")?.Value));
+                    {
+                        foreach (var q in quantities.Elements("q"))
+                        {
+                            var quantityName = Required(q, "name");
+                            var quantityValue = Double(q.Attribute("value")?.Value);
+                            if (element.Quantities.ContainsKey(quantityName))
+                                throw new InvalidDataException("Duplicate QSDB element quantity name: " + element.Id + "/" + quantityName);
+                            element.SetQuantity(quantityName, quantityValue);
+                        }
+                    }
                     element.RestorePersistenceState(Dirty(item.Attribute("dirty")?.Value), Date(item.Attribute("updatedUtc")?.Value));
                     project.Elements.Add(element);
                 }
@@ -175,6 +234,7 @@ namespace QS3D.Core.Persistence
                 new XAttribute("projectId", project.ProjectId),
                 new XAttribute("name", project.Name),
                 new XAttribute("updatedUtc", project.UpdatedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)),
+                new XAttribute("changeVersion", project.ChangeVersion.ToString(CultureInfo.InvariantCulture)),
                 new XAttribute("drawingPath", project.DrawingPath ?? string.Empty),
                 new XAttribute("drawingFingerprint", project.DrawingFingerprint ?? string.Empty),
                 new XAttribute("activeZoneId", project.ActiveZoneId ?? string.Empty),
@@ -203,13 +263,37 @@ namespace QS3D.Core.Persistence
                     new XAttribute("correlationId", x.CorrelationId ?? string.Empty))))));
         }
 
+        private static void ValidateSerializedXmlText(ProjectState project)
+        {
+            try
+            {
+                var root = Serialize(project).Root ?? throw new InvalidDataException("QSDB serialization produced no root element.");
+                foreach (var attribute in root.DescendantsAndSelf().Attributes())
+                    XmlConvert.VerifyXmlChars(attribute.Value);
+                foreach (var text in root.DescendantNodes().OfType<XText>())
+                    XmlConvert.VerifyXmlChars(text.Value);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidDataException("QSDB project contains characters that are invalid in XML.", ex);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidDataException("QSDB project contains data that cannot be represented as XML.", ex);
+            }
+        }
+
+        private static void ValidateSerializedSize(XDocument document, long maximumBytes)
+        {
+            using (var stream = new BoundedCountingStream(maximumBytes))
+            {
+                document.Save(stream, SaveOptions.DisableFormatting);
+            }
+        }
+
         private static XDocument LoadDocument(string path)
         {
             var fullPath = Path.GetFullPath(path);
-            var fileInfo = new FileInfo(fullPath);
-            if (fileInfo.Length > MaxProjectFileBytes)
-                throw new InvalidDataException("QSDB project exceeds the maximum supported file size of 64 MiB.");
-
             var settings = new XmlReaderSettings
             {
                 DtdProcessing = DtdProcessing.Prohibit,
@@ -218,9 +302,14 @@ namespace QS3D.Core.Persistence
             };
 
             using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-            using (var reader = XmlReader.Create(stream, settings))
             {
-                return XDocument.Load(reader, LoadOptions.None);
+                if (stream.Length > MaxProjectFileBytes)
+                    throw new InvalidDataException("QSDB project exceeds the maximum supported file size of 64 MiB.");
+
+                using (var reader = XmlReader.Create(stream, settings))
+                {
+                    return XDocument.Load(reader, LoadOptions.None);
+                }
             }
         }
 
@@ -228,11 +317,9 @@ namespace QS3D.Core.Persistence
         {
             var document = LoadDocument(path);
             var root = document.Root ?? throw new InvalidDataException("Serialized QSDB has no root element.");
-            if (!string.Equals(root.Name.LocalName, "qs3d", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Serialized QSDB root is invalid.");
             var schema = Int(root.Attribute("schema")?.Value, 0);
             if (schema != ProjectState.CurrentSchemaVersion) throw new InvalidDataException("Serialized QSDB schema is invalid.");
-            Required(root, "projectId");
-            Required(root, "name");
+            QsdbProjectXmlSchemaValidator.ValidateCurrent(root);
         }
 
         private static void ValidateProject(ProjectState project)
@@ -258,6 +345,10 @@ namespace QS3D.Core.Persistence
             if (duplicateZone != null) throw new InvalidDataException("Duplicate zone id in QSDB: " + duplicateZone.Key);
             var duplicateFloor = project.Floors.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateFloor != null) throw new InvalidDataException("Duplicate floor id in QSDB: " + duplicateFloor.Key);
+            if (!string.IsNullOrEmpty(project.ActiveZoneId) && !project.Zones.Any(x => string.Equals(x.Id, project.ActiveZoneId, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException("Active zone id does not reference an existing zone: " + project.ActiveZoneId);
+            if (!string.IsNullOrEmpty(project.ActiveFloorId) && !project.Floors.Any(x => string.Equals(x.Id, project.ActiveFloorId, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException("Active floor id does not reference an existing floor: " + project.ActiveFloorId);
             var duplicateRule = project.QuantityRules.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
             if (duplicateRule != null) throw new InvalidDataException("Duplicate quantity rule id in QSDB: " + duplicateRule.Key);
             var duplicateOutput = project.QuantityRules.GroupBy(x => x.Category + "\u001f" + x.OutputName, StringComparer.OrdinalIgnoreCase).FirstOrDefault(x => x.Count() > 1);
@@ -283,7 +374,10 @@ namespace QS3D.Core.Persistence
                 }
             }
             foreach (var audit in project.AuditEvents)
+            {
                 ValidateUtcTimestamp(audit.Utc, "audit event UTC timestamp");
+                ValidateCanonicalKey(audit.Action, "audit event action");
+            }
         }
 
         private static void ValidateStringMap(System.Collections.Generic.IDictionary<string, string> values, string label)
@@ -293,12 +387,15 @@ namespace QS3D.Core.Persistence
 
         private static void ValidateCanonicalStringList(System.Collections.Generic.IEnumerable<string> values, string label)
         {
+            var seen = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
             foreach (var value in values)
             {
                 if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException("QSDB " + label + " contains an empty value at index " + index + ".");
                 if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                     throw new InvalidDataException("QSDB " + label + " contains a non-canonical padded value at index " + index + ".");
+                if (!seen.Add(value))
+                    throw new InvalidDataException("QSDB " + label + " contains a duplicate value at index " + index + ": " + value + ".");
                 index++;
             }
         }
@@ -337,8 +434,30 @@ namespace QS3D.Core.Persistence
             {
                 var key = Required(item, "name");
                 if (target.ContainsKey(key)) throw new InvalidDataException("Duplicate QSDB map key: " + key);
-                target[key] = RawValue(item, "value");
+                var value = RawValue(item, "value");
+                if (target is ProjectMetadataDictionary projectMetadata)
+                {
+                    try
+                    {
+                        projectMetadata.SetPersistenceValue(key, value);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        throw new InvalidDataException("QSDB project metadata exceeds or violates the supported persisted metadata contract.", ex);
+                    }
+                }
+                else
+                    target[key] = value;
             }
+        }
+        private static string RequiredCanonical(XElement element, string attribute)
+        {
+            var value = element.Attribute(attribute)?.Value;
+            if (value == null || string.IsNullOrWhiteSpace(value))
+                throw new InvalidDataException("Missing attribute: " + attribute);
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("Non-canonical QSDB attribute: " + attribute);
+            return value;
         }
 
         private static string Required(XElement element, string attribute) => element.Attribute(attribute)?.Value is string value && !string.IsNullOrWhiteSpace(value) ? value.Trim() : throw new InvalidDataException("Missing attribute: " + attribute);
@@ -358,10 +477,24 @@ namespace QS3D.Core.Persistence
             if (string.IsNullOrWhiteSpace(value)) return 0d;
             if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) || double.IsNaN(result) || double.IsInfinity(result))
                 throw new InvalidDataException("Invalid QSDB numeric value: " + value);
+            var canonical = F(result);
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new InvalidDataException("Non-canonical QSDB numeric value: " + value);
             return result;
         }
 
         private static int Int(string? value, int fallback) => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result) ? result : fallback;
+
+        private static long ChangeVersion(string? value)
+        {
+            if (value == null) return 0L;
+            if (value.Length == 0 || !long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var result) || result < 0L)
+                throw new InvalidDataException("Invalid QSDB change version: " + value);
+            var canonical = result.ToString(CultureInfo.InvariantCulture);
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new InvalidDataException("Non-canonical QSDB change version: " + value);
+            return result;
+        }
 
         private static DateTime Date(string? value)
         {
@@ -370,7 +503,11 @@ namespace QS3D.Core.Persistence
             var raw = value.Trim();
             if (!HasExplicitUtcOffset(raw) || !DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var result))
                 throw new InvalidDataException("Invalid QSDB UTC timestamp: " + value);
-            return result.UtcDateTime;
+            var utc = result.UtcDateTime;
+            var canonical = utc.ToString("O", CultureInfo.InvariantCulture);
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new InvalidDataException("Non-canonical QSDB UTC timestamp: " + value);
+            return utc;
         }
 
         private static bool HasExplicitUtcOffset(string value)
@@ -387,6 +524,9 @@ namespace QS3D.Core.Persistence
             if (string.IsNullOrWhiteSpace(value)) return ElementDirtyFlags.None;
             if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var raw) || raw < 0 || (raw & ~(int)ElementDirtyFlags.All) != 0)
                 throw new InvalidDataException("Invalid QSDB dirty flags: " + value);
+            var canonical = raw.ToString(CultureInfo.InvariantCulture);
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new InvalidDataException("Non-canonical QSDB dirty flags: " + value);
             return (ElementDirtyFlags)raw;
         }
 
@@ -394,6 +534,44 @@ namespace QS3D.Core.Persistence
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new InvalidDataException("QSDB numeric values must be finite.");
             return value.ToString("R", CultureInfo.InvariantCulture);
+        }
+
+        private sealed class BoundedCountingStream : Stream
+        {
+            private readonly long _maximumBytes;
+            private long _length;
+
+            public BoundedCountingStream(long maximumBytes)
+            {
+                if (maximumBytes <= 0L) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+                _maximumBytes = maximumBytes;
+            }
+
+            public override bool CanRead => false;
+            public override bool CanSeek => false;
+            public override bool CanWrite => true;
+            public override long Length => _length;
+            public override long Position
+            {
+                get => _length;
+                set => throw new NotSupportedException();
+            }
+
+            public override void Flush() { }
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+                if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
+                if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+                if (buffer.Length - offset < count) throw new ArgumentException("Invalid buffer range.");
+                if (_length > _maximumBytes - count)
+                    throw new InvalidDataException("QSDB project exceeds the maximum supported file size of 64 MiB.");
+                _length += count;
+            }
         }
     }
 }

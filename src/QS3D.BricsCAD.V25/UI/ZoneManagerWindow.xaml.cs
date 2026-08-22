@@ -15,6 +15,7 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class ZoneManagerWindow : Window
     {
         private readonly Document _document;
+        private ProjectState? _boundProject;
         private bool _loading;
         private string _editingId = string.Empty;
 
@@ -112,8 +113,9 @@ namespace QS3D.BricsCAD.V25.UI
                 var rollback = ProjectStateSnapshot.Capture(project);
                 try
                 {
+                    var beforeVersion = project.ChangeVersion;
                     ProjectZoneService.SetActive(project, zone.Id);
-                    if (!string.Equals(previous, zone.Id, StringComparison.OrdinalIgnoreCase))
+                    if (project.ChangeVersion != beforeVersion)
                         AuditTrail.ForProject(project).Record("zone.activate", string.Empty, previous + " -> " + zone.Id + " • " + zone.Name);
                 }
                 catch (Exception operationError)
@@ -135,16 +137,39 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("gán Zone cho selection");
+                if (!(ZoneList.SelectedItem is ZoneDefinition selectedZone))
+                    throw new InvalidOperationException("Chọn một Zone trước khi thực hiện thao tác.");
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var previewProject))
+                    throw new InvalidOperationException("Gán Zone cho selection cần một QS3D project hiện hữu; thao tác này không tạo project mới.");
+                var previewZone = previewProject.Zones.FirstOrDefault(x => string.Equals(x.Id, selectedZone.Id, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new InvalidOperationException("Zone đã chọn không còn tồn tại trong project hiện tại. Hãy Refresh và chọn lại.");
+                var expectedProjectId = previewProject.ProjectId;
+                var previewIds = SemanticSelectionResolver.ResolveImplied(_document, previewProject)
+                    .Select(x => x.Id)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (previewIds.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
+
                 var project = ExistingProjectMutationContext.Require(_document, "Gán Zone cho selection");
-                var zone = RequireSelectedZone(project);
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("QS3D project đã thay đổi sau khi đọc selection. Không có Zone assignment nào được áp dụng; hãy Refresh và thử lại.");
+                var zone = project.Zones.FirstOrDefault(x => string.Equals(x.Id, previewZone.Id, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new InvalidOperationException("Zone đã thay đổi hoặc bị xóa khỏi project hiện tại. Hãy Refresh và chọn lại.");
                 var elements = SemanticSelectionResolver.ResolveImplied(_document, project)
                     .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                     .Select(x => x.First())
                     .ToList();
-                if (elements.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
-                var previous = elements
-                    .Where(x => !string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase))
-                    .ToDictionary(x => x.Id, x => x.ZoneId, StringComparer.OrdinalIgnoreCase);
+                var currentIds = elements.Select(x => x.Id)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (!previewIds.SequenceEqual(currentIds, StringComparer.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Selection hoặc semantic ownership đã thay đổi trước khi gán Zone. Không có mutation nào được áp dụng; hãy chọn lại và thử lại.");
+
+                var previous = elements.ToDictionary(
+                    element => element.Id,
+                    element => element.ZoneId,
+                    StringComparer.OrdinalIgnoreCase);
 
                 var rollback = ProjectStateSnapshot.Capture(project);
                 int changed;
@@ -152,7 +177,8 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     changed = ProjectZoneService.Assign(project, zone.Id, elements);
                     foreach (var element in elements)
-                        if (previous.TryGetValue(element.Id, out var oldZone))
+                        if (previous.TryGetValue(element.Id, out var oldZone) &&
+                            !string.Equals(oldZone, element.ZoneId, StringComparison.Ordinal))
                             AuditTrail.ForProject(project).Record("zone.assign", element.Id, oldZone + " -> " + zone.Id + " • semantic only; CAD source position unchanged");
                 }
                 catch (Exception operationError)
@@ -194,6 +220,7 @@ namespace QS3D.BricsCAD.V25.UI
                 var previous = string.IsNullOrWhiteSpace(preferredId) ? (ZoneList.SelectedItem as ZoneDefinition)?.Id : preferredId;
                 if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
                 {
+                    _boundProject = null;
                     _loading = true;
                     try { ZoneList.ItemsSource = null; ZoneList.SelectedItem = null; }
                     finally { _loading = false; }
@@ -220,6 +247,7 @@ namespace QS3D.BricsCAD.V25.UI
                 finally { _loading = false; }
                 LoadEditor();
                 RefreshLabels();
+                _boundProject = project;
                 Title = "QS3D • Zone • " + DrawingLabel(_document);
                 if (zones.Count == 0)
                 {
@@ -312,6 +340,10 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
                 throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Zone Manager trước khi " + operation + ".");
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var currentProject) ||
+                _boundProject == null ||
+                !ReferenceEquals(currentProject, _boundProject))
+                throw new InvalidOperationException("QS3D project đã thay đổi từ lần Refresh gần nhất. Hãy Refresh Zone Manager trước khi " + operation + ".");
         }
 
         private static string DrawingLabel(Document document)

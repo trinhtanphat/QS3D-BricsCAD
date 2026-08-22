@@ -2,12 +2,13 @@
 
 ## Product/runtime boundary
 
-QS3D's selected product target is a **BricsCAD V25 x64 .NET plugin**, not a standalone CAD desktop application.
+QS3D's selected product target is a **BricsCAD V25 + V26 Windows x64 hosted plugin**, not a standalone CAD desktop application.
 
-- BricsCAD V25 is required at runtime and remains the native DWG/viewport/document host.
-- The QS3D adapter is built as `QS3D.BricsCAD.V25.dll` and loaded by DemandLoad or `NETLOAD`; a standalone `QS3D.exe` is not part of the current requirement.
+- A matching licensed BricsCAD V25 or V26 host is required at runtime and remains the native DWG/viewport/document host.
+- V25 loads `QS3D.BricsCAD.V25.dll` built for .NET Framework 4.8 (`net48`); V26 loads `QS3D.BricsCAD.V26.dll` built for .NET 8 (`net8.0-windows`). Both are managed Library plugins loaded by the matching BricsCAD host through DemandLoad or `NETLOAD`; a standalone `QS3D.exe` is not part of the current requirement.
+- V25 and V26 package/build/update/runtime identity must remain explicit; a V25 assembly/package must never be relabeled as V26-compatible.
 - QS3D Ribbon, palettes and modeless/full-screen-style WPF windows are plugin UI launched from inside BricsCAD. “Full-screen” below describes window size/workflow, not an independent desktop shell.
-- `QS3D.Core` may run deterministic tests outside CAD, but that does not change the shipping product into a standalone application.
+- `QS3D.Core` may run deterministic tests outside CAD and is shared by both host adapters, but that does not change the shipping product into a standalone application.
 - BLT/BLT3D screenshots and terminology define clean-room workflow/UX expectations only. They do not define QS3D packaging or executable form.
 
 See `docs/PRODUCT-BOUNDARY.md`. Any future standalone/CAD-engine direction requires a separate explicit owner decision and is not implied by “giống BLT”.

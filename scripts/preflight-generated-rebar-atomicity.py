@@ -33,20 +33,22 @@ for label, (relative, semantic_call) in families.items():
         "rollback.Restore(project)",
         "AggregateException(operationError, restoreError)",
         semantic_call,
+        "AuditTrail.ForProject(project).Record(",
     ):
         if token not in text:
             errors.append(label + ": missing generated replacement contract: " + token)
 
     semantic = text.find(semantic_call)
-    touch = text.find("project.Touch()", semantic if semantic >= 0 else 0)
     commit = text.find("transaction.Commit();", semantic if semantic >= 0 else 0)
     flag = text.find("cadCommitted = true", commit if commit >= 0 else 0)
     restore = text.find("rollback.Restore(project)", flag if flag >= 0 else 0)
-    if min(semantic, touch, commit, flag, restore) < 0:
-        errors.append(label + ": cannot resolve semantic/touch/CAD/rollback ordering")
-    elif not semantic < touch < commit < flag < restore:
-        errors.append(label + ": generated ownership/revision must advance before CAD commit and rollback must remain reachable after failed pre-commit work")
+    if min(semantic, commit, flag, restore) < 0:
+        errors.append(label + ": cannot resolve semantic/CAD/rollback ordering")
+    elif not semantic < commit < flag < restore:
+        errors.append(label + ": generated ownership and AuditTrail-owned revision must advance before CAD commit and rollback must remain reachable after failed pre-commit work")
 
+    if semantic >= 0 and restore >= 0 and "project.Touch()" in text[semantic:restore]:
+        errors.append(label + ": redundant project.Touch must stay removed; AuditTrail.Record owns revision advancement")
     if commit >= 0 and semantic_call in text[commit + len("transaction.Commit();"):]:
         errors.append(label + ": generated semantic ownership is still mutated after CAD commit")
     if "Editor.Regen(" in text:
@@ -79,4 +81,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: all eight generated rebar families advance ownership/revision while CAD is rollback-capable, pre-commit failures restore project state, native builders stay UI-free, and command-level UI synchronization cannot turn committed geometry into a false failure.")
+print("PASS: all eight generated rebar families advance ownership and AuditTrail-owned revision while CAD is rollback-capable, pre-commit failures restore project state, native builders stay UI-free, and command-level UI synchronization cannot turn committed geometry into a false failure.")

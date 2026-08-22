@@ -13,6 +13,8 @@ namespace QS3D.Core.Diagnostics
     {
         public const string FormatName = "QS3D.DiagnosticSummary";
         public const int FormatVersion = 1;
+        public const int MaxIssueCount = 1000000;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static string BuildSemantic(ProjectState project)
         {
@@ -25,7 +27,16 @@ namespace QS3D.Core.Diagnostics
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (issues == null) throw new ArgumentNullException(nameof(issues));
 
-            var health = issues.Where(x => x != null)
+            var normalizedIssues = MaterializeIssues(issues);
+            if (normalizedIssues.Any(x => x == null))
+                throw new InvalidOperationException("Diagnostic summary cannot contain a null health issue.");
+            foreach (var issue in normalizedIssues)
+            {
+                if (!Enum.IsDefined(typeof(HealthSeverity), issue.Severity))
+                    throw new InvalidOperationException("Diagnostic summary contains an undefined health severity: " + (int)issue.Severity + ".");
+            }
+
+            var health = normalizedIssues
                 .GroupBy(x => new { x.Severity, Code = CanonicalCode(x.Code) })
                 .OrderByDescending(x => x.Key.Severity)
                 .ThenBy(x => x.Key.Code, StringComparer.Ordinal)
@@ -96,19 +107,61 @@ namespace QS3D.Core.Diagnostics
             return sb.ToString();
         }
 
+        private static List<ModelHealthIssue> MaterializeIssues(IEnumerable<ModelHealthIssue> issues)
+        {
+            ValidateKnownIssueCounts(issues);
+
+            var result = new List<ModelHealthIssue>(Math.Min(MaxIssueCount, 256));
+            using (var enumerator = issues.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= MaxIssueCount)
+                        throw new InvalidOperationException("Diagnostic summary supports at most " + MaxIssueCount.ToString(CultureInfo.InvariantCulture) + " health issues.");
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result;
+        }
+
+        private static void ValidateKnownIssueCounts(IEnumerable<ModelHealthIssue> issues)
+        {
+            var knownCounts = new List<int>(3);
+            if (issues is ICollection<ModelHealthIssue> genericCollection)
+                knownCounts.Add(genericCollection.Count);
+            if (issues is IReadOnlyCollection<ModelHealthIssue> readOnlyCollection)
+                knownCounts.Add(readOnlyCollection.Count);
+            if (issues is System.Collections.ICollection nonGenericCollection)
+                knownCounts.Add(nonGenericCollection.Count);
+
+            int? expectedCount = null;
+            for (var i = 0; i < knownCounts.Count; i++)
+            {
+                var count = knownCounts[i];
+                if (count < 0)
+                    throw new InvalidOperationException("Diagnostic summary issue source reports an invalid negative count.");
+                if (count > MaxIssueCount)
+                    throw new InvalidOperationException("Diagnostic summary supports at most " + MaxIssueCount.ToString(CultureInfo.InvariantCulture) + " health issues.");
+                if (expectedCount.HasValue && count != expectedCount.Value)
+                    throw new InvalidOperationException("Diagnostic summary issue source reports conflicting known counts.");
+                expectedCount = count;
+            }
+        }
+
         public static void Export(string path, ProjectState project, IEnumerable<ModelHealthIssue> issues)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Diagnostic summary path is required.", nameof(path));
             var fullPath = Path.GetFullPath(path);
+            var content = Build(project, issues);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
             var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
             try
             {
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
+                using (var writer = new StreamWriter(stream, StrictUtf8))
                 {
-                    writer.Write(Build(project, issues));
+                    writer.Write(content);
                     writer.Flush();
                     stream.Flush(true);
                 }
@@ -141,6 +194,7 @@ namespace QS3D.Core.Diagnostics
         private static string Escape(string value)
         {
             var input = value ?? string.Empty;
+            StrictUtf8.GetByteCount(input);
             var sb = new StringBuilder(input.Length + 8);
             foreach (var ch in input)
             {

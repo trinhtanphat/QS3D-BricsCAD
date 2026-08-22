@@ -21,36 +21,47 @@ namespace QS3D.Core.Diagnostics
             var ownership = BuildOwnershipIndex(project);
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
-                if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Slab mesh health cannot inspect a null project element.");
+                if (!element.Properties.TryGetValue(HandlesKey, out var raw)) continue;
                 var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var validCount = 0;
-                foreach (var item in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                foreach (var item in (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.None))
                 {
-                    var handle = (item ?? string.Empty).Trim();
+                    var handleText = item ?? string.Empty;
+                    var handle = handleText.Trim();
                     if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
                     {
                         issues.Add(new ModelHealthIssue("INVALID_SLAB_MESH_GENERATED_HANDLE", HealthSeverity.Error, HandlesKey + " chứa handle không hợp lệ.", element.Id));
                         continue;
                     }
-                    if (!local.Add(handle))
+                    if (!string.Equals(handleText, handle, StringComparison.Ordinal))
+                        issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_HANDLE_NON_CANONICAL", HealthSeverity.Error, HandlesKey + " không được có khoảng trắng đầu/cuối ở từng handle.", element.Id));
+                    var identity = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
+                    if (!local.Add(identity))
                     {
                         issues.Add(new ModelHealthIssue("DUPLICATE_SLAB_MESH_GENERATED_HANDLE", HealthSeverity.Error, "Một slab mesh handle bị lặp trong cùng element: " + handle, element.Id));
                         continue;
                     }
                     validCount++;
                     var expectedOwner = element.Id + "/" + HandlesKey;
-                    if (ownership.IsConflicted(handle, expectedOwner))
-                        issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated slab mesh solid xung đột owner/project handle khác: " + ownership.Describe(handle), element.Id));
-                    if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
+                    if (ownership.IsConflicted(identity, expectedOwner))
+                        issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated slab mesh solid xung đột owner/project handle khác: " + ownership.Describe(identity), element.Id));
+                    if (element.SourceHandles.Any(x => string.Equals(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x), identity, StringComparison.OrdinalIgnoreCase)))
                         issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated slab mesh handle không được nằm trong SourceHandles.", element.Id));
-                    if (liveSolidHandles != null && !liveSolidHandles.Contains(handle))
+                    if (liveSolidHandles != null && !ContainsLogicalHandle(liveSolidHandles, identity))
                         issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_SOLID_MISSING", HealthSeverity.Error, "Không còn tìm thấy generated slab mesh Solid3d: " + handle, element.Id));
                 }
 
                 if (!element.Properties.TryGetValue(CountKey, out var countText) ||
                     !int.TryParse(countText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) || count < 0 || count != validCount)
+                {
                     issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_COUNT_MISMATCH", HealthSeverity.Warning, CountKey + " không khớp số handle hợp lệ.", element.Id));
+                }
+                else if (!string.Equals(countText, count.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
+                {
+                    issues.Add(new ModelHealthIssue("SLAB_MESH_GENERATED_COUNT_NON_CANONICAL", HealthSeverity.Warning, CountKey + " phải dùng canonical invariant integer text.", element.Id));
+                }
 
                 ValidatePositive(element, "GeneratedSlabMeshXDiameterMm", "SLAB_MESH_X_DIAMETER_INVALID", issues);
                 ValidatePositive(element, "GeneratedSlabMeshYDiameterMm", "SLAB_MESH_Y_DIAMETER_INVALID", issues);
@@ -59,12 +70,12 @@ namespace QS3D.Core.Diagnostics
                 ValidateNonNegative(element, "GeneratedSlabMeshCoverM", "SLAB_MESH_COVER_INVALID", issues);
 
                 if (!element.Properties.TryGetValue("GeneratedSlabMeshFaces", out var faces) ||
-                    !(string.Equals(faces, "Bottom", StringComparison.OrdinalIgnoreCase) ||
-                      string.Equals(faces, "Top", StringComparison.OrdinalIgnoreCase) ||
-                      string.Equals(faces, "Both", StringComparison.OrdinalIgnoreCase)))
+                    !(string.Equals(faces, "Bottom", StringComparison.Ordinal) ||
+                      string.Equals(faces, "Top", StringComparison.Ordinal) ||
+                      string.Equals(faces, "Both", StringComparison.Ordinal)))
                     issues.Add(new ModelHealthIssue("SLAB_MESH_FACES_INVALID", HealthSeverity.Warning, "GeneratedSlabMeshFaces phải là Bottom, Top hoặc Both.", element.Id));
 
-                if (!element.Properties.TryGetValue("GeneratedSlabMeshMode", out var mode) || !string.Equals(mode, "SlabMeshXY", StringComparison.OrdinalIgnoreCase))
+                if (!element.Properties.TryGetValue("GeneratedSlabMeshMode", out var mode) || !string.Equals(mode, "SlabMeshXY", StringComparison.Ordinal))
                     issues.Add(new ModelHealthIssue("SLAB_MESH_MODE_INVALID", HealthSeverity.Warning, "GeneratedSlabMeshMode thiếu hoặc không hợp lệ.", element.Id));
 
                 // Slab meshes generated before footprint-mode metadata existed were rectangle-only,
@@ -72,9 +83,8 @@ namespace QS3D.Core.Diagnostics
                 // metadata must stay inside the two reviewed coordinate-system contracts.
                 if (element.Properties.TryGetValue(FootprintModeKey, out var footprintMode))
                 {
-                    var normalizedFootprintMode = (footprintMode ?? string.Empty).Trim();
-                    if (!(string.Equals(normalizedFootprintMode, RectangleFootprintMode, StringComparison.OrdinalIgnoreCase) ||
-                          string.Equals(normalizedFootprintMode, PolygonFootprintMode, StringComparison.OrdinalIgnoreCase)))
+                    if (!(string.Equals(footprintMode, RectangleFootprintMode, StringComparison.Ordinal) ||
+                          string.Equals(footprintMode, PolygonFootprintMode, StringComparison.Ordinal)))
                     {
                         issues.Add(new ModelHealthIssue(
                             "SLAB_MESH_FOOTPRINT_MODE_INVALID",
@@ -93,11 +103,15 @@ namespace QS3D.Core.Diagnostics
             return issues.AsReadOnly();
         }
 
+        private static bool ContainsLogicalHandle(IEnumerable<string> handles, string identity) =>
+            handles.Any(x => string.Equals(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x), identity, StringComparison.OrdinalIgnoreCase));
+
         private static void ValidatePositive(ProjectElement element, string key, string code, List<ModelHealthIssue> issues)
         {
             if (!element.Properties.TryGetValue(key, out var text) ||
                 !double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
-                double.IsNaN(value) || double.IsInfinity(value) || value <= 0d)
+                double.IsNaN(value) || double.IsInfinity(value) || value <= 0d ||
+                !string.Equals(text, value.ToString("R", CultureInfo.InvariantCulture), StringComparison.Ordinal))
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, key + " thiếu hoặc không hợp lệ.", element.Id));
         }
 
@@ -105,7 +119,8 @@ namespace QS3D.Core.Diagnostics
         {
             if (!element.Properties.TryGetValue(key, out var text) ||
                 !double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
-                double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+                double.IsNaN(value) || double.IsInfinity(value) || value < 0d ||
+                !string.Equals(text, value.ToString("R", CultureInfo.InvariantCulture), StringComparison.Ordinal))
                 issues.Add(new ModelHealthIssue(code, HealthSeverity.Warning, key + " thiếu hoặc không hợp lệ.", element.Id));
         }
 
@@ -132,7 +147,8 @@ namespace QS3D.Core.Diagnostics
             var index = new OwnershipIndex();
             foreach (var element in project.Elements)
             {
-                if (element == null) continue;
+                if (element == null)
+                    throw new InvalidOperationException("Slab mesh health cannot inspect a null project element.");
                 foreach (var handle in element.SourceHandles)
                     Reserve(index, handle, element.Id + "/SourceHandles");
                 foreach (var property in element.Properties)
@@ -153,7 +169,7 @@ namespace QS3D.Core.Diagnostics
 
         private static void Reserve(OwnershipIndex index, string? handle, string token)
         {
-            var normalized = (handle ?? string.Empty).Trim();
+            var normalized = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
             if (normalized.Length == 0) return;
             if (!index.Owners.TryGetValue(normalized, out var existing))
             {

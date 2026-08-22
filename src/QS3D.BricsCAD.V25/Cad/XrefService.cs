@@ -27,6 +27,48 @@ namespace QS3D.BricsCAD.V25.Cad
             document.Editor.SetImpliedSelection(ids.ToArray()); return ids.Count;
         }
 
+        public static int SetInstanceLayersLocked(Document document, string xrefName, bool locked)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (string.IsNullOrWhiteSpace(xrefName)) throw new ArgumentException("Xref name is required.", nameof(xrefName));
+
+            var affectedLayers = 0;
+            using (document.LockDocument())
+            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            {
+                var xrefId = FindRecord(document.Database, transaction, xrefName);
+                if (xrefId.IsNull) throw new InvalidOperationException("Không tìm thấy Xref: " + xrefName);
+
+                var currentSpace = transaction.GetObject(document.Database.CurrentSpaceId, OpenMode.ForRead, false) as BlockTableRecord;
+                if (currentSpace == null)
+                {
+                    transaction.Commit();
+                    return 0;
+                }
+
+                var layerIds = new HashSet<ObjectId>();
+                foreach (ObjectId id in currentSpace)
+                {
+                    var reference = transaction.GetObject(id, OpenMode.ForRead, false) as BlockReference;
+                    if (reference == null || reference.IsErased || reference.BlockTableRecord != xrefId) continue;
+                    if (!reference.LayerId.IsNull) layerIds.Add(reference.LayerId);
+                }
+
+                foreach (var layerId in layerIds)
+                {
+                    var layer = transaction.GetObject(layerId, OpenMode.ForWrite, false) as LayerTableRecord;
+                    if (layer == null) continue;
+                    layer.IsLocked = locked;
+                    affectedLayers = checked(affectedLayers + 1);
+                }
+
+                transaction.Commit();
+            }
+
+            if (affectedLayers > 0) document.Editor.Regen();
+            return affectedLayers;
+        }
+
         public static void Reload(Document document, string xrefName)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));

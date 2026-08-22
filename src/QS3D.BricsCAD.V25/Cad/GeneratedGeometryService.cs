@@ -16,6 +16,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private const string OwnerElementKey = "GeneratedSolidOwnerElementId";
         private const string OwnershipVersionKey = "GeneratedSolidOwnershipVersion";
         private const string OwnershipVersion = "1";
+        private const string PhysicalOpeningCutPrefix = "PhysicalOpeningCut";
 
         public static string PrepareReplacement(Document document, Transaction transaction, ProjectState project, ProjectElement element)
         {
@@ -56,8 +57,8 @@ namespace QS3D.BricsCAD.V25.Cad
             using (var marker = new ResultBuffer(
                 new TypedValue((int)DxfCode.ExtendedDataRegAppName, RegAppName),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, OwnershipVersion),
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, projectId.Trim()),
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, elementId.Trim()),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, GeneratedOwnershipIdentityToken.Project(projectId)),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, GeneratedOwnershipIdentityToken.Element(elementId)),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, category.ToString())))
                 entity.XData = marker;
         }
@@ -119,6 +120,7 @@ namespace QS3D.BricsCAD.V25.Cad
             element.Properties[OwnerProjectKey] = project.ProjectId;
             element.Properties[OwnerElementKey] = element.Id;
             element.Properties[OwnershipVersionKey] = OwnershipVersion;
+            RemovePropertiesByPrefix(element, PhysicalOpeningCutPrefix);
             element.ClearGeneratedSolidStale();
             element.MarkClean(ElementDirtyFlags.Geometry);
         }
@@ -132,8 +134,8 @@ namespace QS3D.BricsCAD.V25.Cad
                 return values.Length >= 5 &&
                     string.Equals(Convert.ToString(values[0].Value, CultureInfo.InvariantCulture), RegAppName, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(Convert.ToString(values[1].Value, CultureInfo.InvariantCulture), OwnershipVersion, StringComparison.Ordinal) &&
-                    string.Equals(Convert.ToString(values[2].Value, CultureInfo.InvariantCulture), projectId, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(Convert.ToString(values[3].Value, CultureInfo.InvariantCulture), elementId, StringComparison.OrdinalIgnoreCase) &&
+                    GeneratedOwnershipIdentityToken.MatchesProject(Convert.ToString(values[2].Value, CultureInfo.InvariantCulture), projectId) &&
+                    GeneratedOwnershipIdentityToken.MatchesElement(Convert.ToString(values[3].Value, CultureInfo.InvariantCulture), elementId) &&
                     string.Equals(Convert.ToString(values[4].Value, CultureInfo.InvariantCulture), category.ToString(), StringComparison.OrdinalIgnoreCase);
             }
         }
@@ -146,6 +148,14 @@ namespace QS3D.BricsCAD.V25.Cad
             var record = new RegAppTableRecord { Name = RegAppName };
             table.Add(record);
             transaction.AddNewlyCreatedDBObject(record, true);
+        }
+
+        private static void RemovePropertiesByPrefix(ProjectElement element, string prefix)
+        {
+            var keys = new List<string>();
+            foreach (var key in element.Properties.Keys)
+                if (key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) keys.Add(key);
+            foreach (var key in keys) element.Properties.Remove(key);
         }
 
         private static void RemoveFromSourceHandles(ProjectElement element, string? handle)

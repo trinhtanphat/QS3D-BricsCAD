@@ -4,7 +4,19 @@
 
 ## Transaction boundary
 
-Source reconcile expands the semantic dependency closure, captures a `ProjectStateSnapshot`, starts one CAD transaction, prepares generated-output invalidation, refreshes source-derived semantic state, regenerates the affected semantic subset to a stable state, commits invalidation metadata, touches the project, and only then commits the CAD transaction. A failure before CAD commit restores the semantic snapshot.
+Source reconcile expands the semantic dependency closure, captures a `ProjectStateSnapshot`, starts one CAD transaction, prepares generated-output invalidation, refreshes source-derived semantic state, regenerates the affected semantic subset to a stable state, commits invalidation metadata, records its audit-owned project revision, and only then commits the CAD transaction. A failure before CAD commit restores the semantic snapshot.
+
+## Native Undo/Redo semantic bridge
+
+Issue `#1005` exposed that BricsCAD native Undo restored the generated CAD objects but did not know about QS3D's canonical in-memory `ProjectState`. Source Reconcile now writes a small native revision marker to Model Space in the same CAD transaction as invalidation. Each committed marker revision maps to before/after `ProjectStateSnapshot` state held only for that document and plugin session.
+
+After a native Undo/Redo command completes, the document-bound observer compares the live marker with its current revision. Other command completions, including successful or refused `QS3DSYNCSOURCE`, never drive snapshot restoration. When native Undo/Redo restores another known marker, the observer restores the corresponding semantic snapshot only when the same canonical cached project instance, Project ID, `ChangeVersion`, timestamp and sidecar revision still match. It never loads or creates a project from an Undo callback. Project reload/forget and document close discard the in-session history, and an unknown/replaced/drifted project fails closed instead of receiving a stale snapshot.
+
+The bridge observes the unambiguous global native command names `UNDO`, `REDO` and `MREDO`. The single-letter `U` name is ambiguous in the V25 command-event stream and is intentionally not treated as proof of a semantic Undo transition; use the full native `UNDO` command (including toolbar/menu actions that resolve to it) for Source Reconcile semantic synchronization. A marker mismatch still makes the next reconcile fail closed rather than silently rebasing an unobserved CAD state.
+
+If ordinary semantic-only work changes the project before a later Source Reconcile, that later command rebases its current marker to a fresh pre-command snapshot. Undo of the new reconcile therefore preserves those intervening semantic edits; older unreachable marker snapshots are not guessed or replayed.
+
+All unit-policy, invalidation, regeneration and snapshot work finishes before the native revision marker is staged. The after snapshot is placed in a private shadow dictionary; the published history/current revision remain unchanged until the CAD transaction commits. If any earlier refusal or the CAD transaction fails, the shadow history is discarded and the existing command-level semantic rollback remains authoritative. Post-commit bookkeeping publishes the already-allocated dictionary with no native work, so a failed reconcile cannot poison a later reconcile and a successful reconcile cannot expose stale semantic state at command completion.
 
 ## Spatial generated outputs
 
@@ -29,4 +41,33 @@ A live Grid annotation handle that resolves to an unexpected CAD type also fails
 
 ## Runtime boundary
 
-The ownership/invalidation source contract and static preflight are remote-safe. Exact BricsCAD V25 behavior for transaction rollback, Undo/Redo, save/reopen, multi-DWG, locked layers, unusual owner spaces and real private DWGs remains `LOCAL_ONLY` until exercised against installed BricsCAD V25 runtime references. No release claim should infer those runtime gates from static source checks alone.
+The ownership/invalidation source contract, native revision bridge and static preflight are remote-safe. The guarded synthetic LOCAL-004 matrix below is qualified on installed BricsCAD V25.2.10; locked layers, unusual owner spaces, real private DWGs and any expanded scenario remain `LOCAL_ONLY` until separately exercised. No release claim should infer those additional runtime gates from static source checks alone.
+
+### Guarded LOCAL-004 automation
+
+`scripts/test-bricscad-v25-source-reconcile.ps1` is the automation-only baseline for the complete synthetic LOCAL-004 matrix. It accepts only the repository-generated sample, creates two ordinary disposable copies outside the repository, requires a clean exact-SHA V25 x64 Release DLL/Core pair, and invokes production Direct Draw, `QS3DSYNCSOURCE`, `QS3DBUILD3D`, native Undo/Redo, `QS3DSAVE`, native save and cold reopen commands.
+
+The probe covers LINE plus open POLYLINE source edits, three successful reconciles, ownership-scoped generated-solid invalidation/rebuild, generated-output and ambiguous-source refusal, a post-invalidation/pre-commit rollback forced by temporarily mismatching native `INSUNITS` with the canonical project binding, and a second-document unknown-source refusal. Probe code may edit/select/inspect synthetic native state, but it must not call `SourceReconcileService` or generated-output builders directly.
+
+The runner retains only sanitized aggregate markers. It removes both scripts and every exact sidecar/backup/lock file, restores both disposable drawings to the repository fixture hash, and deletes the copies before reporting. A native Undo/Redo versus in-memory semantic divergence is an allowlisted `NATIVE_UNDO_SEMANTIC_DIVERGENCE` failure requiring a remote production fix and exact-SHA rerun; it is never converted into a local pass by the probe.
+
+### Database Undo lifecycle diagnostic result
+
+The bounded diagnostic `scripts/test-bricscad-v25-source-reconcile-undo-lifecycle.ps1` passed all four fresh-process variants in licensed BricsCAD V25.2.10 x64 on exact pushed SHA `745fb3649463a43d577e5042d8595a4e6f09238f`. Matching adapter/Core ProductVersion loaded adapter SHA-256 `C9052C3A16AFC7D863021B60735A2BBE6F3C36ED4AFB07EB2B118DE7377DD5DF`; focused Source Reconcile gates, full Core smoke and the installed-reference V25 build passed first.
+
+Every variant restored the existing BlockBegin XData marker to `BEFORE` and removed the newly appended topology sentinel. Database Undo recording was `ON` at each mutation entry. It stayed `ON` when the diagnostic optionally called database-wide `DisableUndoRecording(false)`, `StartUndoRecord()`, or both, so the four outcomes were identical:
+
+- `OBJECT_ONLY`: entry `ON`, database transitions `NOT_RUN / NOT_RUN`, marker `BEFORE`, topology `UNDONE`;
+- `DB_ENABLE_OBJECT`: entry/after-enable `ON / ON`, start `NOT_RUN`, marker `BEFORE`, topology `UNDONE`;
+- `DB_START_OBJECT`: entry `ON`, enable `NOT_RUN`, after-start `ON`, marker `BEFORE`, topology `UNDONE`;
+- `DB_ENABLE_DB_START_OBJECT`: entry/after-enable/after-start `ON / ON / ON`, marker `BEFORE`, topology `UNDONE`.
+
+This proves the installed host can group the existing-object mutation and appended topology without database-wide enable/start calls. It did not by itself qualify production Source Reconcile and did not justify adding those database APIs to production; at that stage issue `#1005` returned to a production-specific command-boundary investigation. The diagnostic retained only allowlisted markers/metadata; process, private script/state and drawing cleanup passed, and the repository fixture remained byte-identical.
+
+### Exact integrated LOCAL-004 result
+
+The complete production-command matrix passed on exact current-main SHA `b1845fef5565d086a1c69ab63ab086cea52b1678` in licensed BricsCAD V25.2.10. The installed-reference adapter built with `0 warnings / 0 errors`, ProductVersion matched the SHA, and Core/Smoke Release builds plus full smoke passed first.
+
+The runner used native Mark/Back to prove Undo and a separate Begin/End group with direct `UNDO 1` -> `REDO` adjacency to prove Redo without intervening modal-command drift. Because modal Undo setup clears PICKFIRST, each cycle reseeded the exact source pair immediately before production `QS3DSYNCSOURCE`. The sanitized result reported three successful reconciles, native marker `BEFORE` after Undo and `AFTER` after Redo, semantic Undo/Redo coherence, all refusal/rollback/source/rebuild/save/cold-reopen checks true, and `error_code=NONE`.
+
+Process, private-script/state and drawing restoration checks passed, the repository fixture remained byte-identical, and zero BricsCAD processes remained. Issue `#1005` is closed; LOCAL-004 is `LOCAL_PASS` for this bounded synthetic matrix. No private/customer drawing or GitHub Actions was used.

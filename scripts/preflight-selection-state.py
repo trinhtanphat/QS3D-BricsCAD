@@ -15,20 +15,31 @@ for path in (STATE, SMOKE, REG):
 if STATE.is_file():
     text = STATE.read_text(encoding="utf-8")
     for token in (
-        ".Where(x => !string.IsNullOrWhiteSpace(x))",
-        ".Select(x => x.Trim())",
+        "private const int MaxInputCount = 10000;",
+        "if (ids is ICollection<string> collection && collection.Count > MaxInputCount)",
+        "if (ids is IReadOnlyCollection<string> readOnlyCollection && readOnlyCollection.Count > MaxInputCount)",
+        "var enumerationVersion = _changeVersion;",
+        "if (inputCount >= MaxInputCount)",
+        "if (string.IsNullOrWhiteSpace(raw)) continue;",
+        "next.Add(raw.Trim());",
         "StringComparer.OrdinalIgnoreCase",
+        "if (_changeVersion != enumerationVersion)",
+        "Selection changed while replacement element ids were being enumerated.",
         "if (_ids.SetEquals(next)) return;",
+        "var nextVersion = checked(_changeVersion + 1L);",
         "if (_ids.Count == 0) return;",
     ):
         if token not in text:
-            errors.append("SelectionState.cs missing canonical-state token: " + token)
+            errors.append("SelectionState.cs missing bounded/canonical-state token: " + token)
+    if ".Where(x => !string.IsNullOrWhiteSpace(x))" in text or ".Select(x => x.Trim())" in text:
+        errors.append("SelectionState.Replace must not regress to the old unbounded LINQ normalization pipeline")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     for token in (
         "ReplaceTrimsDeduplicatesAndIgnoresBlankIds();",
         "CanonicallyEquivalentReplaceDoesNotRaiseChanged();",
+        "ElementIdsAreDeterministicAndDoNotLeakMutableState();",
         "ClearRaisesOnlyWhenStateChanges();",
         'state.Replace(new[] { " A ", "a", " B", "   " });',
         'state.Replace(new[] { " b ", " A ", "a" });',
@@ -44,4 +55,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] semantic selection state is statically guarded for trimmed/case-insensitive IDs, canonical-equivalent replacement and no-op clear semantics")
+print("[PASS] semantic selection state is bounded and freshness-aware while preserving trimmed/case-insensitive IDs, deterministic snapshots, canonical-equivalent replacement and no-op clear semantics")

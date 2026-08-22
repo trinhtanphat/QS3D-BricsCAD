@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using QS3D.Core.Domain;
 
@@ -10,10 +11,12 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             CustomRoundTripAndUpdate();
+            RejectsControlCharactersBeforeMutation();
             RenamePreservesReferences();
             ReferencedMaterialsAreDiscovered();
             RenamePropagatesReferencesAndStaleState();
             RenameStalesInheritedConsumersButPreservesOverrides();
+            RenameStalesInheritedConsumerWithPaddedFamilyId();
             RenameRejectsCorruptReferenceGraphBeforeMutation();
             ReferencedMaterialCannotBeDeleted();
             RejectsDuplicateBuiltInAndCorruptStorage();
@@ -50,6 +53,24 @@ namespace QS3D.Core.SmokeTests
             if (!ProjectMaterialCatalog.DeleteCustom(project, "mat-stone")) throw new Exception("Custom material delete failed.");
             if (ProjectMaterialCatalog.GetCustom(project).Count != 0) throw new Exception("Custom material was not deleted.");
             if (project.Metadata.ContainsKey(ProjectMaterialCatalog.MetadataKey)) throw new Exception("Empty custom catalog metadata should be removed.");
+        }
+
+        private static void RejectsControlCharactersBeforeMutation()
+        {
+            var project = new ProjectState("p-control", "Material control persistability");
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdatedUtc = project.UpdatedUtc;
+            var beforeMetadataCount = project.Metadata.Count;
+
+            Throws<ArgumentException>(() => ProjectMaterialCatalog.UpsertCustom(project, "mat-\u0001-bad", "Vật liệu hợp lệ", "m²", ""));
+            if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdatedUtc || project.Metadata.Count != beforeMetadataCount)
+                throw new Exception("Rejected control-character material Id must not mutate project persistence state.");
+
+            Throws<ArgumentException>(() => ProjectMaterialCatalog.UpsertCustom(project, "mat-control", "Vật liệu \u0001 lỗi", "m²", ""));
+            if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdatedUtc || project.Metadata.Count != beforeMetadataCount)
+                throw new Exception("Rejected control-character material Name must not mutate project persistence state.");
+            if (ProjectMaterialCatalog.GetCustom(project).Count != 0)
+                throw new Exception("Rejected control-character material identity must not create catalog entries.");
         }
 
         private static void ReferencedMaterialsAreDiscovered()
@@ -116,6 +137,35 @@ namespace QS3D.Core.SmokeTests
             if (!inherited.IsGeneratedSolidStale()) throw new Exception("Inherited material consumers must become stale when the Family reference is renamed.");
             if (overridden.Properties["Material"] != "Gạch") throw new Exception("True instance material override must be preserved.");
             if (overridden.IsGeneratedSolidStale()) throw new Exception("Unchanged material override must not become stale solely because the Family material was renamed.");
+        }
+
+        private static void RenameStalesInheritedConsumerWithPaddedFamilyId()
+        {
+            var project = new ProjectState("p-padded-family", "Padded inherited material FamilyId");
+            ProjectMaterialCatalog.UpsertCustom(project, "mat-padded", "Vật liệu cũ", "m²", "");
+            var family = new ProjectFamily("f-padded", "Tường padded", ElementCategory.ArchitecturalWall);
+            family.Properties["Material"] = "Vật liệu cũ";
+            project.Families.Add(family);
+
+            var inherited = new ProjectElement("e-padded", ElementCategory.ArchitecturalWall, family.Id, "floor", "zone");
+            if (inherited.FamilyId != family.Id) throw new Exception("Valid construction must store the canonical FamilyId before boundary injection.");
+            var paddedFamilyId = "  " + family.Id + "  ";
+            var familyIdField = typeof(ProjectElement).GetField("_familyId", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (familyIdField == null) throw new Exception("ProjectElement._familyId reflection boundary was not found.");
+            familyIdField.SetValue(inherited, paddedFamilyId);
+            if (inherited.FamilyId != paddedFamilyId) throw new Exception("Padded raw FamilyId boundary injection did not reach the element.");
+            inherited.Properties["GeneratedSolidHandle"] = "EE";
+            inherited.ClearGeneratedGeometryStale();
+            inherited.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(inherited);
+
+            ProjectMaterialCatalog.UpsertCustom(project, "mat-padded", "Vật liệu mới", "m²", "");
+
+            if (family.Properties["Material"] != "Vật liệu mới") throw new Exception("Family material reference was not renamed for the padded FamilyId regression.");
+            if (!inherited.IsGeneratedSolidStale()) throw new Exception("Padded but semantically identical FamilyId must still stale inherited material consumers.");
+            if ((inherited.Dirty & (ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity)) != (ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity))
+                throw new Exception("Padded FamilyId inherited consumer must be dirtied for Properties and Quantity.");
+            if (inherited.FamilyId != paddedFamilyId) throw new Exception("Material rename must not rewrite the stored FamilyId while canonicalizing lookup identity.");
         }
 
         private static void RenameRejectsCorruptReferenceGraphBeforeMutation()

@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
@@ -9,7 +10,12 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             GeneratedOutputsBecomeStaleAfterSemanticEdit();
-            ReplacedHandleAutoResolvesOnlyItsOwnStaleKind();
+            RepeatedStaleMarkIsTimestampNoOp();
+            ChangedGeneratedSignatureRefreshesStaleSnapshot();
+            ChangedStaleReasonRefreshesTimestamp();
+            CurtainPanelStaleMarkIsIdempotentAndRefreshesChangedOutput();
+            ReplacedHandlesRemainAsObsoleteMetadataUntilExplicitClear();
+            CurtainPanelObsoleteMarkerIsQueryPure();
             ExplicitClearPreservesOtherStaleKinds();
             StaleHealthReportsAllGeneratedKinds();
             ElementsWithoutGeneratedOutputsRemainFresh();
@@ -34,14 +40,88 @@ namespace QS3D.Core.SmokeTests
             Equal("Thickness changed", element.Properties[ProjectElement.GeneratedGeometryStaleReasonKey]);
         }
 
-        private static void ReplacedHandleAutoResolvesOnlyItsOwnStaleKind()
+        private static void RepeatedStaleMarkIsTimestampNoOp()
+        {
+            var element = Element();
+            element.Properties["GeneratedSolidHandle"] = "AA";
+            element.MarkGeneratedGeometryStale("Same reason");
+            var updatedUtc = element.UpdatedUtc;
+            var snapshot = element.Properties[ProjectElement.GeneratedSolidStaleSnapshotKey];
+
+            WaitForClockAdvance(updatedUtc);
+            element.MarkGeneratedGeometryStale("Same reason");
+
+            Equal(updatedUtc, element.UpdatedUtc);
+            Equal(snapshot, element.Properties[ProjectElement.GeneratedSolidStaleSnapshotKey]);
+            Equal("Same reason", element.Properties[ProjectElement.GeneratedGeometryStaleReasonKey]);
+            True(element.IsGeneratedSolidStale());
+        }
+
+        private static void ChangedGeneratedSignatureRefreshesStaleSnapshot()
+        {
+            var element = Element();
+            element.Properties["GeneratedSolidHandle"] = "AA";
+            element.MarkGeneratedGeometryStale("Geometry changed");
+            var updatedUtc = element.UpdatedUtc;
+
+            WaitForClockAdvance(updatedUtc);
+            element.Properties["GeneratedSolidHandle"] = "AB";
+            element.MarkGeneratedGeometryStale("Geometry changed");
+
+            True(element.UpdatedUtc > updatedUtc);
+            Equal("AB", element.Properties[ProjectElement.GeneratedSolidStaleSnapshotKey]);
+            True(element.IsGeneratedSolidStale());
+        }
+
+        private static void ChangedStaleReasonRefreshesTimestamp()
+        {
+            var element = Element();
+            element.Properties["GeneratedSolidHandle"] = "AA";
+            element.MarkGeneratedGeometryStale("First reason");
+            var updatedUtc = element.UpdatedUtc;
+            var snapshot = element.Properties[ProjectElement.GeneratedSolidStaleSnapshotKey];
+
+            WaitForClockAdvance(updatedUtc);
+            element.MarkGeneratedGeometryStale("Second reason");
+
+            True(element.UpdatedUtc > updatedUtc);
+            Equal(snapshot, element.Properties[ProjectElement.GeneratedSolidStaleSnapshotKey]);
+            Equal("Second reason", element.Properties[ProjectElement.GeneratedGeometryStaleReasonKey]);
+            True(element.IsGeneratedSolidStale());
+        }
+
+        private static void CurtainPanelStaleMarkIsIdempotentAndRefreshesChangedOutput()
+        {
+            var element = Element();
+            element.Properties["GeneratedCurtainPanelHandles"] = "PA";
+            element.MarkGeneratedCurtainPanelStale("Panel changed");
+            var updatedUtc = element.UpdatedUtc;
+
+            WaitForClockAdvance(updatedUtc);
+            element.MarkGeneratedCurtainPanelStale("Panel changed");
+            Equal(updatedUtc, element.UpdatedUtc);
+
+            element.Properties["GeneratedCurtainPanelHandles"] = "PB";
+            element.MarkGeneratedCurtainPanelStale("Panel changed");
+            True(element.UpdatedUtc > updatedUtc);
+            Equal("PB", element.Properties[ProjectElement.GeneratedCurtainPanelStaleSnapshotKey]);
+            True(element.IsGeneratedCurtainPanelStale());
+        }
+
+        private static void ReplacedHandlesRemainAsObsoleteMetadataUntilExplicitClear()
         {
             var element = Element();
             SeedAllGeneratedOutputs(element);
             element.MarkGeneratedGeometryStale("Family changed");
 
+            var rebarSnapshot = element.Properties[ProjectElement.GeneratedRebarStaleSnapshotKey];
+            var aggregateReason = element.Properties[ProjectElement.GeneratedGeometryStaleReasonKey];
             element.Properties["GeneratedRebarHandles"] = "BD";
             False(element.IsGeneratedRebarStale());
+            False(element.IsGeneratedRebarStale());
+            Equal("stale", element.Properties[ProjectElement.GeneratedRebarStateKey]);
+            Equal(rebarSnapshot, element.Properties[ProjectElement.GeneratedRebarStaleSnapshotKey]);
+            Equal(aggregateReason, element.Properties[ProjectElement.GeneratedGeometryStaleReasonKey]);
             True(element.IsGeneratedSolidStale());
             True(element.IsGeneratedShapeRebarStale());
             True(element.IsGeneratedTieRebarStale());
@@ -59,10 +139,57 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedSlabMeshHandles"] = "FG";
             element.Properties["GeneratedWallMeshHandles"] = "GH";
             element.Properties["GeneratedFoundationMeshHandles"] = "HI";
-            True(element.IsGeneratedCurtainFrameStale());
             element.Properties["GeneratedCurtainFrameHandles"] = "IJ";
+
+            False(element.IsGeneratedSolidStale());
+            False(element.IsGeneratedRebarStale());
+            False(element.IsGeneratedShapeRebarStale());
+            False(element.IsGeneratedTieRebarStale());
+            False(element.IsGeneratedBeamStirrupStale());
+            False(element.IsGeneratedSlabMeshStale());
+            False(element.IsGeneratedWallMeshStale());
+            False(element.IsGeneratedFoundationMeshStale());
+            False(element.IsGeneratedCurtainFrameStale());
+            False(element.IsGeneratedGeometryStale());
+            False(element.IsGeneratedGeometryStale());
+            True(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStateKey));
+            True(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStaleReasonKey));
+            True(element.Properties.ContainsKey(ProjectElement.GeneratedSolidStateKey));
+            True(element.Properties.ContainsKey(ProjectElement.GeneratedRebarStateKey));
+            True(element.Properties.ContainsKey(ProjectElement.GeneratedCurtainFrameStateKey));
+
+            element.ClearGeneratedGeometryStale();
             False(element.IsGeneratedGeometryStale());
             False(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStateKey));
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStaleReasonKey));
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedSolidStateKey));
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedRebarStateKey));
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedCurtainFrameStateKey));
+        }
+
+        private static void CurtainPanelObsoleteMarkerIsQueryPure()
+        {
+            var element = Element();
+            element.Properties["GeneratedCurtainPanelHandles"] = "PA";
+            element.MarkGeneratedCurtainPanelStale("Panel source changed");
+            var snapshot = element.Properties[ProjectElement.GeneratedCurtainPanelStaleSnapshotKey];
+            var reason = element.Properties[ProjectElement.GeneratedGeometryStaleReasonKey];
+
+            True(element.IsGeneratedCurtainPanelStale());
+            element.Properties["GeneratedCurtainPanelHandles"] = "PB";
+            False(element.IsGeneratedCurtainPanelStale());
+            False(element.IsGeneratedCurtainPanelStale());
+            False(element.IsGeneratedGeometryStale());
+            Equal("stale", element.Properties[ProjectElement.GeneratedCurtainPanelStateKey]);
+            Equal(snapshot, element.Properties[ProjectElement.GeneratedCurtainPanelStaleSnapshotKey]);
+            Equal(reason, element.Properties[ProjectElement.GeneratedGeometryStaleReasonKey]);
+
+            element.ClearGeneratedCurtainPanelStale();
+            False(element.IsGeneratedCurtainPanelStale());
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedCurtainPanelStateKey));
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedCurtainPanelStaleSnapshotKey));
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStateKey));
+            False(element.Properties.ContainsKey(ProjectElement.GeneratedGeometryStaleReasonKey));
         }
 
         private static void ExplicitClearPreservesOtherStaleKinds()
@@ -133,6 +260,14 @@ namespace QS3D.Core.SmokeTests
             element.Properties["GeneratedWallMeshHandles"] = "GG";
             element.Properties["GeneratedFoundationMeshHandles"] = "HH";
             element.Properties["GeneratedCurtainFrameHandles"] = "II";
+        }
+
+        private static void WaitForClockAdvance(DateTime timestamp)
+        {
+            for (var attempt = 0; attempt < 100 && DateTime.UtcNow <= timestamp; attempt++)
+                Thread.Sleep(1);
+            if (DateTime.UtcNow <= timestamp)
+                throw new Exception("GeneratedGeometryStaleSmoke clock did not advance for timestamp regression check.");
         }
 
         private static void Contains(System.Collections.Generic.IReadOnlyList<ModelHealthIssue> issues, string code)

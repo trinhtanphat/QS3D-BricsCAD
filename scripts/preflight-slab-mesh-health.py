@@ -19,7 +19,7 @@ if SERVICE.is_file():
         'private const string RectangleFootprintMode = "RectangleLocalXY";',
         'private const string PolygonFootprintMode = "PolygonGlobalXY";',
         '"SLAB_MESH_FOOTPRINT_MODE_INVALID"',
-        'if (element == null) continue;',
+        'throw new InvalidOperationException("Slab mesh health cannot inspect a null project element.")',
         'public HashSet<string> Conflicts',
         'if (Conflicts.Contains(handle)) return true;',
         'GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)',
@@ -27,6 +27,8 @@ if SERVICE.is_file():
         if token not in text:
             errors.append("GeneratedSlabMeshHealthService.cs missing fail-closed token: " + token)
 
+    if 'if (element == null) continue;' in text:
+        errors.append("Slab mesh health must fail visible instead of silently skipping null semantic entries.")
     if 'if (!element.Properties.TryGetValue(FootprintModeKey' in text:
         errors.append("Slab footprint mode must remain optional for legacy rectangle metadata; missing key must not fail closed.")
 
@@ -38,9 +40,10 @@ if SMOKE.is_file():
         "AcceptsPolygonFootprintMode();",
         "RejectsInvalidFootprintMode();",
         "DetectsLaterOwnershipConflict();",
-        "IgnoresNullSemanticEntry();",
+        "RejectsNullSemanticEntry();",
         '"SLAB_MESH_FOOTPRINT_MODE_INVALID"',
         '"SLAB_MESH_GENERATED_OWNERSHIP_CONFLICT"',
+        "null semantic entries must fail visibly",
     ):
         if token not in text:
             errors.append("GeneratedSlabMeshHealthSmoke.cs missing regression token: " + token)
@@ -54,4 +57,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Slab mesh Core health keeps legacy footprint compatibility while rejecting invalid modes, ownership ambiguity, and null-diagnostic crashes.")
+print("PASS: Slab mesh Core health keeps legacy footprint compatibility while rejecting invalid modes, ownership ambiguity, and corrupt null semantic entries fail visibly.")

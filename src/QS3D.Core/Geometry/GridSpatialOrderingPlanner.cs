@@ -34,15 +34,20 @@ namespace QS3D.Core.Geometry
             if (!Finite(coordinateTolerance) || coordinateTolerance <= 0.0)
                 throw new ArgumentOutOfRangeException(nameof(coordinateTolerance), "Grid coordinate tolerance must be finite and positive.");
 
-            var axisLength = Hypot(orderingAxis.X, orderingAxis.Y);
-            if (!(axisLength > 0.0) || !Finite(axisLength))
+            if (!Finite(orderingAxis.X) || !Finite(orderingAxis.Y))
                 throw new ArgumentException("Grid ordering axis must be finite and non-zero.", nameof(orderingAxis));
-            var ux = orderingAxis.X / axisLength;
-            var uy = orderingAxis.Y / axisLength;
+            var axisScale = Math.Max(Math.Abs(orderingAxis.X), Math.Abs(orderingAxis.Y));
+            if (!(axisScale > 0.0))
+                throw new ArgumentException("Grid ordering axis must be finite and non-zero.", nameof(orderingAxis));
+            var scaledAxisX = orderingAxis.X / axisScale;
+            var scaledAxisY = orderingAxis.Y / axisScale;
+            var scaledAxisLength = Math.Sqrt(scaledAxisX * scaledAxisX + scaledAxisY * scaledAxisY);
+            var ux = scaledAxisX / scaledAxisLength;
+            var uy = scaledAxisY / scaledAxisLength;
             if (!Finite(ux) || !Finite(uy))
                 throw new InvalidOperationException("Grid ordering axis normalization overflowed the supported numeric range.");
 
-            var list = curves.ToList();
+            var list = curves.Take(MaxCurves + 1).ToList();
             if (list.Count == 0) throw new InvalidOperationException("At least one Grid LINE is required for spatial ordering.");
             if (list.Count > MaxCurves)
                 throw new InvalidOperationException("Grid spatial ordering supports at most " + MaxCurves + " curves.");
@@ -65,11 +70,25 @@ namespace QS3D.Core.Geometry
                 if (!Finite(dx) || !Finite(dy))
                     throw new OverflowException("Grid LINE direction exceeds the supported numeric range for element " + id + ".");
                 var lineLength = Hypot(dx, dy);
-                if (!(lineLength > coordinateTolerance) || !Finite(lineLength))
+                if (!(lineLength > coordinateTolerance))
                     throw new InvalidOperationException("Grid LINE is degenerate within the ordering tolerance for element " + id + ".");
 
-                var lx = dx / lineLength;
-                var ly = dy / lineLength;
+                double lx;
+                double ly;
+                if (Finite(lineLength))
+                {
+                    lx = dx / lineLength;
+                    ly = dy / lineLength;
+                }
+                else
+                {
+                    var lineScale = Math.Max(Math.Abs(dx), Math.Abs(dy));
+                    var scaledLineX = dx / lineScale;
+                    var scaledLineY = dy / lineScale;
+                    var scaledLineLength = Math.Sqrt(scaledLineX * scaledLineX + scaledLineY * scaledLineY);
+                    lx = scaledLineX / scaledLineLength;
+                    ly = scaledLineY / scaledLineLength;
+                }
                 var alignment = Math.Abs(lx * ux + ly * uy);
                 if (!Finite(alignment))
                     throw new OverflowException("Grid LINE alignment exceeded the supported numeric range for element " + id + ".");
@@ -98,9 +117,7 @@ namespace QS3D.Core.Geometry
             for (var i = 1; i < entries.Count; i++)
             {
                 var delta = entries[i].Coordinate - entries[i - 1].Coordinate;
-                if (!Finite(delta))
-                    throw new OverflowException("Grid ordering coordinate delta exceeds the supported numeric range.");
-                if (Math.Abs(delta) <= coordinateTolerance)
+                if (Finite(delta) && Math.Abs(delta) <= coordinateTolerance)
                     throw new InvalidOperationException(
                         "Grid spatial ordering is ambiguous because elements " + entries[i - 1].ElementId + " and " + entries[i].ElementId +
                         " project to the same ordering coordinate within tolerance. Review duplicate/overlapping Grid lines instead of relying on an arbitrary tie-break.");

@@ -40,6 +40,7 @@ namespace QS3D.BricsCAD.V25
                 var wallMeshHandles = PropertyHandles(project, "GeneratedWallMeshHandles");
                 var foundationMeshHandles = PropertyHandles(project, FoundationMeshSolidBuilder.HandlesKey);
                 var curtainFrameHandles = PropertyHandles(project, "GeneratedCurtainFrameHandles");
+                var curtainPanelHandles = PropertyHandles(project, "GeneratedCurtainPanelHandles");
 
                 var liveSources = CadHandleService.GetLiveHandles(document, sourceHandles);
                 var liveMain = CadHandleService.GetLiveSolidHandles(document, mainHandles);
@@ -51,6 +52,7 @@ namespace QS3D.BricsCAD.V25
                 var liveWallMesh = CadHandleService.GetLiveSolidHandles(document, wallMeshHandles);
                 var liveFoundationMesh = CadHandleService.GetLiveSolidHandles(document, foundationMeshHandles);
                 var liveCurtainFrames = CadHandleService.GetLiveSolidHandles(document, curtainFrameHandles);
+                var liveCurtainPanels = CadHandleService.GetLiveSolidHandles(document, curtainPanelHandles);
 
                 var combined = new List<ModelHealthIssue>();
                 combined.AddRange(new ModelHealthService().Inspect(project, liveSources, liveMain));
@@ -64,6 +66,7 @@ namespace QS3D.BricsCAD.V25
                 combined.AddRange(new GeneratedSemanticTagHealthService().Inspect(project));
                 combined.AddRange(GeneratedSemanticTagRuntimeHealthService.Inspect(document, project));
                 combined.AddRange(GeneratedSemanticElementTableRuntimeHealthService.Inspect(document, project));
+                combined.AddRange(SemanticScheduleNativeTableBuilder.Inspect(document, project));
                 combined.AddRange(BbsNativeTableBuilder.Inspect(document, project));
                 combined.AddRange(BqNativeTableBuilder.Inspect(document, project));
                 combined.AddRange(DoorOpeningNativeTableBuilder.Inspect(document, project));
@@ -77,6 +80,9 @@ namespace QS3D.BricsCAD.V25
                 combined.AddRange(new GeneratedFoundationMeshHealthService().Inspect(project, liveFoundationMesh));
                 combined.AddRange(new GeneratedCurtainFrameHealthService().Inspect(project, liveCurtainFrames));
                 combined.AddRange(CurtainWallFrameLiveStateService.Inspect(document, project));
+                combined.AddRange(new GeneratedCurtainPanelHealthService().Inspect(project, liveCurtainPanels));
+                combined.AddRange(CurtainWallPanelLiveStateService.Inspect(document, project));
+                combined.AddRange(GeneratedCurtainPanelRuntimeHealthService.Inspect(document, project));
                 combined.AddRange(PhysicalOpeningCutLiveStateService.Inspect(document, project));
                 combined.AddRange(new GeneratedRebarOwnershipHealthService().Inspect(project));
                 combined.AddRange(new GeneratedHandleOwnershipHealthService().Inspect(project));
@@ -119,9 +125,9 @@ namespace QS3D.BricsCAD.V25
                 });
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                var message = "QS3DHEALTHALL lỗi: " + ex.Message;
+                var message = "QS3DHEALTHALL lỗi: không thể hoàn tất health check.";
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\n" + message);
             }
@@ -144,6 +150,8 @@ namespace QS3D.BricsCAD.V25
         private static IEnumerable<string> LocateProjectArtifactHandles(ProjectState project, string code)
         {
             var normalized = (code ?? string.Empty).ToUpperInvariant();
+            if (normalized.StartsWith("CUSTOM_SCHEDULE_TABLE_", StringComparison.Ordinal))
+                return SemanticScheduleNativeTableBuilder.PersistedHandles(project);
             if (normalized.StartsWith("SEMANTIC_ELEMENT_TABLE_", StringComparison.Ordinal))
                 return MetadataHandle(project, SemanticElementTableBuilder.HandleKey);
             if (normalized.StartsWith("BBS_", StringComparison.Ordinal))
@@ -172,6 +180,7 @@ namespace QS3D.BricsCAD.V25
             if (normalized.Contains("GRID_ANNOTATION")) return SplitPropertyHandles(element, "GeneratedGridAnnotationHandles");
             if (normalized.Contains("PHYSICAL_OPENING_CUT")) return SplitPropertyHandles(element, "PhysicalOpeningCutSolidHandle");
             if (normalized.Contains("CURTAIN_FRAME")) return SplitPropertyHandles(element, "GeneratedCurtainFrameHandles");
+            if (normalized.Contains("CURTAIN_PANEL")) return SplitPropertyHandles(element, "GeneratedCurtainPanelHandles");
             if (normalized.Contains("REBAR_FAB")) return RebarOwnerSlotHandles(element);
             if (normalized.Contains("FOUNDATION_MESH")) return SplitPropertyHandles(element, FoundationMeshSolidBuilder.HandlesKey);
             if (normalized.Contains("WALL_MESH")) return SplitPropertyHandles(element, "GeneratedWallMeshHandles");

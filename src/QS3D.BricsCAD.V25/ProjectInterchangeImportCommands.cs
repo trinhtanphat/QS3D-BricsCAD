@@ -40,6 +40,8 @@ namespace QS3D.BricsCAD.V25
                 if (dialog.ShowDialog() != true) return;
 
                 var json = ReadGuardedSnapshotText(dialog.FileName);
+                ProjectInterchangeValidatedSnapshotReader.Read(json);
+                EnsureActive(document, "Interchange Import / preview");
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 var previewChangeVersion = project.ChangeVersion;
                 var preview = ProjectInterchangeImportPreview.Plan(project, json);
@@ -114,13 +116,13 @@ namespace QS3D.BricsCAD.V25
                         RunKeepTarget(document, confirmedProject, json);
                         return;
                     case CollisionPolicyChoice.UseSourceElement:
-                        RunUseSourceElement(document, json);
+                        RunUseSourceElement(document, confirmedProject, json);
                         return;
                     case CollisionPolicyChoice.UseSourceCatalog:
-                        RunUseSourceCatalog(document, json);
+                        RunUseSourceCatalog(document, confirmedProject, json);
                         return;
                     case CollisionPolicyChoice.UseSourceAll:
-                        RunUseSourceAll(document, json);
+                        RunUseSourceAll(document, confirmedProject, json);
                         return;
                     default:
                         throw new InvalidOperationException("Unsupported interchange collision policy choice.");
@@ -343,10 +345,13 @@ namespace QS3D.BricsCAD.V25
                 ". Chưa tự lưu .qsdb.");
         }
 
-        private static void RunUseSourceElement(Document document, string json)
+        private static void RunUseSourceElement(
+            Document document,
+            QS3D.Core.Domain.ProjectState confirmedProject,
+            string json)
         {
             EnsureActive(document, "Interchange UseSource element import");
-            var result = InterchangeUseSourceElementImportService.Import(document, json);
+            var result = InterchangeUseSourceElementImportService.Import(document, confirmedProject, json);
             try { PaletteCoordinator.RefreshProject(); } catch { }
             var status =
                 "Interchange Import / UseSource Element: replaced " + result.ElementsReplaced.ToString(CultureInfo.InvariantCulture) +
@@ -358,10 +363,13 @@ namespace QS3D.BricsCAD.V25
             document.Editor.WriteMessage("\nQS3D " + status);
         }
 
-        private static void RunUseSourceCatalog(Document document, string json)
+        private static void RunUseSourceCatalog(
+            Document document,
+            QS3D.Core.Domain.ProjectState confirmedProject,
+            string json)
         {
             EnsureActive(document, "Interchange UseSource catalog import");
-            var result = InterchangeUseSourceCatalogImportService.Import(document, json);
+            var result = InterchangeUseSourceCatalogImportService.Import(document, confirmedProject, json);
             try { PaletteCoordinator.RefreshProject(); } catch { }
             var status =
                 "Interchange Import / UseSource Catalog: Zone " + result.ZonesReplaced.ToString(CultureInfo.InvariantCulture) +
@@ -374,10 +382,13 @@ namespace QS3D.BricsCAD.V25
             document.Editor.WriteMessage("\nQS3D " + status);
         }
 
-        private static void RunUseSourceAll(Document document, string json)
+        private static void RunUseSourceAll(
+            Document document,
+            QS3D.Core.Domain.ProjectState confirmedProject,
+            string json)
         {
             EnsureActive(document, "Interchange UseSource all-scope import");
-            var result = InterchangeUseSourceAllImportService.Import(document, json);
+            var result = InterchangeUseSourceAllImportService.Import(document, confirmedProject, json);
             try { PaletteCoordinator.RefreshProject(); } catch { }
             var status =
                 "Interchange Import / UseSource ALL: Zone " + result.ZonesReplaced.ToString(CultureInfo.InvariantCulture) +

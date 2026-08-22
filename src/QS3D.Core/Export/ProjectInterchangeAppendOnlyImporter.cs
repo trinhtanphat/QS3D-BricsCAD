@@ -319,10 +319,43 @@ namespace QS3D.Core.Export
                         throw new InvalidOperationException("Target element " + element.Id + " contains non-finite quantity " + quantity.Key + ".");
             }
 
+            var indegree = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var dependents = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var elementId in elementIds)
+            {
+                indegree[elementId] = 0;
+                dependents[elementId] = new List<string>();
+            }
+
             foreach (var element in target.Elements)
+            {
+                var dependencyIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var dependency in element.DependsOn)
+                {
+                    if (!dependencyIds.Add(dependency))
+                        throw new InvalidOperationException("Target element " + element.Id + " contains duplicate dependency " + dependency + ".");
                     if (!elementIds.Contains(dependency))
                         throw new InvalidOperationException("Target element " + element.Id + " references missing dependency " + dependency + ".");
+                    indegree[element.Id] = checked(indegree[element.Id] + 1);
+                    dependents[dependency].Add(element.Id);
+                }
+            }
+
+            var ready = new Queue<string>(indegree.Where(x => x.Value == 0).Select(x => x.Key));
+            var visited = 0;
+            while (ready.Count > 0)
+            {
+                var dependency = ready.Dequeue();
+                visited++;
+                foreach (var dependent in dependents[dependency])
+                {
+                    var remaining = indegree[dependent] - 1;
+                    indegree[dependent] = remaining;
+                    if (remaining == 0) ready.Enqueue(dependent);
+                }
+            }
+            if (visited != indegree.Count)
+                throw new InvalidOperationException("Target project contains a dependency cycle.");
         }
 
         private static string FamilyNameKey(ElementCategory category, string name) => category + "\u001f" + (name ?? string.Empty).Trim();

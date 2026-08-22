@@ -106,15 +106,19 @@ Physical multi-owner wall-solid union/reconciliation is **not** implemented by g
 ### Curtain Wall / Vách Kính
 
 - Deterministic panel grid, schedule and XLSX.
-- `QS3DCURTAIN3D` keeps one backing GlassWall host solid and generates separate perimeter/mullion/transom overlays for supported source paths.
+- `QS3DCURTAIN3D` keeps one backing GlassWall host solid and generates separate perimeter/mullion/transom overlays plus panel-by-panel clear-glass solids for supported source paths.
 - LINE Curtain frames remain opening-aware: linked Door/Opening rectangles interrupt frame runs deterministically.
 - **Guarded open/bulged WCS-XY POLYLINE path-frame support is source-implemented**: bounded tessellation/station mapping creates ownership-protected native frame fragments and supports linked-opening interruption according to the current path planner.
 - Frame state carries dedicated handles/count/grid/opening/path metadata, configuration fingerprint, generated ownership and live-geometry validation.
+- Native panel state uses independent `GeneratedCurtainPanelHandles`, complete-build/count/grid/opening/path/area metadata, configuration and live fingerprints, stale snapshots, ownership marker and Health/Release integration. It does not overwrite host or frame ownership.
+- `CurtainWallOpeningPanelPlanner` clips `CurtainWallDetailPlanner.Panels` around linked Door/Opening rectangles. LINE panels place clipped cells directly; guarded open/bulged path panels reuse the existing bounded station mapper and may split at tessellated path segments.
+- Panel native output is bounded before old owned output is erased. Complete old-set/XData/project-owner validation rejects missing, duplicate, foreign, ambiguous or non-`Solid3d` panel output before destructive replacement.
+- All six LINE/path host, frame and panel builder phases remain inside the one outer `QS3DCURTAIN3D` native transaction and command semantic snapshot. Post-commit live fingerprint/UI failures remain warnings.
 - Current frame-builder hardening keeps native LINE/path builders free of UI side effects; semantic/precommit validation happens before native rebuild and post-commit UI synchronization is non-fatal.
 - Opening property changes and link/re-host/unlink changes stale dependent frame overlays without unnecessarily stale-marking the backing host.
 - Curtain destructive ownership and dedicated ownership health are policy-driven through the shared generated-handle ownership definition rather than a manual generated-slot list.
 
-Remaining Curtain product/runtime work includes panel-by-panel backing glass solids, broader unsupported/freeform path parity and exact V25 runtime qualification of current LINE/open/bulged frame paths. Whole-command host+frame rollback must remain conservative until proven under the final runtime contract.
+Remaining Curtain work includes broader unsupported/freeform path parity and exact V25 runtime qualification of current LINE/open/bulged host/frame/panel paths, nested transaction rollback, opening clipping, Undo and save/reopen ownership. Source/static panel coverage is not `LOCAL_PASS`; LOCAL-002 remains `PENDING_LOCAL`.
 
 ### Structure / recognition / quantities
 
@@ -246,7 +250,7 @@ The current final SHA still requires an explicitly approved build/runtime valida
 - representative private-DWG save/reopen/multi-DWG regression;
 - Room Auto mixed-curve regression;
 - wall snap, Auto Host and straight/curved opening-cut regression;
-- Curtain host + opening-aware frame regression for current LINE and guarded open/bulged WCS-XY path-frame source paths; panel-by-panel backing glass solids and unsupported broader/freeform path parity remain product work;
+- Curtain host + opening-aware frame/panel regression for current LINE and guarded open/bulged WCS-XY path sources, including exact-SHA rollback, ownership, opening clipping and save/reopen; unsupported broader/freeform path parity remains product work;
 - legacy captured WallPier open-POLYLINE specialized profile product work and any future deterministic multi-segment WallPier Direct Draw profile-around-corners contract;
 - physical multi-owner wall-solid L/T/X/Multi reconciliation product work;
 - transient thickness/profile DrawJig preview and repeated authoring mode only after exact V25 managed-API compile/runtime proof;

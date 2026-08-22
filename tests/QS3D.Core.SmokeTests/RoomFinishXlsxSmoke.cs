@@ -44,9 +44,17 @@ namespace QS3D.Core.SmokeTests
                 }
                 File.WriteAllText(path, "ORIGINAL");
                 var invalidRow = new RoomFinishScheduleRow { FamilyName = "Invalid\u0001Family" };
-                try { RoomFinishXlsxExporter.Export(path, new List<RoomFinishScheduleRow> { invalidRow }); throw new Exception("Invalid XML text must reject room-finish XLSX export."); }
-                catch (XmlException) { }
-                if (File.ReadAllText(path) != "ORIGINAL") throw new Exception("Rejected room-finish XLSX export replaced the existing destination.");
+                RoomFinishXlsxExporter.Export(path, new List<RoomFinishScheduleRow> { invalidRow });
+                using (var archive = ZipFile.OpenRead(path))
+                {
+                    var worksheet = archive.GetEntry("xl/worksheets/sheet1.xml") ?? throw new Exception("Sanitized room-finish XLSX worksheet is missing.");
+                    using (var reader = new StreamReader(worksheet.Open()))
+                    {
+                        var xml = reader.ReadToEnd();
+                        if (xml.IndexOf('\u0001') >= 0) throw new Exception("Room-finish XLSX retained an XML-invalid control character.");
+                        if (xml.IndexOf('\uFFFD') < 0) throw new Exception("Room-finish XLSX did not preserve the sanitized replacement marker.");
+                    }
+                }
             }
             finally { try { if (File.Exists(path)) File.Delete(path); } catch { } }
         }

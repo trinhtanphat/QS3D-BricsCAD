@@ -22,7 +22,7 @@ if UI.is_file():
     for needle in (
         'Content="Đồng bộ source CAD đã sửa" Tag="QS3DSYNCSOURCE"',
         'Content="Xuất Semantic Snapshot JSON" Tag="QS3DINTERCHANGEJSON"',
-        'Text="PROJECT-SAFE • DWG CONTEXT LOCK"',
+        'Text="PROJECT-SAFE • READ-ONLY SNAPSHOT • DWG CONTEXT LOCK"',
     ):
         if needle not in text:
             errors.append("Project Tools missing maintenance/interchange wiring: " + needle)

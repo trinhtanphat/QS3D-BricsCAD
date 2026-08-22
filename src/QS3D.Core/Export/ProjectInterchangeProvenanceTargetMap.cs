@@ -33,6 +33,7 @@ namespace QS3D.Core.Export
         private const string RecordVersion = "v1";
         private const int MaxMappings = 50000;
         private const int MaxEncodedChars = 1024 * 1024;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static ProjectInterchangeProvenanceTargetMapResult Store(
             ProjectState target,
@@ -44,7 +45,10 @@ namespace QS3D.Core.Export
             if (sourceToTargetElementIds == null) throw new ArgumentNullException(nameof(sourceToTargetElementIds));
             var sourceId = Required(sourceProjectId, nameof(sourceProjectId));
             var sourceFingerprint = (sourceDrawingFingerprint ?? string.Empty).Trim();
-            if (sourceToTargetElementIds.Count > MaxMappings)
+            var mappingCount = sourceToTargetElementIds.Count;
+            if (mappingCount < 0)
+                throw new InvalidOperationException("Interchange provenance target map reported a negative mapping Count.");
+            if (mappingCount > MaxMappings)
                 throw new InvalidOperationException("Interchange provenance target map exceeds the supported " + MaxMappings.ToString(CultureInfo.InvariantCulture) + " mapping limit.");
 
             var normalized = sourceToTargetElementIds
@@ -128,6 +132,8 @@ namespace QS3D.Core.Export
                 !string.Equals(fields[2], elementId, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Interchange provenance target-map record does not match the requested source identity.");
             var targetId = Required(fields[3], "targetElementId");
+            if (!string.Equals(fields[3], targetId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Interchange provenance target-map record contains a non-canonical padded target Element id.");
             if (target.FindElement(targetId) == null)
                 throw new InvalidOperationException("Interchange provenance target-map record points to missing target Element " + targetId + ".");
             return targetId;
@@ -136,7 +142,7 @@ namespace QS3D.Core.Export
         private static string Token(string value)
         {
             var canonical = Required(value, "identity").ToUpperInvariant();
-            return Convert.ToBase64String(Encoding.UTF8.GetBytes(canonical))
+            return Convert.ToBase64String(StrictUtf8.GetBytes(canonical))
                 .TrimEnd('=')
                 .Replace('+', '-')
                 .Replace('/', '_');
@@ -144,7 +150,7 @@ namespace QS3D.Core.Export
 
         private static string EncodeRecord(IEnumerable<string> fields)
         {
-            var encoded = fields.Select(x => Convert.ToBase64String(Encoding.UTF8.GetBytes(x ?? string.Empty))).ToArray();
+            var encoded = fields.Select(x => Convert.ToBase64String(StrictUtf8.GetBytes(x ?? string.Empty))).ToArray();
             return RecordVersion + "." + string.Join(".", encoded);
         }
 
@@ -156,8 +162,11 @@ namespace QS3D.Core.Export
             var fields = new List<string>();
             for (var i = 1; i < parts.Length; i++)
             {
-                try { fields.Add(Encoding.UTF8.GetString(Convert.FromBase64String(parts[i]))); }
-                catch (FormatException ex) { throw new InvalidOperationException("Interchange provenance target-map record contains invalid base64 data.", ex); }
+                try { fields.Add(StrictUtf8.GetString(Convert.FromBase64String(parts[i]))); }
+                catch (Exception ex) when (ex is FormatException || ex is DecoderFallbackException)
+                {
+                    throw new InvalidOperationException("Interchange provenance target-map record contains invalid base64 or UTF-8 data.", ex);
+                }
             }
             return fields.AsReadOnly();
         }

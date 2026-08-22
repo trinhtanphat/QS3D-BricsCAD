@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
@@ -19,7 +20,7 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsNonUtcBuild()
         {
             var project = NewProject();
-            project.UpdatedUtc = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Unspecified);
+            CorruptUpdatedUtc(project, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Unspecified));
             Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(project));
         }
 
@@ -29,7 +30,7 @@ namespace QS3D.Core.SmokeTests
             {
                 File.WriteAllText(path, "old-good");
                 var project = NewProject();
-                project.UpdatedUtc = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Local);
+                CorruptUpdatedUtc(project, new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Local));
                 Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Export(path, project));
                 Equal("old-good", File.ReadAllText(path), "failed export changed the existing destination");
             });
@@ -53,6 +54,14 @@ namespace QS3D.Core.SmokeTests
             {
                 UpdatedUtc = new DateTime(2026, 8, 10, 5, 0, 0, DateTimeKind.Utc)
             };
+        }
+
+        private static void CorruptUpdatedUtc(ProjectState project, DateTime value)
+        {
+            var field = typeof(ProjectState).GetField("_updatedUtc", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null)
+                throw new InvalidOperationException("ProjectInterchangeExportSafetySmoke could not access the timestamp backing field.");
+            field.SetValue(project, value);
         }
 
         private static void WithPath(Action<string> action)

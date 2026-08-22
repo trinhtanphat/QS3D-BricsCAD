@@ -15,6 +15,7 @@ def read(rel):
 policy = read("src/QS3D.Core/Units/DrawingUnitResolutionPolicy.cs")
 cad_units = read("src/QS3D.BricsCAD.V25/Cad/CadUnitService.cs")
 workflow = read("src/QS3D.BricsCAD.V25/Services/DrawingUnitWorkflow.cs")
+automation = read("src/QS3D.BricsCAD.V25/Services/DrawingUnitAutomationConfirmation.cs")
 commands = read("src/QS3D.BricsCAD.V25/Commands.cs")
 review = read("src/QS3D.BricsCAD.V25/ReviewCommands.cs")
 capture = read("src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs")
@@ -37,15 +38,29 @@ require("unit policy", policy, (
 ))
 require("CAD unit resolver", cad_units, (
     "TryGetNativeLengthUnit", "TryGetPolicy", "Drawing units are unresolved",
+    "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
     "ValidateQuantityCompatibility",
 ))
 if "default: return LengthUnit.Millimeter" in cad_units:
     errors.append("CadUnitService still silently falls back to millimeter.")
+policy_start = cad_units.find("public static bool TryGetPolicy")
+native_start = cad_units.find("public static bool TryGetNativeLengthUnit", policy_start)
+policy_body = cad_units[policy_start:native_start] if policy_start >= 0 and native_start > policy_start else ""
+if "ProjectContextCoordinator.GetOrCreate" in policy_body:
+    errors.append("Unit-policy inspection must not create/cache a replacement QS3D project.")
 require("unit workflow", workflow, (
     "ProjectStateSnapshot.Capture", "rollback.Restore(project)",
     "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",
     "ProjectContextCoordinator.Save(document)", "USSurveyMile",
+    "DrawingUnitAutomationConfirmation.TryConsume(document, out unit)",
+    "document.Editor.GetKeywords",
 ))
+require("unit lifecycle automation confirmation", automation, (
+    "private static Document? _document", "ReferenceEquals(_document, document)",
+    "_document = null", "public static void Arm", "public static bool TryConsume",
+))
+if "Environment.GetEnvironmentVariable" in automation:
+    errors.append("Drawing-unit automation confirmation must not trust ambient environment values directly.")
 require("commands", commands, (
     'CommandMethod("QS3DUNITS"',
     'DrawingUnitWorkflow.EnsureResolved(doc, "QS3DBQ")',
@@ -59,8 +74,12 @@ if ed2.find("DrawingUnitWorkflow.EnsureResolved") < 0 or ed2.find("DrawingUnitWo
 b4d_start = review.find("private static void RecognizeInternal")
 b4d_end = review.find('CommandMethod("QS3DREVBASE"', b4d_start)
 b4d = review[b4d_start:b4d_end]
-if b4d.find("DrawingUnitWorkflow.EnsureResolved") < 0 or b4d.find("DrawingUnitWorkflow.EnsureResolved") > b4d.find("ReadCurrentSpace"):
-    errors.append("B4D must resolve units before scanning Current Space.")
+b4d_read = b4d.find("ReadCurrentSpace")
+b4d_empty = b4d.find("if (snapshots.Count == 0)")
+b4d_units = b4d.find("DrawingUnitWorkflow.EnsureResolved")
+b4d_suggest = b4d.find("SuggestBatch(project, snapshots)")
+if min(b4d_read, b4d_empty, b4d_units, b4d_suggest) < 0 or not (b4d_read < b4d_empty < b4d_units < b4d_suggest):
+    errors.append("B4D must reject empty Current Space before project bootstrap, then resolve units before recognition.")
 require("semantic capture", capture, (
     "EntitySnapshotCaptureEligibility.EnsureReady(snapshot, category)",
     "DrawingUnitResolutionPolicy.BindQuantityUnit",
@@ -72,8 +91,10 @@ require("proxy eligibility", eligibility, (
 ))
 require("proxy smoke", proxy_smoke, ("SurfaceAreaDrawingUnitsSquared", "double.NaN", "double.PositiveInfinity"))
 require("recognition engine", engine, (
-    "public bool IsCaptureReady", "!IsCaptureReady", "x.IsCaptureReady",
-    "capture-blocked:",
+    "public bool IsCaptureReady",
+    "!EntitySnapshotCaptureEligibility.IsReady(Snapshot, current.Top.Category, out _)",
+    "private bool IsAutoAccepted(RecognitionResult result)", "IsAutoAccepted(x)",
+    "result.IsCaptureReady", "capture-blocked:",
 ))
 require("recognition UI", window, ("x.IsCaptureReady",))
 require("Project Tools", tools_xaml, ('Tag="QS3DUNITS"', 'x:Name="UnitText"'))

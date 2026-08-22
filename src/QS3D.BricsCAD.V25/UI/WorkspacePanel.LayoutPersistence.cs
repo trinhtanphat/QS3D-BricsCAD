@@ -14,24 +14,11 @@ namespace QS3D.BricsCAD.V25.UI
         private Grid? _layoutFamilyGrid;
         private Grid? _layoutRoomGrid;
 
-        static WorkspacePanel()
-        {
-            EventManager.RegisterClassHandler(
-                typeof(WorkspacePanel),
-                FrameworkElement.LoadedEvent,
-                new RoutedEventHandler(OnWorkspaceLoadedForLayout));
-        }
-
-        private static void OnWorkspaceLoadedForLayout(object sender, RoutedEventArgs e)
-        {
-            if (!(sender is WorkspacePanel panel) || !ReferenceEquals(e.OriginalSource, panel)) return;
-            panel.AttachLayoutPersistence();
-        }
-
         private void AttachLayoutPersistence()
         {
             if (_layoutPersistenceAttached) return;
-            if (!(Content is Grid root)) return;
+            var root = WorkspaceContentRoot;
+            if (root == null) return;
 
             var main = root.Children
                 .OfType<Grid>()

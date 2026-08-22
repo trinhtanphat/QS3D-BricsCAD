@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
+using QS3D.Core.Export;
 using QS3D.Core.Persistence;
 using QS3D.Core.Rules;
 using QS3D.Core.Services;
@@ -96,6 +97,9 @@ namespace QS3D.Core.Review
 
     public sealed class PreviewReviewSnapshotService
     {
+        private const string PropertyFieldPrefix = "Property:";
+        private const string QuantityFieldPrefix = "Quantity:";
+
         public const string FormatName = "QS3D.PreviewReviewSnapshot";
         public const int FormatVersion = 1;
 
@@ -105,20 +109,24 @@ namespace QS3D.Core.Review
             var safeName = CanonicalRequired(name, nameof(name));
             var projectId = CanonicalRequired(preview.ProjectId, nameof(preview.ProjectId));
             var entries = new List<PreviewReviewEntry>();
+            var previewElements = RequireNonNullRows(
+                preview.Elements,
+                index => "Quantity-rule preview contains a null element preview at index " + index + ".");
 
-            foreach (var element in preview.Elements.OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase))
+            foreach (var element in previewElements.OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase))
             {
-                if (element == null) throw new InvalidOperationException("Quantity-rule preview contains a null element preview.");
                 var elementId = CanonicalRequired(element.ElementId, "quantity preview element id");
-                foreach (var change in element.Changes.OrderBy(x => x.OutputName, StringComparer.OrdinalIgnoreCase))
+                var elementChanges = RequireNonNullRows(
+                    element.Changes,
+                    index => "Quantity-rule preview contains a null change for element " + elementId + " at index " + index + ".");
+                foreach (var change in elementChanges.OrderBy(x => x.OutputName, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (change == null) throw new InvalidOperationException("Quantity-rule preview contains a null change.");
                     var output = CanonicalRequired(change.OutputName, "quantity preview output name");
                     entries.Add(new PreviewReviewEntry(
                         elementId,
                         element.Category.ToString(),
                         change.Kind.ToString(),
-                        "Quantity:" + output,
+                        QuantityFieldPrefix + output,
                         NullableNumber(change.BeforeValue, elementId + "/" + output + "/before"),
                         NullableNumber(change.AfterValue, elementId + "/" + output + "/after"),
                         change.BeforeProvenance,
@@ -155,17 +163,21 @@ namespace QS3D.Core.Review
 
             var entries = new List<PreviewReviewEntry>();
             var omittedHandles = 0;
-            foreach (var delta in preview.Deltas.OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase))
+            var deltas = RequireNonNullRows(
+                preview.Deltas,
+                index => "Regeneration preview contains a null revision delta at index " + index + ".");
+            foreach (var delta in deltas.OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase))
             {
-                if (delta == null) throw new InvalidOperationException("Regeneration preview contains a null revision delta.");
                 var elementId = CanonicalRequired(delta.ElementId, "regeneration preview element id");
                 var change = CanonicalRequired(delta.Change, "regeneration preview change");
                 var safeFieldCount = 0;
-                foreach (var field in delta.Fields.OrderBy(x => x.Field, StringComparer.OrdinalIgnoreCase))
+                var fields = RequireNonNullRows(
+                    delta.Fields,
+                    index => "Regeneration preview contains a null field delta for element " + elementId + " at index " + index + ".");
+                foreach (var field in fields.OrderBy(x => x.Field, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (field == null) throw new InvalidOperationException("Regeneration preview contains a null field delta.");
                     var fieldName = CanonicalRequired(field.Field, "regeneration preview field");
-                    if (IsHandleField(fieldName))
+                    if (!IsPortableReviewField(fieldName))
                     {
                         omittedHandles++;
                         continue;
@@ -210,6 +222,49 @@ namespace QS3D.Core.Review
         internal static bool IsHandleField(string field)
         {
             return !string.IsNullOrWhiteSpace(field) && field.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        internal static bool IsPortableReviewField(string field)
+        {
+            if (string.IsNullOrWhiteSpace(field)) return true;
+            if (IsHandleField(field)) return false;
+            if (!field.StartsWith(PropertyFieldPrefix, StringComparison.OrdinalIgnoreCase)) return true;
+            return ProjectInterchangeElementPropertyPolicy.IsPortable(field.Substring(PropertyFieldPrefix.Length));
+        }
+
+        internal static bool IsCanonicalOptionalReviewField(string field)
+        {
+            var raw = field ?? string.Empty;
+            return IsCanonicalOptionalReviewToken(raw) &&
+                   HasCanonicalStructuredPayload(raw, PropertyFieldPrefix) &&
+                   HasCanonicalStructuredPayload(raw, QuantityFieldPrefix);
+        }
+
+        internal static bool IsCanonicalOptionalReviewCategory(string category)
+        {
+            return IsCanonicalOptionalReviewToken(category ?? string.Empty);
+        }
+
+        internal static bool IsCanonicalReviewChange(string change)
+        {
+            return string.Equals(change, "Added", StringComparison.Ordinal) ||
+                   string.Equals(change, "Changed", StringComparison.Ordinal) ||
+                   string.Equals(change, "Removed", StringComparison.Ordinal);
+        }
+
+        private static bool IsCanonicalOptionalReviewToken(string raw)
+        {
+            return raw.Length == 0 ||
+                   (!string.IsNullOrWhiteSpace(raw) && string.Equals(raw, raw.Trim(), StringComparison.Ordinal));
+        }
+
+        private static bool HasCanonicalStructuredPayload(string field, string prefix)
+        {
+            if (!field.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return true;
+            var payload = field.Substring(prefix.Length);
+            return payload.Length > 0 &&
+                   !string.IsNullOrWhiteSpace(payload) &&
+                   string.Equals(payload, payload.Trim(), StringComparison.Ordinal);
         }
 
         internal static string ComputeFingerprint(PreviewReviewSnapshot snapshot)
@@ -274,16 +329,70 @@ namespace QS3D.Core.Review
             {
                 if (entry == null) throw new InvalidOperationException("Preview review contains a null entry.");
                 CanonicalRequired(entry.ElementId, "preview review entry element id");
-                CanonicalRequired(entry.Change, "preview review entry change");
-                if (IsHandleField(entry.Field)) throw new InvalidOperationException("Preview review artifacts cannot contain CAD handle fields: " + entry.Field + ".");
+                var change = CanonicalRequired(entry.Change, "preview review entry change");
+                if (!IsCanonicalReviewChange(change)) throw new InvalidOperationException("Preview review entry change is not supported: " + change + ".");
+                if (!IsCanonicalOptionalReviewCategory(entry.Category)) throw new InvalidOperationException("Preview review entry category must be exact-empty or canonical without surrounding whitespace.");
+                if (!IsCanonicalOptionalReviewField(entry.Field)) throw new InvalidOperationException("Preview review entry field must be exact-empty or canonical without surrounding whitespace and use canonical structured payloads.");
+                if (!IsPortableReviewField(entry.Field)) throw new InvalidOperationException("Preview review artifacts cannot contain drawing-local/native fields: " + entry.Field + ".");
                 var rowKey = entry.ElementId + "\u001f" + entry.Field;
                 if (!seenRows.Add(rowKey)) throw new InvalidOperationException("Preview review contains a duplicate element/field row: " + entry.ElementId + "/" + entry.Field + ".");
                 changedElements.Add(entry.ElementId);
             }
             if (changedElements.Count != snapshot.ChangedElementCount)
                 throw new InvalidOperationException("Preview review changed-element summary does not match its entries.");
-            if (string.IsNullOrWhiteSpace(snapshot.Fingerprint) || snapshot.Fingerprint.Length != 64 || snapshot.Fingerprint.Any(ch => !Uri.IsHexDigit(ch)))
-                throw new InvalidOperationException("Preview review fingerprint must be a 64-character SHA-256 hex value.");
+            if (string.IsNullOrWhiteSpace(snapshot.Fingerprint) || snapshot.Fingerprint.Length != 64 || snapshot.Fingerprint.Any(ch => !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'))))
+                throw new InvalidOperationException("Preview review fingerprint must be a 64-character lowercase SHA-256 hex value.");
+        }
+
+        internal static void ValidatePersistedKindSpecificInvariants(PreviewReviewSnapshot snapshot)
+        {
+            if (snapshot.Kind == PreviewReviewKind.QuantityRule)
+            {
+                if (!string.Equals(snapshot.Scope, "Project", StringComparison.Ordinal) || snapshot.TargetElementIds.Count != 0)
+                    throw new InvalidOperationException("Quantity-rule review snapshot must use whole-project scope without targets.");
+                if (snapshot.RegeneratedElementCount != 0 || snapshot.NewHealthIssueCount != 0 || snapshot.NewHealthErrorCount != 0 || snapshot.ResolvedHealthIssueCount != 0 || snapshot.OmittedHandleFieldCount != 0)
+                    throw new InvalidOperationException("Quantity-rule review snapshot cannot contain regeneration or health summary counts.");
+                foreach (var entry in snapshot.Entries)
+                {
+                    if (string.IsNullOrEmpty(entry.Category))
+                        throw new InvalidOperationException("Quantity-rule review entries require a category.");
+                    if (!entry.Field.StartsWith(QuantityFieldPrefix, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Quantity-rule review entries must use canonical Quantity: fields.");
+                }
+                return;
+            }
+
+            if (snapshot.Kind == PreviewReviewKind.Regeneration)
+            {
+                HashSet<string>? subsetTargets = null;
+                if (snapshot.IsSubset)
+                    subsetTargets = new HashSet<string>(snapshot.TargetElementIds, StringComparer.OrdinalIgnoreCase);
+
+                foreach (var entry in snapshot.Entries)
+                {
+                    if (entry.Category.Length != 0)
+                        throw new InvalidOperationException("Regeneration review entries must not contain quantity-rule categories.");
+                    if (entry.BeforeProvenance.Length != 0 || entry.AfterProvenance.Length != 0)
+                        throw new InvalidOperationException("Regeneration review entries must not contain quantity-rule provenance.");
+                    if (subsetTargets != null && !subsetTargets.Contains(entry.ElementId))
+                        throw new InvalidOperationException("Regeneration subset review entry is outside the reviewed target set: " + entry.ElementId + ".");
+                }
+            }
+        }
+
+        private static IReadOnlyList<T> RequireNonNullRows<T>(IEnumerable<T> values, Func<int, string> errorMessage) where T : class
+        {
+            if (values == null) throw new InvalidOperationException("Preview review row collection is missing.");
+            if (errorMessage == null) throw new ArgumentNullException(nameof(errorMessage));
+            var result = new List<T>();
+            var index = 0;
+            foreach (var value in values)
+            {
+                if (value == null) throw new InvalidOperationException(errorMessage(index));
+                result.Add(value);
+                index++;
+            }
+            return result.AsReadOnly();
         }
 
         private static PreviewReviewSnapshot Build(
@@ -354,6 +463,14 @@ namespace QS3D.Core.Review
         private static void Part(StringBuilder sb, string value)
         {
             var safe = value ?? string.Empty;
+            try
+            {
+                XmlConvert.VerifyXmlChars(safe);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidOperationException("Preview review persisted text contains characters that are invalid in XML.", ex);
+            }
             sb.Append(safe.Length.ToString(CultureInfo.InvariantCulture)).Append(':').Append(safe).Append(';');
         }
     }
@@ -366,6 +483,7 @@ namespace QS3D.Core.Review
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Preview review path is required.", nameof(path));
+            PreviewReviewSnapshotService.ValidatePersistedKindSpecificInvariants(snapshot);
             var service = new PreviewReviewSnapshotService();
             if (!service.Verify(snapshot)) throw new InvalidOperationException("Preview review snapshot fingerprint or invariants are invalid.");
 
@@ -388,7 +506,9 @@ namespace QS3D.Core.Review
         public PreviewReviewSnapshot Load(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Preview review path is required.", nameof(path));
-            var root = LoadDocument(path).Root ?? throw new InvalidDataException("Preview review file has no root.");
+            var document = LoadDocument(path);
+            ValidateXmlShape(document);
+            var root = document.Root ?? throw new InvalidDataException("Preview review file has no root.");
             if (!string.Equals(root.Name.LocalName, "qs3dPreviewReview", StringComparison.Ordinal)) throw new InvalidDataException("Invalid preview review root.");
             if (!string.Equals(Required(root, "format"), PreviewReviewSnapshotService.FormatName, StringComparison.Ordinal)) throw new InvalidDataException("Unsupported preview review format.");
             if (NonNegativeInt(root, "formatVersion") != PreviewReviewSnapshotService.FormatVersion) throw new InvalidDataException("Unsupported preview review format version.");
@@ -426,9 +546,12 @@ namespace QS3D.Core.Review
             {
                 var elementId = CanonicalRequired(node, "elementId");
                 var category = Value(node, "category");
+                if (!PreviewReviewSnapshotService.IsCanonicalOptionalReviewCategory(category)) throw new InvalidDataException("Preview review category is not canonical: category.");
                 var change = CanonicalRequired(node, "change");
+                if (!PreviewReviewSnapshotService.IsCanonicalReviewChange(change)) throw new InvalidDataException("Preview review change is not supported: " + change + ".");
                 var field = Value(node, "field");
-                if (PreviewReviewSnapshotService.IsHandleField(field)) throw new InvalidDataException("Preview review file contains a forbidden CAD handle field: " + field + ".");
+                if (!PreviewReviewSnapshotService.IsCanonicalOptionalReviewField(field)) throw new InvalidDataException("Preview review field is not canonical: field.");
+                if (!PreviewReviewSnapshotService.IsPortableReviewField(field)) throw new InvalidDataException("Preview review file contains a forbidden drawing-local/native field: " + field + ".");
                 var key = elementId + "\u001f" + field;
                 if (!seenRows.Add(key)) throw new InvalidDataException("Duplicate preview review element/field row: " + elementId + "/" + field + ".");
                 entries.Add(new PreviewReviewEntry(elementId, category, change, field, Value(node, "before"), Value(node, "after"), Value(node, "beforeProvenance"), Value(node, "afterProvenance")));
@@ -436,6 +559,14 @@ namespace QS3D.Core.Review
             entries = entries.OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Field, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Change, StringComparer.Ordinal).ThenBy(x => x.Before, StringComparer.Ordinal).ThenBy(x => x.After, StringComparer.Ordinal).ToList();
 
             var snapshot = new PreviewReviewSnapshot(name, projectId, kind, sourceChangeVersion, scope, targets, entries, changedElementCount, regeneratedElementCount, newHealthIssueCount, newHealthErrorCount, resolvedHealthIssueCount, omittedHandleFieldCount, fingerprint);
+            try
+            {
+                PreviewReviewSnapshotService.ValidatePersistedKindSpecificInvariants(snapshot);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new InvalidDataException("Preview review snapshot kind-specific persisted invariants are invalid.", ex);
+            }
             if (!new PreviewReviewSnapshotService().Verify(snapshot)) throw new InvalidDataException("Preview review snapshot fingerprint or invariants are invalid.");
             return snapshot;
         }
@@ -468,6 +599,78 @@ namespace QS3D.Core.Review
                         new XAttribute("after", x.After),
                         new XAttribute("beforeProvenance", x.BeforeProvenance),
                         new XAttribute("afterProvenance", x.AfterProvenance))))));
+        }
+
+        private static void ValidateXmlShape(XDocument document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            var root = document.Root ?? throw new InvalidDataException("Preview review file has no root.");
+            foreach (var node in document.Nodes())
+            {
+                if (ReferenceEquals(node, root)) continue;
+                if (node is XText text && string.IsNullOrWhiteSpace(text.Value)) continue;
+                throw new InvalidDataException("Preview review XML contains unsupported document-level node content.");
+            }
+            ValidateElementShape(
+                root,
+                "qs3dPreviewReview",
+                new[]
+                {
+                    "format", "formatVersion", "name", "projectId", "kind", "sourceChangeVersion", "scope",
+                    "changedElementCount", "regeneratedElementCount", "newHealthIssueCount", "newHealthErrorCount",
+                    "resolvedHealthIssueCount", "omittedHandleFieldCount", "fingerprint"
+                },
+                new[] { "targets", "entries" });
+            EnsureSingleChild(root, "targets");
+            EnsureSingleChild(root, "entries");
+
+            var targets = root.Element("targets")!;
+            ValidateElementShape(targets, "targets", Array.Empty<string>(), new[] { "target" });
+            foreach (var target in targets.Elements("target"))
+                ValidateElementShape(target, "target", new[] { "id" }, Array.Empty<string>());
+
+            var entries = root.Element("entries")!;
+            ValidateElementShape(entries, "entries", Array.Empty<string>(), new[] { "entry" });
+            foreach (var entry in entries.Elements("entry"))
+                ValidateElementShape(
+                    entry,
+                    "entry",
+                    new[] { "elementId", "category", "change", "field", "before", "after", "beforeProvenance", "afterProvenance" },
+                    Array.Empty<string>());
+        }
+
+        private static void ValidateElementShape(XElement element, string expectedName, IReadOnlyCollection<string> requiredAttributes, IReadOnlyCollection<string> allowedChildren)
+        {
+            if (element.Name != XName.Get(expectedName))
+                throw new InvalidDataException("Preview review XML contains an unsupported element or namespace: " + element.Name + ".");
+
+            var expectedAttributes = new HashSet<XName>(requiredAttributes.Select(XName.Get));
+            foreach (var attribute in element.Attributes())
+                if (!expectedAttributes.Contains(attribute.Name))
+                    throw new InvalidDataException("Preview review XML contains an unsupported attribute on " + expectedName + ": " + attribute.Name + ".");
+            foreach (var attributeName in expectedAttributes)
+                if (element.Attribute(attributeName) == null)
+                    throw new InvalidDataException("Preview review XML is missing required attribute on " + expectedName + ": " + attributeName.LocalName + ".");
+
+            var expectedChildren = new HashSet<XName>(allowedChildren.Select(XName.Get));
+            foreach (var node in element.Nodes())
+            {
+                if (node is XElement child)
+                {
+                    if (!expectedChildren.Contains(child.Name))
+                        throw new InvalidDataException("Preview review XML contains an unsupported child of " + expectedName + ": " + child.Name + ".");
+                    continue;
+                }
+
+                if (node is XText text && string.IsNullOrWhiteSpace(text.Value)) continue;
+                throw new InvalidDataException("Preview review XML contains unsupported node content in " + expectedName + ".");
+            }
+        }
+
+        private static void EnsureSingleChild(XElement parent, string childName)
+        {
+            if (parent.Elements(XName.Get(childName)).Count() != 1)
+                throw new InvalidDataException("Preview review XML requires exactly one " + childName + " element.");
         }
 
         private static XDocument LoadDocument(string path)

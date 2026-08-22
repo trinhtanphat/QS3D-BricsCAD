@@ -61,25 +61,42 @@ namespace QS3D.Core.Review
 
     public sealed class PreviewReviewQueryService
     {
+        internal const int MaximumMaterializedQueryEntries = 10000;
+
         public PreviewReviewQueryResult Query(PreviewReviewSnapshot snapshot, PreviewReviewQueryOptions? options = null)
         {
             RequireVerified(snapshot);
             var safe = options ?? new PreviewReviewQueryOptions();
-            var entries = snapshot.Entries
-                .Where(x => Matches(x, safe))
-                .OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(x => x.Field, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(x => x.Change, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(x => x.Before, StringComparer.Ordinal)
-                .ThenBy(x => x.After, StringComparer.Ordinal)
-                .ToList()
-                .AsReadOnly();
+            var entries = new List<PreviewReviewEntry>();
+            foreach (var entry in snapshot.Entries)
+            {
+                if (!Matches(entry, safe)) continue;
+                if (entries.Count >= MaximumMaterializedQueryEntries)
+                    throw new InvalidOperationException(
+                        "Preview review query result exceeds the supported materialization bound of " +
+                        MaximumMaterializedQueryEntries + ". Narrow the query filters before materializing review rows.");
+                entries.Add(entry);
+            }
 
+            entries.Sort(CompareEntries);
             return new PreviewReviewQueryResult(
                 entries,
                 BuildFacets(entries, x => x.Change),
                 BuildFacets(entries, x => x.Category),
                 BuildFacets(entries, x => x.Field));
+        }
+
+        private static int CompareEntries(PreviewReviewEntry left, PreviewReviewEntry right)
+        {
+            var result = StringComparer.OrdinalIgnoreCase.Compare(left.ElementId, right.ElementId);
+            if (result != 0) return result;
+            result = StringComparer.OrdinalIgnoreCase.Compare(left.Field, right.Field);
+            if (result != 0) return result;
+            result = StringComparer.OrdinalIgnoreCase.Compare(left.Change, right.Change);
+            if (result != 0) return result;
+            result = StringComparer.Ordinal.Compare(left.Before, right.Before);
+            if (result != 0) return result;
+            return StringComparer.Ordinal.Compare(left.After, right.After);
         }
 
         private static bool Matches(PreviewReviewEntry entry, PreviewReviewQueryOptions options)
@@ -189,11 +206,15 @@ namespace QS3D.Core.Review
 
     public sealed class PreviewReviewSnapshotComparisonService
     {
+        internal const int MaximumComparisonEntriesPerSnapshot = PreviewReviewQueryService.MaximumMaterializedQueryEntries;
+
         public PreviewReviewSnapshotComparison Compare(PreviewReviewSnapshot baseline, PreviewReviewSnapshot candidate)
         {
             PreviewReviewQueryService.RequireVerified(baseline);
             PreviewReviewQueryService.RequireVerified(candidate);
             RequireCompatibleScope(baseline, candidate);
+            RequireComparisonBound(baseline, "baseline");
+            RequireComparisonBound(candidate, "candidate");
 
             var left = Index(baseline.Entries);
             var right = Index(candidate.Entries);
@@ -226,6 +247,14 @@ namespace QS3D.Core.Review
             return new PreviewReviewSnapshotComparison(rows, SummaryDiff(baseline, candidate));
         }
 
+        private static void RequireComparisonBound(PreviewReviewSnapshot snapshot, string label)
+        {
+            if (snapshot.Entries.Count <= MaximumComparisonEntriesPerSnapshot) return;
+            throw new InvalidOperationException(
+                "Preview review " + label + " snapshot exceeds the supported comparison bound of " +
+                MaximumComparisonEntriesPerSnapshot + " entries.");
+        }
+
         private static Dictionary<string, PreviewReviewEntry> Index(IEnumerable<PreviewReviewEntry> entries)
         {
             var result = new Dictionary<string, PreviewReviewEntry>(StringComparer.OrdinalIgnoreCase);
@@ -239,7 +268,15 @@ namespace QS3D.Core.Review
             return result;
         }
 
-        private static string RowKey(string elementId, string field) => (elementId ?? string.Empty) + "\u001f" + (field ?? string.Empty);
+        private static string RowKey(string elementId, string field)
+        {
+            var safeElementId = elementId ?? string.Empty;
+            var safeField = field ?? string.Empty;
+            return safeElementId.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + ":" + safeElementId
+                + safeField.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + ":" + safeField;
+        }
 
         private static bool Equivalent(PreviewReviewEntry left, PreviewReviewEntry right)
         {

@@ -12,6 +12,7 @@ using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
 using QS3D.Core.Persistence;
 using QS3D.Core.Services;
+using QS3D.Core.Units;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -25,24 +26,53 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var tolerance = MetadataNumber(project, "RoomBoundaryToleranceM", 0.005d, minimumExclusive: 0d);
-                var arcSagitta = MetadataNumber(project, "RoomBoundaryArcSagittaM", 0.002d, minimumExclusive: 0d);
-                var splineChord = MetadataNumber(project, "RoomBoundarySplineChordM", 0.02d, minimumExclusive: 0d);
-                var segments = RoomBoundarySegmentReader.ReadCurrentSelection(document, arcSagitta, tolerance, splineChord);
-                if (segments.Count == 0)
+                ProjectState? previewProject = null;
+                string? expectedProjectId = null;
+                if (ProjectContextCoordinator.TryGetReadOnly(document, out var existingPreview))
                 {
-                    document.Editor.WriteMessage("\nQS3DROOMAUTO: chọn LINE, POLYLINE, ARC hoặc SPLINE plan-view tạo biên phòng.");
-                    return;
+                    previewProject = existingPreview;
+                    expectedProjectId = existingPreview.ProjectId;
                 }
 
-                var minimumArea = MetadataNonNegative(project, "RoomBoundaryMinimumAreaM2", 0.5d);
-                var boundaries = new RoomBoundaryEngine().Discover(segments, tolerance, minimumArea);
+                var tolerance = previewProject == null ? 0.005d : MetadataNumber(previewProject, "RoomBoundaryToleranceM", 0.005d, minimumExclusive: 0d);
+                var arcSagitta = previewProject == null ? 0.002d : MetadataNumber(previewProject, "RoomBoundaryArcSagittaM", 0.002d, minimumExclusive: 0d);
+                var splineChord = previewProject == null ? 0.02d : MetadataNumber(previewProject, "RoomBoundarySplineChordM", 0.02d, minimumExclusive: 0d);
+                var segments = RoomBoundarySegmentReader.ReadCurrentSelection(document, arcSagitta, tolerance, splineChord);
+                LengthUnit? selectionUnit = segments.Count == 0 ? (LengthUnit?)null : CadUnitService.GetLengthUnit(document);
+                var minimumArea = previewProject == null ? 0.5d : MetadataNonNegative(previewProject, "RoomBoundaryMinimumAreaM2", 0.5d);
+                var diagnostic = new RoomBoundaryDiagnosticService().Analyze(segments, tolerance, minimumArea);
+                var boundaries = diagnostic.AcceptedBoundaries;
                 if (boundaries.Count == 0)
                 {
-                    document.Editor.WriteMessage("\nQS3DROOMAUTO: chưa phát hiện face kín hợp lệ trong selection.");
+                    var detail = FormatRoomBoundaryDiagnostic(diagnostic);
+                    document.Editor.WriteMessage("\nQS3DROOMAUTO: " + detail);
+                    PaletteCoordinator.SetStatus("Room Auto: " + detail);
                     return;
                 }
+                if (!selectionUnit.HasValue)
+                    throw new InvalidOperationException("Room boundary unit context không còn hợp lệ. Hãy chạy lại lệnh.");
+
+                ProjectState project;
+                if (expectedProjectId != null)
+                {
+                    project = ExistingProjectMutationContext.Require(document, "Room Auto");
+                    if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("QS3D project đã thay đổi trong lúc đọc Room boundary. Hãy chạy lại lệnh.");
+                }
+                else
+                {
+                    // The preview was computed without a QS3D project. If one becomes
+                    // visible before commit, fail closed rather than applying default
+                    // preview settings to a newly appeared canonical project.
+                    if (ProjectContextCoordinator.TryGetReadOnly(document, out _))
+                        throw new InvalidOperationException("QS3D project đã xuất hiện trong lúc đọc Room boundary. Hãy chạy lại lệnh để dùng đúng project settings.");
+
+                    // Creation-capable only after usable CAD input produced at least one closed face.
+                    // Cancel/empty/no-face paths above must never bootstrap a blank project.
+                    project = ProjectContextCoordinator.GetOrCreate(document);
+                }
+
+                EnsureBoundaryCommitFreshness(document, project, selectionUnit.Value, tolerance, arcSagitta, splineChord, minimumArea);
 
                 var signatureCounts = boundaries
                     .Select(x => AutoRoomLifecycle.NormalizeSourceHandles(x.SourceIds))
@@ -132,7 +162,12 @@ namespace QS3D.BricsCAD.V25
                     foreach (var stale in staleRooms)
                         audit.Record("RoomBoundaryStale", stale.Id, "topology changed within the selected boundary source set");
 
-                    var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                    var regenerationTargets = new HashSet<string>(activeRoomIds, StringComparer.OrdinalIgnoreCase);
+                    foreach (var stale in staleRooms)
+                        regenerationTargets.Add(stale.Id);
+
+                    var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
+                        .RegenerateDirtySubset(project, regenerationTargets);
                     project.Touch();
                     PaletteCoordinator.RefreshProject();
                     var message = "Room Auto: " + boundaries.Count + " face • mới " + created + " • cập nhật " + updated + " • stale " + staleRooms.Count + " • sync finish " + refreshedFinishes + " • regenerate " + regenerated + ".";
@@ -157,6 +192,42 @@ namespace QS3D.BricsCAD.V25
             {
                 document.Editor.WriteMessage("\nQS3DROOMAUTO error: " + ex.Message);
                 PaletteCoordinator.SetStatus("QS3DROOMAUTO lỗi: " + ex.Message);
+            }
+        }
+
+        private static void EnsureBoundaryCommitFreshness(
+            Document document,
+            ProjectState project,
+            LengthUnit selectionUnit,
+            double tolerance,
+            double arcSagitta,
+            double splineChord,
+            double minimumArea)
+        {
+            if (CadUnitService.GetLengthUnit(document) != selectionUnit)
+                throw new InvalidOperationException("Drawing unit policy đã thay đổi trong lúc đọc Room boundary. Hãy chạy lại lệnh.");
+
+            if (MetadataNumber(project, "RoomBoundaryToleranceM", 0.005d, minimumExclusive: 0d) != tolerance ||
+                MetadataNumber(project, "RoomBoundaryArcSagittaM", 0.002d, minimumExclusive: 0d) != arcSagitta ||
+                MetadataNumber(project, "RoomBoundarySplineChordM", 0.02d, minimumExclusive: 0d) != splineChord ||
+                MetadataNonNegative(project, "RoomBoundaryMinimumAreaM2", 0.5d) != minimumArea)
+                throw new InvalidOperationException("Room boundary settings đã thay đổi trong lúc đọc selection. Hãy chạy lại lệnh.");
+        }
+
+        private static string FormatRoomBoundaryDiagnostic(RoomBoundaryDiagnosticReport diagnostic)
+        {
+            switch (diagnostic.Reason)
+            {
+                case RoomBoundaryDiagnosticReason.NoInput:
+                    return "không có boundary segment hợp lệ; chọn LINE, POLYLINE, ARC hoặc SPLINE plan-view tạo biên phòng.";
+                case RoomBoundaryDiagnosticReason.InsufficientSegments:
+                    return "chỉ đọc được " + diagnostic.InputSegmentCount + " boundary segment hợp lệ; cần ít nhất 3 segment để tạo face kín.";
+                case RoomBoundaryDiagnosticReason.NoClosedFace:
+                    return "đã đọc " + diagnostic.InputSegmentCount + " segment từ " + diagnostic.UniqueSourceCount + " nguồn nhưng không hình thành face kín; kiểm tra gap, giao cắt, đường hở và tính đồng phẳng của boundary.";
+                case RoomBoundaryDiagnosticReason.BelowMinimumArea:
+                    return "phát hiện " + diagnostic.CandidateBoundaryCount + " face topology nhưng tất cả đều không vượt ngưỡng RoomBoundaryMinimumAreaM2=" + diagnostic.MinimumArea.ToString("0.###", CultureInfo.InvariantCulture) + " m²; face lớn nhất=" + diagnostic.MaxCandidateArea.ToString("0.###", CultureInfo.InvariantCulture) + " m².";
+                default:
+                    return "không phát hiện Room boundary được chấp nhận.";
             }
         }
 

@@ -395,6 +395,8 @@ namespace QS3D.Core.Rebar
             ValidateFinite(topX, "polygonal slab top X elevation");
             ValidateFinite(topY, "polygonal slab top Y elevation");
 
+            var usableLow = -half + cover;
+            var usableHigh = half - cover;
             if (includeBottom && includeTop)
             {
                 var bottomHigh = Math.Max(bottomX + xRadius, bottomY + yRadius);
@@ -404,12 +406,16 @@ namespace QS3D.Core.Rebar
             else if (includeBottom)
             {
                 var low = Math.Min(bottomX - xRadius, bottomY - yRadius);
-                if (low < -half + cover - 1e-12d) throw new InvalidOperationException("Bottom polygonal slab mesh violates concrete cover.");
+                var high = Math.Max(bottomX + xRadius, bottomY + yRadius);
+                if (low < usableLow - 1e-12d || high > usableHigh + 1e-12d)
+                    throw new InvalidOperationException("Bottom polygonal slab mesh does not fit within the concrete cover envelope.");
             }
             else if (includeTop)
             {
+                var low = Math.Min(topX - xRadius, topY - yRadius);
                 var high = Math.Max(topX + xRadius, topY + yRadius);
-                if (high > half - cover + 1e-12d) throw new InvalidOperationException("Top polygonal slab mesh violates concrete cover.");
+                if (low < usableLow - 1e-12d || high > usableHigh + 1e-12d)
+                    throw new InvalidOperationException("Top polygonal slab mesh does not fit within the concrete cover envelope.");
             }
 
             return new MeshElevations { BottomX = bottomX, BottomY = bottomY, TopX = topX, TopY = topY };

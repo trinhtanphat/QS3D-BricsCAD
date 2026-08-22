@@ -114,8 +114,12 @@ namespace QS3D.Core.Services
 
         private static string NormalizeOperationName(string value)
         {
-            var normalized = (value ?? string.Empty).Trim();
-            if (normalized.Length == 0) throw new ArgumentException("Project semantic mutation operation name is required.", nameof(value));
+            var supplied = value ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(supplied))
+                throw new ArgumentException("Project semantic mutation operation name is required.", nameof(value));
+            var normalized = supplied.Trim();
+            if (!string.Equals(supplied, normalized, StringComparison.Ordinal))
+                throw new ArgumentException("Project semantic mutation operation name must not contain leading or trailing whitespace.", nameof(value));
             if (normalized.Length > MaxOperationNameLength)
                 throw new ArgumentException("Project semantic mutation operation name exceeds the supported length.", nameof(value));
             foreach (var character in normalized)
@@ -126,9 +130,9 @@ namespace QS3D.Core.Services
 
         private static string SafeDetail(Exception error)
         {
-            var message = error == null ? string.Empty : (error.GetType().Name + ": " + (error.Message ?? string.Empty));
-            if (message.Length > MaxDetailLength) message = message.Substring(0, MaxDetailLength);
-            return message;
+            var detail = (error == null ? "Exception" : error.GetType().Name) + " occurred.";
+            if (detail.Length > MaxDetailLength) detail = detail.Substring(0, MaxDetailLength);
+            return detail;
         }
 
         private static void TryRecord(

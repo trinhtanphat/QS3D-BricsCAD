@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -98,16 +99,17 @@ namespace QS3D.Core.Navigation
             ValidatePaging(offset, pageSize);
             var index = BuildIndex(root);
             var expanded = NormalizeExpanded(expandedPaths, index);
-            var visible = new List<ProjectBrowserVisibleRow>();
-            AppendVisible(root, Segment(root.Key), 0, expanded, visible);
-            if (offset > visible.Count)
+            var rows = new List<ProjectBrowserVisibleRow>(pageSize);
+            var totalVisibleRows = 0;
+            AppendVisibleWindow(root, Segment(root.Key), 0, expanded, offset, pageSize, rows, ref totalVisibleRows);
+            if (offset > totalVisibleRows)
                 throw new ArgumentOutOfRangeException(nameof(offset), "Project browser viewport offset exceeds visible row count.");
 
             return new ProjectBrowserViewport(
                 offset,
                 pageSize,
-                visible.Count,
-                visible.Skip(offset).Take(pageSize));
+                totalVisibleRows,
+                rows);
         }
 
         public static ProjectBrowserElementPage GetElementPage(
@@ -140,8 +142,6 @@ namespace QS3D.Core.Navigation
             if (root == null) throw new ArgumentNullException(nameof(root));
             var result = new Dictionary<string, ProjectBrowserNode>(StringComparer.Ordinal);
             IndexNode(root, string.Empty, 0, result);
-            if (result.Count > MaxNodes)
-                throw new InvalidOperationException("Project browser virtualization supports at most " + MaxNodes + " tree nodes.");
             return result;
         }
 
@@ -152,6 +152,9 @@ namespace QS3D.Core.Navigation
             IDictionary<string, ProjectBrowserNode> index)
         {
             ValidateNode(node, depth);
+            if (index.Count >= MaxNodes)
+                throw new InvalidOperationException("Project browser virtualization supports at most " + MaxNodes + " tree nodes.");
+
             var path = parentPath.Length == 0 ? Segment(node.Key) : parentPath + "/" + Segment(node.Key);
             if (index.ContainsKey(path))
                 throw new InvalidOperationException("Project browser virtualization found duplicate node path: " + path + ".");
@@ -177,6 +180,8 @@ namespace QS3D.Core.Navigation
         {
             var result = new HashSet<string>(StringComparer.Ordinal);
             if (expandedPaths == null) return result;
+
+            var knownCount = RequireKnownExpandedPathCount(expandedPaths);
             var count = 0;
             foreach (var raw in expandedPaths)
             {
@@ -189,23 +194,56 @@ namespace QS3D.Core.Navigation
                 if (!result.Add(raw)) throw new InvalidOperationException("Project browser contains duplicate expanded node path: " + raw + ".");
                 if (!index.ContainsKey(raw)) throw new InvalidOperationException("Project browser expanded node path does not exist: " + raw + ".");
             }
+
+            if (knownCount.HasValue && count != knownCount.Value)
+                throw new InvalidOperationException("Project browser expanded node path Count does not match traversal count.");
             return result;
         }
 
-        private static void AppendVisible(
+        private static int? RequireKnownExpandedPathCount(IEnumerable<string> expandedPaths)
+        {
+            int? knownCount = null;
+            if (expandedPaths is ICollection<string> generic)
+                MergeKnownExpandedPathCount(generic.Count, ref knownCount);
+            if (expandedPaths is IReadOnlyCollection<string> readOnly)
+                MergeKnownExpandedPathCount(readOnly.Count, ref knownCount);
+            if (expandedPaths is ICollection nonGeneric)
+                MergeKnownExpandedPathCount(nonGeneric.Count, ref knownCount);
+            return knownCount;
+        }
+
+        private static void MergeKnownExpandedPathCount(int candidate, ref int? knownCount)
+        {
+            if (candidate < 0)
+                throw new InvalidOperationException("Project browser expanded node path source exposes a negative Count.");
+            if (candidate > MaxExpandedPaths)
+                throw new InvalidOperationException("Project browser supports at most " + MaxExpandedPaths + " expanded node paths.");
+            if (knownCount.HasValue && knownCount.Value != candidate)
+                throw new InvalidOperationException("Project browser expanded node path source exposes conflicting Count values.");
+            knownCount = candidate;
+        }
+
+        private static void AppendVisibleWindow(
             ProjectBrowserNode node,
             string path,
             int depth,
             ISet<string> expanded,
-            ICollection<ProjectBrowserVisibleRow> rows)
+            int offset,
+            int pageSize,
+            ICollection<ProjectBrowserVisibleRow> rows,
+            ref int totalVisibleRows)
         {
             var isExpanded = expanded.Contains(path);
-            rows.Add(new ProjectBrowserVisibleRow(path, depth, node, isExpanded));
+            var rowIndex = totalVisibleRows;
+            totalVisibleRows++;
+            if (rowIndex >= offset && rows.Count < pageSize)
+                rows.Add(new ProjectBrowserVisibleRow(path, depth, node, isExpanded));
+
             if (!isExpanded) return;
             foreach (var child in node.Children)
             {
                 var childPath = path + "/" + Segment(child.Key);
-                AppendVisible(child, childPath, depth + 1, expanded, rows);
+                AppendVisibleWindow(child, childPath, depth + 1, expanded, offset, pageSize, rows, ref totalVisibleRows);
             }
         }
 

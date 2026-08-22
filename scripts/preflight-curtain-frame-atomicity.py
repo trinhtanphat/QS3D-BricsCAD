@@ -8,13 +8,13 @@ errors = []
 contracts = {
     "LINE curtain frames": {
         "path": "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameSolidBuilder.cs",
-        "start": "public static CurtainFrameBuildResult BuildSelectedLineWalls(Document document, ProjectState project)",
+        "start": "public static CurtainFrameBuildResult BuildSelectedLineWalls(Document document, ProjectState project, bool allowInteractiveSelection = true)",
         "end": "private static void CommitSemanticUpdate",
         "audit": 'AuditTrail.ForProject(project).Record("geometry.curtain.frames"',
     },
     "path curtain frames": {
         "path": "src/QS3D.BricsCAD.V25/Cad/CurtainWallPathFrameSolidBuilder.cs",
-        "start": "public static CurtainFrameBuildResult BuildSelectedOpenPolylines(Document document, ProjectState project)",
+        "start": "public static CurtainFrameBuildResult BuildSelectedOpenPolylines(Document document, ProjectState project, bool allowInteractiveSelection = true)",
         "end": "private static void CommitSemanticUpdate",
         "audit": 'AuditTrail.ForProject(project).Record("geometry.curtain.path.frames"',
     },
@@ -22,7 +22,8 @@ contracts = {
 
 commit_token = "transaction.Commit();\n                    cadCommitted = true;"
 semantic_token = "foreach (var update in pending) CommitSemanticUpdate(project, update);"
-touch_token = "if (pending.Count > 0) project.Touch();"
+validate_token = "var previous = ValidatePrevious(document, transaction, project, element, ownership);"
+erase_token = "ErasePrevious(transaction, project, element, previous);"
 
 for label, contract in contracts.items():
     path = ROOT / contract["path"]
@@ -45,9 +46,9 @@ for label, contract in contracts.items():
     for token in (
         "ProjectStateSnapshot.Capture(project)",
         "var cadCommitted = false;",
-        "ErasePrevious(document, transaction, element, ownership)",
+        validate_token,
+        erase_token,
         semantic_token,
-        touch_token,
         commit_token,
         "catch (Exception operationError)",
         "if (!cadCommitted)",
@@ -57,16 +58,19 @@ for label, contract in contracts.items():
         if token not in body:
             errors.append(label + ": missing atomic frame replacement contract: " + token)
 
+    validate = body.find(validate_token)
+    erase = body.find(erase_token)
     semantic = body.find(semantic_token)
-    touch = body.find(touch_token)
     commit = body.find(commit_token)
     restore = body.find("rollback.Restore(project)")
-    if min(semantic, touch, commit, restore) >= 0 and not semantic < touch < commit < restore:
-        errors.append(label + ": semantic ownership and project revision must commit while CAD remains rollback-capable")
+    if min(validate, erase) >= 0 and not validate < erase:
+        errors.append(label + ": complete previous handle set must be validated before destructive erase")
+    if min(semantic, commit, restore) >= 0 and not semantic < commit < restore:
+        errors.append(label + ": semantic ownership and audit-owned project revision must commit while CAD remains rollback-capable")
     if commit >= 0 and semantic_token in body[commit + len(commit_token):]:
         errors.append(label + ": semantic frame ownership is still mutated after CAD commit")
-    if commit >= 0 and touch_token in body[commit + len(commit_token):]:
-        errors.append(label + ": project.Touch must not occur after CAD commit")
+    if "project.Touch();" in body:
+        errors.append(label + ": redundant project.Touch must stay removed because AuditTrail.Record owns revision advancement")
 
     helper = text[end:]
     for token in (
@@ -74,10 +78,12 @@ for label, contract in contracts.items():
         "GeneratedCurtainFrameCount",
         "GeneratedCurtainFrameConfigFingerprint",
         "ClearGeneratedCurtainFrameStale()",
+        "GeneratedCurtainFrameNativeOwnershipService.RequireMatchingOwnership",
+        "Refusing destructive replacement before any frame is erased",
         contract["audit"],
     ):
         if token not in helper:
-            errors.append(label + ": semantic commit helper missing metadata/audit contract: " + token)
+            errors.append(label + ": semantic/exact-set helper missing metadata, ownership or audit contract: " + token)
 
 live_state = ROOT / "src/QS3D.BricsCAD.V25/Cad/CurtainWallFrameLiveStateService.cs"
 if not live_state.is_file():
@@ -117,4 +123,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: LINE/path frame ownership, audit and project revision commit before CAD commit inside the rollback boundary; live fingerprint stamping remains best-effort post-commit.")
+print("PASS: LINE/path frame replacement validates the complete previous live set before erase; semantic ownership and AuditTrail-owned project revision commit before CAD commit inside the rollback boundary; live fingerprint stamping remains best-effort post-commit.")

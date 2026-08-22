@@ -3,10 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
-using Bricscad.EditorInput;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.UI;
-using QS3D.Core.Audit;
 using QS3D.Core.Geometry;
 using Teigha.DatabaseServices;
 using Teigha.Runtime;
@@ -22,14 +20,27 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(document);
-                var tolerance = MetadataNumber(project, "WallJunctionToleranceM", 0.005d, 0d);
-                var sagitta = MetadataNumber(project, "WallArcSagittaM", 0.002d, 0d);
-                var planarityTolerance = MetadataNumber(project, "WallJunctionPlanarityToleranceM", tolerance, 0d);
-                var segments = ReadSelection(document, sagitta, planarityTolerance);
-                if (segments.Count == 0)
+                var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
+                if (selectedIds.Length == 0)
                 {
                     document.Editor.WriteMessage("\nQS3DWALLJUNCTIONS: chọn LINE/open POLYLINE tim tường plan-view đồng phẳng.");
+                    return;
+                }
+
+                QS3D.Core.Domain.ProjectState? project = null;
+                if (ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
+                    project = previewProject;
+
+                var tolerance = project == null ? 0.005d : MetadataNumber(project, "WallJunctionToleranceM", 0.005d, 0d);
+                var sagitta = project == null ? 0.002d : MetadataNumber(project, "WallArcSagittaM", 0.002d, 0d);
+                var planarityTolerance = project == null ? tolerance : MetadataNumber(project, "WallJunctionPlanarityToleranceM", tolerance, 0d);
+                var segments = ReadSelection(document, selectedIds, sagitta, planarityTolerance, out var skippedClosedCount);
+                if (segments.Count == 0)
+                {
+                    var detail = skippedClosedCount > 0
+                        ? "không có LINE/open POLYLINE tim tường; đã bỏ qua " + skippedClosedCount.ToString(CultureInfo.InvariantCulture) + " closed POLYLINE."
+                        : "chọn LINE/open POLYLINE tim tường plan-view đồng phẳng.";
+                    document.Editor.WriteMessage("\nQS3DWALLJUNCTIONS: " + detail);
                     return;
                 }
 
@@ -46,6 +57,8 @@ namespace QS3D.BricsCAD.V25
                               " • SnapPlan=" + plan.Adjustments.Count.ToString(CultureInfo.InvariantCulture);
                 PaletteCoordinator.SetStatus(summary);
                 document.Editor.WriteMessage("\nQS3D " + summary);
+                if (skippedClosedCount > 0)
+                    document.Editor.WriteMessage("\n  Đã bỏ qua " + skippedClosedCount.ToString(CultureInfo.InvariantCulture) + " closed POLYLINE không phải wall centerline.");
                 foreach (var node in nodes.Where(x => x.Kind == WallJunctionKind.L || x.Kind == WallJunctionKind.T || x.Kind == WallJunctionKind.X || x.Kind == WallJunctionKind.Multi).Take(100))
                 {
                     document.Editor.WriteMessage("\n  " + node.Kind + " @ (" + node.Point.X.ToString("0.###", CultureInfo.InvariantCulture) + ", " + node.Point.Y.ToString("0.###", CultureInfo.InvariantCulture) + ") • " + string.Join(",", node.SegmentIds));
@@ -59,9 +72,6 @@ namespace QS3D.BricsCAD.V25
                 }
                 if (nodes.Count > 100 || plan.Adjustments.Count > 100)
                     document.Editor.WriteMessage("\n  … output truncated; nodes=" + nodes.Count.ToString(CultureInfo.InvariantCulture) + ", snapPlan=" + plan.Adjustments.Count.ToString(CultureInfo.InvariantCulture));
-                AuditTrail.ForProject(project).Record("wall.junction.analyze", string.Empty,
-                    summary + " • sourceSegments=" + segments.Count.ToString(CultureInfo.InvariantCulture) +
-                    " • planarityToleranceM=" + planarityTolerance.ToString("R", CultureInfo.InvariantCulture));
             }
             catch (System.Exception ex)
             {
@@ -71,23 +81,20 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static IReadOnlyList<WallAxisSegment> ReadSelection(Document document, double sagittaM, double planarityToleranceM)
+        private static IReadOnlyList<WallAxisSegment> ReadSelection(
+            Document document,
+            IReadOnlyList<ObjectId> selectedIds,
+            double sagittaM,
+            double planarityToleranceM,
+            out int skippedClosedCount)
         {
-            var editor = document.Editor;
-            var selection = editor.SelectImplied();
-            if (selection.Status != PromptStatus.OK || selection.Value == null)
-            {
-                var prompted = editor.GetSelection();
-                if (prompted.Status != PromptStatus.OK || prompted.Value == null) return Array.Empty<WallAxisSegment>();
-                selection = prompted;
-            }
-
+            skippedClosedCount = 0;
             var units = CadUnitService.GetPolicy(document);
             var result = new List<WallAxisSegment>();
             double? referenceElevationM = null;
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
-                foreach (var id in selection.Value.GetObjectIds())
+                foreach (var id in selectedIds)
                 {
                     var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
                     if (entity == null || entity.IsErased) continue;
@@ -105,7 +112,11 @@ namespace QS3D.BricsCAD.V25
                     }
 
                     if (!(entity is Polyline polyline)) continue;
-                    if (polyline.Closed) throw new InvalidOperationException("Wall junction analysis dùng open POLYLINE centerline; closed polyline cần tách trước: " + handle);
+                    if (polyline.Closed)
+                    {
+                        skippedClosedCount++;
+                        continue;
+                    }
                     var normal = polyline.Normal;
                     if (Math.Abs(normal.X) > 1e-9d || Math.Abs(normal.Y) > 1e-9d || normal.Z < 1d - 1e-9d)
                         throw new InvalidOperationException("Wall centerline POLYLINE phải plan-view +Z: " + handle);

@@ -7,6 +7,7 @@ SOURCE = ROOT / "src/QS3D.Core/Revisions/SemanticChangeReview.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/SemanticChangeReviewSmoke.cs"
 REVISION = ROOT / "src/QS3D.Core/Revisions/RevisionService.cs"
 QUANTITY = ROOT / "src/QS3D.Core/Revisions/QuantityRevisionReport.cs"
+PORTABILITY = ROOT / "src/QS3D.Core/Export/ProjectInterchangeElementPropertyPolicy.cs"
 errors = []
 
 
@@ -21,6 +22,7 @@ source = read(SOURCE)
 smoke = read(SMOKE)
 revision = read(REVISION)
 quantity = read(QUANTITY)
+portability = read(PORTABILITY)
 
 for token in (
     "public sealed class SemanticChangeReviewBuilder",
@@ -29,6 +31,9 @@ for token in (
     "SemanticChangeFieldKind.Property",
     "SemanticChangeFieldKind.Quantity",
     'private const string SourceHandlesField = "SourceHandles"',
+    'private const string PropertyFieldPrefix = "Property:"',
+    "IsPortableReviewField(field.Field)",
+    "ProjectInterchangeElementPropertyPolicy.IsPortable(propertyKey)",
     "omittedSourceReferences++",
     "OmittedSourceReferenceChangeCount",
     "OrderBy(x => ChangeRank(x.Change))",
@@ -52,11 +57,27 @@ for forbidden in (
         errors.append("semantic change review must remain Core presentation-only and not duplicate quantity/native authority: " + forbidden)
 
 for token in (
+    "GeneratedHandleOwnershipPolicy.IsOwnerSlot(normalized)",
+    'normalized.StartsWith("Generated", StringComparison.OrdinalIgnoreCase)',
+    'normalized.StartsWith("QS3D.Generated", StringComparison.OrdinalIgnoreCase)',
+    'normalized.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)',
+    'normalized.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) < 0',
+):
+    if token not in portability:
+        errors.append("shared interchange/review property portability policy drifted: " + token)
+
+for token in (
     "GroupsStableSemanticChangesWithoutHandleAuthority",
     "ReviewOrderingIsDeterministic",
     "MalformedSnapshotsFailClosed",
-    'x.Before != "HANDLE-BEFORE"',
-    'x.After != "HANDLE-AFTER"',
+    'a.Properties["GeneratedSolidHandle"]',
+    'a.Properties["BoundarySourceHandles"]',
+    'a.Properties["QS3D.GeneratedSolid.StaleSnapshot"]',
+    'a.Properties["PhysicalOpeningCutHostHandle"]',
+    "Equal(5, item.OmittedSourceReferenceChangeCount)",
+    'x.Field.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) < 0',
+    'x.Field.IndexOf("Generated", StringComparison.OrdinalIgnoreCase) < 0',
+    'x.Field.IndexOf("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase) < 0',
     "SemanticChangeFieldKind.Identity",
     "SemanticChangeFieldKind.Property",
     "SemanticChangeFieldKind.Quantity",
@@ -76,4 +97,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: semantic change review groups RevisionService deltas by stable semantic ID, classifies visible fields deterministically, and omits raw SourceHandles from portable review content.")
+print("PASS: semantic change review groups RevisionService deltas by stable semantic ID and reuses the Interchange property portability policy so SourceHandles and drawing-local generated/handle-bearing properties stay out of portable review content.")

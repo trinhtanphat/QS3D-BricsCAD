@@ -12,10 +12,29 @@ namespace QS3D.Core.Export
 {
     public static class DoorOpeningXlsxExporter
     {
+        private const int MaxDataRows = 1048575;
+        private const int MaxCellTextLength = 32767;
+
         public static void Export(string path, IReadOnlyList<DoorOpeningScheduleRow> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            var rowCount = rows.Count;
+            if (rowCount > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Door/opening XLSX export supports at most " + MaxDataRows + " data rows.");
+
+            var snapshot = new List<DoorOpeningScheduleRow>(rowCount);
+            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+            {
+                var sourceRow = rows[rowIndex];
+                if (sourceRow == null)
+                    throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
+                snapshot.Add(SnapshotRow(sourceRow, rowIndex));
+            }
+            if (rows.Count != rowCount)
+                throw new InvalidOperationException("Door/opening XLSX export row count changed during snapshot.");
+            ValidateCellText(snapshot);
+            ValidateNumericValues(snapshot);
+
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -30,7 +49,7 @@ namespace QS3D.Core.Export
                     Write(archive, "xl/workbook.xml", WorkbookXml);
                     Write(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
                     Write(archive, "xl/styles.xml", StylesXml);
-                    Write(archive, "xl/worksheets/sheet1.xml", BuildSheet(rows));
+                    Write(archive, "xl/worksheets/sheet1.xml", BuildSheet(snapshot));
                 }
                 Validate(tempPath);
                 AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
@@ -38,21 +57,148 @@ namespace QS3D.Core.Export
             finally { AtomicFileCommit.TryDelete(tempPath); }
         }
 
+        private static DoorOpeningScheduleRow SnapshotRow(DoorOpeningScheduleRow source, int rowIndex)
+        {
+            var row = new DoorOpeningScheduleRow
+            {
+                ProjectId = source.ProjectId ?? string.Empty,
+                DrawingFingerprint = source.DrawingFingerprint ?? string.Empty,
+                Floor = source.Floor ?? string.Empty,
+                Category = source.Category ?? string.Empty,
+                FamilyName = source.FamilyName ?? string.Empty,
+                Material = source.Material ?? string.Empty,
+                WidthM = source.WidthM,
+                HeightM = source.HeightM,
+                SillHeightM = source.SillHeightM,
+                ThicknessM = source.ThicknessM,
+                Count = source.Count,
+                OpeningAreaM2 = source.OpeningAreaM2,
+                HostCount = source.HostCount
+            };
+            var label = "worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " ";
+            SnapshotJoinedCellValues(source.ElementIds, row.ElementIds, label + "Element IDs");
+            SnapshotJoinedCellValues(source.HostIds, row.HostIds, label + "Host IDs");
+            SnapshotJoinedCellValues(source.SourceHandles, row.SourceHandles, label + "Source Handles");
+            return row;
+        }
+
+        private static void SnapshotJoinedCellValues(IList<string> source, IList<string> target, string label)
+        {
+            if (source == null)
+                throw new ArgumentException("Door/opening XLSX " + label + " collection is required.", "rows");
+
+            var count = source.Count;
+            long joinedLength = 0L;
+            for (var index = 0; index < count; index++)
+            {
+                var value = source[index] ?? string.Empty;
+                if (index > 0) joinedLength++;
+                joinedLength += value.Length;
+                if (joinedLength > MaxCellTextLength)
+                    throw new ArgumentOutOfRangeException(
+                        "rows",
+                        "Door/opening XLSX " + label + " exceeds Excel's " + MaxCellTextLength + "-character cell text limit.");
+                target.Add(value);
+            }
+            if (source.Count != count)
+                throw new InvalidOperationException("Door/opening XLSX " + label + " count changed during snapshot.");
+        }
+
+        private static void ValidateCellText(IReadOnlyList<DoorOpeningScheduleRow> rows)
+        {
+            for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+            {
+                var row = rows[rowIndex];
+                var label = "worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " ";
+                RequireCellTextLength(row.ProjectId, label + "Project ID");
+                RequireCellTextLength(row.DrawingFingerprint, label + "Drawing Fingerprint");
+                RequireCellTextLength(row.Floor, label + "Floor");
+                RequireCellTextLength(row.Category, label + "Category");
+                RequireCellTextLength(row.FamilyName, label + "Family name");
+                RequireCellTextLength(row.Material, label + "Material");
+                RequireJoinedCellTextLength(row.ElementIds, label + "Element IDs");
+                RequireJoinedCellTextLength(row.HostIds, label + "Host IDs");
+                RequireJoinedCellTextLength(row.SourceHandles, label + "Source Handles");
+            }
+        }
+
+        private static void ValidateNumericValues(IReadOnlyList<DoorOpeningScheduleRow> rows)
+        {
+            for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+            {
+                var row = rows[rowIndex];
+                var label = "worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " ";
+                RequireCount(row.Count, label + "Count");
+                RequireCount(row.HostCount, label + "HostCount");
+                RequirePositive(row.WidthM, label + "WidthM");
+                RequirePositive(row.HeightM, label + "HeightM");
+                RequireNonNegative(row.SillHeightM, label + "SillHeightM");
+                RequireNonNegative(row.ThicknessM, label + "ThicknessM");
+                RequireNonNegative(row.OpeningAreaM2, label + "OpeningAreaM2");
+            }
+        }
+
+        private static void RequireCount(int value, string label)
+        {
+            if (value < 0)
+                throw new ArgumentOutOfRangeException("rows", "Door/opening XLSX " + label + " must be non-negative.");
+        }
+
+        private static void RequirePositive(double value, string label)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0d)
+                throw new ArgumentOutOfRangeException("rows", "Door/opening XLSX " + label + " must be finite and greater than zero.");
+        }
+
+        private static void RequireNonNegative(double value, string label)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+                throw new ArgumentOutOfRangeException("rows", "Door/opening XLSX " + label + " must be finite and non-negative.");
+        }
+
+        private static void RequireCellTextLength(string value, string label)
+        {
+            if ((value ?? string.Empty).Length > MaxCellTextLength)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Door/opening XLSX " + label + " exceeds Excel's " + MaxCellTextLength + "-character cell text limit.");
+        }
+
+        private static void RequireJoinedCellTextLength(IEnumerable<string> values, string label)
+        {
+            if (values == null)
+                throw new ArgumentException("Door/opening XLSX " + label + " collection is required.", "rows");
+
+            long length = 0L;
+            var index = 0;
+            foreach (var value in values)
+            {
+                if (index > 0) length++;
+                length += (value ?? string.Empty).Length;
+                if (length > MaxCellTextLength)
+                    throw new ArgumentOutOfRangeException(
+                        "rows",
+                        "Door/opening XLSX " + label + " exceeds Excel's " + MaxCellTextLength + "-character cell text limit.");
+                index++;
+            }
+        }
+
         private static string BuildSheet(IReadOnlyList<DoorOpeningScheduleRow> rows)
         {
             var headers = new[]
             {
                 "Tầng", "Loại", "Family / Loại", "Vật liệu", "Rộng (m)", "Cao (m)",
-                "Cao bậu (m)", "Dày (m)", "SL", "DT mở (m²)", "SL host", "Element IDs", "Host IDs"
+                "Cao bậu (m)", "Dày (m)", "SL", "DT mở (m²)", "SL host", "Element IDs", "Host IDs",
+                "Project ID", "Drawing Fingerprint", "Source Handles"
             };
             var lastRow = Math.Max(1, rows.Count + 1);
-            var range = "A1:M" + lastRow.ToString(CultureInfo.InvariantCulture);
+            var range = "A1:P" + lastRow.ToString(CultureInfo.InvariantCulture);
             var sb = new StringBuilder();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
             sb.Append("<dimension ref=\"").Append(range).Append("\"/>");
             sb.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
-            sb.Append("<cols><col min=\"1\" max=\"4\" width=\"20\" customWidth=\"1\"/><col min=\"5\" max=\"11\" width=\"15\" customWidth=\"1\"/><col min=\"12\" max=\"13\" width=\"36\" customWidth=\"1\"/></cols><sheetData>");
+            sb.Append("<cols><col min=\"1\" max=\"4\" width=\"20\" customWidth=\"1\"/><col min=\"5\" max=\"11\" width=\"15\" customWidth=\"1\"/><col min=\"12\" max=\"16\" width=\"36\" customWidth=\"1\"/></cols><sheetData>");
             sb.Append("<row r=\"1\">");
             for (var c = 0; c < headers.Length; c++) StringCell(sb, CellRef(c, 1), headers[c], 1);
             sb.Append("</row>");
@@ -74,6 +220,9 @@ namespace QS3D.Core.Export
                 NumberCell(sb, CellRef(10, r), row.HostCount);
                 StringCell(sb, CellRef(11, r), string.Join(";", row.ElementIds), 0);
                 StringCell(sb, CellRef(12, r), string.Join(";", row.HostIds), 0);
+                StringCell(sb, CellRef(13, r), row.ProjectId, 0);
+                StringCell(sb, CellRef(14, r), row.DrawingFingerprint, 0);
+                StringCell(sb, CellRef(15, r), string.Join(";", row.SourceHandles), 0);
                 sb.Append("</row>");
             }
             sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
@@ -94,14 +243,15 @@ namespace QS3D.Core.Export
 
         private static void StringCell(StringBuilder sb, string cellRef, string value, int style)
         {
-            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>")
-                .Append(SecurityElement.Escape(value ?? string.Empty)).Append("</t></is></c>");
+            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is>");
+            XlsxXmlText.AppendTextElement(sb, value);
+            sb.Append("</is></c>");
         }
 
         private static void NumberCell(StringBuilder sb, string cellRef, double value)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "Door/opening XLSX numeric values must be finite.");
-            sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>").Append(value.ToString("0.########", CultureInfo.InvariantCulture)).Append("</v></c>");
+            sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>").Append(value.ToString("R", CultureInfo.InvariantCulture)).Append("</v></c>");
         }
 
         private static string CellRef(int columnZeroBased, int row)

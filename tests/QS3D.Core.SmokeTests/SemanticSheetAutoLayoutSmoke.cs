@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using QS3D.Core.Documentation;
 using QS3D.Core.Domain;
@@ -10,10 +11,20 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             PacksAcrossSheetsDeterministically();
+            PerSheetPlacementCapPaginates();
+            SheetNumberPrefixReservesGeneratedSuffix();
+            ResultIsReadOnly();
             ReservedTitleBlockAreaIsRespected();
             MissingViewFailsClosed();
             OversizedViewFailsClosed();
             DuplicateRequestedViewFailsClosed();
+            KnownItemCountsFailBeforeEnumeration();
+            KnownAvailableViewCountsFailBeforeEnumeration();
+            HonestKnownCountsRemainAccepted();
+            ItemKnownCountTraversalMismatchFailsClosed();
+            AvailableViewKnownCountTraversalMismatchFailsClosed();
+            BoundedItemsDoNotOverEnumerate();
+            BoundedAvailableViewsDoNotOverEnumerate();
         }
 
         private static void PacksAcrossSheetsDeterministically()
@@ -38,6 +49,71 @@ namespace QS3D.Core.SmokeTests
             Equal(10d, sheets[0].Placements[2].Xmm);
             Equal(100d, sheets[0].Placements[2].Ymm);
             Equal("V5", sheets[1].Placements[0].ViewId);
+        }
+
+        private static void PerSheetPlacementCapPaginates()
+        {
+            var views = BuildViews(129);
+            var items = new List<SemanticSheetAutoLayoutItem>();
+            for (var i = 1; i <= 129; i++) items.Add(new SemanticSheetAutoLayoutItem("V" + i, 1d, 1d));
+
+            var sheets = SemanticSheetAutoLayoutPlanner.Build(
+                items,
+                views,
+                new SemanticSheetAutoLayoutOptions(
+                    "CAP", "CAP-", "Placement Cap", 1000d, 1000d,
+                    marginLeftMm: 0d,
+                    marginTopMm: 0d,
+                    marginRightMm: 0d,
+                    marginBottomMm: 0d,
+                    horizontalGapMm: 0d,
+                    verticalGapMm: 0d));
+
+            Equal(2, sheets.Count);
+            Equal(128, sheets[0].Placements.Count);
+            Equal(1, sheets[1].Placements.Count);
+        }
+
+        private static void SheetNumberPrefixReservesGeneratedSuffix()
+        {
+            var maxPrefix = new string('N', 59);
+            var sheets = SemanticSheetAutoLayoutPlanner.Build(
+                new[] { new SemanticSheetAutoLayoutItem("V1", 100d, 80d) },
+                BuildViews(1),
+                new SemanticSheetAutoLayoutOptions("S", maxPrefix, "Sheet", 297d, 210d));
+
+            Equal(1, sheets.Count);
+            Equal(61, sheets[0].Number.Length);
+            Equal(maxPrefix + "01", sheets[0].Number);
+
+            Throws<ArgumentException>(() => SemanticSheetAutoLayoutPlanner.Build(
+                new[] { new SemanticSheetAutoLayoutItem("V1", 100d, 80d) },
+                BuildViews(1),
+                new SemanticSheetAutoLayoutOptions("S", new string('N', 60), "Sheet", 297d, 210d)));
+        }
+
+        private static void ResultIsReadOnly()
+        {
+            var views = BuildViews(2);
+            var sheets = SemanticSheetAutoLayoutPlanner.Build(
+                new[]
+                {
+                    new SemanticSheetAutoLayoutItem("V1", 100d, 80d),
+                    new SemanticSheetAutoLayoutItem("V2", 100d, 80d)
+                },
+                views,
+                new SemanticSheetAutoLayoutOptions("RO", "RO-", "Read Only", 297d, 210d));
+
+            if (!(sheets is IList<SemanticSheetPlan> mutable))
+                throw new Exception("Automatic sheet layout result must expose the standard read-only IList contract.");
+
+            var originalCount = sheets.Count;
+            var first = sheets[0];
+            Throws<NotSupportedException>(() => mutable[0] = first);
+            Throws<NotSupportedException>(() => mutable.Add(first));
+            Throws<NotSupportedException>(() => mutable.Remove(first));
+            Equal(originalCount, sheets.Count);
+            Equal(first.Id, sheets[0].Id);
         }
 
         private static void ReservedTitleBlockAreaIsRespected()
@@ -102,6 +178,139 @@ namespace QS3D.Core.SmokeTests
                 "A semantic view must not be materialized twice by one automatic layout request.");
         }
 
+        private static void KnownItemCountsFailBeforeEnumeration()
+        {
+            var options = new SemanticSheetAutoLayoutOptions("S", "A-", "Sheet", 297d, 210d);
+            var views = BuildViews(1);
+
+            AssertKnownCountRejectedBeforeEnumeration(
+                new MultiCountCollection<SemanticSheetAutoLayoutItem>(Array.Empty<SemanticSheetAutoLayoutItem>(), 10001, 10001, 10001),
+                source => SemanticSheetAutoLayoutPlanner.Build(source, views, options),
+                "Oversized item Count must fail before enumeration.");
+
+            AssertKnownCountRejectedBeforeEnumeration(
+                new MultiCountCollection<SemanticSheetAutoLayoutItem>(Array.Empty<SemanticSheetAutoLayoutItem>(), -1, -1, -1),
+                source => SemanticSheetAutoLayoutPlanner.Build(source, views, options),
+                "Negative item Count must fail before enumeration.");
+
+            AssertKnownCountRejectedBeforeEnumeration(
+                new MultiCountCollection<SemanticSheetAutoLayoutItem>(Array.Empty<SemanticSheetAutoLayoutItem>(), 0, 1, 0),
+                source => SemanticSheetAutoLayoutPlanner.Build(source, views, options),
+                "Conflicting item Counts must fail before enumeration.");
+        }
+
+        private static void KnownAvailableViewCountsFailBeforeEnumeration()
+        {
+            var options = new SemanticSheetAutoLayoutOptions("S", "A-", "Sheet", 297d, 210d);
+
+            AssertKnownCountRejectedBeforeEnumeration(
+                new MultiCountCollection<SemanticViewPlan>(Array.Empty<SemanticViewPlan>(), 10001, 10001, 10001),
+                source => SemanticSheetAutoLayoutPlanner.Build(Array.Empty<SemanticSheetAutoLayoutItem>(), source, options),
+                "Oversized available-view Count must fail before enumeration.");
+
+            AssertKnownCountRejectedBeforeEnumeration(
+                new MultiCountCollection<SemanticViewPlan>(Array.Empty<SemanticViewPlan>(), -1, -1, -1),
+                source => SemanticSheetAutoLayoutPlanner.Build(Array.Empty<SemanticSheetAutoLayoutItem>(), source, options),
+                "Negative available-view Count must fail before enumeration.");
+
+            AssertKnownCountRejectedBeforeEnumeration(
+                new MultiCountCollection<SemanticViewPlan>(Array.Empty<SemanticViewPlan>(), 0, 0, 1),
+                source => SemanticSheetAutoLayoutPlanner.Build(Array.Empty<SemanticSheetAutoLayoutItem>(), source, options),
+                "Conflicting available-view Counts must fail before enumeration.");
+        }
+
+        private static void HonestKnownCountsRemainAccepted()
+        {
+            var options = new SemanticSheetAutoLayoutOptions("S", "A-", "Sheet", 297d, 210d);
+            var views = new MultiCountCollection<SemanticViewPlan>(BuildViews(1), 1, 1, 1);
+            var items = new MultiCountCollection<SemanticSheetAutoLayoutItem>(
+                new[] { new SemanticSheetAutoLayoutItem("V1", 100d, 80d) },
+                1,
+                1,
+                1);
+
+            var sheets = SemanticSheetAutoLayoutPlanner.Build(items, views, options);
+            Equal(1, sheets.Count);
+            Equal(1, sheets[0].Placements.Count);
+            if (!items.EnumerationStarted || !views.EnumerationStarted)
+                throw new Exception("Honest known Counts should remain eligible for normal enumeration.");
+        }
+
+        private static void ItemKnownCountTraversalMismatchFailsClosed()
+        {
+            var options = new SemanticSheetAutoLayoutOptions("S", "A-", "Sheet", 297d, 210d);
+            var items = new MultiCountCollection<SemanticSheetAutoLayoutItem>(
+                new[] { new SemanticSheetAutoLayoutItem("V1", 100d, 80d) },
+                2,
+                2,
+                2);
+
+            MustFail(
+                () => SemanticSheetAutoLayoutPlanner.Build(items, BuildViews(1), options),
+                "Item known Count must match the traversal cardinality.");
+            if (!items.EnumerationStarted)
+                throw new Exception("Item Count/traversal mismatch must be detected after bounded traversal.");
+        }
+
+        private static void AvailableViewKnownCountTraversalMismatchFailsClosed()
+        {
+            var options = new SemanticSheetAutoLayoutOptions("S", "A-", "Sheet", 297d, 210d);
+            var views = new MultiCountCollection<SemanticViewPlan>(BuildViews(1), 2, 2, 2);
+
+            MustFail(
+                () => SemanticSheetAutoLayoutPlanner.Build(
+                    new[] { new SemanticSheetAutoLayoutItem("V1", 100d, 80d) },
+                    views,
+                    options),
+                "Available-view known Count must match the traversal cardinality.");
+            if (!views.EnumerationStarted)
+                throw new Exception("Available-view Count/traversal mismatch must be detected after bounded traversal.");
+        }
+
+        private static void BoundedItemsDoNotOverEnumerate()
+        {
+            MustFail(
+                () => SemanticSheetAutoLayoutPlanner.Build(
+                    OverBoundedItems(),
+                    BuildViews(1),
+                    new SemanticSheetAutoLayoutOptions("S", "A-", "Sheet", 297d, 210d)),
+                "Automatic sheet layout must stop enumeration as soon as its configured item bound is exceeded.");
+        }
+
+        private static void BoundedAvailableViewsDoNotOverEnumerate()
+        {
+            MustFail(
+                () => SemanticSheetAutoLayoutPlanner.Build(
+                    Array.Empty<SemanticSheetAutoLayoutItem>(),
+                    OverBoundedViews(),
+                    new SemanticSheetAutoLayoutOptions("S", "A-", "Sheet", 297d, 210d)),
+                "Automatic sheet layout must stop available-view enumeration as soon as its configured catalog bound is exceeded.");
+        }
+
+        private static void AssertKnownCountRejectedBeforeEnumeration<T>(
+            MultiCountCollection<T> source,
+            Action<IEnumerable<T>> action,
+            string message)
+        {
+            MustFail(() => action(source), message);
+            if (source.EnumerationStarted)
+                throw new Exception(message + " The source enumerator was entered.");
+        }
+
+        private static IEnumerable<SemanticSheetAutoLayoutItem> OverBoundedItems()
+        {
+            for (var i = 0; i <= 10000; i++) yield return new SemanticSheetAutoLayoutItem("V1", 100d, 80d);
+            throw new ApplicationException("Automatic sheet layout enumerated beyond the first over-bound item.");
+        }
+
+        private static IEnumerable<SemanticViewPlan> OverBoundedViews()
+        {
+            var project = new ProjectState("P-AUTO-SHEET-BOUND", "Auto Sheet Available View Bound");
+            for (var i = 0; i <= 10000; i++)
+                yield return SemanticViewPlanner.Build(project, new SemanticViewDefinition("BOUND-V" + i, "Bound View " + i));
+            throw new ApplicationException("Automatic sheet layout enumerated beyond the first over-bound available view.");
+        }
+
         private static IReadOnlyList<SemanticViewPlan> BuildViews(int count)
         {
             var project = new ProjectState("P-AUTO-SHEET", "Auto Sheet Smoke");
@@ -118,9 +327,73 @@ namespace QS3D.Core.SmokeTests
             if (!failed) throw new Exception(message);
         }
 
+        private static void Throws<TException>(Action action) where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+
+            throw new Exception("Expected exception " + typeof(TException).Name + ".");
+        }
+
         private static void Equal<T>(T expected, T actual)
         {
             if (!Equals(expected, actual)) throw new Exception("Expected '" + expected + "' but got '" + actual + "'.");
+        }
+
+        private sealed class MultiCountCollection<T> : ICollection<T>, IReadOnlyCollection<T>, ICollection
+        {
+            private readonly IReadOnlyList<T> _items;
+            private readonly int _genericCount;
+            private readonly int _readOnlyCount;
+            private readonly int _nonGenericCount;
+
+            public MultiCountCollection(IReadOnlyList<T> items, int genericCount, int readOnlyCount, int nonGenericCount)
+            {
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+                _genericCount = genericCount;
+                _readOnlyCount = readOnlyCount;
+                _nonGenericCount = nonGenericCount;
+            }
+
+            public bool EnumerationStarted { get; private set; }
+            int ICollection<T>.Count => _genericCount;
+            int IReadOnlyCollection<T>.Count => _readOnlyCount;
+            int ICollection.Count => _nonGenericCount;
+            bool ICollection<T>.IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                EnumerationStarted = true;
+                return ((IEnumerable<T>)_items).GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            void ICollection<T>.Add(T item) => throw new NotSupportedException();
+            void ICollection<T>.Clear() => throw new NotSupportedException();
+            bool ICollection<T>.Contains(T item)
+            {
+                var comparer = EqualityComparer<T>.Default;
+                for (var i = 0; i < _items.Count; i++)
+                    if (comparer.Equals(_items[i], item)) return true;
+                return false;
+            }
+            void ICollection<T>.CopyTo(T[] array, int arrayIndex)
+            {
+                for (var i = 0; i < _items.Count; i++) array[arrayIndex + i] = _items[i];
+            }
+            bool ICollection<T>.Remove(T item) => throw new NotSupportedException();
+            void ICollection.CopyTo(Array array, int index)
+            {
+                for (var i = 0; i < _items.Count; i++) array.SetValue(_items[i], index + i);
+            }
         }
     }
 }

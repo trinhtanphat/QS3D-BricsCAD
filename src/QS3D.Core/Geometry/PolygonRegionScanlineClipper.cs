@@ -165,7 +165,17 @@ namespace QS3D.Core.Geometry
                 if (OnSegment(a, point, b)) return PointLocation.Boundary;
                 var crosses = (a.Y > point.Y) != (b.Y > point.Y);
                 if (!crosses) continue;
-                var x = a.X + (point.Y - a.Y) * (b.X - a.X) / (b.Y - a.Y);
+
+                var deltaY = point.Y - a.Y;
+                var edgeX = b.X - a.X;
+                var edgeY = b.Y - a.Y;
+                if (!Finite(deltaY) || !Finite(edgeX) || !Finite(edgeY) || edgeY == 0d)
+                    throw new OverflowException("Polygon region point-in-polygon interpolation exceeds the supported numeric range.");
+                var ratio = deltaY / edgeY;
+                if (!Finite(ratio)) throw new OverflowException("Polygon region point-in-polygon interpolation ratio is not finite.");
+                var deltaX = edgeX * ratio;
+                if (!Finite(deltaX)) throw new OverflowException("Polygon region point-in-polygon X delta is not finite.");
+                var x = a.X + deltaX;
                 if (!Finite(x)) throw new OverflowException("Polygon region point-in-polygon intersection is not finite.");
                 if (x > point.X + Epsilon) inside = !inside;
                 else if (Math.Abs(x - point.X) <= Epsilon) return PointLocation.Boundary;
@@ -205,7 +215,30 @@ namespace QS3D.Core.Geometry
 
         private static double Orientation(Point2 a, Point2 b, Point2 c)
         {
-            var value = (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
+            var ax = b.X - a.X;
+            var ay = b.Y - a.Y;
+            var bx = c.X - a.X;
+            var by = c.Y - a.Y;
+            if (!Finite(ax) || !Finite(ay) || !Finite(bx) || !Finite(by))
+                throw new OverflowException("Polygon region orientation delta exceeds the supported numeric range.");
+            return CrossFinite(ax, ay, bx, by);
+        }
+
+        private static double CrossFinite(double ax, double ay, double bx, double by)
+        {
+            var scaleA = Math.Max(Math.Abs(ax), Math.Abs(ay));
+            var scaleB = Math.Max(Math.Abs(bx), Math.Abs(by));
+            if (!Finite(scaleA) || !Finite(scaleB))
+                throw new OverflowException("Polygon region orientation input exceeds the supported numeric range.");
+            if (scaleA == 0d || scaleB == 0d) return 0d;
+
+            var normalized = ax / scaleA * (by / scaleB) - ay / scaleA * (bx / scaleB);
+            if (!Finite(normalized)) throw new OverflowException("Polygon region orientation exceeds the supported numeric range.");
+            var smallerScale = Math.Min(scaleA, scaleB);
+            var largerScale = Math.Max(scaleA, scaleB);
+            var scaled = normalized * smallerScale;
+            if (!Finite(scaled)) throw new OverflowException("Polygon region orientation exceeds the supported numeric range.");
+            var value = scaled * largerScale;
             if (!Finite(value)) throw new OverflowException("Polygon region orientation exceeds the supported numeric range.");
             return value;
         }

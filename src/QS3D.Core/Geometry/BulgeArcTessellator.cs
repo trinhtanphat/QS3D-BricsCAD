@@ -18,24 +18,41 @@ namespace QS3D.Core.Geometry
 
             var chord = start.DistanceTo(end);
             if (double.IsNaN(chord) || double.IsInfinity(chord) || chord <= 1e-12d) throw new ArgumentException("Arc chord must be finite and non-degenerate.");
-            if (Math.Abs(bulge) <= StraightBulgeTolerance) return new[] { start, end };
+            if (Math.Abs(bulge) <= StraightBulgeTolerance) return Array.AsReadOnly(new[] { start, end });
 
             var theta = 4d * Math.Atan(bulge);
             var absTheta = Math.Abs(theta);
-            if (!(absTheta > 1e-12d) || absTheta >= Math.PI * 2d) throw new ArgumentOutOfRangeException(nameof(bulge), "Polyline bulge produced an invalid included angle.");
+            if (!(absTheta > 1e-12d) || absTheta > Math.PI * 2d) throw new ArgumentOutOfRangeException(nameof(bulge), "Polyline bulge produced an invalid included angle.");
 
             var absBulge = Math.Abs(bulge);
-            var radius = chord * (1d + absBulge * absBulge) / (4d * absBulge);
+            var inverseAbsBulge = 1d / absBulge;
+            var radius = chord * 0.25d * (absBulge + inverseAbsBulge);
             if (double.IsNaN(radius) || double.IsInfinity(radius) || radius <= 0d) throw new OverflowException("Arc radius is not finite.");
 
             var dx = end.X - start.X;
             var dy = end.Y - start.Y;
-            var midpoint = new Point2((start.X + end.X) * 0.5d, (start.Y + end.Y) * 0.5d);
+            var midpoint = new Point2(start.X + dx * 0.5d, start.Y + dy * 0.5d);
+            ValidatePoint(midpoint, "arcMidpoint");
+            if ((midpoint.X == start.X && midpoint.Y == start.Y) ||
+                (midpoint.X == end.X && midpoint.Y == end.Y))
+                throw new InvalidOperationException("Arc midpoint is not representable between the distinct chord endpoints.");
             var nx = -dy / chord;
             var ny = dx / chord;
-            var centerOffset = chord * (1d - bulge * bulge) / (4d * bulge);
+            var centerOffset = chord * 0.25d * (1d / bulge - bulge);
             if (double.IsNaN(centerOffset) || double.IsInfinity(centerOffset)) throw new OverflowException("Arc center offset is not finite.");
-            var center = new Point2(midpoint.X + nx * centerOffset, midpoint.Y + ny * centerOffset);
+
+            var centerDx = nx * centerOffset;
+            var centerDy = ny * centerOffset;
+            if (centerOffset != 0d &&
+                ((nx != 0d && centerDx == 0d) || (ny != 0d && centerDy == 0d)))
+                throw new InvalidOperationException("Arc center displacement is below numeric resolution.");
+
+            var centerX = midpoint.X + centerDx;
+            var centerY = midpoint.Y + centerDy;
+            if ((centerDx != 0d && centerX == midpoint.X) ||
+                (centerDy != 0d && centerY == midpoint.Y))
+                throw new InvalidOperationException("Arc center displacement is not representable at the supplied coordinates.");
+            var center = new Point2(centerX, centerY);
             ValidatePoint(center, "arcCenter");
 
             var sagittaAngle = MaximumSegmentAngle;
@@ -63,10 +80,18 @@ namespace QS3D.Core.Geometry
                 var angle = startAngle + theta * index / segmentCount;
                 var point = new Point2(center.X + radius * Math.Cos(angle), center.Y + radius * Math.Sin(angle));
                 ValidatePoint(point, "tessellatedPoint");
-                points.Add(point);
+                AddNonDegenerateVertexOrThrow(points, point);
             }
-            points.Add(end);
+            AddNonDegenerateVertexOrThrow(points, end);
             return points.AsReadOnly();
+        }
+
+        private static void AddNonDegenerateVertexOrThrow(List<Point2> points, Point2 point)
+        {
+            var previous = points[points.Count - 1];
+            if (previous.X == point.X && previous.Y == point.Y)
+                throw new InvalidOperationException("Bulge arc tessellation collapsed adjacent vertices at the current numeric precision.");
+            points.Add(point);
         }
 
         private static void ValidatePoint(Point2 point, string name)

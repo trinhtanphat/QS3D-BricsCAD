@@ -26,10 +26,11 @@ namespace QS3D.BricsCAD.V25
                     : "Đã mở Nhật ký thay đổi • chưa có QS3D project hiện hữu; không tạo project mới.";
                 try { PaletteCoordinator.SetStatus(status); } catch { }
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                try { document.Editor.WriteMessage("\nQS3DAUDIT error: " + ex.Message); } catch { }
-                try { PaletteCoordinator.SetStatus("Nhật ký thay đổi lỗi: " + ex.Message); } catch { }
+                const string status = "Nhật ký thay đổi lỗi: không thể mở nhật ký thay đổi.";
+                try { document.Editor.WriteMessage("\nQS3DAUDIT error: không thể mở nhật ký thay đổi."); } catch { }
+                try { PaletteCoordinator.SetStatus(status); } catch { }
             }
         }
     }

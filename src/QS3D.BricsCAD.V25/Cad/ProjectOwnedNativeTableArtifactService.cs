@@ -83,6 +83,7 @@ namespace QS3D.BricsCAD.V25.Cad
     {
         private const string RegAppName = "QS3DDOC";
         private const string OwnershipVersion = "1";
+        private const string ProjectIdentityTokenPrefix = "p1:";
         private const int MaxRows = 5000;
         private const int MaxColumns = 32;
         private const int MaxCellLength = 4096;
@@ -164,7 +165,6 @@ namespace QS3D.BricsCAD.V25.Cad
                         "documentation.table.replace",
                         string.Empty,
                         definition.DocumentId + " • " + table.Handle + " • rows=" + snapshot.Rows.Count.ToString(CultureInfo.InvariantCulture));
-                    project.Touch();
 
                     transaction.Commit();
                     cadCommitted = true;
@@ -207,7 +207,6 @@ namespace QS3D.BricsCAD.V25.Cad
                     ErasePrevious(document, transaction, project, definition);
                     foreach (var key in definition.StateKeys) project.Metadata.Remove(key);
                     AuditTrail.ForProject(project).Record("documentation.table.remove", string.Empty, definition.DocumentId);
-                    project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
                 }
@@ -255,7 +254,7 @@ namespace QS3D.BricsCAD.V25.Cad
             if (!definition.StateKeys.Any(project.Metadata.ContainsKey)) return issues.AsReadOnly();
 
             try { ValidatePersistedState(project, definition); }
-            catch (Exception ex)
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
             {
                 issues.Add(Issue("METADATA_INVALID", HealthSeverity.Error, ex.Message));
                 return issues.AsReadOnly();
@@ -267,7 +266,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 expected = snapshotProvider();
                 ValidateSnapshot(expected);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
             {
                 issues.Add(Issue("RENDER_INVALID", HealthSeverity.Error, ex.Message));
                 return issues.AsReadOnly();
@@ -346,7 +345,7 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             string actual;
             try { actual = table.TextString(row, column) ?? string.Empty; }
-            catch (Exception ex)
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
             {
                 issues.Add(Issue("CAD_CELL_UNREADABLE", HealthSeverity.Warning, "Cannot read live Table cell " + label + ": " + ex.Message));
                 detailCount++;
@@ -420,14 +419,14 @@ namespace QS3D.BricsCAD.V25.Cad
                 throw new InvalidOperationException(definition.DocumentId + " metadata is partial. Refusing destructive Table replacement/removal.");
             foreach (var key in keys)
                 if (string.IsNullOrWhiteSpace(project.Metadata[key])) throw new InvalidOperationException(key + " is empty.");
-            if (!string.Equals(project.Metadata[definition.OwnerProjectKey].Trim(), project.ProjectId, StringComparison.Ordinal))
+            if (!string.Equals(project.Metadata[definition.OwnerProjectKey].Trim(), (project.ProjectId ?? string.Empty).Trim(), StringComparison.Ordinal))
                 throw new InvalidOperationException(definition.DocumentId + " owner project does not match active project.");
             if (!string.Equals(project.Metadata[definition.OwnershipVersionKey].Trim(), OwnershipVersion, StringComparison.Ordinal))
                 throw new InvalidOperationException("Unsupported " + definition.DocumentId + " ownership version.");
             ParseFinite(project.Metadata[definition.PositionXKey], definition.PositionXKey);
             ParseFinite(project.Metadata[definition.PositionYKey], definition.PositionYKey);
             ParseFinite(project.Metadata[definition.PositionZKey], definition.PositionZKey);
-            if (!int.TryParse(project.Metadata[definition.RowCountKey], NumberStyles.None, CultureInfo.InvariantCulture, out var rows) || rows < 0 || rows > MaxRows)
+            if (!int.TryParse(project.Metadata[definition.RowCountKey], NumberStyles.None, CultureInfo.InvariantCulture, out var rows) || rows <= 0 || rows > MaxRows)
                 throw new InvalidOperationException(definition.RowCountKey + " is invalid.");
             if (!int.TryParse(project.Metadata[definition.ColumnCountKey], NumberStyles.None, CultureInfo.InvariantCulture, out var columns) || columns <= 0 || columns > MaxColumns)
                 throw new InvalidOperationException(definition.ColumnCountKey + " is invalid.");
@@ -454,7 +453,7 @@ namespace QS3D.BricsCAD.V25.Cad
             using (var marker = new ResultBuffer(
                 new TypedValue((int)DxfCode.ExtendedDataRegAppName, RegAppName),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, OwnershipVersion),
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, projectId.Trim()),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, ProjectIdentityToken(projectId)),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, definition.DocumentId),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, definition.DocumentKind),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, fingerprint)))
@@ -470,7 +469,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 return values.Length >= 6 &&
                     string.Equals(Convert.ToString(values[0].Value, CultureInfo.InvariantCulture), RegAppName, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(Convert.ToString(values[1].Value, CultureInfo.InvariantCulture), OwnershipVersion, StringComparison.Ordinal) &&
-                    string.Equals(Convert.ToString(values[2].Value, CultureInfo.InvariantCulture), projectId, StringComparison.Ordinal) &&
+                    MatchesProjectIdentity(Convert.ToString(values[2].Value, CultureInfo.InvariantCulture), projectId) &&
                     string.Equals(Convert.ToString(values[3].Value, CultureInfo.InvariantCulture), definition.DocumentId, StringComparison.Ordinal) &&
                     string.Equals(Convert.ToString(values[4].Value, CultureInfo.InvariantCulture), definition.DocumentKind, StringComparison.Ordinal) &&
                     string.Equals(Convert.ToString(values[5].Value, CultureInfo.InvariantCulture), fingerprint, StringComparison.OrdinalIgnoreCase);
@@ -502,7 +501,37 @@ namespace QS3D.BricsCAD.V25.Cad
                 id = database.GetObjectId(false, new Handle(value), 0);
                 return !id.IsNull && id.IsValid;
             }
-            catch { return false; }
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
+            {
+                return false;
+            }
+        }
+
+        private static bool IsRecoverableDiagnosticFailure(Exception exception)
+        {
+            return !(exception is OutOfMemoryException) &&
+                   !(exception is StackOverflowException) &&
+                   !(exception is AccessViolationException);
+        }
+
+        private static string ProjectIdentityToken(string projectId)
+        {
+            var normalized = (projectId ?? string.Empty).Trim();
+            using (var sha = SHA256.Create())
+            {
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(normalized));
+                var result = new StringBuilder(ProjectIdentityTokenPrefix.Length + hash.Length * 2);
+                result.Append(ProjectIdentityTokenPrefix);
+                foreach (var value in hash) result.Append(value.ToString("x2", CultureInfo.InvariantCulture));
+                return result.ToString();
+            }
+        }
+
+        private static bool MatchesProjectIdentity(string storedIdentity, string projectId)
+        {
+            var normalized = (projectId ?? string.Empty).Trim();
+            return string.Equals(storedIdentity, ProjectIdentityToken(normalized), StringComparison.Ordinal) ||
+                string.Equals(storedIdentity, normalized, StringComparison.Ordinal);
         }
 
         private static string ComputeFingerprint(NativeDocumentationTableSnapshot snapshot)

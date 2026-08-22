@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using QS3D.Core.Domain;
@@ -11,11 +12,14 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             ExportedValidSnapshotPasses();
+            TimestampCanonicalityFailsClosed();
+            NameCanonicalityFailsClosed();
             WrongUnitsFailClosed();
             GeneratedOwnershipSmugglingFailsClosed();
             BrokenDependencyFailsClosed();
             DependencyCycleFailsClosed();
             InvalidUtf8FileFailsClosed();
+            OversizeFilePreservesGuardedLimit();
             MissingRequiredCollectionFailsClosed();
             EmptyRequiredNamesFailClosed();
         }
@@ -31,6 +35,47 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Interchange validator summary counts are incorrect.");
             if (!string.Equals(result.Format, ProjectInterchangeJsonExporter.FormatName, StringComparison.Ordinal) || result.FormatVersion != ProjectInterchangeJsonExporter.FormatVersion)
                 throw new Exception("Interchange validator did not preserve format identity.");
+        }
+
+        private static void TimestampCanonicalityFailsClosed()
+        {
+            var canonical = ProjectInterchangeJsonExporter.Build(BuildFixture());
+            const string writerToken = "2026-08-10T11:00:00.0000000Z";
+            if (canonical.IndexOf(writerToken, StringComparison.Ordinal) < 0)
+                throw new Exception("Interchange timestamp regression fixture no longer contains the expected canonical writer token.");
+
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace(writerToken, "2026-08-10T18:00:00.0000000+07:00")),
+                "TIMESTAMP_NOT_UTC");
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace(writerToken, "2026-08-10T11:00:00.0000000+00:00")),
+                "TIMESTAMP_NOT_UTC");
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace(writerToken, "2026-08-10T11:00:00.0000000")),
+                "TIMESTAMP_NOT_UTC");
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace(writerToken, "2026-08-10T11:00:00Z")),
+                "TIMESTAMP_NOT_UTC");
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace(writerToken, " 2026-08-10T11:00:00.0000000Z")),
+                "TIMESTAMP_INVALID");
+        }
+
+        private static void NameCanonicalityFailsClosed()
+        {
+            var canonical = ProjectInterchangeJsonExporter.Build(BuildFixture());
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"Interchange Validate Smoke\"", "\"name\":\" Interchange Validate Smoke\"")),
+                "NAME_NON_CANONICAL");
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"Zone 1\"", "\"name\":\"Zone 1 \"")),
+                "NAME_NON_CANONICAL");
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"L01\"", "\"name\":\" L01 \"")),
+                "NAME_NON_CANONICAL");
+            RequireError(
+                ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"B300x500\"", "\"name\":\"B300x500 \"")),
+                "NAME_NON_CANONICAL");
         }
 
         private static void WrongUnitsFailClosed()
@@ -56,9 +101,9 @@ namespace QS3D.Core.SmokeTests
 
         private static void DependencyCycleFailsClosed()
         {
-            var project = BuildFixture();
-            project.FindElement("E-ROOT")!.DependsOn.Add("E-001");
-            RequireError(ProjectInterchangeJsonValidator.Validate(ProjectInterchangeJsonExporter.Build(project)), "DEPENDENCY_CYCLE");
+            var json = ProjectInterchangeJsonExporter.Build(BuildFixture())
+                .Replace("\"dependencies\": []", "\"dependencies\": [\"E-001\"]");
+            RequireError(ProjectInterchangeJsonValidator.Validate(json), "DEPENDENCY_CYCLE");
         }
 
         private static void InvalidUtf8FileFailsClosed()
@@ -68,6 +113,34 @@ namespace QS3D.Core.SmokeTests
             {
                 File.WriteAllBytes(path, new byte[] { (byte)'{', 0xff, (byte)'}' });
                 RequireError(ProjectInterchangeJsonValidator.ValidateFile(path), "JSON_UTF8");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+            }
+        }
+
+        private static void OversizeFilePreservesGuardedLimit()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-interchange-oversize-" + Guid.NewGuid().ToString("N") + ".qs3d.json");
+            try
+            {
+                using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    stream.SetLength(ProjectInterchangeJsonValidator.MaxFileBytes + 1L);
+
+                try
+                {
+                    ProjectInterchangeJsonValidator.ValidateFile(path);
+                }
+                catch (InvalidDataException ex)
+                {
+                    var expected = "Semantic snapshot exceeds the guarded " + ProjectInterchangeJsonValidator.MaxFileBytes.ToString(CultureInfo.InvariantCulture) + " byte limit.";
+                    if (!string.Equals(ex.Message, expected, StringComparison.Ordinal))
+                        throw new Exception("Interchange oversize guard changed its public error contract: " + ex.Message);
+                    return;
+                }
+
+                throw new Exception("Interchange validator must reject files above MaxFileBytes.");
             }
             finally
             {

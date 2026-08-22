@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -68,6 +69,10 @@ namespace QS3D.Core.Documentation
     public static class SemanticSheetAutoLayoutPlanner
     {
         private const int MaxItems = 10000;
+        private const int MaxSheetNumberLength = 64;
+        private const int MaxSheetOrdinalLength = 5;
+        private const int MaxSheetNumberPrefixLength = MaxSheetNumberLength - MaxSheetOrdinalLength;
+        private const int MaxTitleBlockLength = 160;
 
         public static IReadOnlyList<SemanticSheetPlan> Build(
             IEnumerable<SemanticSheetAutoLayoutItem> items,
@@ -80,9 +85,7 @@ namespace QS3D.Core.Documentation
 
             ValidateOptions(options);
             var views = BuildViewIndex(availableViews);
-            var materialized = items.ToList();
-            if (materialized.Count > MaxItems)
-                throw new InvalidOperationException("Automatic sheet layout supports at most " + MaxItems + " views.");
+            var materialized = MaterializeItemsBounded(items);
             if (materialized.Count == 0) return Array.Empty<SemanticSheetPlan>();
 
             var uniqueItemIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -100,8 +103,17 @@ namespace QS3D.Core.Documentation
                 normalized.Add(new SemanticSheetAutoLayoutItem(viewId, item.WidthMm, item.HeightMm));
             }
 
-            var usableWidth = options.PaperWidthMm - options.MarginLeftMm - options.MarginRightMm;
-            var usableHeight = options.PaperHeightMm - options.MarginTopMm - options.MarginBottomMm - options.ReservedBottomMm;
+            var usableWidth = RetreatEdge(
+                RetreatEdge(options.PaperWidthMm, options.MarginRightMm, "automatic sheet right margin"),
+                options.MarginLeftMm,
+                "automatic sheet left margin");
+            var usableHeight = RetreatEdge(
+                RetreatEdge(
+                    RetreatEdge(options.PaperHeightMm, options.MarginBottomMm, "automatic sheet bottom margin"),
+                    options.ReservedBottomMm,
+                    "automatic sheet reserved bottom area"),
+                options.MarginTopMm,
+                "automatic sheet top margin");
             if (usableWidth <= 0d || usableHeight <= 0d)
                 throw new InvalidOperationException("Automatic sheet layout margins/reserved area leave no usable paper region.");
 
@@ -150,27 +162,90 @@ namespace QS3D.Core.Documentation
                     options.TitleBlockName);
                 result.Add(SemanticSheetPlanner.Build(definition, views.Values));
             }
+            return result.AsReadOnly();
+        }
+
+        private static List<SemanticSheetAutoLayoutItem> MaterializeItemsBounded(IEnumerable<SemanticSheetAutoLayoutItem> items)
+        {
+            var knownCount = RequireKnownCountsWithinLimit(items, "automatic sheet layout items");
+
+            var result = new List<SemanticSheetAutoLayoutItem>(Math.Min(MaxItems, 256));
+            using (var enumerator = items.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= MaxItems)
+                        throw new InvalidOperationException("Automatic sheet layout supports at most " + MaxItems + " views.");
+                    result.Add(enumerator.Current);
+                }
+            }
+
+            RequireTraversalMatchesKnownCount(knownCount, result.Count, "automatic sheet layout items");
             return result;
         }
 
         private static Dictionary<string, SemanticViewPlan> BuildViewIndex(IEnumerable<SemanticViewPlan> availableViews)
         {
+            var knownCount = RequireKnownCountsWithinLimit(availableViews, "automatic sheet layout available views");
+
             var result = new Dictionary<string, SemanticViewPlan>(StringComparer.OrdinalIgnoreCase);
+            var count = 0;
             foreach (var view in availableViews)
             {
+                count++;
+                if (count > MaxItems)
+                    throw new InvalidOperationException("Automatic sheet layout supports at most " + MaxItems + " available views.");
                 if (view == null) throw new ArgumentException("Available semantic view cannot be null.", nameof(availableViews));
                 var id = Required(view.Id, "availableViews.Id");
                 if (result.ContainsKey(id)) throw new InvalidOperationException("Available semantic views contain duplicate id: " + id + ".");
                 result.Add(id, view);
             }
+
+            RequireTraversalMatchesKnownCount(knownCount, count, "automatic sheet layout available views");
             return result;
+        }
+
+        private static int? RequireKnownCountsWithinLimit<T>(IEnumerable<T> values, string label)
+        {
+            var counts = new List<int>(3);
+            if (values is ICollection<T> collection) counts.Add(collection.Count);
+            if (values is IReadOnlyCollection<T> readOnlyCollection) counts.Add(readOnlyCollection.Count);
+            if (values is ICollection nonGenericCollection) counts.Add(nonGenericCollection.Count);
+
+            if (counts.Count == 0) return null;
+
+            var expected = counts[0];
+            var maximum = expected;
+            var hasNegative = expected < 0;
+            var hasConflict = false;
+            for (var i = 1; i < counts.Count; i++)
+            {
+                if (counts[i] < 0) hasNegative = true;
+                if (counts[i] != expected) hasConflict = true;
+                if (counts[i] > maximum) maximum = counts[i];
+            }
+
+            if (maximum > MaxItems)
+                throw new InvalidOperationException("Automatic sheet layout supports at most " + MaxItems + " " + label + ".");
+            if (hasNegative)
+                throw new InvalidOperationException("Automatic sheet layout received an invalid negative known count for " + label + ".");
+            if (hasConflict)
+                throw new InvalidOperationException("Automatic sheet layout received conflicting known counts for " + label + ".");
+            return expected;
+        }
+
+        private static void RequireTraversalMatchesKnownCount(int? knownCount, int observedCount, string label)
+        {
+            if (knownCount.HasValue && observedCount != knownCount.Value)
+                throw new InvalidOperationException("Automatic sheet layout " + label + " known Count does not match traversal cardinality.");
         }
 
         private static void ValidateOptions(SemanticSheetAutoLayoutOptions options)
         {
             Required(options.SheetIdPrefix, nameof(options.SheetIdPrefix));
-            Required(options.SheetNumberPrefix, nameof(options.SheetNumberPrefix));
+            Required(options.SheetNumberPrefix, nameof(options.SheetNumberPrefix), MaxSheetNumberPrefixLength);
             Required(options.SheetNamePrefix, nameof(options.SheetNamePrefix));
+            ValidateOptional(options.TitleBlockName, nameof(options.TitleBlockName), MaxTitleBlockLength);
             PositiveFinite(options.PaperWidthMm, nameof(options.PaperWidthMm));
             PositiveFinite(options.PaperHeightMm, nameof(options.PaperHeightMm));
             NonNegativeFinite(options.MarginLeftMm, nameof(options.MarginLeftMm));
@@ -182,12 +257,18 @@ namespace QS3D.Core.Documentation
             NonNegativeFinite(options.ReservedBottomMm, nameof(options.ReservedBottomMm));
         }
 
-        private static string Required(string? value, string name)
+        private static string Required(string? value, string name, int maxLength = 120)
         {
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", name);
             var normalized = value!.Trim();
-            if (normalized.Length > 120) throw new ArgumentException("Value exceeds 120 characters.", name);
+            if (normalized.Length > maxLength) throw new ArgumentException("Value exceeds " + maxLength + " characters.", name);
             return normalized;
+        }
+
+        private static void ValidateOptional(string? value, string name, int maxLength)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return;
+            if (value!.Trim().Length > maxLength) throw new ArgumentException("Value exceeds " + maxLength + " characters.", name);
         }
 
         private static void PositiveFinite(double value, string name)
@@ -200,6 +281,54 @@ namespace QS3D.Core.Documentation
         {
             if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
                 throw new ArgumentOutOfRangeException(name, "Value must be finite and non-negative.");
+        }
+
+        private static double RetreatEdge(double start, double amount, string label)
+        {
+            var edge = start - amount;
+            if (double.IsNaN(edge) || double.IsInfinity(edge))
+                throw new InvalidOperationException(label + " produced a non-finite usable paper boundary.");
+            if (amount > 0d && !(edge < start))
+                throw new InvalidOperationException(label + " was lost to floating-point precision.");
+            return edge;
+        }
+
+        private static bool FitsWithin(double start, double extent, double limit)
+        {
+            if (double.IsNaN(start) || double.IsInfinity(start) || start > limit) return false;
+            return extent <= limit - start;
+        }
+
+        private static double AdvanceEdge(double start, double extent, string label)
+        {
+            var edge = start + extent;
+            if (double.IsInfinity(edge)) return double.PositiveInfinity;
+            if (double.IsNaN(edge)) throw new InvalidOperationException(label + " produced an invalid coordinate.");
+            if (extent > 0d && !(edge > start))
+                throw new InvalidOperationException(label + " lost positive extent to floating-point precision.");
+            return edge;
+        }
+
+        private static double AdvanceGap(double edge, double gap, string label)
+        {
+            if (gap == 0d) return edge;
+            var advanced = edge + gap;
+            if (double.IsInfinity(advanced)) return double.PositiveInfinity;
+            if (double.IsNaN(advanced)) throw new InvalidOperationException(label + " produced an invalid gap coordinate.");
+            if (!(advanced > edge))
+                throw new InvalidOperationException(label + " lost a positive gap to floating-point precision.");
+            return advanced;
+        }
+
+        private static double TranslateCoordinate(double origin, double offset, string label)
+        {
+            if (offset == 0d) return origin;
+            var translated = origin + offset;
+            if (double.IsNaN(translated) || double.IsInfinity(translated))
+                throw new InvalidOperationException(label + " produced a non-finite placement coordinate.");
+            if (!(translated > origin))
+                throw new InvalidOperationException(label + " lost a positive placement offset to floating-point precision.");
+            return translated;
         }
 
         private sealed class PageState
@@ -217,26 +346,40 @@ namespace QS3D.Core.Documentation
                 double usableWidth,
                 double usableHeight)
             {
-                var localX = _started ? _cursorX : 0d;
+                if (Placements.Count >= SemanticSheetPlanner.MaxPlacements) return false;
+
+                var localX = 0d;
                 var localY = _started ? _cursorY : 0d;
                 var rowHeight = _started ? _rowHeight : 0d;
 
-                if (_started && localX + item.WidthMm > usableWidth)
+                if (_started)
                 {
-                    localX = 0d;
-                    localY += rowHeight + options.VerticalGapMm;
-                    rowHeight = 0d;
+                    var wrapRow = !FitsWithin(_cursorX, item.WidthMm, usableWidth);
+                    if (!wrapRow)
+                    {
+                        localX = AdvanceGap(_cursorX, options.HorizontalGapMm, "automatic sheet horizontal gap");
+                        wrapRow = !FitsWithin(localX, item.WidthMm, usableWidth);
+                    }
+
+                    if (wrapRow)
+                    {
+                        var rowBottom = AdvanceEdge(_cursorY, rowHeight, "automatic sheet row height");
+                        if (!FitsWithin(rowBottom, item.HeightMm, usableHeight)) return false;
+                        localX = 0d;
+                        localY = AdvanceGap(rowBottom, options.VerticalGapMm, "automatic sheet vertical gap");
+                        rowHeight = 0d;
+                    }
                 }
 
-                if (localY + item.HeightMm > usableHeight) return false;
+                if (!FitsWithin(localY, item.HeightMm, usableHeight)) return false;
 
                 Placements.Add(new SemanticSheetPlacementDefinition(
                     item.ViewId,
-                    options.MarginLeftMm + localX,
-                    options.MarginTopMm + localY,
+                    TranslateCoordinate(options.MarginLeftMm, localX, "automatic sheet horizontal placement origin"),
+                    TranslateCoordinate(options.MarginTopMm, localY, "automatic sheet vertical placement origin"),
                     item.WidthMm,
                     item.HeightMm));
-                _cursorX = localX + item.WidthMm + options.HorizontalGapMm;
+                _cursorX = AdvanceEdge(localX, item.WidthMm, "automatic sheet horizontal item edge");
                 _cursorY = localY;
                 _rowHeight = Math.Max(rowHeight, item.HeightMm);
                 _started = true;

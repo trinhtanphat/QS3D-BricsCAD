@@ -42,14 +42,16 @@ namespace QS3D.Core.Units
                 return true;
             }
 
-            if (!projectMetadata.TryGetValue(OverrideMetadataKey, out var raw) || string.IsNullOrWhiteSpace(raw))
+            if (!projectMetadata.TryGetValue(OverrideMetadataKey, out var raw))
             {
                 resolution = null!;
                 return false;
             }
+            if (string.IsNullOrWhiteSpace(raw))
+                throw new InvalidOperationException("Project drawing-unit override is invalid: value is blank.");
 
-            if (!Enum.TryParse(raw.Trim(), true, out LengthUnit parsed) || !Enum.IsDefined(typeof(LengthUnit), parsed))
-                throw new InvalidOperationException("Project drawing-unit override is invalid: " + raw + ".");
+            if (!TryParseNamedUnitToken(raw, out var parsed))
+                throw new InvalidOperationException("Project drawing-unit override is invalid: value is not a canonical unit token.");
             resolution = new DrawingUnitResolution(parsed, DrawingUnitResolutionSource.ProjectOverride);
             return true;
         }
@@ -58,9 +60,21 @@ namespace QS3D.Core.Units
         {
             if (projectMetadata == null) throw new ArgumentNullException(nameof(projectMetadata));
             Validate(unit);
-            projectMetadata[OverrideMetadataKey] = unit.ToString();
-            projectMetadata[EffectiveUnitMetadataKey] = unit.ToString();
-            projectMetadata[BindingSourceMetadataKey] = DrawingUnitResolutionSource.ProjectOverride.ToString();
+            var hasBound = TryReadCanonical(projectMetadata, BoundMetadataKey, out var bound);
+            if (hasBound && bound != unit)
+                throw new InvalidOperationException("Drawing unit " + unit + " does not match quantities bound to " + bound + ". Remeasure source geometry before changing units.");
+
+            if (!hasBound)
+            {
+                projectMetadata[OverrideMetadataKey] = unit.ToString();
+                return;
+            }
+
+            ApplyAtomicMetadataUpdates(
+                projectMetadata,
+                new KeyValuePair<string, string>(OverrideMetadataKey, unit.ToString()),
+                new KeyValuePair<string, string>(EffectiveUnitMetadataKey, unit.ToString()),
+                new KeyValuePair<string, string>(BindingSourceMetadataKey, DrawingUnitResolutionSource.ProjectOverride.ToString()));
         }
 
         public static void ValidateQuantityCompatibility(
@@ -87,12 +101,71 @@ namespace QS3D.Core.Units
             LengthUnit effectiveUnit,
             DrawingUnitResolutionSource source)
         {
+            if (!Enum.IsDefined(typeof(DrawingUnitResolutionSource), source)) throw new ArgumentOutOfRangeException(nameof(source));
             ValidateQuantityCompatibility(projectMetadata, hasElements, effectiveUnit);
             if (TryReadCanonical(projectMetadata, BoundMetadataKey, out _)) return false;
-            projectMetadata[BoundMetadataKey] = effectiveUnit.ToString();
-            projectMetadata[EffectiveUnitMetadataKey] = effectiveUnit.ToString();
-            projectMetadata[BindingSourceMetadataKey] = source.ToString();
+            ApplyAtomicMetadataUpdates(
+                projectMetadata,
+                new KeyValuePair<string, string>(BoundMetadataKey, effectiveUnit.ToString()),
+                new KeyValuePair<string, string>(EffectiveUnitMetadataKey, effectiveUnit.ToString()),
+                new KeyValuePair<string, string>(BindingSourceMetadataKey, source.ToString()));
             return true;
+        }
+
+        private static void ApplyAtomicMetadataUpdates(
+            IDictionary<string, string> metadata,
+            params KeyValuePair<string, string>[] updates)
+        {
+            var snapshots = new MetadataSnapshot[updates.Length];
+            for (var i = 0; i < updates.Length; i++)
+            {
+                var exists = metadata.TryGetValue(updates[i].Key, out var value);
+                snapshots[i] = new MetadataSnapshot(updates[i].Key, exists, value);
+            }
+
+            var lastAttemptedIndex = -1;
+            try
+            {
+                for (var i = 0; i < updates.Length; i++)
+                {
+                    lastAttemptedIndex = i;
+                    metadata[updates[i].Key] = updates[i].Value;
+                }
+            }
+            catch
+            {
+                for (var i = lastAttemptedIndex; i >= 0; i--)
+                {
+                    try
+                    {
+                        if (snapshots[i].Exists)
+                            metadata[snapshots[i].Key] = snapshots[i].Value!;
+                        else
+                            metadata.Remove(snapshots[i].Key);
+                    }
+                    catch
+                    {
+                        // Preserve the original mutation failure. Rollback is best-effort for a dictionary
+                        // that remains permanently unwritable, while recoverable setter failures restore
+                        // every attempted key to its pre-call state without touching later keys.
+                    }
+                }
+                throw;
+            }
+        }
+
+        private readonly struct MetadataSnapshot
+        {
+            public MetadataSnapshot(string key, bool exists, string? value)
+            {
+                Key = key;
+                Exists = exists;
+                Value = value;
+            }
+
+            public string Key { get; }
+            public bool Exists { get; }
+            public string? Value { get; }
         }
 
         private static bool TryReadLegacyEffectiveUnit(IDictionary<string, string> metadata, out LengthUnit unit)
@@ -108,10 +181,22 @@ namespace QS3D.Core.Units
         private static bool TryReadCanonical(IDictionary<string, string> metadata, string key, out LengthUnit unit)
         {
             unit = default(LengthUnit);
-            if (!metadata.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return false;
-            if (!Enum.TryParse(raw.Trim(), true, out unit) || !Enum.IsDefined(typeof(LengthUnit), unit))
-                throw new InvalidOperationException("Project drawing-unit metadata is invalid: " + key + "=" + raw + ".");
+            if (!metadata.TryGetValue(key, out var raw)) return false;
+            if (string.IsNullOrWhiteSpace(raw))
+                throw new InvalidOperationException("Project drawing-unit metadata is invalid: " + key + " is blank.");
+            if (!TryParseNamedUnitToken(raw, out unit))
+                throw new InvalidOperationException("Project drawing-unit metadata is invalid: " + key + " is not a canonical unit token.");
             return true;
+        }
+
+        private static bool TryParseNamedUnitToken(string raw, out LengthUnit unit)
+        {
+            unit = default(LengthUnit);
+            var token = raw ?? string.Empty;
+            if (!string.Equals(token, token.Trim(), StringComparison.Ordinal)) return false;
+            if (!Enum.TryParse(token, true, out unit) || !Enum.IsDefined(typeof(LengthUnit), unit)) return false;
+            var name = Enum.GetName(typeof(LengthUnit), unit);
+            return name != null && string.Equals(token, name, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void Validate(LengthUnit unit)

@@ -16,7 +16,10 @@ namespace QS3D.Core.SmokeTests
 
         private static void ReplacedZoneInvalidatesReferencedTargetElements()
         {
-            var target = new ProjectState("TARGET-P", "Target");
+            var target = new ProjectState("TARGET-P", "Target")
+            {
+                DrawingFingerprint = "TARGET-ZONE-INVALIDATION-DWG"
+            };
             target.Zones.Add(new ZoneDefinition("Z1", "Target Zone"));
             var element = new ProjectElement("E1", ElementCategory.Beam, string.Empty, string.Empty, "Z1");
             element.Properties["GeneratedSolidHandle"] = "AA11";

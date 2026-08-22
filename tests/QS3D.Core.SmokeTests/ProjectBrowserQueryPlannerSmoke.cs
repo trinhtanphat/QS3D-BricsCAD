@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using QS3D.Core.Domain;
 using QS3D.Core.Navigation;
 
@@ -13,8 +15,14 @@ namespace QS3D.Core.SmokeTests
             FloorAndZoneFiltersCompose();
             EmptySearchReturnsWholeTree();
             MissingFamilyReferenceFailsClosed();
+            FamilyCategoryMismatchFailsClosed();
+            UnfilteredMissingFamilyReferenceFailsClosed();
+            UnfilteredFamilyCategoryMismatchFailsClosed();
             FilteredPathStillValidatesUnmatchedReferences();
             InvalidFilterReferenceFailsClosed();
+            OversizedKnownCountFailsBeforeEnumeration();
+            ExactKnownCountLimitIsAccepted();
+            DishonestLowKnownCountStillHitsStreamingLimit();
         }
 
         private static void SearchMatchesSemanticCatalogNames()
@@ -95,6 +103,38 @@ namespace QS3D.Core.SmokeTests
                 "Search must not silently hide an element with a missing family reference.");
         }
 
+        private static void FamilyCategoryMismatchFailsClosed()
+        {
+            var project = BuildProject();
+            var bad = new ProjectElement("BAD-FAMILY-CATEGORY", ElementCategory.Beam, "FAM-C", "F-02", "Z-EAST");
+            bad.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(bad);
+            MustFail(
+                () => ProjectBrowserQueryPlanner.Build(
+                    project,
+                    ProjectBrowserGrouping.Category,
+                    new ProjectBrowserQueryOptions(dirtyOnly: true, categories: new[] { ElementCategory.Column })),
+                "Filtered browser query must reject Family/category corruption even when the corrupt element would not match the filter.");
+        }
+
+        private static void UnfilteredMissingFamilyReferenceFailsClosed()
+        {
+            var project = BuildProject();
+            project.Elements.Add(new ProjectElement("BAD-UNFILTERED-FAMILY", ElementCategory.Beam, "FAM-404", "F-02", "Z-EAST"));
+            MustFail(
+                () => ProjectBrowserQueryPlanner.Build(project, ProjectBrowserGrouping.Category),
+                "Unfiltered browser query must reject a missing Family reference instead of bypassing query integrity preflight.");
+        }
+
+        private static void UnfilteredFamilyCategoryMismatchFailsClosed()
+        {
+            var project = BuildProject();
+            project.Elements.Add(new ProjectElement("BAD-UNFILTERED-CATEGORY", ElementCategory.Beam, "FAM-C", "F-02", "Z-EAST"));
+            MustFail(
+                () => ProjectBrowserQueryPlanner.Build(project, ProjectBrowserGrouping.Category, new ProjectBrowserQueryOptions("   ")),
+                "Unfiltered browser query must reject a Family/category mismatch instead of bypassing query integrity preflight.");
+        }
+
         private static void FilteredPathStillValidatesUnmatchedReferences()
         {
             var project = BuildProject();
@@ -118,6 +158,35 @@ namespace QS3D.Core.SmokeTests
                     ProjectBrowserGrouping.Category,
                     new ProjectBrowserQueryOptions(floorIds: new[] { "F-404" })),
                 "Unknown explicit browser filter IDs must fail closed.");
+        }
+
+        private static void OversizedKnownCountFailsBeforeEnumeration()
+        {
+            var source = new CountedEnumerable<ElementCategory>(10001, 0, ElementCategory.Beam);
+            MustFail(
+                () => new ProjectBrowserQueryOptions(categories: source),
+                "A query filter whose known Count exceeds 10,000 must fail closed.");
+            Equal(0, source.GetEnumeratorCalls);
+            Equal(0, source.MoveNextCalls);
+        }
+
+        private static void ExactKnownCountLimitIsAccepted()
+        {
+            var source = new CountedEnumerable<ElementCategory>(10000, 10000, ElementCategory.Beam);
+            var options = new ProjectBrowserQueryOptions(categories: source);
+            Equal(10000, options.Categories.Count);
+            Equal(1, source.GetEnumeratorCalls);
+            Equal(10001, source.MoveNextCalls);
+        }
+
+        private static void DishonestLowKnownCountStillHitsStreamingLimit()
+        {
+            var source = new CountedEnumerable<ElementCategory>(1, 10001, ElementCategory.Beam);
+            MustFail(
+                () => new ProjectBrowserQueryOptions(categories: source),
+                "A dishonest low Count must not bypass the streaming 10,000-value ceiling.");
+            Equal(1, source.GetEnumeratorCalls);
+            Equal(10001, source.MoveNextCalls);
         }
 
         private static ProjectState BuildProject()
@@ -148,6 +217,57 @@ namespace QS3D.Core.SmokeTests
         private static void Equal<T>(T expected, T actual)
         {
             if (!Equals(expected, actual)) throw new Exception("Expected '" + expected + "' but got '" + actual + "'.");
+        }
+
+        private sealed class CountedEnumerable<T> : ICollection<T>
+        {
+            private readonly int _yieldCount;
+            private readonly T _value;
+
+            internal CountedEnumerable(int reportedCount, int yieldCount, T value)
+            {
+                Count = reportedCount;
+                _yieldCount = yieldCount;
+                _value = value;
+            }
+
+            public int Count { get; }
+            public bool IsReadOnly => true;
+            internal int GetEnumeratorCalls { get; private set; }
+            internal int MoveNextCalls { get; private set; }
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                GetEnumeratorCalls++;
+                return new CountingEnumerator(this);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(T item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(T item) => throw new NotSupportedException();
+            public bool Contains(T item) => false;
+            public void CopyTo(T[] array, int arrayIndex) => throw new NotSupportedException();
+
+            private sealed class CountingEnumerator : IEnumerator<T>
+            {
+                private readonly CountedEnumerable<T> _owner;
+                private int _index = -1;
+
+                internal CountingEnumerator(CountedEnumerable<T> owner) => _owner = owner;
+                public T Current => _owner._value;
+                object IEnumerator.Current => Current!;
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    _index++;
+                    return _index < _owner._yieldCount;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
         }
     }
 }

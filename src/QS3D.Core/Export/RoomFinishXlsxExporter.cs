@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
-using System.Security;
 using System.Text;
 using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
@@ -12,10 +11,38 @@ namespace QS3D.Core.Export
 {
     public static class RoomFinishXlsxExporter
     {
+        private const int MaxDataRows = 1048575;
+        private const int MaxCellTextCharacters = 32767;
+
         public static void Export(string path, IReadOnlyList<RoomFinishScheduleRow> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            var rowCount = rows.Count;
+            if (rowCount > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Room-finish XLSX export supports at most " + MaxDataRows + " data rows.");
+            var snapshot = new List<RoomFinishScheduleRow>(rowCount);
+            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+            {
+                var sourceRow = rows[rowIndex];
+                if (sourceRow == null)
+                    throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
+                var row = SnapshotRow(sourceRow, rowIndex);
+                ValidateCellText(row.Floor, rowIndex, "Floor");
+                ValidateCellText(row.Room, rowIndex, "Room");
+                ValidateCellText(row.Category, rowIndex, "Category");
+                ValidateCellText(row.FamilyName, rowIndex, "FamilyName");
+                ValidateCellText(row.Material, rowIndex, "Material");
+                ValidateCellText(row.UnitHint, rowIndex, "UnitHint");
+                ValidateJoinedCellText(row.ElementIds, rowIndex, "ElementIds");
+                ValidateJoinedCellText(row.RoomIds, rowIndex, "RoomIds");
+                ValidateNonNegativeCount(row.Count, rowIndex);
+                ValidateNonNegativeFinite(row.PrimaryQuantity, rowIndex, "PrimaryQuantity");
+                ValidateNonNegativeFinite(row.LengthM, rowIndex, "LengthM");
+                ValidateNonNegativeFinite(row.AreaM2, rowIndex, "AreaM2");
+                snapshot.Add(row);
+            }
+            if (rows.Count != rowCount)
+                throw new InvalidOperationException("Room-finish XLSX export row count changed during snapshot.");
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -30,12 +57,54 @@ namespace QS3D.Core.Export
                     Write(archive, "xl/workbook.xml", WorkbookXml);
                     Write(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
                     Write(archive, "xl/styles.xml", StylesXml);
-                    Write(archive, "xl/worksheets/sheet1.xml", BuildSheet(rows));
+                    Write(archive, "xl/worksheets/sheet1.xml", BuildSheet(snapshot));
                 }
                 Validate(tempPath);
                 AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
             }
             finally { AtomicFileCommit.TryDelete(tempPath); }
+        }
+
+        private static RoomFinishScheduleRow SnapshotRow(RoomFinishScheduleRow source, int rowIndex)
+        {
+            var row = new RoomFinishScheduleRow
+            {
+                Floor = source.Floor ?? string.Empty,
+                Room = source.Room ?? string.Empty,
+                Category = source.Category ?? string.Empty,
+                FamilyName = source.FamilyName ?? string.Empty,
+                Material = source.Material ?? string.Empty,
+                UnitHint = source.UnitHint ?? string.Empty,
+                Count = source.Count,
+                LengthM = source.LengthM,
+                AreaM2 = source.AreaM2,
+                PrimaryQuantity = source.PrimaryQuantity
+            };
+            SnapshotJoinedCellValues(source.ElementIds, row.ElementIds, rowIndex, "ElementIds");
+            SnapshotJoinedCellValues(source.RoomIds, row.RoomIds, rowIndex, "RoomIds");
+            return row;
+        }
+
+        private static void SnapshotJoinedCellValues(IList<string> source, IList<string> target, int rowIndex, string fieldName)
+        {
+            if (source == null)
+                throw new ArgumentException("Room-finish XLSX row " + rowIndex + " field " + fieldName + " collection is required.", "rows");
+
+            var count = source.Count;
+            long joinedLength = 0L;
+            for (var index = 0; index < count; index++)
+            {
+                var value = source[index] ?? string.Empty;
+                if (index > 0) joinedLength++;
+                joinedLength += value.Length;
+                if (joinedLength > MaxCellTextCharacters)
+                    throw new ArgumentOutOfRangeException(
+                        "rows",
+                        "Room-finish XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+                target.Add(value);
+            }
+            if (source.Count != count)
+                throw new InvalidOperationException("Room-finish XLSX row " + rowIndex + " field " + fieldName + " count changed during snapshot.");
         }
 
         private static string BuildSheet(IReadOnlyList<RoomFinishScheduleRow> rows)
@@ -86,15 +155,55 @@ namespace QS3D.Core.Export
                 "xl/worksheets/sheet1.xml");
         }
 
+        private static void ValidateCellText(string value, int rowIndex, string fieldName)
+        {
+            var text = value ?? string.Empty;
+            if (text.Length > MaxCellTextCharacters)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Room-finish XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+        }
+
+        private static void ValidateJoinedCellText(IList<string> values, int rowIndex, string fieldName)
+        {
+            long length = 0;
+            for (var index = 0; index < values.Count; index++)
+            {
+                if (index > 0) length++;
+                length += (values[index] ?? string.Empty).Length;
+                if (length > MaxCellTextCharacters)
+                    throw new ArgumentOutOfRangeException(
+                        "rows",
+                        "Room-finish XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+            }
+        }
+
+        private static void ValidateNonNegativeCount(int value, int rowIndex)
+        {
+            if (value < 0)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Room-finish XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field Count must be non-negative.");
+        }
+
+        private static void ValidateNonNegativeFinite(double value, int rowIndex, string fieldName)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Room-finish XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be finite and non-negative.");
+        }
+
         private static void StringCell(StringBuilder sb, string cellRef, string value, int style)
         {
-            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>").Append(SecurityElement.Escape(value ?? string.Empty)).Append("</t></is></c>");
+            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>").Append(XlsxXmlText.Escape(value)).Append("</t></is></c>");
         }
 
         private static void NumberCell(StringBuilder sb, string cellRef, double value)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "Room-finish XLSX numeric values must be finite.");
-            sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>").Append(value.ToString("0.########", CultureInfo.InvariantCulture)).Append("</v></c>");
+            var text = value == 0d ? "0" : value.ToString("R", CultureInfo.InvariantCulture);
+            sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>").Append(text).Append("</v></c>");
         }
 
         private static string CellRef(int columnZeroBased, int row)

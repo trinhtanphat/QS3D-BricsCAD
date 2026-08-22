@@ -1,6 +1,6 @@
 # QS3D command reference
 
-Updated for the integrated source baseline on 2026-08-10. These names are **BricsCAD command-line/plugin commands after QS3D is loaded**, not standalone EXE or PowerShell commands. Commands that create/mutate native BricsCAD geometry remain subject to the licensed V25 runtime gate.
+Updated for the integrated source baseline on 2026-08-14. These names are **BricsCAD command-line/plugin commands after QS3D is loaded**, not standalone EXE or PowerShell commands. Commands that create/mutate native BricsCAD geometry remain subject to the licensed V25 runtime gate.
 
 ## Workspace, project and schedules
 
@@ -9,6 +9,7 @@ Updated for the integrated source baseline on 2026-08-10. These names are **Bric
 - `QS3DDOMAIN` — open Full Domain Hub.
 - `QS3DPROJECTTOOLS` — open the drawing-bound Project Tools hub.
 - `QS3DSCHEDULES` — open the drawing-bound Schedule Hub for BQ, Room Finish, Material, Curtain, Door/Opening and rebar schedules/exports.
+- `QS3DREFSEARCH` — open the drawing-bound **Tham khảo thi công** launcher for Hình ảnh/Web/Video/Mua sắm/Video ngắn/Tin tức. QS3D URL-encodes the query, uses fixed HTTPS search URLs with SafeSearch and opens results in the Windows default browser; it does not scrape/embed result pages. See `CONSTRUCTION-REFERENCE-SEARCH.md`.
 - `QS3DZONES` — Zone Manager: CRUD/active Zone/semantic assignment.
 - `QS3DLEVELS` — Floor/Level project editor.
 - `QS3DFAMILIES` — Family Manager: create/duplicate/rename/delete/properties/assignment while preserving true instance overrides. The **TẠO MỚI** Ribbon and Full Domain Hub expose it as the canonical Family / Type launcher before Direct Draw.
@@ -20,7 +21,12 @@ Updated for the integrated source baseline on 2026-08-10. These names are **Bric
 - `QS3DRELEASECHECK` — unified source/project release-readiness review. Includes safe generated ownership, all current generated rebar families including Foundation mesh, mode semantics, live CAD and BOM release guards. A clean result is still **not** a substitute for the licensed V25/private-DWG runtime gate.
 - `QS3DOWNERSHIPHEALTH` — provenance-safe generated handle ownership review.
 - `QS3DRUNTIMEPROBE` — V25 runtime identity/readiness probe.
+- `QS3DLEVELZPROBE` — **automation-only LOCAL-003 qualification**, not a user-facing command. `scripts/test-bricscad-v25-level-z.ps1` enables it only through nonce/result/exact-source-SHA environment guards and only on a clean exact-SHA build plus disposable `*.level-z-probe-copy.dwg`. It proves representative legacy, Bottom-only, Bottom+Top, Top-only refusal, physical Door cutting, Curtain frame/panel, Beam rebar/stirrup, vertical-snapshot and Level-edit invalidation behavior; verifies the drawing hash is unchanged and no sidecar is persisted; and emits sanitized aggregate marker/metadata only. It does not replace the full mm/m, full-family, Undo, save/reopen, multi-DWG or private-DWG matrix.
 - `QS3DBRCPROBE` — **automation-only clean-room diagnostic**, not a user-facing command. It runs only when the qualification harness supplies its result-marker environment variable and must be used only on a disposable reference copy of an authorized drawing, never on the original. The probe uses public BricsCAD APIs and emits sanitized aggregate capability/count data only; it does not emit drawing paths, CAD handles, layer/text/property values, call BLT APIs, or open/read BLT program binaries. Its purpose is to determine whether proxy/BRC entities expose supported public measurements; it is not a BLT compatibility or reverse-engineering path.
+- `QS3DBRCROUNDTRIPPROBE` — **automation-only local qualification**, not a user-facing command. The guarded runner NETLOADs the exact V25 adapter, runs `QS3DB4D`, exports a newly created ED2 workbook, reads row 2 from `CHI_TIET`, validates Drawing Fingerprint + Element ID ↔ Handle provenance, resolves every Handle before changing PICKFIRST, and confirms metricless `ProxyEntity` candidates remain review-only/uncaptured. It accepts only a disposable `*.reference-copy.dwg`, refuses a pre-existing `.qsdb`, verifies the DWG SHA-256 before/after, writes only sanitized aggregate counts/booleans, and never calls BLT/private APIs or modifies the reference original.
+
+- `QS3DLIFECYCLESEED`, `QS3DLIFECYCLEAFTERSAVE`, `QS3DLIFECYCLEPROBE`, `QS3DLIFECYCLECOMMANDPREP`, `QS3DLIFECYCLECOMMANDVERIFY` — **automation-only LOCAL-001 qualification**, not user-facing commands. `scripts/test-bricscad-v25-project-lifecycle.ps1` creates four disposable copies of the repository-generated sample, proves DWG `SaveComplete` sidecar persistence, cold-cache reopen/canonical binding, distinct ProjectIds and multi-DWG mutation isolation, and runs the real `QS3DREGEN`, `QS3DREFRESH` and `QS3DFINISH` commands against both a cold existing project and an absent-sidecar drawing. It also runs `QS3DBQ` to prove automatic legacy quantity-unit binding on the canonical project and native-unit resolution without a project, then runs `QS3DUNITS` with unresolved INSUNITS and a scope-validated one-shot automation confirmation to prove that an explicit accepted choice is the intentional project/bootstrap boundary. Normal user calls still use `Editor.GetKeywords`; physical keyboard/prompt UX remains part of the interactive matrix. A corrupt sidecar must fail closed and remain unchanged. Final evidence contains only nonce-bound booleans/counts and hashes; it does not emit drawing paths, ProjectIds, fingerprints, Handles, semantic names or raw exception text.
+- `QS3DSIDECARREVISIONPROBE` — **automation-only LOCAL-001 qualification**, not a user-facing command. `scripts/test-bricscad-v25-sidecar-revision.ps1` uses one repository-generated disposable DWG copy and, with the project cache deliberately kept warm, tests backup appearance, primary replacement and primary removal. Read-only access, canonical bind, existing-project mutation, Interchange confirmation and Save must all refuse stale authority without changing semantic or DWG state; restoring the original bytes must recover the same canonical session. Marker evidence is nonce-bound booleans/counts/hashes only.
 
 Project mutation APIs follow a shared integrity rule: object-based Floor/Zone/Family/Bulk Edit operations reject foreign `ProjectElement` objects even when their ID matches an element already stored in the project.
 
@@ -32,6 +38,26 @@ The Workspace property pane has two scopes:
 - **Đối tượng / Instance** — used when exactly one semantic element is selected; edits affect only that element and `↺` resets an override to the current Family value.
 
 Typed controls include finite-number/text fields, boolean checkbox and editable choices. Semantic selection resolves source handles and generated owner slots, including slab/wall/Foundation mesh and Curtain frame handles.
+
+## VẼ / reference-workflow utility commands
+
+The 2026-08-14 clean-room screenshot parity pass exposes these additional user-facing entry points. They reuse existing QS3D semantics or delegate to the installed BricsCAD native command engine; they are not a second CAD/IFC implementation.
+
+- `QS3DDRAWLINE` — context-aware QS3D line using the active Project/Family/Floor/Zone and native LINE geometry with QS3D context XData.
+- `QS3DDRAWRECT` — context-aware QS3D rectangle using the active Project/Family/Floor/Zone.
+- `QS3DDRAWCIRCLE` — context-aware QS3D circle using the active Project/Family/Floor/Zone.
+- `QS3DDRAWBYCAD` — **Theo nét CAD**; forwards into the existing `QS3DCONVERT2D` workflow.
+- `QS3DDRAWPROFILE` — **Biên dạng**; delegates to BricsCAD native `PLINE` for profile drafting.
+- `QS3DFLOORSLOPE` — **Dốc sàn**; delegates to native `3DROTATE` so the operator controls the actual rotation axis/angle.
+- `QS3DSLABCUT` — **Cắt sàn**; delegates to native `SUBTRACT`; operator selection remains authoritative and normal native Undo/Cancel semantics apply.
+- `QS3DJOINCORNER` — **Nối góc**; delegates to native `FILLET`.
+- `QS3DJOINTEE` — **Nối chữ T**; delegates to native `EXTEND`.
+- `QS3DIFCIMPORT` — **Nhập IFC**; opens BricsCAD native `IMPORT`, where IFC/IFCZIP and installed-edition options are selected by the operator.
+- `QS3DIFCIMPORTLIGHT` — **Nhập IFC (nhẹ)**; opens the same native `IMPORT` path and instructs the operator to use the installed BricsCAD IFC XRef/spatial-split profile when available. It does not silently invent a separate lightweight IFC parser.
+- `QS3DIFCREMOVE` — **Xóa IFC**; opens native `XREF` management so an IFC imported as XRef can be detached explicitly.
+- `QS3DIFCEXPORT` — **Xuất IFC**; delegates to native BricsCAD BIM `IFCEXPORT`.
+
+These buttons are source-wired and statically guarded. Visibility, installed-edition command availability, IFC options, DPI rendering and native Undo/Cancel remain exact-V25 runtime acceptance items.
 
 ## Direct Draw / Tạo mới
 
@@ -50,7 +76,7 @@ P0 is intentionally guarded: Model Space only, unit-aware 5 mm planarity checks,
 
 ### Guarded P1 native subset
 
-- `QS3DDRAWGLASSWALL` — draw a GlassWall from two or more plan-view points, prompt/inherit thickness/height/bottom offset, capture semantic state and reuse `QS3DBUILD3D` for the backing native GlassWall host. Dedicated Curtain frames remain a `QS3DCURTAIN3D` / Curtain Hub workflow.
+- `QS3DDRAWGLASSWALL` — draw a GlassWall from two or more plan-view points, prompt/inherit thickness/height/bottom offset, capture semantic state and reuse `QS3DBUILD3D` for the backing native GlassWall host. Dedicated Curtain frames/panels remain a `QS3DCURTAIN3D` / Curtain Hub workflow.
 - `QS3DDRAWWALLPIER` — pick exactly two plan-view points and create a LINE source, prompt/inherit thickness/height/bottom offset, then reuse the specialized WallPier dispatch. The LINE path preserves current Rectangular/Chamfered `WallPierProfileSolidBuilder` semantics; multi-segment Direct Draw is deliberately rejected until a deterministic profile-around-corners contract exists.
 - `QS3DDRAWSTRUCTWALL` — draw a two-point StructuralWall LINE, prompt/inherit thickness/height/bottom offset and reuse canonical `QS3DBUILD3D` / structural builder behavior.
 - `QS3DDRAWFOUNDATION` — draw a closed Foundation POLYLINE from at least three plan-view points, prompt/inherit thickness/bottom offset and reuse canonical `QS3DBUILD3D` / structural builder behavior.
@@ -87,6 +113,7 @@ Room Auto is non-destructive: stable provenance can reuse Rooms and topology cha
 - `QS3DWALL` — capture Tường Gạch / ArchitecturalWall.
 - `QS3DGLASSWALL` — capture Vách Kính / GlassWall and seed Curtain defaults.
 - `QS3DWALLPIER` — capture Trụ Tường / WallPier and seed profile defaults.
+- `QS3DWALLQTY` — open the drawing-bound Wall Quantity takeoff workspace: search/filter by floor/category, inspect one semantic wall per detail row, review visible-row totals, recompute on a detached snapshot, export the visible wall scope to XLSX, and use guarded default-on `Bám 3D` / explicit `Định vị 3D` to revalidate the current semantic wall + current source Handles before CAD select/zoom. The merged source path is not a substitute for licensed V25 modeless/viewport qualification; see `WALL-QUANTITY-TAKEOFF.md`.
 - `QS3DWALLJUNCTIONS` — analyze L/T/X/Straight/End/Multi wall-centerline junctions and report a reviewable endpoint plan.
 - `QS3DWALLSNAPPREVIEW` — calculate/fingerprint supported straight endpoint cleanup without mutation.
 - `QS3DWALLSNAPAPPLY` — apply only the matching preview signature; stale preview/curved/bulged/nonsemantic source fails closed.
@@ -116,9 +143,9 @@ Opening link/re-host/unlink and relevant opening property changes stale dependen
 - `QS3DCURTAINXLSX` — deterministic Curtain schedule export.
 - `QS3DCURTAINFRAMES3D` — generate/update supported perimeter/mullion/transom frame overlays. Current source includes deterministic LINE plus guarded open/bulged WCS-XY path support; exact V25 behavior remains runtime-gated.
 - `QS3DCURTAINFRAMEHEALTH` — frame handle/live-solid/count/grid/config/live-geometry/ownership health.
-- `QS3DCURTAIN3D` — one-shot backing GlassWall host + supported frame-overlay workflow.
+- `QS3DCURTAIN3D` — one-shot backing GlassWall host + supported frame-overlay + panel-by-panel clear-glass workflow for guarded LINE/open-bulged path sources.
 
-Curtain frames can be interrupted deterministically around linked Door/Opening rectangles according to the supported source-path planner. The backing GlassWall remains the single host solid used by opening booleans; frame pieces own separate `GeneratedCurtainFrameHandles`.
+Curtain frames and panel cells are interrupted/clipped deterministically around linked Door/Opening rectangles according to the supported source-path planners. The backing GlassWall remains the single host solid used by opening booleans; frame pieces own `GeneratedCurtainFrameHandles` and native panel pieces own the independent `GeneratedCurtainPanelHandles` slot. Panel replacement is bounded to 4,096 native pieces per element and 8,192 per batch before destructive replacement. Source/static wiring is not exact-SHA BricsCAD V25 runtime proof; see `docs/CURTAIN-NATIVE-PANELS.md` and LOCAL-002.
 
 Curtain destructive and health ownership indexes use the shared generated-owner policy, so newly added generated families are protected without updating a manual slot list. Do not call current open/bulged-path frame work runtime-verified until the licensed V25 gate is executed.
 
@@ -136,6 +163,7 @@ Native source conventions include LINE for supported linear structure and closed
 - `QS3DRECOGNIZEAUTO` — auto-apply only sufficiently confident recognition.
 - `QS3DB4D` — bounded Current Space scan. It rejects layer/text matches whose CAD entity type is incompatible, excludes every generated owner-slot handle through the shared ownership policy, and keeps planar area separate from `Solid3d` total surface area. For recognized material solids, native mass-properties volume is authoritative over default prism estimates.
 - `QS3DBQ` — quantity summary/filter/group/Locate/XLSX.
+- `QS3DSETUPBLT` — open Quantity Settings with the bundled BLT3D compatibility preset staged as a reviewable draft; it is persisted only after **Lưu Cài Đặt / Save Settings**, and native quantity defaults remain unchanged until the user explicitly saves the preset.
 - `QS3DED2` — choose `Selection`, active `Floor`, active `Zone` or `All`; regenerate that semantic scope, then export `CHI_TIET` (one element per row) and Zone-aware `TONG_HOP` in one newly created workbook. Both sheets preserve Element ID/Handle/fingerprint provenance and expose element name, category, effective material, Family ID, Floor/Zone, engineering quantities, optional `DensityKgM3`/derived or explicit mass, and notes. Missing density stays blank rather than being guessed.
 - `QS3DEXCELLOCATE` — locate a `CHI_TIET`/QS3D workbook row only when Element ID, CAD Handle and DWG fingerprint provenance agree with the active project and every Handle still resolves. Legacy BLT `$decimal` Handle rows are the only no-fingerprint path and require explicit `YES`; failures preserve the current CAD selection.
 

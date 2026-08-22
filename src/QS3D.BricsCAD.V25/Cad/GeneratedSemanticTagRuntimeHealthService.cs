@@ -35,10 +35,19 @@ namespace QS3D.BricsCAD.V25.Cad
 
                     foreach (var handle in handles)
                     {
-                        if (!long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value)) continue;
+                        if (!long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
+                        {
+                            issues.Add(new ModelHealthIssue(
+                                "SEMANTIC_TAG_MTEXT_HANDLE_INVALID",
+                                HealthSeverity.Error,
+                                "GeneratedSemanticTagHandles chứa handle không phải hexadecimal metadata hợp lệ: " + handle + ". Health chỉ báo lỗi, không sửa/xóa CAD.",
+                                element.Id));
+                            continue;
+                        }
+
                         ObjectId id;
                         try { id = document.Database.GetObjectId(false, new Handle(value), 0); }
-                        catch
+                        catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
                         {
                             AddMissing(issues, element, handle);
                             continue;
@@ -51,7 +60,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
                         Entity? entity;
                         try { entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity; }
-                        catch
+                        catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
                         {
                             AddMissing(issues, element, handle);
                             continue;
@@ -198,6 +207,13 @@ namespace QS3D.BricsCAD.V25.Cad
         }
 
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+        private static bool IsRecoverableDiagnosticFailure(Exception exception)
+        {
+            return !(exception is OutOfMemoryException) &&
+                   !(exception is StackOverflowException) &&
+                   !(exception is AccessViolationException);
+        }
 
         private static string EncodePlainMText(string value)
         {

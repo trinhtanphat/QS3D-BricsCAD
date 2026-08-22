@@ -71,6 +71,23 @@ Only when source `<Version>` already matches the intended tag exactly:
 
 `-SkipRuntime` is allowed only for diagnosing source/build problems. A report containing `runtimeSkipped=true` **cannot qualify a customer release**.
 
+### Focused LOCAL-003 Level Z probe
+
+After the aggregate build gates are green, run the guarded Level Z-chain probe on the same clean exact SHA before the wider interactive matrix:
+
+```powershell
+.\scripts\test-bricscad-v25-level-z.ps1 `
+  -BricsCadDir "C:\Program Files\Bricsys\BricsCAD V25 en_US" `
+  -PluginDll ".\src\QS3D.BricsCAD.V25\bin\x64\Release\net48\QS3D.BricsCAD.V25.dll" `
+  -DrawingCopy ".\artifacts\local-v25-level-z\QS3D-Sample.level-z-probe-copy.dwg" `
+  -Profile "QS3D-V25-TEST" `
+  -ArtifactDir ".\artifacts\local-v25-level-z\run" `
+  -ExpectedSourceSha (git rev-parse HEAD) `
+  -ConfirmDisposableCopy
+```
+
+Read `docs/LOCAL-LEVEL-Z-QUALIFICATION-2026-08-11.md` for preparation, exact expected values, evidence and the required follow-on matrix. A PASS from this focused automation is representative native evidence only; it does not by itself close `LOCAL-003` or qualify a customer release.
+
 ## 3. Required interactive scenario matrix
 
 The automated probe proves load/runtime wiring, not every CAD operation. After it passes, run the following scenarios against the **same SHA and built DLL**.
@@ -78,6 +95,7 @@ The automated probe proves load/runtime wiring, not every CAD operation. After i
 ### A. Plugin shell / UI
 
 - DemandLoad from a clean user registration: run `QS3D` without manual `NETLOAD`.
+- After installing the exact locally built package in `OnCommand` mode, run `scripts/test-bricscad-v25-runtime.ps1` with `-DemandLoadOnly -SkipScreenshot` and `-PluginDll` set to the registered installed loader. The marker assembly path must equal that loader; a stale or already-loaded build must fail the check.
 - `QS3DRUNTIMECHECK` reports V25 + x64 + matching package/assembly state.
 - Ribbon tabs/actions exist once, not duplicated after reopen/reset.
 - Workspace/RightPanel/Family Manager/Hubs are modeless where designed.
@@ -177,6 +195,7 @@ No agent may infer engineering reinforcement, hook, lap, anchorage or fabricatio
 
 ### H. Project lifecycle
 
+- Run `scripts/test-bricscad-v25-project-lifecycle.ps1` first against the exact clean SHA and the repository-generated `samples/generated/QS3D-Sample.dwg`. Its four disposable copies provide a repeatable baseline for DWG `SaveComplete` sidecar persistence, cold-cache canonical binding, A/B project isolation, absent-sidecar non-creation and corrupt-sidecar fail-closed behavior. This automation is only the baseline below; it does not replace the interactive/modeless scenarios.
 - save `.qsdb`;
 - close/reopen DWG;
 - Save As and verify drawing identity synchronization;

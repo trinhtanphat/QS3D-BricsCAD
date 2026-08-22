@@ -10,28 +10,25 @@ if not SOURCE.is_file():
     errors.append("missing " + str(SOURCE.relative_to(ROOT)))
 else:
     text = SOURCE.read_text(encoding="utf-8")
-    dialog = text.find("var dialog = new SaveFileDialog")
-    confirmed = text.find("if (dialog.ShowDialog() != true) return;", dialog + 1)
-    project = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)", confirmed + 1)
+    project = text.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
     snapshot = text.find("ProjectStateSnapshot.CreateDetachedCopy(project)", project + 1)
     regen = text.find("RegenerateDirty(snapshot)", snapshot + 1)
     build = text.find("ProjectRebarScheduleBuilder.Build(snapshot)", regen + 1)
-    export = text.find("RebarCsvExporter.Export(dialog.FileName, rows)", build + 1)
+    rows = text.find("rows.Count == 0", build + 1)
+    total = text.find('QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS CSV total weight")', rows + 1)
+    dialog = text.find("var dialog = new SaveFileDialog", total + 1)
+    confirmed = text.find("if (dialog.ShowDialog() != true) return;", dialog + 1)
+    export = text.find("RebarCsvExporter.Export(dialog.FileName, rows)", confirmed + 1)
+    finalize = text.find("FinalizeUi(document, status);", export + 1)
 
-    if min(dialog, confirmed, project, snapshot, regen, build, export) < 0:
-        errors.append("BbsCsvCommands.cs missing save/read-only-project/detached-regenerate/build/export contract token")
-    elif not dialog < confirmed < project < snapshot < regen < build < export:
-        errors.append("BBS CSV must confirm Save before read-only lookup, detached regeneration, fresh schedule build, and export")
+    if min(project, snapshot, regen, build, rows, total, dialog, confirmed, export, finalize) < 0:
+        errors.append("BbsCsvCommands.cs missing read-only-project/detached-regenerate/build-validation/save/export contract token")
+    elif not project < snapshot < regen < build < rows < total < dialog < confirmed < export < finalize:
+        errors.append("BBS CSV must validate fresh detached exportability before SaveFileDialog, then export only after Save confirmation")
 
     pre_confirm = text[:confirmed if confirmed >= 0 else 0]
-    for forbidden in (
-        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
-        "ProjectStateSnapshot.CreateDetachedCopy(project)",
-        "RegenerateDirty(snapshot)",
-        "ProjectRebarScheduleBuilder.Build(snapshot)",
-    ):
-        if forbidden in pre_confirm:
-            errors.append("BBS CSV Cancel path must not execute before Save confirmation: " + forbidden)
+    if "RebarCsvExporter.Export(" in pre_confirm:
+        errors.append("BBS CSV must not write the export before Save confirmation")
 
     for forbidden in (
         "ProjectContextCoordinator.GetOrCreate(document)",
@@ -52,4 +49,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BBS CSV confirms the destination, resolves existing state read-only, regenerates/builds a detached snapshot, exports fresh rows, and isolates post-export UI reporting.")
+print("PASS: BBS CSV resolves existing state read-only, regenerates/builds and validates a detached snapshot before SaveFileDialog, writes only after confirmation, and isolates post-export UI reporting.")

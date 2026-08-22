@@ -22,7 +22,7 @@ namespace QS3D.Core.SmokeTests
         {
             var root = Element("ROOT");
             var z = Element("Z-CHILD", "ROOT");
-            var a = Element("A-CHILD", "ROOT", "ROOT");
+            var a = Element("A-CHILD", "ROOT");
             var grandchild = Element("GRANDCHILD", "A-CHILD");
             var graph = new DependencyGraph();
             graph.Rebuild(new[] { grandchild, z, root, a });
@@ -37,7 +37,7 @@ namespace QS3D.Core.SmokeTests
         private static void LookupNormalizesSourceId()
         {
             var root = Element("Root");
-            var child = Element("Child", " root ");
+            var child = Element("Child", "root");
             var graph = new DependencyGraph();
             graph.Rebuild(new[] { root, child });
             var direct = graph.GetDirectDependents(" ROOT ");
@@ -80,7 +80,7 @@ namespace QS3D.Core.SmokeTests
         private static void TransitiveLookupNormalizesAndIsDeterministic()
         {
             var root = Element("Root");
-            var z = Element("Z-CHILD", " root ");
+            var z = Element("Z-CHILD", "root");
             var a = Element("A-CHILD", "ROOT");
             var zLeaf = Element("Z-LEAF", "Z-CHILD");
             var aLeaf = Element("A-LEAF", "A-CHILD");

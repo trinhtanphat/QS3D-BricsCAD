@@ -50,6 +50,7 @@ namespace QS3D.Core.Navigation
     public static class ProjectBrowserPlanner
     {
         private const int MaxElements = 250000;
+        private const int MaxReferenceDefinitions = 2000;
         private const string UnassignedFloorKey = "@unassigned-floor";
         private const string UnassignedZoneKey = "@unassigned-zone";
 
@@ -58,6 +59,8 @@ namespace QS3D.Core.Navigation
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (!Enum.IsDefined(typeof(ProjectBrowserGrouping), grouping)) throw new ArgumentOutOfRangeException(nameof(grouping));
             if (project.Elements.Count > MaxElements) throw new InvalidOperationException("Project browser supports at most " + MaxElements + " semantic elements.");
+            if (project.Floors.Count > MaxReferenceDefinitions) throw new InvalidOperationException("Project browser supports at most " + MaxReferenceDefinitions + " floor definitions.");
+            if (project.Zones.Count > MaxReferenceDefinitions) throw new InvalidOperationException("Project browser supports at most " + MaxReferenceDefinitions + " zone definitions.");
 
             var elements = ValidateAndOrderElements(project);
             var floors = BuildFloorIndex(project);
@@ -136,13 +139,22 @@ namespace QS3D.Core.Navigation
         {
             foreach (var element in elements)
             {
-                var floorId = (element.FloorId ?? string.Empty).Trim();
+                var floorId = CanonicalOptionalReference(element.FloorId, "floor", element.Id);
                 if (floorId.Length > 0 && !floors.ContainsKey(floorId))
                     throw new InvalidOperationException("Project browser found missing floor reference " + floorId + " on element " + element.Id + ".");
-                var zoneId = (element.ZoneId ?? string.Empty).Trim();
+                var zoneId = CanonicalOptionalReference(element.ZoneId, "zone", element.Id);
                 if (zoneId.Length > 0 && !zones.ContainsKey(zoneId))
                     throw new InvalidOperationException("Project browser found missing zone reference " + zoneId + " on element " + element.Id + ".");
             }
+        }
+
+        private static string CanonicalOptionalReference(string value, string label, string elementId)
+        {
+            var raw = value ?? string.Empty;
+            if (raw.Length == 0) return string.Empty;
+            if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Project browser requires canonical " + label + " references without surrounding whitespace on element " + elementId + ".");
+            return raw;
         }
 
         private static IReadOnlyList<ProjectBrowserNode> BuildFloorNodes(

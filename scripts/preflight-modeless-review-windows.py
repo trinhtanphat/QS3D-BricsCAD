@@ -35,23 +35,37 @@ if bq.is_file():
             errors.append("BQ modeless callback missing current-project/source-DWG guard: " + needle)
     helper = text.find("private void EnsureCurrentProject(string operation)")
     helper_active = text.find("EnsureActive(operation);", helper)
-    helper_project = text.find("ProjectContextCoordinator.TryGetReadOnly(_document, out _)", helper)
-    if helper < 0 or helper_active < 0 or helper_project < 0 or not (helper < helper_active < helper_project):
-        errors.append("BQ EnsureCurrentProject must verify the bound DWG before existing-project inspection")
+    helper_project = text.find("ProjectContextCoordinator.TryGetReadOnly(_document, out var project)", helper)
+    helper_identity = text.find("EnsureProjectIdentity(project, operation);", helper)
+    if min(helper, helper_active, helper_project, helper_identity) < 0 or not (helper < helper_active < helper_project < helper_identity):
+        errors.append("BQ EnsureCurrentProject must verify the bound DWG, inspect the existing project, then verify project identity")
     export = text.find("private void OnExportClick")
     export_guard = text.find('EnsureCurrentProject("xuất BQ XLSX")', export)
-    recalc = text.find("_rows = _recalculate()", export)
+    refresh = text.find("RefreshRowsForCurrentMode(false);", export)
     exporter = text.find("XlsxQuantityExporter.Export", export)
-    if export < 0 or export_guard < 0 or recalc < 0 or exporter < 0 or not (export_guard < recalc < exporter):
+    refresh_helper = text.find("private void RefreshRowsForCurrentMode(bool requireLiveSummarySource)")
+    refresh_assign = text.find("_rows = RecalculateRowsForCurrentMode(requireLiveSummarySource);", refresh_helper)
+    if export < 0 or export_guard < 0 or refresh < 0 or exporter < 0 or not (export_guard < refresh < exporter):
         errors.append("BQ XLSX export must bind to the source DWG/current project and recalculate before writing cached rows")
+    if refresh_helper < 0 or refresh_assign < 0:
+        errors.append("BQ refresh helper must rebuild rows for the active Summary/Detail mode")
 
 recognition = windows["Recognition"]
 if recognition.is_file():
     text = recognition.read_text(encoding="utf-8")
-    if "EnsureActiveDocument();" not in text:
-        errors.append("Recognition apply/locate must verify its source DWG")
-    if "catch (Exception ex)" not in text or "firstError = ex.Message" not in text:
-        errors.append("Recognition review must surface manual apply failures instead of swallowing them")
+    for needle in (
+        "EnsureActiveDocument();",
+        "Func<IReadOnlyList<RecognitionResult>, bool, int>? _apply",
+        "Apply(IEnumerable<RecognitionResult> rows, bool requireLiveConfidence)",
+        "batch = rows.Where(x => x != null && x.TopCandidate != null).ToList().AsReadOnly();",
+        "var applied = _apply(batch, requireLiveConfidence);",
+        "RefreshStatus(applied, 0, null);",
+        'RefreshStatus(0, batch.Count, "Apply batch: " + ex.Message);',
+    ):
+        if needle not in text:
+            errors.append("Recognition atomic review UI missing bound-DWG/batch error token: " + needle)
+    if "catch {" in text:
+        errors.append("Recognition review must not silently swallow apply/locate failures")
 
 bbs = windows["BBS"]
 if bbs.is_file():
@@ -67,7 +81,7 @@ if bbs.is_file():
 revision = windows["Revision"]
 if revision.is_file():
     text = revision.read_text(encoding="utf-8")
-    ensure = text.find("EnsureActive();")
+    ensure = text.find("EnsureActiveAndCurrent();")
     callback = text.find("_locate?.Invoke(row);")
     if min(ensure, callback) < 0 or ensure > callback:
         errors.append("Revision Locate must verify its source DWG before invoking the CAD callback")
@@ -83,4 +97,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Recognition/BQ/BBS/Revision/Health modeless CAD/project/export actions are bound to their source DWG; BQ verifies current project state and refreshes before XLSX while BBS totals are checked.")
+print("PASS: Recognition/BQ/BBS/Revision/Health modeless actions stay bound to their source DWG; Recognition surfaces atomic batch failures, BQ refreshes before export, and BBS totals remain checked.")

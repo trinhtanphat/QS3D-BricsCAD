@@ -9,6 +9,7 @@ if not SOURCE.is_file():
     errors.append("missing SupportBundleCommands.cs")
 else:
     text = SOURCE.read_text(encoding="utf-8")
+    publish_call = "PublishSupportBundle(dialog.FileName, lines);"
     required = (
         '"QS3D_SUPPORT_BUNDLE_V1"',
         '"privacy=No drawing path, source/generated handles, semantic IDs, Family names, project metadata, user name or machine name are included."',
@@ -20,13 +21,20 @@ else:
         '"dirty_element_count="',
         '"has_drawing_fingerprint=" + Bool(!string.IsNullOrWhiteSpace(project.DrawingFingerprint))',
         'lines.Add("category." + SafeToken(group.Key.ToString()) + "=" + group.Count().ToString(CultureInfo.InvariantCulture));',
-        'File.WriteAllLines(dialog.FileName, lines, new System.Text.UTF8Encoding(false));',
+        publish_call,
+        "private static void PublishSupportBundle(string path, IReadOnlyList<string> lines)",
+        "using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false)))",
+        "writer.Flush();",
+        "stream.Flush(true);",
+        "File.Replace(temp, fullPath, null, true);",
+        "File.Move(temp, fullPath);",
     )
     for needle in required:
         if needle not in text:
-            errors.append("support bundle privacy contract missing: " + needle)
+            errors.append("support bundle privacy/atomic contract missing: " + needle)
 
-    before_write = text.split("File.WriteAllLines(dialog.FileName, lines", 1)[0]
+    publish_pos = text.find(publish_call)
+    before_publish = text[:publish_pos] if publish_pos >= 0 else text
     forbidden_report_inputs = (
         "Environment.UserName",
         "Environment.MachineName",
@@ -47,19 +55,21 @@ else:
         "Exception.ToString",
     )
     for needle in forbidden_report_inputs:
-        if needle in before_write:
+        if needle in before_publish:
             errors.append("support bundle may include private/raw report input: " + needle)
 
     # Drawing fingerprint may be reported only as a boolean presence flag, never as the fingerprint value.
-    fingerprint_uses = [line.strip() for line in before_write.splitlines() if "DrawingFingerprint" in line]
+    fingerprint_uses = [line.strip() for line in before_publish.splitlines() if "DrawingFingerprint" in line]
     expected_fingerprint = '"has_drawing_fingerprint=" + Bool(!string.IsNullOrWhiteSpace(project.DrawingFingerprint))'
     if len(fingerprint_uses) != 1 or expected_fingerprint not in fingerprint_uses[0]:
         errors.append("DrawingFingerprint must remain presence-only in the support bundle")
 
-    # Raw exceptions may be shown locally after the export attempt, but must not become bundle content.
-    after_write = text.split("File.WriteAllLines(dialog.FileName, lines", 1)[1] if "File.WriteAllLines(dialog.FileName, lines" in text else ""
-    if "ex.Message" not in after_write:
-        errors.append("local support command should still surface export failure without adding it to bundle content")
+    # Raw exceptions may be shown locally after publication is attempted, but must never become bundle content.
+    after_publish = text[publish_pos + len(publish_call):] if publish_pos >= 0 else ""
+    if "ex.Message" not in after_publish:
+        errors.append("local support command should still surface export/UI failure without adding it to bundle content")
+    if publish_pos >= 0 and 'lines.Add(' in text[publish_pos + len(publish_call):text.find("private static void PublishSupportBundle", publish_pos)]:
+        errors.append("support bundle content must be finalized before atomic publication")
 
 print("QS3D support bundle privacy preflight")
 if errors:
@@ -68,4 +78,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: support bundle remains aggregate/version-only and excludes drawing paths/content, semantic/generated handles, IDs, names, environment identity, local file reads and raw exception text from exported evidence.")
+print("PASS: support bundle content remains aggregate/version-only before atomic publication; sensitive project/runtime identity and raw exception text stay outside exported evidence while local failures remain reportable.")

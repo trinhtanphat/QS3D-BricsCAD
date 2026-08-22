@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -12,6 +13,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             SummaryContainsCountsWithoutProjectPayload();
+            NullIssuesFailClosedWithoutReplacingExport();
+            UndefinedSeverityFailsClosedWithoutReplacingExport();
             ExportReplacesAtomically();
         }
 
@@ -60,6 +63,109 @@ namespace QS3D.Core.SmokeTests
             Forbid(json, "123.456");
             Forbid(json, "Sensitive detail");
             Forbid(json, "Customer geometry detail");
+        }
+
+        private static void NullIssuesFailClosedWithoutReplacingExport()
+        {
+            var project = new ProjectState("P-NULL", "Diagnostic Null");
+            var malformed = new ModelHealthIssue[]
+            {
+                new ModelHealthIssue("VALID", HealthSeverity.Info, "valid"),
+                null!
+            };
+
+            try
+            {
+                _ = ProjectDiagnosticSummaryExporter.Build(project, malformed);
+                throw new Exception("Diagnostic summary Build must reject a null health issue.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("null health issue", StringComparison.Ordinal) < 0)
+                    throw new Exception("Diagnostic summary Build rejected a null issue for the wrong reason.", ex);
+            }
+
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-diagnostic-null-" + Guid.NewGuid().ToString("N") + ".json");
+            try
+            {
+                File.WriteAllText(path, "old");
+                try
+                {
+                    ProjectDiagnosticSummaryExporter.Export(path, project, malformed);
+                    throw new Exception("Diagnostic summary Export must reject a null health issue.");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    if (ex.Message.IndexOf("null health issue", StringComparison.Ordinal) < 0)
+                        throw new Exception("Diagnostic summary Export rejected a null issue for the wrong reason.", ex);
+                }
+                var persisted = File.ReadAllText(path);
+                if (!string.Equals(persisted, "old", StringComparison.Ordinal))
+                    throw new Exception("Malformed diagnostic export must not replace the existing destination.");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+            }
+        }
+
+        private static void UndefinedSeverityFailsClosedWithoutReplacingExport()
+        {
+            try
+            {
+                _ = new ModelHealthIssue("INVALID_SEVERITY", (HealthSeverity)999, "invalid");
+                throw new Exception("ModelHealthIssue constructor must reject an undefined health severity.");
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+            }
+
+            var project = new ProjectState("P-SEVERITY", "Diagnostic Severity");
+            var malformed = new[] { CreateMalformedSeverityFixture() };
+
+            try
+            {
+                _ = ProjectDiagnosticSummaryExporter.Build(project, malformed);
+                throw new Exception("Diagnostic summary Build must reject an undefined health severity.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("undefined health severity", StringComparison.Ordinal) < 0)
+                    throw new Exception("Diagnostic summary Build rejected undefined severity for the wrong reason.", ex);
+            }
+
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-diagnostic-severity-" + Guid.NewGuid().ToString("N") + ".json");
+            try
+            {
+                File.WriteAllText(path, "old");
+                try
+                {
+                    ProjectDiagnosticSummaryExporter.Export(path, project, malformed);
+                    throw new Exception("Diagnostic summary Export must reject an undefined health severity.");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    if (ex.Message.IndexOf("undefined health severity", StringComparison.Ordinal) < 0)
+                        throw new Exception("Diagnostic summary Export rejected undefined severity for the wrong reason.", ex);
+                }
+                var persisted = File.ReadAllText(path);
+                if (!string.Equals(persisted, "old", StringComparison.Ordinal))
+                    throw new Exception("Undefined diagnostic severity must not replace the existing destination.");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+            }
+        }
+
+        private static ModelHealthIssue CreateMalformedSeverityFixture()
+        {
+            var issue = new ModelHealthIssue("INVALID_SEVERITY", HealthSeverity.Error, "invalid");
+            var field = typeof(ModelHealthIssue).GetField("<Severity>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new Exception("ProjectDiagnosticSummarySmoke could not locate the severity backing field for its malformed test fixture.");
+            field.SetValue(issue, (HealthSeverity)999);
+            if ((int)issue.Severity != 999) throw new Exception("ProjectDiagnosticSummarySmoke could not create its malformed severity fixture.");
+            return issue;
         }
 
         private static void ExportReplacesAtomically()

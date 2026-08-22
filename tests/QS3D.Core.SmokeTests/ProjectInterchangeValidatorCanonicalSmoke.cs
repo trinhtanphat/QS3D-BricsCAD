@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
@@ -17,8 +18,10 @@ namespace QS3D.Core.SmokeTests
             RejectsPaddedDependency();
             RejectsPaddedPropertyKey();
             RejectsPaddedQuantityKey();
+            RejectsPaddedUnitTokens();
             RejectsTimestampWithoutOffset();
-            AcceptsExplicitOffset();
+            RejectsTimestampWithExplicitOffset();
+            AcceptsCanonicalUtc();
         }
 
         private static void RejectsPaddedProjectId() =>
@@ -39,15 +42,46 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsPaddedQuantityKey() =>
             RequireIssue(Json().Replace("\"Count\":2", "\" Count \":2"), "QUANTITY_KEY_NON_CANONICAL");
 
+        private static void RejectsPaddedUnitTokens()
+        {
+            RequireUnitToken("length", "m", "UNIT_LENGTH");
+            RequireUnitToken("area", "m2", "UNIT_AREA");
+            RequireUnitToken("volume", "m3", "UNIT_VOLUME");
+            RequireUnitToken("mass", "kg", "UNIT_MASS");
+        }
+
+        private static void RequireUnitToken(string name, string value, string code)
+        {
+            var canonical = "\"" + name + "\":\"" + value + "\"";
+            var padded = "\"" + name + "\":\" " + value + " \"";
+            var json = Json().Replace(canonical, padded);
+            RequireIssue(json, code);
+            try
+            {
+                ProjectInterchangeValidatedSnapshotReader.Read(json);
+            }
+            catch (InvalidDataException)
+            {
+                return;
+            }
+            throw new InvalidOperationException("ProjectInterchangeValidatorCanonicalSmoke: typed reader accepted padded unit token " + name + ".");
+        }
+
         private static void RejectsTimestampWithoutOffset() =>
             RequireIssue(Json().Replace("2026-08-10T10:00:00.0000000Z", "2026-08-10T10:00:00.0000000"), "TIMESTAMP_NOT_UTC");
 
-        private static void AcceptsExplicitOffset()
+        private static void RejectsTimestampWithExplicitOffset()
         {
-            var json = Json().Replace("2026-08-10T10:00:00.0000000Z", "2026-08-10T17:00:00.0000000+07:00");
-            var result = ProjectInterchangeJsonValidator.Validate(json);
+            RequireIssue(
+                Json().Replace("2026-08-10T10:00:00.0000000Z", "2026-08-10T17:00:00.0000000+07:00"),
+                "TIMESTAMP_NOT_UTC");
+        }
+
+        private static void AcceptsCanonicalUtc()
+        {
+            var result = ProjectInterchangeJsonValidator.Validate(Json());
             if (!result.IsValid)
-                throw new InvalidOperationException("ProjectInterchangeValidatorCanonicalSmoke: explicit timezone offset was rejected: " + string.Join(",", result.Issues.Select(x => x.Code)));
+                throw new InvalidOperationException("ProjectInterchangeValidatorCanonicalSmoke: exact UTC round-trip timestamp was rejected: " + string.Join(",", result.Issues.Select(x => x.Code)));
         }
 
         private static void RequireIssue(string json, string code)

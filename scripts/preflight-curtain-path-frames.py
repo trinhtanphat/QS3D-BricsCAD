@@ -39,7 +39,7 @@ checks = {
         'Mode = "LineFrameOverlay"', 'OpeningAwareMode = "LineFrameOverlay.OpeningAware"',
         "BuildSelectedLineWalls", "CurtainFrameOpeningPlanner.Interrupt", "GeneratedCurtainFrameOwnershipGuard.Build",
         "ownership.EnsureOwned", "GeneratedCurtainFrameConfigFingerprint", "ClearGeneratedCurtainFrameStale",
-        "MaxFramesPerElement = 4096", "MaxFramesPerBatch = 8192", "project.Touch()",
+        "MaxFramesPerElement = 4096", "MaxFramesPerBatch = 8192", 'AuditTrail.ForProject(project).Record("geometry.curtain.frames"',
     ],
     "builder": [
         'Mode = "PathFrameOverlay"', 'OpeningAwareMode = "PathFrameOverlay.OpeningAware"',
@@ -49,7 +49,7 @@ checks = {
         'GeneratedCurtainFrameSourceKind"] = "OpenPolyline"', "GeneratedCurtainFramePathSegmentCount",
         "GeneratedCurtainFrameMappedFrameCount", "GeneratedCurtainFrameConfigFingerprint", "ClearGeneratedCurtainFrameStale",
         "CreateBox", "Matrix3d.Rotation", "WallArcSagittaM", "MaxFramesPerElement = 4096", "MaxFramesPerBatch = 8192",
-        "project.Touch()",
+        'AuditTrail.ForProject(project).Record("geometry.curtain.path.frames"',
     ],
     "fingerprint": [
         "AppendHostGeometry", "hostSource is Line", "hostSource is Polyline", "polyline.GetPoint2dAt",
@@ -69,7 +69,7 @@ checks = {
     "build_command": [
         "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls", "CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines",
         "PolylineWallSolidBuilder.BuildSelected", "open/bulged POLYLINE WCS-XY", "RegenerateDirty(project)",
-        "FinalizeUi(document, hostSolids, frameSolids, stamped, regenerated, stampWarning)", '" UI sync warning: " + ex.Message',
+        "FinalizeUi(document, hostSolids, frameSolids, panelSolids, checked(stamped + panelsStamped), regenerated, stampWarning)", '" UI sync warning: " + ex.Message',
     ],
     "planner_smoke": [
         "ModuleInitializer", "BentPathSplitsFrameAtCorner", "ProjectionUsesNearestPathStation",
@@ -89,6 +89,12 @@ for key, needles in checks.items():
     for needle in needles:
         if needle not in text:
             errors.append(str(path.relative_to(ROOT)) + " missing curtain path token: " + needle)
+
+for key in ("line_builder", "builder"):
+    if files[key].is_file():
+        text = files[key].read_text(encoding="utf-8")
+        if "project.Touch();" in text:
+            errors.append(str(files[key].relative_to(ROOT)) + " must keep redundant batch project.Touch removed; AuditTrail.Record owns revision advancement")
 
 if files["builder"].is_file():
     text = files["builder"].read_text(encoding="utf-8")
@@ -132,4 +138,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: line and open/bulged WCS-XY GlassWall frame builders stay UI-free after commit, path sources map deterministic curtain stations to tessellated segments, linked openings preserve ownership/stale metadata, Curtain3D validates semantics before native mutation, and post-commit UI synchronization stays non-fatal at command level.")
+print("PASS: line and open/bulged WCS-XY GlassWall frame builders stay UI-free and AuditTrail-owned after commit, path sources map deterministic curtain stations to tessellated segments, linked openings preserve ownership/stale metadata, Curtain3D validates semantics before native mutation, and post-commit UI synchronization stays non-fatal at command level.")

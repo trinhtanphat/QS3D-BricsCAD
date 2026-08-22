@@ -1,6 +1,6 @@
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
 param(
-    [string]$PackageDirectory = $PSScriptRoot,
+    [string]$PackageDirectory,
     [string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA 'QS3D\BricsCAD-V25'),
     [ValidateSet('OnCommand', 'OnStartup')]
     [string]$LoadMode = 'OnCommand',
@@ -14,6 +14,37 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$UpdateMutexPrefix = 'Global\QS3D-BricsCAD-V25-Update-'
+
+function Enter-Qs3dUpdateMutex {
+    $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    try { $sid = [string]$identity.User.Value }
+    finally { $identity.Dispose() }
+    if ([string]::IsNullOrWhiteSpace($sid)) { throw 'Could not resolve the current Windows user SID for QS3D install serialization.' }
+
+    $mutexName = $UpdateMutexPrefix + $sid
+    $mutex = [System.Threading.Mutex]::new($false, $mutexName)
+    $ownsMutex = $false
+    try {
+        try { $ownsMutex = $mutex.WaitOne(0) }
+        catch [System.Threading.AbandonedMutexException] { $ownsMutex = $true }
+        if (-not $ownsMutex) {
+            throw 'Another QS3D install/update is already active for this Windows user. Finish that operation before starting another install.'
+        }
+        return $mutex
+    }
+    catch {
+        $mutex.Dispose()
+        throw
+    }
+}
+
+function Exit-Qs3dUpdateMutex {
+    param([System.Threading.Mutex]$Mutex)
+    if ($null -eq $Mutex) { return }
+    try { $Mutex.ReleaseMutex() }
+    finally { $Mutex.Dispose() }
+}
 
 function Get-RegistryTargets {
     param([string[]]$RequestedVersions, [string[]]$RequestedLanguages)
@@ -71,6 +102,10 @@ function Assert-PackageIntegrity {
 
     $manifest = Join-Path $Directory 'SHA256SUMS.txt'
     if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw "Missing hash manifest: $manifest" }
+
+    $packageRootPath = [IO.Path]::GetFullPath($Directory).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $packageRoot = $packageRootPath + [IO.Path]::DirectorySeparatorChar
+    $manifestEntries = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $verified = 0
     foreach ($line in Get-Content -LiteralPath $manifest) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
@@ -85,7 +120,8 @@ function Assert-PackageIntegrity {
         if ($segments.Count -eq 0 -or @($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
             throw "Unsafe SHA256SUMS entry: $name"
         }
-        $packageRoot = [IO.Path]::GetFullPath($Directory).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+        if (-not $manifestEntries.Add($name)) { throw "Duplicate SHA256SUMS payload entry: $name" }
+
         $file = [IO.Path]::GetFullPath((Join-Path $Directory ($name.Replace('/', [IO.Path]::DirectorySeparatorChar))))
         if (-not $file.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe SHA256SUMS entry: $name" }
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing package payload: $name" }
@@ -94,6 +130,24 @@ function Assert-PackageIntegrity {
         $verified++
     }
     if ($verified -eq 0) { throw 'SHA256SUMS.txt contains no payload entries.' }
+
+    $actualEntries = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($packageFile in Get-ChildItem -LiteralPath $Directory -File -Recurse) {
+        $fullPath = [IO.Path]::GetFullPath($packageFile.FullName)
+        if ([string]::Equals($fullPath, [IO.Path]::GetFullPath($manifest), [StringComparison]::OrdinalIgnoreCase)) { continue }
+        if (-not $fullPath.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Package payload escaped package root: $($packageFile.FullName)"
+        }
+        $relative = $fullPath.Substring($packageRoot.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')
+        if (-not $actualEntries.Add($relative)) { throw "Duplicate/case-colliding package payload path: $relative" }
+        if (-not $manifestEntries.Contains($relative)) { throw "Unhashed package payload: $relative" }
+    }
+    foreach ($name in $manifestEntries) {
+        if (-not $actualEntries.Contains($name)) { throw "SHA256SUMS entry does not map to a regular package file: $name" }
+    }
+    if ($actualEntries.Count -ne $manifestEntries.Count) {
+        throw "SHA256SUMS coverage mismatch. Manifest entries=$($manifestEntries.Count), package files=$($actualEntries.Count)."
+    }
 
     $expectedSigner = Normalize-Thumbprint $SignerThumbprint
     $signedPayloadNames = @(
@@ -116,6 +170,111 @@ function Assert-PackageIntegrity {
     $commands = @(Get-Content -LiteralPath $commandsPath | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Sort-Object -Unique)
     if ($commands.Count -eq 0 -or -not ($commands -contains 'QS3D')) { throw 'COMMANDS.txt does not contain the QS3D entry command.' }
     return $commands
+}
+
+function Convert-ToStrictSemVerIdentity {
+    param([string]$Value, [string]$Label)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Label is missing." }
+    $text = $Value.Trim()
+    $match = [regex]::Match(
+        $text,
+        '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
+        [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+    if (-not $match.Success) { throw "$Label is not strict SemVer: $text" }
+
+    $components = @()
+    foreach ($index in 1..3) {
+        $parsed = 0
+        if (-not [int]::TryParse($match.Groups[$index].Value, [Globalization.NumberStyles]::None, [Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)) {
+            throw "$Label numeric component is outside the supported range: $text"
+        }
+        $components += $parsed
+    }
+
+    if ($match.Groups[4].Success) {
+        foreach ($identifier in $match.Groups[4].Value.Split('.')) {
+            if ($identifier -match '^[0-9]+$' -and $identifier.Length -gt 1 -and $identifier[0] -eq '0') {
+                throw "$Label has a numeric prerelease identifier with a leading zero: $text"
+            }
+        }
+    }
+
+    $buildMetadataIndex = $text.IndexOf('+')
+    $publicText = if ($buildMetadataIndex -ge 0) { $text.Substring(0, $buildMetadataIndex) } else { $text }
+
+    return [pscustomobject]@{
+        Text = $text
+        PublicText = $publicText
+        Major = [int]$components[0]
+        Minor = [int]$components[1]
+        Patch = [int]$components[2]
+    }
+}
+
+function Assert-PackageIdentity {
+    param([string]$Directory)
+
+    $metadataPath = Join-Path $Directory 'PACKAGE-METADATA.json'
+    if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "Missing package metadata: $metadataPath" }
+    try { $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json }
+    catch { throw "PACKAGE-METADATA.json is unreadable: $($_.Exception.Message)" }
+
+    if ([string]$metadata.product -ne 'QS3D') { throw 'PACKAGE-METADATA product must be QS3D.' }
+    if ([string]$metadata.target -ne 'BricsCAD V25 x64') { throw 'PACKAGE-METADATA target must be BricsCAD V25 x64.' }
+    if (-not $metadata.PSObject.Properties['version']) { throw 'PACKAGE-METADATA is missing version.' }
+    if (-not $metadata.PSObject.Properties['productVersion']) { throw 'PACKAGE-METADATA is missing productVersion.' }
+
+    try { $metadataAssemblyVersion = [Version]::Parse([string]$metadata.version) }
+    catch { throw "PACKAGE-METADATA version is invalid: $($metadata.version)" }
+    $metadataProductVersion = Convert-ToStrictSemVerIdentity -Value ([string]$metadata.productVersion) -Label 'PACKAGE-METADATA productVersion'
+
+    if ($metadataAssemblyVersion.Major -ne $metadataProductVersion.Major -or
+        $metadataAssemblyVersion.Minor -ne $metadataProductVersion.Minor -or
+        $metadataAssemblyVersion.Build -ne $metadataProductVersion.Patch) {
+        throw "PACKAGE-METADATA assembly version $metadataAssemblyVersion does not match productVersion core $($metadataProductVersion.Major).$($metadataProductVersion.Minor).$($metadataProductVersion.Patch)."
+    }
+
+    $fullDllProductVersion = $null
+    foreach ($name in @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')) {
+        $path = Join-Path $Directory $name
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Package identity payload is missing: $name" }
+
+        try { $assemblyVersion = [Reflection.AssemblyName]::GetAssemblyName($path).Version }
+        catch { throw "$name assembly version is unreadable: $($_.Exception.Message)" }
+        if (-not $assemblyVersion) { throw "$name assembly version is missing." }
+        if ($assemblyVersion -ne $metadataAssemblyVersion) {
+            throw "$name assembly version $assemblyVersion does not match PACKAGE-METADATA version $metadataAssemblyVersion."
+        }
+
+        try { $productVersionText = [string][Diagnostics.FileVersionInfo]::GetVersionInfo($path).ProductVersion }
+        catch { throw "$name product version is unreadable: $($_.Exception.Message)" }
+        $dllProductVersion = Convert-ToStrictSemVerIdentity -Value $productVersionText -Label ("$name product version")
+        if (-not [string]::Equals($dllProductVersion.PublicText, $metadataProductVersion.PublicText, [StringComparison]::Ordinal)) {
+            throw "$name public product version $($dllProductVersion.PublicText) does not match PACKAGE-METADATA productVersion public identity $($metadataProductVersion.PublicText)."
+        }
+        if ($null -eq $fullDllProductVersion) {
+            $fullDllProductVersion = $dllProductVersion.Text
+        }
+        elseif (-not [string]::Equals($dllProductVersion.Text, $fullDllProductVersion, [StringComparison]::Ordinal)) {
+            throw "Package managed DLL product versions disagree: expected $fullDllProductVersion, got $($dllProductVersion.Text) for $name."
+        }
+    }
+}
+
+function Assert-ExistingInstallDirectorySafeToReplace {
+    param([string]$Directory)
+
+    if (-not (Test-Path -LiteralPath $Directory)) { return }
+    if (-not (Test-Path -LiteralPath $Directory -PathType Container)) {
+        throw "Refusing to replace existing InstallDirectory because it is not a directory: $Directory"
+    }
+    try {
+        Assert-PackageIdentity -Directory $Directory
+    }
+    catch {
+        throw "Refusing to replace existing InstallDirectory because it is not a valid QS3D V25 installation: $Directory. $($_.Exception.Message)"
+    }
 }
 
 function Get-RegistryValueSnapshot {
@@ -214,103 +373,196 @@ function Restore-DemandLoadSnapshot {
     }
 }
 
-if (Get-Process -Name bricscad -ErrorAction SilentlyContinue) {
-    throw 'Close all BricsCAD processes before installing or upgrading QS3D.'
+function Get-RunningBricsCADProcessDetails {
+    $details = @()
+    foreach ($process in @(Get-Process -Name bricscad -ErrorAction SilentlyContinue)) {
+        $processPath = '<unavailable>'
+        try {
+            if (-not [string]::IsNullOrWhiteSpace([string]$process.Path)) {
+                $processPath = [string]$process.Path
+            }
+        }
+        catch {
+            $processPath = '<unavailable>'
+        }
+        $details += "Name=$($process.ProcessName) PID=$($process.Id) Path=$processPath"
+    }
+    return $details
 }
 
-$package = (Resolve-Path -LiteralPath $PackageDirectory).Path
-$commands = Assert-PackageIntegrity -Directory $package -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
-$targets = @(Get-RegistryTargets -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)
+function Assert-DemandLoadRegistration {
+    param(
+        $Target,
+        [string]$ExpectedLoader,
+        [int]$ExpectedLoadCtrls,
+        [string[]]$ExpectedCommands
+    )
 
-foreach ($target in $targets) {
-    if ((Test-Path -LiteralPath $target.AppKey) -and -not $Force) {
-        throw "QS3D DemandLoad registration already exists for $($target.Version)/$($target.Language). Use -Force for an intentional upgrade."
-    }
-}
-
-$registrySnapshots = @($targets | ForEach-Object { Get-DemandLoadSnapshot -AppKey $_.AppKey })
-$installFull = [IO.Path]::GetFullPath($InstallDirectory)
-$parent = Split-Path -Parent $installFull
-if ([string]::IsNullOrWhiteSpace($parent)) { throw 'InstallDirectory must have a parent directory.' }
-$stage = Join-Path $parent ('.qs3d-stage-' + [Guid]::NewGuid().ToString('N'))
-$backup = $null
-$payloadCommitted = $false
-$payload = @(
-    'QS3D.BricsCAD.V25.dll',
-    'QS3D.Core.dll',
-    'COMMANDS.txt',
-    'PACKAGE-METADATA.json',
-    'README.txt',
-    'SHA256SUMS.txt',
-    'uninstall-v25-autoload.ps1',
-    'update-v25.ps1'
-)
-
-try {
-    if ($PSCmdlet.ShouldProcess($installFull, 'Install QS3D V25 payload')) {
-        New-Item -ItemType Directory -Path $parent -Force | Out-Null
-        New-Item -ItemType Directory -Path $stage -Force | Out-Null
-        foreach ($name in $payload) {
-            $source = Join-Path $package $name
-            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing installer payload: $name" }
-            Copy-Item -LiteralPath $source -Destination (Join-Path $stage $name) -Force
-        }
-
-        if (Test-Path -LiteralPath $installFull) {
-            if (-not $Force) { throw "Install directory already exists: $installFull" }
-            $backup = $installFull + '.backup-' + [Guid]::NewGuid().ToString('N')
-            Move-Item -LiteralPath $installFull -Destination $backup
-        }
-        Move-Item -LiteralPath $stage -Destination $installFull
-        $payloadCommitted = $true
+    if (-not (Test-Path -LiteralPath $Target.AppKey)) {
+        throw "DemandLoad registration was not created for $($Target.Version)/$($Target.Language): $($Target.AppKey)"
     }
 
-    $loader = Join-Path $installFull 'QS3D.BricsCAD.V25.dll'
-    $loadCtrls = if ($LoadMode -eq 'OnStartup') { 2 } else { 4 }
-    foreach ($target in $targets) {
-        if ($PSCmdlet.ShouldProcess("$($target.Version)/$($target.Language)", "Register QS3D DemandLoad ($LoadMode)")) {
-            New-Item -Path $target.AppKey -Force | Out-Null
-            New-ItemProperty -Path $target.AppKey -Name 'Loader' -Value $loader -PropertyType String -Force | Out-Null
-            New-ItemProperty -Path $target.AppKey -Name 'LoadCtrls' -Value $loadCtrls -PropertyType DWord -Force | Out-Null
-            New-ItemProperty -Path $target.AppKey -Name 'Description' -Value 'QS3D for BricsCAD V25' -PropertyType String -Force | Out-Null
-            $commandsKey = Join-Path $target.AppKey 'Commands'
-            Remove-Item -LiteralPath $commandsKey -Recurse -Force -ErrorAction SilentlyContinue
-            New-Item -Path $commandsKey -Force | Out-Null
-            foreach ($command in $commands) {
-                New-ItemProperty -Path $commandsKey -Name $command -Value $command -PropertyType String -Force | Out-Null
+    $appKey = Get-Item -LiteralPath $Target.AppKey
+    try {
+        $actualLoader = [string]$appKey.GetValue('Loader', '')
+        $actualLoadCtrls = [int]$appKey.GetValue('LoadCtrls', -1)
+        $actualDescription = [string]$appKey.GetValue('Description', '')
+    }
+    finally { $appKey.Close() }
+
+    if (-not [string]::Equals($actualLoader, $ExpectedLoader, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "DemandLoad Loader mismatch for $($Target.Version)/$($Target.Language). Expected '$ExpectedLoader', got '$actualLoader'."
+    }
+    if ($actualLoadCtrls -ne $ExpectedLoadCtrls) {
+        throw "DemandLoad LoadCtrls mismatch for $($Target.Version)/$($Target.Language). Expected $ExpectedLoadCtrls, got $actualLoadCtrls."
+    }
+    if ($actualDescription -ne 'QS3D for BricsCAD V25') {
+        throw "DemandLoad Description mismatch for $($Target.Version)/$($Target.Language)."
+    }
+
+    $commandsKeyPath = Join-Path $Target.AppKey 'Commands'
+    if (-not (Test-Path -LiteralPath $commandsKeyPath)) {
+        throw "DemandLoad Commands key is missing for $($Target.Version)/$($Target.Language)."
+    }
+    $commandsKey = Get-Item -LiteralPath $commandsKeyPath
+    try {
+        $registeredNames = @($commandsKey.GetValueNames())
+        foreach ($command in $ExpectedCommands) {
+            if (-not ($registeredNames -contains $command)) {
+                throw "DemandLoad command registration is missing '$command' for $($Target.Version)/$($Target.Language)."
+            }
+            $mappedCommand = [string]$commandsKey.GetValue($command, '')
+            if ($mappedCommand -ne $command) {
+                throw "DemandLoad command mapping mismatch for '$command' on $($Target.Version)/$($Target.Language)."
             }
         }
     }
-
-    if ($backup -and (Test-Path -LiteralPath $backup)) { Remove-Item -LiteralPath $backup -Recurse -Force }
-    Write-Host "QS3D installed: $installFull"
-    Write-Host "DemandLoad mode: $LoadMode"
-    Write-Host "Registered targets: $($targets.Count)"
-    Write-Host 'Security settings were not weakened. Production -RequireSigned verifies both DLLs and all packaged PowerShell executable payloads.'
+    finally { $commandsKey.Close() }
 }
-catch {
-    $originalError = $_
-    $rollbackFailures = @()
 
-    for ($index = $registrySnapshots.Count - 1; $index -ge 0; $index--) {
-        try { Restore-DemandLoadSnapshot -Snapshot $registrySnapshots[$index] }
-        catch { $rollbackFailures += ("registry " + $registrySnapshots[$index].AppKey + ": " + $_.Exception.Message) }
+$runningBricsCAD = @(Get-RunningBricsCADProcessDetails)
+if ($runningBricsCAD.Count -gt 0) {
+    throw ('Close all BricsCAD processes before installing or upgrading QS3D. Detected: ' + ($runningBricsCAD -join ' | '))
+}
+
+$updateMutex = Enter-Qs3dUpdateMutex
+try {
+    Write-Warning 'QS3D managed plugin requires BricsCAD V25 Pro or higher. BricsCAD Shape/Lite cannot load the BRX/.NET plugin.'
+
+    $scriptDirectory = $PSScriptRoot
+    if ([string]::IsNullOrWhiteSpace($scriptDirectory) -and -not [string]::IsNullOrWhiteSpace([string]$MyInvocation.MyCommand.Path)) {
+        $scriptDirectory = Split-Path -Parent ([IO.Path]::GetFullPath([string]$MyInvocation.MyCommand.Path))
     }
+    if ([string]::IsNullOrWhiteSpace($PackageDirectory)) {
+        $PackageDirectory = $scriptDirectory
+    }
+    if ([string]::IsNullOrWhiteSpace($PackageDirectory)) {
+        throw 'PackageDirectory could not be resolved from the installer script location. Pass -PackageDirectory explicitly.'
+    }
+
+    $package = (Resolve-Path -LiteralPath $PackageDirectory).Path
+    $commands = Assert-PackageIntegrity -Directory $package -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
+    Assert-PackageIdentity -Directory $package
+    $targets = @(Get-RegistryTargets -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)
+
+    foreach ($target in $targets) {
+        if ((Test-Path -LiteralPath $target.AppKey) -and -not $Force) {
+            throw "QS3D DemandLoad registration already exists for $($target.Version)/$($target.Language). Use -Force for an intentional upgrade."
+        }
+    }
+
+    $registrySnapshots = @($targets | ForEach-Object { Get-DemandLoadSnapshot -AppKey $_.AppKey })
+    $installFull = [IO.Path]::GetFullPath($InstallDirectory)
+    $parent = Split-Path -Parent $installFull
+    if ([string]::IsNullOrWhiteSpace($parent)) { throw 'InstallDirectory must have a parent directory.' }
+    $stage = Join-Path $parent ('.qs3d-stage-' + [Guid]::NewGuid().ToString('N'))
+    $backup = $null
+    $payloadCommitted = $false
+    $payload = @(
+        'QS3D.BricsCAD.V25.dll',
+        'QS3D.Core.dll',
+        'COMMANDS.txt',
+        'PACKAGE-METADATA.json',
+        'README.txt',
+        'SHA256SUMS.txt',
+        'uninstall-v25-autoload.ps1',
+        'update-v25.ps1'
+    )
 
     try {
-        if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
-        if ($backup -and (Test-Path -LiteralPath $backup)) {
-            if (Test-Path -LiteralPath $installFull) { Remove-Item -LiteralPath $installFull -Recurse -Force }
-            Move-Item -LiteralPath $backup -Destination $installFull
-        }
-        elseif ($payloadCommitted -and (Test-Path -LiteralPath $installFull)) {
-            Remove-Item -LiteralPath $installFull -Recurse -Force
-        }
-    }
-    catch { $rollbackFailures += ("payload: " + $_.Exception.Message) }
+        if ($PSCmdlet.ShouldProcess($installFull, 'Install QS3D V25 payload')) {
+            New-Item -ItemType Directory -Path $parent -Force | Out-Null
+            New-Item -ItemType Directory -Path $stage -Force | Out-Null
+            foreach ($name in $payload) {
+                $source = Join-Path $package $name
+                if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing installer payload: $name" }
+                $destination = Join-Path $stage $name
+                Copy-Item -LiteralPath $source -Destination $destination -Force
+                Unblock-File -LiteralPath $destination -ErrorAction Stop
+            }
 
-    if ($rollbackFailures.Count -gt 0) {
-        Write-Warning ("QS3D installer rollback encountered error(s): " + ($rollbackFailures -join ' | '))
+            if (Test-Path -LiteralPath $installFull) {
+                if (-not $Force) { throw "Install directory already exists: $installFull" }
+                Assert-ExistingInstallDirectorySafeToReplace -Directory $installFull
+                $backup = $installFull + '.backup-' + [Guid]::NewGuid().ToString('N')
+                Move-Item -LiteralPath $installFull -Destination $backup
+            }
+            Move-Item -LiteralPath $stage -Destination $installFull
+            $payloadCommitted = $true
+        }
+
+        $loader = Join-Path $installFull 'QS3D.BricsCAD.V25.dll'
+        $loadCtrls = if ($LoadMode -eq 'OnStartup') { 2 } else { 4 }
+        foreach ($target in $targets) {
+            if ($PSCmdlet.ShouldProcess("$($target.Version)/$($target.Language)", "Register QS3D DemandLoad ($LoadMode)")) {
+                New-Item -Path $target.AppKey -Force | Out-Null
+                New-ItemProperty -Path $target.AppKey -Name 'Loader' -Value $loader -PropertyType String -Force | Out-Null
+                New-ItemProperty -Path $target.AppKey -Name 'LoadCtrls' -Value $loadCtrls -PropertyType DWord -Force | Out-Null
+                New-ItemProperty -Path $target.AppKey -Name 'Description' -Value 'QS3D for BricsCAD V25' -PropertyType String -Force | Out-Null
+                $commandsKey = Join-Path $target.AppKey 'Commands'
+                Remove-Item -LiteralPath $commandsKey -Recurse -Force -ErrorAction SilentlyContinue
+                New-Item -Path $commandsKey -Force | Out-Null
+                foreach ($command in $commands) {
+                    New-ItemProperty -Path $commandsKey -Name $command -Value $command -PropertyType String -Force | Out-Null
+                }
+                Assert-DemandLoadRegistration -Target $target -ExpectedLoader $loader -ExpectedLoadCtrls $loadCtrls -ExpectedCommands $commands
+            }
+        }
+
+        if ($backup -and (Test-Path -LiteralPath $backup)) { Remove-Item -LiteralPath $backup -Recurse -Force }
+        Write-Host "QS3D installed: $installFull"
+        Write-Host "DemandLoad mode: $LoadMode"
+        Write-Host "Registered targets: $($targets.Count)"
+        Write-Host 'Host requirement: BricsCAD V25 Pro or higher. Shape/Lite cannot load the QS3D BRX/.NET plugin.'
+        Write-Host 'Security settings were not weakened. Production -RequireSigned verifies both DLLs and all packaged PowerShell executable payloads.'
     }
-    throw $originalError
+    catch {
+        $originalError = $_
+        $rollbackFailures = @()
+
+        for ($index = $registrySnapshots.Count - 1; $index -ge 0; $index--) {
+            try { Restore-DemandLoadSnapshot -Snapshot $registrySnapshots[$index] }
+            catch { $rollbackFailures += ("registry " + $registrySnapshots[$index].AppKey + ": " + $_.Exception.Message) }
+        }
+
+        try {
+            if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+            if ($backup -and (Test-Path -LiteralPath $backup)) {
+                if (Test-Path -LiteralPath $installFull) { Remove-Item -LiteralPath $installFull -Recurse -Force }
+                Move-Item -LiteralPath $backup -Destination $installFull
+            }
+            elseif ($payloadCommitted -and (Test-Path -LiteralPath $installFull)) {
+                Remove-Item -LiteralPath $installFull -Recurse -Force
+            }
+        }
+        catch { $rollbackFailures += ("payload: " + $_.Exception.Message) }
+
+        if ($rollbackFailures.Count -gt 0) {
+            Write-Warning ("QS3D installer rollback encountered error(s): " + ($rollbackFailures -join ' | '))
+        }
+        throw $originalError
+    }
+}
+finally {
+    Exit-Qs3dUpdateMutex -Mutex $updateMutex
 }

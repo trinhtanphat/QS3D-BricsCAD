@@ -29,9 +29,9 @@ namespace QS3D.Core.Documentation
             Kind = kind;
             FloorId = floorId;
             ZoneId = zoneId;
-            Categories = categories == null ? new List<ElementCategory>().AsReadOnly() : new List<ElementCategory>(categories).AsReadOnly();
-            IncludeElementIds = includeElementIds == null ? new List<string>().AsReadOnly() : new List<string>(includeElementIds).AsReadOnly();
-            ExcludeElementIds = excludeElementIds == null ? new List<string>().AsReadOnly() : new List<string>(excludeElementIds).AsReadOnly();
+            Categories = SnapshotCategories(categories);
+            IncludeElementIds = SnapshotFilterIds(includeElementIds, "includeElementIds");
+            ExcludeElementIds = SnapshotFilterIds(excludeElementIds, "excludeElementIds");
         }
 
         public string Id { get; }
@@ -42,6 +42,38 @@ namespace QS3D.Core.Documentation
         public IReadOnlyList<ElementCategory> Categories { get; }
         public IReadOnlyList<string> IncludeElementIds { get; }
         public IReadOnlyList<string> ExcludeElementIds { get; }
+
+        private static IReadOnlyList<ElementCategory> SnapshotCategories(IEnumerable<ElementCategory>? values)
+        {
+            if (values == null) return Array.Empty<ElementCategory>();
+            var result = new List<ElementCategory>(Math.Min(SemanticViewPlanner.MaxFilterIds, 256));
+            using (var enumerator = values.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= SemanticViewPlanner.MaxFilterIds)
+                        throw new InvalidOperationException("Semantic view supports at most " + SemanticViewPlanner.MaxFilterIds + " categories.");
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result.AsReadOnly();
+        }
+
+        private static IReadOnlyList<string> SnapshotFilterIds(IEnumerable<string>? values, string label)
+        {
+            if (values == null) return Array.Empty<string>();
+            var result = new List<string>(Math.Min(SemanticViewPlanner.MaxFilterIds, 256));
+            using (var enumerator = values.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= SemanticViewPlanner.MaxFilterIds)
+                        throw new InvalidOperationException("Semantic view supports at most " + SemanticViewPlanner.MaxFilterIds + " " + label + ".");
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result.AsReadOnly();
+        }
     }
 
     public sealed class SemanticViewPlan
@@ -72,7 +104,8 @@ namespace QS3D.Core.Documentation
 
     public static class SemanticViewPlanner
     {
-        private const int MaxFilterIds = 100000;
+        private const int MaxCatalogViews = 10000;
+        internal const int MaxFilterIds = 100000;
         private const int MaxIdLength = 128;
         private const int MaxNameLength = 160;
 
@@ -83,17 +116,16 @@ namespace QS3D.Core.Documentation
 
             var viewId = Required(definition.Id, nameof(definition.Id), MaxIdLength);
             var viewName = Required(definition.Name, nameof(definition.Name), MaxNameLength);
+            var viewKind = RequiredKind(definition.Kind);
             var elementIndex = BuildUniqueElementIndex(project);
 
             var floorId = NormalizeOptional(definition.FloorId, MaxIdLength, nameof(definition.FloorId));
-            if (floorId != null) EnsureUniqueReference(project.Floors.Select(x => x.Id), floorId, "floor");
+            if (floorId != null) EnsureUniqueReference(project.Floors, x => x.Id, floorId, "floor");
 
             var zoneId = NormalizeOptional(definition.ZoneId, MaxIdLength, nameof(definition.ZoneId));
-            if (zoneId != null) EnsureUniqueReference(project.Zones.Select(x => x.Id), zoneId, "zone");
+            if (zoneId != null) EnsureUniqueReference(project.Zones, x => x.Id, zoneId, "zone");
 
-            var categories = new HashSet<ElementCategory>(definition.Categories);
-            if (categories.Count != definition.Categories.Count)
-                throw new InvalidOperationException("Semantic view contains duplicate category filters.");
+            var categories = NormalizeCategories(definition.Categories);
 
             var includeIds = NormalizeIds(definition.IncludeElementIds, "includeElementIds");
             var excludeIds = NormalizeIds(definition.ExcludeElementIds, "excludeElementIds");
@@ -104,8 +136,8 @@ namespace QS3D.Core.Documentation
             EnsureFilterIdsExist(excludeIds, elementIndex, "excluded");
 
             IEnumerable<ProjectElement> query = project.Elements;
-            if (floorId != null) query = query.Where(x => string.Equals(x.FloorId, floorId, StringComparison.OrdinalIgnoreCase));
-            if (zoneId != null) query = query.Where(x => string.Equals(x.ZoneId, zoneId, StringComparison.OrdinalIgnoreCase));
+            if (floorId != null) query = query.Where(x => string.Equals((x.FloorId ?? string.Empty).Trim(), floorId, StringComparison.OrdinalIgnoreCase));
+            if (zoneId != null) query = query.Where(x => string.Equals((x.ZoneId ?? string.Empty).Trim(), zoneId, StringComparison.OrdinalIgnoreCase));
             if (categories.Count > 0) query = query.Where(x => categories.Contains(x.Category));
             if (includeIds.Count > 0) query = query.Where(x => includeIds.Contains(x.Id));
             if (excludeIds.Count > 0) query = query.Where(x => !excludeIds.Contains(x.Id));
@@ -116,7 +148,7 @@ namespace QS3D.Core.Documentation
                 .ThenBy(x => x, StringComparer.Ordinal)
                 .ToArray();
 
-            return new SemanticViewPlan(viewId, viewName, definition.Kind, floorId, zoneId, selectedIds);
+            return new SemanticViewPlan(viewId, viewName, viewKind, floorId, zoneId, selectedIds);
         }
 
         public static IReadOnlyList<SemanticViewPlan> BuildCatalog(ProjectState project, IEnumerable<SemanticViewDefinition> definitions)
@@ -124,9 +156,9 @@ namespace QS3D.Core.Documentation
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (definitions == null) throw new ArgumentNullException(nameof(definitions));
 
-            var materialized = definitions.ToList();
-            if (materialized.Count > 10000) throw new InvalidOperationException("Semantic view catalog supports at most 10000 views.");
-
+            var projectSnapshot = CaptureProjectStructure(project);
+            var materialized = MaterializeCatalogBounded(definitions);
+            EnsureProjectStructureUnchanged(project, projectSnapshot);
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var plans = new List<SemanticViewPlan>(materialized.Count);
@@ -139,10 +171,120 @@ namespace QS3D.Core.Documentation
                 plans.Add(plan);
             }
 
-            return plans
+            var result = plans
                 .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+                .ToList()
+                .AsReadOnly();
+            EnsureProjectStructureUnchanged(project, projectSnapshot);
+            return result;
+        }
+
+        private static ProjectStructureSnapshot CaptureProjectStructure(ProjectState project) =>
+            new ProjectStructureSnapshot(
+                project.ChangeVersion,
+                project.Elements.ToArray(),
+                project.Floors.ToArray(),
+                project.Zones.ToArray());
+
+        private static void EnsureProjectStructureUnchanged(ProjectState project, ProjectStructureSnapshot snapshot)
+        {
+            if (project.ChangeVersion != snapshot.ChangeVersion)
+                throw new InvalidOperationException("Project changed while the semantic view catalog was being planned.");
+            EnsureSameReferences(project.Elements, snapshot.Elements);
+            EnsureSameElementPlanningValues(project.Elements, snapshot.ElementPlanningValues);
+            EnsureSameReferences(project.Floors, snapshot.Floors);
+            EnsureSameReferences(project.Zones, snapshot.Zones);
+        }
+
+        private static void EnsureSameReferences<T>(IList<T> current, IReadOnlyList<T> expected) where T : class
+        {
+            if (current.Count != expected.Count)
+                throw new InvalidOperationException("Project structure changed while the semantic view catalog was being planned.");
+            for (var i = 0; i < expected.Count; i++)
+                if (!ReferenceEquals(current[i], expected[i]))
+                    throw new InvalidOperationException("Project structure changed while the semantic view catalog was being planned.");
+        }
+
+        private static void EnsureSameElementPlanningValues(
+            IList<ProjectElement> current,
+            IReadOnlyList<ProjectElementPlanningValues> expected)
+        {
+            if (current.Count != expected.Count)
+                throw new InvalidOperationException("Project structure changed while the semantic view catalog was being planned.");
+            for (var i = 0; i < expected.Count; i++)
+            {
+                var element = current[i];
+                var values = expected[i];
+                if (element == null)
+                {
+                    if (!values.IsNull)
+                        throw new InvalidOperationException("Project structure changed while the semantic view catalog was being planned.");
+                    continue;
+                }
+
+                if (values.IsNull ||
+                    !string.Equals(element.Id, values.Id, StringComparison.Ordinal) ||
+                    element.Category != values.Category ||
+                    !string.Equals(element.FloorId, values.FloorId, StringComparison.Ordinal) ||
+                    !string.Equals(element.ZoneId, values.ZoneId, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Project structure changed while the semantic view catalog was being planned.");
+            }
+        }
+
+        private static List<SemanticViewDefinition> MaterializeCatalogBounded(IEnumerable<SemanticViewDefinition> definitions)
+        {
+            var result = new List<SemanticViewDefinition>(Math.Min(MaxCatalogViews, 256));
+            using (var enumerator = definitions.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= MaxCatalogViews)
+                        throw new InvalidOperationException("Semantic view catalog supports at most " + MaxCatalogViews + " views.");
+                    result.Add(enumerator.Current);
+                }
+            }
+            return result;
+        }
+
+        private sealed class ProjectStructureSnapshot
+        {
+            public ProjectStructureSnapshot(
+                long changeVersion,
+                IReadOnlyList<ProjectElement> elements,
+                IReadOnlyList<FloorDefinition> floors,
+                IReadOnlyList<ZoneDefinition> zones)
+            {
+                ChangeVersion = changeVersion;
+                Elements = elements;
+                ElementPlanningValues = elements.Select(x => new ProjectElementPlanningValues(x)).ToArray();
+                Floors = floors;
+                Zones = zones;
+            }
+
+            public long ChangeVersion { get; }
+            public IReadOnlyList<ProjectElement> Elements { get; }
+            public IReadOnlyList<ProjectElementPlanningValues> ElementPlanningValues { get; }
+            public IReadOnlyList<FloorDefinition> Floors { get; }
+            public IReadOnlyList<ZoneDefinition> Zones { get; }
+        }
+
+        private sealed class ProjectElementPlanningValues
+        {
+            public ProjectElementPlanningValues(ProjectElement? element)
+            {
+                IsNull = element == null;
+                Id = element?.Id;
+                Category = element?.Category ?? default;
+                FloorId = element?.FloorId;
+                ZoneId = element?.ZoneId;
+            }
+
+            public bool IsNull { get; }
+            public string? Id { get; }
+            public ElementCategory Category { get; }
+            public string? FloorId { get; }
+            public string? ZoneId { get; }
         }
 
         private static Dictionary<string, ProjectElement> BuildUniqueElementIndex(ProjectState project)
@@ -154,6 +296,20 @@ namespace QS3D.Core.Documentation
                 var id = Required(element.Id, "project.Elements.Id", MaxIdLength);
                 if (result.ContainsKey(id)) throw new InvalidOperationException("Project contains duplicate semantic element id: " + id + ".");
                 result.Add(id, element);
+            }
+            return result;
+        }
+
+        private static HashSet<ElementCategory> NormalizeCategories(IReadOnlyList<ElementCategory> values)
+        {
+            var result = new HashSet<ElementCategory>();
+            for (var i = 0; i < values.Count; i++)
+            {
+                var category = values[i];
+                if (!Enum.IsDefined(typeof(ElementCategory), category))
+                    throw new InvalidOperationException("Unsupported semantic view category filter '" + category + "'.");
+                if (!result.Add(category))
+                    throw new InvalidOperationException("Semantic view contains duplicate category filters.");
             }
             return result;
         }
@@ -176,11 +332,25 @@ namespace QS3D.Core.Documentation
                 if (!elementIndex.ContainsKey(id)) throw new InvalidOperationException("Semantic view references missing " + label + " element id: " + id + ".");
         }
 
-        private static void EnsureUniqueReference(IEnumerable<string> ids, string requestedId, string label)
+        private static void EnsureUniqueReference<T>(IEnumerable<T> items, Func<T, string> idSelector, string requestedId, string label)
+            where T : class
         {
-            var count = ids.Count(x => string.Equals(x, requestedId, StringComparison.OrdinalIgnoreCase));
+            var count = 0;
+            foreach (var item in items)
+            {
+                if (item == null) throw new InvalidOperationException("Project contains a null " + label + " entry.");
+                if (string.Equals(idSelector(item), requestedId, StringComparison.OrdinalIgnoreCase)) count++;
+            }
+
             if (count == 0) throw new InvalidOperationException("Semantic view references missing " + label + " id: " + requestedId + ".");
             if (count > 1) throw new InvalidOperationException("Semantic view references ambiguous " + label + " id: " + requestedId + ".");
+        }
+
+        private static SemanticViewKind RequiredKind(SemanticViewKind kind)
+        {
+            if (!Enum.IsDefined(typeof(SemanticViewKind), kind))
+                throw new InvalidOperationException("Unsupported semantic view kind '" + kind + "'.");
+            return kind;
         }
 
         private static string Required(string? value, string name, int maxLength)

@@ -21,6 +21,8 @@ namespace QS3D.BricsCAD.V25.Services
             if (document == null) throw new ArgumentNullException(nameof(document));
             var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
             if (snapshots.Count == 0) return 0;
+            EnsureCapturePreflight(document, snapshots, category);
+            var projectExistedBeforeCapture = ProjectContextCoordinator.TryGetReadOnly(document, out _);
             var project = ProjectContextCoordinator.GetOrCreate(document);
             var rollback = ProjectStateSnapshot.Capture(project);
             try
@@ -31,7 +33,7 @@ namespace QS3D.BricsCAD.V25.Services
             }
             catch (Exception operationError)
             {
-                RestoreOrThrow(project, rollback, operationError, "Semantic capture batch");
+                RestoreCaptureOrThrow(document, project, rollback, projectExistedBeforeCapture, operationError, "Semantic capture batch");
                 throw;
             }
         }
@@ -40,6 +42,8 @@ namespace QS3D.BricsCAD.V25.Services
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            EnsureCapturePreflight(document, new[] { snapshot }, category);
+            var projectExistedBeforeCapture = ProjectContextCoordinator.TryGetReadOnly(document, out _);
             var project = ProjectContextCoordinator.GetOrCreate(document);
             var rollback = ProjectStateSnapshot.Capture(project);
             try
@@ -48,9 +52,26 @@ namespace QS3D.BricsCAD.V25.Services
             }
             catch (Exception operationError)
             {
-                RestoreOrThrow(project, rollback, operationError, "Semantic capture");
+                RestoreCaptureOrThrow(document, project, rollback, projectExistedBeforeCapture, operationError, "Semantic capture");
                 throw;
             }
+        }
+
+        private static void EnsureCapturePreflight(
+            Document document,
+            IReadOnlyList<EntitySnapshot> snapshots,
+            ElementCategory category)
+        {
+            if (snapshots == null) throw new ArgumentNullException(nameof(snapshots));
+            foreach (var snapshot in snapshots)
+            {
+                if (snapshot == null)
+                    throw new ArgumentException("Semantic capture selection cannot contain a null snapshot.", nameof(snapshots));
+                EntitySnapshotCaptureEligibility.EnsureReady(snapshot, category);
+            }
+
+            if (!CadUnitService.TryGetPolicy(document, out _, out _))
+                throw new InvalidOperationException("Drawing units are unresolved. Run QS3DUNITS before semantic capture.");
         }
 
         private static bool CaptureSnapshotCore(Document document, ProjectState project, EntitySnapshot snapshot, ElementCategory category)
@@ -110,6 +131,29 @@ namespace QS3D.BricsCAD.V25.Services
             return true;
         }
 
+        private static void RestoreCaptureOrThrow(
+            Document document,
+            ProjectState project,
+            ProjectStateSnapshot rollback,
+            bool projectExistedBeforeCapture,
+            Exception operationError,
+            string operation)
+        {
+            Exception? restoreError = null;
+            try
+            {
+                rollback.Restore(project);
+            }
+            catch (Exception error)
+            {
+                restoreError = error;
+            }
+
+            if (!projectExistedBeforeCapture) ProjectContextCoordinator.Forget(document);
+            if (restoreError != null)
+                throw new InvalidOperationException(operation + " failed and project rollback also failed.", new AggregateException(operationError, restoreError));
+        }
+
         private static void RestoreOrThrow(ProjectState project, ProjectStateSnapshot rollback, Exception operationError, string operation)
         {
             try
@@ -137,8 +181,9 @@ namespace QS3D.BricsCAD.V25.Services
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
+            if (snapshots.Count == 0) return 0;
             var handles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            var project = ExistingProjectMutationContext.Require(document, "Room finish generation");
             var rollback = ProjectStateSnapshot.Capture(project);
             try
             {

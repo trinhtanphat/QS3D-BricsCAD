@@ -1,6 +1,9 @@
 using System;
+using System.Globalization;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Selection;
+using QS3D.Core.Services;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -10,9 +13,12 @@ namespace QS3D.Core.SmokeTests
         {
             SourceDerivedAndOwnershipFieldsAreReadOnly();
             PropertyDirtyFlagsStayPrecise();
-            SameInheritedValueIsANoOp();
+            SameInheritedValueMaterializesInstanceOverride();
             NumericMultiplyPreflightsBeforeMutation();
+            NumericMultiplyUnderflowIsAtomic();
+            NumericMultiplyPreservesLegitimateZeroAndSubnormal();
             FamilyAssignmentIsAllOrNothingAcrossCategories();
+            FamilyIdentityMustBeCanonicalAndAtomic();
             DuplicateSelectionFailsBeforeMutation();
         }
 
@@ -51,17 +57,26 @@ namespace QS3D.Core.SmokeTests
                 Equal(true, (element.Dirty & ElementDirtyFlags.Geometry) != 0);
         }
 
-        private static void SameInheritedValueIsANoOp()
+        private static void SameInheritedValueMaterializesInstanceOverride()
         {
             var project = BuildProject();
             foreach (var element in project.Elements) element.MarkClean(ElementDirtyFlags.All);
             var version = project.ChangeVersion;
             var service = new SemanticSelectionBulkEditService();
+
             var result = service.SetProperty(project, new[] { "B-1", "B-2" }, "FireRating", "R60");
-            Equal(0, result.ChangedCount);
+            Equal(2, result.ChangedCount);
+            Equal(true, project.ChangeVersion > version);
+            Equal("R60", project.Elements[0].Properties["FireRating"]);
+            Equal("R60", project.Elements[1].Properties["FireRating"]);
+
+            foreach (var element in project.Elements) element.MarkClean(ElementDirtyFlags.All);
+            version = project.ChangeVersion;
+            var noOp = service.SetProperty(project, new[] { "B-1", "B-2" }, "FireRating", "R60");
+            Equal(0, noOp.ChangedCount);
             Equal(version, project.ChangeVersion);
-            Equal(false, project.Elements[0].Properties.ContainsKey("FireRating"));
-            Equal(false, project.Elements[1].Properties.ContainsKey("FireRating"));
+            Equal(ElementDirtyFlags.None, project.Elements[0].Dirty);
+            Equal(ElementDirtyFlags.None, project.Elements[1].Dirty);
         }
 
         private static void NumericMultiplyPreflightsBeforeMutation()
@@ -77,6 +92,69 @@ namespace QS3D.Core.SmokeTests
             Equal("0.2", project.Elements[0].Properties["WidthM"]);
             Equal("bad", project.Elements[1].Properties["WidthM"]);
             Equal(version, project.ChangeVersion);
+        }
+
+        private static void NumericMultiplyUnderflowIsAtomic()
+        {
+            var service = new SemanticSelectionBulkEditService();
+
+            var parseProject = BuildProject();
+            parseProject.Elements[0].SetProperty("WidthM", "0.2");
+            parseProject.Elements[1].SetProperty("WidthM", "1e-4000");
+            foreach (var element in parseProject.Elements) element.MarkClean(ElementDirtyFlags.All);
+            var parseVersion = parseProject.ChangeVersion;
+
+            MustFail(() => service.MultiplyNumericProperty(parseProject, new[] { "B-1", "B-2" }, "WidthM", 2d));
+            Equal("0.2", parseProject.Elements[0].Properties["WidthM"]);
+            Equal("1e-4000", parseProject.Elements[1].Properties["WidthM"]);
+            Equal(parseVersion, parseProject.ChangeVersion);
+            Equal(ElementDirtyFlags.None, parseProject.Elements[0].Dirty);
+            Equal(ElementDirtyFlags.None, parseProject.Elements[1].Dirty);
+
+            var productProject = BuildProject();
+            var epsilonText = double.Epsilon.ToString("R", CultureInfo.InvariantCulture);
+            productProject.Elements[0].SetProperty("WidthM", "0.2");
+            productProject.Elements[1].SetProperty("WidthM", epsilonText);
+            foreach (var element in productProject.Elements) element.MarkClean(ElementDirtyFlags.All);
+            var productVersion = productProject.ChangeVersion;
+
+            MustFail(() => service.MultiplyNumericProperty(productProject, new[] { "B-1", "B-2" }, "WidthM", 0.5d));
+            Equal("0.2", productProject.Elements[0].Properties["WidthM"]);
+            Equal(epsilonText, productProject.Elements[1].Properties["WidthM"]);
+            Equal(productVersion, productProject.ChangeVersion);
+            Equal(ElementDirtyFlags.None, productProject.Elements[0].Dirty);
+            Equal(ElementDirtyFlags.None, productProject.Elements[1].Dirty);
+        }
+
+        private static void NumericMultiplyPreservesLegitimateZeroAndSubnormal()
+        {
+            var service = new SemanticSelectionBulkEditService();
+
+            var zeroProject = BuildProject();
+            zeroProject.Elements[0].SetProperty("WidthM", "0e-4000");
+            zeroProject.Elements[0].MarkClean(ElementDirtyFlags.All);
+            var zeroVersion = zeroProject.ChangeVersion;
+            var zero = service.MultiplyNumericProperty(zeroProject, new[] { "B-1" }, "WidthM", 2d);
+            Equal(0, zero.ChangedCount);
+            Equal("0e-4000", zeroProject.Elements[0].Properties["WidthM"]);
+            Equal(zeroVersion, zeroProject.ChangeVersion);
+            Equal(ElementDirtyFlags.None, zeroProject.Elements[0].Dirty);
+
+            var subnormalProject = BuildProject();
+            var epsilonText = double.Epsilon.ToString("R", CultureInfo.InvariantCulture);
+            var expected = (double.Epsilon * 2d).ToString("R", CultureInfo.InvariantCulture);
+            subnormalProject.Elements[0].SetProperty("WidthM", epsilonText);
+            subnormalProject.Elements[0].MarkClean(ElementDirtyFlags.All);
+            var subnormal = service.MultiplyNumericProperty(subnormalProject, new[] { "B-1" }, "WidthM", 2d);
+            Equal(1, subnormal.ChangedCount);
+            Equal(expected, subnormalProject.Elements[0].Properties["WidthM"]);
+
+            var zeroFactorProject = BuildProject();
+            zeroFactorProject.Elements[0].SetProperty("WidthM", "2");
+            zeroFactorProject.Elements[0].MarkClean(ElementDirtyFlags.All);
+            var zeroFactor = service.MultiplyNumericProperty(zeroFactorProject, new[] { "B-1" }, "WidthM", 0d);
+            Equal(1, zeroFactor.ChangedCount);
+            Equal("0", zeroFactorProject.Elements[0].Properties["WidthM"]);
         }
 
         private static void FamilyAssignmentIsAllOrNothingAcrossCategories()
@@ -98,6 +176,62 @@ namespace QS3D.Core.SmokeTests
             Equal(2, changed.ChangedCount);
             Equal("F-B2", project.FindElement("B-1")!.FamilyId);
             Equal("F-B2", project.FindElement("B-2")!.FamilyId);
+        }
+
+        private static void FamilyIdentityMustBeCanonicalAndAtomic()
+        {
+            var semantic = new SemanticSelectionBulkEditService();
+
+            var paddedTarget = BuildProject();
+            var paddedTargetVersion = paddedTarget.ChangeVersion;
+            MustFail(() => semantic.AssignFamily(paddedTarget, new[] { "B-1" }, " F-B2 "));
+            Equal("F-B", paddedTarget.FindElement("B-1")!.FamilyId);
+            Equal(paddedTargetVersion, paddedTarget.ChangeVersion);
+
+            var paddedCurrent = BuildProject();
+            var paddedCurrentElement = paddedCurrent.FindElement("B-1")!;
+            SetRawFamilyId(paddedCurrentElement, " F-B ");
+            var paddedCurrentVersion = paddedCurrent.ChangeVersion;
+            MustFail(() => semantic.AssignFamily(paddedCurrent, new[] { "B-1" }, "F-B2"));
+            Equal(" F-B ", paddedCurrentElement.FamilyId);
+            Equal(paddedCurrentVersion, paddedCurrent.ChangeVersion);
+
+            var inherited = BuildProject();
+            var inheritedElement = inherited.FindElement("B-1")!;
+            SetRawFamilyId(inheritedElement, " F-B ");
+            var inheritedVersion = inherited.ChangeVersion;
+            MustFail(() => semantic.MultiplyNumericProperty(inherited, new[] { "B-1" }, "WidthM", 2d));
+            Equal(false, inheritedElement.Properties.ContainsKey("WidthM"));
+            Equal(" F-B ", inheritedElement.FamilyId);
+            Equal(inheritedVersion, inherited.ChangeVersion);
+
+            var directTarget = BuildProject();
+            var directTargetVersion = directTarget.ChangeVersion;
+            MustFail(() => new BulkEditService().AssignFamily(directTarget, new[] { "B-1" }, " F-B2 "));
+            Equal("F-B", directTarget.FindElement("B-1")!.FamilyId);
+            Equal(directTargetVersion, directTarget.ChangeVersion);
+
+            var directCurrent = BuildProject();
+            var directCurrentElement = directCurrent.FindElement("B-1")!;
+            SetRawFamilyId(directCurrentElement, " F-B ");
+            var directCurrentVersion = directCurrent.ChangeVersion;
+            MustFail(() => new BulkEditService().AssignFamily(directCurrent, new[] { "B-1" }, "F-B2"));
+            Equal(" F-B ", directCurrentElement.FamilyId);
+            Equal(directCurrentVersion, directCurrent.ChangeVersion);
+
+            var noFamily = BuildProject();
+            var noFamilyElement = noFamily.FindElement("B-1")!;
+            noFamilyElement.FamilyId = string.Empty;
+            var noFamilyChanged = semantic.AssignFamily(noFamily, new[] { "B-1" }, "F-B2");
+            Equal(1, noFamilyChanged.ChangedCount);
+            Equal("F-B2", noFamilyElement.FamilyId);
+        }
+
+        private static void SetRawFamilyId(ProjectElement element, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_familyId", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement._familyId reflection hook is unavailable for malformed-state regression setup.");
+            field.SetValue(element, value);
         }
 
         private static void DuplicateSelectionFailsBeforeMutation()

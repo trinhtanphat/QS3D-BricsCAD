@@ -20,6 +20,7 @@ def require(text: str, token: str, label: str) -> None:
 
 
 fingerprint = read("src/QS3D.BricsCAD.V25/Cad/PhysicalOpeningCutLiveFingerprint.cs")
+boolean_builder = read("src/QS3D.BricsCAD.V25/Cad/OpeningBooleanService.cs")
 state = read("src/QS3D.BricsCAD.V25/Cad/PhysicalOpeningCutLiveStateService.cs")
 straight = read("src/QS3D.BricsCAD.V25/OpeningBooleanCommands.cs")
 curved = read("src/QS3D.BricsCAD.V25/CurvedOpeningBooleanCommands.cs")
@@ -28,10 +29,12 @@ release = read("src/QS3D.BricsCAD.V25/ReleaseReadinessCommands.cs")
 invalidator = read("src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs")
 
 for token in [
-    '"ThicknessM"', '"HeightM"', '"BottomOffsetM"',
-    '"WidthM"', '"SillHeightM"', '"BooleanClearanceM"',
+    '"ThicknessM"', '"HeightM"',
+    '"WidthM"', '"BooleanClearanceM"',
     '"WallArcSagittaM"', '"PhysicalOpeningMaximumOffsetM"',
     '"PhysicalOpeningAmbiguityM"', '"WallMiterLimit"',
+    "CadElementVerticalPlacement.Resolve(", "FingerprintBottomM",
+    "CadHostedOpeningVerticalPlacement.Resolve(",
     "SHA256.Create()", "GeometricExtents", "GetBulgeAt",
 ]:
     require(fingerprint, token, "live fingerprint inputs")
@@ -48,6 +51,7 @@ for token in [
     require(state, token, "live-state health")
 
 require(straight, "PhysicalOpeningCutLiveStateService.StampStraight(document, project, openingIds)", "straight cut stamp")
+require(boolean_builder, "host.IsGeneratedSolidStale()", "straight cut stale-host refusal")
 require(curved, "PhysicalOpeningCutLiveStateService.StampCurved(document, project)", "curved cut stamp")
 require(health, "PhysicalOpeningCutLiveStateService.Inspect(document, project)", "Health All wiring")
 require(health, "CurtainWallFrameLiveStateService.Inspect(document, project)", "Health All curtain live wiring")

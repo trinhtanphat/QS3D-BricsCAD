@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -46,17 +47,28 @@ namespace QS3D.Core.Rebar
 
     public static class RebarScheduleBuilder
     {
+        private const int MaxRowCount = 10000;
+
         public static IReadOnlyList<RebarScheduleRow> Build(IEnumerable<RebarScheduleInput> inputs)
         {
             if (inputs == null) throw new ArgumentNullException(nameof(inputs));
+            var expectedInputCount = ValidateKnownInputCount(inputs, nameof(inputs));
+            var observedInputCount = 0;
             var rows = new List<RebarScheduleRow>();
-            foreach (var input in inputs) Append(input ?? throw new ArgumentException("Rebar schedule input cannot contain null.", nameof(inputs)), rows);
+            foreach (var input in inputs)
+            {
+                Append(input ?? throw new ArgumentException("Rebar schedule input cannot contain null.", nameof(inputs)), rows, nameof(inputs));
+                observedInputCount++;
+            }
+            if (expectedInputCount.HasValue && observedInputCount != expectedInputCount.Value)
+                throw new InvalidOperationException("Rebar schedule input known Count does not match traversal.");
             ValidateAggregate(rows);
-            return rows;
+            return rows.AsReadOnly();
         }
 
-        private static void Append(RebarScheduleInput input, ICollection<RebarScheduleRow> rows)
+        private static void Append(RebarScheduleInput input, ICollection<RebarScheduleRow> rows, string inputParameterName)
         {
+            var elementId = RequireCanonicalElementId(input.ElementId, nameof(input.ElementId));
             if (string.IsNullOrWhiteSpace(input.Notation)) throw new ArgumentException("Rebar notation is required.", nameof(input));
             EnsureFiniteNonNegative(input.CuttingLengthM, nameof(input.CuttingLengthM));
             EnsureFiniteNonNegative(input.DistributionLengthM, nameof(input.DistributionLengthM));
@@ -69,17 +81,22 @@ namespace QS3D.Core.Rebar
             var groups = RebarNotationParser.Parse(input.Notation);
             if (input.CountOverride.HasValue && groups.Count > 1) throw new InvalidOperationException("CountOverride is ambiguous for compound rebar notation.");
 
-            var cuttingLength = RebarMath.Add(input.CuttingLengthM, input.LapLengthM, "cutting + lap length");
-            cuttingLength = RebarMath.Add(cuttingLength, input.AnchorLengthM, "cutting + anchor length");
-            cuttingLength = RebarMath.Add(cuttingLength, input.HookAllowanceM, "cutting + hook allowance");
+            var cuttingLengthParts = new CompensatedFiniteSum();
+            cuttingLengthParts.Add(input.CuttingLengthM, "cutting length");
+            cuttingLengthParts.Add(input.LapLengthM, "cutting + lap length");
+            cuttingLengthParts.Add(input.AnchorLengthM, "cutting + anchor length");
+            cuttingLengthParts.Add(input.HookAllowanceM, "cutting + hook allowance");
+            var cuttingLength = cuttingLengthParts.Value;
             if (cuttingLength <= 0d) throw new InvalidOperationException("Rebar cutting length must be greater than zero.");
-            var baseMark = string.IsNullOrWhiteSpace(input.BarMark) ? (string.IsNullOrWhiteSpace(input.ElementId) ? "BAR" : input.ElementId) : input.BarMark.Trim();
+            var baseMark = string.IsNullOrWhiteSpace(input.BarMark) ? elementId : input.BarMark.Trim();
             var fabricationStatus = Normalize(input.FabricationStatus);
             var fabricationStandardCode = Normalize(input.FabricationStandardCode);
             var fabricationDetailingRevision = Normalize(input.FabricationDetailingRevision);
 
             for (var index = 0; index < groups.Count; index++)
             {
+                if (rows.Count >= MaxRowCount)
+                    throw new ArgumentOutOfRangeException(inputParameterName, "Rebar schedule exceeds the supported row bound of " + MaxRowCount + ".");
                 var group = groups[index];
                 var quantity = ResolveQuantity(group, input);
                 var mark = groups.Count == 1 ? baseMark : baseMark + "-" + (index + 1).ToString(CultureInfo.InvariantCulture);
@@ -89,7 +106,7 @@ namespace QS3D.Core.Rebar
                 var totalWeight = RebarWeight.TotalKilograms(group.DiameterMm, totalLength, input.WastePercent);
                 rows.Add(new RebarScheduleRow
                 {
-                    ElementId = input.ElementId ?? string.Empty,
+                    ElementId = elementId,
                     BarMark = mark,
                     ShapeCode = string.IsNullOrWhiteSpace(input.ShapeCode) ? "00" : input.ShapeCode.Trim(),
                     Notation = group.ToString(),
@@ -106,6 +123,51 @@ namespace QS3D.Core.Rebar
                     FabricationDetailingRevision = fabricationDetailingRevision
                 });
             }
+        }
+
+        internal static string RequireCanonicalElementId(string value, string parameterName)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("Rebar schedule element id is required.", parameterName);
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Rebar schedule element id must not contain surrounding whitespace.", parameterName);
+            for (var index = 0; index < value.Length; index++)
+            {
+                if (char.IsControl(value[index]))
+                    throw new ArgumentException("Rebar schedule element id must not contain control characters.", parameterName);
+            }
+            return value;
+        }
+
+        private static int? ValidateKnownInputCount(IEnumerable<RebarScheduleInput> inputs, string parameterName)
+        {
+            var knownCounts = new List<int>(3);
+            if (inputs is ICollection<RebarScheduleInput> genericCollection)
+                knownCounts.Add(genericCollection.Count);
+            if (inputs is IReadOnlyCollection<RebarScheduleInput> readOnlyCollection)
+                knownCounts.Add(readOnlyCollection.Count);
+            if (inputs is ICollection nonGenericCollection)
+                knownCounts.Add(nonGenericCollection.Count);
+
+            foreach (var count in knownCounts)
+            {
+                if (count < 0)
+                    throw new InvalidOperationException("Rebar schedule input exposes an invalid negative known Count.");
+            }
+            foreach (var count in knownCounts)
+            {
+                if (count > MaxRowCount)
+                    throw new ArgumentOutOfRangeException(parameterName, "Rebar schedule input Count exceeds the supported row bound of " + MaxRowCount + ".");
+            }
+            if (knownCounts.Count == 0) return null;
+
+            var expected = knownCounts[0];
+            for (var index = 1; index < knownCounts.Count; index++)
+            {
+                if (knownCounts[index] != expected)
+                    throw new InvalidOperationException("Rebar schedule input exposes conflicting known Count values.");
+            }
+            return expected;
         }
 
         private static void ValidateAggregate(IReadOnlyList<RebarScheduleRow> rows)
@@ -133,14 +195,50 @@ namespace QS3D.Core.Rebar
                 if (input.DistributionLengthM <= 0d) throw new InvalidOperationException("Rebar distribution length must be greater than zero for spacing notation.");
                 var millimeters = RebarMath.Multiply(input.DistributionLengthM, 1000d, "spacing distribution length");
                 var intervals = RebarMath.Divide(millimeters, group.SpacingMm.Value, "spacing interval count");
-                var nearestInteger = Math.Round(intervals);
-                var floatingTolerance = Math.Max(1d, Math.Abs(intervals)) * 1e-12d;
-                if (Math.Abs(intervals - nearestInteger) <= floatingTolerance) intervals = nearestInteger;
-                var rounded = Math.Ceiling(intervals);
+                var rounded = RebarMath.CeilingNearInteger(intervals, "spacing interval count");
                 if (rounded > int.MaxValue - 1d) throw new OverflowException("Rebar spacing produces too many bars.");
                 return checked((int)rounded + 1);
             }
             throw new InvalidOperationException("Rebar quantity cannot be inferred. Provide count notation, spacing + distribution length, or CountOverride.");
+        }
+
+        private struct CompensatedFiniteSum
+        {
+            private double _sum;
+            private double _compensation;
+            private string _lastLabel;
+
+            public void Add(double value, string label)
+            {
+                var next = _sum + value;
+                EnsureFinite(next, label);
+
+                var correction = Math.Abs(_sum) >= Math.Abs(value)
+                    ? (_sum - next) + value
+                    : (value - next) + _sum;
+                var compensation = _compensation + correction;
+                EnsureFinite(compensation, label);
+
+                _sum = next;
+                _compensation = compensation;
+                _lastLabel = label;
+            }
+
+            public double Value
+            {
+                get
+                {
+                    var result = _sum + _compensation;
+                    EnsureFinite(result, _lastLabel ?? "cutting + hook allowance");
+                    return result;
+                }
+            }
+
+            private static void EnsureFinite(double value, string label)
+            {
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                    throw new OverflowException("Rebar addition overflow: " + label);
+            }
         }
 
         private static string Normalize(string value) => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
@@ -184,8 +282,18 @@ namespace QS3D.Core.Rebar
             foreach (var element in project.Elements)
             {
                 if (element == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
-                if (string.IsNullOrWhiteSpace(element.Id)) throw new InvalidOperationException("Project contains a semantic element with a blank id.");
-                if (!ids.Add(element.Id)) throw new InvalidOperationException("Project contains duplicate semantic element id: " + element.Id);
+                if (string.IsNullOrWhiteSpace(element.Id))
+                    throw new InvalidOperationException("Project contains a semantic element with a blank id.");
+                string elementId;
+                try
+                {
+                    elementId = RebarScheduleBuilder.RequireCanonicalElementId(element.Id, nameof(element.Id));
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new InvalidOperationException("Project contains a semantic element with a noncanonical id.", ex);
+                }
+                if (!ids.Add(elementId)) throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId);
                 elements.Add(element);
             }
             return elements.AsReadOnly();

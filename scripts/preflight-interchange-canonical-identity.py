@@ -42,7 +42,8 @@ if SMOKE.is_file():
         "RejectsPaddedSourceHandle();",
         "RejectsPaddedPropertyKey();",
         "RejectsTimestampWithoutOffset();",
-        "AcceptsExplicitOffsetDeterministically();",
+        "RejectsTimestampWithExplicitOffset();",
+        "AcceptsCanonicalUtcDeterministically();",
     ):
         if token not in text:
             errors.append("ProjectInterchangeCanonicalIdentitySmoke.cs missing regression token: " + token)
@@ -53,4 +54,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: typed interchange snapshots reject padded semantic identities and machine-dependent timestamps while preserving free-text property values.")
+print("PASS: typed interchange snapshots reject padded semantic identities and non-canonical timestamps, accept exact UTC round-trip timestamps, and preserve free-text property values.")

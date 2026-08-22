@@ -5,25 +5,82 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 AUDIT = ROOT / "src/QS3D.Core/Audit/AuditTrail.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/AuditTrailSnapshotSmoke.cs"
+HISTORY_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/AuditTrailHistoryBoundSmoke.cs"
 REG = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 errors = []
 
-for path in (AUDIT, SMOKE, REG):
+for path in (AUDIT, SMOKE, HISTORY_SMOKE, REG):
     if not path.is_file():
         errors.append("missing audit snapshot integrity file: " + str(path.relative_to(ROOT)))
 
 if AUDIT.is_file():
     text = AUDIT.read_text(encoding="utf-8")
     for token in (
-        "var snapshot = new List<AuditEvent>(_events.Count);",
+        "var storedCount = RequireSupportedHistoryCount(requireAppendCapacity: false);",
+        "var snapshot = new List<AuditEvent>(storedCount);",
+        "var validationError = GetStoredEventValidationError(item);",
+        "if (validationError != null) throw new InvalidOperationException(validationError);",
         "snapshot.Add(Clone(item));",
+        "RequireObservedHistoryCount(storedCount, observed);",
         "return snapshot.AsReadOnly();",
+        "private static void RequireObservedHistoryCount(int storedCount, int observed)",
         "private static AuditEvent Clone(AuditEvent item)",
     ):
         if token not in text:
-            errors.append("AuditTrail.cs missing deep snapshot token: " + token)
+            errors.append("AuditTrail.cs missing validated deep snapshot token: " + token)
+
+    count_pos = text.find("var storedCount = RequireSupportedHistoryCount(requireAppendCapacity: false);")
+    snapshot_pos = text.find("var snapshot = new List<AuditEvent>(storedCount);", count_pos)
+    validation_pos = text.find("var validationError = GetStoredEventValidationError(item);")
+    clone_pos = text.find("snapshot.Add(Clone(item));", validation_pos)
+    equality_pos = text.find("RequireObservedHistoryCount(storedCount, observed);", clone_pos)
+    return_pos = text.find("return snapshot.AsReadOnly();", equality_pos)
+    if count_pos < 0 or snapshot_pos < 0 or count_pos >= snapshot_pos:
+        errors.append("AuditTrail.Events must allocate its read snapshot from the single validated stored Count.")
+    if "new List<AuditEvent>(_events.Count)" in text:
+        errors.append("AuditTrail.Events must not re-read mutable backing Count after validation.")
+    if validation_pos < 0 or clone_pos < 0 or validation_pos >= clone_pos:
+        errors.append("AuditTrail.Events must validate stored history before deep-cloning each event.")
+    if equality_pos < 0 or return_pos < 0 or equality_pos >= return_pos:
+        errors.append("AuditTrail.Events must reject a stored Count that disagrees with traversal before returning its snapshot.")
     if "_events as IReadOnlyList<AuditEvent>" in text:
         errors.append("AuditTrail.Events still exposes the mutable backing list through an interface cast.")
+
+    record_pos = text.find("public void Record(")
+    clear_pos = text.find("public void Clear()", record_pos)
+    record_text = text[record_pos:clear_pos] if record_pos >= 0 and clear_pos > record_pos else ""
+    record_validate_pos = record_text.find(
+        "ValidateExistingHistory(requireAppendCapacity: true, additionalTextCharacters: newTextCharacters);"
+    )
+    record_add_pos = record_text.find("_events.Add(item);")
+    if record_validate_pos < 0 or record_add_pos < 0 or record_validate_pos >= record_add_pos:
+        errors.append("AuditTrail.Record must validate existing history and aggregate text capacity before adding a new audit event.")
+
+    clear_method_pos = text.find("public void Clear()")
+    validate_method_pos = text.find("private int ValidateExistingHistory", clear_method_pos)
+    clear_text = text[clear_method_pos:validate_method_pos] if clear_method_pos >= 0 and validate_method_pos > clear_method_pos else ""
+    clear_validate_pos = clear_text.find("var observed = ValidateExistingHistory(requireAppendCapacity: false);")
+    clear_noop_pos = clear_text.find("if (observed == 0) return;")
+    clear_mutation_pos = clear_text.find("_events.Clear();")
+    if clear_validate_pos < 0 or clear_noop_pos < 0 or clear_mutation_pos < 0 or not (clear_validate_pos < clear_noop_pos < clear_mutation_pos):
+        errors.append("AuditTrail.Clear must validate/traverse stored history before deciding that Clear is a no-op.")
+    if "_events.Count == 0" in clear_text:
+        errors.append("AuditTrail.Clear must not trust mutable backing Count as an early-return substitute for traversal.")
+
+    supported_count_method_pos = text.find("private int RequireSupportedHistoryCount", validate_method_pos)
+    validate_text = text[validate_method_pos:supported_count_method_pos] if validate_method_pos >= 0 and supported_count_method_pos > validate_method_pos else ""
+    validate_count_pos = validate_text.find("var storedCount = RequireSupportedHistoryCount(requireAppendCapacity);")
+    validate_traversal_pos = validate_text.find("foreach (var existing in _events)")
+    validate_equality_pos = validate_text.find("RequireObservedHistoryCount(storedCount, observed);")
+    validate_return_pos = validate_text.find("return observed;")
+    if (
+        validate_count_pos < 0
+        or validate_traversal_pos < 0
+        or validate_equality_pos < 0
+        or validate_return_pos < 0
+        or not (validate_count_pos < validate_traversal_pos < validate_equality_pos < validate_return_pos)
+    ):
+        errors.append("AuditTrail.ValidateExistingHistory must enforce Count -> traversal -> equality -> return ordering inside the modification validator.")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -36,6 +93,26 @@ if SMOKE.is_file():
         if token not in text:
             errors.append("AuditTrailSnapshotSmoke.cs missing integrity regression token: " + token)
 
+if HISTORY_SMOKE.is_file():
+    text = HISTORY_SMOKE.read_text(encoding="utf-8")
+    for token in (
+        "RejectsUnderreportedReadWithoutMutation();",
+        "RejectsUnderreportedRecordWithoutMutation();",
+        "RejectsUnderreportedClearWithoutMutation();",
+        "RejectsOverreportedReadWithoutMutation();",
+        "RejectsOverreportedRecordWithoutMutation();",
+        "RejectsOverreportedClearWithoutMutation();",
+        "private sealed class DishonestCountHistory : IList<AuditEvent>",
+        "public int Count => _reportedCount;",
+        "Equal(0, history.AddRequests, \"underreported record add requests\");",
+        "Equal(0, history.ClearRequests, \"underreported clear mutation requests\");",
+        "Equal(0, history.AddRequests, \"overreported record add requests\");",
+        "Equal(0, history.ClearRequests, \"overreported clear mutation requests\");",
+        "var history = new DishonestCountHistory(2, CanonicalEvent());",
+    ):
+        if token not in text:
+            errors.append("AuditTrailHistoryBoundSmoke.cs missing Count-versus-traversal fail-closed regression token: " + token)
+
 if REG.is_file() and "AuditTrailSnapshotSmoke.Run();" not in REG.read_text(encoding="utf-8"):
     errors.append("Audit snapshot integrity smoke is not registered.")
 
@@ -45,4 +122,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: AuditTrail.Events returns a deep read snapshot and cannot mutate authoritative audit state by cast or entry editing.")
+print("PASS: AuditTrail reads and mutations validate stored history, enforce method-local Count-versus-traversal ordering, and reject dishonest history before mutation.")

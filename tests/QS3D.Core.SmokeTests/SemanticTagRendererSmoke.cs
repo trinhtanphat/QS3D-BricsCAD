@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using QS3D.Core.Documentation;
 using QS3D.Core.Domain;
 
@@ -9,11 +10,15 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             StableSemanticReferencesRender();
+            EmptyReferencesRenderEmpty();
             OptionalPropertyAndQuantityRender();
             GeneratedOwnershipCannotLeakIntoTag();
+            NativeHandleMetadataCannotLeakIntoTag();
             UnsupportedTokenFailsClosed();
             MalformedBraceGrammarFailsClosed();
             MissingReferenceFailsClosed();
+            NonCanonicalReferencesFailClosed();
+            NonCanonicalOwnerIdsFailClosed();
             DetachedElementWithSameIdFailsClosed();
             DuplicateElementIdFailsClosed();
             AmbiguousReferencesFailClosed();
@@ -25,6 +30,16 @@ namespace QS3D.Core.SmokeTests
             var text = SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{Category} | {Family} | {Floor} | {Zone} | {Id}");
             if (text != "Beam | B300x500 | L02 | Zone A | E-001")
                 throw new Exception("Unexpected semantic tag output: " + text);
+        }
+
+        private static void EmptyReferencesRenderEmpty()
+        {
+            var fixture = BuildFixture();
+            fixture.Element.FamilyId = string.Empty;
+            fixture.Element.FloorId = string.Empty;
+            fixture.Element.ZoneId = string.Empty;
+            var text = SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{Family}|{Floor}|{Zone}");
+            if (text != "||") throw new Exception("Canonical empty semantic references must remain unassigned: " + text);
         }
 
         private static void OptionalPropertyAndQuantityRender()
@@ -44,6 +59,19 @@ namespace QS3D.Core.SmokeTests
             try { SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{P:GeneratedSolidHandle}"); }
             catch (InvalidOperationException) { failed = true; }
             if (!failed) throw new Exception("Semantic tag must not expose generated CAD owner handles.");
+        }
+
+        private static void NativeHandleMetadataCannotLeakIntoTag()
+        {
+            var fixture = BuildFixture();
+            fixture.Element.Properties["CadHandle"] = "ABCD";
+            fixture.Element.Properties["SourceHandleRef"] = "EF12";
+            MustFail(
+                () => SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{P:cAdHaNdLe}"),
+                "Semantic tag must not expose arbitrary CAD handle metadata.");
+            MustFail(
+                () => SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{P:SOURCEHANDLEREF}"),
+                "Semantic tag must reject handle-bearing property names case-insensitively.");
         }
 
         private static void UnsupportedTokenFailsClosed()
@@ -73,6 +101,87 @@ namespace QS3D.Core.SmokeTests
             try { SemanticTagRenderer.Render(fixture.Project, fixture.Element, "{Family}"); }
             catch (InvalidOperationException) { failed = true; }
             if (!failed) throw new Exception("Missing semantic references must not render as valid documentation.");
+        }
+
+        private static void NonCanonicalReferencesFailClosed()
+        {
+            var familyFixture = BuildFixture();
+            familyFixture.Element.FamilyId = " FAM-B";
+            if (familyFixture.Element.FamilyId != "FAM-B") throw new Exception("FamilyId setter must canonicalize padded input.");
+            SetRawElementRelation(familyFixture.Element, "_familyId", " FAM-B");
+            MustFail(
+                () => SemanticTagRenderer.Render(familyFixture.Project, familyFixture.Element, "{Family}"),
+                "Whitespace-padded Family references must fail closed instead of being normalized during render.");
+
+            var floorFixture = BuildFixture();
+            floorFixture.Element.FloorId = "F-02 ";
+            if (floorFixture.Element.FloorId != "F-02") throw new Exception("FloorId setter must canonicalize padded input.");
+            SetRawElementRelation(floorFixture.Element, "_floorId", "F-02 ");
+            MustFail(
+                () => SemanticTagRenderer.Render(floorFixture.Project, floorFixture.Element, "{Floor}"),
+                "Whitespace-padded Floor references must fail closed instead of being normalized during render.");
+
+            var zoneFixture = BuildFixture();
+            zoneFixture.Element.ZoneId = "\tZ-A";
+            if (zoneFixture.Element.ZoneId != "Z-A") throw new Exception("ZoneId setter must canonicalize padded input.");
+            SetRawElementRelation(zoneFixture.Element, "_zoneId", "\tZ-A");
+            MustFail(
+                () => SemanticTagRenderer.Render(zoneFixture.Project, zoneFixture.Element, "{Zone}"),
+                "Whitespace-padded Zone references must fail closed instead of being normalized during render.");
+
+            var blankFamilyFixture = BuildFixture();
+            blankFamilyFixture.Element.FamilyId = "   ";
+            if (blankFamilyFixture.Element.FamilyId != string.Empty) throw new Exception("FamilyId setter must canonicalize whitespace-only input.");
+            SetRawElementRelation(blankFamilyFixture.Element, "_familyId", "   ");
+            MustFail(
+                () => SemanticTagRenderer.Render(blankFamilyFixture.Project, blankFamilyFixture.Element, "{Family}"),
+                "Whitespace-only Family references must fail closed instead of being treated as unassigned.");
+
+            var blankFloorFixture = BuildFixture();
+            blankFloorFixture.Element.FloorId = "\t";
+            if (blankFloorFixture.Element.FloorId != string.Empty) throw new Exception("FloorId setter must canonicalize whitespace-only input.");
+            SetRawElementRelation(blankFloorFixture.Element, "_floorId", "\t");
+            MustFail(
+                () => SemanticTagRenderer.Render(blankFloorFixture.Project, blankFloorFixture.Element, "{Floor}"),
+                "Whitespace-only Floor references must fail closed instead of being treated as unassigned.");
+
+            var blankZoneFixture = BuildFixture();
+            blankZoneFixture.Element.ZoneId = "  \t  ";
+            if (blankZoneFixture.Element.ZoneId != string.Empty) throw new Exception("ZoneId setter must canonicalize whitespace-only input.");
+            SetRawElementRelation(blankZoneFixture.Element, "_zoneId", "  \t  ");
+            MustFail(
+                () => SemanticTagRenderer.Render(blankZoneFixture.Project, blankZoneFixture.Element, "{Zone}"),
+                "Whitespace-only Zone references must fail closed instead of being treated as unassigned.");
+        }
+
+        private static void NonCanonicalOwnerIdsFailClosed()
+        {
+            var familyFixture = BuildFixture();
+            familyFixture.Project.Families.Clear();
+            var paddedFamily = new ProjectFamily("FAM-B", "Padded Family", ElementCategory.Beam);
+            SetRawOwnerId(paddedFamily, " FAM-B ");
+            familyFixture.Project.Families.Add(paddedFamily);
+            MustFail(
+                () => SemanticTagRenderer.Render(familyFixture.Project, familyFixture.Element, "{Family}"),
+                "Whitespace-padded Family owner IDs must fail closed instead of satisfying a canonical reference.");
+
+            var floorFixture = BuildFixture();
+            floorFixture.Project.Floors.Clear();
+            var paddedFloor = new FloorDefinition("F-02", "Padded Floor", 3.6d);
+            SetRawOwnerId(paddedFloor, " F-02 ");
+            floorFixture.Project.Floors.Add(paddedFloor);
+            MustFail(
+                () => SemanticTagRenderer.Render(floorFixture.Project, floorFixture.Element, "{Floor}"),
+                "Whitespace-padded Floor owner IDs must fail closed instead of satisfying a canonical reference.");
+
+            var zoneFixture = BuildFixture();
+            zoneFixture.Project.Zones.Clear();
+            var paddedZone = new ZoneDefinition("Z-A", "Padded Zone");
+            SetRawOwnerId(paddedZone, "\tZ-A");
+            zoneFixture.Project.Zones.Add(paddedZone);
+            MustFail(
+                () => SemanticTagRenderer.Render(zoneFixture.Project, zoneFixture.Element, "{Zone}"),
+                "Whitespace-padded Zone owner IDs must fail closed instead of satisfying a canonical reference.");
         }
 
         private static void DetachedElementWithSameIdFailsClosed()
@@ -116,6 +225,20 @@ namespace QS3D.Core.SmokeTests
             try { action(); }
             catch (InvalidOperationException) { failed = true; }
             if (!failed) throw new Exception(message);
+        }
+
+        private static void SetRawElementRelation(ProjectElement element, string fieldName, string rawId)
+        {
+            var field = typeof(ProjectElement).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new Exception("ProjectElement backing field is unavailable for malformed semantic reference fixture: " + fieldName + ".");
+            field.SetValue(element, rawId);
+        }
+
+        private static void SetRawOwnerId(object owner, string rawId)
+        {
+            var field = owner.GetType().GetField("<Id>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null) throw new Exception("Owner ID backing field is unavailable for the malformed-state fixture.");
+            field.SetValue(owner, rawId);
         }
 
         private static void MustFormatFail(Action action, string message)

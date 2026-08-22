@@ -183,12 +183,9 @@ Do not compose `QS3DSYNCSOURCE` + `QS3DBUILD3D` and call the result atomic unles
 
 ### 7.1 Whole-command atomicity/recovery
 
-`QS3DCURTAIN3D` still orchestrates semantic regeneration, host replacement and frame replacement across separate native transaction families. Keep truthful `PARTIAL COMMIT` reporting until one of these is implemented and tested:
+Current source places semantic regeneration plus the canonical LINE/path host and frame replacement builders under a command `ProjectStateSnapshot` and one outer native transaction. A failure before the outer commit is expected to abort every nested native phase and restore semantic state; fingerprint/UI finalization remains post-commit and warning-only.
 
-- a shared native transaction orchestration that all builders can participate in; or
-- a durable compensation journal with deterministic recovery and save/reopen behavior.
-
-Failure injection is required after every logical phase.
+This is `REMOTE_DONE` source structure, not local proof. Exact-SHA BricsCAD V25 failure injection is still required after semantic regeneration and every host/frame phase to establish real nested-transaction behavior, Undo and save/reopen recovery. Do not restore obsolete `PARTIAL COMMIT` messaging, and do not mark LOCAL-002 PASS from the static orchestration preflight.
 
 ### 7.2 Native panel-by-panel glass
 
@@ -203,6 +200,8 @@ Use existing `CurtainWallDetailPlanner.Panels` as semantic geometry input. Requi
 - atomic/recoverable host + frame + panel replacement;
 - select/locate/cleanup integration;
 - real V25 save/reopen geometry proof.
+
+The current implementation batch and exact local evidence matrix are maintained in `docs/CURTAIN-NATIVE-PANELS.md`. Source/static completion does not change the `PENDING_LOCAL` status of this section.
 
 ## 8. Physical L/T/X wall junction output
 

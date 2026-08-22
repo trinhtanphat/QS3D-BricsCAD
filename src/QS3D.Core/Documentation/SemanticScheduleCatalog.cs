@@ -24,12 +24,24 @@ namespace QS3D.Core.Documentation
             Id = id ?? string.Empty;
             Name = name ?? string.Empty;
             Title = title ?? string.Empty;
-            Categories = new List<ElementCategory>(categories ?? Array.Empty<ElementCategory>()).AsReadOnly();
+            Categories = SnapshotBounded(
+                categories ?? Array.Empty<ElementCategory>(),
+                SemanticScheduleCatalog.MaxIds,
+                "Semantic schedule category list exceeds 5000 entries.");
             FloorId = floorId ?? string.Empty;
             ZoneId = zoneId ?? string.Empty;
-            IncludeElementIds = new List<string>(includeElementIds ?? Array.Empty<string>()).AsReadOnly();
-            ExcludeElementIds = new List<string>(excludeElementIds ?? Array.Empty<string>()).AsReadOnly();
-            Columns = new List<SemanticDocumentationColumn>(columns ?? throw new ArgumentNullException(nameof(columns))).AsReadOnly();
+            IncludeElementIds = SnapshotBounded(
+                includeElementIds ?? Array.Empty<string>(),
+                SemanticScheduleCatalog.MaxIds,
+                "Semantic schedule include list exceeds 5000 ids.");
+            ExcludeElementIds = SnapshotBounded(
+                excludeElementIds ?? Array.Empty<string>(),
+                SemanticScheduleCatalog.MaxIds,
+                "Semantic schedule exclude list exceeds 5000 ids.");
+            Columns = SnapshotBounded(
+                columns ?? throw new ArgumentNullException(nameof(columns)),
+                SemanticScheduleCatalog.MaxColumns,
+                "Semantic schedule requires 1..32 columns.");
         }
 
         public string Id { get; }
@@ -41,42 +53,109 @@ namespace QS3D.Core.Documentation
         public IReadOnlyList<string> IncludeElementIds { get; }
         public IReadOnlyList<string> ExcludeElementIds { get; }
         public IReadOnlyList<SemanticDocumentationColumn> Columns { get; }
+
+        private static IReadOnlyList<T> SnapshotBounded<T>(IEnumerable<T> values, int maxCount, string capacityError)
+        {
+            int? knownCount = null;
+            ValidateKnownCount(values as ICollection<T>, maxCount, capacityError, ref knownCount);
+            ValidateKnownCount(values as IReadOnlyCollection<T>, maxCount, capacityError, ref knownCount);
+            ValidateKnownCount(values as System.Collections.ICollection, maxCount, capacityError, ref knownCount);
+
+            var result = new List<T>(knownCount ?? Math.Min(maxCount, 256));
+            using (var enumerator = values.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= maxCount) throw new InvalidOperationException(capacityError);
+                    result.Add(enumerator.Current);
+                }
+            }
+
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw new InvalidOperationException("Semantic schedule collection source known Count does not match completed traversal.");
+            return result.AsReadOnly();
+        }
+
+        private static void ValidateKnownCount<T>(ICollection<T>? values, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (values != null) ValidateKnownCount(values.Count, maxCount, capacityError, ref knownCount);
+        }
+
+        private static void ValidateKnownCount<T>(IReadOnlyCollection<T>? values, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (values != null) ValidateKnownCount(values.Count, maxCount, capacityError, ref knownCount);
+        }
+
+        private static void ValidateKnownCount(System.Collections.ICollection? values, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (values != null) ValidateKnownCount(values.Count, maxCount, capacityError, ref knownCount);
+        }
+
+        private static void ValidateKnownCount(int count, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Semantic schedule collection source reports an invalid negative known Count.");
+            if (count > maxCount)
+                throw new InvalidOperationException(capacityError);
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException("Semantic schedule collection source exposes conflicting known Count values.");
+            knownCount = count;
+        }
     }
 
     public static class SemanticScheduleCatalog
     {
         public const string MetadataKey = "QS3D.Documentation.SemanticSchedules.v1";
         private const int MaxSchedules = 128;
-        private const int MaxIds = 5000;
-        private const int MaxColumns = 32;
+        internal const int MaxIds = 5000;
+        internal const int MaxColumns = 32;
+        private const int MaxRows = 5000;
         private const int MaxPayloadChars = 1024 * 1024;
 
         public static IReadOnlyList<SemanticScheduleDefinition> Load(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            if (!project.Metadata.TryGetValue(MetadataKey, out var payload) || string.IsNullOrWhiteSpace(payload))
+            if (!project.Metadata.TryGetValue(MetadataKey, out var payload) || string.IsNullOrEmpty(payload))
                 return Array.Empty<SemanticScheduleDefinition>();
             if (payload.Length > MaxPayloadChars) throw new InvalidDataException("Semantic schedule catalog exceeds the 1 MiB metadata limit.");
 
             var root = Parse(payload);
             if (root.Name.NamespaceName.Length != 0 || !string.Equals(root.Name.LocalName, "semanticSchedules", StringComparison.Ordinal) || (string)root.Attribute("version") != "1")
                 throw new InvalidDataException("Semantic schedule catalog format/version is invalid.");
-            ValidateSchema(root);
-            var definitions = root.Elements("schedule").Select(ReadDefinition).ToList();
+            var scheduleNodes = MaterializeScheduleNodesBounded(root);
+            ValidateSchema(root, scheduleNodes);
+            var definitions = scheduleNodes.Select(ReadDefinition).ToList();
             ValidateCatalog(definitions);
             return definitions.AsReadOnly();
+        }
+
+        private static IReadOnlyList<XElement> MaterializeScheduleNodesBounded(XElement root)
+        {
+            var result = new List<XElement>(MaxSchedules);
+            foreach (var schedule in root.Elements("schedule"))
+            {
+                if (result.Count >= MaxSchedules)
+                    throw new InvalidOperationException("Semantic schedule catalog exceeds the supported 128 definitions.");
+                result.Add(schedule);
+            }
+            return result.AsReadOnly();
         }
 
         public static void Save(ProjectState project, IEnumerable<SemanticScheduleDefinition> definitions)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (definitions == null) throw new ArgumentNullException(nameof(definitions));
-            var list = definitions.ToList();
+            var list = new List<SemanticScheduleDefinition>(MaxSchedules);
+            foreach (var definition in definitions)
+            {
+                if (list.Count >= MaxSchedules)
+                    throw new InvalidOperationException("Semantic schedule catalog exceeds the supported 128 definitions.");
+                list.Add(definition);
+            }
             ValidateCatalog(list);
             if (list.Count == 0)
             {
                 if (!project.Metadata.ContainsKey(MetadataKey)) return;
-                project.Touch();
                 project.Metadata.Remove(MetadataKey);
                 return;
             }
@@ -84,7 +163,6 @@ namespace QS3D.Core.Documentation
             var payload = Serialize(list);
             if (payload.Length > MaxPayloadChars) throw new InvalidOperationException("Semantic schedule catalog exceeds the 1 MiB metadata limit.");
             if (project.Metadata.TryGetValue(MetadataKey, out var current) && string.Equals(current, payload, StringComparison.Ordinal)) return;
-            project.Touch();
             project.Metadata[MetadataKey] = payload;
         }
 
@@ -92,7 +170,8 @@ namespace QS3D.Core.Documentation
         {
             if (definition == null) throw new ArgumentNullException(nameof(definition));
             var list = Load(project).ToList();
-            var index = list.FindIndex(x => string.Equals(x.Id, definition.Id, StringComparison.OrdinalIgnoreCase));
+            var normalizedId = Required(definition.Id, "schedule id", 80);
+            var index = list.FindIndex(x => string.Equals(x.Id, normalizedId, StringComparison.OrdinalIgnoreCase));
             if (index >= 0) list[index] = definition; else list.Add(definition);
             Save(project, list);
         }
@@ -122,17 +201,23 @@ namespace QS3D.Core.Documentation
             foreach (var id in exclude)
                 if (project.FindElement(id) == null) throw new InvalidOperationException("Semantic schedule exclude list references missing Element " + id + ".");
 
-            var candidates = project.Elements.ToArray();
-            if (candidates.Any(x => x == null))
-                throw new InvalidOperationException("Project contains a null semantic element.");
-
             var categorySet = new HashSet<ElementCategory>(normalized.Categories);
-            var ids = candidates
-                .Where(x => categorySet.Count == 0 || categorySet.Contains(x.Category))
-                .Where(x => normalized.FloorId.Length == 0 || string.Equals(x.FloorId, normalized.FloorId, StringComparison.OrdinalIgnoreCase))
-                .Where(x => normalized.ZoneId.Length == 0 || string.Equals(x.ZoneId, normalized.ZoneId, StringComparison.OrdinalIgnoreCase))
-                .Where(x => include.Count == 0 || include.Contains(x.Id))
-                .Where(x => !exclude.Contains(x.Id))
+            var matches = new List<ProjectElement>(Math.Min(project.Elements.Count, MaxRows));
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element.");
+                if (categorySet.Count > 0 && !categorySet.Contains(element.Category)) continue;
+                if (normalized.FloorId.Length > 0 && !string.Equals((element.FloorId ?? string.Empty).Trim(), normalized.FloorId, StringComparison.OrdinalIgnoreCase)) continue;
+                if (normalized.ZoneId.Length > 0 && !string.Equals((element.ZoneId ?? string.Empty).Trim(), normalized.ZoneId, StringComparison.OrdinalIgnoreCase)) continue;
+                if (include.Count > 0 && !include.Contains(element.Id)) continue;
+                if (exclude.Contains(element.Id)) continue;
+                if (matches.Count >= MaxRows)
+                    throw new InvalidOperationException("Semantic schedule supports at most 5000 matching elements.");
+                matches.Add(element);
+            }
+
+            var ids = matches
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Id, StringComparer.Ordinal)
                 .Select(x => x.Id)
@@ -160,9 +245,14 @@ namespace QS3D.Core.Documentation
             var id = Required(raw.Id, "schedule id", 80);
             var name = Required(raw.Name, "schedule name", 160);
             var title = Required(raw.Title, "schedule title", 160);
-            var categories = raw.Categories.Distinct().OrderBy(x => x.ToString(), StringComparer.Ordinal).ToArray();
+            var categories = raw.Categories.ToArray();
+            var uniqueCategories = new HashSet<ElementCategory>();
             foreach (var category in categories)
+            {
                 if (!Enum.IsDefined(typeof(ElementCategory), category)) throw new InvalidOperationException("Semantic schedule contains unsupported category " + category + ".");
+                if (!uniqueCategories.Add(category)) throw new InvalidOperationException("Semantic schedule contains duplicate category " + category + ".");
+            }
+            categories = uniqueCategories.OrderBy(x => x.ToString(), StringComparer.Ordinal).ToArray();
             var include = NormalizeIds(raw.IncludeElementIds, "include");
             var exclude = NormalizeIds(raw.ExcludeElementIds, "exclude");
             if (include.Intersect(exclude, StringComparer.OrdinalIgnoreCase).Any())
@@ -208,10 +298,10 @@ namespace QS3D.Core.Documentation
         {
             try
             {
-                var categories = node.Element("categories")?.Elements("category").Select(x => (ElementCategory)Enum.Parse(typeof(ElementCategory), Required((string)x.Attribute("value"), "category", 64), true)) ?? Array.Empty<ElementCategory>();
-                var include = node.Element("include")?.Elements("id").Select(x => (string)x.Attribute("value")) ?? Array.Empty<string>();
-                var exclude = node.Element("exclude")?.Elements("id").Select(x => (string)x.Attribute("value")) ?? Array.Empty<string>();
-                var columns = node.Element("columns")?.Elements("column").Select(x => new SemanticDocumentationColumn((string)x.Attribute("header"), (string)x.Attribute("template"))) ?? Array.Empty<SemanticDocumentationColumn>();
+                var categories = node.Element("categories").Elements("category").Select(ParseCategory);
+                var include = node.Element("include").Elements("id").Select(x => (string)x.Attribute("value"));
+                var exclude = node.Element("exclude").Elements("id").Select(x => (string)x.Attribute("value"));
+                var columns = node.Element("columns").Elements("column").Select(x => new SemanticDocumentationColumn((string)x.Attribute("header"), (string)x.Attribute("template")));
                 return Normalize(new SemanticScheduleDefinition((string)node.Attribute("id"), (string)node.Attribute("name"), (string)node.Attribute("title"), categories, (string)node.Attribute("floorId"), (string)node.Attribute("zoneId"), include, exclude, columns));
             }
             catch (Exception ex) when (!(ex is InvalidDataException))
@@ -220,47 +310,58 @@ namespace QS3D.Core.Documentation
             }
         }
 
-        private static void ValidateSchema(XElement root)
+        private static ElementCategory ParseCategory(XElement node)
+        {
+            var stored = (string)node.Attribute("value");
+            var raw = Required(stored, "category", 64);
+            if (!string.Equals(stored, raw, StringComparison.Ordinal)
+                || !Enum.TryParse(raw, false, out ElementCategory category)
+                || !Enum.IsDefined(typeof(ElementCategory), category)
+                || !string.Equals(raw, category.ToString(), StringComparison.Ordinal))
+                throw new InvalidDataException("Semantic schedule category must use a canonical ElementCategory name.");
+            return category;
+        }
+
+        private static void ValidateSchema(XElement root, IReadOnlyList<XElement> schedules)
         {
             ValidateElement(root, "semanticSchedules", new[] { "version" }, new[] { "schedule" });
-            foreach (var schedule in root.Elements("schedule"))
+            EnsureRequiredAttributes(root, "version");
+            foreach (var schedule in schedules)
             {
                 ValidateElement(schedule, "schedule", new[] { "id", "name", "title", "floorId", "zoneId" }, new[] { "categories", "include", "exclude", "columns" });
-                EnsureAtMostOneChild(schedule, "categories");
-                EnsureAtMostOneChild(schedule, "include");
-                EnsureAtMostOneChild(schedule, "exclude");
-                EnsureAtMostOneChild(schedule, "columns");
+                EnsureRequiredAttributes(schedule, "id", "name", "title", "floorId", "zoneId");
 
-                var categories = schedule.Element("categories");
-                if (categories != null)
+                var categories = RequireExactlyOneChild(schedule, "categories");
+                var include = RequireExactlyOneChild(schedule, "include");
+                var exclude = RequireExactlyOneChild(schedule, "exclude");
+                var columns = RequireExactlyOneChild(schedule, "columns");
+
+                ValidateElement(categories, "categories", Array.Empty<string>(), new[] { "category" });
+                foreach (var category in categories.Elements("category"))
                 {
-                    ValidateElement(categories, "categories", Array.Empty<string>(), new[] { "category" });
-                    foreach (var category in categories.Elements("category"))
-                        ValidateElement(category, "category", new[] { "value" }, Array.Empty<string>());
+                    ValidateElement(category, "category", new[] { "value" }, Array.Empty<string>());
+                    EnsureRequiredAttributes(category, "value");
                 }
 
-                var include = schedule.Element("include");
-                if (include != null)
+                ValidateElement(include, "include", Array.Empty<string>(), new[] { "id" });
+                foreach (var id in include.Elements("id"))
                 {
-                    ValidateElement(include, "include", Array.Empty<string>(), new[] { "id" });
-                    foreach (var id in include.Elements("id"))
-                        ValidateElement(id, "id", new[] { "value" }, Array.Empty<string>());
+                    ValidateElement(id, "id", new[] { "value" }, Array.Empty<string>());
+                    EnsureRequiredAttributes(id, "value");
                 }
 
-                var exclude = schedule.Element("exclude");
-                if (exclude != null)
+                ValidateElement(exclude, "exclude", Array.Empty<string>(), new[] { "id" });
+                foreach (var id in exclude.Elements("id"))
                 {
-                    ValidateElement(exclude, "exclude", Array.Empty<string>(), new[] { "id" });
-                    foreach (var id in exclude.Elements("id"))
-                        ValidateElement(id, "id", new[] { "value" }, Array.Empty<string>());
+                    ValidateElement(id, "id", new[] { "value" }, Array.Empty<string>());
+                    EnsureRequiredAttributes(id, "value");
                 }
 
-                var columns = schedule.Element("columns");
-                if (columns != null)
+                ValidateElement(columns, "columns", Array.Empty<string>(), new[] { "column" });
+                foreach (var column in columns.Elements("column"))
                 {
-                    ValidateElement(columns, "columns", Array.Empty<string>(), new[] { "column" });
-                    foreach (var column in columns.Elements("column"))
-                        ValidateElement(column, "column", new[] { "header", "template" }, Array.Empty<string>());
+                    ValidateElement(column, "column", new[] { "header", "template" }, Array.Empty<string>());
+                    EnsureRequiredAttributes(column, "header", "template");
                 }
             }
         }
@@ -286,16 +387,27 @@ namespace QS3D.Core.Documentation
                     continue;
                 }
 
+                if (node is XCData)
+                    throw new InvalidDataException("Semantic schedule catalog contains unsupported CDATA content in " + expectedName + ".");
                 var text = node as XText;
                 if (text != null && string.IsNullOrWhiteSpace(text.Value)) continue;
                 throw new InvalidDataException("Semantic schedule catalog contains unsupported XML content in " + expectedName + ".");
             }
         }
 
-        private static void EnsureAtMostOneChild(XElement parent, string childName)
+        private static void EnsureRequiredAttributes(XElement element, params string[] attributeNames)
         {
-            if (parent.Elements(childName).Skip(1).Any())
-                throw new InvalidDataException("Semantic schedule catalog contains duplicate " + childName + " containers.");
+            foreach (var attributeName in attributeNames)
+                if (element.Attribute(attributeName) == null)
+                    throw new InvalidDataException("Semantic schedule catalog is missing required attribute " + attributeName + " on " + element.Name.LocalName + ".");
+        }
+
+        private static XElement RequireExactlyOneChild(XElement parent, string childName)
+        {
+            var children = parent.Elements(childName).ToArray();
+            if (children.Length != 1)
+                throw new InvalidDataException("Semantic schedule catalog requires exactly one " + childName + " container per schedule.");
+            return children[0];
         }
 
         private static XElement Parse(string payload)
@@ -317,14 +429,27 @@ namespace QS3D.Core.Documentation
             if (normalized.Length == 0) throw new ArgumentException("Semantic schedule " + label + " is required.");
             if (normalized.Length > maxLength) throw new ArgumentException("Semantic schedule " + label + " exceeds supported length.");
             if (normalized.Any(char.IsControl)) throw new ArgumentException("Semantic schedule " + label + " contains control characters.");
-            return normalized;
+            return RequireXmlText(normalized, label);
         }
 
         private static string Optional(string value, int maxLength)
         {
             var normalized = (value ?? string.Empty).Trim();
             if (normalized.Length > maxLength || normalized.Any(char.IsControl)) throw new ArgumentException("Semantic schedule optional id is invalid.");
-            return normalized;
+            return RequireXmlText(normalized, "optional id");
+        }
+
+        private static string RequireXmlText(string value, string label)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+                return value;
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Semantic schedule " + label + " contains characters that are invalid in XML.", ex);
+            }
         }
     }
 }

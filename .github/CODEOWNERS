@@ -1,0 +1,17 @@
+# Repository-critical ownership. This routes review; it does not grant merge authority.
+/.github/workflows/ @trinhtanphat
+/.github/CODEOWNERS @trinhtanphat
+/.github/dependabot.yml @trinhtanphat
+/.github/pull_request_template.md @trinhtanphat
+/.github/ISSUE_TEMPLATE/ @trinhtanphat
+/AGENTS.md @trinhtanphat
+/CI_POLICY.md @trinhtanphat
+/CONTRIBUTING.md @trinhtanphat
+/SECURITY.md @trinhtanphat
+/docs/MAIN-WRITE-AUTHORIZATION.md @trinhtanphat
+/docs/AGENT-WORK-REGISTRATION.md @trinhtanphat
+/scripts/preflight-ci-manual-only.py @trinhtanphat
+/scripts/preflight-repository-professionalism.py @trinhtanphat
+/scripts/*release* @trinhtanphat
+/scripts/*sign* @trinhtanphat
+/scripts/*update* @trinhtanphat

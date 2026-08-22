@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             AcyclicChainPasses();
+            NullElementFailsVisible();
             SelfReferenceIsReported();
             MultiElementCycleReportsOnlyCycleMembers();
             MissingDependencyIsNotMisclassifiedAsCycle();
@@ -29,6 +30,20 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(c);
             var issues = new DependencyHealthService().Inspect(project);
             Require(!issues.Any(), "acyclic dependency chain must pass");
+        }
+
+        private static void NullElementFailsVisible()
+        {
+            var project = Project("null-element");
+            project.Elements.Add(Element("A"));
+            project.Elements.Add(null!);
+            Throws<InvalidOperationException>(() => new DependencyHealthService().Inspect(project));
+
+            var aggregateIssues = new ComprehensiveModelHealthService().Inspect(project);
+            Require(aggregateIssues.Any(x =>
+                    x.Code == "HEALTH_PROVIDER_FAILED" &&
+                    (x.Message ?? string.Empty).IndexOf("DependencyHealthService", StringComparison.Ordinal) >= 0),
+                "comprehensive health must surface dependency provider failure for a null semantic element");
         }
 
         private static void SelfReferenceIsReported()
@@ -75,7 +90,10 @@ namespace QS3D.Core.SmokeTests
             a.DependsOn.Add("MISSING");
             project.Elements.Add(a);
             var issues = new DependencyHealthService().Inspect(project);
-            Require(!issues.Any(), "missing dependency remains ModelHealthService responsibility and must not be misclassified as a cycle");
+            Require(issues.Count(x => x.Code == "DEPENDENCY_TARGET_MISSING" && x.Severity == HealthSeverity.Error && x.ElementId == "A") == 1,
+                "missing dependency must be reported exactly once as an error on the referencing element");
+            Require(!issues.Any(x => x.Code == "DEPENDENCY_CYCLE" || x.Code == "DEPENDENCY_SELF_REFERENCE"),
+                "missing dependency must not be misclassified as a cycle or self-reference");
         }
 
         private static void DuplicateDependencyTargetIsReportedAsAmbiguous()
@@ -98,6 +116,19 @@ namespace QS3D.Core.SmokeTests
 
         private static ProjectElement Element(string id) =>
             new ProjectElement(id, ElementCategory.CustomQuantity, string.Empty, string.Empty, string.Empty);
+
+        private static void Throws<TException>(Action action) where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+            throw new InvalidOperationException("DependencyHealthSmoke: expected " + typeof(TException).Name + ".");
+        }
 
         private static void Require(bool condition, string message)
         {

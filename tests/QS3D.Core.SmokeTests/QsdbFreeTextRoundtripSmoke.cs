@@ -31,11 +31,11 @@ namespace QS3D.Core.SmokeTests
                 project.AuditEvents.Add(new AuditEvent
                 {
                     Utc = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc),
-                    Action = "  action  ",
-                    ElementId = "  E1  ",
+                    Action = "action",
+                    ElementId = "E1",
                     Detail = "  detail with intentional padding  ",
                     Actor = "  actor  ",
-                    CorrelationId = "  correlation  "
+                    CorrelationId = "correlation"
                 });
 
                 var store = new QsdbProjectStore();
@@ -45,11 +45,11 @@ namespace QS3D.Core.SmokeTests
                 Equal("  project note  ", loaded.Metadata["Notes"], "project metadata");
                 Equal("  family description  ", loaded.FindFamily("F1")!.Properties["Description"], "family property");
                 Equal("  element comment  ", loaded.FindElement("E1")!.Properties["Comment"], "element property");
-                Equal("  action  ", loaded.AuditEvents[0].Action, "audit action");
-                Equal("  E1  ", loaded.AuditEvents[0].ElementId, "audit element id payload");
+                Equal("action", loaded.AuditEvents[0].Action, "audit action");
+                Equal("E1", loaded.AuditEvents[0].ElementId, "audit element id");
                 Equal("  detail with intentional padding  ", loaded.AuditEvents[0].Detail, "audit detail");
                 Equal("  actor  ", loaded.AuditEvents[0].Actor, "audit actor");
-                Equal("  correlation  ", loaded.AuditEvents[0].CorrelationId, "audit correlation id");
+                Equal("correlation", loaded.AuditEvents[0].CorrelationId, "audit correlation id");
             }
             finally
             {

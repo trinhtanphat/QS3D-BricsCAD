@@ -109,6 +109,7 @@ namespace QS3D.Core.Geometry
         private const string GroupTokenPrefix = "WJP1:";
         private const string OwnerTokenPrefix = "WJX1:";
         private const string FingerprintPrefix = "WJF1:";
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         private sealed class NormalizedOwner
         {
@@ -149,10 +150,10 @@ namespace QS3D.Core.Geometry
             if (!Finite(verticalToleranceM) || verticalToleranceM <= 0d)
                 throw new ArgumentOutOfRangeException(nameof(verticalToleranceM), "Vertical tolerance must be finite and > 0.");
 
-            var junctionList = junctions.ToList();
-            var mappingList = ownerMappings.ToList();
+            var junctionList = junctions.Take(MaxJunctions + 1).ToList();
             if (junctionList.Count > MaxJunctions)
                 throw new InvalidOperationException("Physical wall-junction ownership planning supports at most " + MaxJunctions + " junctions per batch.");
+            var mappingList = ownerMappings.Take(MaxOwnerMappings + 1).ToList();
             if (mappingList.Count > MaxOwnerMappings)
                 throw new InvalidOperationException("Physical wall-junction ownership planning supports at most " + MaxOwnerMappings + " source-owner mappings per batch.");
 
@@ -221,7 +222,6 @@ namespace QS3D.Core.Geometry
                     .OrderBy(x => x.WallElementId, StringComparer.Ordinal)
                     .ToList();
 
-                // A polyline corner or split source belonging to one semantic wall is not a multi-owner physical junction.
                 if (distinctOwners.Count < 2) continue;
 
                 var bottomM = distinctOwners.Max(x => x.BottomM);
@@ -354,17 +354,17 @@ namespace QS3D.Core.Geometry
             AppendPacked(builder, occurrence.ToString(CultureInfo.InvariantCulture));
             AppendPacked(builder, candidate.Junction.Kind.ToString());
             AppendPacked(builder, candidate.Junction.RayCount.ToString(CultureInfo.InvariantCulture));
-            AppendPacked(builder, candidate.Junction.Point.X.ToString("R", CultureInfo.InvariantCulture));
-            AppendPacked(builder, candidate.Junction.Point.Y.ToString("R", CultureInfo.InvariantCulture));
-            AppendPacked(builder, candidate.BottomM.ToString("R", CultureInfo.InvariantCulture));
-            AppendPacked(builder, candidate.TopM.ToString("R", CultureInfo.InvariantCulture));
+            AppendPacked(builder, CanonicalDouble(candidate.Junction.Point.X));
+            AppendPacked(builder, CanonicalDouble(candidate.Junction.Point.Y));
+            AppendPacked(builder, CanonicalDouble(candidate.BottomM));
+            AppendPacked(builder, CanonicalDouble(candidate.TopM));
             foreach (var owner in candidate.SourceOwners)
             {
                 AppendPacked(builder, owner.SourceSegmentId);
                 AppendPacked(builder, owner.WallElementId);
-                AppendPacked(builder, owner.BottomM.ToString("R", CultureInfo.InvariantCulture));
-                AppendPacked(builder, owner.TopM.ToString("R", CultureInfo.InvariantCulture));
-                AppendPacked(builder, owner.ThicknessM.ToString("R", CultureInfo.InvariantCulture));
+                AppendPacked(builder, CanonicalDouble(owner.BottomM));
+                AppendPacked(builder, CanonicalDouble(owner.TopM));
+                AppendPacked(builder, CanonicalDouble(owner.ThicknessM));
             }
             return builder.ToString();
         }
@@ -399,7 +399,22 @@ namespace QS3D.Core.Geometry
             var normalized = value.Trim();
             if (normalized.Length > MaxIdentityLength)
                 throw new InvalidOperationException(label + " exceeds " + MaxIdentityLength + " characters.");
-            return normalized.ToUpperInvariant();
+            var canonical = normalized.ToUpperInvariant();
+            try
+            {
+                StrictUtf8.GetByteCount(canonical);
+            }
+            catch (EncoderFallbackException ex)
+            {
+                throw new InvalidOperationException(label + " must contain well-formed Unicode text.", ex);
+            }
+            return canonical;
+        }
+
+        private static string CanonicalDouble(double value)
+        {
+            if (value == 0d) value = 0d;
+            return value.ToString("R", CultureInfo.InvariantCulture);
         }
 
         private static void AppendPacked(StringBuilder builder, string value)
@@ -414,7 +429,7 @@ namespace QS3D.Core.Geometry
         {
             using (var sha = SHA256.Create())
             {
-                var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(value));
+                var bytes = sha.ComputeHash(StrictUtf8.GetBytes(value));
                 return BitConverter.ToString(bytes).Replace("-", string.Empty).ToLowerInvariant();
             }
         }

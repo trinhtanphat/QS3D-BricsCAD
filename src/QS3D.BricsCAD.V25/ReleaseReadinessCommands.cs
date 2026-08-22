@@ -12,6 +12,12 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class ReleaseReadinessCommands
     {
+#if BRICSCAD_V26
+        private const string ExpectedRuntimeLabel = "V26";
+#else
+        private const string ExpectedRuntimeLabel = "V25";
+#endif
+
         [CommandMethod("QS3DRELEASECHECK", CommandFlags.Modal)]
         public void ReviewReleaseReadiness()
         {
@@ -49,10 +55,14 @@ namespace QS3D.BricsCAD.V25
                 issues.AddRange(new GeneratedFoundationMeshHealthService().Inspect(project, liveGenerated));
                 issues.AddRange(new GeneratedCurtainFrameHealthService().Inspect(project, liveGenerated));
                 issues.AddRange(CurtainWallFrameLiveStateService.Inspect(document, project));
+                issues.AddRange(new GeneratedCurtainPanelHealthService().Inspect(project, liveGenerated));
+                issues.AddRange(CurtainWallPanelLiveStateService.Inspect(document, project));
+                issues.AddRange(GeneratedCurtainPanelRuntimeHealthService.Inspect(document, project));
                 issues.AddRange(PhysicalOpeningCutLiveStateService.Inspect(document, project));
                 issues.AddRange(new GeneratedGeometryStaleHealthService().Inspect(project));
                 issues.AddRange(new GeneratedRebarModeHealthService().Inspect(project));
                 issues.AddRange(new RebarFabricationQualificationHealthService().Inspect(project));
+                issues.AddRange(SemanticScheduleNativeTableBuilder.Inspect(document, project));
                 issues.AddRange(BomReleaseGuardService.Inspect(project, liveGenerated));
                 issues = issues
                     .GroupBy(x => x.Code + "\n" + x.ElementId + "\n" + x.Message, StringComparer.Ordinal)
@@ -65,7 +75,7 @@ namespace QS3D.BricsCAD.V25
                 var summary = new HealthSummary(issues);
                 var ready = summary.Errors == 0 && summary.Warnings == 0;
                 var message = ready
-                    ? "Release Check: READY • không có Error/Warning trong semantic/generated/live CAD health. V25 runtime/private-DWG gate vẫn là bước riêng."
+                    ? "Release Check: READY • không có Error/Warning trong semantic/generated/live CAD health. " + ExpectedRuntimeLabel + " runtime/private-DWG gate vẫn là bước riêng."
                     : "Release Check: BLOCKED • " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin.";
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
@@ -87,8 +97,17 @@ namespace QS3D.BricsCAD.V25
 
         private static void Locate(Document document, ModelHealthIssue issue)
         {
-            if (string.IsNullOrWhiteSpace(issue.ElementId)) return;
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
+            if (string.IsNullOrWhiteSpace(issue.ElementId))
+            {
+                if (!(issue.Code ?? string.Empty).StartsWith("CUSTOM_SCHEDULE_TABLE_", StringComparison.OrdinalIgnoreCase)) return;
+                var artifactHandles = SemanticScheduleNativeTableBuilder.PersistedHandles(currentProject);
+                if (artifactHandles.Count == 0) return;
+                var artifactCount = CadHandleService.Select(document, artifactHandles);
+                PaletteCoordinator.SetStatus("Release Check Định vị " + issue.Code + " • " + artifactCount + " CAD object(s)");
+                if (artifactCount > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+                return;
+            }
             var element = currentProject.FindElement(issue.ElementId);
             if (element == null) return;
             var handles = SemanticReferenceHandles.Get(element)

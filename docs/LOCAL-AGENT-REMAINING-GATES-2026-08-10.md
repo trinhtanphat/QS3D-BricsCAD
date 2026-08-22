@@ -33,13 +33,13 @@ Before starting the remaining tasks, verify current `main`, but treat these as t
 
 ### Why source-only completion is unsafe
 
-Core already describes panel cells, but correct V25 native panel solids depend on real `Solid3d` behavior, path orientation, bulged-polyline tessellation, opening clipping, transaction replacement, unit conversion and boolean/tolerance behavior. Adding a third independent native commit after host + frame would increase the existing partial-commit risk.
+Core and adapter source now describe bounded LINE/path panel cells, opening clipping, independent ownership/stale/health and one outer host/frame/panel transaction. Correct V25 native panel solids still depend on real `Solid3d` behavior, path orientation, bulged-polyline tessellation, opening clipping, nested transaction replacement, unit conversion and model tolerance. Source/static PASS is not LOCAL-002 PASS.
 
-### Required architecture
+### Source architecture to preserve
 
 Do **not** create panel solids as an unrelated best-effort transaction.
 
-Target contract:
+Current source contract:
 
 - semantic host remains the `GlassWall` element;
 - native panel outputs use an explicit owner slot such as `GeneratedCurtainPanelHandles`;
@@ -49,6 +49,8 @@ Target contract:
 - old owned output may be replaced; foreign/ambiguous output must fail closed and must never be erased;
 - cap panel/object counts before native mutation to avoid runaway DWG generation;
 - opening/door regions hosted on the GlassWall must interrupt or clip panel generation deterministically; do not leave full glass panels through an opening while only the host backing solid is cut.
+
+The focused source gate is `scripts/preflight-curtain-native-panels.py`; the exact P01-P12 local evidence matrix is `docs/CURTAIN-NATIVE-PANELS.md`.
 
 ### Primary source surfaces
 
@@ -228,7 +230,7 @@ Direct Draw: PASS/FAIL
 Door/Opening booleans: PASS/FAIL
 Room/HT_PHONG: PASS/FAIL
 Curtain host+frame: PASS/FAIL
-Curtain panel-by-panel: PASS/FAIL/NOT IMPLEMENTED
+Curtain panel-by-panel: PASS/FAIL/PENDING_LOCAL
 Wall L/T/X physical junction: PASS/FAIL/NOT IMPLEMENTED
 Rebar geometry/atomicity: PASS/FAIL
 Rebar governing standard + revision: <explicit value or NOT QUALIFIED>

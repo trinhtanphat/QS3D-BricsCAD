@@ -11,8 +11,13 @@ namespace QS3D.Core.Rebar
             if (element == null) throw new ArgumentNullException(nameof(element));
             if (element.Category != ElementCategory.Column)
                 throw new InvalidOperationException("Column tie quantities can only be calculated for Column elements.");
-            if (family != null && family.Category != ElementCategory.Column)
-                throw new InvalidOperationException("Column tie quantity family must have the Column category.");
+            if (family != null)
+            {
+                if (family.Category != ElementCategory.Column)
+                    throw new InvalidOperationException("Column tie quantity family must have the Column category.");
+                if (!string.Equals(family.Id, element.FamilyId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Column tie quantity family must match the element family id.");
+            }
 
             var diameterMm = Positive(Number(element, family, "RebarTieDiameterMm", 8d), element.Id + "/RebarTieDiameterMm");
             var layout = ColumnTieLayoutPlanner.Plan(new ColumnTieLayoutInput

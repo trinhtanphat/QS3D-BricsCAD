@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
@@ -13,7 +14,11 @@ namespace QS3D.Core.SmokeTests
             SetPropertyUsesCanonicalKeyAndGeometryDirtyPolicy();
             MultiplyNumericPropertyUsesCanonicalKey();
             CorruptProjectFailsBeforeBulkMutation();
+            ObjectBasedBulkEditsRejectNullTargets();
             IdBasedBulkEditsRejectIncompleteTargetSets();
+            KnownCountContractsFailClosedBeforeEnumeration();
+            KnownCountTraversalMismatchFailsClosed();
+            HonestKnownAndStreamingInputsRemainAccepted();
             FamilyAssignmentRejectsIncompatibleBatch();
         }
 
@@ -70,6 +75,27 @@ namespace QS3D.Core.SmokeTests
             if (wall.FamilyId != familyA.Id) throw new Exception("Rejected bulk family assignment must not partially mutate a target.");
         }
 
+        private static void ObjectBasedBulkEditsRejectNullTargets()
+        {
+            var project = new ProjectState("P-OBJECT-NULL", "Bulk object target atomicity");
+            var wall = new ProjectElement("W1", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            wall.Properties["WidthM"] = "0.2";
+            wall.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(wall);
+            var service = new BulkEditService();
+            var version = project.ChangeVersion;
+            var dirty = wall.Dirty;
+            var targets = new ProjectElement[] { wall, null! };
+
+            Throws<InvalidOperationException>(() => service.SetProperty(project, targets, "WidthM", "0.25"));
+            if (wall.Properties["WidthM"] != "0.2" || wall.Dirty != dirty || project.ChangeVersion != version)
+                throw new Exception("Null object target must reject bulk set before any semantic mutation.");
+
+            Throws<InvalidOperationException>(() => service.MultiplyNumericProperty(project, targets, "WidthM", 2d));
+            if (wall.Properties["WidthM"] != "0.2" || wall.Dirty != dirty || project.ChangeVersion != version)
+                throw new Exception("Null object target must reject bulk multiply before any semantic mutation.");
+        }
+
         private static void IdBasedBulkEditsRejectIncompleteTargetSets()
         {
             var project = new ProjectState("P-ID", "Bulk target identity");
@@ -93,6 +119,66 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Duplicate bulk target must reject the whole batch before mutation.");
         }
 
+        private static void KnownCountContractsFailClosedBeforeEnumeration()
+        {
+            var project = ProjectWithTwoWalls(out var wall1, out _);
+            var service = new BulkEditService();
+            var version = project.ChangeVersion;
+            var dirty = wall1.Dirty;
+
+            var negativeIds = new MultiCountCollection<string>(new[] { wall1.Id }, -1, -1, -1, throwOnEnumeration: true);
+            ThrowsMessage<InvalidOperationException>(() => service.SetProperty(project, negativeIds, "WidthM", "0.25"), "invalid negative input count");
+            if (negativeIds.EnumerationRequested) throw new Exception("Negative known BulkEdit ID count must fail before enumeration.");
+
+            var conflictingObjects = new MultiCountCollection<ProjectElement>(new[] { wall1 }, 1, 2, 1, throwOnEnumeration: true);
+            ThrowsMessage<InvalidOperationException>(() => service.SetProperty(project, conflictingObjects, "WidthM", "0.25"), "conflicting known input counts");
+            if (conflictingObjects.EnumerationRequested) throw new Exception("Conflicting known BulkEdit object counts must fail before enumeration.");
+
+            var oversizedNonGeneric = new MultiCountCollection<string>(new[] { wall1.Id }, 1, 1, 10001, throwOnEnumeration: true);
+            ThrowsMessage<InvalidOperationException>(() => service.SetProperty(project, oversizedNonGeneric, "WidthM", "0.25"), "cannot exceed 10000");
+            if (oversizedNonGeneric.EnumerationRequested) throw new Exception("Oversized non-generic BulkEdit ID count must fail before enumeration.");
+
+            if (wall1.Properties["WidthM"] != "0.2" || wall1.Dirty != dirty || project.ChangeVersion != version)
+                throw new Exception("Malformed known BulkEdit counts must not mutate semantic state.");
+        }
+
+        private static void KnownCountTraversalMismatchFailsClosed()
+        {
+            var project = ProjectWithTwoWalls(out var wall1, out var wall2);
+            var service = new BulkEditService();
+            var version = project.ChangeVersion;
+            var dirty1 = wall1.Dirty;
+            var dirty2 = wall2.Dirty;
+
+            var underIds = new MultiCountCollection<string>(new[] { wall1.Id }, 2, 2, 2, throwOnEnumeration: false);
+            ThrowsMessage<InvalidOperationException>(() => service.SetProperty(project, underIds, "WidthM", "0.25"), "input count changed during enumeration");
+
+            var overObjects = new MultiCountCollection<ProjectElement>(new[] { wall1, wall2 }, 1, 1, 1, throwOnEnumeration: false);
+            ThrowsMessage<InvalidOperationException>(() => service.SetProperty(project, overObjects, "WidthM", "0.25"), "input count changed during enumeration");
+
+            if (wall1.Properties["WidthM"] != "0.2" || wall2.Properties["WidthM"] != "0.3" ||
+                wall1.Dirty != dirty1 || wall2.Dirty != dirty2 || project.ChangeVersion != version)
+                throw new Exception("Known Count traversal mismatch must fail before BulkEdit mutation.");
+        }
+
+        private static void HonestKnownAndStreamingInputsRemainAccepted()
+        {
+            var project = ProjectWithTwoWalls(out var wall1, out var wall2);
+            var service = new BulkEditService();
+
+            var countedIds = new MultiCountCollection<string>(new[] { wall1.Id }, 1, 1, 1, throwOnEnumeration: false);
+            if (service.SetProperty(project, countedIds, "WidthM", "0.25") != 1 || wall1.Properties["WidthM"] != "0.25")
+                throw new Exception("Honest counted BulkEdit ID input must remain accepted.");
+
+            var countedObjects = new MultiCountCollection<ProjectElement>(new[] { wall2 }, 1, 1, 1, throwOnEnumeration: false);
+            var changed = service.SetProperty(project, countedObjects, "WidthM", "0.35");
+            if (changed.Count != 1 || changed[0] != wall2.Id || wall2.Properties["WidthM"] != "0.35")
+                throw new Exception("Honest counted BulkEdit object input must remain accepted.");
+
+            if (service.SetProperty(project, Stream(wall1.Id), "WidthM", "0.4") != 1 || wall1.Properties["WidthM"] != "0.4")
+                throw new Exception("Pure streaming BulkEdit ID input must remain supported.");
+        }
+
         private static void FamilyAssignmentRejectsIncompatibleBatch()
         {
             var project = new ProjectState("P-CATEGORY", "Bulk family category atomicity");
@@ -113,11 +199,86 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Incompatible family assignment must reject the whole batch without silently skipping targets.");
         }
 
+        private static ProjectState ProjectWithTwoWalls(out ProjectElement wall1, out ProjectElement wall2)
+        {
+            var project = new ProjectState("P-COUNT", "Bulk known Count");
+            wall1 = new ProjectElement("W1", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            wall2 = new ProjectElement("W2", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            wall1.Properties["WidthM"] = "0.2";
+            wall2.Properties["WidthM"] = "0.3";
+            wall1.MarkClean(ElementDirtyFlags.All);
+            wall2.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(wall1);
+            project.Elements.Add(wall2);
+            return project;
+        }
+
+        private static IEnumerable<string> Stream(string id)
+        {
+            yield return id;
+        }
+
         private static void Throws<T>(Action action) where T : Exception
         {
             try { action(); }
             catch (T) { return; }
             throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private static void ThrowsMessage<T>(Action action, string messageFragment) where T : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (T ex)
+            {
+                if (ex.Message.IndexOf(messageFragment, StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new Exception("Expected " + typeof(T).Name + " containing '" + messageFragment + "', got: " + ex.Message);
+                return;
+            }
+            throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private sealed class MultiCountCollection<T> : ICollection<T>, IReadOnlyCollection<T>, ICollection
+        {
+            private readonly T[] _items;
+            private readonly int _genericCount;
+            private readonly int _readOnlyCount;
+            private readonly int _nonGenericCount;
+            private readonly bool _throwOnEnumeration;
+
+            public MultiCountCollection(T[] items, int genericCount, int readOnlyCount, int nonGenericCount, bool throwOnEnumeration)
+            {
+                _items = items;
+                _genericCount = genericCount;
+                _readOnlyCount = readOnlyCount;
+                _nonGenericCount = nonGenericCount;
+                _throwOnEnumeration = throwOnEnumeration;
+            }
+
+            public bool EnumerationRequested { get; private set; }
+            int ICollection<T>.Count => _genericCount;
+            int IReadOnlyCollection<T>.Count => _readOnlyCount;
+            int ICollection.Count => _nonGenericCount;
+            bool ICollection<T>.IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                EnumerationRequested = true;
+                if (_throwOnEnumeration) throw new Exception("Enumerator must not be requested.");
+                return ((IEnumerable<T>)_items).GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            void ICollection<T>.Add(T item) => throw new NotSupportedException();
+            void ICollection<T>.Clear() => throw new NotSupportedException();
+            bool ICollection<T>.Contains(T item) => Array.IndexOf(_items, item) >= 0;
+            void ICollection<T>.CopyTo(T[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+            bool ICollection<T>.Remove(T item) => throw new NotSupportedException();
+            void ICollection.CopyTo(Array array, int index) => _items.CopyTo(array, index);
         }
     }
 }

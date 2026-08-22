@@ -10,29 +10,44 @@ if not SOURCE.is_file():
     errors.append("missing " + str(SOURCE.relative_to(ROOT)))
 else:
     text = SOURCE.read_text(encoding="utf-8")
+    command_start = text.find('[CommandMethod("QS3DREBARTIEQTY", CommandFlags.UsePickSet)]')
+    helper = "private static void FinalizeUi(Document document, string message)"
+    helper_pos = text.find(helper, command_start + 1) if command_start >= 0 else -1
+    command = text[command_start:helper_pos] if command_start >= 0 and helper_pos > command_start else ""
+
     snapshot = "var snapshot = ProjectStateSnapshot.Capture(project);"
-    touch = "project.Touch();"
+    audit = 'AuditTrail.ForProject(project).Record("quantity.rebar.column.tie", element.Id,'
     restore = "snapshot.Restore(project);"
     finalize = "FinalizeUi(document, message);"
-    helper = "private static void FinalizeUi(Document document, string message)"
     refresh = "PaletteCoordinator.RefreshProject();"
     warning = "Cảnh báo UI sau Tie QTY commit"
 
-    for token in (snapshot, touch, restore, finalize, helper, refresh, warning):
-        if token not in text:
-            errors.append("QS3DREBARTIEQTY missing post-commit boundary token: " + token)
+    if not command:
+        errors.append("cannot isolate QS3DREBARTIEQTY from FinalizeUi")
+    else:
+        for token in (snapshot, audit, restore, finalize):
+            if token not in command:
+                errors.append("QS3DREBARTIEQTY missing semantic/UI boundary token: " + token)
 
-    snapshot_pos = text.find(snapshot)
-    touch_pos = text.find(touch)
-    restore_pos = text.find(restore)
-    finalize_pos = text.find(finalize)
-    helper_pos = text.find(helper)
-    if min(snapshot_pos, touch_pos, restore_pos, finalize_pos, helper_pos) >= 0:
-        if not snapshot_pos < touch_pos < restore_pos < finalize_pos < helper_pos:
-            errors.append("QS3DREBARTIEQTY must snapshot before mutation, retain catch/restore, and invoke FinalizeUi only after the semantic try/catch completes")
-        post_commit_boundary = text[restore_pos + len(restore):finalize_pos]
-        if refresh in post_commit_boundary or "PaletteCoordinator.SetStatus" in post_commit_boundary or "Editor.WriteMessage" in post_commit_boundary:
-            errors.append("QS3DREBARTIEQTY must not perform fallible UI work directly between semantic rollback boundary and FinalizeUi")
+        snapshot_pos = command.find(snapshot)
+        audit_pos = command.find(audit)
+        restore_pos = command.find(restore)
+        finalize_pos = command.find(finalize)
+        if min(snapshot_pos, audit_pos, restore_pos, finalize_pos) >= 0:
+            if not snapshot_pos < audit_pos < restore_pos < finalize_pos:
+                errors.append("QS3DREBARTIEQTY must snapshot before audit-owned mutation, retain catch/restore, and invoke FinalizeUi only after the semantic try/catch completes")
+            post_commit_boundary = command[restore_pos + len(restore):finalize_pos]
+            if refresh in post_commit_boundary or "PaletteCoordinator.SetStatus" in post_commit_boundary or "Editor.WriteMessage" in post_commit_boundary:
+                errors.append("QS3DREBARTIEQTY must not perform fallible UI work directly between semantic rollback boundary and FinalizeUi")
+
+        if "project.Touch();" in command:
+            errors.append("QS3DREBARTIEQTY revision must remain AuditTrail-owned without a redundant project.Touch()")
+        if command.count(audit) != 1:
+            errors.append("QS3DREBARTIEQTY must retain exactly one per-loop quantity.rebar.column.tie AuditTrail call site")
+
+    for token in (helper, refresh, warning):
+        if token not in text:
+            errors.append("QS3DREBARTIEQTY missing post-commit UI isolation token: " + token)
 
     helper_body = text[helper_pos:] if helper_pos >= 0 else ""
     if helper_pos >= 0 and ("catch (System.Exception ex)" not in helper_body or refresh not in helper_body):
@@ -45,4 +60,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DREBARTIEQTY preserves semantic rollback for calculation failures while isolating post-commit Palette/editor UI failures.")
+print("PASS: QS3DREBARTIEQTY keeps audit-owned semantic revisions and rollback for calculation failures while isolating post-commit Palette/editor UI failures.")

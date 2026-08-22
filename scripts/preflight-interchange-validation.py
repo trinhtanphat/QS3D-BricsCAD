@@ -9,11 +9,12 @@ COMMAND = ROOT / "src/QS3D.BricsCAD.V25/ProjectInterchangeValidationCommands.cs"
 EXPORT = ROOT / "src/QS3D.Core/Export/ProjectInterchangeJsonExporter.cs"
 PROJECT_TOOLS = ROOT / "src/QS3D.BricsCAD.V25/UI/ProjectToolsWindow.xaml"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ProjectInterchangeValidationSmoke.cs"
+UNICODE_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ProjectInterchangeValidatorUnicodeIntegritySmoke.cs"
 REGISTRATION = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 DOC = ROOT / "docs/INTERCHANGE-JSON.md"
 errors = []
 
-for path in (CORE, COMMAND, EXPORT, PROJECT_TOOLS, SMOKE, REGISTRATION, DOC):
+for path in (CORE, COMMAND, EXPORT, PROJECT_TOOLS, SMOKE, UNICODE_SMOKE, REGISTRATION, DOC):
     if not path.is_file():
         errors.append("missing interchange validation dependency: " + str(path.relative_to(ROOT)))
 
@@ -42,6 +43,9 @@ if CORE.is_file():
         "MaxIssues",
         "new UTF8Encoding(false, true)",
         '"JSON_UTF8"',
+        "StrictUtf8.GetByteCount(json)",
+        "StrictUtf8.GetBytes(json)",
+        '"JSON_UTF16"',
         'RequireCollection(snapshot.Zones, "zones", issues)',
         'RequireCollection(snapshot.Floors, "floors", issues)',
         'RequireCollection(snapshot.Families, "families", issues)',
@@ -133,6 +137,19 @@ if SMOKE.is_file():
     ):
         if token not in text:
             errors.append("ProjectInterchangeValidationSmoke.cs missing validator smoke: " + token)
+
+if UNICODE_SMOKE.is_file():
+    text = UNICODE_SMOKE.read_text(encoding="utf-8")
+    for token in (
+        "[ModuleInitializer]",
+        "LoneHighSurrogateFailsClosed",
+        "LoneLowSurrogateFailsClosed",
+        "SupplementaryUnicodeRoundTripsExactly",
+        'string.Equals(x.Code, "JSON_UTF16", StringComparison.Ordinal)',
+        "ProjectInterchangeValidatedSnapshotReader.Read(json)",
+    ):
+        if token not in text:
+            errors.append("ProjectInterchangeValidatorUnicodeIntegritySmoke.cs missing Unicode integrity contract: " + token)
 
 if REGISTRATION.is_file() and "ProjectInterchangeValidationSmoke.Run();" not in REGISTRATION.read_text(encoding="utf-8"):
     errors.append("ProjectInterchangeValidationSmoke is not registered")

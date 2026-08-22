@@ -11,26 +11,26 @@ namespace QS3D.Core.SmokeTests
         [ModuleInitializer]
         internal static void Initialize()
         {
-            EquivalentOffsetsDoNotCreateFalseChange();
-            DifferentInstantsStillCreateChange();
+            IdenticalCanonicalTimestampsDoNotCreateFalseChange();
+            DifferentCanonicalInstantsStillCreateChange();
         }
 
-        private static void EquivalentOffsetsDoNotCreateFalseChange()
+        private static void IdenticalCanonicalTimestampsDoNotCreateFalseChange()
         {
             var left = Json();
-            var right = left.Replace("2026-08-10T10:00:00.0000000Z", "2026-08-10T17:00:00.0000000+07:00");
+            var right = Json();
             var diff = ProjectInterchangeSnapshotDiff.CompareJson(left, right);
             if (diff.Changes.Any(x => x.ObjectKind == InterchangeSnapshotObjectKind.Project && x.Fields.Contains("updatedUtc")))
-                throw new InvalidOperationException("ProjectInterchangeSnapshotTimestampDiffSmoke: equivalent timezone representations produced a false project timestamp change.");
+                throw new InvalidOperationException("ProjectInterchangeSnapshotTimestampDiffSmoke: identical canonical UTC timestamps produced a false project timestamp change.");
         }
 
-        private static void DifferentInstantsStillCreateChange()
+        private static void DifferentCanonicalInstantsStillCreateChange()
         {
             var left = Json();
-            var right = left.Replace("2026-08-10T10:00:00.0000000Z", "2026-08-10T18:00:00.0000000+07:00");
+            var right = left.Replace("2026-08-10T10:00:00.0000000Z", "2026-08-10T11:00:00.0000000Z");
             var diff = ProjectInterchangeSnapshotDiff.CompareJson(left, right);
             if (!diff.Changes.Any(x => x.ObjectKind == InterchangeSnapshotObjectKind.Project && x.Fields.Contains("updatedUtc")))
-                throw new InvalidOperationException("ProjectInterchangeSnapshotTimestampDiffSmoke: genuinely different project timestamps were treated as equal.");
+                throw new InvalidOperationException("ProjectInterchangeSnapshotTimestampDiffSmoke: different canonical UTC timestamps were treated as equal.");
         }
 
         private static string Json()

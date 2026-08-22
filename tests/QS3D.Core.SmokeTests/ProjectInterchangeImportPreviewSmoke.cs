@@ -75,8 +75,10 @@ namespace QS3D.Core.SmokeTests
             var source = SourceProject("source", "SAME", "Z-S", "F-S", "FAM-S", "E-S", ElementCategory.Slab);
             var json = ProjectInterchangeJsonExporter.Build(source);
             Equal(InterchangeDrawingFingerprintRelation.Match, ProjectInterchangeImportPreview.Plan(new ProjectState("target", "T") { DrawingFingerprint = "SAME" }, json).DrawingFingerprintRelation);
+            Throws<ArgumentException>(() => new ProjectState("target", "T") { DrawingFingerprint = " SAME " });
             Equal(InterchangeDrawingFingerprintRelation.Different, ProjectInterchangeImportPreview.Plan(new ProjectState("target", "T") { DrawingFingerprint = "OTHER" }, json).DrawingFingerprintRelation);
             Equal(InterchangeDrawingFingerprintRelation.Unknown, ProjectInterchangeImportPreview.Plan(new ProjectState("target", "T"), json).DrawingFingerprintRelation);
+            Throws<ArgumentException>(() => new ProjectState("target", "T") { DrawingFingerprint = "   " });
         }
 
         private static void AmbiguousTargetIdsFailClosed()

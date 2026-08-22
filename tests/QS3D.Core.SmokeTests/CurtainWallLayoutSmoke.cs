@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
         {
             UniformGridProducesStableQuantities();
             SinglePanelUsesPerimeterFramesOnly();
+            RejectsPositiveAreaUnderflow();
             RejectsImpossibleFramesAndExcessiveGrid();
         }
 
@@ -64,6 +65,34 @@ namespace QS3D.Core.SmokeTests
             Near(0.81d, layout.ClearGlassAreaM2);
         }
 
+        private static void RejectsPositiveAreaUnderflow()
+        {
+            var zeroFrameLayout = CurtainWallLayoutPlanner.Plan(new CurtainWallLayoutInput
+            {
+                LengthM = 1d,
+                HeightM = 1d,
+                MaxPanelWidthM = 2d,
+                MaxPanelHeightM = 2d,
+                PerimeterFrameWidthM = 0d,
+                MullionWidthM = 0d,
+                TransomWidthM = 0d
+            });
+            Near(1d, zeroFrameLayout.GrossAreaM2);
+            Near(1d, zeroFrameLayout.ClearGlassAreaM2);
+
+            var underflow = Capture<InvalidOperationException>(() => CurtainWallLayoutPlanner.Plan(new CurtainWallLayoutInput
+            {
+                LengthM = 1e-200d,
+                HeightM = 1e-200d,
+                MaxPanelWidthM = 1d,
+                MaxPanelHeightM = 1d,
+                PerimeterFrameWidthM = 0d,
+                MullionWidthM = 0d,
+                TransomWidthM = 0d
+            }));
+            Contains("curtain gross area underflowed to zero.", underflow.Message);
+        }
+
         private static void RejectsImpossibleFramesAndExcessiveGrid()
         {
             Throws<InvalidOperationException>(() => CurtainWallLayoutPlanner.Plan(new CurtainWallLayoutInput
@@ -107,9 +136,20 @@ namespace QS3D.Core.SmokeTests
 
         private static void Throws<T>(Action action) where T : Exception
         {
+            Capture<T>(action);
+        }
+
+        private static T Capture<T>(Action action) where T : Exception
+        {
             try { action(); }
-            catch (T) { return; }
+            catch (T ex) { return ex; }
             throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private static void Contains(string expected, string actual)
+        {
+            if (actual == null || actual.IndexOf(expected, StringComparison.Ordinal) < 0)
+                throw new Exception("Expected '" + actual + "' to contain '" + expected + "'.");
         }
     }
 }

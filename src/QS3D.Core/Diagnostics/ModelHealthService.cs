@@ -13,6 +13,9 @@ namespace QS3D.Core.Diagnostics
     {
         public ModelHealthIssue(string code, HealthSeverity severity, string message, string elementId = "")
         {
+            if (!Enum.IsDefined(typeof(HealthSeverity), severity))
+                throw new ArgumentOutOfRangeException(nameof(severity), severity, "Health severity must be defined.");
+
             Code = code ?? string.Empty;
             Severity = severity;
             Message = message ?? string.Empty;
@@ -42,13 +45,12 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var issues = new List<ModelHealthIssue>();
-            var normalizedLiveHandles = NormalizeHandleSet(liveHandles);
+            var normalizedLiveHandles = NormalizeSourceHandleSet(liveHandles);
             var normalizedLiveGeneratedSolidHandles = NormalizeHandleSet(liveGeneratedSolidHandles);
 
             if (project.Metadata.TryGetValue("QS3D.ReadOnlyRecoveryRequired", out var recoveryRequired) && string.Equals(recoveryRequired, "true", StringComparison.OrdinalIgnoreCase))
             {
-                var detail = project.Metadata.TryGetValue("QS3D.LoadWarning", out var warning) ? warning : "QSDB could not be loaded.";
-                issues.Add(new ModelHealthIssue("PROJECT_LOAD_FAILED", HealthSeverity.Error, "Project đang ở chế độ bảo vệ và sẽ không ghi đè .qsdb: " + detail));
+                issues.Add(new ModelHealthIssue("PROJECT_LOAD_FAILED", HealthSeverity.Error, "Project đang ở chế độ bảo vệ vì .qsdb chính không thể tải; dữ liệu sẽ không được ghi đè. Hãy kiểm tra file project hoặc bản sao lưu trước khi lưu lại."));
             }
             else if (project.Metadata.TryGetValue("QS3D.RecoveredFromBackup", out var recovered) && string.Equals(recovered, "true", StringComparison.OrdinalIgnoreCase))
             {
@@ -80,7 +82,18 @@ namespace QS3D.Core.Diagnostics
 
                 var normalizedSourceHandles = element.SourceHandles
                     .Where(x => !string.IsNullOrWhiteSpace(x))
-                    .Select(x => x.Trim())
+                    .Select(x => GeneratedHandleIdentity.Normalize(x))
+                    .ToList();
+                var duplicateSourceHandles = normalizedSourceHandles
+                    .GroupBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .Where(group => group.Count() > 1)
+                    .Select(group => group.Key)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                foreach (var duplicateHandle in duplicateSourceHandles)
+                    issues.Add(new ModelHealthIssue("DUPLICATE_SOURCE_HANDLE", HealthSeverity.Warning, "CAD Handle nguồn bị lặp trong cùng QS3D element: " + duplicateHandle, element.Id));
+
+                normalizedSourceHandles = normalizedSourceHandles
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
                 foreach (var normalized in normalizedSourceHandles)
@@ -93,6 +106,14 @@ namespace QS3D.Core.Diagnostics
                     issues.Add(new ModelHealthIssue("ORPHAN_HANDLE", HealthSeverity.Error, "Không còn tìm thấy đối tượng CAD nguồn.", element.Id));
             }
             return issues.AsReadOnly();
+        }
+
+        private static ISet<string>? NormalizeSourceHandleSet(ISet<string>? handles)
+        {
+            if (handles == null) return null;
+            return new HashSet<string>(
+                handles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => GeneratedHandleIdentity.Normalize(x)),
+                StringComparer.OrdinalIgnoreCase);
         }
 
         private static ISet<string>? NormalizeHandleSet(ISet<string>? handles)
@@ -168,31 +189,46 @@ namespace QS3D.Core.Diagnostics
 
         private static void ValidateActiveZone(ProjectState project, DiagnosticIdentityIndex identity, ICollection<ModelHealthIssue> issues)
         {
-            var id = (project.ActiveZoneId ?? string.Empty).Trim();
-            if (id.Length == 0 || !identity.Zones.ContainsKey(id))
+            var rawId = project.ActiveZoneId ?? string.Empty;
+            var id = rawId.Trim();
+            if (id.Length == 0 || !identity.Zones.TryGetValue(id, out var zone))
             {
                 issues.Add(new ModelHealthIssue("INVALID_ACTIVE_ZONE", HealthSeverity.Warning, "Zone làm việc hiện tại không còn hợp lệ."));
                 return;
             }
             if (identity.DuplicateZoneIds.Contains(id))
+            {
                 issues.Add(new ModelHealthIssue("AMBIGUOUS_ACTIVE_ZONE", HealthSeverity.Error, "Zone làm việc hiện tại trỏ tới mã Zone bị trùng: " + id + "."));
+                return;
+            }
+            if (!string.Equals(rawId, zone.Id, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("ACTIVE_ZONE_NON_CANONICAL", HealthSeverity.Error, "ActiveZoneId phải khớp chính xác mã Zone canonical: " + zone.Id + "."));
         }
 
         private static void ValidateActiveFloor(ProjectState project, DiagnosticIdentityIndex identity, ICollection<ModelHealthIssue> issues)
         {
-            var id = (project.ActiveFloorId ?? string.Empty).Trim();
-            if (id.Length == 0 || !identity.Floors.ContainsKey(id))
+            var rawId = project.ActiveFloorId ?? string.Empty;
+            var id = rawId.Trim();
+            if (id.Length == 0 || !identity.Floors.TryGetValue(id, out var floor))
             {
                 issues.Add(new ModelHealthIssue("INVALID_ACTIVE_FLOOR", HealthSeverity.Warning, "Tầng làm việc hiện tại không còn hợp lệ."));
                 return;
             }
             if (identity.DuplicateFloorIds.Contains(id))
+            {
                 issues.Add(new ModelHealthIssue("AMBIGUOUS_ACTIVE_FLOOR", HealthSeverity.Error, "Tầng làm việc hiện tại trỏ tới mã Floor/Level bị trùng: " + id + "."));
+                return;
+            }
+            if (!string.Equals(rawId, floor.Id, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("ACTIVE_FLOOR_NON_CANONICAL", HealthSeverity.Error, "ActiveFloorId phải khớp chính xác mã Floor/Level canonical: " + floor.Id + "."));
         }
 
         private static void ValidateFamily(DiagnosticIdentityIndex identity, ProjectElement element, ICollection<ModelHealthIssue> issues)
         {
-            var familyId = (element.FamilyId ?? string.Empty).Trim();
+            var rawFamilyId = element.FamilyId ?? string.Empty;
+            var familyId = rawFamilyId.Trim();
+            if (!string.Equals(rawFamilyId, familyId, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("FAMILY_REFERENCE_NON_CANONICAL", HealthSeverity.Error, "FamilyId phải dùng đúng canonical semantic ID, không có khoảng trắng đầu/cuối.", element.Id));
             if (familyId.Length == 0 || !identity.Families.TryGetValue(familyId, out var family))
             {
                 issues.Add(new ModelHealthIssue("MISSING_FAMILY", HealthSeverity.Error, "Cấu kiện chưa liên kết Family hợp lệ.", element.Id));
@@ -208,7 +244,10 @@ namespace QS3D.Core.Diagnostics
 
         private static void ValidateFloor(DiagnosticIdentityIndex identity, ProjectElement element, ICollection<ModelHealthIssue> issues)
         {
-            var floorId = (element.FloorId ?? string.Empty).Trim();
+            var rawFloorId = element.FloorId ?? string.Empty;
+            var floorId = rawFloorId.Trim();
+            if (!string.Equals(rawFloorId, floorId, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("FLOOR_REFERENCE_NON_CANONICAL", HealthSeverity.Error, "FloorId phải dùng đúng canonical semantic ID, không có khoảng trắng đầu/cuối.", element.Id));
             if (floorId.Length == 0 || !identity.Floors.ContainsKey(floorId))
             {
                 issues.Add(new ModelHealthIssue("MISSING_FLOOR", HealthSeverity.Warning, "Cấu kiện chưa có tầng hợp lệ.", element.Id));
@@ -220,7 +259,10 @@ namespace QS3D.Core.Diagnostics
 
         private static void ValidateZone(DiagnosticIdentityIndex identity, ProjectElement element, ICollection<ModelHealthIssue> issues)
         {
-            var zoneId = (element.ZoneId ?? string.Empty).Trim();
+            var rawZoneId = element.ZoneId ?? string.Empty;
+            var zoneId = rawZoneId.Trim();
+            if (!string.Equals(rawZoneId, zoneId, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("ZONE_REFERENCE_NON_CANONICAL", HealthSeverity.Error, "ZoneId phải dùng đúng canonical semantic ID, không có khoảng trắng đầu/cuối.", element.Id));
             if (zoneId.Length == 0 || !identity.Zones.ContainsKey(zoneId))
             {
                 issues.Add(new ModelHealthIssue("MISSING_ZONE", HealthSeverity.Warning, "Cấu kiện chưa có Zone hợp lệ.", element.Id));
@@ -233,24 +275,57 @@ namespace QS3D.Core.Diagnostics
         private static void ValidateHost(DiagnosticIdentityIndex identity, ProjectElement element, ICollection<ModelHealthIssue> issues)
         {
             if (element.Category != ElementCategory.WallOpening && element.Category != ElementCategory.Door) return;
-            if (!element.Properties.TryGetValue("HostWallId", out var hostId) || string.IsNullOrWhiteSpace(hostId))
+
+            var slabOpening = false;
+            if (element.Category == ElementCategory.WallOpening)
             {
-                issues.Add(new ModelHealthIssue("MISSING_HOST", HealthSeverity.Error, "Cửa/lỗ mở chưa có Host Wall.", element.Id));
+                var familyId = (element.FamilyId ?? string.Empty).Trim();
+                if (familyId.Length > 0 &&
+                    !identity.DuplicateFamilyIds.Contains(familyId) &&
+                    identity.Families.TryGetValue(familyId, out var family))
+                    slabOpening = SlabOpeningContract.IsSlabOpenFamily(family);
+            }
+
+            var hostKey = slabOpening ? SlabOpeningContract.HostSlabIdKey : "HostWallId";
+            var hostLabel = slabOpening ? "Host Slab" : "Host Wall";
+            if (!element.Properties.TryGetValue(hostKey, out var hostId) || string.IsNullOrWhiteSpace(hostId))
+            {
+                issues.Add(new ModelHealthIssue(
+                    "MISSING_HOST",
+                    HealthSeverity.Error,
+                    slabOpening ? "slabOpen chưa có Host Slab." : "Cửa/lỗ mở chưa có Host Wall.",
+                    element.Id));
                 return;
             }
 
-            var normalized = hostId.Trim();
+            var rawHostId = hostId ?? string.Empty;
+            var normalized = rawHostId.Trim();
             if (identity.DuplicateElementIds.Contains(normalized))
             {
-                issues.Add(new ModelHealthIssue("AMBIGUOUS_HOST", HealthSeverity.Error, "Host Wall trỏ tới mã semantic element bị trùng: " + normalized + ".", element.Id));
+                issues.Add(new ModelHealthIssue("AMBIGUOUS_HOST", HealthSeverity.Error, hostLabel + " trỏ tới mã semantic element bị trùng: " + normalized + ".", element.Id));
                 return;
             }
             if (!identity.Elements.TryGetValue(normalized, out var host))
             {
-                issues.Add(new ModelHealthIssue("INVALID_HOST", HealthSeverity.Error, "Host Wall không tồn tại trong project.", element.Id));
+                issues.Add(new ModelHealthIssue("INVALID_HOST", HealthSeverity.Error, hostLabel + " không tồn tại trong project.", element.Id));
                 return;
             }
-            if (!IsWall(host.Category)) issues.Add(new ModelHealthIssue("INVALID_HOST_CATEGORY", HealthSeverity.Error, "Host của cửa/lỗ mở không phải cấu kiện tường.", element.Id));
+            if (!string.Equals(rawHostId, host.Id, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue(
+                    "HOST_REFERENCE_NON_CANONICAL",
+                    HealthSeverity.Error,
+                    hostKey + " phải khớp chính xác mã " + hostLabel + " canonical: " + host.Id + ".",
+                    element.Id));
+
+            if (slabOpening)
+            {
+                if (host.Category != ElementCategory.Slab)
+                    issues.Add(new ModelHealthIssue("INVALID_HOST_CATEGORY", HealthSeverity.Error, "Host của slabOpen phải là cấu kiện Slab.", element.Id));
+            }
+            else if (!IsWall(host.Category))
+            {
+                issues.Add(new ModelHealthIssue("INVALID_HOST_CATEGORY", HealthSeverity.Error, "Host của cửa/lỗ mở không phải cấu kiện tường.", element.Id));
+            }
         }
 
         private static void ValidateDependencies(DiagnosticIdentityIndex identity, ProjectElement element, ICollection<ModelHealthIssue> issues)
@@ -322,12 +397,15 @@ namespace QS3D.Core.Diagnostics
         private static void ValidateGeneratedGeometry(ProjectState project, ProjectElement element, ISet<string>? liveGeneratedSolidHandles, IDictionary<string, string> owners, ICollection<ModelHealthIssue> issues)
         {
             if (!element.Properties.TryGetValue("GeneratedSolidHandle", out var rawHandle)) return;
-            var handle = (rawHandle ?? string.Empty).Trim();
+            var handleText = rawHandle ?? string.Empty;
+            var handle = handleText.Trim();
             if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
             {
                 issues.Add(new ModelHealthIssue("INVALID_GENERATED_HANDLE", HealthSeverity.Error, "GeneratedSolidHandle không hợp lệ.", element.Id));
                 return;
             }
+            if (!string.Equals(handleText, handle, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("GENERATED_HANDLE_NON_CANONICAL", HealthSeverity.Error, "GeneratedSolidHandle không được có khoảng trắng đầu/cuối.", element.Id));
 
             if (owners.TryGetValue(handle, out var owner) && !string.Equals(owner, element.Id, StringComparison.OrdinalIgnoreCase))
                 issues.Add(new ModelHealthIssue("DUPLICATE_GENERATED_HANDLE", HealthSeverity.Error, "Generated solid đang được nhiều element nhận sở hữu; element khác: " + owner, element.Id));
@@ -336,10 +414,18 @@ namespace QS3D.Core.Diagnostics
             if (element.SourceHandles.Any(x => string.Equals(x?.Trim(), handle, StringComparison.OrdinalIgnoreCase)))
                 issues.Add(new ModelHealthIssue("GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "GeneratedSolidHandle không được nằm trong SourceHandles.", element.Id));
 
-            if (!element.Properties.TryGetValue("GeneratedSolidCategory", out var rawCategory) || !Enum.TryParse(rawCategory, true, out ElementCategory generatedCategory))
+            var categoryText = (element.Properties.TryGetValue("GeneratedSolidCategory", out var rawCategory) ? rawCategory : string.Empty) ?? string.Empty;
+            var normalizedCategoryText = categoryText.Trim();
+            if (normalizedCategoryText.Length == 0 || !Enum.TryParse(normalizedCategoryText, true, out ElementCategory generatedCategory))
                 issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_MISSING", HealthSeverity.Warning, "GeneratedSolidCategory bị thiếu hoặc không hợp lệ.", element.Id));
-            else if (generatedCategory != element.Category)
-                issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_MISMATCH", HealthSeverity.Error, "GeneratedSolidCategory không khớp category semantic: " + generatedCategory + " ≠ " + element.Category + ".", element.Id));
+            else
+            {
+                var canonicalCategoryText = generatedCategory.ToString();
+                if (!string.Equals(categoryText, canonicalCategoryText, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_NON_CANONICAL", HealthSeverity.Error, "GeneratedSolidCategory phải dùng đúng canonical ElementCategory token: " + canonicalCategoryText + ".", element.Id));
+                if (generatedCategory != element.Category)
+                    issues.Add(new ModelHealthIssue("GENERATED_CATEGORY_MISMATCH", HealthSeverity.Error, "GeneratedSolidCategory không khớp category semantic: " + generatedCategory + " ≠ " + element.Category + ".", element.Id));
+            }
 
             var hasVersion = element.Properties.TryGetValue("GeneratedSolidOwnershipVersion", out var ownershipVersion) && !string.IsNullOrWhiteSpace(ownershipVersion);
             var hasProjectOwner = element.Properties.TryGetValue("GeneratedSolidOwnerProjectId", out var ownerProjectId) && !string.IsNullOrWhiteSpace(ownerProjectId);
@@ -348,11 +434,22 @@ namespace QS3D.Core.Diagnostics
                 issues.Add(new ModelHealthIssue("GENERATED_OWNERSHIP_MISSING", HealthSeverity.Warning, "Generated solid is missing a QS3D ownership marker and cannot be replaced automatically.", element.Id));
             else
             {
-                if (!string.Equals(ownershipVersion!.Trim(), "1", StringComparison.Ordinal))
+                var normalizedOwnershipVersion = ownershipVersion!.Trim();
+                var normalizedOwnerProjectId = ownerProjectId!.Trim();
+                var normalizedOwnerElementId = ownerElementId!.Trim();
+
+                if (!string.Equals(ownershipVersion, normalizedOwnershipVersion, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue("GENERATED_OWNERSHIP_VERSION_NON_CANONICAL", HealthSeverity.Error, "Generated solid ownership version contains non-canonical surrounding whitespace.", element.Id));
+                if (!string.Equals(ownerProjectId, normalizedOwnerProjectId, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue("GENERATED_PROJECT_OWNER_NON_CANONICAL", HealthSeverity.Error, "Generated solid owner project id contains non-canonical surrounding whitespace.", element.Id));
+                if (!string.Equals(ownerElementId, normalizedOwnerElementId, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue("GENERATED_ELEMENT_OWNER_NON_CANONICAL", HealthSeverity.Error, "Generated solid owner element id contains non-canonical surrounding whitespace.", element.Id));
+
+                if (!string.Equals(normalizedOwnershipVersion, "1", StringComparison.Ordinal))
                     issues.Add(new ModelHealthIssue("GENERATED_OWNERSHIP_VERSION", HealthSeverity.Error, "Generated solid ownership version is not supported: " + ownershipVersion + ".", element.Id));
-                if (!string.Equals(ownerProjectId!.Trim(), project.ProjectId, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(normalizedOwnerProjectId, project.ProjectId, StringComparison.OrdinalIgnoreCase))
                     issues.Add(new ModelHealthIssue("GENERATED_PROJECT_MISMATCH", HealthSeverity.Error, "Generated solid does not belong to the current project.", element.Id));
-                if (!string.Equals(ownerElementId!.Trim(), element.Id, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(normalizedOwnerElementId, element.Id, StringComparison.OrdinalIgnoreCase))
                     issues.Add(new ModelHealthIssue("GENERATED_ELEMENT_MISMATCH", HealthSeverity.Error, "Generated solid ownership does not match the current semantic element.", element.Id));
             }
 

@@ -3,9 +3,12 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using System.Xml.Linq;
+using QS3D.Core.Cost;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
+using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 using QS3D.Core.Revisions;
 using QS3D.Core.Services;
@@ -16,6 +19,8 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
+            MaterialCatalogRevisionSemantics();
+            MaterialCatalogUsesLastAvailableRevision();
             StructuralQuantities();
             StructuralOpeningDeduction();
             FixedPointRegeneration();
@@ -25,6 +30,80 @@ namespace QS3D.Core.SmokeTests
             RebarXlsxExport();
             DetailedRevision();
             AdvancedHealth();
+            CostPercentageScalingPrecision();
+        }
+
+        private static void MaterialCatalogRevisionSemantics()
+        {
+            var project = new ProjectState("material-catalog-revision", "Material catalog revision");
+            var beforeUpsertVersion = project.ChangeVersion;
+            ProjectMaterialCatalog.UpsertCustom(project, "custom-1", "Custom One", "m2", "Initial");
+            Equal(beforeUpsertVersion + 1L, project.ChangeVersion);
+            Equal(1, ProjectMaterialCatalog.GetCustom(project).Count);
+            Equal("Custom One", ProjectMaterialCatalog.GetCustom(project)[0].Name);
+
+            var afterUpsertVersion = project.ChangeVersion;
+            var afterUpsertUpdatedUtc = project.UpdatedUtc;
+            ProjectMaterialCatalog.UpsertCustom(project, "custom-1", "Custom One", "m2", "Initial");
+            Equal(afterUpsertVersion, project.ChangeVersion);
+            Equal(afterUpsertUpdatedUtc, project.UpdatedUtc);
+
+            var beforeDeleteVersion = project.ChangeVersion;
+            True(ProjectMaterialCatalog.DeleteCustom(project, "custom-1"));
+            Equal(beforeDeleteVersion + 1L, project.ChangeVersion);
+            Equal(0, ProjectMaterialCatalog.GetCustom(project).Count);
+            True(!project.Metadata.ContainsKey(ProjectMaterialCatalog.MetadataKey));
+        }
+
+        private static void MaterialCatalogUsesLastAvailableRevision()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-material-catalog-revision-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            try
+            {
+                var store = new QsdbProjectStore();
+                store.Save(new ProjectState("material-catalog-ceiling", "Material catalog ceiling"), path);
+
+                var document = XDocument.Load(path, LoadOptions.None);
+                var root = document.Root ?? throw new Exception("Serialized QSDB root was not found for material catalog revision-ceiling fixture.");
+                root.SetAttributeValue(
+                    "changeVersion",
+                    (long.MaxValue - 1L).ToString(System.Globalization.CultureInfo.InvariantCulture));
+                document.Save(path, SaveOptions.DisableFormatting);
+
+                var project = store.Load(path);
+                Equal(long.MaxValue - 1L, project.ChangeVersion);
+                True(!project.Metadata.ContainsKey(ProjectMaterialCatalog.MetadataKey));
+
+                ProjectMaterialCatalog.UpsertCustom(project, "custom-ceiling", "Ceiling material", "m2", "Initial");
+
+                Equal(long.MaxValue, project.ChangeVersion);
+                Equal(1, ProjectMaterialCatalog.GetCustom(project).Count);
+                Equal("Ceiling material", ProjectMaterialCatalog.GetCustom(project)[0].Name);
+                True(project.Metadata.ContainsKey(ProjectMaterialCatalog.MetadataKey));
+
+                var beforeRejectedUpdatedUtc = project.UpdatedUtc;
+                var beforeRejectedMetadata = project.Metadata[ProjectMaterialCatalog.MetadataKey];
+                var rejected = false;
+                try
+                {
+                    ProjectMaterialCatalog.UpsertCustom(project, "custom-ceiling", "Ceiling material", "m2", "Changed description");
+                }
+                catch (OverflowException)
+                {
+                    rejected = true;
+                }
+
+                True(rejected);
+                Equal(long.MaxValue, project.ChangeVersion);
+                Equal(beforeRejectedUpdatedUtc, project.UpdatedUtc);
+                Equal(beforeRejectedMetadata, project.Metadata[ProjectMaterialCatalog.MetadataKey]);
+                Equal("Initial", ProjectMaterialCatalog.GetCustom(project)[0].Description);
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+                try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
+            }
         }
 
         private static void StructuralQuantities()
@@ -65,7 +144,21 @@ namespace QS3D.Core.SmokeTests
             new HostLinkService().LinkOpening(project, opening.Id, wall.Id);
             new OpeningRegenerator().Regenerate(project, opening);
             new StructuralRegenerator().Regenerate(project, wall);
-            Near(13.02, wall.Quantities["NetWallAreaM2"]); Near(2.604, wall.Quantities["NetVolumeM3"]); Near(26.04, wall.Quantities["FormworkM2"]);
+            Near(13.02, wall.Quantities["NetWallAreaM2"]); Near(2.604, wall.Quantities["NetVolumeM3"]); Near(27.10, wall.Quantities["FormworkM2"]);
+
+            opening.Properties["SillOffsetMm"] = "500";
+            new StructuralRegenerator().Regenerate(project, wall);
+            Near(27.28, wall.Quantities["FormworkM2"]);
+
+            var door = new ProjectElement("D1", ElementCategory.Door, "", "f", "z"); door.Properties["WidthM"] = "1"; door.Properties["HeightM"] = "2"; project.Elements.Add(door);
+            new HostLinkService().LinkOpening(project, door.Id, wall.Id);
+            new OpeningRegenerator().Regenerate(project, door);
+            new StructuralRegenerator().Regenerate(project, wall);
+            Near(11.02, wall.Quantities["NetWallAreaM2"]); Near(2.204, wall.Quantities["NetVolumeM3"]); Near(24.28, wall.Quantities["FormworkM2"]);
+
+            var areaOnlyWall = new ProjectElement("SW-AREA", ElementCategory.StructuralWall, "", "f", "z"); areaOnlyWall.Properties["LengthM"] = "5"; areaOnlyWall.Properties["HeightM"] = "3"; areaOnlyWall.Properties["ThicknessM"] = "0.2"; areaOnlyWall.Properties["OpeningAreaM2"] = "2"; project.Elements.Add(areaOnlyWall);
+            new StructuralRegenerator().Regenerate(project, areaOnlyWall);
+            Near(13, areaOnlyWall.Quantities["NetWallAreaM2"]); Near(2.6, areaOnlyWall.Quantities["NetVolumeM3"]); Near(26, areaOnlyWall.Quantities["FormworkM2"]);
         }
 
         private static void FixedPointRegeneration()
@@ -147,6 +240,56 @@ namespace QS3D.Core.SmokeTests
             var beam = new ProjectElement("B3", ElementCategory.Beam, family.Id, "f", "z"); beam.Properties["RebarNotation"] = "bad"; project.Elements.Add(beam);
             var issues = new ModelHealthService().Inspect(project);
             True(issues.Any(x => x.Code == "MISSING_MATERIAL" && x.ElementId == "B3")); True(issues.Any(x => x.Code == "INVALID_REBAR" && x.ElementId == "B3"));
+        }
+
+        private static void CostPercentageScalingPrecision()
+        {
+            const decimal tinyPercent = 1.6e-26m;
+            const decimal expectedTinyShare = 8e-28m;
+            var component = new CostResourceComponent("RES-PREC", "Precision resource", "m2", 1m, 5m);
+
+            var overhead = new CostRateBuildUp(
+                "BUILDUP-OVERHEAD-PREC",
+                new CostCode("PREC"),
+                "m2",
+                "VND",
+                new[] { component },
+                overheadPercent: tinyPercent);
+            Equal(5m, overhead.DirectUnitCost);
+            Equal(expectedTinyShare, overhead.OverheadUnitCost);
+
+            var profit = new CostRateBuildUp(
+                "BUILDUP-PROFIT-PREC",
+                new CostCode("PREC"),
+                "m2",
+                "VND",
+                new[] { component },
+                profitPercent: tinyPercent);
+            Equal(expectedTinyShare, profit.ProfitUnitCost);
+
+            var progress = new ProgressClaimService().Evaluate(
+                new[] { new ProgressContractItem("ITEM-PREC", "m2", 1m, 5m) },
+                new[] { new ProgressClaimLine("ITEM-PREC", 0m, 1m) },
+                tinyPercent);
+            Equal(5m, progress.GrossCertifiedThisPeriod);
+            Equal(expectedTinyShare, progress.RetentionThisPeriod);
+            Equal(5m - expectedTinyShare, progress.NetCertifiedThisPeriod);
+
+            var ordinary = new CostRateBuildUp(
+                "BUILDUP-ORDINARY-PERCENT",
+                new CostCode("PREC"),
+                "m2",
+                "VND",
+                new[] { component },
+                overheadPercent: 10m);
+            Equal(0.5m, ordinary.OverheadUnitCost);
+
+            var ordinaryProgress = new ProgressClaimService().Evaluate(
+                new[] { new ProgressContractItem("ITEM-ORDINARY", "m2", 1m, 5m) },
+                new[] { new ProgressClaimLine("ITEM-ORDINARY", 0m, 1m) },
+                10m);
+            Equal(0.5m, ordinaryProgress.RetentionThisPeriod);
+            Equal(4.5m, ordinaryProgress.NetCertifiedThisPeriod);
         }
 
         private static ProjectState NewProject()

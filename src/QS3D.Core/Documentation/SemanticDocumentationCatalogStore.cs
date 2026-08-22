@@ -28,6 +28,8 @@ namespace QS3D.Core.Documentation
         public const string MetadataKey = "QS3D.Documentation.Catalog.v1";
         private const int FormatVersion = 1;
         private const int MaxCatalogChars = 1024 * 1024;
+        private const int MaxCatalogViews = 10000;
+        private const int MaxCatalogSheets = 10000;
 
         public void Save(
             ProjectState project,
@@ -38,15 +40,19 @@ namespace QS3D.Core.Documentation
             if (views == null) throw new ArgumentNullException(nameof(views));
             if (sheets == null) throw new ArgumentNullException(nameof(sheets));
 
+            var projectSnapshot = CaptureProjectStructure(project);
             var viewDefinitions = MaterializeViews(views);
+            EnsureProjectStructureUnchanged(project, projectSnapshot);
             var sheetDefinitions = MaterializeSheets(sheets);
+            EnsureProjectStructureUnchanged(project, projectSnapshot);
             var viewPlans = SemanticViewPlanner.BuildCatalog(project, viewDefinitions);
             SemanticSheetPlanner.BuildCatalog(sheetDefinitions, viewPlans);
+            EnsureProjectStructureUnchanged(project, projectSnapshot);
 
             if (viewDefinitions.Count == 0 && sheetDefinitions.Count == 0)
             {
                 if (!project.Metadata.ContainsKey(MetadataKey)) return;
-                project.Touch();
+                EnsureProjectStructureUnchanged(project, projectSnapshot);
                 project.Metadata.Remove(MetadataKey);
                 return;
             }
@@ -56,15 +62,109 @@ namespace QS3D.Core.Documentation
                 throw new InvalidOperationException("Semantic documentation catalog exceeds the 1 MiB metadata limit.");
             if (project.Metadata.TryGetValue(MetadataKey, out var current) && string.Equals(current, payload, StringComparison.Ordinal)) return;
 
-            project.Touch();
+            EnsureProjectStructureUnchanged(project, projectSnapshot);
             project.Metadata[MetadataKey] = payload;
+        }
+
+        private static ProjectStructureSnapshot CaptureProjectStructure(ProjectState project) =>
+            new ProjectStructureSnapshot(
+                project.ChangeVersion,
+                project.Elements.ToArray(),
+                project.Floors.ToArray(),
+                project.Zones.ToArray());
+
+        private static void EnsureProjectStructureUnchanged(ProjectState project, ProjectStructureSnapshot snapshot)
+        {
+            if (project.ChangeVersion != snapshot.ChangeVersion)
+                throw new InvalidOperationException("Project changed while the semantic documentation catalog was being saved.");
+            EnsureSameReferences(project.Elements, snapshot.Elements);
+            EnsureSameElementPlanningValues(project.Elements, snapshot.ElementPlanningValues);
+            EnsureSameReferences(project.Floors, snapshot.Floors);
+            EnsureSameReferences(project.Zones, snapshot.Zones);
+        }
+
+        private static void EnsureSameReferences<T>(IList<T> current, IReadOnlyList<T> expected) where T : class
+        {
+            if (current.Count != expected.Count)
+                throw new InvalidOperationException("Project structure changed while the semantic documentation catalog was being saved.");
+            for (var i = 0; i < expected.Count; i++)
+                if (!ReferenceEquals(current[i], expected[i]))
+                    throw new InvalidOperationException("Project structure changed while the semantic documentation catalog was being saved.");
+        }
+
+        private static void EnsureSameElementPlanningValues(
+            IList<ProjectElement> current,
+            IReadOnlyList<ProjectElementPlanningValues> expected)
+        {
+            if (current.Count != expected.Count)
+                throw new InvalidOperationException("Project structure changed while the semantic documentation catalog was being saved.");
+            for (var i = 0; i < expected.Count; i++)
+            {
+                var element = current[i];
+                var values = expected[i];
+                if (element == null)
+                {
+                    if (!values.IsNull)
+                        throw new InvalidOperationException("Project structure changed while the semantic documentation catalog was being saved.");
+                    continue;
+                }
+
+                if (values.IsNull ||
+                    !string.Equals(element.Id, values.Id, StringComparison.Ordinal) ||
+                    element.Category != values.Category ||
+                    !string.Equals(element.FloorId, values.FloorId, StringComparison.Ordinal) ||
+                    !string.Equals(element.ZoneId, values.ZoneId, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Project structure changed while the semantic documentation catalog was being saved.");
+            }
+        }
+
+        private sealed class ProjectStructureSnapshot
+        {
+            public ProjectStructureSnapshot(
+                long changeVersion,
+                IReadOnlyList<ProjectElement> elements,
+                IReadOnlyList<FloorDefinition> floors,
+                IReadOnlyList<ZoneDefinition> zones)
+            {
+                ChangeVersion = changeVersion;
+                Elements = elements;
+                ElementPlanningValues = elements.Select(x => new ProjectElementPlanningValues(x)).ToArray();
+                Floors = floors;
+                Zones = zones;
+            }
+
+            public long ChangeVersion { get; }
+            public IReadOnlyList<ProjectElement> Elements { get; }
+            public IReadOnlyList<ProjectElementPlanningValues> ElementPlanningValues { get; }
+            public IReadOnlyList<FloorDefinition> Floors { get; }
+            public IReadOnlyList<ZoneDefinition> Zones { get; }
+        }
+
+        private sealed class ProjectElementPlanningValues
+        {
+            public ProjectElementPlanningValues(ProjectElement? element)
+            {
+                IsNull = element == null;
+                Id = element?.Id;
+                Category = element?.Category ?? default;
+                FloorId = element?.FloorId;
+                ZoneId = element?.ZoneId;
+            }
+
+            public bool IsNull { get; }
+            public string? Id { get; }
+            public ElementCategory Category { get; }
+            public string? FloorId { get; }
+            public string? ZoneId { get; }
         }
 
         public SemanticDocumentationCatalog Load(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            if (!project.Metadata.TryGetValue(MetadataKey, out var payload) || string.IsNullOrEmpty(payload))
+            if (!project.Metadata.TryGetValue(MetadataKey, out var payload))
                 return new SemanticDocumentationCatalog(Array.Empty<SemanticViewDefinition>(), Array.Empty<SemanticSheetDefinition>());
+            if (string.IsNullOrEmpty(payload))
+                throw new InvalidDataException("Semantic documentation catalog payload is empty.");
             if (payload.Length > MaxCatalogChars)
                 throw new InvalidDataException("Semantic documentation catalog exceeds the 1 MiB metadata limit.");
 
@@ -84,24 +184,75 @@ namespace QS3D.Core.Documentation
 
         private static IReadOnlyList<SemanticViewDefinition> MaterializeViews(IEnumerable<SemanticViewDefinition> values)
         {
-            var result = new List<SemanticViewDefinition>();
-            foreach (var value in values)
-            {
-                if (value == null) throw new ArgumentException("Semantic documentation view cannot be null.", nameof(values));
-                result.Add(value);
-            }
-            return result.AsReadOnly();
+            return MaterializeBounded(
+                values,
+                MaxCatalogViews,
+                "Semantic view catalog supports at most " + MaxCatalogViews + " views.",
+                "Semantic documentation view cannot be null.");
         }
 
         private static IReadOnlyList<SemanticSheetDefinition> MaterializeSheets(IEnumerable<SemanticSheetDefinition> values)
         {
-            var result = new List<SemanticSheetDefinition>();
-            foreach (var value in values)
+            return MaterializeBounded(
+                values,
+                MaxCatalogSheets,
+                "Semantic sheet catalog supports at most " + MaxCatalogSheets + " sheets.",
+                "Semantic documentation sheet cannot be null.");
+        }
+
+        private static IReadOnlyList<T> MaterializeBounded<T>(
+            IEnumerable<T> values,
+            int maxCount,
+            string capacityError,
+            string nullEntryError)
+        {
+            int? knownCount = null;
+            ValidateKnownCount(values as ICollection<T>, maxCount, capacityError, ref knownCount);
+            ValidateKnownCount(values as IReadOnlyCollection<T>, maxCount, capacityError, ref knownCount);
+            ValidateKnownCount(values as System.Collections.ICollection, maxCount, capacityError, ref knownCount);
+
+            var result = new List<T>(knownCount ?? Math.Min(maxCount, 256));
+            using (var enumerator = values.GetEnumerator())
             {
-                if (value == null) throw new ArgumentException("Semantic documentation sheet cannot be null.", nameof(values));
-                result.Add(value);
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= maxCount)
+                        throw new InvalidOperationException(capacityError);
+                    var value = enumerator.Current;
+                    if (value is null) throw new ArgumentException(nullEntryError, nameof(values));
+                    result.Add(value);
+                }
             }
+
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw new InvalidOperationException("Semantic documentation catalog source known Count does not match completed traversal.");
             return result.AsReadOnly();
+        }
+
+        private static void ValidateKnownCount<T>(ICollection<T>? values, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (values != null) ValidateKnownCount(values.Count, maxCount, capacityError, ref knownCount);
+        }
+
+        private static void ValidateKnownCount<T>(IReadOnlyCollection<T>? values, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (values != null) ValidateKnownCount(values.Count, maxCount, capacityError, ref knownCount);
+        }
+
+        private static void ValidateKnownCount(System.Collections.ICollection? values, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (values != null) ValidateKnownCount(values.Count, maxCount, capacityError, ref knownCount);
+        }
+
+        private static void ValidateKnownCount(int count, int maxCount, string capacityError, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Semantic documentation catalog source reports an invalid negative known Count.");
+            if (count > maxCount)
+                throw new InvalidOperationException(capacityError);
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException("Semantic documentation catalog source exposes conflicting known Count values.");
+            knownCount = count;
         }
 
         private static string Serialize(
@@ -112,13 +263,13 @@ namespace QS3D.Core.Documentation
                 new XAttribute("version", FormatVersion),
                 new XElement("views",
                     views
-                        .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-                        .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(x => CanonicalRequiredText(x.Name), StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => CanonicalRequiredText(x.Id), StringComparer.OrdinalIgnoreCase)
                         .Select(SerializeView)),
                 new XElement("sheets",
                     sheets
-                        .OrderBy(x => x.Number, StringComparer.OrdinalIgnoreCase)
-                        .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(x => CanonicalRequiredText(x.Number), StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => CanonicalRequiredText(x.Id), StringComparer.OrdinalIgnoreCase)
                         .Select(SerializeSheet)));
             return root.ToString(SaveOptions.DisableFormatting);
         }
@@ -126,11 +277,11 @@ namespace QS3D.Core.Documentation
         private static XElement SerializeView(SemanticViewDefinition view)
         {
             return new XElement("view",
-                new XAttribute("id", view.Id ?? string.Empty),
-                new XAttribute("name", view.Name ?? string.Empty),
+                new XAttribute("id", CanonicalRequiredText(view.Id)),
+                new XAttribute("name", CanonicalRequiredText(view.Name)),
                 new XAttribute("kind", view.Kind),
-                new XAttribute("floorId", view.FloorId ?? string.Empty),
-                new XAttribute("zoneId", view.ZoneId ?? string.Empty),
+                new XAttribute("floorId", CanonicalOptionalText(view.FloorId)),
+                new XAttribute("zoneId", CanonicalOptionalText(view.ZoneId)),
                 new XElement("categories",
                     view.Categories
                         .Distinct()
@@ -138,32 +289,32 @@ namespace QS3D.Core.Documentation
                         .Select(x => new XElement("category", new XAttribute("value", x)))),
                 new XElement("include",
                     view.IncludeElementIds
-                        .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-                        .ThenBy(x => x, StringComparer.Ordinal)
-                        .Select(x => new XElement("id", new XAttribute("value", x ?? string.Empty)))),
+                        .OrderBy(x => CanonicalRequiredText(x), StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => CanonicalRequiredText(x), StringComparer.Ordinal)
+                        .Select(x => new XElement("id", new XAttribute("value", CanonicalRequiredText(x))))),
                 new XElement("exclude",
                     view.ExcludeElementIds
-                        .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-                        .ThenBy(x => x, StringComparer.Ordinal)
-                        .Select(x => new XElement("id", new XAttribute("value", x ?? string.Empty)))));
+                        .OrderBy(x => CanonicalRequiredText(x), StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => CanonicalRequiredText(x), StringComparer.Ordinal)
+                        .Select(x => new XElement("id", new XAttribute("value", CanonicalRequiredText(x))))));
         }
 
         private static XElement SerializeSheet(SemanticSheetDefinition sheet)
         {
             return new XElement("sheet",
-                new XAttribute("id", sheet.Id ?? string.Empty),
-                new XAttribute("number", sheet.Number ?? string.Empty),
-                new XAttribute("name", sheet.Name ?? string.Empty),
+                new XAttribute("id", CanonicalRequiredText(sheet.Id)),
+                new XAttribute("number", CanonicalRequiredText(sheet.Number)),
+                new XAttribute("name", CanonicalRequiredText(sheet.Name)),
                 new XAttribute("widthMm", Number(sheet.WidthMm)),
                 new XAttribute("heightMm", Number(sheet.HeightMm)),
-                new XAttribute("titleBlockName", sheet.TitleBlockName ?? string.Empty),
+                new XAttribute("titleBlockName", CanonicalOptionalText(sheet.TitleBlockName)),
                 new XElement("placements",
                     sheet.Placements
                         .OrderBy(x => x.Ymm)
                         .ThenBy(x => x.Xmm)
-                        .ThenBy(x => x.ViewId, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => CanonicalRequiredText(x.ViewId), StringComparer.OrdinalIgnoreCase)
                         .Select(x => new XElement("placement",
-                            new XAttribute("viewId", x.ViewId ?? string.Empty),
+                            new XAttribute("viewId", CanonicalRequiredText(x.ViewId)),
                             new XAttribute("xMm", Number(x.Xmm)),
                             new XAttribute("yMm", Number(x.Ymm)),
                             new XAttribute("widthMm", Number(x.WidthMm)),
@@ -196,8 +347,8 @@ namespace QS3D.Core.Documentation
         private static void ValidateSchema(XElement root)
         {
             ValidateElement(root, "documentation", new[] { "version" }, new[] { "views", "sheets" });
-            EnsureAtMostOneChild(root, "views");
-            EnsureAtMostOneChild(root, "sheets");
+            RequireExactlyOneChild(root, "views");
+            RequireExactlyOneChild(root, "sheets");
 
             var views = root.Element("views");
             if (views != null)
@@ -217,7 +368,6 @@ namespace QS3D.Core.Documentation
                         foreach (var category in categories.Elements("category"))
                             ValidateElement(category, "category", new[] { "value" }, Array.Empty<string>());
                     }
-
                     ValidateIdContainer(view.Element("include"), "include");
                     ValidateIdContainer(view.Element("exclude"), "exclude");
                 }
@@ -269,10 +419,18 @@ namespace QS3D.Core.Documentation
                     continue;
                 }
 
+                if (node is XCData)
+                    throw new InvalidDataException("Semantic documentation catalog contains unsupported CDATA content in " + expectedName + ".");
                 var text = node as XText;
                 if (text != null && string.IsNullOrWhiteSpace(text.Value)) continue;
                 throw new InvalidDataException("Semantic documentation catalog contains unsupported XML content in " + expectedName + ".");
             }
+        }
+
+        private static void RequireExactlyOneChild(XElement parent, string childName)
+        {
+            if (parent.Elements(childName).Take(2).Count() != 1)
+                throw new InvalidDataException("Semantic documentation catalog requires exactly one " + childName + " container.");
         }
 
         private static void EnsureAtMostOneChild(XElement parent, string childName)
@@ -287,16 +445,15 @@ namespace QS3D.Core.Documentation
             var result = new List<SemanticViewDefinition>();
             foreach (var item in container.Elements("view"))
             {
-                var kindText = Required(item, "kind");
-                if (!Enum.TryParse(kindText, true, out SemanticViewKind kind) || !Enum.IsDefined(typeof(SemanticViewKind), kind))
-                    throw new InvalidDataException("Semantic documentation view kind is invalid: " + kindText + ".");
+                if (result.Count >= MaxCatalogViews)
+                    throw new InvalidDataException("Semantic documentation catalog contains more than " + MaxCatalogViews + " views.");
+
+                var kind = NamedEnum<SemanticViewKind>(Required(item, "kind"), "view kind");
 
                 var categories = new List<ElementCategory>();
                 foreach (var categoryElement in item.Element("categories")?.Elements("category") ?? Enumerable.Empty<XElement>())
                 {
-                    var categoryText = Required(categoryElement, "value");
-                    if (!Enum.TryParse(categoryText, true, out ElementCategory category) || !Enum.IsDefined(typeof(ElementCategory), category))
-                        throw new InvalidDataException("Semantic documentation view category is invalid: " + categoryText + ".");
+                    var category = NamedEnum<ElementCategory>(Required(categoryElement, "value"), "view category");
                     categories.Add(category);
                 }
 
@@ -319,23 +476,29 @@ namespace QS3D.Core.Documentation
             var result = new List<SemanticSheetDefinition>();
             foreach (var item in container.Elements("sheet"))
             {
+                if (result.Count >= MaxCatalogSheets)
+                    throw new InvalidDataException("Semantic documentation catalog contains more than " + MaxCatalogSheets + " sheets.");
+
                 var placements = new List<SemanticSheetPlacementDefinition>();
                 foreach (var placement in item.Element("placements")?.Elements("placement") ?? Enumerable.Empty<XElement>())
                 {
+                    if (placements.Count >= SemanticSheetPlanner.MaxPlacements)
+                        throw new InvalidDataException(
+                            "Semantic documentation sheet contains more than " + SemanticSheetPlanner.MaxPlacements + " view placements.");
                     placements.Add(new SemanticSheetPlacementDefinition(
                         Required(placement, "viewId"),
-                        Double(Required(placement, "xMm"), "placement xMm"),
-                        Double(Required(placement, "yMm"), "placement yMm"),
-                        Double(Required(placement, "widthMm"), "placement widthMm"),
-                        Double(Required(placement, "heightMm"), "placement heightMm")));
+                        RequiredDouble(placement, "xMm", "placement xMm"),
+                        RequiredDouble(placement, "yMm", "placement yMm"),
+                        RequiredDouble(placement, "widthMm", "placement widthMm"),
+                        RequiredDouble(placement, "heightMm", "placement heightMm")));
                 }
 
                 result.Add(new SemanticSheetDefinition(
                     Required(item, "id"),
                     Required(item, "number"),
                     Required(item, "name"),
-                    Double(Required(item, "widthMm"), "sheet widthMm"),
-                    Double(Required(item, "heightMm"), "sheet heightMm"),
+                    RequiredDouble(item, "widthMm", "sheet widthMm"),
+                    RequiredDouble(item, "heightMm", "sheet heightMm"),
                     placements,
                     Optional(item, "titleBlockName")));
             }
@@ -348,31 +511,58 @@ namespace QS3D.Core.Documentation
             return container.Elements("id").Select(x => Required(x, "value")).ToArray();
         }
 
+        private static TEnum NamedEnum<TEnum>(string token, string label) where TEnum : struct
+        {
+            if (!Enum.TryParse(token, true, out TEnum value) || !Enum.IsDefined(typeof(TEnum), value))
+                throw new InvalidDataException("Semantic documentation " + label + " is invalid: " + token + ".");
+            var name = Enum.GetName(typeof(TEnum), value);
+            if (name == null || !string.Equals(token, name, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Semantic documentation " + label + " must use a named enum token.");
+            return value;
+        }
+
         private static string Required(XElement element, string attribute)
         {
             var value = element.Attribute(attribute)?.Value;
             if (value == null || string.IsNullOrWhiteSpace(value))
                 throw new InvalidDataException("Semantic documentation catalog is missing attribute: " + attribute + ".");
-            return value.Trim();
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("Semantic documentation catalog attribute must use canonical text: " + attribute + ".");
+            return value;
         }
 
         private static string? Optional(XElement element, string attribute)
         {
             var value = element.Attribute(attribute)?.Value;
-            if (value == null || string.IsNullOrWhiteSpace(value)) return null;
-            return value.Trim();
+            if (value == null || value.Length == 0) return null;
+            if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("Semantic documentation catalog attribute must use canonical text: " + attribute + ".");
+            return value;
         }
 
         private static int Integer(string? value, string label)
         {
-            if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result))
+            if (string.IsNullOrEmpty(value) ||
+                !int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var result) ||
+                !string.Equals(value, result.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
                 throw new InvalidDataException("Semantic documentation " + label + " is invalid.");
             return result;
         }
 
+        private static double RequiredDouble(XElement element, string attribute, string label)
+        {
+            var value = element.Attribute(attribute)?.Value;
+            if (value == null || string.IsNullOrWhiteSpace(value))
+                throw new InvalidDataException("Semantic documentation catalog is missing attribute: " + attribute + ".");
+            return Double(value, label);
+        }
+
         private static double Double(string value, string label)
         {
-            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) || double.IsNaN(result) || double.IsInfinity(result))
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) ||
+                double.IsNaN(result) ||
+                double.IsInfinity(result) ||
+                !string.Equals(value, Number(result), StringComparison.Ordinal))
                 throw new InvalidDataException("Semantic documentation " + label + " is invalid.");
             return result;
         }
@@ -382,6 +572,31 @@ namespace QS3D.Core.Documentation
             if (double.IsNaN(value) || double.IsInfinity(value))
                 throw new InvalidOperationException("Semantic documentation numeric values must be finite.");
             return value.ToString("R", CultureInfo.InvariantCulture);
+        }
+
+        private static string CanonicalRequiredText(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidOperationException("Semantic documentation required text must not be blank.");
+            return RequireXmlText(value!.Trim());
+        }
+
+        private static string CanonicalOptionalText(string? value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? string.Empty : RequireXmlText(value!.Trim());
+        }
+
+        private static string RequireXmlText(string value)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+                return value;
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidOperationException("Semantic documentation text contains characters that are invalid in XML.", ex);
+            }
         }
     }
 }

@@ -10,6 +10,8 @@ namespace QS3D.Core.SmokeTests
         {
             CountDistributionIsSymmetric();
             SpacingDistributionRoundsUpSafely();
+            NearIntegerSpacingDoesNotAddPhantomBar();
+            TrueSpacingOverrunStillAddsBar();
             SingleBarUsesCenter();
             AmbiguousModeIsRejected();
             CoverEnvelopeIsValidated();
@@ -46,6 +48,35 @@ namespace QS3D.Core.SmokeTests
             Near(0.178d, layout.ActualSpacingM);
             True(layout.OffsetsM.Zip(layout.OffsetsM.Skip(1), (a, b) => b > a).All(x => x));
             True(layout.ActualSpacingM * 1000d <= 200d + 1e-9d);
+        }
+
+        private static void NearIntegerSpacingDoesNotAddPhantomBar()
+        {
+            var layout = LinearRebarLayoutPlanner.Plan(new LinearRebarLayoutInput
+            {
+                SpanM = 0.4d,
+                CoverM = 0.02d,
+                DiameterMm = 10d,
+                SpacingMm = 50d
+            });
+
+            Equal(8, layout.Count);
+            Near(0.35d, layout.UsableSpanM);
+            Near(0.05d, layout.ActualSpacingM);
+        }
+
+        private static void TrueSpacingOverrunStillAddsBar()
+        {
+            var layout = LinearRebarLayoutPlanner.Plan(new LinearRebarLayoutInput
+            {
+                SpanM = 0.40000000005d,
+                CoverM = 0.02d,
+                DiameterMm = 10d,
+                SpacingMm = 50d
+            });
+
+            Equal(9, layout.Count);
+            True(layout.ActualSpacingM * 1000d <= 50d + 1e-9d);
         }
 
         private static void SingleBarUsesCenter()

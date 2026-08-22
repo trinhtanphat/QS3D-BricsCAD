@@ -24,6 +24,11 @@ namespace QS3D.Core.Services
             int directPlannedDependentCount)
         {
             if (orderIndex < 0) throw new ArgumentOutOfRangeException(nameof(orderIndex));
+            if (!Enum.IsDefined(typeof(ElementCategory), category)) throw new ArgumentOutOfRangeException(nameof(category));
+            if ((dirtyFlags & ~ElementDirtyFlags.All) != ElementDirtyFlags.None) throw new ArgumentOutOfRangeException(nameof(dirtyFlags));
+            if (dependencyDepth < 0) throw new ArgumentOutOfRangeException(nameof(dependencyDepth));
+            if (directPlannedDependencyCount < 0) throw new ArgumentOutOfRangeException(nameof(directPlannedDependencyCount));
+            if (directPlannedDependentCount < 0) throw new ArgumentOutOfRangeException(nameof(directPlannedDependentCount));
             OrderIndex = orderIndex;
             ElementId = string.IsNullOrWhiteSpace(elementId)
                 ? throw new ArgumentException("Regeneration work item element id is required.", nameof(elementId))
@@ -50,6 +55,7 @@ namespace QS3D.Core.Services
     {
         public RegenerationCategoryWork(ElementCategory category, int plannedElementCount, int semanticDirtyElementCount)
         {
+            if (!Enum.IsDefined(typeof(ElementCategory), category)) throw new ArgumentOutOfRangeException(nameof(category));
             if (plannedElementCount < 0) throw new ArgumentOutOfRangeException(nameof(plannedElementCount));
             if (semanticDirtyElementCount < 0 || semanticDirtyElementCount > plannedElementCount)
                 throw new ArgumentOutOfRangeException(nameof(semanticDirtyElementCount));
@@ -81,6 +87,7 @@ namespace QS3D.Core.Services
                 ? throw new ArgumentException("Project id is required.", nameof(projectId))
                 : projectId;
             if (sourceChangeVersion < 0L) throw new ArgumentOutOfRangeException(nameof(sourceChangeVersion));
+            if (!Enum.IsDefined(typeof(RegenerationWorkScope), scope)) throw new ArgumentOutOfRangeException(nameof(scope));
             if (projectElementCount < 0) throw new ArgumentOutOfRangeException(nameof(projectElementCount));
             if (dirtyProjectElementCount < 0 || dirtyProjectElementCount > projectElementCount)
                 throw new ArgumentOutOfRangeException(nameof(dirtyProjectElementCount));
@@ -90,11 +97,11 @@ namespace QS3D.Core.Services
             ProjectId = projectId;
             SourceChangeVersion = sourceChangeVersion;
             Scope = scope;
-            TargetElementIds = (targetElementIds ?? throw new ArgumentNullException(nameof(targetElementIds))).ToList().AsReadOnly();
+            TargetElementIds = MaterializeBounded(targetElementIds, projectElementCount, nameof(targetElementIds), "target element");
             ProjectElementCount = projectElementCount;
             DirtyProjectElementCount = dirtyProjectElementCount;
-            Items = (items ?? throw new ArgumentNullException(nameof(items))).ToList().AsReadOnly();
-            Categories = (categories ?? throw new ArgumentNullException(nameof(categories))).ToList().AsReadOnly();
+            Items = MaterializeBounded(items, projectElementCount, nameof(items), "work item");
+            Categories = MaterializeBounded(categories, projectElementCount, nameof(categories), "category");
             InternalDependencyEdgeCount = internalDependencyEdgeCount;
             MaxDependencyDepth = maxDependencyDepth;
         }
@@ -113,6 +120,21 @@ namespace QS3D.Core.Services
         public int SemanticDirtyElementCount => Items.Count(x => x.HasSemanticDirtyWork);
         public int GeometryOnlyDirtyElementCount => PlannedElementCount - SemanticDirtyElementCount;
         public bool HasWork => PlannedElementCount > 0;
+
+        private static IReadOnlyList<T> MaterializeBounded<T>(IEnumerable<T> values, int maxCount, string parameterName, string label)
+        {
+            if (values == null) throw new ArgumentNullException(parameterName);
+            var result = new List<T>();
+            foreach (var value in values)
+            {
+                if (ReferenceEquals(value, null))
+                    throw new ArgumentException("Regeneration work profile " + label + " collection cannot contain null entries.", parameterName);
+                if (result.Count >= maxCount)
+                    throw new ArgumentException("Regeneration work profile " + label + " collection cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".", parameterName);
+                result.Add(value);
+            }
+            return result.AsReadOnly();
+        }
     }
 
     public sealed class RegenerationWorkProfiler
@@ -137,7 +159,13 @@ namespace QS3D.Core.Services
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
-            var requested = CanonicalTargetIds(elementIds);
+            var elementOwnership = SnapshotElementOwnership(project);
+            var inputVersion = project.ChangeVersion;
+            var sourceElementCount = project.Elements.Count;
+            var requested = CanonicalTargetIds(elementIds, sourceElementCount);
+            if (project.ChangeVersion != inputVersion)
+                throw new InvalidOperationException("Project changed while regeneration profile target ids were being materialized. Re-run the profile against the current semantic state.");
+            RequireElementOwnershipUnchanged(project, elementOwnership);
             if (requested.Count == 0)
                 return Build(project, RegenerationWorkScope.Subset, Array.Empty<string>(), Array.Empty<ProjectElement>());
 
@@ -252,7 +280,38 @@ namespace QS3D.Core.Services
                 maxDepth);
         }
 
-        private static IReadOnlyList<string> CanonicalTargetIds(IEnumerable<string> elementIds)
+        private static IReadOnlyDictionary<string, ProjectElement> SnapshotElementOwnership(ProjectState project)
+        {
+            var result = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry.");
+                if (result.ContainsKey(element.Id))
+                    throw new InvalidOperationException("Project contains duplicate element id: " + element.Id);
+                result.Add(element.Id, element);
+            }
+            return result;
+        }
+
+        private static void RequireElementOwnershipUnchanged(
+            ProjectState project,
+            IReadOnlyDictionary<string, ProjectElement> expected)
+        {
+            if (project.Elements.Count != expected.Count)
+                throw new InvalidOperationException("Project element ownership changed while regeneration profile target ids were being materialized. Re-run the profile against the current semantic state.");
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null || !seen.Add(element.Id) ||
+                    !expected.TryGetValue(element.Id, out var original) ||
+                    !ReferenceEquals(original, element))
+                    throw new InvalidOperationException("Project element ownership changed while regeneration profile target ids were being materialized. Re-run the profile against the current semantic state.");
+            }
+        }
+
+        private static IReadOnlyList<string> CanonicalTargetIds(IEnumerable<string> elementIds, int maxCount)
         {
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -264,8 +323,11 @@ namespace QS3D.Core.Services
                     throw new ArgumentException("Regeneration target id cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
                 if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
                     throw new ArgumentException("Regeneration target id must be canonical without surrounding whitespace: " + raw + ".", nameof(elementIds));
-                if (!seen.Add(raw))
+                if (seen.Contains(raw))
                     throw new ArgumentException("Duplicate regeneration target id: " + raw + ".", nameof(elementIds));
+                if (result.Count >= maxCount)
+                    throw new ArgumentException("Regeneration profile target set cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
+                seen.Add(raw);
                 result.Add(raw);
                 index++;
             }

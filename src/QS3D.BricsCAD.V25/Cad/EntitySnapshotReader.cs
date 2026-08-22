@@ -91,7 +91,10 @@ namespace QS3D.BricsCAD.V25.Cad
             if (id.IsNull || id.IsErased) return;
             var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
             if (entity == null) return;
-            var snapshot = new EntitySnapshot(entity.Handle.ToString(), entity.GetType().Name, entity.Layer);
+            var snapshot = new EntitySnapshot(entity.Handle.ToString(), entity.GetType().Name, entity.Layer)
+            {
+                HasQs3dGeneratedOwnershipMarker = GeneratedNativeSourceGuard.HasKnownOwnershipMarker(entity)
+            };
             PopulateMetrics(entity, snapshot);
             PopulateMetadata(transaction, entity, snapshot);
             result.Add(snapshot);
@@ -106,6 +109,10 @@ namespace QS3D.BricsCAD.V25.Cad
             if (entity is Polyline polyline && polyline.Closed)
             {
                 try { var area = Math.Abs(polyline.Area); if (!double.IsNaN(area) && !double.IsInfinity(area)) snapshot.AreaDrawingUnitsSquared = area; } catch { }
+            }
+            if (entity is Circle circle)
+            {
+                try { var area = Math.PI * circle.Radius * circle.Radius; if (!double.IsNaN(area) && !double.IsInfinity(area) && area >= 0d) snapshot.AreaDrawingUnitsSquared = area; } catch { }
             }
             if (entity is Region region)
             {

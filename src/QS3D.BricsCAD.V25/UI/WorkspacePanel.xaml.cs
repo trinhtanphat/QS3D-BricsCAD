@@ -19,7 +19,7 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class WorkspacePanel : UserControl
     {
-        private readonly WorkspaceViewModel _viewModel = new WorkspaceViewModel();
+        private WorkspaceViewModel _viewModel = new WorkspaceViewModel();
         private IReadOnlyList<EntitySnapshot> _inspection = Array.Empty<EntitySnapshot>();
         private bool _loadingContext;
         private ElementCategory? _categoryFilter;
@@ -27,11 +27,44 @@ namespace QS3D.BricsCAD.V25.UI
         public WorkspacePanel()
         {
             InitializeComponent();
+            BindViewModel();
+            ConfigureWorkspaceInteractions();
+            AttachQuickDrawInteractions();
+            AttachLayoutPersistence();
+            Loaded += OnInitialLoaded;
+        }
+
+        private void OnInitialLoaded(object sender, RoutedEventArgs e)
+        {
+            Loaded -= OnInitialLoaded;
+            RefreshProject();
+        }
+
+        private void BindViewModel()
+        {
             DataContext = _viewModel;
             var propertyView = CollectionViewSource.GetDefaultView(_viewModel.Properties);
-            if (propertyView != null && propertyView.CanGroup) propertyView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(PropertyRowViewModel.Group)));
-            ConfigureWorkspaceInteractions();
-            Loaded += (_, __) => RefreshProject();
+            if (propertyView != null && propertyView.CanGroup)
+                propertyView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(PropertyRowViewModel.Group)));
+        }
+
+        public void ClearProject(string status)
+        {
+            _loadingContext = true;
+            try
+            {
+                _inspection = Array.Empty<EntitySnapshot>();
+                InspectionList.ItemsSource = _inspection;
+                SelectionCount.Text = "0 chọn";
+                _categoryFilter = null;
+                _viewModel = new WorkspaceViewModel();
+                BindViewModel();
+                ZoneCombo.SelectedIndex = -1;
+                FloorCombo.SelectedIndex = -1;
+                FamilyList.SelectedItem = null;
+                _viewModel.Status = status ?? string.Empty;
+            }
+            finally { _loadingContext = false; }
         }
 
         private void ConfigureWorkspaceInteractions()
@@ -156,7 +189,11 @@ namespace QS3D.BricsCAD.V25.UI
             _loadingContext = true;
             try
             {
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                if (!ExistingProjectMutationContext.TryGet(doc, out var project))
+                {
+                    ClearProject("No QS3D project is available; Workspace remains read-only and non-creating.");
+                    return;
+                }
                 _viewModel.Load(project);
                 ZoneCombo.SelectedIndex = _viewModel.ActiveZoneIndex();
                 FloorCombo.SelectedIndex = _viewModel.ActiveFloorIndex();
@@ -166,28 +203,79 @@ namespace QS3D.BricsCAD.V25.UI
             }
             catch (Exception ex)
             {
-                SetStatus("Đọc Workspace lỗi: " + ex.Message);
+                ClearProject("Đọc Workspace lỗi: " + ex.Message);
             }
             finally { _loadingContext = false; }
         }
 
         public void SetStatus(string status) => _viewModel.Status = status ?? string.Empty;
-        public void SetInspection(IReadOnlyList<EntitySnapshot> snapshots) { _inspection = snapshots ?? Array.Empty<EntitySnapshot>(); InspectionList.ItemsSource = _inspection; SelectionCount.Text = _inspection.Count + " chọn"; SyncFamilyFromSelection(); }
+
+        public void SetInspection(IReadOnlyList<EntitySnapshot> snapshots)
+        {
+            _inspection = snapshots ?? Array.Empty<EntitySnapshot>();
+            InspectionList.ItemsSource = _inspection;
+            SelectionCount.Text = _inspection.Count + " chọn";
+            try
+            {
+                SyncFamilyFromSelection();
+            }
+            catch (Exception ex)
+            {
+                ClearProject("Selection sync semantic lỗi: " + ex.Message);
+            }
+        }
 
         private void SyncFamilyFromSelection()
         {
-            if (_inspection.Count == 0) return; var doc = Application.DocumentManager.MdiActiveDocument; if (doc == null) return;
-            var handles = new HashSet<string>(_inspection.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase); var project = ProjectContextCoordinator.GetOrCreate(doc);
+            if (_inspection.Count != 1)
+            {
+                _viewModel.SetSelectedElement(null);
+                if (_inspection.Count > 1)
+                    SetStatus("Selection gồm nhiều đối tượng CAD; inspector giữ scope Family để tránh sửa nhầm Instance.");
+                return;
+            }
+
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+            {
+                _viewModel.SetSelectedElement(null);
+                return;
+            }
+
+            var handles = new HashSet<string>(_inspection.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
+            if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
+            {
+                _viewModel.SetSelectedElement(null);
+                SetStatus("Bản vẽ hiện tại chưa có QS3D project; selection chỉ được inspect CAD.");
+                return;
+            }
             var matches = project.Elements.Where(x => SemanticReferenceHandles.MatchesSelection(x, handles)).Take(2).ToList();
             if (matches.Count != 1 || string.IsNullOrWhiteSpace(matches[0].FamilyId))
             {
-                if (matches.Count > 1) SetStatus("Selection khớp nhiều cấu kiện semantic; inspector giữ scope Family để tránh sửa nhầm Instance.");
+                _viewModel.SetSelectedElement(null);
+                if (matches.Count > 1)
+                    SetStatus("Selection khớp nhiều cấu kiện semantic; inspector giữ scope Family để tránh sửa nhầm Instance.");
                 return;
             }
+
             var element = matches[0];
-            var family = project.FindFamily(element.FamilyId); if (family == null) return;
+            var family = project.FindFamily(element.FamilyId);
+            if (family == null)
+            {
+                _viewModel.SetSelectedElement(null);
+                SetStatus("Cấu kiện semantic đang chọn không còn Family hợp lệ; inspector đã về scope Family.");
+                return;
+            }
+
             _loadingContext = true;
-            try { _categoryFilter = family.Category; ApplyFamilyFilter(); FamilyList.SelectedItem = family; FamilyList.ScrollIntoView(family); _viewModel.SetSelectedElement(element); }
+            try
+            {
+                _categoryFilter = family.Category;
+                ApplyFamilyFilter();
+                FamilyList.SelectedItem = family;
+                RefreshSelectedFamilyHighlight();
+                _viewModel.SetSelectedElement(element);
+            }
             finally { _loadingContext = false; }
         }
 
@@ -229,8 +317,10 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 var doc = Application.DocumentManager.MdiActiveDocument;
                 if (doc == null) throw new InvalidOperationException("Không có bản vẽ BricsCAD đang active.");
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
                 var selected = FamilyList.SelectedItem as ProjectFamily;
+                var project = selected == null
+                    ? ProjectContextCoordinator.GetOrCreate(doc)
+                    : ExistingProjectMutationContext.Require(doc, "Nhân bản Family từ Workspace");
                 var basis = selected == null ? null : project.FindFamily(selected.Id);
                 if (selected != null && basis == null)
                     throw new InvalidOperationException("Family đang chọn không còn tồn tại trong project hiện tại. Hãy Refresh Workspace.");
@@ -277,7 +367,7 @@ namespace QS3D.BricsCAD.V25.UI
                 var doc = Application.DocumentManager.MdiActiveDocument;
                 if (doc == null) throw new InvalidOperationException("Không có bản vẽ BricsCAD đang active.");
                 if (!(FamilyList.SelectedItem is ProjectFamily selected)) return;
-                var project = ProjectContextCoordinator.GetOrCreate(doc);
+                var project = ExistingProjectMutationContext.Require(doc, "Xóa Family từ Workspace");
                 var family = project.FindFamily(selected.Id)
                     ?? throw new InvalidOperationException("Family đang chọn không còn tồn tại trong project hiện tại. Hãy Refresh Workspace.");
                 var used = ProjectFamilyService.ReferenceCount(project, family.Id);
@@ -391,7 +481,7 @@ namespace QS3D.BricsCAD.V25.UI
             var doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null || _inspection.Count == 0) return 0;
             var handles = new HashSet<string>(_inspection.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
-            var project = ProjectContextCoordinator.GetOrCreate(doc);
+            if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project)) return 0;
             var sourceHandles = project.Elements
                 .Where(x => SemanticReferenceHandles.MatchesSelection(x, handles))
                 .SelectMany(x => x.SourceHandles)

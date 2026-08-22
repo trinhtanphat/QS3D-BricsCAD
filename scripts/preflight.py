@@ -60,15 +60,14 @@ allowed_synthetic_cad = {
     Path("samples/generated/QS3D-Sample.dwg"),
     Path("samples/generated/QS3D-Sample.dxf"),
 }
-for ext in ("*.dwg", "*.dxf", "*.docx"):
-    found = []
-    for relative in eligible_files:
-        if not relative.match(ext):
-            continue
-        if ext in ("*.dwg", "*.dxf") and relative in allowed_synthetic_cad:
-            continue
-        found.append(str(relative))
-    if found: errors.append(f"private/reference artifact must not be committed ({ext}): {found}")
+private_extensions = {".dwg", ".dxf", ".docx"}
+for relative in eligible_files:
+    suffix = relative.suffix.casefold()
+    if suffix not in private_extensions:
+        continue
+    if suffix in {".dwg", ".dxf"} and relative in allowed_synthetic_cad:
+        continue
+    errors.append(f"private/reference artifact must not be committed ({suffix}): {relative}")
 sample_readme = ROOT / "samples/generated/README.md"
 if any((ROOT / relative).is_file() for relative in allowed_synthetic_cad):
     if not sample_readme.is_file():
@@ -86,10 +85,18 @@ if plugin.exists():
     for needle, message in {"<TargetFramework>net48</TargetFramework>": "plugin must target net48", "$(BRICSCAD_V25_DIR)\\BrxMgd.dll": "plugin must use external BrxMgd reference", "<Private>false</Private>": "BricsCAD references must not be copied locally"}.items():
         if needle not in text: errors.append(message)
 
-for workflow in (ROOT / ".github/workflows").glob("*.yml"):
-    text = workflow.read_text(encoding="utf-8")
-    if "workflow_dispatch:" not in text: errors.append(f"{workflow.name}: must remain manual-only")
-    if re.search(r"(?m)^\s*(push|pull_request)\s*:", text): errors.append(f"{workflow.name}: automatic trigger forbidden before real V25 runtime gate")
+workflow_dir = ROOT / ".github/workflows"
+if workflow_dir.is_dir():
+    workflow_files = sorted(
+        path for path in workflow_dir.iterdir()
+        if path.is_file() and path.suffix.casefold() in {".yml", ".yaml"}
+    )
+    for workflow in workflow_files:
+        text = workflow.read_text(encoding="utf-8")
+        if "workflow_dispatch:" not in text: errors.append(f"{workflow.name}: must remain manual-only")
+        if re.search(r"(?m)^\s*(push|pull_request)\s*:", text): errors.append(f"{workflow.name}: automatic trigger forbidden before real V25 runtime gate")
+else:
+    errors.append("missing workflows directory: .github/workflows")
 
 for xaml in ROOT.rglob("*.xaml"):
     if xaml.name == "Theme.xaml": continue
@@ -104,7 +111,7 @@ for xaml in ROOT.rglob("*.xaml"):
 project_state = ROOT / "src/QS3D.Core/Domain/ProjectState.cs"
 if project_state.exists():
     text = project_state.read_text(encoding="utf-8")
-    if "CurrentSchemaVersion = 3" not in text: errors.append("QSDB schema v3 is required for persisted rules/audit")
+    if "CurrentSchemaVersion = 4" not in text: errors.append("QSDB schema v4 is required for persisted rules/audit and project mappings")
     if "IList<QuantityRule> QuantityRules" not in text: errors.append("project quantity-rule catalog missing")
     if "IList<AuditEvent> AuditEvents" not in text: errors.append("project audit catalog missing")
 
@@ -126,6 +133,7 @@ if migrator.exists():
     text = migrator.read_text(encoding="utf-8")
     if "ElementDirtyFlags.All" not in text or 'element.SetAttributeValue("updatedUtc", LegacyUpdatedUtc)' not in text: errors.append("legacy QSDB elements must migrate dirty and require deterministic regeneration")
     if "MigrateV2ToV3" not in text: errors.append("QSDB v2 to v3 migration missing")
+    if "MigrateV3ToV4" not in text: errors.append("QSDB v3 to v4 migration missing")
 
 regen = ROOT / "src/QS3D.Core/Services/RegenerationEngine.cs"
 if regen.exists() and "ApplyMatching(project, element)" not in regen.read_text(encoding="utf-8"): errors.append("project quantity rules are not integrated into regeneration")
@@ -161,7 +169,15 @@ if template_commands.exists():
 bulk = ROOT / "src/QS3D.Core/Services/BulkEditService.cs"
 if bulk.exists():
     text = bulk.read_text(encoding="utf-8")
-    if "inheritedKeys" not in text or "previousFamily.Properties" not in text: errors.append("family reassignment must refresh inherited defaults without overwriting instance overrides")
+    family_reassignment_tokens = (
+        "inheritedKeys",
+        'ProjectFamilyService.SnapshotProperties(family, "Target", "bulk assignment")',
+        'ProjectFamilyService.SnapshotProperties(previousFamily, "Previous", "bulk assignment")',
+        "targetPropertyKeys",
+        "previousProperties",
+    )
+    if any(token not in text for token in family_reassignment_tokens):
+        errors.append("family reassignment must refresh inherited defaults without overwriting instance overrides")
 wall_quantity = ROOT / "src/QS3D.Core/Services/WallQuantityCalculator.cs"
 if wall_quantity.exists():
     text = wall_quantity.read_text(encoding="utf-8")
@@ -182,7 +198,7 @@ if continuation.exists():
 workflow_smoke = ROOT / "tests/QS3D.Core.SmokeTests/WorkflowPersistenceSmoke.cs"
 if workflow_smoke.exists():
     text = workflow_smoke.read_text(encoding="utf-8")
-    for needle in ("SchemaV2MigratesToV3", "RuleAuditRoundTrip", "RuleDrivenRegeneration", "TemplateRoundTripApply", "ProjectLayerMappingWins"):
+    for needle in ("SchemaV2MigratesToV4", "RuleAuditRoundTrip", "RuleDrivenRegeneration", "TemplateRoundTripApply", "ProjectLayerMappingWins"):
         if needle not in text: errors.append("workflow persistence regression missing: " + needle)
 registration = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 if registration.exists():
@@ -239,8 +255,13 @@ if selection_sync.exists() and "ReferenceEquals(document, Application.DocumentMa
 palette = ROOT / "src/QS3D.BricsCAD.V25/PaletteCoordinator.cs"
 if palette.exists():
     text = palette.read_text(encoding="utf-8")
-    if "MinimumSize = new DrawingSize(460, 420)" not in text: errors.append("workspace PaletteSet minimum width must match compact BLT workspace target")
+    if "MinimumSize = new DrawingSize(UserUiLayoutStore.WorkspacePaletteMinWidth, UserUiLayoutStore.WorkspacePaletteMinHeight)" not in text: errors.append("workspace PaletteSet minimum must use the centralized compact layout policy")
     if "MinimumSize = new Size(520, 420)" in text: errors.append("workspace PaletteSet still forces the old oversized minimum width")
+layout_store = ROOT / "src/QS3D.BricsCAD.V25/Services/UserUiLayoutStore.cs"
+if layout_store.exists():
+    text = layout_store.read_text(encoding="utf-8")
+    if "internal const int WorkspacePaletteMinWidth = 460;" not in text or "internal const int WorkspacePaletteMinHeight = 420;" not in text:
+        errors.append("centralized workspace PaletteSet minimum must preserve the compact 460x420 target")
 
 right = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs"
 if right.exists():
@@ -275,15 +296,17 @@ if commands.exists():
     if "CadUnitService.GetDrawingUnit(doc)" not in text: errors.append("BQ snapshot fallback still assumes millimeters")
     if "GetLiveSolidHandles" not in text or "liveGeneratedSolids" not in text: errors.append("QS3DHEALTH must verify generated Solid3d liveness")
     if "QS3DED2" not in text or "QS3DEXCELLOCATE" not in text or "XlsxHandleReader.ReadHandleLookup" not in text: errors.append("ED2 Excel/Handle round-trip workflow missing")
+    locate_service = ROOT / "src/QS3D.BricsCAD.V25/Services/ExcelLocateResolutionService.cs"
+    identity_text = text + (locate_service.read_text(encoding="utf-8") if locate_service.exists() else "")
     for needle in ("DrawingFingerprint", "Excel drawing fingerprint does not match", "Type YES"):
-        if needle not in text: errors.append("ED2 drawing-identity guard missing: " + needle)
+        if needle not in identity_text: errors.append("ED2 drawing-identity guard missing: " + needle)
 
 review_commands = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
 snapshot_reader = ROOT / "src/QS3D.BricsCAD.V25/Cad/EntitySnapshotReader.cs"
 if review_commands.exists() and snapshot_reader.exists():
     review_text = review_commands.read_text(encoding="utf-8")
     snapshot_text = snapshot_reader.read_text(encoding="utf-8")
-    for needle in ("QS3DB4D", "ReadCurrentSpace", "CollectGeneratedHandles(project)", "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)"):
+    for needle in ("QS3DB4D", "ReadCurrentSpace", "CollectGeneratedHandles(previewProject)", "GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project)"):
         if needle not in review_text: errors.append("B4D generated-source exclusion missing: " + needle)
     for needle in ("ReadCurrentSpace", "MaxCurrentSpaceEntities"):
         if needle not in snapshot_text: errors.append("B4D bounded whole-Current-Space scan missing: " + needle)
@@ -291,8 +314,10 @@ if review_commands.exists() and snapshot_reader.exists():
 semantic_capture = ROOT / "src/QS3D.BricsCAD.V25/Services/SemanticCaptureService.cs"
 if semantic_capture.exists():
     text = semantic_capture.read_text(encoding="utf-8")
-    for needle in ("ReplaceSourceMetric", "element.Properties.Remove(key)", 'StartsWith("CAD."'):
+    for needle in ("ReplaceSourceMetric", "element.Properties.Remove(key)"):
         if needle not in text: errors.append("CAD rescan must replace stale source-derived metrics/metadata: " + needle)
+    cad_prefix = 'StartsWith("CAD.", StringComparison.OrdinalIgnoreCase)'
+    if cad_prefix not in text: errors.append("CAD rescan must remove stale CAD metadata with ordinal-ignore-case prefix matching: " + cad_prefix)
 
 ribbon = ROOT / "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs"
 if ribbon.exists():
@@ -311,4 +336,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: structure, XML/XAML handlers, manual CI, proprietary/private-file guard with explicit synthetic sample provenance, QSDB v3/rules/audit, template/recognition/revision workflow wiring, migration/persistence hardening, quantity/health/generated-solid guards, units, two-phase 3D geometry, document lifecycle, selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation/preferences, canonical B4D generated-source exclusion and installer verification are present.")
+print("PASS: structure, XML/XAML handlers, manual CI, proprietary/private-file guard with explicit synthetic sample provenance, QSDB v4/rules/audit/project mappings, template/recognition/revision workflow wiring, migration/persistence hardening, quantity/health/generated-solid guards, units, two-phase 3D geometry, document lifecycle, selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation/preferences, canonical B4D generated-source exclusion and installer verification are present.")

@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             CanonicalHandlesAreSortedWithoutMutation();
+            CompareIgnoresHandleOrderAndCase();
+            CompareReportsRealHandleSetChange();
             BlankHandleFailsClosed();
             PaddedHandleFailsClosed();
             DuplicateHandleFailsClosed();
@@ -32,6 +34,26 @@ namespace QS3D.Core.SmokeTests
             Equal("BB", captured[1]);
             Equal(before[0], element.SourceHandles[0]);
             Equal(before[1], element.SourceHandles[1]);
+        }
+
+        private static void CompareIgnoresHandleOrderAndCase()
+        {
+            var before = Snapshot("AA", "BB");
+            var after = Snapshot("bb", "aa");
+            var deltas = new RevisionService().Compare(before, after);
+            Equal(0, deltas.Count);
+        }
+
+        private static void CompareReportsRealHandleSetChange()
+        {
+            var before = Snapshot("AA", "BB");
+            var after = Snapshot("AA", "CC");
+            var deltas = new RevisionService().Compare(before, after);
+            Equal(1, deltas.Count);
+            Equal(1, deltas[0].Fields.Count);
+            Equal("SourceHandles", deltas[0].Fields[0].Field);
+            Equal("AA,BB", deltas[0].Fields[0].Before);
+            Equal("AA,CC", deltas[0].Fields[0].After);
         }
 
         private static void BlankHandleFailsClosed()
@@ -55,6 +77,22 @@ namespace QS3D.Core.SmokeTests
             element.SourceHandles.Add("AA");
             element.SourceHandles.Add("aa");
             Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "r"));
+        }
+
+        private static RevisionSnapshot Snapshot(params string[] handles)
+        {
+            var snapshot = new RevisionSnapshot { Id = "r", CreatedUtc = DateTime.UtcNow };
+            var element = new RevisionElementSnapshot
+            {
+                ElementId = "E1",
+                Category = ElementCategory.Beam.ToString(),
+                FamilyId = string.Empty,
+                FloorId = "F",
+                ZoneId = "Z"
+            };
+            foreach (var handle in handles) element.SourceHandles.Add(handle);
+            snapshot.Elements.Add(element);
+            return snapshot;
         }
 
         private static ProjectState Project()

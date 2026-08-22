@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -8,6 +9,8 @@ namespace QS3D.Core.Reporting
 {
     public sealed class CurtainWallScheduleRow
     {
+        public string ProjectId { get; set; } = string.Empty;
+        public string DrawingFingerprint { get; set; } = string.Empty;
         public string Floor { get; set; } = string.Empty;
         public string FamilyName { get; set; } = string.Empty;
         public int WallCount { get; set; }
@@ -25,6 +28,7 @@ namespace QS3D.Core.Reporting
         public double MinimumClearPanelHeightM { get; set; } = double.MaxValue;
         public double MaximumClearPanelHeightM { get; set; }
         public IList<string> ElementIds { get; } = new List<string>();
+        public IList<string> SourceHandles { get; } = new List<string>();
     }
 
     public static class CurtainWallScheduleBuilder
@@ -32,6 +36,7 @@ namespace QS3D.Core.Reporting
         public static IReadOnlyList<CurtainWallScheduleRow> Build(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Curtain wall schedule");
             var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var rows = new Dictionary<string, CurtainWallScheduleRow>(StringComparer.OrdinalIgnoreCase);
@@ -39,12 +44,23 @@ namespace QS3D.Core.Reporting
 
             foreach (var element in project.Elements.Where(x => x.Category == ElementCategory.GlassWall).OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
-                var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
-                var family = families.TryGetValue(element.FamilyId, out var familyDefinition) ? familyDefinition.Name : element.FamilyId;
-                var key = element.FloorId + "\u001f" + element.FamilyId;
+                var floorId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FloorId);
+                var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
+                var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
+                families.TryGetValue(familyId, out var familyDefinition);
+                if (familyDefinition != null && familyDefinition.Category != element.Category)
+                    throw new InvalidOperationException("Curtain wall schedule element " + element.Id + " category " + element.Category + " does not match Family " + familyDefinition.Id + " category " + familyDefinition.Category + ". Repair the Family relation before reporting.");
+                var family = familyDefinition?.Name ?? familyId;
+                var key = GroupKey(floorId, familyId);
                 if (!rows.TryGetValue(key, out var row))
                 {
-                    row = new CurtainWallScheduleRow { Floor = floor, FamilyName = family };
+                    row = new CurtainWallScheduleRow
+                    {
+                        ProjectId = project.ProjectId,
+                        DrawingFingerprint = project.DrawingFingerprint,
+                        Floor = floor,
+                        FamilyName = family
+                    };
                     rows[key] = row;
                     order.Add(key);
                 }
@@ -64,6 +80,7 @@ namespace QS3D.Core.Reporting
                 row.MinimumClearPanelHeightM = Math.Min(row.MinimumClearPanelHeightM, Q(element, "CurtainMinClearPanelHeightM"));
                 row.MaximumClearPanelHeightM = Math.Max(row.MaximumClearPanelHeightM, Q(element, "CurtainMaxClearPanelHeightM"));
                 row.ElementIds.Add(element.Id);
+                ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
             }
 
             foreach (var row in rows.Values)
@@ -71,7 +88,15 @@ namespace QS3D.Core.Reporting
                 if (row.MinimumClearPanelWidthM == double.MaxValue) row.MinimumClearPanelWidthM = 0d;
                 if (row.MinimumClearPanelHeightM == double.MaxValue) row.MinimumClearPanelHeightM = 0d;
             }
-            return order.Select(x => rows[x]).ToList();
+            return order.Select(x => rows[x]).ToList().AsReadOnly();
+        }
+
+        private static string GroupKey(string floorId, string familyId)
+        {
+            var floor = floorId ?? string.Empty;
+            var family = familyId ?? string.Empty;
+            return floor.Length.ToString(CultureInfo.InvariantCulture) + ":" + floor +
+                   family.Length.ToString(CultureInfo.InvariantCulture) + ":" + family;
         }
 
         private static double Q(ProjectElement element, string key)
@@ -101,9 +126,7 @@ namespace QS3D.Core.Reporting
         {
             if (double.IsNaN(left) || double.IsInfinity(left) || left < 0d || double.IsNaN(right) || double.IsInfinity(right) || right < 0d)
                 throw new InvalidOperationException(label + " requires finite non-negative values.");
-            var result = left + right;
-            if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " overflowed.");
-            return result;
+            return QuantityReportMath.Add(left, right, label);
         }
     }
 }

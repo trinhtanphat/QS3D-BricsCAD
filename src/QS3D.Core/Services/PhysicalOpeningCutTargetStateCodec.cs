@@ -25,7 +25,7 @@ namespace QS3D.Core.Services
             if (raw.Length > MaxSerializedLength)
                 throw new InvalidOperationException("Host " + host.Id + " physical opening target-state exceeds the safety limit.");
 
-            var tokens = raw.Split(new[] { ';' }, StringSplitOptions.None);
+            var tokens = raw.Split(new[] { ';' }, MaxOpeningIds + 1, StringSplitOptions.None);
             if (tokens.Length > MaxOpeningIds)
                 throw new InvalidOperationException("Host " + host.Id + " has too many physical opening targets; limit " + MaxOpeningIds + ".");
 
@@ -33,30 +33,39 @@ namespace QS3D.Core.Services
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var token in tokens)
             {
-                var encoded = (token ?? string.Empty).Trim();
-                if (encoded.Length == 0)
-                    throw new InvalidOperationException("Host " + host.Id + " has malformed physical opening target-state.");
+                var encoded = token ?? string.Empty;
+                if (encoded.Length == 0 || !string.Equals(encoded, encoded.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Host " + host.Id + " has malformed or non-canonical physical opening target-state.");
                 if (encoded.Length > MaxEncodedIdLength)
                     throw new InvalidOperationException("Host " + host.Id + " has an encoded physical opening target id above the safety limit.");
 
                 string id;
                 try
                 {
-                    id = StrictUtf8.GetString(Convert.FromBase64String(encoded)).Trim();
+                    var bytes = Convert.FromBase64String(encoded);
+                    if (!string.Equals(Convert.ToBase64String(bytes), encoded, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Host " + host.Id + " has non-canonical Base64 physical opening target-state.");
+                    id = StrictUtf8.GetString(bytes);
                 }
                 catch (Exception ex) when (ex is FormatException || ex is DecoderFallbackException)
                 {
                     throw new InvalidOperationException("Host " + host.Id + " has undecodable physical opening target-state.", ex);
                 }
 
-                if (id.Length == 0 || id.Length > MaxElementIdLength || !seen.Add(id))
-                    throw new InvalidOperationException("Host " + host.Id + " physical opening target-state contains an empty, overlong or duplicate id.");
+                if (id.Length == 0 ||
+                    id.Length > MaxElementIdLength ||
+                    !string.Equals(id, id.Trim(), StringComparison.Ordinal) ||
+                    !seen.Add(id))
+                    throw new InvalidOperationException("Host " + host.Id + " physical opening target-state contains an empty, overlong, non-canonical or duplicate id.");
                 parsed.Add(id);
             }
 
             if (parsed.Count == 0)
                 throw new InvalidOperationException("Host " + host.Id + " physical opening target-state contains no opening ids.");
-            openingIds = parsed.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+            var canonical = parsed.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+            if (!parsed.SequenceEqual(canonical, StringComparer.Ordinal))
+                throw new InvalidOperationException("Host " + host.Id + " physical opening target-state is not in canonical opening-id order.");
+            openingIds = canonical.AsReadOnly();
             return true;
         }
 
@@ -64,22 +73,48 @@ namespace QS3D.Core.Services
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (host == null) throw new ArgumentNullException(nameof(host));
+
+            ValidateProjectElements(project);
+            var sourceElements = project.Elements.ToArray();
+            var sourceIndex = sourceElements.ToDictionary(x => x.Id, x => x, StringComparer.OrdinalIgnoreCase);
+            var canonicalHost = project.FindElement(host.Id);
+            if (canonicalHost == null)
+                throw new InvalidOperationException("Physical opening cut host does not belong to the project: " + host.Id + ".");
+            if (!ReferenceEquals(canonicalHost, host))
+                throw new InvalidOperationException("Physical opening cut host is detached from the current project instance: " + host.Id + ".");
+
+            var targetEnumerationVersion = project.ChangeVersion;
             var ids = Normalize(openingIds);
+            if (project.ChangeVersion != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while physical opening target ids were being enumerated; recompute the target set against the current project state.");
             if (ids.Count == 0)
                 throw new InvalidOperationException("Host " + host.Id + " physical opening target-state cannot be empty.");
+
+            ValidateProjectElements(project);
+            RequireElementStructureFresh(project, sourceElements);
+            var currentHost = project.FindElement(canonicalHost.Id);
+            if (!ReferenceEquals(currentHost, canonicalHost))
+                throw new InvalidOperationException("Physical opening cut host no longer belongs to the project after opening target enumeration: " + canonicalHost.Id + ".");
 
             var result = new List<ProjectElement>(ids.Count);
             foreach (var id in ids)
             {
-                var opening = project.FindElement(id) ??
+                if (!sourceIndex.TryGetValue(id, out var opening))
                     throw new InvalidOperationException("Physical opening target no longer exists: " + id + ". Rebuild the host 3D geometry before cutting again.");
                 if (!IsOpening(opening))
                     throw new InvalidOperationException("Physical opening target is no longer a Door/WallOpening: " + id + ". Rebuild the host 3D geometry.");
-                if (!opening.Properties.TryGetValue("HostWallId", out var linkedHostId) ||
-                    !string.Equals(linkedHostId?.Trim(), host.Id, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("Physical opening target " + id + " is no longer linked to host " + host.Id + ". Rebuild the host 3D geometry.");
+                if (!opening.Properties.TryGetValue("HostWallId", out var linkedHostId) || string.IsNullOrWhiteSpace(linkedHostId))
+                    throw new InvalidOperationException("Physical opening target " + id + " is no longer linked to host " + canonicalHost.Id + ". Rebuild the host 3D geometry.");
+                if (!string.Equals(linkedHostId, linkedHostId.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Physical opening target " + id + " has a non-canonical HostWallId relation. Repair semantic relations before trusting physical cut ownership.");
+                if (!string.Equals(linkedHostId, canonicalHost.Id, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Physical opening target " + id + " is no longer linked to host " + canonicalHost.Id + ". Rebuild the host 3D geometry.");
                 result.Add(opening);
             }
+
+            if (project.ChangeVersion != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while physical opening targets were being resolved; recompute the target set against the current project state.");
+            RequireElementStructureFresh(project, sourceElements);
             return result.AsReadOnly();
         }
 
@@ -98,11 +133,18 @@ namespace QS3D.Core.Services
 
         public static IReadOnlyList<string> Normalize(IEnumerable<string> openingIds)
         {
+            var source = openingIds ?? Array.Empty<string>();
+            var knownCount = GetKnownCount(source);
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var raw in openingIds ?? Array.Empty<string>())
+            var observedCount = 0;
+            foreach (var raw in source)
             {
-                var id = (raw ?? string.Empty).Trim();
-                if (id.Length == 0) continue;
+                observedCount++;
+                if (string.IsNullOrWhiteSpace(raw))
+                    throw new InvalidOperationException("Physical opening target-state contains an empty opening id.");
+                if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Physical opening target-state contains a non-canonical opening id with leading or trailing whitespace.");
+                var id = raw;
                 if (id.Length > MaxElementIdLength)
                     throw new InvalidOperationException("Physical opening target id exceeds " + MaxElementIdLength + " characters.");
                 if (!result.Add(id))
@@ -110,7 +152,75 @@ namespace QS3D.Core.Services
                 if (result.Count > MaxOpeningIds)
                     throw new InvalidOperationException("Physical opening target-state exceeds the " + MaxOpeningIds + " opening id limit.");
             }
+
+            RequireObservedCount(knownCount, observedCount);
             return result.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+        }
+
+        private static int? GetKnownCount(IEnumerable<string> openingIds)
+        {
+            var genericCount = openingIds is ICollection<string> collection ? (int?)collection.Count : null;
+            var readOnlyCount = openingIds is IReadOnlyCollection<string> readOnlyCollection ? (int?)readOnlyCollection.Count : null;
+            var nonGenericCount = openingIds is System.Collections.ICollection nonGenericCollection ? (int?)nonGenericCollection.Count : null;
+
+            ValidateKnownCount(genericCount);
+            ValidateKnownCount(readOnlyCount);
+            ValidateKnownCount(nonGenericCount);
+
+            var expected = genericCount ?? readOnlyCount ?? nonGenericCount;
+            if (!expected.HasValue) return null;
+            if ((genericCount.HasValue && genericCount.Value != expected.Value) ||
+                (readOnlyCount.HasValue && readOnlyCount.Value != expected.Value) ||
+                (nonGenericCount.HasValue && nonGenericCount.Value != expected.Value))
+                throw new InvalidOperationException("Physical opening target-state reports conflicting known opening id counts.");
+            return expected;
+        }
+
+        private static void ValidateKnownCount(int? count)
+        {
+            if (!count.HasValue) return;
+            if (count.Value < 0)
+                throw new InvalidOperationException("Physical opening target-state reports an invalid negative opening id count.");
+            if (count.Value > MaxOpeningIds)
+                throw new InvalidOperationException("Physical opening target-state exceeds the " + MaxOpeningIds + " opening id limit.");
+        }
+
+        private static void RequireObservedCount(int? knownCount, int observedCount)
+        {
+            if (knownCount.HasValue && knownCount.Value != observedCount)
+                throw new InvalidOperationException("Physical opening target-state opening id count changed during enumeration.");
+        }
+
+        private static void ValidateProjectElements(ProjectState project)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                if (element == null)
+                    throw new InvalidOperationException("Project contains a null semantic element entry.");
+                var id = element.Id ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(id))
+                    throw new InvalidOperationException("Project contains an element with a blank semantic id.");
+                if (!string.Equals(id, id.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Project contains an element with a non-canonical semantic id: " + id + ".");
+                if (!seen.Add(id))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + id + ".");
+            }
+        }
+
+        private static void RequireElementStructureFresh(ProjectState project, IReadOnlyList<ProjectElement> sourceElements)
+        {
+            if (project.Elements.Count != sourceElements.Count)
+                throw StructuralFreshnessError();
+            for (var index = 0; index < sourceElements.Count; index++)
+                if (!ReferenceEquals(project.Elements[index], sourceElements[index]))
+                    throw StructuralFreshnessError();
+        }
+
+        private static InvalidOperationException StructuralFreshnessError()
+        {
+            return new InvalidOperationException(
+                "Project element structure changed while physical opening target ids were being enumerated; recompute the target set against the current project state.");
         }
 
         private static bool IsOpening(ProjectElement element) =>

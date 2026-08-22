@@ -33,11 +33,12 @@ namespace QS3D.BricsCAD.V25
 
                 var json = ReadGuardedSnapshotText(dialog.FileName);
                 EnsureActive(document, "Interchange remap dry-run");
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                    throw new InvalidOperationException("Interchange remap dry-run cần một QS3D project hiện hữu; planner không tạo project mới.");
                 var appendPlan = ProjectInterchangeRemapAppendImporter.Plan(project, json);
                 var plan = appendPlan.Remap;
 
-                document.Editor.WriteMessage(
+                TryWrite(document,
                     "\nQS3D Interchange Remap PLAN ONLY — source=" + plan.SourceProjectId +
                     " • identities=" + plan.IdentityCount.ToString(CultureInfo.InvariantCulture) +
                     " • ID remap=" + plan.IdRemapCount.ToString(CultureInfo.InvariantCulture) +
@@ -52,41 +53,42 @@ namespace QS3D.BricsCAD.V25
                     var namePart = item.NameChanged
                         ? " • name '" + item.SourceName + "' -> '" + item.TargetName + "'"
                         : string.Empty;
-                    document.Editor.WriteMessage(
+                    TryWrite(document,
                         "\n  " + item.Kind + " " + item.SourceId + " -> " + item.TargetId + namePart + " • " + item.Reason);
                 }
                 if (plan.Items.Count(x => x.IdChanged || x.NameChanged) > 40)
-                    document.Editor.WriteMessage("\n  ... remap list truncated in command line; planner remains deterministic for the full snapshot.");
+                    TryWrite(document, "\n  ... remap list truncated in command line; planner remains deterministic for the full snapshot.");
 
                 foreach (var rewrite in plan.ReferenceRewrites.Take(40))
                 {
                     var key = string.IsNullOrWhiteSpace(rewrite.PropertyKey) ? rewrite.ReferenceKind : rewrite.PropertyKey;
-                    document.Editor.WriteMessage(
+                    TryWrite(document,
                         "\n  REF " + rewrite.OwnerElementSourceId + " / " + key + ": " + rewrite.SourceReferenceId + " -> " + rewrite.TargetReferenceId);
                 }
                 if (plan.ReferenceRewrites.Count > 40)
-                    document.Editor.WriteMessage("\n  ... typed reference rewrite list truncated in command line.");
+                    TryWrite(document, "\n  ... typed reference rewrite list truncated in command line.");
 
                 foreach (var warning in plan.OpaqueReferenceWarnings.Take(20))
-                    document.Editor.WriteMessage("\n  BLOCK REF " + warning.OwnerElementSourceId + " / " + warning.PropertyKey + ": " + warning.Reason);
+                    TryWrite(document, "\n  BLOCK REF " + warning.OwnerElementSourceId + " / " + warning.PropertyKey + ": " + warning.Reason);
                 if (plan.OpaqueReferenceWarnings.Count > 20)
-                    document.Editor.WriteMessage("\n  ... unresolved property-reference warning list truncated in command line.");
+                    TryWrite(document, "\n  ... unresolved property-reference warning list truncated in command line.");
 
                 foreach (var blocker in appendPlan.CompatibilityBlockers.Take(20))
-                    document.Editor.WriteMessage("\n  BLOCK RUNTIME " + blocker.OwnerKind + " " + blocker.OwnerSourceId + " / " + blocker.Field + ": " + blocker.Reason);
+                    TryWrite(document, "\n  BLOCK RUNTIME " + blocker.OwnerKind + " " + blocker.OwnerSourceId + " / " + blocker.Field + ": " + blocker.Reason);
                 if (appendPlan.CompatibilityBlockers.Count > 20)
-                    document.Editor.WriteMessage("\n  ... runtime compatibility blocker list truncated in command line.");
+                    TryWrite(document, "\n  ... runtime compatibility blocker list truncated in command line.");
 
                 var status = appendPlan.CanImport
                     ? "Interchange remap dry-run READY: candidate IDs/names + typed references + target runtime compatibility đã resolve. Chưa mutate project; chưa import."
                     : "Interchange remap dry-run BLOCKED: còn property-reference hoặc target runtime compatibility blocker. Chưa mutate project; chưa import.";
-                try { PaletteCoordinator.SetStatus(status); } catch { }
-                document.Editor.WriteMessage("\nQS3D " + status);
+                TrySetStatus(status);
+                TryWrite(document, "\nQS3D " + status);
             }
             catch (Exception ex)
             {
-                try { PaletteCoordinator.SetStatus("QS3DINTERCHANGEREMAPPLAN lỗi: " + ex.Message); } catch { }
-                document.Editor.WriteMessage("\nQS3DINTERCHANGEREMAPPLAN error: " + ex.Message + " Dry-run không mutate project/DWG.");
+                var message = "QS3DINTERCHANGEREMAPPLAN lỗi: " + ex.Message + " Dry-run không mutate project/DWG.";
+                TrySetStatus(message);
+                TryWrite(document, "\n" + message);
             }
         }
 
@@ -94,6 +96,16 @@ namespace QS3D.BricsCAD.V25
         {
             if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
                 throw new InvalidOperationException(operation + " requires the DWG that started the operation to remain active.");
+        }
+
+        private static void TrySetStatus(string status)
+        {
+            try { PaletteCoordinator.SetStatus(status); } catch { }
+        }
+
+        private static void TryWrite(Document document, string message)
+        {
+            try { document.Editor.WriteMessage(message); } catch { }
         }
 
         private static string ReadGuardedSnapshotText(string path)

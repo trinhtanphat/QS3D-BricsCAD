@@ -16,6 +16,7 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class FamilyManagerWindow : Window
     {
         private readonly Document _document;
+        private ProjectState? _boundProject;
         private bool _loading;
         private bool _creatingNew;
 
@@ -63,6 +64,11 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnFamilySelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_loading) return;
+            if (_creatingNew && FamilyList.SelectedItem == null)
+            {
+                RefreshQuickWorkflow();
+                return;
+            }
             _creatingNew = false;
             LoadFamily();
         }
@@ -82,7 +88,8 @@ namespace QS3D.BricsCAD.V25.UI
             PropertyValueBox.Text = string.Empty;
             ReferenceCountText.Text = "0";
             FamilyNameBox.Focus();
-            SetStatus("Tạo Family mới: chọn Category, nhập tên rồi bấm Lưu tên.");
+            RefreshQuickWorkflow();
+            SetStatus("Tạo Family mới: chọn Category, nhập tên rồi bấm Lưu tên. Custom property là tùy chọn.");
         }
 
         private void OnDuplicateClick(object sender, RoutedEventArgs e)
@@ -171,15 +178,23 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                var key = (PropertyKeyBox.Text ?? string.Empty).Trim();
+                if (key.Length == 0)
+                {
+                    SetStatus("Custom property là tùy chọn. Family và các property chuẩn vẫn được giữ; nhập Key chỉ khi cần thêm hoặc sửa custom property.");
+                    return;
+                }
+
                 EnsureActive("lưu Family property");
                 var project = ExistingProjectMutationContext.Require(_document, "Lưu Family property");
                 var family = RequireSelectedFamily(project);
-                var key = PropertyKeyBox.Text;
                 var value = PropertyValueBox.Text;
                 var result = ExecuteAtomic(project, () =>
                 {
+                    var beforeVersion = project.ChangeVersion;
                     var update = ProjectFamilyService.SetProperty(project, family.Id, key, value);
-                    AuditTrail.ForProject(project).Record("family.property.set", string.Empty, family.Id + " • " + key + "=" + value + " • inherited=" + update.InheritedInstancesUpdated + " • overrides=" + update.OverridesPreserved);
+                    if (project.ChangeVersion != beforeVersion)
+                        AuditTrail.ForProject(project).Record("family.property.set", string.Empty, family.Id + " • " + key + "=" + value + " • inherited=" + update.InheritedInstancesUpdated + " • overrides=" + update.OverridesPreserved);
                     return update;
                 }, "Lưu Family property");
 
@@ -195,14 +210,22 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
+                var key = (PropertyKeyBox.Text ?? string.Empty).Trim();
+                if (key.Length == 0)
+                {
+                    SetStatus("Custom property là tùy chọn. Chọn một property hoặc nhập Key trước khi xóa.");
+                    return;
+                }
+
                 EnsureActive("xóa Family property");
                 var project = ExistingProjectMutationContext.Require(_document, "Xóa Family property");
                 var family = RequireSelectedFamily(project);
-                var key = PropertyKeyBox.Text;
                 var result = ExecuteAtomic(project, () =>
                 {
+                    var beforeVersion = project.ChangeVersion;
                     var update = ProjectFamilyService.RemoveProperty(project, family.Id, key);
-                    AuditTrail.ForProject(project).Record("family.property.remove", string.Empty, family.Id + " • " + key + " • inherited=" + update.InheritedInstancesUpdated + " • overrides=" + update.OverridesPreserved);
+                    if (project.ChangeVersion != beforeVersion)
+                        AuditTrail.ForProject(project).Record("family.property.remove", string.Empty, family.Id + " • " + key + " • inherited=" + update.InheritedInstancesUpdated + " • overrides=" + update.OverridesPreserved);
                     return update;
                 }, "Xóa Family property");
 
@@ -219,13 +242,35 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 EnsureActive("gán Family cho selection");
+                if (!(FamilyList.SelectedItem is ProjectFamily selectedFamily))
+                    throw new InvalidOperationException("Chọn Family trước khi thực hiện thao tác.");
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var previewProject))
+                    throw new InvalidOperationException("Gán Family cho selection cần một QS3D project hiện hữu; thao tác này không tạo project mới.");
+                var previewFamily = previewProject.FindFamily(selectedFamily.Id)
+                    ?? throw new InvalidOperationException("Family đã chọn không còn tồn tại trong project hiện tại. Hãy Refresh và chọn lại.");
+                var expectedProjectId = previewProject.ProjectId;
+                var previewIds = SemanticSelectionResolver.ResolveImplied(_document, previewProject)
+                    .Select(x => x.Id)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (previewIds.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
+
                 var project = ExistingProjectMutationContext.Require(_document, "Gán Family cho selection");
-                var family = RequireSelectedFamily(project);
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("QS3D project đã thay đổi sau khi đọc selection. Không có Family assignment nào được áp dụng; hãy Refresh và thử lại.");
+                var family = project.FindFamily(previewFamily.Id)
+                    ?? throw new InvalidOperationException("Family đã thay đổi hoặc bị xóa khỏi project hiện tại. Hãy Refresh và chọn lại.");
                 var elements = SemanticSelectionResolver.ResolveImplied(_document, project)
                     .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                     .Select(x => x.First())
                     .ToList();
-                if (elements.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
+                var currentIds = elements.Select(x => x.Id)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (!previewIds.SequenceEqual(currentIds, StringComparer.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Selection hoặc semantic ownership đã thay đổi trước khi gán Family. Không có mutation nào được áp dụng; hãy chọn lại và thử lại.");
+
                 var previous = elements.ToDictionary(x => x.Id, x => x.FamilyId, StringComparer.OrdinalIgnoreCase);
                 var changed = ExecuteAtomic(project, () =>
                 {
@@ -251,6 +296,7 @@ namespace QS3D.BricsCAD.V25.UI
                 var previous = string.IsNullOrWhiteSpace(preferredId) ? (FamilyList.SelectedItem as ProjectFamily)?.Id : preferredId;
                 if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
                 {
+                    _boundProject = null;
                     _loading = true;
                     try { FamilyList.ItemsSource = null; FamilyList.SelectedItem = null; }
                     finally { _loading = false; }
@@ -269,6 +315,7 @@ namespace QS3D.BricsCAD.V25.UI
                 finally { _loading = false; }
                 _creatingNew = false;
                 LoadFamily();
+                _boundProject = project;
                 Title = "QS3D • Family Manager • " + DrawingLabel(_document);
             }
             catch (Exception ex) { SetStatus("Đọc Family Catalog lỗi: " + ex.Message); }
@@ -374,7 +421,16 @@ namespace QS3D.BricsCAD.V25.UI
             throw new InvalidOperationException("Không tìm được tên Family duplicate an toàn.");
         }
 
-        private void EnsureActive(string operation) { if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)) throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Family Manager trước khi " + operation + "."); }
+        private void EnsureActive(string operation)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+                throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Family Manager trước khi " + operation + ".");
+            if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var currentProject) ||
+                _boundProject == null ||
+                !ReferenceEquals(currentProject, _boundProject))
+                throw new InvalidOperationException("QS3D project đã thay đổi từ lần Refresh gần nhất. Hãy Refresh Family Manager trước khi " + operation + ".");
+        }
+
         private static string DrawingLabel(Document document) { var name = document.Name ?? string.Empty; if (string.IsNullOrWhiteSpace(name)) return "Bản vẽ chưa lưu"; try { return System.IO.Path.GetFileName(name); } catch { return name; } }
         private void SetStatus(string text) { StatusText.Text = text ?? string.Empty; try { PaletteCoordinator.SetStatus(StatusText.Text); } catch { } }
     }

@@ -8,9 +8,10 @@ ENGINE = ROOT / "src/QS3D.Core/Services/RegenerationEngine.cs"
 REVISION = ROOT / "src/QS3D.Core/Revisions/RevisionService.cs"
 HEALTH = ROOT / "src/QS3D.Core/Diagnostics/ModelHealthBaselineService.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/RegenerationPreviewSmoke.cs"
+STRUCTURAL_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/RegenerationPreviewStructuralFreshnessSmoke.cs"
 errors = []
 
-for path in (SOURCE, ENGINE, REVISION, HEALTH, SMOKE):
+for path in (SOURCE, ENGINE, REVISION, HEALTH, SMOKE, STRUCTURAL_SMOKE):
     if not path.is_file():
         errors.append("missing regeneration preview contract file: " + str(path.relative_to(ROOT)))
 
@@ -21,7 +22,9 @@ if SOURCE.is_file():
         "public RegenerationPreview PreviewSubset(ProjectState project, IEnumerable<string> elementIds)",
         "public IReadOnlyList<string> TargetElementIds",
         "public bool IsSubset => TargetElementIds.Count > 0;",
-        "CanonicalPreviewTargets(elementIds)",
+        "var sourceElementOwnership = SnapshotElementOwnership(project);",
+        "CanonicalPreviewTargets(elementIds, sourceElementOwnership.Count)",
+        "RequireProjectFresh(project, sourceChangeVersion, sourceElementOwnership);",
         "public long SourceChangeVersion",
         "var sourceChangeVersion = project.ChangeVersion;",
         "preview.SourceChangeVersion != project.ChangeVersion",
@@ -40,28 +43,37 @@ if SOURCE.is_file():
         "ProjectStateSnapshot.Capture(project)",
         "snapshot.Restore(project)",
         "if (diff.NewErrorCount > 0)",
+        "private static IReadOnlyDictionary<string, ProjectElement> SnapshotElementOwnership",
+        "project.Elements.Count != expectedOwnership.Count",
+        "!ReferenceEquals(original, element)",
     ):
         if token not in text:
-            errors.append("RegenerationPreviewService missing detached/subset/version/stale/health guard token: " + token)
+            errors.append("RegenerationPreviewService missing detached/subset/version/structural/stale/health guard token: " + token)
 
 if ENGINE.is_file():
     text = ENGINE.read_text(encoding="utf-8")
     for token in (
         "public int RegenerateDirty(ProjectState project)",
         "public int RegenerateDirtySubset(ProjectState project, IEnumerable<string> elementIds)",
-        "CanonicalTargetIds(elementIds)",
+        "var inputVersion = project.ChangeVersion;",
+        "var sourceElements = project.Elements.ToArray();",
+        "CanonicalTargetIds(elementIds, sourceElements.Length)",
+        "RequireElementStructureFresh(project, sourceElements);",
         "RegenerateTransactional(project, project.Elements, project.Elements.Count)",
         "string.IsNullOrWhiteSpace(raw)",
         "!string.Equals(raw, raw.Trim(), StringComparison.Ordinal)",
-        "if (!result.Add(raw))",
+        "if (result.Contains(raw))",
+        "if (result.Count >= maxCount)",
+        "if (unresolved.Remove(element.Id)) targets.Add(element);",
     ):
         if token not in text:
-            errors.append("RegenerationEngine lost transactional/canonical subset contract required by preview/apply: " + token)
+            errors.append("RegenerationEngine lost transactional/canonical/structural subset contract required by preview/apply: " + token)
     for forbidden in (
         "elementIds.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim())",
+        "CanonicalTargetIds(elementIds);",
     ):
         if forbidden in text:
-            errors.append("Subset regeneration must not normalize/drop malformed target IDs: " + forbidden)
+            errors.append("Subset regeneration must not normalize/drop malformed target IDs or use an unbounded legacy helper: " + forbidden)
 
 if REVISION.is_file():
     text = REVISION.read_text(encoding="utf-8")
@@ -89,6 +101,18 @@ if SMOKE.is_file():
         if token not in text:
             errors.append("RegenerationPreviewSmoke missing regression token: " + token)
 
+if STRUCTURAL_SMOKE.is_file():
+    text = STRUCTURAL_SMOKE.read_text(encoding="utf-8")
+    for token in (
+        "ReplacementDuringSubsetEnumerationFailsFreshness();",
+        "StableSubsetStillPreviews();",
+        "project.Elements[index] = replacement;",
+        "element ownership changed",
+        "failed preview must not mutate live target quantities",
+    ):
+        if token not in text:
+            errors.append("RegenerationPreviewStructuralFreshnessSmoke missing regression token: " + token)
+
 if errors:
     print("QS3D regeneration preview preflight")
     for error in errors:
@@ -96,4 +120,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: semantic regeneration supports whole-project and canonical subset detached dry-runs bound to ChangeVersion, revision/health diff, scope-preserving stale rejection and rollback on new Model Health errors.")
+print("PASS: semantic regeneration supports whole-project and bounded canonical subset detached dry-runs bound to ChangeVersion plus structural ownership freshness, revision/health diff, scope-preserving stale rejection and rollback on new Model Health errors.")

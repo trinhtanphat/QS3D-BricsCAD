@@ -5,6 +5,7 @@ using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Diagnostics;
+using QS3D.Core.Domain;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -21,7 +22,51 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
+                if (selectedIds.Length == 0)
+                {
+                    Report(document, "Beam Stirrup 3D: chọn Beam semantic LINE có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8).");
+                    return;
+                }
+
+                var selectedHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var id in selectedIds)
+                {
+                    try { selectedHandles.Add(id.Handle.ToString()); }
+                    catch { }
+                }
+                if (selectedHandles.Count == 0)
+                {
+                    Report(document, "Beam Stirrup 3D: selection không có source handle hợp lệ.");
+                    return;
+                }
+
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
+                {
+                    Report(document, "Beam Stirrup 3D: BLOCKED • chưa có QS3D project hiện hữu; lệnh không tạo project mới từ selection.");
+                    return;
+                }
+
+                var previewTargets = ResolveBeamTargets(previewProject, selectedHandles);
+                if (previewTargets.Count == 0)
+                {
+                    Report(document, "Beam Stirrup 3D: chọn Beam semantic LINE có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8).");
+                    return;
+                }
+
+                var expectedProjectId = previewProject.ProjectId;
+                var expectedChangeVersion = previewProject.ChangeVersion;
+                var expectedTargetIds = new HashSet<string>(previewTargets.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+
                 var project = ExistingProjectMutationContext.Require(document, "Beam Stirrup 3D");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    project.ChangeVersion != expectedChangeVersion)
+                    throw new InvalidOperationException("Beam Stirrup 3D: QS3D project đã thay đổi sau khi đọc selection; hãy chọn lại target.");
+
+                var targets = ResolveBeamTargets(project, selectedHandles);
+                if (!expectedTargetIds.SetEquals(targets.Select(x => x.Id)))
+                    throw new InvalidOperationException("Beam Stirrup 3D: semantic Beam target set đã thay đổi sau khi đọc selection; hãy chọn lại target.");
+
                 var result = BeamStirrupSolidBuilder.BuildSelected(document, project);
                 var message = result.Stirrups == 0
                     ? "Beam Stirrup 3D: chọn Beam semantic LINE có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8)."
@@ -71,6 +116,12 @@ namespace QS3D.BricsCAD.V25
                 Report(document, "QS3DREBARSTIRRUPHEALTH lỗi: " + ex.Message);
             }
         }
+
+        private static List<ProjectElement> ResolveBeamTargets(ProjectState project, HashSet<string> selectedHandles) =>
+            project.Elements
+                .Where(x => x.Category == ElementCategory.Beam && x.SourceHandles.Any(selectedHandles.Contains))
+                .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
         private static void FinalizeUi(Document document, string message)
         {

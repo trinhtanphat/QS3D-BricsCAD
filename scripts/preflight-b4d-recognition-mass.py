@@ -15,6 +15,7 @@ paths = {
     "policy": ROOT / "src/QS3D.Core/Services/MeasuredSolidQuantityPolicy.cs",
     "regen": ROOT / "src/QS3D.Core/Services/RegenerationEngine.cs",
     "review": ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs",
+    "apply": ROOT / "src/QS3D.BricsCAD.V25/Services/RecognitionApplyBatchService.cs",
     "logic_smoke": ROOT / "tests/QS3D.Core.SmokeTests/LogicRegressionSmoke.cs",
     "quantity_smoke": ROOT / "tests/QS3D.Core.SmokeTests/ProjectQuantitySmoke.cs",
 }
@@ -25,10 +26,12 @@ for name, path in paths.items():
     else:
         texts[name] = path.read_text(encoding="utf-8")
 
+
 def require(name, tokens):
     for token in tokens:
         if token not in texts.get(name, ""):
             errors.append(paths[name].name + " missing B4D recognition/mass token: " + token)
+
 
 require("engine", (
     "public static bool IsEntityTypeCompatible",
@@ -37,8 +40,19 @@ require("engine", (
 ))
 require("project", (
     "ExactLayerMapping(project, snapshot)",
-    "RecognitionEngine.IsEntityTypeCompatible(category, snapshot.EntityType)",
+    "if (mapped != null) return new RecognitionResult(snapshot, new[] { mapped });",
+    "if (!TryParseNamedCategory(item.Value, out var category))",
+    'RuleId = "project-layer:" + pattern, Category = category, Confidence = 0.99d',
 ))
+project = texts.get("project", "")
+exact_start = project.find("private static RecognitionCandidate? ExactLayerMapping")
+exact_end = project.find("private static List<KeyValuePair<string, string>> CaptureLayerMappingState", exact_start)
+exact_block = project[exact_start:exact_end] if exact_start >= 0 and exact_end > exact_start else ""
+if not exact_block:
+    errors.append("ProjectRecognitionService ExactLayerMapping block was not found.")
+elif "RecognitionEngine.IsEntityTypeCompatible" in exact_block:
+    errors.append("Exact project layer mappings must remain authoritative and must not be rejected by fallback entity-type compatibility.")
+
 require("snapshot", ("SurfaceAreaDrawingUnitsSquared", "VolumeDrawingUnitsCubed"))
 require("reader", (
     "snapshot.SurfaceAreaDrawingUnitsSquared = area",
@@ -68,16 +82,36 @@ require("policy", (
     "case ElementCategory.WallFinish:",
 ))
 require("regen", ("MeasuredSolidQuantityPolicy.Apply(element)",))
+
+# Recognition/B4D review now delegates all mutation to the atomic batch service.
 require("review", (
-    "if (!ExistingProjectMutationContext.TryGet(doc, out var currentProject))",
-    "SemanticCaptureService.CaptureSnapshot(doc, refreshed.Snapshot, candidate.Category)",
-    "var captured = SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(currentProject, result.Handle)",
-    'AuditTrail.ForProject(currentProject).Record("recognition.apply", captured.Id',
+    "var reviewProjectId = project.ProjectId;",
+    "RecognitionApplyBatchService.PrepareStrict(",
+    "RecognitionApplyBatchService.PrepareBestEffort(doc, reviewProjectId, batch.AutoAccepted)",
+    "RecognitionApplyBatchService.Commit(doc, reviewProjectId, plan)",
+    "RecognitionApplyBatchService.Commit(doc, reviewProjectId, autoPlan)",
 ))
+require("apply", (
+    "ExistingProjectMutationContext.TryGet(document, out var project)",
+    "string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase)",
+    "EntitySnapshotReader.ReadHandles(document, new[] { result.Handle })",
+    "new ProjectRecognitionService().Suggest(project, liveSnapshots[0])",
+    "candidate.Category != expectedCandidate.Category",
+    "!refreshed.IsCaptureReady",
+    "ProjectStateSnapshot.Capture(project)",
+    "SemanticCaptureService.CaptureSnapshot(document, item.Snapshot, item.Category)",
+    "SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, item.Handle)",
+    '"recognition.apply",',
+    'audit.Record("recognition.skip", skip.Handle, skip.Reason);',
+    "rollback.Restore(project)",
+))
+
 require("logic_smoke", (
-    "RecognitionRejectsEntityTypeMismatch",
+    "RecognitionKeepsFallbackTypeGateWithAuthoritativeProjectMapping",
     'new EntitySnapshot("TXT", "DBText", "A-WALL")',
-    "mapped.TopCandidate == null",
+    "fallback.TopCandidate == null",
+    "mapped.TopCandidate != null",
+    "Equal(ElementCategory.ArchitecturalWall, mapped.TopCandidate!.Category)",
 ))
 require("quantity_smoke", (
     "MeasuredSolidMassOverridesDefaultPrismVolume",
@@ -93,4 +127,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: B4D re-resolves and canonically binds current project/source ownership before guarded mutation while preserving native Solid3d mass provenance and entity-type recognition gates.")
+print("PASS: B4D recognition uses live revalidation plus atomic batch commit/rollback while fallback entity-type gates, authoritative project mappings, and native Solid3d mass provenance remain guarded.")

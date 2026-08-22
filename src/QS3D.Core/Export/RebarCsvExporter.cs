@@ -10,6 +10,9 @@ namespace QS3D.Core.Export
 {
     public static class RebarCsvExporter
     {
+        private const int MaxRowCount = 10000;
+        private static readonly UTF8Encoding StrictUtf8WithBom = CreateStrictUtf8WithBom();
+
         public static void Export(string path, IEnumerable<RebarScheduleRow> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Path is required.", nameof(path));
@@ -21,7 +24,7 @@ namespace QS3D.Core.Export
             try
             {
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                using (var writer = new StreamWriter(stream, new UTF8Encoding(true)))
+                using (var writer = new StreamWriter(stream, StrictUtf8WithBom))
                 {
                     writer.Write(content);
                     writer.Flush();
@@ -39,9 +42,13 @@ namespace QS3D.Core.Export
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
             var sb = new StringBuilder();
-            sb.AppendLine("ElementId,BarMark,ShapeCode,Notation,DiameterMm,Quantity,CuttingLengthM,TotalLengthM,UnitWeightKgM,NetWeightKg,WastePercent,TotalWeightKg,FabricationStatus,FabricationStandardCode,FabricationDetailingRevision");
+            sb.Append("ElementId,BarMark,ShapeCode,Notation,DiameterMm,Quantity,CuttingLengthM,TotalLengthM,UnitWeightKgM,NetWeightKg,WastePercent,TotalWeightKg,FabricationStatus,FabricationStandardCode,FabricationDetailingRevision").Append("\r\n");
+            var rowCount = 0;
             foreach (var row in rows)
             {
+                if (rowCount >= MaxRowCount)
+                    throw new ArgumentOutOfRangeException(nameof(rows), "BBS CSV exceeds the supported row bound of " + MaxRowCount + ".");
+                rowCount++;
                 ValidateRow(row ?? throw new ArgumentException("BBS row cannot be null.", nameof(rows)));
                 sb.Append(Q(row.ElementId)).Append(',')
                     .Append(Q(row.BarMark)).Append(',')
@@ -57,9 +64,19 @@ namespace QS3D.Core.Export
                     .Append(F(row.TotalWeightKg)).Append(',')
                     .Append(Q(row.FabricationStatus)).Append(',')
                     .Append(Q(row.FabricationStandardCode)).Append(',')
-                    .Append(Q(row.FabricationDetailingRevision)).AppendLine();
+                    .Append(Q(row.FabricationDetailingRevision)).Append("\r\n");
             }
-            return sb.ToString();
+            var content = sb.ToString();
+            StrictUtf8WithBom.GetByteCount(content);
+            return content;
+        }
+
+        private static UTF8Encoding CreateStrictUtf8WithBom()
+        {
+            var encoding = (UTF8Encoding)new UTF8Encoding(true).Clone();
+            encoding.EncoderFallback = EncoderFallback.ExceptionFallback;
+            encoding.DecoderFallback = DecoderFallback.ExceptionFallback;
+            return encoding;
         }
 
         private static void ValidateRow(RebarScheduleRow row)
@@ -84,7 +101,10 @@ namespace QS3D.Core.Export
             if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d) throw new ArgumentOutOfRangeException(name, "BBS CSV numeric value must be finite and non-negative.");
         }
 
-        private static string F(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
+        private static string F(double value)
+        {
+            return value == 0d ? "0" : value.ToString("R", CultureInfo.InvariantCulture);
+        }
 
         private static string Q(string value)
         {

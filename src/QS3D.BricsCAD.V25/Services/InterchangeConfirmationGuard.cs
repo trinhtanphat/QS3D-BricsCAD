@@ -19,11 +19,13 @@ namespace QS3D.BricsCAD.V25.Services
             if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
                 throw new InvalidOperationException(operation + " requires the DWG that was reviewed to remain active.");
 
-            var currentProject = QS3D.BricsCAD.V25.ProjectContextCoordinator.GetOrCreate(document);
-            if (!ReferenceEquals(currentProject, reviewedProject) || currentProject.ChangeVersion != reviewedChangeVersion)
+            if (!QS3D.BricsCAD.V25.ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject) ||
+                !ReferenceEquals(currentProject, reviewedProject) ||
+                currentProject.ChangeVersion != reviewedChangeVersion)
                 throw new InvalidOperationException(
                     operation + " target semantic project changed after preview. Run the command again to review a fresh plan.");
 
+            QS3D.BricsCAD.V25.ProjectContextCoordinator.RequireBackingStoreUnchanged(document, currentProject, operation);
             return currentProject;
         }
     }

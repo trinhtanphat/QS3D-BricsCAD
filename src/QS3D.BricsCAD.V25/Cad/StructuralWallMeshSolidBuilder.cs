@@ -28,6 +28,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private sealed class PendingUpdate
         {
             public ProjectElement Element { get; set; } = null!;
+            public CadElementVerticalPlacement VerticalPlacement { get; set; } = null!;
             public List<string> Handles { get; } = new List<string>();
             public double HorizontalDiameterMm { get; set; }
             public double VerticalDiameterMm { get; set; }
@@ -98,7 +99,15 @@ namespace QS3D.BricsCAD.V25.Cad
                         var planarityTolerance = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, .005d, element.Id + "/wall mesh planarity tolerance"), element.Id + "/wall mesh planarity tolerance drawing");
                         if (Math.Abs(dz) > planarityTolerance) throw new InvalidOperationException("StructuralWall mesh 3D hiện yêu cầu source LINE gần ngang (|ΔZ| <= 0.005 m): " + element.Id);
                         var lengthM = CadGeometryGuard.ToMeters(document, lengthDrawing, element.Id + "/wall length");
-                        var heightM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "HeightM", 3d), element.Id + "/HeightM");
+                        var verticalPlacement = CadElementVerticalPlacement.Resolve(
+                            document,
+                            project,
+                            element,
+                            family,
+                            line.StartPoint.Z,
+                            "HeightM",
+                            3.6d);
+                        var heightM = verticalPlacement.HeightM;
                         var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", .2d), element.Id + "/ThicknessM");
                         var coverM = CadGeometryGuard.Number(element, family, "RebarWallCoverM", CadGeometryGuard.Number(element, family, "RebarCoverM", .02d));
                         if (coverM < 0d) throw new InvalidOperationException(element.Id + "/RebarWallCoverM phải >= 0.");
@@ -126,20 +135,19 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (batchBars > MaxBarsPerBatch - layout.Count) throw new InvalidOperationException("StructuralWall mesh batch vượt giới hạn " + MaxBarsPerBatch + " bar.");
                         batchBars = checked(batchBars + layout.Count);
 
-                        ErasePrevious(document, transaction, element, ownership);
+                        ErasePrevious(document, transaction, project, element, ownership);
                         var ux = dx / lengthDrawing;
                         var uy = dy / lengthDrawing;
                         var axis = new Vector3d(ux, uy, 0d);
                         var normal = new Vector3d(-uy, ux, 0d);
                         var midX = CadGeometryGuard.Midpoint(line.StartPoint.X, line.EndPoint.X, element.Id + "/wall mid X");
                         var midY = CadGeometryGuard.Midpoint(line.StartPoint.Y, line.EndPoint.Y, element.Id + "/wall mid Y");
-                        var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                        var centerOffsetM = CadGeometryGuard.Add(bottomM, heightM / 2d, element.Id + "/wall mesh center offset Z");
-                        var centerZ = CadGeometryGuard.Add(line.StartPoint.Z, CadGeometryGuard.ToDrawingUnits(document, centerOffsetM, element.Id + "/wall mesh center offset Z"), element.Id + "/wall mesh center Z");
+                        var centerZ = verticalPlacement.CenterDrawing;
                         var wallCenter = new Point3d(midX, midY, centerZ);
                         var update = new PendingUpdate
                         {
                             Element = element,
+                            VerticalPlacement = verticalPlacement,
                             HorizontalDiameterMm = horizontal.DiameterMm,
                             VerticalDiameterMm = vertical.DiameterMm,
                             CoverM = coverM,
@@ -188,6 +196,7 @@ namespace QS3D.BricsCAD.V25.Cad
                                 bar.Layer = line.Layer;
                                 modelSpace.AppendEntity(bar);
                                 transaction.AddNewlyCreatedDBObject(bar, true);
+                                GeneratedRebarNativeOwnershipService.MarkGenerated(document, transaction, bar, project, element, HandlesKey);
                                 update.Handles.Add(bar.Handle.ToString());
                                 bar = null;
                             }
@@ -197,7 +206,6 @@ namespace QS3D.BricsCAD.V25.Cad
                     }
 
                     foreach (var update in pending) CommitSemanticUpdate(project, update);
-                    if (pending.Count > 0) project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
                 }
@@ -231,6 +239,7 @@ namespace QS3D.BricsCAD.V25.Cad
             update.Element.Properties["GeneratedWallMeshHorizontalActualSpacingM"] = update.HorizontalSpacingM.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedWallMeshVerticalActualSpacingM"] = update.VerticalSpacingM.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedWallMeshFaces"] = update.Faces;
+            CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedWallMesh", update.VerticalPlacement);
             AuditTrail.ForProject(project).Record("geometry.rebar.wall.mesh", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars");
         }
 
@@ -245,7 +254,7 @@ namespace QS3D.BricsCAD.V25.Cad
             return group;
         }
 
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
+        private static void ErasePrevious(Document document, Transaction transaction, ProjectState project, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -257,6 +266,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 var entity = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Entity;
                 if (entity == null || entity.IsErased) continue;
                 if (!(entity is Solid3d solid)) throw new InvalidOperationException("Generated StructuralWall mesh handle " + handle + " is live but is not a Solid3d. Refusing destructive erase.");
+                GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(solid, project, element, HandlesKey, "erase generated StructuralWall mesh " + handle);
                 solid.Erase();
             }
         }

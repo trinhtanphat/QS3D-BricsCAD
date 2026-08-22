@@ -31,6 +31,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private sealed class PendingUpdate
         {
             public ProjectElement Element { get; set; } = null!;
+            public CadElementVerticalPlacement VerticalPlacement { get; set; } = null!;
             public List<string> Handles { get; } = new List<string>();
             public double XDiameterMm { get; set; }
             public double YDiameterMm { get; set; }
@@ -92,7 +93,15 @@ namespace QS3D.BricsCAD.V25.Cad
                         var family = project.FindFamily(element.FamilyId);
                         var xGroup = ParseDirection(element, family, "RebarFoundationXNotation");
                         var yGroup = ParseDirection(element, family, "RebarFoundationYNotation");
-                        var thicknessM = CadGeometryGuard.Positive(CadGeometryGuard.Number(element, family, "ThicknessM", .5d), element.Id + "/ThicknessM");
+                        var verticalPlacement = CadElementVerticalPlacement.Resolve(
+                            document,
+                            project,
+                            element,
+                            family,
+                            polyline.Elevation,
+                            "ThicknessM",
+                            .5d);
+                        var thicknessM = verticalPlacement.HeightM;
                         var coverM = CadGeometryGuard.Number(element, family, "RebarFoundationCoverM", CadGeometryGuard.Number(element, family, "RebarCoverM", .05d));
                         if (coverM < 0d) throw new InvalidOperationException(element.Id + "/RebarFoundationCoverM phải >= 0.");
                         var faces = Text(element, family, "RebarFoundationFaces", "Bottom");
@@ -100,12 +109,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         var includeTop = string.Equals(faces, "Top", StringComparison.OrdinalIgnoreCase) || string.Equals(faces, "Both", StringComparison.OrdinalIgnoreCase);
                         if (!includeBottom && !includeTop) throw new InvalidOperationException(element.Id + "/RebarFoundationFaces phải là Bottom, Top hoặc Both.");
                         var xClosest = Boolean(element, family, "RebarFoundationXClosestToFace", true);
-                        var bottomM = CadGeometryGuard.Number(element, family, "BottomOffsetM", 0d);
-                        var centerOffsetM = CadGeometryGuard.Add(bottomM, thicknessM / 2d, element.Id + "/foundation mesh center offset Z");
-                        var centerZ = CadGeometryGuard.Add(
-                            polyline.Elevation,
-                            CadGeometryGuard.ToDrawingUnits(document, centerOffsetM, element.Id + "/foundation mesh center Z"),
-                            element.Id + "/foundation mesh world center Z");
+                        var centerZ = verticalPlacement.CenterDrawing;
 
                         var rectangle = TryReadRectangle(document, element, polyline);
                         if (rectangle != null)
@@ -127,9 +131,10 @@ namespace QS3D.BricsCAD.V25.Cad
                                 XClosestToFace = xClosest
                             });
                             ReserveBatchBars(ref batchBars, layout.Count);
-                            ErasePrevious(document, transaction, element, ownership);
-                            var update = CreateUpdate(element, xGroup, yGroup, coverM, layout.XActualSpacingM, layout.YActualSpacingM, includeBottom, includeTop, RectangleFootprintMode);
+                            ErasePrevious(document, transaction, project, element, ownership);
+                            var update = CreateUpdate(element, verticalPlacement, xGroup, yGroup, coverM, layout.XActualSpacingM, layout.YActualSpacingM, includeBottom, includeTop, RectangleFootprintMode);
                             AppendRectangleBars(document, transaction, modelSpace, polyline, element, rectangle, centerZ, layout, update);
+                            GeneratedRebarNativeOwnershipService.MarkFreshGeneratedHandles(document, transaction, project, element, HandlesKey, update.Handles);
                             pending.Add(update);
                             continue;
                         }
@@ -151,14 +156,14 @@ namespace QS3D.BricsCAD.V25.Cad
                             XClosestToFace = xClosest
                         });
                         ReserveBatchBars(ref batchBars, polygonLayout.Count);
-                        ErasePrevious(document, transaction, element, ownership);
-                        var polygonUpdate = CreateUpdate(element, xGroup, yGroup, coverM, polygonLayout.XActualSpacingM, polygonLayout.YActualSpacingM, includeBottom, includeTop, PolygonFootprintMode);
+                        ErasePrevious(document, transaction, project, element, ownership);
+                        var polygonUpdate = CreateUpdate(element, verticalPlacement, xGroup, yGroup, coverM, polygonLayout.XActualSpacingM, polygonLayout.YActualSpacingM, includeBottom, includeTop, PolygonFootprintMode);
                         AppendPolygonBars(document, transaction, modelSpace, polyline, element, centerZ, polygonLayout, polygonUpdate);
+                        GeneratedRebarNativeOwnershipService.MarkFreshGeneratedHandles(document, transaction, project, element, HandlesKey, polygonUpdate.Handles);
                         pending.Add(polygonUpdate);
                     }
 
                     foreach (var update in pending) CommitSemanticUpdate(project, update);
-                    if (pending.Count > 0) project.Touch();
                     transaction.Commit();
                     cadCommitted = true;
                 }
@@ -183,6 +188,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static PendingUpdate CreateUpdate(
             ProjectElement element,
+            CadElementVerticalPlacement verticalPlacement,
             RebarGroup xGroup,
             RebarGroup yGroup,
             double coverM,
@@ -195,6 +201,7 @@ namespace QS3D.BricsCAD.V25.Cad
             return new PendingUpdate
             {
                 Element = element,
+                VerticalPlacement = verticalPlacement,
                 XDiameterMm = xGroup.DiameterMm,
                 YDiameterMm = yGroup.DiameterMm,
                 CoverM = coverM,
@@ -309,6 +316,7 @@ namespace QS3D.BricsCAD.V25.Cad
             update.Element.Properties["GeneratedFoundationMeshXActualSpacingM"] = update.XSpacingM.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedFoundationMeshYActualSpacingM"] = update.YSpacingM.ToString("R", CultureInfo.InvariantCulture);
             update.Element.Properties["GeneratedFoundationMeshFaces"] = update.Faces;
+            CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedFoundationMesh", update.VerticalPlacement);
             update.Element.ClearGeneratedFoundationMeshStale();
             AuditTrail.ForProject(project).Record(
                 "geometry.rebar.foundation.mesh",
@@ -419,7 +427,7 @@ namespace QS3D.BricsCAD.V25.Cad
             return group;
         }
 
-        private static void ErasePrevious(Document document, Transaction transaction, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
+        private static void ErasePrevious(Document document, Transaction transaction, ProjectState project, ProjectElement element, GeneratedRebarOwnershipGuard.OwnershipIndex ownership)
         {
             if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
             foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -431,6 +439,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 var entity = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Entity;
                 if (entity == null || entity.IsErased) continue;
                 if (!(entity is Solid3d solid)) throw new InvalidOperationException("Generated foundation mesh handle " + handle + " is live but is not a Solid3d. Refusing destructive erase.");
+                GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(solid, project, element, HandlesKey, "erase generated foundation mesh " + handle);
                 solid.Erase();
             }
         }

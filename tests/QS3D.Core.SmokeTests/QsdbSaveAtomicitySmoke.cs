@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Xml.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
 
@@ -10,6 +11,9 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             FailedDurableReplaceRestoresPersistenceState();
+            SuccessfulSaveRoundTripsChangeVersion();
+            MissingCurrentChangeVersionIsRejected();
+            InvalidPersistedChangeVersionIsRejected();
         }
 
         private static void FailedDurableReplaceRestoresPersistenceState()
@@ -55,9 +59,101 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void SuccessfulSaveRoundTripsChangeVersion()
+        {
+            var path = TempProjectPath("version-roundtrip");
+            try
+            {
+                var project = new ProjectState("version-roundtrip", "Version roundtrip");
+                project.Touch();
+                project.Touch();
+                var beforeSaveVersion = project.ChangeVersion;
+                var store = new QsdbProjectStore();
+
+                store.Save(project, path);
+                Require(project.ChangeVersion == beforeSaveVersion + 1L, "Successful save did not advance the in-memory change version exactly once.");
+
+                var loaded = store.Load(path);
+                Require(loaded.ChangeVersion == project.ChangeVersion, "QSDB load did not restore the persisted change version.");
+                Require(loaded.UpdatedUtc == project.UpdatedUtc, "QSDB load did not restore the persisted UpdatedUtc timestamp.");
+            }
+            finally
+            {
+                Cleanup(path);
+            }
+        }
+
+        private static void MissingCurrentChangeVersionIsRejected()
+        {
+            var path = TempProjectPath("missing-current-version");
+            try
+            {
+                var store = new QsdbProjectStore();
+                store.Save(new ProjectState("missing-current-version", "Missing current version"), path);
+                var document = XDocument.Load(path);
+                document.Root?.Attribute("changeVersion")?.Remove();
+                document.Save(path, SaveOptions.DisableFormatting);
+
+                Throws<InvalidDataException>(
+                    () => store.Load(path),
+                    "Current schema-3 QSDB without changeVersion was accepted instead of failing the strict persistence boundary.");
+            }
+            finally
+            {
+                Cleanup(path);
+            }
+        }
+
+        private static void InvalidPersistedChangeVersionIsRejected()
+        {
+            foreach (var invalid in new[] { "-1", "1.5", " 1", "9223372036854775808" })
+            {
+                var path = TempProjectPath("invalid-version");
+                try
+                {
+                    var store = new QsdbProjectStore();
+                    store.Save(new ProjectState("invalid-version", "Invalid version"), path);
+                    var document = XDocument.Load(path);
+                    var root = document.Root ?? throw new Exception("Saved QSDB has no root element.");
+                    root.SetAttributeValue("changeVersion", invalid);
+                    document.Save(path, SaveOptions.DisableFormatting);
+
+                    Throws<InvalidDataException>(() => store.Load(path), "Invalid QSDB changeVersion was accepted: " + invalid);
+                }
+                finally
+                {
+                    Cleanup(path);
+                }
+            }
+        }
+
+        private static string TempProjectPath(string prefix) =>
+            Path.Combine(Path.GetTempPath(), "qs3d-" + prefix + "-" + Guid.NewGuid().ToString("N") + ".qsdb");
+
+        private static void Cleanup(string path)
+        {
+            foreach (var candidate in new[] { path, path + ".bak", path + ".tmp", path + ".lock" })
+            {
+                try { if (File.Exists(candidate)) File.Delete(candidate); } catch { }
+            }
+        }
+
         private static void Require(bool value, string message)
         {
             if (!value) throw new Exception(message);
+        }
+
+        private static void Throws<T>(Action action, string message) where T : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (T)
+            {
+                return;
+            }
+            throw new Exception(message);
         }
     }
 }

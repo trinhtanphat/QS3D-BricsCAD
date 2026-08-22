@@ -8,9 +8,10 @@ errors = []
 
 xaml_path = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml"
 code_path = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.Interactions.cs"
+shortcut_path = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.SearchShortcuts.cs"
 main_code_path = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs"
 
-for path in (xaml_path, code_path, main_code_path):
+for path in (xaml_path, code_path, shortcut_path, main_code_path):
     if not path.is_file():
         errors.append("missing RightPanel interaction dependency: " + str(path.relative_to(ROOT)))
 
@@ -39,11 +40,6 @@ if xaml_path.is_file():
 if code_path.is_file():
     text = code_path.read_text(encoding="utf-8")
     for token in (
-        "OnRightPanelPreviewKeyDown",
-        "ModifierKeys.Control && e.Key == Key.F",
-        "ModifierKeys.None && e.Key == Key.F5",
-        "LayerSearchBox.Focus();",
-        "OnRefreshClick(this, new RoutedEventArgs());",
         "OnDrawingListPreviewMouseRightButtonDown",
         "OnLayerListPreviewMouseRightButtonDown",
         "if (!item.IsSelected)",
@@ -61,6 +57,18 @@ if code_path.is_file():
     ):
         if forbidden in text:
             errors.append("RightPanel interaction accelerator must reuse existing handlers, not duplicate CAD mutation logic: " + forbidden)
+
+if shortcut_path.is_file():
+    text = shortcut_path.read_text(encoding="utf-8")
+    for token in (
+        "private void OnRightPanelPreviewKeyDown(object sender, KeyEventArgs e)",
+        "ModifierKeys.Control && e.Key == Key.F",
+        "LayerSearchBox?.Focus();",
+        "ModifierKeys.None && e.Key == Key.F5",
+        "Refresh();",
+    ):
+        if token not in text:
+            errors.append("RightPanel.SearchShortcuts.cs missing keyboard contract: " + token)
 
 if main_code_path.is_file():
     text = main_code_path.read_text(encoding="utf-8")

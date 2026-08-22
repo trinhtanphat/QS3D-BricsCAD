@@ -105,15 +105,9 @@ namespace QS3D.Core.Geometry
                     throw new ArgumentException("Polygon contains a zero-length edge at vertex " + i + ".", nameof(polygon));
             }
 
-            var twiceArea = 0d;
-            for (var i = 0; i < vertices.Count; i++)
-            {
-                var a = vertices[i];
-                var b = vertices[(i + 1) % vertices.Count];
-                twiceArea += a.X * b.Y - b.X * a.Y;
-                if (!Finite(twiceArea)) throw new OverflowException("Polygon signed area exceeds the supported numeric range.");
-            }
-            if (Math.Abs(twiceArea) <= Epsilon) throw new ArgumentException("Polygon area is zero or below tolerance.", nameof(polygon));
+            var signedArea = PolylineMetrics.SignedArea(vertices);
+            if (Math.Abs(signedArea) <= Epsilon * 0.5d)
+                throw new ArgumentException("Polygon area is zero or below tolerance.", nameof(polygon));
 
             ValidateSimple(vertices);
             return vertices.AsReadOnly();
@@ -161,8 +155,60 @@ namespace QS3D.Core.Geometry
 
         private static double Orientation(Point2 a, Point2 b, Point2 c)
         {
-            var value = (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
-            if (!Finite(value)) throw new OverflowException("Polygon orientation exceeds the supported numeric range.");
+            var ax = b.X - a.X;
+            var ay = b.Y - a.Y;
+            var bx = c.X - a.X;
+            var by = c.Y - a.Y;
+            if (Finite(ax) && Finite(ay) && Finite(bx) && Finite(by))
+                return CrossFinite(ax, ay, bx, by, "Polygon orientation");
+
+            var scaleX = Math.Max(Math.Abs(a.X), Math.Max(Math.Abs(b.X), Math.Abs(c.X)));
+            var scaleY = Math.Max(Math.Abs(a.Y), Math.Max(Math.Abs(b.Y), Math.Abs(c.Y)));
+            if (!Finite(scaleX) || !Finite(scaleY))
+                throw new OverflowException("Polygon orientation input exceeds the supported numeric range.");
+            if (scaleX == 0d || scaleY == 0d) return 0d;
+
+            ax = b.X / scaleX - a.X / scaleX;
+            bx = c.X / scaleX - a.X / scaleX;
+            ay = b.Y / scaleY - a.Y / scaleY;
+            by = c.Y / scaleY - a.Y / scaleY;
+            var normalized = ax * by - ay * bx;
+            if (!Finite(normalized)) throw new OverflowException("Polygon orientation exceeds the supported numeric range.");
+            return RestorePredicateCross(normalized, scaleX, scaleY);
+        }
+
+        private static double CrossFinite(double ax, double ay, double bx, double by, string label)
+        {
+            var firstProduct = ax * by;
+            var secondProduct = ay * bx;
+            if (Finite(firstProduct) && Finite(secondProduct))
+            {
+                var direct = firstProduct - secondProduct;
+                if (Finite(direct)) return direct;
+            }
+
+            var scaleA = Math.Max(Math.Abs(ax), Math.Abs(ay));
+            var scaleB = Math.Max(Math.Abs(bx), Math.Abs(by));
+            if (!Finite(scaleA) || !Finite(scaleB)) throw new OverflowException(label + " input exceeds the supported numeric range.");
+            if (scaleA == 0d || scaleB == 0d) return 0d;
+
+            var normalized = ax / scaleA * (by / scaleB) - ay / scaleA * (bx / scaleB);
+            if (!Finite(normalized)) throw new OverflowException(label + " exceeds the supported numeric range.");
+            return RestorePredicateCross(normalized, scaleA, scaleB);
+        }
+
+        private static double RestorePredicateCross(double normalized, double firstScale, double secondScale)
+        {
+            if (normalized == 0d) return 0d;
+
+            var smaller = Math.Min(firstScale, secondScale);
+            var larger = Math.Max(firstScale, secondScale);
+            var scaleFirst = Math.Abs(normalized) <= 1d ? larger : smaller;
+            var scaleSecond = Math.Abs(normalized) <= 1d ? smaller : larger;
+            var scaled = normalized * scaleFirst;
+            if (!Finite(scaled)) return normalized > 0d ? double.MaxValue : -double.MaxValue;
+            var value = scaled * scaleSecond;
+            if (!Finite(value)) return scaled > 0d ? double.MaxValue : -double.MaxValue;
             return value;
         }
 

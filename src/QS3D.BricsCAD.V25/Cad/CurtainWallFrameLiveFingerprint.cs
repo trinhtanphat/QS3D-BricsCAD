@@ -28,6 +28,18 @@ namespace QS3D.BricsCAD.V25.Cad
             var text = new StringBuilder();
             text.Append("host=").Append(host.Id).Append('|').Append(hostSource.Handle.ToString()).Append('|');
             AppendHostGeometry(text, hostSource);
+            double hostSourceBaseDrawing;
+            if (hostSource is Line hostLine) hostSourceBaseDrawing = hostLine.StartPoint.Z;
+            else if (hostSource is Polyline hostPolyline) hostSourceBaseDrawing = hostPolyline.Elevation;
+            else throw new InvalidOperationException("Curtain live fingerprint supports only LINE or POLYLINE GlassWall sources.");
+            var hostPlacement = CadElementVerticalPlacement.Resolve(
+                document,
+                project,
+                host,
+                project.FindFamily(host.FamilyId),
+                hostSourceBaseDrawing,
+                "HeightM",
+                3.6d);
 
             foreach (var opening in project.Elements
                 .Where(x => (x.Category == ElementCategory.Door || x.Category == ElementCategory.WallOpening) &&
@@ -37,12 +49,8 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 var family = project.FindFamily(opening.FamilyId);
                 var width = CadGeometryGuard.Number(opening, family, "WidthM", 0d);
-                var height = CadGeometryGuard.Number(opening, family, "HeightM", 0d);
-                var sill = CadGeometryGuard.Number(opening, family, "SillHeightM", opening.Category == ElementCategory.Door ? 0d : 0.9d);
                 var clearance = CadGeometryGuard.Number(opening, family, "BooleanClearanceM", 0.01d);
                 Finite(width, opening.Id + "/WidthM");
-                Finite(height, opening.Id + "/HeightM");
-                Finite(sill, opening.Id + "/SillHeightM");
                 Finite(clearance, opening.Id + "/BooleanClearanceM");
 
                 var sourceIds = CadHandleService.Resolve(document, opening.SourceHandles);
@@ -54,6 +62,17 @@ namespace QS3D.BricsCAD.V25.Cad
                 Extents3d extents;
                 try { extents = entity.GeometricExtents; }
                 catch (Exception ex) { throw new InvalidOperationException("Curtain live fingerprint cannot read extents for " + opening.Id + ".", ex); }
+                var openingPlacement = CadHostedOpeningVerticalPlacement.Resolve(
+                    document,
+                    project,
+                    opening,
+                    family,
+                    extents.MinPoint.Z,
+                    hostPlacement,
+                    0d,
+                    opening.Category == ElementCategory.Door ? 0d : 0.9d);
+                var height = openingPlacement.HeightM;
+                var sill = openingPlacement.SillHeightM;
 
                 text.Append("|opening=").Append(opening.Id)
                     .Append(':').Append(opening.Category)

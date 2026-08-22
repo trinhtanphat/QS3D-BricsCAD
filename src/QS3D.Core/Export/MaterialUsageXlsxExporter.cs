@@ -12,10 +12,36 @@ namespace QS3D.Core.Export
 {
     public static class MaterialUsageXlsxExporter
     {
+        private const int MaxDataRows = 1048575;
+        private const int MaxCellTextCharacters = 32767;
+
         public static void Export(string path, IReadOnlyList<MaterialUsageRow> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            var rowCount = rows.Count;
+            if (rowCount > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Material XLSX export supports at most " + MaxDataRows + " data rows.");
+            var snapshot = new List<MaterialUsageRow>(rowCount);
+            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+            {
+                var sourceRow = rows[rowIndex];
+                if (sourceRow == null)
+                    throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
+                var row = SnapshotRow(sourceRow);
+                ValidateCellText(row.Floor, rowIndex, "Floor");
+                ValidateCellText(row.MaterialName, rowIndex, "MaterialName");
+                ValidateCellText(row.UnitHint, rowIndex, "UnitHint");
+                ValidateCellText(row.Component, rowIndex, "Component");
+                ValidateCellText(row.Category, rowIndex, "Category");
+                ValidateCellText(row.FamilyName, rowIndex, "FamilyName");
+                ValidateCount(row.ElementCount, rowIndex, "ElementCount");
+                ValidateNonNegative(row.PrimaryQuantity, rowIndex, "PrimaryQuantity");
+                ValidateNonNegative(row.LengthM, rowIndex, "LengthM");
+                ValidateNonNegative(row.AreaM2, rowIndex, "AreaM2");
+                ValidateNonNegative(row.VolumeM3, rowIndex, "VolumeM3");
+                ValidateNonNegative(row.MassKg, rowIndex, "MassKg");
+                snapshot.Add(row);
+            }
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -30,7 +56,7 @@ namespace QS3D.Core.Export
                     Write(archive, "xl/workbook.xml", WorkbookXml);
                     Write(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
                     Write(archive, "xl/styles.xml", StylesXml);
-                    Write(archive, "xl/worksheets/sheet1.xml", BuildSheet(rows));
+                    Write(archive, "xl/worksheets/sheet1.xml", BuildSheet(snapshot));
                 }
                 Validate(tempPath);
                 AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
@@ -91,16 +117,60 @@ namespace QS3D.Core.Export
                 "xl/worksheets/sheet1.xml");
         }
 
+        private static MaterialUsageRow SnapshotRow(MaterialUsageRow row)
+        {
+            return new MaterialUsageRow
+            {
+                Floor = row.Floor ?? string.Empty,
+                MaterialName = row.MaterialName ?? string.Empty,
+                UnitHint = row.UnitHint ?? string.Empty,
+                Component = row.Component ?? string.Empty,
+                Category = row.Category ?? string.Empty,
+                FamilyName = row.FamilyName ?? string.Empty,
+                ElementCount = row.ElementCount,
+                LengthM = row.LengthM,
+                AreaM2 = row.AreaM2,
+                VolumeM3 = row.VolumeM3,
+                MassKg = row.MassKg
+            };
+        }
+
+        private static void ValidateCellText(string value, int rowIndex, string fieldName)
+        {
+            var text = value ?? string.Empty;
+            if (text.Length > MaxCellTextCharacters)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Material XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+        }
+
+        private static void ValidateCount(int value, int rowIndex, string fieldName)
+        {
+            if (value < 0)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Material XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be non-negative.");
+        }
+
+        private static void ValidateNonNegative(double value, int rowIndex, string fieldName)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Material XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be finite and non-negative.");
+        }
+
         private static void StringCell(StringBuilder sb, string cellRef, string value, int style)
         {
-            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>")
-                .Append(SecurityElement.Escape(value ?? string.Empty)).Append("</t></is></c>");
+            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is>");
+            XlsxXmlText.AppendTextElement(sb, value);
+            sb.Append("</is></c>");
         }
 
         private static void NumberCell(StringBuilder sb, string cellRef, double value)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "Material XLSX numeric values must be finite.");
-            sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>").Append(value.ToString("0.########", CultureInfo.InvariantCulture)).Append("</v></c>");
+            sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>").Append(value.ToString("R", CultureInfo.InvariantCulture)).Append("</v></c>");
         }
 
         private static string CellRef(int columnZeroBased, int row)

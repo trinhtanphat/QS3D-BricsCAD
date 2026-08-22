@@ -2,12 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Reporting
 {
     public sealed class MaterialUsageRow
     {
+        public string ProjectId { get; set; } = string.Empty;
+        public string DrawingFingerprint { get; set; } = string.Empty;
         public string Floor { get; set; } = string.Empty;
         public string MaterialName { get; set; } = string.Empty;
         public string UnitHint { get; set; } = string.Empty;
@@ -20,6 +23,7 @@ namespace QS3D.Core.Reporting
         public double VolumeM3 { get; set; }
         public double MassKg { get; set; }
         public IList<string> ElementIds { get; } = new List<string>();
+        public IList<string> SourceHandles { get; } = new List<string>();
 
         public double PrimaryQuantity
         {
@@ -30,7 +34,8 @@ namespace QS3D.Core.Reporting
                 if (unit == "m2") return AreaM2;
                 if (unit == "m3") return VolumeM3;
                 if (unit == "kg") return MassKg;
-                return 0d;
+                if (unit.Length == 0) return 0d;
+                throw new InvalidOperationException("Material Usage primary quantity does not support unit: " + UnitHint + ".");
             }
         }
 
@@ -46,6 +51,7 @@ namespace QS3D.Core.Reporting
         public static IReadOnlyList<MaterialUsageRow> Build(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Material usage schedule");
             RoomFinishIdentityService.ValidateProject(project);
             var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
@@ -58,10 +64,13 @@ namespace QS3D.Core.Reporting
             foreach (var element in project.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
                 if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
-                families.TryGetValue(element.FamilyId, out var family);
+                var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
+                families.TryGetValue(familyId, out var family);
+                if (family != null && family.Category != element.Category)
+                    throw new InvalidOperationException("Material usage element " + element.Id + " category " + element.Category + " does not match Family " + family.Id + " category " + family.Category + ". Repair the Family relation before reporting.");
                 var material = Effective(element, family, "Material");
                 if (material.Length > 0)
-                    Add(project, element, family, floors, units, rows, order, material, "Material", MetricsForMainMaterial(element));
+                    Add(project, element, family, floors, units, rows, order, material, "Material", MetricsForMainMaterial(element, family));
 
                 if (element.Category == ElementCategory.GlassWall)
                 {
@@ -88,13 +97,13 @@ namespace QS3D.Core.Reporting
             public double MassKg { get; set; }
         }
 
-        private static UsageMetrics MetricsForMainMaterial(ProjectElement element)
+        private static UsageMetrics MetricsForMainMaterial(ProjectElement element, ProjectFamily? family)
         {
             var metrics = new UsageMetrics
             {
                 LengthM = Q(element, "LengthM"),
                 VolumeM3 = QFirst(element, "NetVolumeM3", "VolumeM3"),
-                MassKg = Q(element, "WeightKg")
+                MassKg = EffectiveMass(element, family)
             };
 
             switch (element.Category)
@@ -132,6 +141,66 @@ namespace QS3D.Core.Reporting
             return metrics;
         }
 
+        private static double EffectiveMass(ProjectElement element, ProjectFamily? family)
+        {
+            var explicitMass = OptionalNonNegativeQuantity(element, "WeightKg", "MassKg");
+            if (explicitMass.HasValue) return explicitMass.Value;
+
+            var densityKgM3 = EffectiveDensity(element, family);
+            if (!densityKgM3.HasValue) return 0d;
+
+            var volume = OptionalNonNegativeQuantity(
+                element,
+                "NetConcreteM3",
+                "NetVolumeM3",
+                "GrossConcreteM3",
+                "GrossVolumeM3",
+                "VolumeM3",
+                "MeasuredVolumeM3");
+            if (!volume.HasValue) return 0d;
+
+            var mass = checked(volume.Value * densityKgM3.Value);
+            if (double.IsNaN(mass) || double.IsInfinity(mass))
+                throw new OverflowException("Material usage mass overflow: " + element.Id + "/volume*density.");
+            if (mass == 0d && volume.Value > 0d && densityKgM3.Value > 0d)
+                throw new InvalidOperationException("Material usage mass underflow: " + element.Id + "/volume*density rounded positive finite inputs to zero.");
+            if (volume.Value != 0d && densityKgM3.Value != 0d)
+            {
+                if (densityKgM3.Value != 1d && mass == volume.Value)
+                    throw new InvalidOperationException("Material usage mass lost the density contribution at double precision: " + element.Id + "/volume*density.");
+                if (volume.Value != 1d && mass == densityKgM3.Value)
+                    throw new InvalidOperationException("Material usage mass lost the volume contribution at double precision: " + element.Id + "/volume*density.");
+            }
+            return mass;
+        }
+
+        private static double? EffectiveDensity(ProjectElement element, ProjectFamily? family)
+        {
+            if (element.Properties.TryGetValue("DensityKgM3", out var instance) && !string.IsNullOrWhiteSpace(instance))
+                return PositiveInvariant(instance, element.Id + "/DensityKgM3");
+            if (family != null && family.Properties.TryGetValue("DensityKgM3", out var inherited) && !string.IsNullOrWhiteSpace(inherited))
+                return PositiveInvariant(inherited, "Family " + family.Id + "/DensityKgM3");
+            return null;
+        }
+
+        private static double PositiveInvariant(string value, string label)
+        {
+            if (!double.TryParse(value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ||
+                double.IsNaN(parsed) || double.IsInfinity(parsed) || parsed <= 0d)
+                throw new InvalidOperationException(label + " must be an invariant finite number greater than zero.");
+            return parsed;
+        }
+
+        private static double? OptionalNonNegativeQuantity(ProjectElement element, params string[] keys)
+        {
+            foreach (var key in keys)
+            {
+                if (!element.Quantities.ContainsKey(key)) continue;
+                return Q(element, key);
+            }
+            return null;
+        }
+
         private static void Add(
             ProjectState project,
             ProjectElement element,
@@ -144,14 +213,18 @@ namespace QS3D.Core.Reporting
             string component,
             UsageMetrics metrics)
         {
-            var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
-            var familyName = family?.Name ?? element.FamilyId;
+            var floorId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FloorId);
+            var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
+            var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
+            var familyName = family?.Name ?? familyId;
             var category = element.Category.ToString();
-            var key = element.FloorId + "\u001f" + material + "\u001f" + component + "\u001f" + category + "\u001f" + element.FamilyId;
+            var key = GroupKey(floorId, material, component, category, familyId);
             if (!rows.TryGetValue(key, out var row))
             {
                 row = new MaterialUsageRow
                 {
+                    ProjectId = project.ProjectId,
+                    DrawingFingerprint = project.DrawingFingerprint,
                     Floor = floor,
                     MaterialName = material,
                     UnitHint = units.TryGetValue(material, out var unit) ? unit : string.Empty,
@@ -168,6 +241,20 @@ namespace QS3D.Core.Reporting
             row.VolumeM3 = QuantityReportMath.Add(row.VolumeM3, metrics.VolumeM3, element.Id + "/material volume");
             row.MassKg = QuantityReportMath.Add(row.MassKg, metrics.MassKg, element.Id + "/material mass");
             row.ElementIds.Add(element.Id);
+            ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
+        }
+
+        private static string GroupKey(params string[] tokens)
+        {
+            var key = new StringBuilder();
+            foreach (var raw in tokens)
+            {
+                var token = raw ?? string.Empty;
+                key.Append(token.Length.ToString(CultureInfo.InvariantCulture))
+                    .Append(':')
+                    .Append(token);
+            }
+            return key.ToString();
         }
 
         private static string Effective(ProjectElement element, ProjectFamily? family, string key)

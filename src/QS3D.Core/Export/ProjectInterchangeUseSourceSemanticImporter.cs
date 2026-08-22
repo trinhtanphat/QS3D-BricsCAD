@@ -32,6 +32,9 @@ namespace QS3D.Core.Export
     public sealed class ProjectInterchangeUseSourceSemanticPlan
     {
         internal ProjectInterchangeUseSourceSemanticPlan(
+            string targetProjectId,
+            string targetDrawingFingerprint,
+            long targetChangeVersion,
             string sourceProjectId,
             int sourceSchemaVersion,
             string sourceDrawingFingerprint,
@@ -48,6 +51,11 @@ namespace QS3D.Core.Export
             IEnumerable<string> affectedTargetElementIds,
             IEnumerable<ProjectInterchangeNativeCleanupRequirement> nativeCleanupRequirements)
         {
+            TargetProjectId = (targetProjectId ?? string.Empty).Trim();
+            if (TargetProjectId.Length == 0) throw new ArgumentException("Target project id is required.", nameof(targetProjectId));
+            TargetDrawingFingerprint = (targetDrawingFingerprint ?? string.Empty).Trim();
+            if (targetChangeVersion < 0L) throw new ArgumentOutOfRangeException(nameof(targetChangeVersion), "Target change version cannot be negative.");
+            TargetChangeVersion = targetChangeVersion;
             SourceProjectId = sourceProjectId ?? string.Empty;
             SourceSchemaVersion = sourceSchemaVersion;
             SourceDrawingFingerprint = sourceDrawingFingerprint ?? string.Empty;
@@ -70,6 +78,9 @@ namespace QS3D.Core.Export
             TargetGeneratedHandlesToClean = NativeCleanupRequirements.Sum(x => x.OwnerHandles.Count);
         }
 
+        public string TargetProjectId { get; }
+        public string TargetDrawingFingerprint { get; }
+        public long TargetChangeVersion { get; }
         public string SourceProjectId { get; }
         public int SourceSchemaVersion { get; }
         public string SourceDrawingFingerprint { get; }
@@ -123,11 +134,19 @@ namespace QS3D.Core.Export
         private readonly HashSet<string> _elementIds;
         private readonly Dictionary<string, HashSet<string>> _ownerHandlesByElementId;
         private readonly bool _handleBound;
+        private readonly bool _targetBound;
+        private readonly string _targetProjectId;
+        private readonly string _targetDrawingFingerprint;
+        private readonly long _targetChangeVersion;
 
         private ProjectInterchangeNativeCleanupAuthorization(
             IEnumerable<string> elementIds,
             IEnumerable<ProjectInterchangeNativeCleanupRequirement> requirements,
-            bool handleBound)
+            bool handleBound,
+            bool targetBound,
+            string targetProjectId,
+            string targetDrawingFingerprint,
+            long targetChangeVersion)
         {
             _elementIds = new HashSet<string>(
                 (elementIds ?? Enumerable.Empty<string>())
@@ -141,16 +160,25 @@ namespace QS3D.Core.Export
                 _ownerHandlesByElementId[requirement.ElementId] = new HashSet<string>(requirement.OwnerHandles, StringComparer.OrdinalIgnoreCase);
             }
             _handleBound = handleBound;
+            _targetBound = targetBound;
+            _targetProjectId = (targetProjectId ?? string.Empty).Trim();
+            _targetDrawingFingerprint = (targetDrawingFingerprint ?? string.Empty).Trim();
+            _targetChangeVersion = targetChangeVersion;
             ElementIds = _elementIds.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
 
         public IReadOnlyList<string> ElementIds { get; }
         public bool IsHandleBound => _handleBound;
+        public bool IsTargetBound => _targetBound;
         public static ProjectInterchangeNativeCleanupAuthorization None { get; } =
             new ProjectInterchangeNativeCleanupAuthorization(
                 Array.Empty<string>(),
                 Array.Empty<ProjectInterchangeNativeCleanupRequirement>(),
-                handleBound: true);
+                handleBound: true,
+                targetBound: false,
+                targetProjectId: string.Empty,
+                targetDrawingFingerprint: string.Empty,
+                targetChangeVersion: 0L);
 
         public static ProjectInterchangeNativeCleanupAuthorization ForElementIds(IEnumerable<string> elementIds)
         {
@@ -158,7 +186,11 @@ namespace QS3D.Core.Export
             return new ProjectInterchangeNativeCleanupAuthorization(
                 elementIds,
                 Array.Empty<ProjectInterchangeNativeCleanupRequirement>(),
-                handleBound: false);
+                handleBound: false,
+                targetBound: false,
+                targetProjectId: string.Empty,
+                targetDrawingFingerprint: string.Empty,
+                targetChangeVersion: 0L);
         }
 
         public static ProjectInterchangeNativeCleanupAuthorization ForPlan(ProjectInterchangeUseSourceSemanticPlan plan)
@@ -167,15 +199,23 @@ namespace QS3D.Core.Export
             return new ProjectInterchangeNativeCleanupAuthorization(
                 plan.TargetElementIdsRequiringNativeCleanup,
                 plan.NativeCleanupRequirements,
-                handleBound: true);
+                handleBound: true,
+                targetBound: true,
+                targetProjectId: plan.TargetProjectId,
+                targetDrawingFingerprint: plan.TargetDrawingFingerprint,
+                targetChangeVersion: plan.TargetChangeVersion);
         }
 
-        internal bool MatchesExactly(IReadOnlyList<ProjectInterchangeNativeCleanupRequirement> requirements)
+        internal bool MatchesExactly(ProjectInterchangeUseSourceSemanticPlan plan)
         {
-            requirements = requirements ?? Array.Empty<ProjectInterchangeNativeCleanupRequirement>();
+            if (plan == null) return false;
+            var requirements = plan.NativeCleanupRequirements ?? Array.Empty<ProjectInterchangeNativeCleanupRequirement>();
             if (requirements.Count == 0) return _elementIds.Count == 0;
-            if (!_handleBound || _elementIds.Count != requirements.Count || _ownerHandlesByElementId.Count != requirements.Count)
+            if (!_handleBound || !_targetBound || _elementIds.Count != requirements.Count || _ownerHandlesByElementId.Count != requirements.Count)
                 return false;
+            if (!string.Equals(_targetProjectId, plan.TargetProjectId, StringComparison.OrdinalIgnoreCase)) return false;
+            if (!string.Equals(_targetDrawingFingerprint, plan.TargetDrawingFingerprint, StringComparison.OrdinalIgnoreCase)) return false;
+            if (_targetChangeVersion != plan.TargetChangeVersion) return false;
 
             foreach (var requirement in requirements)
             {
@@ -242,6 +282,39 @@ namespace QS3D.Core.Export
             public ProjectInterchangeUseSourceSemanticPlan Plan { get; }
         }
 
+        private sealed class ResolutionActionIndex
+        {
+            private readonly Dictionary<InterchangeIdentityKind, Dictionary<string, InterchangeImportResolutionAction>> _actionsByKind =
+                new Dictionary<InterchangeIdentityKind, Dictionary<string, InterchangeImportResolutionAction>>();
+
+            public ResolutionActionIndex(ProjectInterchangeImportResolutionPlan plan)
+            {
+                if (plan == null) throw new ArgumentNullException(nameof(plan));
+                foreach (var item in plan.Items)
+                {
+                    if (!_actionsByKind.TryGetValue(item.Kind, out var actionsById))
+                    {
+                        actionsById = new Dictionary<string, InterchangeImportResolutionAction>(StringComparer.OrdinalIgnoreCase);
+                        _actionsByKind.Add(item.Kind, actionsById);
+                    }
+
+                    if (actionsById.ContainsKey(item.Id))
+                        throw new InvalidOperationException("Sequence contains more than one matching element");
+                    actionsById.Add(item.Id, item.Action);
+                }
+            }
+
+            public bool ShouldAdd(InterchangeIdentityKind kind, string id)
+            {
+                if (!_actionsByKind.TryGetValue(kind, out var actionsById) ||
+                    !actionsById.TryGetValue(id ?? string.Empty, out var action))
+                    throw new InvalidOperationException("Sequence contains no matching element");
+                if (action == InterchangeImportResolutionAction.AddSourceSemanticData) return true;
+                if (action == InterchangeImportResolutionAction.UseSourceSemanticData) return false;
+                throw new InvalidOperationException("UseSource semantic mutation reached a non-executable resolution for " + kind + " " + id + ".");
+            }
+        }
+
         public const string ImportMode = "UseSourceSemanticData";
         public const string LastSemanticIdentitiesAddedKey = "Interchange.LastImport.SemanticIdentitiesAdded";
         public const string LastSemanticIdentitiesReplacedKey = "Interchange.LastImport.SemanticIdentitiesReplaced";
@@ -266,8 +339,8 @@ namespace QS3D.Core.Export
             var prepared = Prepare(target, json);
             EnsureNativeCleanupAuthorized(prepared.Plan, nativeCleanupAuthorization);
             var source = prepared.Source;
-            var resolution = prepared.Resolution;
             var plan = prepared.Plan;
+            var resolutionActions = new ResolutionActionIndex(prepared.Resolution);
             var snapshot = ProjectStateSnapshot.Capture(target);
 
             var targetHadZones = target.Zones.Count > 0;
@@ -282,7 +355,7 @@ namespace QS3D.Core.Export
             {
                 foreach (var zoneSnapshot in source.Zones.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (ShouldAdd(resolution, InterchangeIdentityKind.Zone, zoneSnapshot.Id))
+                    if (resolutionActions.ShouldAdd(InterchangeIdentityKind.Zone, zoneSnapshot.Id))
                     {
                         ProjectZoneService.Create(target, zoneSnapshot.Id, zoneSnapshot.Name);
                     }
@@ -295,7 +368,7 @@ namespace QS3D.Core.Export
 
                 foreach (var floorSnapshot in source.Floors.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (ShouldAdd(resolution, InterchangeIdentityKind.Floor, floorSnapshot.Id))
+                    if (resolutionActions.ShouldAdd(InterchangeIdentityKind.Floor, floorSnapshot.Id))
                     {
                         ProjectFloorService.Create(target, floorSnapshot.Id, floorSnapshot.Name, floorSnapshot.ElevationM);
                     }
@@ -310,7 +383,7 @@ namespace QS3D.Core.Export
                 foreach (var familySnapshot in source.Families.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                 {
                     ProjectFamily family;
-                    if (ShouldAdd(resolution, InterchangeIdentityKind.Family, familySnapshot.Id))
+                    if (resolutionActions.ShouldAdd(InterchangeIdentityKind.Family, familySnapshot.Id))
                     {
                         family = ProjectFamilyService.Create(target, familySnapshot.Id, familySnapshot.Name, familySnapshot.Category);
                     }
@@ -328,7 +401,7 @@ namespace QS3D.Core.Export
                 foreach (var elementSnapshot in source.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                 {
                     ProjectElement element;
-                    if (ShouldAdd(resolution, InterchangeIdentityKind.Element, elementSnapshot.Id))
+                    if (resolutionActions.ShouldAdd(InterchangeIdentityKind.Element, elementSnapshot.Id))
                     {
                         element = new ProjectElement(
                             elementSnapshot.Id,
@@ -446,10 +519,36 @@ namespace QS3D.Core.Export
                     .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
                 if (handles.Length == 0) continue;
+
+                foreach (var handle in handles)
+                {
+                    try
+                    {
+                        if (!GeneratedHandleOwnershipPolicy.TryFindOwner(target, handle, out var owner, out _) ||
+                            owner == null ||
+                            !ReferenceEquals(owner, element))
+                            throw new InvalidOperationException(
+                                "UseSource native cleanup handle " + handle + " is not exclusively owned by affected target element " + element.Id + ".");
+                    }
+                    catch (InvalidOperationException error)
+                    {
+                        throw new InvalidOperationException(
+                            "UseSource native cleanup ownership is ambiguous or unsafe for handle " + handle + "/" + element.Id + ": " + error.Message,
+                            error);
+                    }
+                }
+
                 cleanup.Add(new ProjectInterchangeNativeCleanupRequirement(element.Id, handles));
             }
 
+            if (cleanup.Count > 0 && string.IsNullOrWhiteSpace(target.DrawingFingerprint))
+                throw new InvalidOperationException(
+                    "UseSource native cleanup requires a non-empty target drawing fingerprint before cleanup authorization can be created.");
+
             var plan = new ProjectInterchangeUseSourceSemanticPlan(
+                target.ProjectId,
+                target.DrawingFingerprint,
+                target.ChangeVersion,
                 source.Project.Id,
                 source.Project.SchemaVersion,
                 source.Project.DrawingFingerprint,
@@ -567,15 +666,15 @@ namespace QS3D.Core.Export
             ProjectInterchangeUseSourceSemanticPlan plan,
             ProjectInterchangeNativeCleanupAuthorization authorization)
         {
-            if (authorization.MatchesExactly(plan.NativeCleanupRequirements)) return;
+            if (authorization.MatchesExactly(plan)) return;
             var required = plan.TargetElementIdsRequiringNativeCleanup
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .Take(16)
                 .ToArray();
             throw new InvalidOperationException(
-                "UseSource semantic import requires native cleanup authorization bound to the exact generated-handle set for target element(s): " +
+                "UseSource semantic import requires native cleanup authorization bound to the exact target project, drawing fingerprint, semantic revision and generated-handle set for target element(s): " +
                 string.Join(", ", required) +
-                ". The Core importer re-plans before mutation and rejects stale or element-id-only cleanup authorization; native cleanup must be completed by a guarded adapter transaction/recovery workflow first.");
+                ". The Core importer re-plans before mutation and rejects cross-project, cross-drawing, stale-revision or element-id-only cleanup authorization; native cleanup must be completed by a guarded adapter transaction/recovery workflow first.");
         }
 
         private static void ApplySourceFamilyProperties(
@@ -655,14 +754,6 @@ namespace QS3D.Core.Export
         private static int Count(ProjectInterchangeImportResolutionPlan plan, InterchangeIdentityKind kind, InterchangeImportResolutionAction action)
         {
             return plan.Items.Count(x => x.Kind == kind && x.Action == action);
-        }
-
-        private static bool ShouldAdd(ProjectInterchangeImportResolutionPlan plan, InterchangeIdentityKind kind, string id)
-        {
-            var item = plan.Items.Single(x => x.Kind == kind && string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
-            if (item.Action == InterchangeImportResolutionAction.AddSourceSemanticData) return true;
-            if (item.Action == InterchangeImportResolutionAction.UseSourceSemanticData) return false;
-            throw new InvalidOperationException("UseSource semantic mutation reached a non-executable resolution for " + kind + " " + id + ".");
         }
 
         private static void RestoreExistingActiveContext(

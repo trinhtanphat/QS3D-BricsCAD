@@ -13,19 +13,24 @@ else:
     text = path.read_text(encoding="utf-8")
     for token in (
         "using QS3D.Core.Persistence;",
+        "using QS3D.Core.Audit;",
         "ProjectStateSnapshot.Capture(project)",
         "var cadCommitted = false;",
         "ErasePrevious(document, transaction, project, element, ownership)",
+        "GeneratedRebarNativeOwnershipService.MarkGenerated(document, transaction, solid, project, element, HandlesKey)",
         "foreach (var item in pending) CommitSemanticUpdate(project, item);",
-        "if (pending.Count > 0) project.Touch();",
         "transaction.Commit();\n                    cadCommitted = true;",
         "catch (Exception operationError)",
         "if (!cadCommitted)",
         "rollback.Restore(project)",
         "AggregateException(operationError, restoreError)",
+        'AuditTrail.ForProject(project).Record("geometry.rebar.shape", item.Element.Id',
     ):
         if token not in text:
-            errors.append("Shape rebar missing atomicity contract: " + token)
+            errors.append("Shape rebar missing atomicity/native-ownership/revision contract: " + token)
+
+    if "if (pending.Count > 0) project.Touch();" in text or "project.Touch();" in text:
+        errors.append("Shape rebar revision must remain per-element AuditTrail-owned; standalone project.Touch is redundant")
 
     start = text.find("public static ShapeRebarBuildResult BuildSelected(Document document, ProjectState project)")
     end = text.find("private static void CommitSemanticUpdate", start + 1) if start >= 0 else -1
@@ -34,16 +39,14 @@ else:
     else:
         body = text[start:end]
         semantic_token = "foreach (var item in pending) CommitSemanticUpdate(project, item);"
-        touch_token = "if (pending.Count > 0) project.Touch();"
         commit_token = "transaction.Commit();\n                    cadCommitted = true;"
         semantic = body.find(semantic_token)
-        touch = body.find(touch_token, semantic if semantic >= 0 else 0)
         commit = body.find(commit_token)
         restore = body.find("rollback.Restore(project)")
-        if min(semantic, touch, commit, restore) < 0:
+        if min(semantic, commit, restore) < 0:
             errors.append("Shape rebar atomicity ordering tokens are incomplete")
-        elif not semantic < touch < commit < restore:
-            errors.append("Shape rebar handles/count/mode/stale/revision state must commit while CAD is rollback-capable")
+        elif not semantic < commit < restore:
+            errors.append("Shape rebar handles/count/mode/stale/audit state must commit while CAD is rollback-capable")
         if body.count(semantic_token) != 1 or body.count(commit_token) != 1:
             errors.append("Shape rebar requires exactly one semantic replacement phase and one CAD commit/flag boundary")
         if commit >= 0 and semantic_token in body[commit + len(commit_token):]:
@@ -59,9 +62,12 @@ else:
         "GeneratedShapeRebarCount",
         "GeneratedShapeRebarMode",
         "ClearGeneratedShapeRebarStale()",
+        'AuditTrail.ForProject(project).Record("geometry.rebar.shape", item.Element.Id',
     ):
         if token not in helper:
-            errors.append("Shape rebar semantic commit helper missing metadata contract: " + token)
+            errors.append("Shape rebar semantic commit helper missing metadata/audit contract: " + token)
+    if "project.Touch();" in helper:
+        errors.append("Shape rebar semantic helper must not double-advance revision outside AuditTrail")
 
 if not command_path.is_file():
     errors.append("missing ShapeRebarGeometryCommands.cs")
@@ -78,4 +84,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Shape Rebar replaces owned generated bars and advances handles/count/mode/stale/revision state before CAD commit with deep project rollback on pre-commit failure; native builder stays UI-free and command-level viewport/UI synchronization is non-fatal.")
+print("PASS: Shape Rebar verifies project-aware native ownership before replacement and records per-element AuditTrail-owned revisions with handles/count/mode/stale state before CAD commit and deep project rollback on pre-commit failure.")

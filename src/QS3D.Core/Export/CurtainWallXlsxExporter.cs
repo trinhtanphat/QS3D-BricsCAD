@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
-using System.Security;
 using System.Text;
 using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
@@ -12,10 +11,48 @@ namespace QS3D.Core.Export
 {
     public static class CurtainWallXlsxExporter
     {
+        private const int MaxDataRows = 1048575;
+        private const int MaxCellTextCharacters = 32767;
+
         public static void Export(string path, IReadOnlyList<CurtainWallScheduleRow> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            var rowCount = rows.Count;
+            if (rowCount > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Curtain XLSX export supports at most " + MaxDataRows + " data rows.");
+            var snapshot = new List<CurtainWallScheduleRow>(rowCount);
+            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+            {
+                var sourceRow = rows[rowIndex];
+                if (sourceRow == null)
+                    throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
+                var row = SnapshotRow(sourceRow, rowIndex);
+                ValidateCellText(row.ProjectId, rowIndex, "Project ID");
+                ValidateCellText(row.DrawingFingerprint, rowIndex, "Drawing Fingerprint");
+                ValidateCellText(row.Floor, rowIndex, "Floor");
+                ValidateCellText(row.FamilyName, rowIndex, "FamilyName");
+                ValidateJoinedCellText(row.ElementIds, rowIndex, "Element IDs");
+                ValidateJoinedCellText(row.SourceHandles, rowIndex, "Source Handles");
+                ValidateCount(row.WallCount, rowIndex, "WallCount");
+                ValidateCount(row.PanelCount, rowIndex, "PanelCount");
+                ValidateCount(row.VerticalFrameCount, rowIndex, "VerticalFrameCount");
+                ValidateCount(row.HorizontalFrameCount, rowIndex, "HorizontalFrameCount");
+                ValidateNonNegative(row.TotalWallLengthM, rowIndex, "TotalWallLengthM");
+                ValidateNonNegative(row.GrossWallAreaM2, rowIndex, "GrossWallAreaM2");
+                ValidateNonNegative(row.OpeningAreaM2, rowIndex, "OpeningAreaM2");
+                ValidateNonNegative(row.NetGlassAreaM2, rowIndex, "NetGlassAreaM2");
+                ValidateNonNegative(row.FrameFaceAreaM2, rowIndex, "FrameFaceAreaM2");
+                ValidateNonNegative(row.FrameLengthM, rowIndex, "FrameLengthM");
+                ValidateNonNegative(row.MinimumClearPanelWidthM, rowIndex, "MinimumClearPanelWidthM");
+                ValidateNonNegative(row.MaximumClearPanelWidthM, rowIndex, "MaximumClearPanelWidthM");
+                ValidateNonNegative(row.MinimumClearPanelHeightM, rowIndex, "MinimumClearPanelHeightM");
+                ValidateNonNegative(row.MaximumClearPanelHeightM, rowIndex, "MaximumClearPanelHeightM");
+                ValidateRange(row.MinimumClearPanelWidthM, row.MaximumClearPanelWidthM, rowIndex, "clear-panel width");
+                ValidateRange(row.MinimumClearPanelHeightM, row.MaximumClearPanelHeightM, rowIndex, "clear-panel height");
+                snapshot.Add(row);
+            }
+            if (rows.Count != rowCount)
+                throw new InvalidOperationException("Curtain XLSX export row count changed during snapshot.");
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -30,12 +67,63 @@ namespace QS3D.Core.Export
                     WriteEntry(archive, "xl/workbook.xml", WorkbookXml);
                     WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
                     WriteEntry(archive, "xl/styles.xml", StylesXml);
-                    WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildSheet(rows));
+                    WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildSheet(snapshot));
                 }
                 ValidatePackage(tempPath);
                 AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
             }
             finally { AtomicFileCommit.TryDelete(tempPath); }
+        }
+
+        private static CurtainWallScheduleRow SnapshotRow(CurtainWallScheduleRow source, int rowIndex)
+        {
+            var row = new CurtainWallScheduleRow
+            {
+                ProjectId = source.ProjectId ?? string.Empty,
+                DrawingFingerprint = source.DrawingFingerprint ?? string.Empty,
+                Floor = source.Floor ?? string.Empty,
+                FamilyName = source.FamilyName ?? string.Empty,
+                WallCount = source.WallCount,
+                TotalWallLengthM = source.TotalWallLengthM,
+                GrossWallAreaM2 = source.GrossWallAreaM2,
+                OpeningAreaM2 = source.OpeningAreaM2,
+                NetGlassAreaM2 = source.NetGlassAreaM2,
+                FrameFaceAreaM2 = source.FrameFaceAreaM2,
+                FrameLengthM = source.FrameLengthM,
+                PanelCount = source.PanelCount,
+                VerticalFrameCount = source.VerticalFrameCount,
+                HorizontalFrameCount = source.HorizontalFrameCount,
+                MinimumClearPanelWidthM = source.MinimumClearPanelWidthM,
+                MaximumClearPanelWidthM = source.MaximumClearPanelWidthM,
+                MinimumClearPanelHeightM = source.MinimumClearPanelHeightM,
+                MaximumClearPanelHeightM = source.MaximumClearPanelHeightM
+            };
+            var label = "worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " ";
+            SnapshotJoinedCellValues(source.ElementIds, row.ElementIds, label + "Element IDs");
+            SnapshotJoinedCellValues(source.SourceHandles, row.SourceHandles, label + "Source Handles");
+            return row;
+        }
+
+        private static void SnapshotJoinedCellValues(IList<string> source, IList<string> target, string label)
+        {
+            if (source == null)
+                throw new ArgumentException("Curtain XLSX " + label + " collection is required.", "rows");
+
+            var count = source.Count;
+            long joinedLength = 0L;
+            for (var index = 0; index < count; index++)
+            {
+                var value = source[index] ?? string.Empty;
+                if (index > 0) joinedLength++;
+                joinedLength += value.Length;
+                if (joinedLength > MaxCellTextCharacters)
+                    throw new ArgumentOutOfRangeException(
+                        "rows",
+                        "Curtain XLSX " + label + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+                target.Add(value);
+            }
+            if (source.Count != count)
+                throw new InvalidOperationException("Curtain XLSX " + label + " count changed during snapshot.");
         }
 
         private static string BuildSheet(IReadOnlyList<CurtainWallScheduleRow> rows)
@@ -44,10 +132,11 @@ namespace QS3D.Core.Export
             {
                 "Tầng", "Family / Loại", "SL vách", "Dài vách (m)", "DT vách gộp (m²)", "DT cửa/lỗ (m²)",
                 "DT kính net (m²)", "DT mặt khung (m²)", "Dài khung (m)", "SL panel", "SL khung đứng", "SL khung ngang",
-                "Panel clear W min (m)", "Panel clear W max (m)", "Panel clear H min (m)", "Panel clear H max (m)"
+                "Panel clear W min (m)", "Panel clear W max (m)", "Panel clear H min (m)", "Panel clear H max (m)",
+                "Project ID", "Drawing Fingerprint", "Element IDs", "Source Handles"
             };
             var lastRow = Math.Max(1, rows.Count + 1);
-            var range = "A1:P" + lastRow.ToString(CultureInfo.InvariantCulture);
+            var range = "A1:T" + lastRow.ToString(CultureInfo.InvariantCulture);
             var sb = new StringBuilder();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
@@ -56,6 +145,7 @@ namespace QS3D.Core.Export
             sb.Append("<cols>");
             sb.Append("<col min=\"1\" max=\"2\" width=\"22\" customWidth=\"1\"/>");
             sb.Append("<col min=\"3\" max=\"16\" width=\"18\" customWidth=\"1\"/>");
+            sb.Append("<col min=\"17\" max=\"20\" width=\"36\" customWidth=\"1\"/>");
             sb.Append("</cols><sheetData>");
             sb.Append("<row r=\"1\">");
             for (var c = 0; c < headers.Length; c++) AppendInlineStringCell(sb, CellRef(c, 1), headers[c], 1);
@@ -82,6 +172,10 @@ namespace QS3D.Core.Export
                 AppendNumberCell(sb, CellRef(13, r), row.MaximumClearPanelWidthM);
                 AppendNumberCell(sb, CellRef(14, r), row.MinimumClearPanelHeightM);
                 AppendNumberCell(sb, CellRef(15, r), row.MaximumClearPanelHeightM);
+                AppendInlineStringCell(sb, CellRef(16, r), row.ProjectId, 0);
+                AppendInlineStringCell(sb, CellRef(17, r), row.DrawingFingerprint, 0);
+                AppendInlineStringCell(sb, CellRef(18, r), string.Join(";", row.ElementIds), 0);
+                AppendInlineStringCell(sb, CellRef(19, r), string.Join(";", row.SourceHandles), 0);
                 sb.Append("</row>");
             }
             sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
@@ -97,17 +191,64 @@ namespace QS3D.Core.Export
             }
         }
 
+        private static void ValidateCellText(string value, int rowIndex, string fieldName)
+        {
+            var text = value ?? string.Empty;
+            if (text.Length > MaxCellTextCharacters)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Curtain XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+        }
+
+        private static void ValidateJoinedCellText(IList<string> values, int rowIndex, string fieldName)
+        {
+            if (values == null)
+                throw new ArgumentException("Curtain XLSX row " + rowIndex + " field " + fieldName + " collection is required.", "rows");
+            long length = values.Count > 0 ? values.Count - 1L : 0L;
+            for (var index = 0; index < values.Count; index++)
+                length += (values[index] ?? string.Empty).Length;
+            if (length > MaxCellTextCharacters)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Curtain XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+        }
+
+        private static void ValidateCount(int value, int rowIndex, string fieldName)
+        {
+            if (value < 0)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Curtain XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be non-negative.");
+        }
+
+        private static void ValidateNonNegative(double value, int rowIndex, string fieldName)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Curtain XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be finite and non-negative.");
+        }
+
+        private static void ValidateRange(double minimum, double maximum, int rowIndex, string label)
+        {
+            if (minimum > maximum)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Curtain XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " " + label + " minimum cannot exceed maximum.");
+        }
+
         private static void AppendInlineStringCell(StringBuilder sb, string cellRef, string value, int style)
         {
-            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>")
-                .Append(SecurityElement.Escape(value ?? string.Empty)).Append("</t></is></c>");
+            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is>");
+            XlsxXmlText.AppendTextElement(sb, value);
+            sb.Append("</is></c>");
         }
 
         private static void AppendNumberCell(StringBuilder sb, string cellRef, double value)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "Curtain XLSX numeric values must be finite.");
             sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>")
-                .Append(value.ToString("0.########", CultureInfo.InvariantCulture)).Append("</v></c>");
+                .Append(value.ToString("R", CultureInfo.InvariantCulture)).Append("</v></c>");
         }
 
         private static string CellRef(int columnZeroBased, int row)

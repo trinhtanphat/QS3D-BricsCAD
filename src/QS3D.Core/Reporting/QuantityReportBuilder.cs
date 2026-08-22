@@ -1,46 +1,162 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
+using System.Globalization;
+using System.Text;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Reporting
 {
     public static class QuantityReportBuilder
     {
+        private sealed class QuantityAccumulatorSet
+        {
+            private QuantityReportMath.FiniteAccumulator _grossConcreteM3;
+            private QuantityReportMath.FiniteAccumulator _deductionM3;
+            private QuantityReportMath.FiniteAccumulator _netConcreteM3;
+            private QuantityReportMath.FiniteAccumulator _formworkM2;
+            private QuantityReportMath.FiniteAccumulator _lengthM;
+            private QuantityReportMath.FiniteAccumulator _outerPerimeterM;
+            private QuantityReportMath.FiniteAccumulator _innerPerimeterM;
+            private QuantityReportMath.FiniteAccumulator _doorAreaM2;
+            private QuantityReportMath.FiniteAccumulator _sideAreaM2;
+            private QuantityReportMath.FiniteAccumulator _bottomAreaM2;
+            private QuantityReportMath.FiniteAccumulator _topAreaM2;
+            private QuantityReportMath.FiniteAccumulator _otherAreaM2;
+
+            public void Add(ElementInstance element)
+            {
+                var id = element.Id;
+                _grossConcreteM3.Add(NonNegative(element.GrossConcreteM3, id, "GrossConcreteM3"), id + "/GrossConcreteM3");
+                _deductionM3.Add(NonNegative(element.DeductionM3, id, "DeductionM3"), id + "/DeductionM3");
+                _netConcreteM3.Add(NonNegative(element.NetConcreteM3, id, "NetConcreteM3"), id + "/NetConcreteM3");
+                _formworkM2.Add(NonNegative(element.FormworkM2, id, "FormworkM2"), id + "/FormworkM2");
+                _lengthM.Add(NonNegative(element.LengthM, id, "LengthM"), id + "/LengthM");
+                _outerPerimeterM.Add(NonNegative(element.OuterPerimeterM, id, "OuterPerimeterM"), id + "/OuterPerimeterM");
+                _innerPerimeterM.Add(NonNegative(element.InnerPerimeterM, id, "InnerPerimeterM"), id + "/InnerPerimeterM");
+                _doorAreaM2.Add(NonNegative(element.DoorAreaM2, id, "DoorAreaM2"), id + "/DoorAreaM2");
+                _sideAreaM2.Add(NonNegative(element.SideAreaM2, id, "SideAreaM2"), id + "/SideAreaM2");
+                _bottomAreaM2.Add(NonNegative(element.BottomAreaM2, id, "BottomAreaM2"), id + "/BottomAreaM2");
+                _topAreaM2.Add(NonNegative(element.TopAreaM2, id, "TopAreaM2"), id + "/TopAreaM2");
+                _otherAreaM2.Add(NonNegative(element.OtherAreaM2, id, "OtherAreaM2"), id + "/OtherAreaM2");
+            }
+
+            public void Apply(QuantityReportRow row)
+            {
+                row.GrossConcreteM3 = _grossConcreteM3.Value("GrossConcreteM3");
+                row.DeductionM3 = _deductionM3.Value("DeductionM3");
+                row.NetConcreteM3 = _netConcreteM3.Value("NetConcreteM3");
+                row.FormworkM2 = _formworkM2.Value("FormworkM2");
+                row.LengthM = _lengthM.Value("LengthM");
+                row.OuterPerimeterM = _outerPerimeterM.Value("OuterPerimeterM");
+                row.InnerPerimeterM = _innerPerimeterM.Value("InnerPerimeterM");
+                row.DoorAreaM2 = _doorAreaM2.Value("DoorAreaM2");
+                row.SideAreaM2 = _sideAreaM2.Value("SideAreaM2");
+                row.BottomAreaM2 = _bottomAreaM2.Value("BottomAreaM2");
+                row.TopAreaM2 = _topAreaM2.Value("TopAreaM2");
+                row.OtherAreaM2 = _otherAreaM2.Value("OtherAreaM2");
+            }
+        }
+
         public static IReadOnlyList<QuantityReportRow> Group(IEnumerable<ElementInstance> elements)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
+            var knownCount = SnapshotKnownElementCount(elements);
             var order = new List<string>();
             var grouped = new Dictionary<string, QuantityReportRow>(StringComparer.OrdinalIgnoreCase);
+            var accumulators = new Dictionary<string, QuantityAccumulatorSet>(StringComparer.OrdinalIgnoreCase);
+            var seenElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var elementIndex = 0;
+            var observedCount = 0;
             foreach (var element in elements)
             {
-                if (element == null) continue;
-                var key = element.Floor + "\u001f" + element.Family.Category + "\u001f" + element.Family.Name;
+                observedCount++;
+                if (knownCount.HasValue && observedCount > knownCount.Value)
+                    throw ElementCountMismatch(knownCount.Value, observedCount);
+                if (element == null)
+                    throw new ArgumentException("Quantity report elements cannot contain null entries. Invalid element index: " + elementIndex + ".", nameof(elements));
+                if (!seenElementIds.Add(element.Id))
+                    throw new InvalidOperationException("Quantity report contains duplicate element id: " + element.Id + ".");
+                var material = NormalizeMaterial(element.Family.Material);
+                var key = GroupKey(element.Floor, element.Family.Category.ToString(), element.Family.Name, material);
                 if (!grouped.TryGetValue(key, out var row))
                 {
-                    row = new QuantityReportRow { Floor = element.Floor, Category = element.Family.Category.ToString(), FamilyName = element.Family.Name };
-                    grouped.Add(key, row); order.Add(key);
+                    row = new QuantityReportRow
+                    {
+                        Floor = element.Floor,
+                        Category = element.Family.Category.ToString(),
+                        FamilyName = element.Family.Name,
+                        Material = material
+                    };
+                    grouped.Add(key, row);
+                    accumulators.Add(key, new QuantityAccumulatorSet());
+                    order.Add(key);
                 }
                 row.Count = QuantityReportMath.AddCount(row.Count, 1);
                 row.ElementIds.Add(element.Id);
-                foreach (var handle in element.SourceHandles)
-                    if (!string.IsNullOrWhiteSpace(handle) && !row.SourceHandles.Contains(handle, StringComparer.OrdinalIgnoreCase)) row.SourceHandles.Add(handle.Trim());
-                row.GrossConcreteM3 = QuantityReportMath.Add(row.GrossConcreteM3, element.GrossConcreteM3, element.Id + "/GrossConcreteM3");
-                row.DeductionM3 = QuantityReportMath.Add(row.DeductionM3, element.DeductionM3, element.Id + "/DeductionM3");
-                row.NetConcreteM3 = QuantityReportMath.Add(row.NetConcreteM3, element.NetConcreteM3, element.Id + "/NetConcreteM3");
-                row.FormworkM2 = QuantityReportMath.Add(row.FormworkM2, element.FormworkM2, element.Id + "/FormworkM2");
-                row.LengthM = QuantityReportMath.Add(row.LengthM, element.LengthM, element.Id + "/LengthM");
-                row.OuterPerimeterM = QuantityReportMath.Add(row.OuterPerimeterM, element.OuterPerimeterM, element.Id + "/OuterPerimeterM");
-                row.InnerPerimeterM = QuantityReportMath.Add(row.InnerPerimeterM, element.InnerPerimeterM, element.Id + "/InnerPerimeterM");
-                row.DoorAreaM2 = QuantityReportMath.Add(row.DoorAreaM2, element.DoorAreaM2, element.Id + "/DoorAreaM2");
-                row.SideAreaM2 = QuantityReportMath.Add(row.SideAreaM2, element.SideAreaM2, element.Id + "/SideAreaM2");
-                row.BottomAreaM2 = QuantityReportMath.Add(row.BottomAreaM2, element.BottomAreaM2, element.Id + "/BottomAreaM2");
-                row.TopAreaM2 = QuantityReportMath.Add(row.TopAreaM2, element.TopAreaM2, element.Id + "/TopAreaM2");
-                row.OtherAreaM2 = QuantityReportMath.Add(row.OtherAreaM2, element.OtherAreaM2, element.Id + "/OtherAreaM2");
+                ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
+                accumulators[key].Add(element);
+                elementIndex++;
             }
+            if (knownCount.HasValue && observedCount != knownCount.Value)
+                throw ElementCountMismatch(knownCount.Value, observedCount);
+
             var result = new List<QuantityReportRow>(order.Count);
-            foreach (var key in order) result.Add(grouped[key]);
-            return result;
+            foreach (var key in order)
+            {
+                var row = grouped[key];
+                accumulators[key].Apply(row);
+                result.Add(row);
+            }
+            return result.AsReadOnly();
         }
+
+        private static int? SnapshotKnownElementCount(IEnumerable<ElementInstance> elements)
+        {
+            int? knownCount = null;
+            if (elements is ICollection<ElementInstance> genericCollection)
+                ObserveKnownElementCount(genericCollection.Count, ref knownCount);
+            if (elements is IReadOnlyCollection<ElementInstance> readOnlyCollection)
+                ObserveKnownElementCount(readOnlyCollection.Count, ref knownCount);
+            if (elements is ICollection nonGenericCollection)
+                ObserveKnownElementCount(nonGenericCollection.Count, ref knownCount);
+            return knownCount;
+        }
+
+        private static void ObserveKnownElementCount(int count, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Quantity report element input reported a negative known count.");
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException(
+                    "Quantity report element input exposes conflicting known counts: " + knownCount.Value + " and " + count + ".");
+            knownCount = count;
+        }
+
+        private static InvalidOperationException ElementCountMismatch(int reportedCount, int observedCount)
+        {
+            return new InvalidOperationException(
+                "Quantity report element input changed during enumeration; Count reported " + reportedCount +
+                " items but enumeration produced " + observedCount + ".");
+        }
+
+        private static string GroupKey(params string[] tokens)
+        {
+            var key = new StringBuilder();
+            foreach (var raw in tokens)
+            {
+                var token = raw ?? string.Empty;
+                key.Append(token.Length.ToString(CultureInfo.InvariantCulture))
+                    .Append(':')
+                    .Append(token);
+            }
+            return key.ToString();
+        }
+
+        private static string NormalizeMaterial(string material) =>
+            string.IsNullOrWhiteSpace(material) ? "Khác" : material.Trim();
+
+        private static double NonNegative(double value, string elementId, string quantity) =>
+            QuantityReportMath.NonNegative(value, elementId + "/" + quantity);
     }
 }

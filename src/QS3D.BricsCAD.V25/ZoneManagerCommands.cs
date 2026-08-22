@@ -14,6 +14,7 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                ExistingProjectMutationContext.TryGet(document, out _);
                 var window = new ZoneManagerWindow(document);
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
                 PaletteCoordinator.SetStatus("Zone Manager: CRUD • active Zone • semantic assignment • khóa theo bản vẽ.");

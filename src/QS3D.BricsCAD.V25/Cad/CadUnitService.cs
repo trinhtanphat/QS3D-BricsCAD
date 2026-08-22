@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Units;
 
@@ -17,14 +18,27 @@ namespace QS3D.BricsCAD.V25.Cad
         public static bool TryGetPolicy(Document document, out ProjectUnitPolicy policy, out DrawingUnitResolution resolution)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
-            var project = ProjectContextCoordinator.GetOrCreate(document);
+            IDictionary<string, string> metadata;
+            var hasElements = false;
+            if (ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+            {
+                metadata = project.Metadata;
+                hasElements = project.Elements.Count > 0;
+            }
+            else
+            {
+                // Resolving a native INSUNITS value is an inspection operation. A
+                // unit-dependent read command must not bootstrap/cache a QS3D
+                // project merely because the drawing has no sidecar yet.
+                metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
             var native = TryGetNativeLengthUnit(document, out var nativeUnit) ? nativeUnit : (LengthUnit?)null;
-            if (!DrawingUnitResolutionPolicy.TryResolve(native, project.Metadata, out resolution))
+            if (!DrawingUnitResolutionPolicy.TryResolve(native, metadata, out resolution))
             {
                 policy = null!;
                 return false;
             }
-            DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(project.Metadata, project.Elements.Count > 0, resolution.Unit);
+            DrawingUnitResolutionPolicy.ValidateQuantityCompatibility(metadata, hasElements, resolution.Unit);
             policy = new ProjectUnitPolicy(resolution.Unit);
             return true;
         }

@@ -7,20 +7,103 @@ from pathlib import Path
 
 SHA40 = re.compile(r"^[0-9a-fA-F]{40}$")
 SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
-SAFE_TOKEN = re.compile(r"^[A-Za-z0-9._/+:-]{1,160}$")
+SEMVER_IDENTIFIER = re.compile(r"^[0-9A-Za-z-]+$")
 ALLOWED_STATUS = {"PASS", "FAIL", "SKIPPED", "NOT_RUN", "FAIL_OR_INCOMPLETE"}
-
-
-def safe_token(value, fallback="(not recorded)"):
-    text = str(value or "").strip()
-    if not text or not SAFE_TOKEN.fullmatch(text):
-        return fallback
-    return text
+SAFE_PUBLIC_BRANCHES = frozenset({"main", "master", "HEAD"})
+SAFE_PRERELEASE_CHANNELS = frozenset({"preview", "alpha", "beta", "rc"})
+SAFE_QUALIFICATION_SCOPES = frozenset(
+    {
+        "incomplete",
+        "source-build",
+        "source-build+runtime-smoke",
+        "source-build+runtime-smoke+package",
+        "source-build+runtime-smoke+package+authenticode",
+    }
+)
+SAFE_STEP_NAMES = frozenset(
+    {
+        "Exact Git SHA / clean tree",
+        "Manual-only CI policy",
+        "Generic source preflight",
+        "Aggregate feature preflights",
+        "Core Release build",
+        "Core deterministic smoke suite",
+        "BricsCAD V25 adapter Release build",
+        "Offline WPF theme / Workspace / RightPanel smoke",
+        "Licensed V25 NETLOAD / Ribbon / Palette runtime probe",
+        "Build local V25 package",
+        "Authenticode sign packaged executable payload",
+        "Verify Authenticode signer and trusted timestamp",
+        "Finalize signed package metadata / hashes / ZIP",
+    }
+)
 
 
 def normalized_status(value, fallback="UNKNOWN"):
     text = str(value or "").strip().upper()
     return text if text in ALLOWED_STATUS else fallback
+
+
+def sanitized_qualification_scope(value):
+    text = str(value or "").strip()
+    return text if text in SAFE_QUALIFICATION_SCOPES else "legacy-or-unknown"
+
+
+def sanitized_branch(value):
+    text = str(value or "").strip()
+    if not text:
+        return "(not recorded)"
+    return text if text in SAFE_PUBLIC_BRANCHES else "(redacted non-main branch)"
+
+
+def sanitized_release_tag(value):
+    text = str(value or "").strip()
+    if not text:
+        return "(none)"
+    if not text.startswith("v"):
+        return "(redacted release tag)"
+
+    version = text[1:]
+    if version.count("+") > 1:
+        return "(redacted release tag)"
+    version_core, plus, build = version.partition("+")
+    if version_core.count("-") > 1:
+        return "(redacted release tag)"
+    core, dash, prerelease = version_core.partition("-")
+
+    core_parts = core.split(".")
+    if len(core_parts) != 3:
+        return "(redacted release tag)"
+    for part in core_parts:
+        if not part.isdigit() or (len(part) > 1 and part.startswith("0")):
+            return "(redacted release tag)"
+
+    if dash:
+        prerelease_parts = prerelease.split(".")
+        if any(not part or not SEMVER_IDENTIFIER.fullmatch(part) for part in prerelease_parts):
+            return "(redacted release tag)"
+        if any(part.isdigit() and len(part) > 1 and part.startswith("0") for part in prerelease_parts):
+            return "(redacted release tag)"
+        if prerelease_parts[0] not in SAFE_PRERELEASE_CHANNELS:
+            return "(redacted release tag)"
+        if any(not part.isdigit() for part in prerelease_parts[1:]):
+            return "(redacted release tag)"
+
+    if plus:
+        build_parts = build.split(".")
+        if any(not part or not SEMVER_IDENTIFIER.fullmatch(part) for part in build_parts):
+            return "(redacted release tag)"
+        if any(not part.isdigit() for part in build_parts):
+            return "(redacted release tag)"
+
+    return text
+
+
+def sanitized_step_name(value, ordinal):
+    text = str(value or "").strip()
+    if text in SAFE_STEP_NAMES:
+        return text
+    return f"Step {ordinal} (redacted label)"
 
 
 def yes_no(value):
@@ -40,7 +123,7 @@ def build_summary(report):
         "NOT_RUN" if bool(report.get("runtimeSkipped")) else "UNKNOWN",
     )
     interactive_status = normalized_status(report.get("fullInteractiveMatrixStatus"), "NOT_RUN")
-    qualification_scope = safe_token(report.get("qualificationScope"), "legacy-or-unknown")
+    qualification_scope = sanitized_qualification_scope(report.get("qualificationScope"))
 
     exact_sha = str(report.get("exactSha") or "").strip()
     if not SHA40.fullmatch(exact_sha):
@@ -50,8 +133,8 @@ def build_summary(report):
     if not SHA256.fullmatch(plugin_hash):
         plugin_hash = "NOT AVAILABLE"
 
-    branch = safe_token(report.get("branch"), "(not recorded)")
-    release_tag = safe_token(report.get("releaseTag"), "(none)")
+    branch = sanitized_branch(report.get("branch"))
+    release_tag = sanitized_release_tag(report.get("releaseTag"))
     runtime_skipped = bool(report.get("runtimeSkipped"))
     package_requested = bool(report.get("packageRequested"))
     customer_release_qualified = yes_no_unknown(report, "customerReleaseQualified")
@@ -90,11 +173,10 @@ def build_summary(report):
     steps = report.get("steps")
     if isinstance(steps, list):
         lines.extend(["", "## Automated steps", "", "| Step | Status |", "|---|---|"])
-        for item in steps:
+        for ordinal, item in enumerate(steps, start=1):
             if not isinstance(item, dict):
                 continue
-            name = str(item.get("name") or "Unnamed step").replace("|", "\\|")
-            name = " ".join(name.split())[:180]
+            name = sanitized_step_name(item.get("name"), ordinal)
             step_status = normalized_status(item.get("status"))
             lines.append(f"| {name} | **{step_status}** |")
 
@@ -147,6 +229,19 @@ def main(argv=None):
     destination = Path(args.output)
     if not source.is_file():
         print(f"ERROR: qualification report does not exist: {source}", file=sys.stderr)
+        return 2
+
+    try:
+        source_identity = source.resolve()
+        destination_identity = destination.resolve()
+        aliases_input = source_identity == destination_identity
+        if not aliases_input and destination.exists():
+            aliases_input = source.samefile(destination)
+    except OSError as exc:
+        print(f"ERROR: could not resolve qualification input/output paths safely: {exc}", file=sys.stderr)
+        return 2
+    if aliases_input:
+        print("ERROR: sanitized summary output must not alias the input qualification report.", file=sys.stderr)
         return 2
 
     try:

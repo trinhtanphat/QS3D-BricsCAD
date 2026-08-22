@@ -1,0 +1,261 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using QS3D.Core.Domain;
+using QS3D.Core.Units;
+
+namespace QS3D.Core.SmokeTests
+{
+    internal static class ProjectOnboardingRegression
+    {
+        public static void Run()
+        {
+            UnitGateIsNonDestructive();
+            MaterialGateIsNonDestructive();
+            FreshProjectCreatesStarterRoute();
+            ExistingFamilyIsPreserved();
+            SingleExistingFloorWithoutActiveSelectionIsActivated();
+            MultipleExistingFloorsWithoutActiveSelectionFailClosed();
+            StaleActiveFloorFailsClosed();
+            AmbiguousExactFamilyReuseFailsClosed();
+            MalformedExistingMaterialIsNotTrusted();
+            RepeatIsIdempotent();
+        }
+
+        private static void UnitGateIsNonDestructive()
+        {
+            var project = new ProjectState("P-ONBOARD-UNIT", "unit gate");
+            var result = ProjectOnboardingService.Bootstrap(project, new ProjectOnboardingRequest(null, null, Materials()));
+            Equal(ProjectOnboardingStatus.NeedsUnitConfirmation, result.Status, "Unresolved units must fail closed.");
+            Equal(0, project.Floors.Count, "Unit gate must not create Floor.");
+            Equal(0, project.Families.Count, "Unit gate must not create Families.");
+            Equal(0, project.Metadata.Count, "Unit gate must not persist assumptions.");
+        }
+
+        private static void MaterialGateIsNonDestructive()
+        {
+            var project = new ProjectState("P-ONBOARD-MAT", "material gate");
+            var result = ProjectOnboardingService.Bootstrap(project, new ProjectOnboardingRequest(null, LengthUnit.Millimeter, new Dictionary<ElementCategory, string>()));
+            Equal(ProjectOnboardingStatus.NeedsMaterialConfirmation, result.Status, "Fresh catalog needs explicit materials.");
+            Equal(6, result.MissingMaterialCategories.Count, "All starter categories should be reported.");
+            Equal(0, project.Floors.Count, "Material gate must not create Floor.");
+            Equal(0, project.Families.Count, "Material gate must not create Families.");
+            False(project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.OverrideMetadataKey), "Material gate must not persist unit override early.");
+        }
+
+        private static void FreshProjectCreatesStarterRoute()
+        {
+            var project = new ProjectState("P-ONBOARD-FRESH", "fresh project");
+            var materials = Materials();
+            var result = ProjectOnboardingService.Bootstrap(project, new ProjectOnboardingRequest(null, LengthUnit.Millimeter, materials));
+            Equal(ProjectOnboardingStatus.ReadyForFirstObject, result.Status, "Fresh project should become ready.");
+            Equal(1, project.Floors.Count, "Fresh project needs one starter Floor.");
+            Equal(ProjectOnboardingService.StarterFloorId, project.ActiveFloorId, "Starter Floor should be active.");
+            Equal(6, project.Families.Count, "Fresh project needs six starter Families.");
+            Equal(6, result.CreatedFamilyIds.Count, "Created Family result count mismatch.");
+            Equal("Tạo mới", result.NextAuthoringAction, "Authoring route mismatch.");
+            Equal("Khối lượng", result.NextQuantityAction, "Quantity route mismatch.");
+            Equal("Millimeter", project.Metadata[DrawingUnitResolutionPolicy.OverrideMetadataKey], "Confirmed unit must persist explicitly.");
+            foreach (var category in ProjectOnboardingService.StarterCategories)
+            {
+                var family = project.Families.Single(x => x.Category == category);
+                Equal(materials[category], family.Properties["Material"], "Starter material must be explicit for " + category + ".");
+            }
+        }
+
+        private static void ExistingFamilyIsPreserved()
+        {
+            var project = new ProjectState("P-ONBOARD-EXIST", "existing project");
+            ProjectFloorService.Create(project, "existing-floor", "Ground", 0d);
+            var beam = ProjectFamilyService.Create(project, "existing-beam", "Custom Beam", ElementCategory.Beam);
+            ProjectFamilyService.SetProperty(project, beam.Id, "WidthM", "0.3");
+            ProjectFamilyService.SetProperty(project, beam.Id, "HeightM", "0.5");
+            ProjectFamilyService.SetProperty(project, beam.Id, "BottomOffsetM", "0");
+            ProjectFamilyService.SetProperty(project, beam.Id, "Material", "Concrete C30");
+            ProjectFamilyService.SetProperty(project, beam.Id, "CatalogMarker", "KEEP");
+            var materials = Materials();
+            materials[ElementCategory.Beam] = "Concrete C30";
+            var result = ProjectOnboardingService.Bootstrap(project, new ProjectOnboardingRequest(LengthUnit.Millimeter, null, materials));
+            Equal(ProjectOnboardingStatus.ReadyForFirstObject, result.Status, "Existing project should be ready.");
+            Equal(1, project.Floors.Count, "Existing Floor must not be replaced.");
+            Equal("existing-floor", project.Floors[0].Id, "Existing Floor id changed.");
+            Equal("existing-floor", project.ActiveFloorId, "Existing valid active Floor must be preserved.");
+            Equal(1, project.Families.Count(x => x.Category == ElementCategory.Beam), "Compatible Beam must not be duplicated.");
+            Equal("KEEP", beam.Properties["CatalogMarker"], "Existing Family data was overwritten.");
+            True(result.ReusedFamilyIds.Contains(beam.Id), "Existing compatible Family should be reported as reused.");
+        }
+
+        private static void SingleExistingFloorWithoutActiveSelectionIsActivated()
+        {
+            var project = new ProjectState("P-ONBOARD-ONE-FLOOR", "one floor no active");
+            ProjectFloorService.Create(project, "floor-only", "Only Floor", 0d);
+            project.ActiveFloorId = string.Empty;
+
+            var result = ProjectOnboardingService.Bootstrap(
+                project,
+                new ProjectOnboardingRequest(LengthUnit.Millimeter, null, Materials()));
+
+            Equal(ProjectOnboardingStatus.ReadyForFirstObject, result.Status,
+                "One unambiguous existing Floor should allow onboarding to become ready.");
+            Equal(1, project.Floors.Count, "Onboarding must preserve the existing Floor catalog.");
+            Equal("floor-only", project.ActiveFloorId, "The only existing Floor should become active before ready.");
+            Equal("floor-only", result.ActiveFloorId, "Ready result must expose the activated existing Floor.");
+        }
+
+        private static void MultipleExistingFloorsWithoutActiveSelectionFailClosed()
+        {
+            var project = new ProjectState("P-ONBOARD-MULTI-FLOOR", "multiple floors no active");
+            ProjectFloorService.Create(project, "floor-a", "Floor A", 0d);
+            ProjectFloorService.Create(project, "floor-b", "Floor B", 3.6d);
+            project.ActiveFloorId = string.Empty;
+            var beforeVersion = project.ChangeVersion;
+
+            var threw = false;
+            try
+            {
+                ProjectOnboardingService.Bootstrap(
+                    project,
+                    new ProjectOnboardingRequest(LengthUnit.Millimeter, null, Materials()));
+            }
+            catch (InvalidOperationException ex)
+            {
+                threw = ex.Message.IndexOf("multiple Floors", StringComparison.Ordinal) >= 0 &&
+                        ex.Message.IndexOf("active Floor", StringComparison.Ordinal) >= 0;
+            }
+
+            True(threw, "Multiple existing Floors with no active selection must fail closed instead of choosing one arbitrarily.");
+            Equal(beforeVersion, project.ChangeVersion, "Ambiguous active Floor failure must occur before onboarding mutation.");
+            Equal(string.Empty, project.ActiveFloorId, "Ambiguous Floor failure must not select an arbitrary Floor.");
+            Equal(0, project.Families.Count, "Ambiguous Floor failure must not create starter Families.");
+            False(project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.OverrideMetadataKey),
+                "Ambiguous Floor failure must not persist a unit override.");
+        }
+
+        private static void StaleActiveFloorFailsClosed()
+        {
+            var project = new ProjectState("P-ONBOARD-STALE-FLOOR", "stale active floor");
+            ProjectFloorService.Create(project, "floor-real", "Real Floor", 0d);
+            project.ActiveFloorId = "floor-missing";
+            var beforeVersion = project.ChangeVersion;
+
+            var threw = false;
+            try
+            {
+                ProjectOnboardingService.Bootstrap(
+                    project,
+                    new ProjectOnboardingRequest(LengthUnit.Millimeter, null, Materials()));
+            }
+            catch (InvalidOperationException ex)
+            {
+                threw = ex.Message.IndexOf("active Floor", StringComparison.Ordinal) >= 0 &&
+                        ex.Message.IndexOf("not found", StringComparison.Ordinal) >= 0;
+            }
+
+            True(threw, "A stale active Floor reference must fail closed before onboarding mutation.");
+            Equal(beforeVersion, project.ChangeVersion, "Stale active Floor failure must be non-destructive.");
+            Equal("floor-missing", project.ActiveFloorId, "Stale active Floor reference must remain visible for repair.");
+            Equal(0, project.Families.Count, "Stale active Floor failure must not create starter Families.");
+            False(project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.OverrideMetadataKey),
+                "Stale active Floor failure must not persist a unit override.");
+        }
+
+        private static void AmbiguousExactFamilyReuseFailsClosed()
+        {
+            var project = new ProjectState("P-ONBOARD-AMBIG", "ambiguous exact family");
+            var first = ProjectFamilyService.Create(project, "beam-a", "Beam A", ElementCategory.Beam);
+            var second = ProjectFamilyService.Create(project, "beam-b", "Beam B", ElementCategory.Beam);
+            foreach (var family in new[] { first, second })
+            {
+                ProjectFamilyService.SetProperty(project, family.Id, "WidthM", "0.3");
+                ProjectFamilyService.SetProperty(project, family.Id, "HeightM", "0.5");
+                ProjectFamilyService.SetProperty(project, family.Id, "BottomOffsetM", "0");
+                ProjectFamilyService.SetProperty(project, family.Id, "Material", "Concrete C30");
+            }
+
+            var beforeIds = project.Families.Select(x => x.Id).ToArray();
+            var threw = false;
+            try
+            {
+                ProjectOnboardingService.Bootstrap(
+                    project,
+                    new ProjectOnboardingRequest(null, LengthUnit.Millimeter, Materials()));
+            }
+            catch (InvalidOperationException ex)
+            {
+                threw = ex.Message.IndexOf("multiple exact Family matches", StringComparison.Ordinal) >= 0;
+            }
+
+            True(threw, "Explicit starter material must fail closed when exact Family reuse is ambiguous.");
+            Equal(0, project.Floors.Count, "Ambiguous exact reuse must fail before starter Floor creation.");
+            False(project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.OverrideMetadataKey), "Ambiguous exact reuse must fail before persisting unit override.");
+            True(beforeIds.SequenceEqual(project.Families.Select(x => x.Id), StringComparer.OrdinalIgnoreCase), "Ambiguous exact reuse must not mutate the Family catalog.");
+        }
+
+        private static void MalformedExistingMaterialIsNotTrusted()
+        {
+            var malformed = new[]
+            {
+                "Concrete\nC30",
+                "Concrete\uFFFE",
+                new string('X', 1001)
+            };
+
+            for (var index = 0; index < malformed.Length; index++)
+            {
+                var project = new ProjectState("P-ONBOARD-BAD-MAT-" + index, "bad existing material");
+                var beam = ProjectFamilyService.Create(project, "bad-beam", "Bad Beam", ElementCategory.Beam);
+                ProjectFamilyService.SetProperty(project, beam.Id, "WidthM", "0.3");
+                ProjectFamilyService.SetProperty(project, beam.Id, "HeightM", "0.5");
+                ProjectFamilyService.SetProperty(project, beam.Id, "BottomOffsetM", "0");
+                beam.Properties["Material"] = malformed[index];
+
+                var materials = Materials();
+                materials.Remove(ElementCategory.Beam);
+                var result = ProjectOnboardingService.Bootstrap(
+                    project,
+                    new ProjectOnboardingRequest(LengthUnit.Millimeter, null, materials));
+
+                Equal(ProjectOnboardingStatus.NeedsMaterialConfirmation, result.Status,
+                    "Malformed existing material must not be trusted for starter reuse.");
+                True(result.MissingMaterialCategories.Contains(ElementCategory.Beam),
+                    "Malformed Beam material must require explicit confirmation.");
+                Equal(0, project.Floors.Count, "Malformed reused material gate must not create a Floor.");
+                Equal(1, project.Families.Count, "Malformed reused material gate must not mutate the Family catalog.");
+                Equal(malformed[index], beam.Properties["Material"], "Malformed source Family must remain untouched for repair/review.");
+            }
+        }
+
+        private static void RepeatIsIdempotent()
+        {
+            var project = new ProjectState("P-ONBOARD-REPEAT", "repeat project");
+            var request = new ProjectOnboardingRequest(null, LengthUnit.Millimeter, Materials());
+            ProjectOnboardingService.Bootstrap(project, request);
+            var ids = project.Families.Select(x => x.Id).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+            var second = ProjectOnboardingService.Bootstrap(project, request);
+            Equal(1, project.Floors.Count, "Repeat must not duplicate Floor.");
+            True(ids.SequenceEqual(project.Families.Select(x => x.Id).OrderBy(x => x, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase), "Repeat must not duplicate Families.");
+            Equal(0, second.CreatedFamilyIds.Count, "Repeat should create no Families.");
+            Equal(6, second.ReusedFamilyIds.Count, "Repeat should reuse all starter Families.");
+        }
+
+        private static Dictionary<ElementCategory, string> Materials()
+        {
+            return new Dictionary<ElementCategory, string>
+            {
+                [ElementCategory.ArchitecturalWall] = "Masonry",
+                [ElementCategory.Beam] = "Concrete C30",
+                [ElementCategory.Column] = "Concrete C30",
+                [ElementCategory.Slab] = "Concrete C30",
+                [ElementCategory.StructuralWall] = "Concrete C30",
+                [ElementCategory.Foundation] = "Concrete C30"
+            };
+        }
+
+        private static void True(bool value, string message) { if (!value) throw new Exception(message); }
+        private static void False(bool value, string message) { if (value) throw new Exception(message); }
+        private static void Equal<T>(T expected, T actual, string message)
+        {
+            if (!Equals(expected, actual)) throw new Exception(message + " Expected=" + expected + ", actual=" + actual + ".");
+        }
+    }
+}

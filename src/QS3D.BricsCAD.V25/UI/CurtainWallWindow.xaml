@@ -118,11 +118,20 @@
         </ScrollViewer>
 
         <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="11,7" BorderThickness="0,1,0,0">
-            <DockPanel>
-                <Border Background="{StaticResource WarningBrush}" CornerRadius="5" Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                <TextBlock x:Name="StatusText" Text="Sẵn sàng" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
-                <TextBlock DockPanel.Dock="Right" Text="CURVE FRAME = V25 GATE" Style="{StaticResource Caption}" Margin="12,0,0,0"/>
-            </DockPanel>
+            <Grid x:Name="CurtainWallStatusGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="{StaticResource WarningBrush}" CornerRadius="5"
+                        Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                <TextBlock Grid.Column="1" x:Name="StatusText" Text="Sẵn sàng"
+                           MinWidth="0" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+                <TextBlock Grid.Column="2" Text="CURVE FRAME = V25 GATE"
+                           HorizontalAlignment="Right" TextWrapping="NoWrap"
+                           Style="{StaticResource Caption}" Margin="12,0,0,0"/>
+            </Grid>
         </Border>
     </Grid>
 </Window>

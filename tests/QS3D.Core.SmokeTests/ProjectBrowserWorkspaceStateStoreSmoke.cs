@@ -107,6 +107,7 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidDataException>(() => store.Deserialize(valid.Replace("<Id>F-02</Id>", "<Id future=\"x\">F-02</Id>")));
             Throws<InvalidDataException>(() => store.Deserialize(valid.Replace("<Id>Z-A</Id>", "<Id><Future>Z-A</Future></Id>")));
             Throws<InvalidDataException>(() => store.Deserialize(valid.Replace("<SelectedElementIds>", "<SelectedElementIds><!--future-->")));
+            Throws<InvalidDataException>(() => store.Deserialize(valid.Replace("<Categories>", "<Categories/><future:Categories xmlns:future=\"urn:future\"><future:Category>Beam</future:Category></future:Categories><Categories>")));
         }
 
         private static void StaleSelectionFailsClosed()

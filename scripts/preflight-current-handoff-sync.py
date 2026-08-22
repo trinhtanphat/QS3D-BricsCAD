@@ -74,7 +74,11 @@ if local_addendum.is_file():
 
 if documentation.is_file():
     text = documentation.read_text(encoding="utf-8")
-    for token in ("SemanticTagRenderer", "Native V25 work that remains"):
+    for token in (
+        "SemanticTagRenderer",
+        "DWG tables — source-implemented native Table slice",
+        "Still open for native table qualification/expansion:",
+    ):
         if token not in text:
             errors.append("documentation-layer boundary missing token: " + token)
 

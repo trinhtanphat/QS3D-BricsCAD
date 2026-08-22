@@ -93,14 +93,14 @@ checks = {
         "EnsureOwned", "ownership conflict", "Refusing destructive erase", "SourceHandles", "AddProtected"
     ],
     "src/QS3D.BricsCAD.V25/Cad/WallSolidBuilder.cs": [
-        "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelectedLineWalls(Document document, ProjectState project, ElementCategory category)",
+        "ElementCategory.GlassWall", "ElementCategory.WallPier", "bool allowPostCommitUi = true",
         "GeneratedGeometryService.PrepareReplacement(document, transaction, project, element)",
         "GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category)",
         "GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category)"
     ],
     "src/QS3D.BricsCAD.V25/Cad/PolylineWallSolidBuilder.cs": [
         "WallFootprintEngine", "BulgeArcTessellator.Tessellate", "Region.CreateFromCurves", "CreateExtrudedSolid", "WallJoinMode",
-        "ElementCategory.GlassWall", "ElementCategory.WallPier", "BuildSelected(Document document, ProjectState project, ElementCategory category)",
+        "ElementCategory.GlassWall", "ElementCategory.WallPier", "bool allowPostCommitUi = true",
         "GeneratedGeometryService.MarkGenerated(document, transaction, solid, project.ProjectId, element.Id, category)",
         "GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category)"
     ],
@@ -172,7 +172,7 @@ checks = {
     "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs": [
         "FamilyScope", "InstanceScope", "PropertyScopes", "SelectedPropertyScope", "SetSelectedElement", "LoadInstanceProperties", "ApplyInstanceProperty",
         "DisplayNameFor", "GroupFor", "IsNumericProperty", "Bề dày", "CỐT THÉP", "EditorKindFor", "ChoicesFor", "IsBooleanProperty",
-        "ProjectFamilyService.SetProperty", "InheritedInstancesUpdated", "OverridesPreserved", "instance override", "row.CanReset", "Đã đưa", "element.MarkDirty(ElementDirtyFlags.All)",
+        "ProjectFamilyService.SetProperty", "InheritedInstancesUpdated", "OverridesPreserved", "instance override", "row.CanReset", "Đã đưa", "element.SetProperty(key, next)",
         "string.Equals(previous, next, StringComparison.Ordinal)", "ProjectFamilyService.Rename", "Chọn một cấu kiện semantic trước khi chuyển sang thuộc tính Instance"
     ],
     "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml": [
@@ -180,11 +180,11 @@ checks = {
         'Tag="QS3DREBAR3D"', 'Tag="QS3DREBAR3DSHAPE"', 'Tag="QS3DREBARHEALTH"', 'Tag="QS3DREBARSHAPEHEALTH"'
     ],
     "src/QS3D.BricsCAD.V25/Ribbon/RibbonBootstrapper.cs": [
-        'new RibbonButtonSpec("Vách Kính", "QS3DGLASSWALL")', 'new RibbonButtonSpec("Trụ Tường", "QS3DWALLPIER")',
-        'new RibbonButtonSpec("Giao tường", "QS3DWALLJUNCTIONS")', 'new RibbonButtonSpec("Khoét Cửa/Lỗ", "QS3DCUTOPENINGS")',
-        'new RibbonButtonSpec("Focus", "QS3DFOCUS")', 'new RibbonButtonSpec("Cô lập", "QS3DISOLATE")', 'new RibbonButtonSpec("Khôi phục", "QS3DUNISOLATE")',
-        'new RibbonButtonSpec("Cốt thép cột 3D", "QS3DREBAR3D")', 'new RibbonButtonSpec("Cốt thép shape 3D", "QS3DREBAR3DSHAPE")',
-        'new RibbonButtonSpec("Health shape", "QS3DREBARSHAPEHEALTH")'
+        'Button("Vách Kính", "QS3DGLASSWALL")', 'Button("Trụ Tường", "QS3DWALLPIER")',
+        'Button("Giao tường", "QS3DWALLJUNCTIONS")', 'Button("Khoét Cửa/Lỗ", "QS3DCUTOPENINGS")',
+        'Button("Focus", "QS3DFOCUS")', 'Button("Cô lập", "QS3DISOLATE")', 'Button("Khôi phục", "QS3DUNISOLATE")',
+        'Button("Cốt thép cột 3D", "QS3DREBAR3D")', 'Button("Cốt thép shape 3D", "QS3DREBAR3DSHAPE")',
+        'Button("Health shape", "QS3DREBARSHAPEHEALTH")'
     ],
     "tests/QS3D.Core.SmokeTests/GeometryCompletionSmoke.cs": [
         "StraightWallFootprint", "PolylineWallCorner", "FarOriginWallFootprint", "OpeningCutPlan", "RectangularRebarLayout", "GeneratedRebarHealth",

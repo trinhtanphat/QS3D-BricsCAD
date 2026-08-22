@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Xml.Linq;
 using QS3D.Core.Documentation;
 using QS3D.Core.Domain;
 
@@ -12,6 +15,9 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             SaveLoadRoundTripIsDeterministic();
+            PersistedCategoriesRequireCanonicalNames();
+            DuplicateCategoriesFailClosedAndDistinctCategoriesRoundTrip();
+            PersistedSchemaRequiresCanonicalShape();
             UpsertAndRemoveSupportMultipleDefinitions();
             BuildFiltersAndUsesCanonicalTemplateRenderer();
             EmptySelectionBuildsHeaderOnlyTable();
@@ -19,6 +25,8 @@ namespace QS3D.Core.SmokeTests
             NullProjectElementsFailClosed();
             StaleReferencesFailClosedAtRenderTime();
             DuplicateDefinitionsAndOverlappingListsFailClosed();
+            LoadAcceptsCapacityAndRejectsMalformedExcessByCapacity();
+            MalformedScheduleWithinCapacityKeepsSchemaFailure();
         }
 
         private static void SaveLoadRoundTripIsDeterministic()
@@ -40,6 +48,103 @@ namespace QS3D.Core.SmokeTests
             SemanticScheduleCatalog.Save(project, loaded);
             Equal(payload, project.Metadata[SemanticScheduleCatalog.MetadataKey]);
             Equal(version, project.ChangeVersion);
+        }
+
+        private static void PersistedCategoriesRequireCanonicalNames()
+        {
+            var project = Project();
+            SemanticScheduleCatalog.Save(project, new[] { Definition("S1", "Beam schedule", "BEAMS", "", "", Array.Empty<string>(), Array.Empty<string>()) });
+            var canonical = project.Metadata[SemanticScheduleCatalog.MetadataKey];
+            var categoryName = ElementCategory.Beam.ToString();
+            var canonicalToken = "value=\"" + categoryName + "\"";
+
+            project.Metadata[SemanticScheduleCatalog.MetadataKey] = canonical.Replace(canonicalToken, "value=\"" + categoryName.ToLowerInvariant() + "\"");
+            Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
+
+            project.Metadata[SemanticScheduleCatalog.MetadataKey] = canonical.Replace(
+                canonicalToken,
+                "value=\"" + Convert.ToInt64(ElementCategory.Beam, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture) + "\"");
+            Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
+
+            project.Metadata[SemanticScheduleCatalog.MetadataKey] = canonical.Replace(canonicalToken, "value=\" " + categoryName + " \"");
+            Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
+        }
+
+        private static void DuplicateCategoriesFailClosedAndDistinctCategoriesRoundTrip()
+        {
+            var project = Project();
+            var beforeVersion = project.ChangeVersion;
+            var duplicate = new SemanticScheduleDefinition(
+                "S-DUPLICATE-CATEGORY",
+                "Duplicate category",
+                "DUPLICATE CATEGORY",
+                new[] { ElementCategory.Beam, ElementCategory.Beam },
+                string.Empty,
+                string.Empty,
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                new[] { new SemanticDocumentationColumn("Id", "{Id}") });
+
+            Throws<InvalidOperationException>(() => SemanticScheduleCatalog.Save(project, new[] { duplicate }));
+            Throws<InvalidOperationException>(() => SemanticScheduleCatalog.Build(project, duplicate));
+            Equal(beforeVersion, project.ChangeVersion);
+            False(project.Metadata.ContainsKey(SemanticScheduleCatalog.MetadataKey));
+
+            var distinct = new SemanticScheduleDefinition(
+                "S-DISTINCT-CATEGORIES",
+                "Distinct categories",
+                "DISTINCT CATEGORIES",
+                new[] { ElementCategory.Column, ElementCategory.Beam },
+                string.Empty,
+                string.Empty,
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                new[] { new SemanticDocumentationColumn("Id", "{Id}") });
+            SemanticScheduleCatalog.Save(project, new[] { distinct });
+            var canonical = project.Metadata[SemanticScheduleCatalog.MetadataKey];
+            var savedVersion = project.ChangeVersion;
+            var loaded = SemanticScheduleCatalog.Load(project);
+
+            Equal(2, loaded[0].Categories.Count);
+            Equal(ElementCategory.Beam, loaded[0].Categories[0]);
+            Equal(ElementCategory.Column, loaded[0].Categories[1]);
+            SemanticScheduleCatalog.Save(project, loaded);
+            Equal(canonical, project.Metadata[SemanticScheduleCatalog.MetadataKey]);
+            Equal(savedVersion, project.ChangeVersion);
+
+            var root = XDocument.Parse(canonical).Root ?? throw new Exception("Catalog root missing.");
+            var categoryContainer = root.Element("schedule")?.Element("categories")
+                ?? throw new Exception("Category container missing.");
+            categoryContainer.Add(new XElement(
+                categoryContainer.Elements("category").First()));
+            project.Metadata[SemanticScheduleCatalog.MetadataKey] = root.ToString(SaveOptions.DisableFormatting);
+
+            Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
+        }
+
+        private static void PersistedSchemaRequiresCanonicalShape()
+        {
+            var project = Project();
+            SemanticScheduleCatalog.Save(project, new[] { Definition("S1", "Beam schedule", "BEAMS", "", "", Array.Empty<string>(), Array.Empty<string>()) });
+            var canonical = project.Metadata[SemanticScheduleCatalog.MetadataKey];
+
+            foreach (var containerName in new[] { "categories", "include", "exclude", "columns" })
+            {
+                var root = XDocument.Parse(canonical).Root ?? throw new Exception("Catalog root missing.");
+                var schedule = root.Element("schedule") ?? throw new Exception("Schedule missing.");
+                (schedule.Element(containerName) ?? throw new Exception("Canonical container missing.")).Remove();
+                project.Metadata[SemanticScheduleCatalog.MetadataKey] = root.ToString(SaveOptions.DisableFormatting);
+                Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
+            }
+
+            foreach (var attributeName in new[] { "id", "name", "title", "floorId", "zoneId" })
+            {
+                var root = XDocument.Parse(canonical).Root ?? throw new Exception("Catalog root missing.");
+                var schedule = root.Element("schedule") ?? throw new Exception("Schedule missing.");
+                (schedule.Attribute(attributeName) ?? throw new Exception("Canonical attribute missing.")).Remove();
+                project.Metadata[SemanticScheduleCatalog.MetadataKey] = root.ToString(SaveOptions.DisableFormatting);
+                Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
+            }
         }
 
         private static void UpsertAndRemoveSupportMultipleDefinitions()
@@ -147,6 +252,69 @@ namespace QS3D.Core.SmokeTests
             {
                 Definition("S3", "Overlap", "OVERLAP", "", "", new[] { "E1" }, new[] { "e1" })
             }));
+        }
+
+        private static void LoadAcceptsCapacityAndRejectsMalformedExcessByCapacity()
+        {
+            var project = Project();
+            var definitions = Enumerable.Range(1, 128)
+                .Select(index => Definition(
+                    "S-CAP-" + index,
+                    "Capacity " + index,
+                    "CAPACITY " + index,
+                    string.Empty,
+                    string.Empty,
+                    Array.Empty<string>(),
+                    Array.Empty<string>()))
+                .ToArray();
+            SemanticScheduleCatalog.Save(project, definitions);
+            Equal(128, SemanticScheduleCatalog.Load(project).Count);
+
+            var root = XDocument.Parse(project.Metadata[SemanticScheduleCatalog.MetadataKey]).Root
+                ?? throw new Exception("Catalog root missing.");
+            root.Add(new XElement(
+                "schedule",
+                new XAttribute("unsupported-excess-detail", "must-not-be-validated")));
+            project.Metadata[SemanticScheduleCatalog.MetadataKey] = root.ToString(SaveOptions.DisableFormatting);
+
+            try
+            {
+                SemanticScheduleCatalog.Load(project);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Equal("Semantic schedule catalog exceeds the supported 128 definitions.", ex.Message);
+                return;
+            }
+            catch (InvalidDataException ex)
+            {
+                throw new Exception("The malformed 129th schedule reached detailed schema validation before the catalog capacity guard.", ex);
+            }
+
+            throw new Exception("Expected Semantic Schedule load capacity rejection.");
+        }
+
+        private static void MalformedScheduleWithinCapacityKeepsSchemaFailure()
+        {
+            var project = Project();
+            SemanticScheduleCatalog.Save(project, new[]
+            {
+                Definition(
+                    "S-SCHEMA",
+                    "Schema failure",
+                    "SCHEMA FAILURE",
+                    string.Empty,
+                    string.Empty,
+                    Array.Empty<string>(),
+                    Array.Empty<string>())
+            });
+            var root = XDocument.Parse(project.Metadata[SemanticScheduleCatalog.MetadataKey]).Root
+                ?? throw new Exception("Catalog root missing.");
+            (root.Element("schedule") ?? throw new Exception("Schedule missing."))
+                .Add(new XAttribute("unsupported-within-capacity", "must-fail-schema"));
+            project.Metadata[SemanticScheduleCatalog.MetadataKey] = root.ToString(SaveOptions.DisableFormatting);
+
+            Throws<InvalidDataException>(() => SemanticScheduleCatalog.Load(project));
         }
 
         private static SemanticScheduleDefinition Definition(

@@ -9,11 +9,9 @@ namespace QS3D.Core.Persistence
     public sealed class ProjectFileLock : IDisposable
     {
         private FileStream? _stream;
-        private readonly string _lockPath;
 
-        private ProjectFileLock(string lockPath, FileStream stream)
+        private ProjectFileLock(FileStream stream)
         {
-            _lockPath = lockPath;
             _stream = stream;
         }
 
@@ -27,16 +25,20 @@ namespace QS3D.Core.Persistence
             FileStream? stream = null;
             try
             {
-                stream = new FileStream(lockPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
+                // Keep one stable rendezvous path for every owner. Recreating/unlinking the
+                // path between owners can split lock ownership on POSIX filesystems.
+                stream = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                stream.SetLength(0);
+                stream.Position = 0;
                 var payload = Encoding.UTF8.GetBytes("pid=" + Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture) + "\nutc=" + DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
                 stream.Write(payload, 0, payload.Length);
                 stream.Flush();
-                return new ProjectFileLock(lockPath, stream);
+                return new ProjectFileLock(stream);
             }
             catch (IOException ex)
             {
                 stream?.Dispose();
-                throw new InvalidOperationException("Unable to acquire exclusive QS3D project write lock: " + lockPath, ex);
+                throw new InvalidOperationException("Unable to acquire exclusive QS3D project write lock.", ex);
             }
             catch
             {
@@ -51,9 +53,6 @@ namespace QS3D.Core.Persistence
             if (stream == null) return;
             _stream = null;
             stream.Dispose();
-            try { File.Delete(_lockPath); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
         }
     }
 }

@@ -1,133 +1,301 @@
 # Agent Collaboration Policy
 
-This repository is expected to have multiple agents working concurrently. Every agent must protect other agents' work and choose tasks that match its actual execution environment.
+**POLICY_VERSION: 2026-08-21-v1**
+
+This repository is expected to have multiple agents working concurrently. Every agent must protect other agents' work, avoid overlapping lanes, and choose tasks that match its actual execution environment.
+
+## MUST READ / RUN THIS BOOTSTRAP ON EVERY OWNER PROMPT
+
+For every prompt that asks an agent/chat session to change, continue, fix, validate, integrate, merge, release, update docs/Markdown, or otherwise advance repository work:
+
+1. Read this `AGENTS.md` from current `origin/main`.
+2. Read `docs/AGENT-RUNTIME-CONTRACT.md` from current `origin/main`.
+3. Resolve current `origin/main` to an exact SHA; do **not** rely on chat memory for repository state or policy.
+4. Check the requested scope against current Issues/Lane-Keys, owners/sessions, branches, PRs and active/blocking claims before mutation.
+5. Reuse/continue the one canonical carrier when it already exists. An equivalent active carrier means `DUPLICATE_CARRIER / NO MUTATION` unless explicitly reassigned/superseded.
+6. Direct task writes/ref updates/force pushes to `main` are forbidden. Normal task content lands through a dedicated branch + protected PR.
+7. For normal owner-requested work, the default successful endpoint is **`MERGED_MAIN`** under `docs/MAIN-WRITE-AUTHORIZATION.md` unless the owner opts out for that exact task or a real terminal blocker remains.
+8. Red current-carrier CI is an automatic diagnose/fix/push/recheck trigger while safe same-lane remediation exists.
+9. Markdown-only does **not** mean no CI: ordinary docs may be lightweight; governance/policy Markdown may require source/policy guards. Changed paths are authoritative.
+10. Full owner-facing lifecycle reporting is terminal-first. Normal success reports begin exactly with `✅ Prompt result: MERGED_MAIN`; blocker reports are permitted only when no further safe authorized action remains.
+
+If older wording elsewhere conflicts with direct-main permission, standing same-task merge authorization, or the normal `MERGED_MAIN` endpoint, `docs/MAIN-WRITE-AUTHORIZATION.md` wins. If older wording treats branch-CI/PR timestamp order alone as permanent carrier validity, `docs/PR-CI-LIFECYCLE.md` wins.
+
+## Highest-priority Git/Main rule
+
+`docs/MAIN-WRITE-AUTHORIZATION.md` is authoritative for who may change `main` and for the default merge-completion endpoint of normal owner-requested repository tasks.
+
+**Direct-write default:** every normal AI agent/chat session treats `origin/main` as read-only for direct task writes.
+
+Requests such as the following never authorize a direct contents write, direct ref update, force push, protection bypass, or equivalent operation against `main`:
+
+- `fix bug`
+- `update code`
+- `implement all`
+- `continue all`
+- `commit`
+- `commit push git`
+- `review and fix`
+- `update docs`
+- `update md`
+- `chore`
+- `run CI`
+- `fix CI`
+- `merge main`
+
+There is **no docs/Markdown/chore direct-main exception**. Source, tests, scripts, workflows, docs, Markdown, claims, handoffs, status files and chores all go to a dedicated task branch/PR.
+
+For a normal repository-owner request, standing authorization applies to the **same task PR** after the task is fixed/validated, every current required check is green, the candidate is current and mergeable, and the owner has not explicitly opted out. The agent should then merge that same task PR through the protected PR path and verify the resulting `main` SHA without waiting for a second owner message.
+
+This standing authorization never permits unrelated/bulk merges, bypassing required checks, weakening branch protection, force-pushing, or directly writing `main`.
 
 ## Locked product form: BricsCAD plugin
 
-QS3D is a **BricsCAD V25 x64 .NET plugin**, not a standalone CAD desktop executable. BricsCAD is required at runtime; the native BricsCAD viewport/database/editor remain the CAD host. `QS3D.BricsCAD.V25` builds as a library/DLL and is loaded by DemandLoad or `NETLOAD`.
+QS3D is a **BricsCAD V25 + V26 Windows x64 hosted plugin**, not a standalone CAD desktop executable. A matching licensed BricsCAD host is required at runtime; the native BricsCAD viewport/database/editor remain the CAD host.
 
-`BLT-like`, `BLT-style`, `BLT3D-familiar`, “giống BLT” and similar wording refer to clean-room **workflow/UX familiarity only**. Do not reinterpret those phrases, modeless/full-screen window wording, or the CAD-independent `QS3D.Core` layer as a requirement for `QS3D.exe` or a QS3D-owned CAD engine.
+V25 loads the `QS3D.BricsCAD.V25` Library/DLL built for `net48`; V26 loads the `QS3D.BricsCAD.V26` Library/DLL built for `net8.0-windows`. Each host-major assembly is loaded by the matching BricsCAD host through DemandLoad or `NETLOAD` and must never be relabeled across majors.
 
-The canonical boundary is `docs/PRODUCT-BOUNDARY.md`. Changing the product into a standalone application requires a new explicit owner requirement and coordinated architecture/build/release changes; agents must never infer that change on their own.
+`BLT-like`, `BLT-style`, `BLT3D-familiar`, “giống BLT” and similar wording refer to clean-room workflow/UX familiarity only. Do not reinterpret them as a requirement for `QS3D.exe` or a QS3D-owned CAD engine.
 
-## Mandatory handoff reading order
+`docs/PRODUCT-BOUNDARY.md` is authoritative unless the owner explicitly changes the product boundary.
 
-Before starting substantive work, read in this order:
+## Mandatory reading order
 
-1. `AGENTS.md` (this file);
-2. `docs/PRODUCT-BOUNDARY.md` — **canonical product/hosting boundary**;
-3. `CI_POLICY.md`;
-4. fetch the latest `main`;
-5. `docs/REMOTE-AGENT-SCOPE.md` — **canonical remote/local execution boundary; remote agents must filter LOCAL_ONLY work out of their backlog instead of rechecking it**;
-6. `docs/AGENT-HANDOFF-CURRENT-2026-08-10-2306.md` — **newest short canonical current-state delta for Rule/Regen Preview, Health baseline/diff, privacy-safe diagnostics and current source/product logic**;
-7. `docs/AGENT-HANDOFF-CURRENT-2026-08-10-2037.md` — previous fast-moving source delta retained for concurrent persistence/interchange/documentation context;
-8. `docs/AGENT-HANDOFF-LATEST-2026-08-10.md` — broader current-source baseline/handoff retained for detail;
-9. `docs/IMPLEMENTATION-STATUS.md`;
-10. `docs/PLAN.md`, `docs/SOURCE-PRODUCT-PLAN-2026-08-10.md` and `docs/COMMANDS.md`;
-11. `docs/COMMANDS-PREVIEW-DIAGNOSTICS.md` — Rule Preview, Regen Preview, privacy-safe Diagnostic Summary and guarded Core Apply boundaries;
-12. `docs/DIRECT-DRAW-WORKFLOW.md` — **owner-required BLT-style direct authoring direction**;
-13. `docs/DIRECT-DRAW-P0-IMPLEMENTATION.md` — current P0 source/rollback/runtime boundary;
-14. `docs/DIRECT-DRAW-P1-IMPLEMENTATION.md` — guarded GlassWall/WallPier/StructuralWall/Foundation plus current Direct Draw extension summary;
-15. `docs/DIRECT-DRAW-OPENINGS.md` — **current Door/WallOpening source + Auto Host + explicit physical-cut boundary and V25 runtime checklist**;
-16. `docs/LOCAL-AGENT-INBOX.md` — **single live priority queue for every LOCAL_ONLY gate; remote agents must register new/changed local scenarios here in the same batch, and local agents start here**;
-17. `docs/LOCAL-V25-QUALIFICATION.md` — **LOCAL_ONLY execution runbook for agents with interactive Windows + licensed BricsCAD V25; remote agents do not re-run/re-audit it**;
-18. `docs/LOCAL-PREVIEW-DIAGNOSTIC-QUALIFICATION-2026-08-10.md` — **LOCAL_ONLY exact-SHA qualification for read-only previews, privacy-safe diagnostic export and future guarded Apply confirmation/Undo/session behavior**;
-19. `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md` — **LOCAL_ONLY remaining Curtain-panel, physical wall-junction, standard-specific rebar and production-signing detail**;
-20. `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` — **LOCAL_ONLY/runtime/policy detail including whole-command Curtain recovery, native DrawJig/repeated authoring, commercial-license policy/wiring, legal distribution and performance/UX gates**;
-21. `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md` — **consolidated LOCAL_ONLY execution detail for Interchange JSON, documentation, polygon mesh, Level Z-chain, Source Reconcile, Curtain, L/T/X, Direct Draw, signing/licensing and performance**;
-22. `docs/DOCUMENTATION-LAYER.md` — semantic-tag and native documentation-table source/runtime boundaries;
-23. `docs/INTERCHANGE-JSON.md` — read-only semantic interchange format and runtime qualification boundary;
-24. `docs/INTERCHANGE-IMPORT-RESOLUTION-POLICY.md` — **explicit collision/provenance/generated-output policy planning and execution boundaries**;
-25. `docs/AGENT-HANDOFF-SESSION-HISTORY-2026-08-10.md` only when deeper session chronology, old branch/gate history, screenshot requirements or early implementation evidence is needed.
+Before substantive work, read from current `origin/main`:
 
-The local-agent inbox is the live priority index. Longer `LOCAL-*` documents are runbooks/history/detail and must not become competing live queues. If they conflict on current priority/status, `docs/LOCAL-AGENT-INBOX.md` wins; current source still wins for implementation truth.
+1. `AGENTS.md`;
+2. `docs/AGENT-RUNTIME-CONTRACT.md`;
+3. `docs/MAIN-WRITE-AUTHORIZATION.md`;
+4. `docs/PRODUCT-BOUNDARY.md`;
+5. `CI_POLICY.md`;
+6. `docs/AGENT-BRANCH-CI-ACTIONS-LOOKUP.md`;
+7. current `origin/main` exact SHA;
+8. `docs/AGENT-WORK-REGISTRATION.md`;
+9. `docs/AGENT-PROMPT-TO-RELEASE-CONTRACT.md`;
+10. `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`;
+11. `docs/PR-CI-LIFECYCLE.md`;
+12. relevant open Issues/PRs plus `ACTIVE`/`BLOCKED` historical claims under `docs/agent-work-claims/`;
+13. `docs/REMOTE-AGENT-SCOPE.md`;
+14. the newest current handoff/status docs relevant to the task;
+15. `docs/LOCAL-AGENT-INBOX.md` for LOCAL_ONLY work;
+16. the exact feature/runbook documents required by the assigned lane.
 
-The session-history handoff is intentionally retained as an audit trail, but it contains historical source-status statements that can become stale as `main` evolves. When it conflicts with the current handoff or current source, current `main` wins. For product-form/hosting ambiguity, `docs/PRODUCT-BOUNDARY.md` is authoritative unless the owner explicitly changes that requirement.
+Current source wins over stale historical handoffs for implementation truth. `docs/LOCAL-AGENT-INBOX.md` is the live LOCAL_ONLY priority index when older local documents disagree on status/priority.
+
+## Mandatory work registration and single-carrier rule
+
+Before implementation, every normal agent must:
+
+1. fetch/read current `origin/main`;
+2. inspect relevant Issues, PRs, branches and active/blocking claims;
+3. choose a non-overlapping lane and determine its stable **Lane-Key**, normally `issue-<number>`;
+4. identify the one current canonical owner/carrier for that Lane-Key;
+5. create/update a GitHub Issue for the lane when practical, unless an existing owner-created issue already uniquely identifies the task;
+6. create a dedicated branch from the latest valid baseline, normally `agent/<agent-id>/<scope>`, only when no canonical carrier already owns the Lane-Key;
+7. put **all** task changes on that one canonical branch;
+8. validate, commit and push only that branch;
+9. observe/remediate any known red exact-head branch CI on the same carrier;
+10. open/continue the single canonical PR with Lane-Key, owner/session, carrier and supersession metadata;
+11. refresh/reconcile `origin/main` when needed and obtain fresh current-candidate evidence;
+12. for a normal owner-requested task, merge the same PR through protected `main` once all current required gates are satisfied unless the owner explicitly opted out.
+
+Single-owner/single-carrier invariants:
+
+- one Lane-Key has at most one ACTIVE owner, one canonical branch and one open canonical PR;
+- stale, red, queued, behind or inconvenient work remains owned until explicitly released/superseded;
+- if replacement is genuinely required, record supersession and close the old open PR before representing a replacement as canonical;
+- do not create branch-to-branch/internal PRs merely to sync/replay `main` or another branch into a task branch;
+- umbrella/control Issues do not authorize duplicate concrete implementation lanes;
+- a clean Git merge does not prove semantic non-overlap.
+
+## Markdown / docs execution path
+
+`Markdown-only` does **not** imply `no CI`. Changed paths, not commit prefixes such as `docs:`, `md:` or `chore:`, determine validation and release impact.
+
+### ORDINARY_DOCS
+
+Ordinary guidance/notes/claims/handoffs outside the policy/source-guard watched set:
+
+- remain branch + PR work;
+- may use the lightweight non-build shared-CI path;
+- may omit heavy pre-PR source/build validation when the path is intentionally outside that watched set;
+- do not require Core/V25 build or licensed BricsCAD runtime merely because `.md` changed;
+- still require protected current-candidate `preflight` + `core` before merge.
+
+### GOVERNANCE_POLICY_MD
+
+Policy Markdown explicitly classified by `.github/workflows/ci.yml`, including `AGENTS.md`, `CI_POLICY.md`, `README.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `docs/AGENT-WORK-REGISTRATION.md`, `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`, `docs/AGENT-STATUS-MARKER-SEMANTICS.md`, and `docs/AGENT-BRANCH-CI-ACTIONS-LOOKUP.md`:
+
+- remains branch + PR work;
+- must run the policy/source guards selected by shared CI;
+- does **not** require Core/V25 build unless another build-relevant path changed;
+- must not be expanded into scripts/workflows/source merely to make a documentation clarification appear more enforceable unless executable enforcement is explicitly part of the task.
+
+Ordinary docs/Markdown/chore-only landings outside the V25 dispatcher's watched integration-relevant paths must not trigger the V25 cloud release path.
+
+## Branch CI and PR timing
+
+Every `agent/**` / `integration/**` push is eligible for the owner-approved shared non-publishing CI. Inspect/remediate known red exact-head results.
+
+For watched work, prefer exact-head branch-CI success before opening a new PR when the current admission gate requires it. However, branch-CI completion timestamp is **not** permanent PR identity:
+
+- a canonical PR may coexist with queued/running branch CI;
+- completion after PR creation does not poison the PR;
+- later same-carrier remediation may change the head SHA;
+- do not close/recreate a PR or branch merely to make timestamps look ordered;
+- revalidate the current candidate and keep the same canonical carrier unless there is a real ownership/scope reason to supersede it.
+
+Protected current-candidate `preflight` + `core`, strict freshness, mergeability/collision checks and expected-head protection are the merge gate.
+
+## Mandatory continuation and terminal-first reporting
+
+Every owner prompt that asks to change, continue, fix, validate, integrate, merge or release work is a continuation of the **current canonical GitHub lifecycle**, not a fresh isolated attempt.
+
+These states are distinct:
+
+```text
+edited locally
+  != committed
+  != pushed branch
+  != branch CI green
+  != PR ready/open
+  != PR/protected candidate green
+  != merged to main
+  != exact-main validated
+  != released/published
+```
+
+Do **not** emit a full owner-facing lifecycle completion report merely because an intermediate state was reached. Continue the same canonical carrier while safe authorized actions remain.
+
+Full lifecycle reporting is required when:
+
+1. success reaches `MERGED_MAIN` (or a stricter endpoint the owner explicitly requested); or
+2. a legitimate blocker leaves no further safe authorized action in the current execution.
+
+Normal success report begins exactly:
+
+```text
+✅ Prompt result: MERGED_MAIN
+```
+
+Legitimate blocker reports begin exactly:
+
+```text
+❌ Prompt result: BLOCKED
+```
+
+Use the complete mandatory fields/forms in `docs/AGENT-PROMPT-TO-RELEASE-CONTRACT.md`. Queued/running CI, a red-but-fixable current carrier, an open PR, review feedback that can be fixed, or a stale branch that can be reconciled are not terminal blockers by themselves.
 
 ## Mandatory sync discipline
 
-Before starting a code change:
+Before starting a code or documentation change and again before final handoff/merge decisions:
 
-1. refresh/fetch the latest `main`;
-2. inspect recent commits and changed files relevant to the task;
-3. base the work on the current branch head, not on an older snapshot from the beginning of the conversation/session.
+1. refresh current `origin/main`;
+2. inspect relevant recent commits and concurrent PRs;
+3. verify the current canonical branch/head;
+4. reconcile safely on the task branch if `main` moved;
+5. review the final diff so it contains only intended scope;
+6. obtain fresh applicable exact-head/protected evidence after any candidate change.
 
-Before every commit/push to `main`:
-
-1. refresh the current `main` again;
-2. verify whether another agent has pushed since the last sync;
-3. if `main` moved, rebase/reapply/merge the intended patch onto the latest head without discarding newer work;
-4. review the final diff so the commit contains only the intended changes.
-
-For longer tasks, repeat this sync periodically instead of waiting until the end. Assume another agent can commit at any time.
-
-Never force-push over concurrent work, reset `main` backwards, or silently revert another agent's changes unless the repository owner explicitly requests that exact operation.
+Never force-push `main`, reset it backwards, silently overwrite another agent's work, or use `ours`/`theirs` blindly to hide semantic conflicts.
 
 ## Request-scoped commit batching
 
-The repository owner explicitly prefers **coherent commits scoped to the owner request**, not a stream of tiny commits.
+The repository owner prefers coherent commits scoped to the owner request/lane rather than a stream of tiny file-by-file commits.
 
-- Treat one owner request or `continue all` batch as the default commit unit.
-- Accumulate related source implementation, regression/smoke/static guards, documentation and canonical handoff updates, review the combined diff, then commit the coherent batch.
-- **Do not commit merely because one file or one small fix is finished.** Avoid file-by-file, test-by-test and docs-after-code commit chains for one request.
-- Split a request into more than one commit only when the parts are genuinely independent and separately revertable/risky, when integrating an already-existing independent PR (prefer squash), or when concurrent movement of `main` makes separate conflict-safe integration necessary.
-- If another agent lands overlapping work while a batch is in progress, review and reuse the winning implementation instead of committing a duplicate.
-- Immediately before the final batch commit, sync `main` again. If it moved, reapply/rebase the whole intended batch onto the new head and never force-push stale history.
+- Treat one owner request or `continue all` lane as the default commit unit on the task branch.
+- Accumulate related implementation, regressions/guards, docs and handoff updates into coherent commits.
+- Split only when parts are genuinely independent or separately risky/revertable.
+- If another agent lands overlapping work, review/reuse the winning implementation instead of committing a duplicate.
 
-Commit messages should describe the request-level capability or safety outcome, not the last individual file touched.
+## Normal owner-task endpoint
+
+For a normal repository-owner task, the successful path is generally:
+
+```text
+latest main read
+  -> issue/reservation checked
+  -> one canonical agent branch
+  -> implementation/docs/chore commits
+  -> appropriate validation
+  -> branch pushed; exact-head CI observed/remediated when applicable
+  -> canonical PR opened/continued
+  -> refresh/reconcile main if needed
+  -> protected current-candidate preflight + core SUCCESS
+  -> current + mergeable + expected-head verified
+  -> merge same task PR under MAIN-WRITE-AUTHORIZATION
+  -> refresh resulting main SHA
+  -> MERGED_MAIN
+```
+
+An owner may explicitly opt a task out with `PR only`, `do not merge main`, `stop before merge`, `đừng merge`, or clear equivalent wording. A non-owner contribution context that has no applicable owner standing authorization stops at its authorized PR boundary.
+
+## Owner-authorized integration coordinator
+
+Standing same-task authorization does not permit unrelated/bulk integration. A named multi-agent batch or unrelated PR set requires the applicable owner integration authorization.
+
+For multi-agent work, prefer `integration/<batch-id>`. The authorized coordinator must refresh current `main`, identify exact participating lanes, integrate without silently dropping work, resolve semantic/API/test conflicts deliberately, validate the combined candidate, satisfy protected current-candidate rules, merge only the authorized batch, and then record the resulting `main` SHA.
 
 ## Divide work by execution capability
 
-### Agents with local-machine access
+### Local-machine agents
 
-If an agent has permission and tooling to operate a real/local machine, that agent should prioritize work that genuinely requires that local environment, especially:
+Agents with real/local access should prioritize work that genuinely requires that environment: licensed BricsCAD V25/V26 runtime, real `NETLOAD`/DemandLoad, Windows desktop/UI interaction, proprietary SDK/runtime dependencies unavailable in GitHub, private DWG fixtures/assets, signing credentials, or machine-specific behavior.
 
-- BricsCAD V25 installation/runtime access;
-- real `NETLOAD` / DemandLoad and interactive plugin validation;
-- Windows desktop/UI interaction and screenshots;
-- local licensed/proprietary dependencies that cannot be stored in GitHub;
-- private DWG fixtures or files that exist only on the local machine;
-- runner registration, environment variables, installed SDK/runtime inspection;
-- reproducing machine-specific crashes, DPI/layout issues, file-lock behavior, or native CAD behavior.
+### Hard scope lock for `agent/local002` / `agent/local003`
 
-Start every local pass from `docs/LOCAL-AGENT-INBOX.md`: choose the highest-priority compatible `OPEN`/`IN_PROGRESS` item, then follow its linked runbook. For exact V25 qualification, continue with `docs/LOCAL-V25-QUALIFICATION.md` and run `scripts/run-local-v25-qualification.ps1` against a **clean exact SHA** before manual scenario testing. For the preview/diagnostic workflow also read `docs/LOCAL-PREVIEW-DIAGNOSTIC-QUALIFICATION-2026-08-10.md`. The remaining historical/detail handoffs are supporting material for the inbox item, not separate queues. Close only gates for which the local agent can produce the required evidence or owner-supplied policy. Keep generated runtime evidence under `artifacts/` or another explicitly local folder; `artifacts/` is intentionally gitignored. Do not claim a customer-release qualification when the runner used `-SkipRuntime`.
+The two local workers and successor sessions in those roles are restricted to **LOCAL_ONLY / local-agent-only** work. They may implement/qualify only an item explicitly marked `LOCAL_ONLY`, `PENDING_LOCAL`, assigned in `docs/LOCAL-AGENT-INBOX.md`, assigned in a relevant reservation, or directly assigned by the owner as that exact local task.
 
-Do not spend scarce local-machine access on ordinary repository editing, documentation cleanup, broad source review, or other tasks that remote agents can perform equally well unless those tasks directly unblock local validation.
+General source-safe bug fixing, tests, docs, refactors, source guards, packaging logic and ordinary adapter fixes belong to non-local agents unless the owner explicitly assigns otherwise. If local validation discovers a normal source bug, capture sanitized evidence and hand it off; a remote/source agent fixes it, and the local worker may resume LOCAL_ONLY validation against the new exact SHA.
+
+Local workers must not perform broad opportunistic cleanup, treat Actions failures as their default backlog, dispatch/re-run/cancel Actions without exact owner assignment, or broaden into remote-safe work when no compatible LOCAL_ONLY item exists.
+
+Start permitted local passes from `docs/LOCAL-AGENT-INBOX.md`, then follow the linked exact runbook. For licensed BricsCAD V25 qualification, use `docs/LOCAL-V25-QUALIFICATION.md` and record evidence against the exact source SHA.
 
 ### Remote / hybrid online agents
 
-Remote or hybrid agents should handle work that does not require the real local BricsCAD machine, including:
+Remote/hybrid agents handle repository-safe source review/implementation, core/domain/persistence/reporting/test code, static analysis, general source bugs, Markdown/documentation/planning, workflow/policy review without unauthorized Actions dispatch, Git history inspection, and probes for later local execution.
 
-- GitHub source review and implementation;
-- core/domain/persistence/reporting/test code;
-- static analysis and code-quality fixes;
-- Markdown/documentation/planning;
-- workflow/policy review without dispatching Actions;
-- Git history inspection and multi-agent integration;
-- preparing scripts, tests, patches, and runtime probes for a local agent to execute later.
+`docs/REMOTE-AGENT-SCOPE.md` is authoritative for remote backlog filtering. Remote/static evidence must never be reported as `LOCAL_PASS`.
 
-`docs/REMOTE-AGENT-SCOPE.md` is authoritative for remote backlog filtering. A remote agent must **skip**, rather than repeatedly re-check, qualification already classified `LOCAL_ONLY`, including real V25/Windows runtime, NETLOAD/DemandLoad, private-DWG, native UI/performance, clean-machine installer and real Authenticode private-key/timestamp gates. During broad `continue all` or source audits, do not search merely to see whether those local gates have become PASS, do not reopen them as remote backlog, and do not block remote completion on them.
+Remote agents must skip execution gates already classified LOCAL_ONLY rather than repeatedly rechecking them.
 
-Remote agents may still implement or strengthen source contracts, static guards, deterministic tests and local probes around those areas. If such source work changes what must be validated locally, add or update the matching `docs/LOCAL-AGENT-INBOX.md` item **in the same source/docs batch** with the minimum exact scenario/evidence required, then continue remote source work. Do not park a new local gate only in prose elsewhere. Remote agents must never manufacture `LOCAL_PASS` from source/static evidence.
+## Unavailable-work handoff
 
-## Handoff rule
+When a required part cannot be completed/proved because the session lacks licensed runtime, private fixtures, Windows UI, signing credentials, hardware or another non-repository resource, classify/handoff the unavailable part precisely, update the relevant local inbox/runbook reference on the task branch when appropriate, leave source-safe implementation/tests/probes ready, and continue other safe work. Lack of local capability is a handoff condition, not a reason for repeated remote retries.
 
-When a remote agent reaches a new task that requires local-only access, leave the repository in a runnable/testable state and register the exact scenario in `docs/LOCAL-AGENT-INBOX.md`, which is the canonical live priority/status index. `docs/LOCAL-V25-QUALIFICATION.md` is the canonical exact-V25 execution runbook; preview/diagnostic runtime work is detailed in `docs/LOCAL-PREVIEW-DIAGNOSTIC-QUALIFICATION-2026-08-10.md`; remaining historical implementation/engineering/signing details live in `docs/LOCAL-AGENT-REMAINING-GATES-2026-08-10.md`, `docs/LOCAL-AGENT-OPEN-WORK-ADDENDUM-2026-08-10.md` and `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`. Extend detailed handoffs only when useful, but always update the inbox when a new/changed local scenario affects current work. Do not repeatedly re-audit an already parked LOCAL_ONLY gate from a remote environment.
-
-When a local agent finishes validation, update the matching inbox item with `PASS` only when sanitized evidence is tied to the exact tested SHA. Commit only reusable source/scripts/docs and a sanitized text summary if useful; never commit proprietary BricsCAD DLLs, private fixtures, screenshots containing private drawings, signing secrets or raw machine evidence.
-
-When adding major source capability, update `docs/AGENT-HANDOFF-CURRENT-2026-08-10-2306.md` or create a newer canonical current handoff and update this reading-order pointer. Do not make agents infer current status from an old session transcript alone.
+New or materially changed LOCAL_ONLY scenarios must be registered in `docs/LOCAL-AGENT-INBOX.md` on the same task branch/PR so source-side policy and local evidence requirements stay synchronized.
 
 ## GitHub Actions / release
 
-Follow `CI_POLICY.md` strictly:
+Follow `CI_POLICY.md` and use `docs/AGENT-BRANCH-CI-ACTIONS-LOOKUP.md` for CI self-observation/evidence recovery.
 
-- all workflows are `workflow_dispatch` only;
-- do not add automatic/event-driven triggers;
-- do not dispatch or re-run Actions because code/docs were changed, committed, pushed, merged, reviewed, handed off, or because the owner said `continue all`;
-- CI/build/runtime/release runs require a **separate explicit owner request**;
-- preparing `.github/workflows/release-v25.yml` does not authorize running it;
-- publishing a GitHub Release is allowed only when the owner explicitly requests a release and the manual workflow receives `confirm_release=RELEASE`;
-- use `scripts/preflight-ci-manual-only.py` as the strict repository guard against accidental automatic CI/CD triggers.
+- Workflows are manual-only by default.
+- `.github/workflows/ci.yml` shared branch/PR CI is an owner-approved automatic validation exception.
+- AI agents must exhaust repository-native CI evidence-recovery routes before asking the owner for routine run/check information.
+- The owner-approved automatic publishing/dispatch exception is `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` after an authorized integration-relevant `main` landing.
+- Normal task authorization does not authorize unrelated manual workflow dispatch/re-run/cancel.
+- Manual CI authorization does not imply unrelated merge authorization.
+- Ordinary docs/Markdown-only landings outside dispatcher watched paths must not trigger V25 cloud release.
+- Changed paths, not commit-message prefixes, determine automatic-dispatch eligibility.
 
-For an approved build/release operation, read `docs/MANUAL-BUILD-RELEASE.md` first and resolve the exact commit/tag before dispatching anything.
+## GitHub hard protection
+
+GitHub ruleset **`protectedMain`** (ruleset ID **`20890901`**) is the expected hard-enforcement layer for `main`:
+
+- require PR-based updates to `main`;
+- require stable status checks `preflight` and `core`;
+- strict required-status freshness enabled;
+- block force pushes/non-fast-forward updates;
+- block deletion;
+- bypass list empty.
+
+Repository policy and GitHub hard protection are complementary. Verify effective rules when protection state matters. If required protection disappears or an unexpected bypass appears, treat that as a governance defect and do not bypass it.
+
+See `docs/GITHUB-MAIN-PROTECTION.md` for verification/recovery details.
+
+## Definition of `ALL MERGED TO MAIN`
+
+State **ALL MERGED TO MAIN** only after the authorized integration reviewer verifies against current `main` that required lanes are terminal or explicitly excluded/superseded, all required work is reachable from current `main`, no required work remains only off-main, required evidence is green/fresh where applicable, current protection remains valid, the combined tree has no known semantic/API/test collision or accidental reversion, and the exact current `main` SHA has been recorded.
+
+Branch deletion, Issue state, PR UI state or stale CI alone is not sufficient proof.

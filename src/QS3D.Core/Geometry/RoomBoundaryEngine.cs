@@ -48,13 +48,12 @@ namespace QS3D.Core.Geometry
             if (!FinitePositive(tolerance)) throw new ArgumentOutOfRangeException(nameof(tolerance));
             if (!FiniteNonNegative(minimumArea)) throw new ArgumentOutOfRangeException(nameof(minimumArea));
 
-            var segments = source.ToList();
+            var segments = source.Take(MaxInputSegments + 1).ToList();
             if (segments.Count > MaxInputSegments) throw new InvalidOperationException("Room boundary input exceeds the supported segment limit.");
             foreach (var segment in segments) ValidateSegment(segment, tolerance);
             if (segments.Count < 3) return Array.Empty<RoomBoundary>();
 
             var cuts = new List<Cut>[segments.Count];
-            var bounds = new SegmentBounds[segments.Count];
             for (var i = 0; i < segments.Count; i++)
             {
                 cuts[i] = new List<Cut>
@@ -62,15 +61,10 @@ namespace QS3D.Core.Geometry
                     new Cut(0d, segments[i].Start),
                     new Cut(1d, segments[i].End)
                 };
-                bounds[i] = new SegmentBounds(segments[i], tolerance);
             }
 
-            for (var i = 0; i < segments.Count; i++)
-                for (var j = i + 1; j < segments.Count; j++)
-                {
-                    if (!bounds[i].Overlaps(bounds[j])) continue;
-                    CollectPairCuts(segments[i], segments[j], cuts[i], cuts[j], tolerance);
-                }
+            foreach (var pair in EnumeratePotentialPairs(segments, tolerance))
+                CollectPairCuts(segments[pair.Item1], segments[pair.Item2], cuts[pair.Item1], cuts[pair.Item2], tolerance);
 
             var rawEdges = new List<RawEdge>();
             for (var i = 0; i < segments.Count; i++)
@@ -107,7 +101,7 @@ namespace QS3D.Core.Geometry
                 Trace(edge.B, edge.A);
             }
 
-            return result.OrderBy(x => x.Key, StringComparer.Ordinal).ToList();
+            return result.OrderBy(x => x.Key, StringComparer.Ordinal).ToList().AsReadOnly();
 
             void Trace(int startA, int startB)
             {
@@ -150,6 +144,40 @@ namespace QS3D.Core.Geometry
                     boundarySources.Where(x => !string.IsNullOrWhiteSpace(x)).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly(),
                     signedArea,
                     perimeter));
+            }
+        }
+
+        private static IEnumerable<Tuple<int, int>> EnumeratePotentialPairs(IReadOnlyList<BoundarySegment> segments, double tolerance)
+        {
+            var ordered = new List<SegmentBounds>(segments.Count);
+            for (var index = 0; index < segments.Count; index++) ordered.Add(new SegmentBounds(index, segments[index], tolerance));
+            ordered.Sort((left, right) =>
+            {
+                var compare = left.MinX.CompareTo(right.MinX);
+                if (compare != 0) return compare;
+                compare = left.MaxX.CompareTo(right.MaxX);
+                if (compare != 0) return compare;
+                compare = left.MinY.CompareTo(right.MinY);
+                if (compare != 0) return compare;
+                compare = left.MaxY.CompareTo(right.MaxY);
+                return compare != 0 ? compare : left.Index.CompareTo(right.Index);
+            });
+
+            var active = new List<SegmentBounds>();
+            foreach (var current in ordered)
+            {
+                for (var index = active.Count - 1; index >= 0; index--)
+                    if (active[index].MaxX < current.MinX) active.RemoveAt(index);
+
+                foreach (var other in active)
+                {
+                    if (!other.Overlaps(current)) continue;
+                    var first = Math.Min(other.Index, current.Index);
+                    var second = Math.Max(other.Index, current.Index);
+                    yield return Tuple.Create(first, second);
+                }
+
+                active.Add(current);
             }
         }
 
@@ -202,12 +230,47 @@ namespace QS3D.Core.Geometry
         {
             var dx = segment.End.X - segment.Start.X;
             var dy = segment.End.Y - segment.Start.Y;
-            var lengthSquared = dx * dx + dy * dy;
-            if (!(lengthSquared > 0d)) return;
-            var t = ((point.X - segment.Start.X) * dx + (point.Y - segment.Start.Y) * dy) / lengthSquared;
-            if (t < 0d || t > 1d) return;
+            if (!Finite(dx) || !Finite(dy)) throw new OverflowException("Room boundary endpoint projection direction exceeds the supported numeric range.");
+            var length = segment.Start.DistanceTo(segment.End);
+            if (!(length > 0d)) return;
+            var ux = dx / length;
+            var uy = dy / length;
+            if (!Finite(ux) || !Finite(uy)) throw new OverflowException("Room boundary endpoint projection direction is not finite.");
+
+            var qx = point.X - segment.Start.X;
+            var qy = point.Y - segment.Start.Y;
+            if (!Finite(qx) || !Finite(qy)) throw new OverflowException("Room boundary endpoint projection delta exceeds the supported numeric range.");
+            var scale = Math.Max(Math.Abs(qx), Math.Abs(qy));
+            if (scale == 0d)
+            {
+                cuts.Add(new Cut(0d, segment.Start));
+                return;
+            }
+
+            var scaledAlong = qx / scale * ux + qy / scale * uy;
+            if (!Finite(scaledAlong)) throw new OverflowException("Room boundary endpoint scaled projection is not finite.");
+            if (scaledAlong < 0d) return;
+            var scaledLength = length / scale;
+            if (!(scaledLength > 0d) || scaledAlong > scaledLength) return;
+            var t = scaledAlong / scaledLength;
+            if (!Finite(t) || t < 0d || t > 1d) return;
             var projected = new Point2(segment.Start.X + dx * t, segment.Start.Y + dy * t);
-            if (projected.DistanceTo(point) <= tolerance) cuts.Add(new Cut(Clamp01(t), projected));
+            if (projected.DistanceTo(point) > tolerance)
+            {
+                var dominantDirection = Math.Abs(dx) >= Math.Abs(dy) ? dx : dy;
+                var dominantDelta = Math.Abs(dx) >= Math.Abs(dy) ? qx : qy;
+                if (dominantDirection == 0d) return;
+                var dominantT = dominantDelta / dominantDirection;
+                if (!Finite(dominantT) || dominantT < 0d || dominantT > 1d) return;
+                dominantT = Clamp01(dominantT);
+                var dominantProjected = new Point2(
+                    segment.Start.X + dx * dominantT,
+                    segment.Start.Y + dy * dominantT);
+                if (dominantProjected.DistanceTo(point) > tolerance) return;
+                t = dominantT;
+                projected = dominantProjected;
+            }
+            cuts.Add(new Cut(Clamp01(t), projected));
         }
 
         private static IReadOnlyList<Cut> DeduplicateCuts(IEnumerable<Cut> source, BoundarySegment segment, double tolerance)
@@ -372,15 +435,52 @@ namespace QS3D.Core.Geometry
 
         private static string CanonicalRotation(IReadOnlyList<string> tokens)
         {
-            string? best = null;
-            for (var start = 0; start < tokens.Count; start++)
+            if (tokens.Count == 0) return string.Empty;
+
+            var first = 0;
+            var second = 1;
+            var offset = 0;
+            while (first < tokens.Count && second < tokens.Count && offset < tokens.Count)
             {
-                var ordered = new string[tokens.Count];
-                for (var i = 0; i < tokens.Count; i++) ordered[i] = tokens[(start + i) % tokens.Count];
-                var candidate = string.Join("|", ordered);
-                if (best == null || string.CompareOrdinal(candidate, best) < 0) best = candidate;
+                var compare = CompareRotationToken(tokens[(first + offset) % tokens.Count], tokens[(second + offset) % tokens.Count]);
+                if (compare == 0)
+                {
+                    offset++;
+                    continue;
+                }
+
+                if (compare > 0)
+                {
+                    first += offset + 1;
+                    if (first <= second) first = second + 1;
+                }
+                else
+                {
+                    second += offset + 1;
+                    if (second <= first) second = first + 1;
+                }
+                offset = 0;
             }
-            return best ?? string.Empty;
+
+            var start = Math.Min(first, second);
+            var ordered = new string[tokens.Count];
+            for (var index = 0; index < tokens.Count; index++) ordered[index] = tokens[(start + index) % tokens.Count];
+            return string.Join("|", ordered);
+        }
+
+        private static int CompareRotationToken(string left, string right)
+        {
+            var leftLength = left.Length + 1;
+            var rightLength = right.Length + 1;
+            var commonLength = Math.Min(leftLength, rightLength);
+            for (var index = 0; index < commonLength; index++)
+            {
+                var leftChar = index < left.Length ? left[index] : '|';
+                var rightChar = index < right.Length ? right[index] : '|';
+                var compare = leftChar.CompareTo(rightChar);
+                if (compare != 0) return compare;
+            }
+            return leftLength.CompareTo(rightLength);
         }
 
         private static string QuantizedToken(Point2 point, double tolerance)
@@ -396,7 +496,23 @@ namespace QS3D.Core.Geometry
             if (a > b) { var temp = a; a = b; b = temp; }
             return a.ToString(CultureInfo.InvariantCulture) + ":" + b.ToString(CultureInfo.InvariantCulture);
         }
-        private static double Cross(double ax, double ay, double bx, double by) => ax * by - ay * bx;
+        private static double Cross(double ax, double ay, double bx, double by)
+        {
+            var scaleA = Math.Max(Math.Abs(ax), Math.Abs(ay));
+            var scaleB = Math.Max(Math.Abs(bx), Math.Abs(by));
+            if (!Finite(scaleA) || !Finite(scaleB)) throw new OverflowException("Room boundary determinant input exceeds the supported numeric range.");
+            if (scaleA == 0d || scaleB == 0d) return 0d;
+
+            var normalized = ax / scaleA * (by / scaleB) - ay / scaleA * (bx / scaleB);
+            if (!Finite(normalized)) throw new OverflowException("Room boundary determinant exceeds the supported numeric range.");
+            var smallerScale = Math.Min(scaleA, scaleB);
+            var largerScale = Math.Max(scaleA, scaleB);
+            var scaled = normalized * smallerScale;
+            if (!Finite(scaled)) throw new OverflowException("Room boundary determinant exceeds the supported numeric range.");
+            var value = scaled * largerScale;
+            if (!Finite(value)) throw new OverflowException("Room boundary determinant exceeds the supported numeric range.");
+            return value;
+        }
         private static double Clamp01(double value) => value < 0d ? 0d : value > 1d ? 1d : value;
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
         private static bool FinitePositive(double value) => Finite(value) && value > 0d;
@@ -405,14 +521,16 @@ namespace QS3D.Core.Geometry
 
         private sealed class SegmentBounds
         {
-            public SegmentBounds(BoundarySegment segment, double tolerance)
+            public SegmentBounds(int index, BoundarySegment segment, double tolerance)
             {
+                Index = index;
                 MinX = ExpandDown(Math.Min(segment.Start.X, segment.End.X), tolerance);
                 MaxX = ExpandUp(Math.Max(segment.Start.X, segment.End.X), tolerance);
                 MinY = ExpandDown(Math.Min(segment.Start.Y, segment.End.Y), tolerance);
                 MaxY = ExpandUp(Math.Max(segment.Start.Y, segment.End.Y), tolerance);
             }
 
+            public int Index { get; }
             public double MinX { get; }
             public double MaxX { get; }
             public double MinY { get; }
@@ -444,10 +562,12 @@ namespace QS3D.Core.Geometry
 
             public int GetOrAdd(Point2 point)
             {
-                var cellX = Cell(point.X); var cellY = Cell(point.Y);
-                var best = -1; var bestDistance = double.MaxValue;
-                for (var x = cellX - 1; x <= cellX + 1; x++)
-                    for (var y = cellY - 1; y <= cellY + 1; y++)
+                var centerX = CellToken(point.X);
+                var centerY = CellToken(point.Y);
+                var best = -1;
+                var bestDistance = double.MaxValue;
+                foreach (var x in NeighborCellTokens(point.X))
+                    foreach (var y in NeighborCellTokens(point.Y))
                         if (_cells.TryGetValue(CellKey(x, y), out var candidates))
                             foreach (var index in candidates)
                             {
@@ -458,14 +578,40 @@ namespace QS3D.Core.Geometry
                 if (best >= 0) return best;
                 var created = _points.Count;
                 _points.Add(point);
-                var key = CellKey(cellX, cellY);
+                var key = CellKey(centerX, centerY);
                 if (!_cells.TryGetValue(key, out var list)) { list = new List<int>(); _cells[key] = list; }
                 list.Add(created);
                 return created;
             }
 
-            private long Cell(double value) => checked((long)Math.Floor(value / _tolerance));
-            private static string CellKey(long x, long y) => x.ToString(CultureInfo.InvariantCulture) + ":" + y.ToString(CultureInfo.InvariantCulture);
+            private IReadOnlyList<string> NeighborCellTokens(double value)
+            {
+                var scaled = value / _tolerance;
+                if (!Finite(scaled)) return new[] { ExactValueToken(value) };
+
+                var cell = Math.Floor(scaled);
+                var result = new List<string>(3);
+                AddCellToken(result, cell - 1d);
+                AddCellToken(result, cell);
+                AddCellToken(result, cell + 1d);
+                return result;
+            }
+
+            private string CellToken(double value)
+            {
+                var scaled = value / _tolerance;
+                return Finite(scaled) ? CellIndexToken(Math.Floor(scaled)) : ExactValueToken(value);
+            }
+
+            private static void AddCellToken(ICollection<string> target, double cell)
+            {
+                var token = CellIndexToken(cell);
+                if (!target.Contains(token)) target.Add(token);
+            }
+
+            private static string CellIndexToken(double cell) => "C:" + cell.ToString("R", CultureInfo.InvariantCulture);
+            private static string ExactValueToken(double value) => "V:" + value.ToString("R", CultureInfo.InvariantCulture);
+            private static string CellKey(string x, string y) => x + "|" + y;
         }
 
         private sealed class Cut { public Cut(double t, Point2 point) { T = t; Point = point; } public double T { get; } public Point2 Point { get; } }

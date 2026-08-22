@@ -64,7 +64,7 @@ namespace QS3D.Core.Navigation
             var index = BuildIndex(root);
 
             foreach (var elementId in selected)
-                if (!index.Root.ElementIds.Contains(elementId))
+                if (!index.Root.ElementIds.Contains(elementId, StringComparer.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Project browser selection references missing semantic element id: " + elementId + ".");
 
             var primary = NormalizePrimary(primaryElementId, selected);
@@ -215,7 +215,7 @@ namespace QS3D.Core.Navigation
             return entry;
         }
 
-        private static string CanonicalRequired(string value, string label)
+        private static string CanonicalRequired(string? value, string label)
         {
             var raw = value ?? string.Empty;
             if (string.IsNullOrWhiteSpace(raw)) throw new InvalidOperationException(label + " is required.");

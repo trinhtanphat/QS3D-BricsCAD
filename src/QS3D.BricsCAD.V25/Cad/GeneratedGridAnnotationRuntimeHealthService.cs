@@ -60,11 +60,19 @@ namespace QS3D.BricsCAD.V25.Cad
             int index,
             ICollection<ModelHealthIssue> issues)
         {
-            if (!long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value)) return;
+            if (!long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
+            {
+                issues.Add(new ModelHealthIssue(
+                    "GRID_ANNOTATION_CAD_HANDLE_INVALID",
+                    HealthSeverity.Error,
+                    "Generated Grid annotation Handle không phải hexadecimal metadata hợp lệ: " + handle + ".",
+                    element.Id));
+                return;
+            }
 
             ObjectId id;
             try { id = document.Database.GetObjectId(false, new Handle(value), 0); }
-            catch
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
             {
                 AddMissing(element, handle, issues);
                 return;
@@ -78,7 +86,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
             Entity? entity;
             try { entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity; }
-            catch
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
             {
                 AddMissing(element, handle, issues);
                 return;
@@ -153,6 +161,13 @@ namespace QS3D.BricsCAD.V25.Cad
                 HealthSeverity.Error,
                 "Generated Grid annotation Handle không còn resolve tới live CAD entity: " + handle + ".",
                 element.Id));
+        }
+
+        private static bool IsRecoverableDiagnosticFailure(Exception exception)
+        {
+            return !(exception is OutOfMemoryException) &&
+                   !(exception is StackOverflowException) &&
+                   !(exception is AccessViolationException);
         }
     }
 }

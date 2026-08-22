@@ -5,6 +5,7 @@ using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Diagnostics;
+using QS3D.Core.Domain;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -18,7 +19,51 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
+                if (selectedIds.Length == 0)
+                {
+                    Report(document, "Slab Mesh 3D: chọn Slab semantic có closed straight-segment plan-view POLYLINE + RebarSlabXNotation/RebarSlabYNotation. Rectangle giữ local-axis legacy; polygon dùng drawing X/Y.");
+                    return;
+                }
+
+                var selectedHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var id in selectedIds)
+                {
+                    try { selectedHandles.Add(id.Handle.ToString()); }
+                    catch { }
+                }
+                if (selectedHandles.Count == 0)
+                {
+                    Report(document, "Slab Mesh 3D: selection không có source handle hợp lệ.");
+                    return;
+                }
+
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
+                {
+                    Report(document, "Slab Mesh 3D: BLOCKED • chưa có QS3D project hiện hữu; lệnh không tạo project mới từ selection.");
+                    return;
+                }
+
+                var previewTargets = ResolveSlabTargets(previewProject, selectedHandles);
+                if (previewTargets.Count == 0)
+                {
+                    Report(document, "Slab Mesh 3D: chọn Slab semantic có closed straight-segment plan-view POLYLINE + RebarSlabXNotation/RebarSlabYNotation. Rectangle giữ local-axis legacy; polygon dùng drawing X/Y.");
+                    return;
+                }
+
+                var expectedProjectId = previewProject.ProjectId;
+                var expectedChangeVersion = previewProject.ChangeVersion;
+                var expectedTargetIds = new HashSet<string>(previewTargets.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+
                 var project = ExistingProjectMutationContext.Require(document, "Slab Mesh 3D");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    project.ChangeVersion != expectedChangeVersion)
+                    throw new InvalidOperationException("Slab Mesh 3D: QS3D project đã thay đổi sau khi đọc selection; hãy chọn lại target.");
+
+                var targets = ResolveSlabTargets(project, selectedHandles);
+                if (!expectedTargetIds.SetEquals(targets.Select(x => x.Id)))
+                    throw new InvalidOperationException("Slab Mesh 3D: semantic target set đã thay đổi sau khi đọc selection; hãy chọn lại target.");
+
                 var result = SlabMeshSolidBuilder.BuildSelected(document, project);
                 var message = result.Bars == 0
                     ? "Slab Mesh 3D: chọn Slab semantic có closed straight-segment plan-view POLYLINE + RebarSlabXNotation/RebarSlabYNotation. Rectangle giữ local-axis legacy; polygon dùng drawing X/Y."
@@ -65,6 +110,12 @@ namespace QS3D.BricsCAD.V25
                 Report(document, "QS3DSLABREBARHEALTH lỗi: " + ex.Message);
             }
         }
+
+        private static List<ProjectElement> ResolveSlabTargets(ProjectState project, HashSet<string> selectedHandles) =>
+            project.Elements
+                .Where(x => x.Category == ElementCategory.Slab && x.SourceHandles.Any(selectedHandles.Contains))
+                .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
         private static void FinalizeUi(Document document, string message)
         {

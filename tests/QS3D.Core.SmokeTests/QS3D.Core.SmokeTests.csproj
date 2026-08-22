@@ -4,6 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>QS3D.Core.SmokeTests</AssemblyName>
     <RootNamespace>QS3D.Core.SmokeTests</RootNamespace>
+    <StartupObject>QS3D.Core.SmokeTests.SmokeTestEntryPoint</StartupObject>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\QS3D.Core\QS3D.Core.csproj" />

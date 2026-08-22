@@ -29,6 +29,8 @@ else:
         "project.Metadata[TemplateProfileStore.VisibleBqColumnsKey] = string.Join(\"|\", visible);",
         "rollback.Restore(project);",
         "new HashSet<string>(ColumnKeys, StringComparer.OrdinalIgnoreCase)",
+        "private bool _loadingColumnPreferences = true;",
+        "if (_loadingColumnPreferences) return;",
         "LoadColumnPreferences();",
     )
     for token in required:

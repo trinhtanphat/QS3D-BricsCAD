@@ -1,6 +1,8 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using QS3D.Core.Domain;
 
 namespace QS3D.Core.Revisions
 {
@@ -30,6 +32,7 @@ namespace QS3D.Core.Revisions
         {
             if (before == null) throw new ArgumentNullException(nameof(before));
             if (after == null) throw new ArgumentNullException(nameof(after));
+            ValidateProjectIdentityCompatibility(before, after);
             var left = Index(before, "before");
             var right = Index(after, "after");
             var rows = new List<QuantityRevisionRow>();
@@ -50,25 +53,92 @@ namespace QS3D.Core.Revisions
                     rows.Add(new QuantityRevisionRow { ElementId = id, Category = b?.Category ?? a?.Category ?? string.Empty, QuantityName = name, Change = !hasBefore ? "Added" : !hasAfter ? "Removed" : "Changed", Before = beforeValue, After = afterValue });
                 }
             }
-            return rows;
+            return rows.AsReadOnly();
         }
 
         public IReadOnlyList<QuantityRevisionSummary> Summarize(IEnumerable<QuantityRevisionRow> rows)
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            var result = new List<QuantityRevisionSummary>();
-            foreach (var group in rows.Where(x => x != null && !string.IsNullOrWhiteSpace(x.QuantityName)).GroupBy(x => x.QuantityName, StringComparer.OrdinalIgnoreCase).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+            var knownCount = SnapshotKnownSummaryCount(rows);
+            var summarizable = new List<QuantityRevisionRow>();
+            var index = 0;
+            foreach (var row in rows)
             {
-                var before = 0d;
-                var after = 0d;
+                if (row == null)
+                    throw new ArgumentException("Quantity revision summary contains a null row at index " + index + ".", nameof(rows));
+                if (!string.IsNullOrEmpty(row.QuantityName) && row.QuantityName.Any(char.IsControl))
+                    ValidateCanonicalRequired(row.QuantityName, "summary row " + index + " quantity key");
+                if (!string.IsNullOrWhiteSpace(row.QuantityName))
+                {
+                    ValidateCanonicalRequired(row.QuantityName, "summary row " + index + " quantity key");
+                    summarizable.Add(row);
+                }
+                index++;
+            }
+
+            if (knownCount.HasValue && index != knownCount.Value)
+                throw new InvalidOperationException(
+                    "Quantity revision summary input changed during enumeration; Count reported " + knownCount.Value +
+                    " rows but traversal produced " + index + ".");
+
+            var result = new List<QuantityRevisionSummary>();
+            foreach (var group in summarizable.GroupBy(x => x.QuantityName, StringComparer.OrdinalIgnoreCase).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                var before = new CompensatedFiniteSum();
+                var after = new CompensatedFiniteSum();
                 foreach (var row in group)
                 {
-                    before = RevisionMath.Add(before, row.Before, group.Key + "/Before");
-                    after = RevisionMath.Add(after, row.After, group.Key + "/After");
+                    before.Add(row.Before, group.Key + "/Before");
+                    after.Add(row.After, group.Key + "/After");
                 }
-                result.Add(new QuantityRevisionSummary { QuantityName = group.Key, Before = before, After = after });
+                result.Add(new QuantityRevisionSummary
+                {
+                    QuantityName = group.Key,
+                    Before = before.Value(group.Key + "/Before"),
+                    After = after.Value(group.Key + "/After")
+                });
             }
-            return result;
+            return result.AsReadOnly();
+        }
+
+        private static int? SnapshotKnownSummaryCount(IEnumerable<QuantityRevisionRow> rows)
+        {
+            int? knownCount = null;
+            if (rows is ICollection<QuantityRevisionRow> genericCollection)
+                ObserveKnownSummaryCount(genericCollection.Count, ref knownCount);
+            if (rows is IReadOnlyCollection<QuantityRevisionRow> readOnlyCollection)
+                ObserveKnownSummaryCount(readOnlyCollection.Count, ref knownCount);
+            if (rows is ICollection nonGenericCollection)
+                ObserveKnownSummaryCount(nonGenericCollection.Count, ref knownCount);
+            return knownCount;
+        }
+
+        private static void ObserveKnownSummaryCount(int count, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Quantity revision summary input reported a negative known Count.");
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException(
+                    "Quantity revision summary input exposes conflicting known Counts: " + knownCount.Value + " and " + count + ".");
+            knownCount = count;
+        }
+
+        private static void ValidateProjectIdentityCompatibility(RevisionSnapshot before, RevisionSnapshot after)
+        {
+            var beforeProjectId = before.ProjectId ?? string.Empty;
+            var afterProjectId = after.ProjectId ?? string.Empty;
+
+            if (beforeProjectId.Length == 0 && afterProjectId.Length == 0) return;
+
+            if (beforeProjectId.Length == 0)
+                throw new InvalidOperationException("Revision baseline has no project identity; capture a new baseline before comparing.");
+            if (afterProjectId.Length == 0)
+                throw new InvalidOperationException("Current revision has no project identity; capture a new revision before comparing.");
+            ValidateCanonicalRequired(beforeProjectId, "before project id");
+            ValidateCanonicalRequired(afterProjectId, "after project id");
+
+            if (!string.Equals(beforeProjectId, afterProjectId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Revision baseline belongs to a different project; capture a new baseline before comparing.");
         }
 
         private static Dictionary<string, RevisionElementSnapshot> Index(RevisionSnapshot snapshot, string label)
@@ -76,11 +146,67 @@ namespace QS3D.Core.Revisions
             var result = new Dictionary<string, RevisionElementSnapshot>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in snapshot.Elements)
             {
-                if (element == null || string.IsNullOrWhiteSpace(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains an element without id.");
+                if (element == null) throw new InvalidOperationException("Revision " + label + " contains a null element.");
+                ValidateCanonicalRequired(element.ElementId, label + " element id");
+                ValidateCanonicalCategory(element.Category, label + " element " + element.ElementId + " category");
+                foreach (var quantity in element.Quantities)
+                {
+                    ValidateCanonicalRequired(quantity.Key, label + " element " + element.ElementId + " quantity key");
+                    RevisionMath.Finite(quantity.Value, element.ElementId + "/" + quantity.Key + "/" + label);
+                }
                 if (result.ContainsKey(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains duplicate element id: " + element.ElementId);
                 result.Add(element.ElementId, element);
             }
             return result;
+        }
+
+        private static void ValidateCanonicalCategory(string? value, string label)
+        {
+            if (string.IsNullOrWhiteSpace(value) ||
+                !Enum.TryParse(value, true, out ElementCategory category) ||
+                !Enum.IsDefined(typeof(ElementCategory), category) ||
+                !string.Equals(value, category.ToString(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Revision " + label + " must use a canonical element category name.");
+        }
+
+        private static void ValidateCanonicalRequired(string? value, string label)
+        {
+            if (value == null ||
+                string.IsNullOrWhiteSpace(value) ||
+                !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
+                value.Any(char.IsControl))
+            {
+                throw new InvalidOperationException(
+                    "Revision " + label + " must be non-empty and must not contain leading/trailing whitespace or control characters.");
+            }
+        }
+
+        private struct CompensatedFiniteSum
+        {
+            private double _sum;
+            private double _compensation;
+
+            internal void Add(double value, string label)
+            {
+                var next = RevisionMath.Add(_sum, value, label);
+                var compensationLabel = label + " compensation";
+                var correction = Math.Abs(_sum) >= Math.Abs(value)
+                    ? RevisionMath.Add(RevisionMath.Subtract(_sum, next, compensationLabel), value, compensationLabel)
+                    : RevisionMath.Add(RevisionMath.Subtract(value, next, compensationLabel), _sum, compensationLabel);
+
+                _compensation = RevisionMath.Add(_compensation, correction, compensationLabel);
+                _sum = next;
+            }
+
+            internal double Value(string label)
+            {
+                var result = RevisionMath.Add(_sum, _compensation, label);
+                if (_compensation != 0d && result == _sum)
+                    throw new OverflowException("Revision quantity total lost a non-zero compensation at floating-point precision: " + label);
+                if (_sum != 0d && result == _compensation)
+                    throw new OverflowException("Revision quantity total lost a non-zero primary sum at floating-point precision: " + label);
+                return result;
+            }
         }
     }
 }

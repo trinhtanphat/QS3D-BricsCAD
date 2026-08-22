@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -18,16 +19,16 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectsPaddedProjectRelations()
         {
-            RejectsWithoutMutation(project => project.ActiveFloorId = " F1 ", project => project.ActiveFloorId, " F1 ");
-            RejectsWithoutMutation(project => project.ActiveZoneId = " Z1 ", project => project.ActiveZoneId, " Z1 ");
-            RejectsWithoutMutation(project => project.ActiveFloorId = "   ", project => project.ActiveFloorId, "   ");
+            RejectsWithoutMutation(project => InjectRawRelation(project, "_activeFloorId", " F1 "), project => project.ActiveFloorId, " F1 ");
+            RejectsWithoutMutation(project => InjectRawRelation(project, "_activeZoneId", " Z1 "), project => project.ActiveZoneId, " Z1 ");
+            RejectsWithoutMutation(project => InjectRawRelation(project, "_activeFloorId", "   "), project => project.ActiveFloorId, "   ");
         }
 
         private static void RejectsPaddedElementRelations()
         {
-            RejectsElementWithoutMutation(element => element.FamilyId = " FAM ", element => element.FamilyId, " FAM ");
-            RejectsElementWithoutMutation(element => element.FloorId = " F1 ", element => element.FloorId, " F1 ");
-            RejectsElementWithoutMutation(element => element.ZoneId = " Z1 ", element => element.ZoneId, " Z1 ");
+            RejectsElementWithoutMutation(element => InjectRawRelation(element, "_familyId", " FAM "), element => element.FamilyId, " FAM ");
+            RejectsElementWithoutMutation(element => InjectRawRelation(element, "_floorId", " F1 "), element => element.FloorId, " F1 ");
+            RejectsElementWithoutMutation(element => InjectRawRelation(element, "_zoneId", " Z1 "), element => element.ZoneId, " Z1 ");
         }
 
         private static void AllowsEmptyOptionalRelations()
@@ -57,7 +58,9 @@ namespace QS3D.Core.SmokeTests
             WithPath(path =>
             {
                 var project = NewProject();
+                Require(read(project).Length == 0, "project relation must start at the canonical empty value");
                 mutate(project);
+                Require(string.Equals(read(project), expected, StringComparison.Ordinal), "raw project relation injection did not reach the public getter");
                 var beforeUpdated = project.UpdatedUtc;
                 Throws<InvalidDataException>(() => new QsdbProjectStore().Save(project, path));
                 Require(string.Equals(read(project), expected, StringComparison.Ordinal), "failed Save normalized a project relation in memory");
@@ -71,7 +74,9 @@ namespace QS3D.Core.SmokeTests
             {
                 var project = NewProject();
                 var element = project.Elements[0];
+                Require(read(element).Length == 0, "element relation must start at the canonical empty value");
                 mutate(element);
+                Require(string.Equals(read(element), expected, StringComparison.Ordinal), "raw element relation injection did not reach the public getter");
                 var beforeProjectUpdated = project.UpdatedUtc;
                 var beforeElementUpdated = element.UpdatedUtc;
                 Throws<InvalidDataException>(() => new QsdbProjectStore().Save(project, path));
@@ -79,6 +84,14 @@ namespace QS3D.Core.SmokeTests
                 Require(project.UpdatedUtc == beforeProjectUpdated, "failed validation touched project timestamp");
                 Require(element.UpdatedUtc == beforeElementUpdated, "failed validation touched element timestamp");
             });
+        }
+
+        private static void InjectRawRelation(object target, string fieldName, string rawValue)
+        {
+            var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null || field.FieldType != typeof(string))
+                throw new InvalidOperationException("QsdbRelationIdentityCanonicalSmoke cannot inject raw relation field " + fieldName + ".");
+            field.SetValue(target, rawValue);
         }
 
         private static ProjectState NewProject()

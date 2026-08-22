@@ -13,14 +13,30 @@ else:
     text = PATH.read_text(encoding="utf-8")
     if '[CommandMethod("QS3DRUNTIMECHECK", CommandFlags.Modal)]' not in text:
         errors.append("QS3DRUNTIMECHECK command registration is missing.")
+    if "ProjectContextCoordinator.TryGetCached(document, out _)" not in text:
+        errors.append("QS3DRUNTIMECHECK must distinguish already-loaded project state without creating it.")
     if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" not in text:
         errors.append("QS3DRUNTIMECHECK must resolve project state read-only when available.")
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:
         errors.append("QS3DRUNTIMECHECK must not create/cache project state merely to inspect runtime/package metadata.")
-    if "runtime diagnostics remain read-only and do not create project state" not in text:
-        errors.append("QS3DRUNTIMECHECK must explain its no-project read-only behavior.")
-    if "var ok = v25Runtime && x64Runtime && packageVersionMatches;" not in text:
-        errors.append("Runtime qualification must remain independent of semantic-project presence.")
+    for token in (
+        '"\\n  Project state: AVAILABLE"',
+        '"\\n  Project state: UNAVAILABLE"',
+        '"\\n  Diagnostics access: READ-ONLY"',
+        '"\\n  Diagnostics access: READ-ONLY; no project state was created"',
+    ):
+        if token not in text:
+            errors.append("QS3DRUNTIMECHECK structured read-only project-state contract is missing: " + token)
+    for token in (
+        "private const int ExpectedRuntimeMajor = 26;",
+        "private const int ExpectedRuntimeMajor = 25;",
+        "var expectedRuntime = NativeRuntimeAssembliesMatch(brxAssembly, tdAssembly);",
+        "if (Major(brxAssembly) != ExpectedRuntimeMajor || Major(tdAssembly) != ExpectedRuntimeMajor)",
+        "return Major(typeof(Brep).Assembly) == ExpectedRuntimeMajor;",
+        "var ok = expectedRuntime && x64Runtime && packageVersionMatches && diskVersionMatches && diskFingerprintMatches;",
+    ):
+        if token not in text:
+            errors.append("Runtime host-major qualification contract is missing: " + token)
 
 if errors:
     for error in errors:
@@ -28,4 +44,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DRUNTIMECHECK inspects runtime/package state without creating a semantic project.")
+print("PASS: QS3DRUNTIMECHECK inspects the compile-time V25/V26 complete native host-major/package and loaded/on-disk binary identity state independently of optional semantic project presence and never creates project state.")

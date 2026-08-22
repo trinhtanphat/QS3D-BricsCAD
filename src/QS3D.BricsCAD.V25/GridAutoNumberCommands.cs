@@ -20,6 +20,7 @@ namespace QS3D.BricsCAD.V25
     {
         private const int MaxGridBatch = 2000;
         private const double PlanElevationTolerance = 1e-6d;
+        private const double PlanCoordinateFreshnessTolerance = 1e-8d;
 
         [CommandMethod("QS3DGRIDNUMBERAUTO", CommandFlags.UsePickSet)]
         public void AutoNumberGrid()
@@ -34,17 +35,28 @@ namespace QS3D.BricsCAD.V25
                 if (selected.Count > MaxGridBatch)
                     throw new InvalidOperationException("Grid auto-number selection vượt giới hạn " + MaxGridBatch + ".");
 
-                var project = ExistingProjectMutationContext.Require(document, "Grid Auto Number");
-                var extraction = ExtractParallelLineCandidates(document, project, selected);
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
+                    throw new InvalidOperationException("Grid Auto Number yêu cầu QS3D project hiện hữu; lệnh không tạo project mới.");
+                var expectedProjectId = previewProject.ProjectId;
+                var previewExtraction = ExtractParallelLineCandidates(document, previewProject, selected);
                 var orderingAxis = AcquireOrderingAxis(document.Editor);
                 if (!orderingAxis.HasValue) return;
 
-                var ordered = GridSpatialOrderingPlanner.OrderParallelLines(extraction.Curves, orderingAxis.Value);
-                var orderedIds = ordered.Select(x => x.ElementId).ToList();
+                var previewOrdered = GridSpatialOrderingPlanner.OrderParallelLines(previewExtraction.Curves, orderingAxis.Value);
                 var namingOptions = AcquireNamingOptions(document.Editor);
                 if (namingOptions == null) return;
 
-                if (!ConfirmPlan(document.Editor, ordered, namingOptions)) return;
+                if (!ConfirmPlan(document.Editor, previewOrdered, namingOptions)) return;
+
+                var project = ExistingProjectMutationContext.Require(document, "Grid Auto Number");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("QS3D project đã thay đổi trong lúc review Grid auto-number. Hãy chạy lại lệnh.");
+
+                var currentExtraction = ExtractParallelLineCandidates(document, project, selected);
+                var currentOrdered = GridSpatialOrderingPlanner.OrderParallelLines(currentExtraction.Curves, orderingAxis.Value);
+                if (!SamePreviewPlan(previewOrdered, currentOrdered))
+                    throw new InvalidOperationException("Grid auto-number preview không còn khớp source/ordering hiện tại. Không áp dụng; hãy review lại.");
+                var orderedIds = currentOrdered.Select(x => x.ElementId).ToList();
 
                 var rollback = ProjectStateSnapshot.Capture(project);
                 IReadOnlyList<GridLabelAssignment> assignments;
@@ -70,7 +82,7 @@ namespace QS3D.BricsCAD.V25
                     throw;
                 }
 
-                FinalizeUi(document, assignments, namingOptions, orderedIds, extraction.ObjectIdsByElementId);
+                FinalizeUi(document, assignments, namingOptions, orderedIds, currentExtraction.ObjectIdsByElementId);
             }
             catch (Exception ex)
             {
@@ -236,6 +248,20 @@ namespace QS3D.BricsCAD.V25
             var confirm = editor.GetKeywords("\nÁp dụng auto-number theo thứ tự này? [Yes/No] <No>: ", "Yes No");
             if (confirm.Status == PromptStatus.None) return false;
             return confirm.Status == PromptStatus.OK && string.Equals(confirm.StringResult, "Yes", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool SamePreviewPlan(
+            IReadOnlyList<GridSpatialOrderingEntry> preview,
+            IReadOnlyList<GridSpatialOrderingEntry> current)
+        {
+            if (preview == null || current == null || preview.Count != current.Count) return false;
+            for (var i = 0; i < preview.Count; i++)
+            {
+                if (!string.Equals(preview[i].ElementId, current[i].ElementId, StringComparison.OrdinalIgnoreCase)) return false;
+                var delta = current[i].Coordinate - preview[i].Coordinate;
+                if (!Finite(delta) || Math.Abs(delta) > PlanCoordinateFreshnessTolerance) return false;
+            }
+            return true;
         }
 
         private static string? PromptOptionalText(Editor editor, string prompt)

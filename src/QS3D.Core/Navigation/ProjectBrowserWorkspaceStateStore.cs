@@ -51,14 +51,27 @@ namespace QS3D.Core.Navigation
             if (value == null || string.IsNullOrWhiteSpace(value)) return string.Empty;
             var normalized = value.Trim();
             if (normalized.Length > 160) throw new ArgumentException("Project browser workspace query exceeds 160 characters.", nameof(value));
+            try
+            {
+                XmlConvert.VerifyXmlChars(normalized);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Project browser workspace query contains characters that cannot be persisted as XML.", nameof(value), ex);
+            }
             return normalized;
         }
 
         private static IReadOnlyList<ElementCategory> NormalizeCategories(IEnumerable<ElementCategory>? values)
         {
             var result = new SortedSet<ElementCategory>();
+            var count = 0;
             foreach (var value in values ?? Enumerable.Empty<ElementCategory>())
             {
+                if (count >= ProjectBrowserQueryPlanner.MaxFilterIds)
+                    throw new InvalidOperationException(
+                        "Project browser workspace category filter exceeds " + ProjectBrowserQueryPlanner.MaxFilterIds + " entries.");
+                count++;
                 if (!Enum.IsDefined(typeof(ElementCategory), value))
                     throw new ArgumentOutOfRangeException(nameof(values), "Project browser workspace contains an undefined category.");
                 result.Add(value);
@@ -131,10 +144,8 @@ namespace QS3D.Core.Navigation
         public ProjectBrowserWorkspaceState Load(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            if (!project.Metadata.TryGetValue(MetadataKey, out var serialized) || string.IsNullOrWhiteSpace(serialized))
+            if (!project.Metadata.TryGetValue(MetadataKey, out var serialized))
                 return new ProjectBrowserWorkspaceState();
-            if (serialized.Length > MaxSerializedChars)
-                throw new InvalidDataException("Project browser workspace state exceeds the maximum persisted size.");
 
             var state = Deserialize(serialized);
             ValidateAgainstProject(project, state);
@@ -202,42 +213,71 @@ namespace QS3D.Core.Navigation
 
             var root = document.Root;
             if (root == null || root.Name != "ProjectBrowserWorkspaceState") throw new InvalidDataException("Project browser workspace state root is invalid.");
+            ValidateDocumentShape(document, root);
             ValidateRootShape(root);
             RequireAttribute(root, "format", FormatName);
             RequireAttribute(root, "version", FormatVersion.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
-            if (!Enum.TryParse((string)root.Attribute("grouping"), false, out ProjectBrowserGrouping grouping) ||
-                !Enum.IsDefined(typeof(ProjectBrowserGrouping), grouping))
+            var groupingRaw = (string)root.Attribute("grouping");
+            if (!Enum.TryParse(groupingRaw, false, out ProjectBrowserGrouping grouping) ||
+                !Enum.IsDefined(typeof(ProjectBrowserGrouping), grouping) ||
+                !string.Equals(groupingRaw, grouping.ToString(), StringComparison.Ordinal))
                 throw new InvalidDataException("Project browser workspace grouping is invalid.");
             var dirtyRaw = (string)root.Attribute("dirtyOnly");
-            if (!bool.TryParse(dirtyRaw, out var dirtyOnly)) throw new InvalidDataException("Project browser workspace dirtyOnly is invalid.");
+            if (!bool.TryParse(dirtyRaw, out var dirtyOnly) ||
+                !string.Equals(dirtyRaw, dirtyOnly ? "true" : "false", StringComparison.Ordinal))
+                throw new InvalidDataException("Project browser workspace dirtyOnly is invalid.");
 
-            var expectedChildren = new[] { "Categories", "FloorIds", "ZoneIds", "ExpandedPaths", "SelectedElementIds" };
+            var expectedChildren = new HashSet<XName>(new[]
+            {
+                XName.Get("Categories"), XName.Get("FloorIds"), XName.Get("ZoneIds"),
+                XName.Get("ExpandedPaths"), XName.Get("SelectedElementIds")
+            });
             foreach (var child in root.Elements())
-                if (!expectedChildren.Contains(child.Name.LocalName, StringComparer.Ordinal))
+                if (!expectedChildren.Contains(child.Name))
                     throw new InvalidDataException("Project browser workspace contains an unsupported element: " + child.Name + ".");
             foreach (var name in expectedChildren)
                 if (root.Elements(name).Count() != 1)
-                    throw new InvalidDataException("Project browser workspace requires exactly one " + name + " element.");
+                    throw new InvalidDataException("Project browser workspace requires exactly one " + name.LocalName + " element.");
+            var expectedChildOrder = new[]
+            {
+                XName.Get("Categories"), XName.Get("FloorIds"), XName.Get("ZoneIds"),
+                XName.Get("ExpandedPaths"), XName.Get("SelectedElementIds")
+            };
+            if (!root.Elements().Select(x => x.Name).SequenceEqual(expectedChildOrder))
+                throw new InvalidDataException("Project browser workspace collection containers are not in canonical order.");
 
             var categories = ReadCategories(root.Element("Categories"));
             var floorIds = ReadValues(root.Element("FloorIds"), "Id");
             var zoneIds = ReadValues(root.Element("ZoneIds"), "Id");
             var expanded = ReadValues(root.Element("ExpandedPaths"), "Path");
             var selected = ReadValues(root.Element("SelectedElementIds"), "Id");
+            var queryRaw = (string)root.Attribute("query");
+            var primaryRaw = (string)root.Attribute("primaryElementId");
 
             try
             {
-                return new ProjectBrowserWorkspaceState(
+                var state = new ProjectBrowserWorkspaceState(
                     grouping,
-                    (string)root.Attribute("query"),
+                    queryRaw,
                     dirtyOnly,
                     categories,
                     floorIds,
                     zoneIds,
                     expanded,
                     selected,
-                    (string)root.Attribute("primaryElementId"));
+                    primaryRaw);
+                if (!string.Equals(queryRaw, state.Query, StringComparison.Ordinal))
+                    throw new InvalidDataException("Project browser workspace query is non-canonical.");
+                if (!string.Equals(primaryRaw, state.PrimaryElementId, StringComparison.Ordinal))
+                    throw new InvalidDataException("Project browser workspace primary element id is non-canonical.");
+                if (!categories.SequenceEqual(state.Categories) ||
+                    !floorIds.SequenceEqual(state.FloorIds, StringComparer.Ordinal) ||
+                    !zoneIds.SequenceEqual(state.ZoneIds, StringComparer.Ordinal) ||
+                    !expanded.SequenceEqual(state.ExpandedPaths, StringComparer.Ordinal) ||
+                    !selected.SequenceEqual(state.SelectedElementIds, StringComparer.Ordinal))
+                    throw new InvalidDataException("Project browser workspace collections are non-canonical.");
+                return state;
             }
             catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
             {
@@ -265,7 +305,9 @@ namespace QS3D.Core.Navigation
             foreach (var element in container.Elements("Category"))
             {
                 ValidateItemShape(element, "Category");
-                if (!Enum.TryParse(element.Value, false, out ElementCategory value) || !Enum.IsDefined(typeof(ElementCategory), value))
+                if (!Enum.TryParse(element.Value, false, out ElementCategory value) ||
+                    !Enum.IsDefined(typeof(ElementCategory), value) ||
+                    !string.Equals(element.Value, value.ToString(), StringComparison.Ordinal))
                     throw new InvalidDataException("Project browser workspace category is invalid: " + element.Value + ".");
                 result.Add(value);
             }
@@ -283,6 +325,15 @@ namespace QS3D.Core.Navigation
                 result.Add(element.Value);
             }
             return result.AsReadOnly();
+        }
+
+        private static void ValidateDocumentShape(XDocument document, XElement root)
+        {
+            foreach (var node in document.Nodes())
+            {
+                if (ReferenceEquals(node, root)) continue;
+                throw new InvalidDataException("Project browser workspace document contains unsupported node content.");
+            }
         }
 
         private static void ValidateRootShape(XElement root)
@@ -320,8 +371,12 @@ namespace QS3D.Core.Navigation
             if (element.HasAttributes)
                 throw new InvalidDataException("Project browser workspace " + itemName + " item contains unsupported attributes.");
             foreach (var node in element.Nodes())
+            {
+                if (node is XCData)
+                    throw new InvalidDataException("Project browser workspace " + itemName + " item must not contain CDATA.");
                 if (!(node is XText))
                     throw new InvalidDataException("Project browser workspace " + itemName + " item must contain text only.");
+            }
         }
 
         private static void ValidateContainerNodes(XElement element, string label)
@@ -329,6 +384,8 @@ namespace QS3D.Core.Navigation
             foreach (var node in element.Nodes())
             {
                 if (node is XElement) continue;
+                if (node is XCData)
+                    throw new InvalidDataException("Project browser workspace " + label + " must not contain CDATA.");
                 var text = node as XText;
                 if (text != null && string.IsNullOrWhiteSpace(text.Value)) continue;
                 throw new InvalidDataException("Project browser workspace " + label + " contains unsupported node content.");

@@ -58,7 +58,10 @@ for token in [
     'if (raw.Length > MaxSerializedLength)',
     'if (tokens.Length > MaxOpeningIds)',
     'if (encoded.Length > MaxEncodedIdLength)',
-    'if (id.Length == 0 || id.Length > MaxElementIdLength || !seen.Add(id))',
+    'if (id.Length == 0 ||',
+    'id.Length > MaxElementIdLength ||',
+    '!string.Equals(id, id.Trim(), StringComparison.Ordinal) ||',
+    '!seen.Add(id))',
     'if (result.Count > MaxOpeningIds)',
     'if (serialized.Length > MaxSerializedLength)',
     'Convert.ToBase64String',
@@ -95,13 +98,11 @@ for token in [
     if token not in doc:
         errors.append("local V25 handoff missing incremental regression: " + token)
 
-# Guard the key ordering: previous physical state must be validated before any new boolean mutation.
 previous_index = service.find("PhysicalOpeningCutTargetState.TryRead(host, out var previousIds)")
 boolean_index = service.find("hostSolid.BooleanOperation(BooleanOperationType.BoolSubtract, cutter)")
 if previous_index < 0 or boolean_index < 0 or previous_index > boolean_index:
     errors.append("previous physical cut state must be validated before BoolSubtract")
 
-# Guard against the old subset-only fingerprint write path.
 if re.search(r"(?<![A-Za-z0-9_])Fingerprint\s*=\s*requestedFingerprint\b", service):
     errors.append("service must not stamp only the current request fingerprint after an incremental cut")
 
@@ -112,4 +113,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: straight-host selected opening cuts preserve a bounded explicit accumulated cut set through the shared Core codec, validate prior state before mutation, subtract only newly selected openings, fingerprint the persisted exact cut set, and invalidate all physical-cut metadata on host rebuild.")
+print("PASS: straight-host selected opening cuts preserve a bounded explicit accumulated cut set through the shared Core codec, validate prior state before mutation, reject non-canonical/duplicate ids, subtract only newly selected openings, fingerprint the persisted exact cut set, and invalidate all physical-cut metadata on host rebuild.")

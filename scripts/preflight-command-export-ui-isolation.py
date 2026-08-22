@@ -45,8 +45,8 @@ else:
 
     for token in (
         "private static void FinalizeExportUi(Document document, string status, string extra = \"\")",
-        "catch (System.Exception uiError)",
-        "Export đã hoàn tất; cảnh báo UI:",
+        "catch (System.Exception)",
+        "Export đã hoàn tất; cảnh báo UI: không thể hoàn tất cập nhật giao diện.",
     ):
         if token not in text:
             errors.append("Commands export finalizer missing token: " + token)

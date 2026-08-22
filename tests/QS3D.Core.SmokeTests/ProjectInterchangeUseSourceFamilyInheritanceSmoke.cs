@@ -16,7 +16,10 @@ namespace QS3D.Core.SmokeTests
 
         private static void ReplacementPreservesOverridesAndPropagatesInheritedDefaults()
         {
-            var target = new ProjectState("TARGET-FAMILY-INHERITANCE", "Target family inheritance");
+            var target = new ProjectState("TARGET-FAMILY-INHERITANCE", "Target family inheritance")
+            {
+                DrawingFingerprint = "TARGET-FAMILY-INHERITANCE-DWG"
+            };
             var family = new ProjectFamily("FAM-1", "Target Beam", ElementCategory.Beam);
             family.Properties["WidthM"] = "0.4";
             family.Properties["Material"] = "C30";
@@ -34,7 +37,7 @@ namespace QS3D.Core.SmokeTests
             var overridden = new ProjectElement("E-OVERRIDE", ElementCategory.Beam, family.Id, string.Empty, string.Empty);
             overridden.Properties["WidthM"] = "0.4";
             overridden.Properties["Material"] = "INSTANCE-SPECIAL";
-            overridden.Properties["LegacyDefault"] = "legacy";
+            overridden.Properties["LegacyDefault"] = "INSTANCE-LEGACY";
             overridden.MarkClean(ElementDirtyFlags.All);
             target.Elements.Add(overridden);
 
@@ -74,7 +77,7 @@ namespace QS3D.Core.SmokeTests
             Equal("0.5", overridden.Properties["WidthM"]);
             Equal("INSTANCE-SPECIAL", overridden.Properties["Material"]);
             Equal("0.6", overridden.Properties["DepthM"]);
-            True(!overridden.Properties.ContainsKey("LegacyDefault"));
+            Equal("INSTANCE-LEGACY", overridden.Properties["LegacyDefault"]);
             Equal(ElementDirtyFlags.All, overridden.Dirty);
         }
 

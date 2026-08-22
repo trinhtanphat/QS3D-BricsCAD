@@ -77,13 +77,57 @@ namespace QS3D.BricsCAD.V25
                     lines.Add("project_available=false");
                 }
 
-                File.WriteAllLines(dialog.FileName, lines, new System.Text.UTF8Encoding(false));
+                PublishSupportBundle(dialog.FileName, lines);
                 FinalizeSupportBundleUi(document, dialog.FileName);
             }
             catch (System.Exception ex)
             {
                 try { document.Editor.WriteMessage("\nQS3DSUPPORTBUNDLE error: " + ex.Message); }
                 catch { }
+            }
+        }
+
+        private static void PublishSupportBundle(string path, IReadOnlyList<string> lines)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                throw new ArgumentException("Support Bundle path is required.", nameof(path));
+            if (lines == null) throw new ArgumentNullException(nameof(lines));
+
+            var fullPath = Path.GetFullPath(path);
+            var directory = Path.GetDirectoryName(fullPath);
+            if (string.IsNullOrWhiteSpace(directory))
+                throw new InvalidOperationException("Support Bundle path must have a parent directory.");
+            Directory.CreateDirectory(directory);
+
+            var temp = Path.Combine(
+                directory,
+                "." + Path.GetFileName(fullPath) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+            try
+            {
+                using (var stream = File.Open(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false)))
+                {
+                    foreach (var line in lines)
+                        writer.WriteLine(line ?? string.Empty);
+                    writer.Flush();
+                    stream.Flush(true);
+                }
+
+                if (File.Exists(fullPath))
+                    File.Replace(temp, fullPath, null, true);
+                else
+                    File.Move(temp, fullPath);
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(temp)) File.Delete(temp);
+                }
+                catch
+                {
+                    // Temp cleanup is best-effort and must not mask the original publish failure.
+                }
             }
         }
 

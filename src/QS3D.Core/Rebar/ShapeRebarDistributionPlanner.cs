@@ -17,7 +17,7 @@ namespace QS3D.Core.Rebar
         public ShapeRebarDistributionResult(double centerClearance, IReadOnlyList<double> offsets)
         {
             CenterClearance = centerClearance;
-            Offsets = offsets ?? throw new ArgumentNullException(nameof(offsets));
+            Offsets = new List<double>(offsets ?? throw new ArgumentNullException(nameof(offsets))).AsReadOnly();
         }
 
         public double CenterClearance { get; }
@@ -26,13 +26,15 @@ namespace QS3D.Core.Rebar
 
     public static class ShapeRebarDistributionPlanner
     {
+        private const int MaxBars = 10000;
+
         public static ShapeRebarDistributionResult Plan(ShapeRebarDistributionInput input)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
             var span = RebarMath.Positive(input.Span, nameof(input.Span));
             var cover = RebarMath.NonNegative(input.Cover, nameof(input.Cover));
             var radius = RebarMath.Positive(input.Radius, nameof(input.Radius));
-            if (input.Count <= 0) throw new ArgumentOutOfRangeException(nameof(input.Count));
+            if (input.Count <= 0 || input.Count > MaxBars) throw new ArgumentOutOfRangeException(nameof(input.Count));
 
             var clearance = RebarMath.Add(cover, radius, "shape rebar center clearance");
             var twoSideClearance = RebarMath.Multiply(2d, clearance, "shape rebar two-side clearance");
@@ -65,6 +67,7 @@ namespace QS3D.Core.Rebar
                 throw new ArgumentOutOfRangeException(label, "Shape rebar values must be finite.");
             var result = left - right;
             if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException("Shape rebar subtraction overflow: " + label);
+            if (right != 0d && result == left) throw new OverflowException("Shape rebar subtraction lost a nonzero value: " + label);
             return result;
         }
     }

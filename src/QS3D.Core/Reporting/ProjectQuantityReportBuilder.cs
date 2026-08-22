@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -9,6 +10,8 @@ namespace QS3D.Core.Reporting
 {
     public static class ProjectQuantityReportBuilder
     {
+        internal const int MaxSelectionElementIds = 10000;
+
         public static IReadOnlyList<QuantityReportRow> Group(ProjectState project) => Build(project, null, false);
 
         public static IReadOnlyList<QuantityReportRow> Group(ProjectState project, IEnumerable<string> elementIds)
@@ -28,26 +31,30 @@ namespace QS3D.Core.Reporting
         private static IReadOnlyList<QuantityReportRow> Build(ProjectState project, IEnumerable<string>? elementIds, bool detail)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            ReportingProjectIdentityGuard.RequireUniqueElementIds(project, detail ? "Quantity detail report" : "Quantity report");
             RoomFinishIdentityService.ValidateProject(project);
             var selectedIds = ResolveSelection(project, elementIds);
             var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var zones = project.Zones.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var rows = new Dictionary<string, QuantityReportRow>(StringComparer.OrdinalIgnoreCase);
+            var noteValues = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
             var order = new List<string>();
-            var seenElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var element in project.Elements)
             {
-                var elementId = (element.Id ?? string.Empty).Trim();
-                if (elementId.Length == 0) throw new InvalidOperationException("Quantity report contains an element with an empty id.");
-                if (!seenElementIds.Add(elementId)) throw new InvalidOperationException("Quantity report contains duplicate element id: " + elementId + ".");
+                var elementId = element.Id.Trim();
                 if (selectedIds != null && !selectedIds.Contains(elementId)) continue;
                 if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
-                var floor = floors.TryGetValue(element.FloorId, out var floorName) ? floorName : element.FloorId;
-                var zone = zones.TryGetValue(element.ZoneId, out var zoneName) ? zoneName : element.ZoneId;
-                var familyId = (element.FamilyId ?? string.Empty).Trim();
+                var floorId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FloorId);
+                var zoneId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.ZoneId);
+                var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
+                var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
+                var zone = zones.TryGetValue(zoneId, out var zoneName) ? zoneName : zoneId;
                 families.TryGetValue(familyId, out var family);
+                if (family != null && family.Category != element.Category)
+                    throw new InvalidOperationException("Quantity report element " + element.Id + " category " + element.Category + " does not match Family " + family.Id + " category " + family.Category + ". Repair the Family relation before reporting.");
+                if (family != null) familyId = family.Id;
                 var familyName = family != null ? family.Name : familyId;
                 var elementName = FirstInstanceProperty(element, "Name", "TenCauKien");
                 if (elementName.Length == 0) elementName = familyName;
@@ -59,8 +66,7 @@ namespace QS3D.Core.Reporting
                 var category = element.Category.ToString();
                 var key = detail
                     ? "ELEMENT\u001f" + elementId
-                    : element.FloorId + "\u001f" + element.ZoneId + "\u001f" + category + "\u001f" + familyId +
-                      "\u001f" + material + "\u001f" + DensityKey(densityKgM3);
+                    : CanonicalGroupKey(floorId, zoneId, category, familyId, material, DensityKey(densityKgM3));
                 var created = false;
                 if (!rows.TryGetValue(key, out var row))
                 {
@@ -79,18 +85,61 @@ namespace QS3D.Core.Reporting
                         DrawingFingerprint = project.DrawingFingerprint
                     };
                     rows[key] = row;
+                    var distinctNotes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    if (note.Length != 0) distinctNotes.Add(note);
+                    noteValues.Add(key, distinctNotes);
                     order.Add(key);
                     created = true;
                 }
                 else
                 {
-                    row.Note = MergeDistinctText(row.Note, note);
+                    if (note.Length != 0 && noteValues[key].Add(note))
+                        row.Note = AppendText(row.Note, note);
                     row.MassKg = AddHomogeneousMass(row.MassKg, massKg, element.Id + "/MassKg");
                 }
 
                 row.Count = QuantityReportMath.AddCount(row.Count, 1);
                 row.ElementIds.Add(elementId);
                 AddHandles(row.SourceHandles, SourceHandleResolver.Resolve(project, new[] { elementId }));
+
+                var hasGrossEvidence = HasAnyQuantity(element, "GrossConcreteM3", "GrossVolumeM3");
+                var hasNetEvidence = HasAnyQuantity(element, "NetConcreteM3", "NetVolumeM3");
+                var hasDeductionEvidence = element.Quantities.ContainsKey("DeductionM3") || (hasGrossEvidence && hasNetEvidence);
+                var hasFormworkEvidence = element.Quantities.ContainsKey("FormworkM2");
+                var hasLengthEvidence = element.Quantities.ContainsKey("LengthM");
+                var hasOuterPerimeterEvidence = element.Category == ElementCategory.Room
+                    ? HasAnyQuantity(element, "OuterPerimeterM", "PerimeterM")
+                    : element.Quantities.ContainsKey("OuterPerimeterM");
+                var hasInnerPerimeterEvidence = element.Category == ElementCategory.Skirting
+                    ? HasAnyQuantity(element, "InnerPerimeterM", "PerimeterM")
+                    : element.Quantities.ContainsKey("InnerPerimeterM");
+                var hasDoorAreaEvidence = element.Category == ElementCategory.Door || element.Category == ElementCategory.WallOpening
+                    ? element.Quantities.ContainsKey("OpeningAreaM2")
+                    : element.Quantities.ContainsKey("DoorAreaM2");
+                var hasSideAreaEvidence = element.Category == ElementCategory.WallFinish
+                    ? HasAnyQuantity(element, "NetFinishAreaM2", "SideAreaM2")
+                    : element.Quantities.ContainsKey("SideAreaM2");
+                var hasBottomAreaEvidence = element.Category == ElementCategory.FloorFinish || element.Category == ElementCategory.Waterproofing
+                    ? HasAnyQuantity(element, "BottomAreaM2", "AreaM2")
+                    : element.Quantities.ContainsKey("BottomAreaM2");
+                var hasTopAreaEvidence = element.Category == ElementCategory.CeilingFinish
+                    ? HasAnyQuantity(element, "TopAreaM2", "AreaM2")
+                    : element.Quantities.ContainsKey("TopAreaM2");
+                var hasOtherAreaEvidence = HasAnyQuantity(element, "OtherAreaM2", "MeasuredSurfaceAreaM2");
+
+                row.HasGrossConcreteM3Evidence = AggregateEvidence(row.HasGrossConcreteM3Evidence, hasGrossEvidence, created);
+                row.HasDeductionM3Evidence = AggregateEvidence(row.HasDeductionM3Evidence, hasDeductionEvidence, created);
+                row.HasNetConcreteM3Evidence = AggregateEvidence(row.HasNetConcreteM3Evidence, hasNetEvidence, created);
+                row.HasFormworkM2Evidence = AggregateEvidence(row.HasFormworkM2Evidence, hasFormworkEvidence, created);
+                row.HasLengthMEvidence = AggregateEvidence(row.HasLengthMEvidence, hasLengthEvidence, created);
+                row.HasOuterPerimeterMEvidence = AggregateEvidence(row.HasOuterPerimeterMEvidence, hasOuterPerimeterEvidence, created);
+                row.HasInnerPerimeterMEvidence = AggregateEvidence(row.HasInnerPerimeterMEvidence, hasInnerPerimeterEvidence, created);
+                row.HasDoorAreaM2Evidence = AggregateEvidence(row.HasDoorAreaM2Evidence, hasDoorAreaEvidence, created);
+                row.HasSideAreaM2Evidence = AggregateEvidence(row.HasSideAreaM2Evidence, hasSideAreaEvidence, created);
+                row.HasBottomAreaM2Evidence = AggregateEvidence(row.HasBottomAreaM2Evidence, hasBottomAreaEvidence, created);
+                row.HasTopAreaM2Evidence = AggregateEvidence(row.HasTopAreaM2Evidence, hasTopAreaEvidence, created);
+                row.HasOtherAreaM2Evidence = AggregateEvidence(row.HasOtherAreaM2Evidence, hasOtherAreaEvidence, created);
+
                 var gross = QFirst(element, "GrossConcreteM3", "GrossVolumeM3");
                 var net = QFirstOrFallback(element, gross, "NetConcreteM3", "NetVolumeM3");
                 row.GrossConcreteM3 = QuantityReportMath.Add(row.GrossConcreteM3, gross, element.Id + "/GrossConcreteM3");
@@ -118,24 +167,88 @@ namespace QS3D.Core.Reporting
                     element.Id + "/TopAreaM2");
                 row.OtherAreaM2 = QuantityReportMath.Add(row.OtherAreaM2, QFirst(element, "OtherAreaM2", "MeasuredSurfaceAreaM2"), element.Id + "/OtherAreaM2");
                 if (created && row.MassKg.HasValue)
-                    row.MassKg = QuantityReportMath.Finite(row.MassKg.Value, element.Id + "/MassKg");
+                    row.MassKg = QuantityReportMath.NonNegative(row.MassKg.Value, element.Id + "/MassKg");
             }
 
-            return order.Select(x => rows[x]).ToList();
+            return order.Select(x => rows[x]).ToList().AsReadOnly();
         }
 
         private static HashSet<string>? ResolveSelection(ProjectState project, IEnumerable<string>? elementIds)
         {
             if (elementIds == null) return null;
+
+            var selectionVersion = project.ChangeVersion;
+            var knownCount = SnapshotKnownSelectionCount(elementIds);
+            if (project.ChangeVersion != selectionVersion)
+                throw new InvalidOperationException("Project changed while quantity report element-id Count contracts were being inspected; recompute the selection against the current project state.");
+
             var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var selectedInstances = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            var observedCount = 0;
             foreach (var raw in elementIds)
             {
+                observedCount++;
+                if (observedCount > MaxSelectionElementIds)
+                    throw SelectionTooLarge();
+
                 var id = (raw ?? string.Empty).Trim();
                 if (id.Length == 0) throw new ArgumentException("Quantity report element ids must not be blank.", nameof(elementIds));
-                if (!selected.Add(id)) continue;
-                if (project.FindElement(id) == null) throw new KeyNotFoundException("Unknown quantity report element: " + id);
+                if (!selected.Add(id))
+                    throw new ArgumentException("Quantity report element ids must be unique. Duplicate id: " + id + ".", nameof(elementIds));
+                var element = project.FindElement(id) ?? throw new KeyNotFoundException("Unknown quantity report element: " + id);
+                selectedInstances.Add(id, element);
+            }
+
+            if (project.ChangeVersion != selectionVersion)
+                throw new InvalidOperationException("Project changed while quantity report element ids were being enumerated; recompute the selection against the current project state.");
+            if (knownCount.HasValue && observedCount != knownCount.Value)
+                throw SelectionCountMismatch(knownCount.Value, observedCount);
+
+            ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Quantity report selection");
+            foreach (var selectedInstance in selectedInstances)
+            {
+                var current = project.FindElement(selectedInstance.Key);
+                if (current == null || !ReferenceEquals(current, selectedInstance.Value))
+                    throw new InvalidOperationException("Quantity report selection became stale while element ids were being enumerated; recompute the selection against the current project state.");
             }
             return selected;
+        }
+
+        private static int? SnapshotKnownSelectionCount(IEnumerable<string> elementIds)
+        {
+            int? knownCount = null;
+            if (elementIds is ICollection<string> genericCollection)
+                ObserveKnownSelectionCount(genericCollection.Count, ref knownCount);
+            if (elementIds is IReadOnlyCollection<string> readOnlyCollection)
+                ObserveKnownSelectionCount(readOnlyCollection.Count, ref knownCount);
+            if (elementIds is ICollection nonGenericCollection)
+                ObserveKnownSelectionCount(nonGenericCollection.Count, ref knownCount);
+            return knownCount;
+        }
+
+        private static void ObserveKnownSelectionCount(int count, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Quantity report selection input reported a negative known count.");
+            if (count > MaxSelectionElementIds)
+                throw SelectionTooLarge();
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException(
+                    "Quantity report selection input exposes conflicting known counts: " + knownCount.Value + " and " + count + ".");
+            knownCount = count;
+        }
+
+        private static InvalidOperationException SelectionTooLarge()
+        {
+            return new InvalidOperationException(
+                "Quantity report selection input exceeds the supported bound of " + MaxSelectionElementIds + ".");
+        }
+
+        private static InvalidOperationException SelectionCountMismatch(int reportedCount, int observedCount)
+        {
+            return new InvalidOperationException(
+                "Quantity report selection input changed during enumeration; Count reported " + reportedCount +
+                " items but enumeration produced " + observedCount + ".");
         }
 
         private static void AddHandles(IList<string> destination, IEnumerable<string> source)
@@ -194,6 +307,15 @@ namespace QS3D.Core.Reporting
             var mass = checked(volume.Value * densityKgM3.Value);
             if (double.IsNaN(mass) || double.IsInfinity(mass))
                 throw new OverflowException("Quantity report mass overflow: " + element.Id + "/volume*density.");
+            if (mass == 0d && volume.Value > 0d && densityKgM3.Value > 0d)
+                throw new InvalidOperationException("Quantity report mass underflow: " + element.Id + "/volume*density rounded positive finite inputs to zero.");
+            if (volume.Value != 0d && densityKgM3.Value != 0d)
+            {
+                if (densityKgM3.Value != 1d && mass == volume.Value)
+                    throw new InvalidOperationException("Quantity report mass lost the density contribution at double precision: " + element.Id + "/volume*density.");
+                if (volume.Value != 1d && mass == densityKgM3.Value)
+                    throw new InvalidOperationException("Quantity report mass lost the volume contribution at double precision: " + element.Id + "/volume*density.");
+            }
             return mass;
         }
 
@@ -202,9 +324,7 @@ namespace QS3D.Core.Reporting
             foreach (var key in keys)
             {
                 if (!element.Quantities.ContainsKey(key)) continue;
-                var value = Q(element, key);
-                if (value < 0d) throw new InvalidOperationException(element.Id + "/" + key + " must be non-negative.");
-                return value;
+                return Q(element, key);
             }
             return null;
         }
@@ -213,20 +333,40 @@ namespace QS3D.Core.Reporting
             ? densityKgM3.Value.ToString("R", CultureInfo.InvariantCulture)
             : "<none>";
 
+        private static string CanonicalGroupKey(params string[] parts)
+        {
+            return string.Join("|", (parts ?? Array.Empty<string>())
+                .Select(part =>
+                {
+                    var value = part ?? string.Empty;
+                    return value.Length.ToString(CultureInfo.InvariantCulture) + ":" + value;
+                }));
+        }
+
         private static double? AddHomogeneousMass(double? current, double? value, string label)
         {
             if (!current.HasValue || !value.HasValue) return null;
             return QuantityReportMath.Add(current.Value, value.Value, label);
         }
 
-        private static string MergeDistinctText(string current, string value)
+        private static string AppendText(string current, string value)
         {
             var existing = (current ?? string.Empty).Trim();
             var incoming = (value ?? string.Empty).Trim();
-            if (incoming.Length == 0 || string.Equals(existing, incoming, StringComparison.OrdinalIgnoreCase)) return existing;
+            if (incoming.Length == 0) return existing;
             if (existing.Length == 0) return incoming;
             return existing + " | " + incoming;
         }
+
+        private static bool HasAnyQuantity(ProjectElement element, params string[] keys)
+        {
+            foreach (var key in keys)
+                if (element.Quantities.ContainsKey(key)) return true;
+            return false;
+        }
+
+        private static bool AggregateEvidence(bool current, bool elementEvidence, bool created) =>
+            created ? elementEvidence : current && elementEvidence;
 
         private static double QFirst(ProjectElement element, params string[] keys)
         {
@@ -239,13 +379,13 @@ namespace QS3D.Core.Reporting
         {
             foreach (var key in keys)
                 if (element.Quantities.ContainsKey(key)) return Q(element, key);
-            return QuantityReportMath.Finite(fallback, element.Id + "/fallback");
+            return QuantityReportMath.NonNegative(fallback, element.Id + "/fallback");
         }
 
         private static double Q(ProjectElement element, string name, double fallback = 0d)
         {
             var value = element.Quantities.TryGetValue(name, out var stored) ? stored : fallback;
-            return QuantityReportMath.Finite(value, element.Id + "/" + name);
+            return QuantityReportMath.NonNegative(value, element.Id + "/" + name);
         }
     }
 }

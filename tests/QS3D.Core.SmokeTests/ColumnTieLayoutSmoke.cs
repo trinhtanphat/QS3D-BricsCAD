@@ -8,6 +8,8 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             SpacingIsMaximumNotMinimum();
+            NearIntegerSpacingDoesNotAddPhantomTie();
+            TrueSpacingOverrunStillAddsTie();
             SingleTieWhenUsableRangeCollapses();
             RejectsImpossibleCoverAndBadSpacing();
         }
@@ -32,6 +34,40 @@ namespace QS3D.Core.SmokeTests
             // Centerline envelope: 2 * ((0.4 - 2 * 0.044) + (0.5 - 2 * 0.044)).
             Near(1.448d, layout.PathPerimeterM, 1e-12d);
             if (layout.ClosedPath.Count != 5) throw new Exception("Expected closed rectangular path with repeated start point.");
+        }
+
+        private static void NearIntegerSpacingDoesNotAddPhantomTie()
+        {
+            var layout = ColumnTieLayoutPlanner.Plan(new ColumnTieLayoutInput
+            {
+                WidthM = 0.3d,
+                DepthM = 0.3d,
+                HeightM = 1.056d,
+                CoverM = 0.025d,
+                DiameterMm = 6d,
+                SpacingMm = 100d
+            });
+
+            if (layout.ElevationsM.Count != 11) throw new Exception("Near-integer spacing added a phantom column tie.");
+            Near(0.1d, layout.ActualSpacingM, 1e-12d);
+            Near(0.028d, layout.ElevationsM[0], 1e-12d);
+            Near(1.028d, layout.ElevationsM[layout.ElevationsM.Count - 1], 1e-12d);
+        }
+
+        private static void TrueSpacingOverrunStillAddsTie()
+        {
+            var layout = ColumnTieLayoutPlanner.Plan(new ColumnTieLayoutInput
+            {
+                WidthM = 0.3d,
+                DepthM = 0.3d,
+                HeightM = 1.0560000001d,
+                CoverM = 0.025d,
+                DiameterMm = 6d,
+                SpacingMm = 100d
+            });
+
+            if (layout.ElevationsM.Count != 12) throw new Exception("A real column-tie spacing overrun was incorrectly snapped down.");
+            if (layout.ActualSpacingM > 0.100000000001d) throw new Exception("Tie spacing exceeded requested maximum after a real overrun.");
         }
 
         private static void SingleTieWhenUsableRangeCollapses()

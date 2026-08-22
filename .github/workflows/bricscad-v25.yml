@@ -20,11 +20,13 @@ jobs:
       BRICSCAD_V25_DIR: ${{ vars.BRICSCAD_V25_DIR }}
       BRICSCAD_V25_PROFILE: ${{ vars.BRICSCAD_V25_PROFILE }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: "8.0.x"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
       - name: Manual-only CI policy gate
@@ -65,6 +67,7 @@ jobs:
           if (-not (Test-Path "$env:BRICSCAD_V25_DIR\bricscad.exe")) { throw "bricscad.exe missing." }
           if (-not (Test-Path "$env:BRICSCAD_V25_DIR\BrxMgd.dll")) { throw "BrxMgd.dll missing." }
           if (-not (Test-Path "$env:BRICSCAD_V25_DIR\TD_Mgd.dll")) { throw "TD_Mgd.dll missing." }
+          if (-not (Test-Path "$env:BRICSCAD_V25_DIR\TD_MgdBrep.dll")) { throw "TD_MgdBrep.dll missing." }
       - name: Build V25 plugin
         run: dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64
       - name: Build V25 release package
@@ -80,7 +83,7 @@ jobs:
             -PluginDll $plugin `
             -Profile $env:BRICSCAD_V25_PROFILE `
             -ArtifactDir "$env:GITHUB_WORKSPACE\artifacts\bricscad-v25-runtime"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: QS3D-BricsCAD-V25
           path: |
@@ -89,7 +92,7 @@ jobs:
             dist/QS3D-BricsCAD-V25.zip
       - name: Upload V25 runtime evidence
         if: ${{ always() && inputs.run_runtime }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: QS3D-BricsCAD-V25-runtime
           if-no-files-found: warn

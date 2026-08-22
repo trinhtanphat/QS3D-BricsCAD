@@ -40,6 +40,37 @@ $SignedPayloadNames = @(
     'uninstall-v25-autoload.ps1',
     'update-v25.ps1'
 )
+$UpdateMutexPrefix = 'Global\QS3D-BricsCAD-V25-Update-'
+
+function Enter-Qs3dUpdateMutex {
+    $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    try { $sid = [string]$identity.User.Value }
+    finally { $identity.Dispose() }
+    if ([string]::IsNullOrWhiteSpace($sid)) { throw 'Could not resolve the current Windows user SID for QS3D update serialization.' }
+
+    $mutexName = $UpdateMutexPrefix + $sid
+    $mutex = [System.Threading.Mutex]::new($false, $mutexName)
+    $ownsMutex = $false
+    try {
+        try { $ownsMutex = $mutex.WaitOne(0) }
+        catch [System.Threading.AbandonedMutexException] { $ownsMutex = $true }
+        if (-not $ownsMutex) {
+            throw 'Another QS3D install/update is already active for this Windows user. Finish that operation before starting another update.'
+        }
+        return $mutex
+    }
+    catch {
+        $mutex.Dispose()
+        throw
+    }
+}
+
+function Exit-Qs3dUpdateMutex {
+    param([System.Threading.Mutex]$Mutex)
+    if ($null -eq $Mutex) { return }
+    try { $Mutex.ReleaseMutex() }
+    finally { $Mutex.Dispose() }
+}
 
 function Normalize-Thumbprint {
     param([string]$Thumbprint)
@@ -56,11 +87,236 @@ function Convert-ToSafeHttpsUri {
     return $uri
 }
 
+function Invoke-BoundedHttpsDownload {
+    param(
+        [Parameter(Mandatory = $true)]
+        [Uri]$Address,
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationPath,
+        [Parameter(Mandatory = $true)]
+        [int64]$MaxBytes,
+        [Parameter(Mandatory = $true)]
+        [ValidateRange(1000, 600000)]
+        [int]$TimeoutMilliseconds,
+        [Parameter(Mandatory = $true)]
+        [string]$Label
+    )
+
+    if ($null -eq $Address -or $Address.Scheme -ne [Uri]::UriSchemeHttps -or [string]::IsNullOrWhiteSpace($Address.Host)) {
+        throw "$Label download URI must be an absolute HTTPS URI."
+    }
+    if ($Address.UserInfo) { throw "$Label download URI must not contain embedded credentials." }
+    if ($MaxBytes -le 0) { throw "$Label download byte limit must be positive." }
+
+    $request = [System.Net.WebRequest]::CreateHttp($Address.AbsoluteUri)
+    $request.Method = 'GET'
+    $request.UserAgent = 'QS3D-BricsCAD-V25-Updater'
+    $request.Accept = '*/*'
+    $request.AllowAutoRedirect = $true
+    $request.MaximumAutomaticRedirections = 5
+    $request.AutomaticDecompression = [System.Net.DecompressionMethods]::GZip -bor [System.Net.DecompressionMethods]::Deflate
+    $request.Timeout = $TimeoutMilliseconds
+    $request.ReadWriteTimeout = $TimeoutMilliseconds
+
+    $response = $null
+    $input = $null
+    $output = $null
+    $completed = $false
+    try {
+        $response = [System.Net.HttpWebResponse]$request.GetResponse()
+        if ($response.StatusCode -ne [System.Net.HttpStatusCode]::OK) {
+            throw "$Label download returned HTTP $([int]$response.StatusCode)."
+        }
+        $finalUri = $response.ResponseUri
+        if ($null -eq $finalUri -or $finalUri.Scheme -ne [Uri]::UriSchemeHttps -or [string]::IsNullOrWhiteSpace($finalUri.Host) -or $finalUri.UserInfo) {
+            throw "$Label download redirected to a non-HTTPS or credential-bearing URI."
+        }
+        if ($response.ContentLength -gt $MaxBytes) {
+            throw "$Label download Content-Length $($response.ContentLength) exceeds the allowed maximum $MaxBytes bytes."
+        }
+
+        $input = $response.GetResponseStream()
+        if ($null -eq $input) { throw "$Label download response body was empty." }
+        $output = [System.IO.File]::Open($DestinationPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+        $buffer = New-Object byte[] 65536
+        [int64]$total = 0
+        while ($true) {
+            $read = $input.Read($buffer, 0, $buffer.Length)
+            if ($read -le 0) { break }
+            if ($total -gt ($MaxBytes - [int64]$read)) {
+                throw "$Label download exceeded the allowed maximum $MaxBytes bytes while streaming."
+            }
+            $output.Write($buffer, 0, $read)
+            $total += [int64]$read
+        }
+        if ($total -le 0) { throw "$Label download returned an empty response body." }
+        $output.Flush()
+        $completed = $true
+        return $total
+    }
+    finally {
+        if ($output) { $output.Dispose() }
+        if ($input) { $input.Dispose() }
+        if ($response) { $response.Dispose() }
+        if (-not $completed -and (Test-Path -LiteralPath $DestinationPath)) {
+            Remove-Item -LiteralPath $DestinationPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Require-ManifestProperty {
     param($Manifest, [string]$Name)
     $property = $Manifest.PSObject.Properties[$Name]
     if (-not $property) { throw "Update manifest is missing '$Name'." }
     return $property.Value
+}
+
+function Convert-ToStrictSemVer {
+    param([string]$Value, [string]$Label)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Label is missing." }
+    $text = $Value.Trim()
+    $match = [regex]::Match(
+        $text,
+        '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
+        [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+    if (-not $match.Success) { throw "$Label is not strict SemVer: $text" }
+
+    $components = @()
+    foreach ($index in 1..3) {
+        $parsed = 0
+        if (-not [int]::TryParse($match.Groups[$index].Value, [Globalization.NumberStyles]::None, [Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)) {
+            throw "$Label numeric component is outside the supported range: $text"
+        }
+        $components += $parsed
+    }
+
+    [string[]]$prerelease = @()
+    if ($match.Groups[4].Success) {
+        $prerelease = @($match.Groups[4].Value.Split('.'))
+        foreach ($identifier in $prerelease) {
+            if ($identifier -match '^[0-9]+$' -and $identifier.Length -gt 1 -and $identifier[0] -eq '0') {
+                throw "$Label has a numeric prerelease identifier with a leading zero: $text"
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Text = $text
+        Major = [int]$components[0]
+        Minor = [int]$components[1]
+        Patch = [int]$components[2]
+        Prerelease = [string[]]$prerelease
+    }
+}
+
+function Compare-StrictSemVer {
+    param($Left, $Right)
+
+    foreach ($property in @('Major', 'Minor', 'Patch')) {
+        $comparison = ([int]$Left.$property).CompareTo([int]$Right.$property)
+        if ($comparison -ne 0) { return $comparison }
+    }
+
+    $leftPre = @($Left.Prerelease)
+    $rightPre = @($Right.Prerelease)
+    if ($leftPre.Count -eq 0 -and $rightPre.Count -eq 0) { return 0 }
+    if ($leftPre.Count -eq 0) { return 1 }
+    if ($rightPre.Count -eq 0) { return -1 }
+
+    $count = [Math]::Min($leftPre.Count, $rightPre.Count)
+    for ($index = 0; $index -lt $count; $index++) {
+        $leftIdentifier = [string]$leftPre[$index]
+        $rightIdentifier = [string]$rightPre[$index]
+        $leftNumeric = $leftIdentifier -match '^[0-9]+$'
+        $rightNumeric = $rightIdentifier -match '^[0-9]+$'
+
+        if ($leftNumeric -and $rightNumeric) {
+            $lengthComparison = $leftIdentifier.Length.CompareTo($rightIdentifier.Length)
+            if ($lengthComparison -ne 0) { return $lengthComparison }
+            $numericComparison = [string]::CompareOrdinal($leftIdentifier, $rightIdentifier)
+            if ($numericComparison -ne 0) { return $numericComparison }
+            continue
+        }
+        if ($leftNumeric -ne $rightNumeric) { return $(if ($leftNumeric) { -1 } else { 1 }) }
+
+        $lexicalComparison = [string]::CompareOrdinal($leftIdentifier, $rightIdentifier)
+        if ($lexicalComparison -ne 0) { return $lexicalComparison }
+    }
+
+    return $leftPre.Count.CompareTo($rightPre.Count)
+}
+
+function Get-OfficialGitHubReleaseSnapshot {
+    param([Uri]$ManifestAddress)
+
+    if (-not [string]::Equals($ManifestAddress.Host, 'github.com', [StringComparison]::OrdinalIgnoreCase)) { return $null }
+    $prefix = '/trinhtanphat/QS3D-BricsCAD/releases/download/'
+    $path = $ManifestAddress.AbsolutePath
+    if (-not $path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { return $null }
+    if ($ManifestAddress.UserInfo -or $ManifestAddress.Query -or $ManifestAddress.Fragment) {
+        throw 'Official QS3D GitHub manifest URI must not contain credentials, query, or fragment.'
+    }
+
+    $remainder = $path.Substring($prefix.Length)
+    $slash = $remainder.IndexOf('/')
+    if ($slash -le 0 -or $slash -eq ($remainder.Length - 1) -or $remainder.IndexOf('/', $slash + 1) -ge 0) {
+        throw 'Official QS3D GitHub manifest URI has an invalid release-download path.'
+    }
+
+    try {
+        $tag = [Uri]::UnescapeDataString($remainder.Substring(0, $slash))
+        $asset = [Uri]::UnescapeDataString($remainder.Substring($slash + 1))
+    }
+    catch [UriFormatException] {
+        throw 'Official QS3D GitHub manifest URI contains invalid escaping.'
+    }
+    if (-not [string]::Equals($asset, 'QS3D-BricsCAD-V25.update.json', [StringComparison]::Ordinal)) {
+        throw "Official QS3D GitHub manifest asset must be QS3D-BricsCAD-V25.update.json, got '$asset'."
+    }
+    if ($tag.Length -le 1 -or -not [string]::Equals($tag.Substring(0, 1), 'v', [StringComparison]::Ordinal)) {
+        throw "Official QS3D GitHub release tag must start with lowercase v: $tag"
+    }
+    $productVersion = Convert-ToStrictSemVer -Value $tag.Substring(1) -Label 'Official GitHub release tag'
+    return [pscustomobject]@{
+        Tag = $tag
+        ProductVersion = $productVersion.Text
+    }
+}
+
+function Assert-OfficialGitHubPackageSnapshot {
+    param([Uri]$PackageAddress, $Snapshot)
+
+    if ($PackageAddress.Scheme -ne [Uri]::UriSchemeHttps -or
+        -not [string]::Equals($PackageAddress.Host, 'github.com', [StringComparison]::OrdinalIgnoreCase) -or
+        $PackageAddress.UserInfo -or $PackageAddress.Query -or $PackageAddress.Fragment) {
+        throw 'Official QS3D package URI must be a credential-free HTTPS github.com URL without query or fragment.'
+    }
+
+    $prefix = '/trinhtanphat/QS3D-BricsCAD/releases/download/'
+    $path = $PackageAddress.AbsolutePath
+    if (-not $path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Official QS3D package URI does not belong to trinhtanphat/QS3D-BricsCAD release downloads.'
+    }
+    $remainder = $path.Substring($prefix.Length)
+    $slash = $remainder.IndexOf('/')
+    if ($slash -le 0 -or $slash -eq ($remainder.Length - 1) -or $remainder.IndexOf('/', $slash + 1) -ge 0) {
+        throw 'Official QS3D package URI has an invalid release-download path.'
+    }
+
+    try {
+        $tag = [Uri]::UnescapeDataString($remainder.Substring(0, $slash))
+        $asset = [Uri]::UnescapeDataString($remainder.Substring($slash + 1))
+    }
+    catch [UriFormatException] {
+        throw 'Official QS3D package URI contains invalid escaping.'
+    }
+    if (-not [string]::Equals($tag, [string]$Snapshot.Tag, [StringComparison]::Ordinal)) {
+        throw "Official QS3D package release tag '$tag' does not match scheduled release tag '$($Snapshot.Tag)'."
+    }
+    if (-not [string]::Equals($asset, 'QS3D-BricsCAD-V25.zip', [StringComparison]::Ordinal)) {
+        throw "Official QS3D package asset must be QS3D-BricsCAD-V25.zip, got '$asset'."
+    }
 }
 
 function Read-InstalledVersion {
@@ -103,6 +359,45 @@ function Read-InstalledVersion {
     if ($pluginVersion) { return $pluginVersion }
     if ($metadataVersion) { return $metadataVersion }
     throw 'Installed QS3D state does not expose a readable version.'
+}
+
+function Read-PluginProductVersion {
+    param([string]$Path, [string]$Label)
+    try {
+        $productVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($Path).ProductVersion
+        return Convert-ToStrictSemVer -Value ([string]$productVersion) -Label $Label
+    }
+    catch {
+        throw "$Label is unreadable: $($_.Exception.Message)"
+    }
+}
+
+function Read-InstalledProductVersion {
+    param([string]$Directory)
+
+    $metadataPath = Join-Path $Directory 'PACKAGE-METADATA.json'
+    $pluginPath = Join-Path $Directory 'QS3D.BricsCAD.V25.dll'
+    $hasMetadata = Test-Path -LiteralPath $metadataPath -PathType Leaf
+    $hasPlugin = Test-Path -LiteralPath $pluginPath -PathType Leaf
+    if (-not $hasMetadata -and -not $hasPlugin) {
+        return Convert-ToStrictSemVer -Value '0.0.0' -Label 'Installed QS3D productVersion'
+    }
+    if (-not $hasMetadata -or -not $hasPlugin) {
+        throw 'Installed QS3D state is incomplete; PACKAGE-METADATA.json and QS3D.BricsCAD.V25.dll must both exist before secure update.'
+    }
+
+    try { $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json }
+    catch { throw "Installed PACKAGE-METADATA.json is unreadable: $($_.Exception.Message)" }
+    if (-not $metadata.PSObject.Properties['productVersion']) {
+        throw 'Installed PACKAGE-METADATA.json is missing productVersion; install a product-version-aware signed QS3D build manually before using secure auto-update.'
+    }
+
+    $metadataProductVersion = Convert-ToStrictSemVer -Value ([string]$metadata.productVersion) -Label 'Installed PACKAGE-METADATA productVersion'
+    $pluginProductVersion = Read-PluginProductVersion -Path $pluginPath -Label 'Installed signed QS3D plugin product version'
+    if (-not [string]::Equals($metadataProductVersion.Text, $pluginProductVersion.Text, [StringComparison]::Ordinal)) {
+        throw "Installed PACKAGE-METADATA productVersion $($metadataProductVersion.Text) does not match installed QS3D plugin product version $($pluginProductVersion.Text)."
+    }
+    return $pluginProductVersion
 }
 
 function Read-SignedPluginVersion {
@@ -213,92 +508,138 @@ if (Get-Process -Name bricscad -ErrorAction SilentlyContinue) {
     throw 'Close all BricsCAD processes before updating QS3D.'
 }
 
-$manifestAddress = Convert-ToSafeHttpsUri -Value $ManifestUri -Label 'ManifestUri'
-$expectedSigner = Normalize-Thumbprint $ExpectedSignerThumbprint
-$allowedHosts = @($manifestAddress.Host)
-if ($AllowedPackageHost) { $allowedHosts += $AllowedPackageHost }
-$allowedHosts = @($allowedHosts | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.Trim().ToLowerInvariant() } | Sort-Object -Unique)
-
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-update-' + [Guid]::NewGuid().ToString('N'))
-$manifestPath = Join-Path $tempRoot 'manifest.json'
-$zipPath = Join-Path $tempRoot 'package.zip'
-$extractRoot = Join-Path $tempRoot 'package'
-
+$updateMutex = Enter-Qs3dUpdateMutex
 try {
-    New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
-    Invoke-WebRequest -Uri $manifestAddress.AbsoluteUri -OutFile $manifestPath -UseBasicParsing
-    $manifestFile = Get-Item -LiteralPath $manifestPath
-    if ($manifestFile.Length -le 0 -or $manifestFile.Length -gt 65536) { throw 'Update manifest must be between 1 byte and 64 KiB.' }
+    $manifestAddress = Convert-ToSafeHttpsUri -Value $ManifestUri -Label 'ManifestUri'
+    $officialReleaseSnapshot = Get-OfficialGitHubReleaseSnapshot -ManifestAddress $manifestAddress
+    $expectedSigner = Normalize-Thumbprint $ExpectedSignerThumbprint
+    $allowedHosts = @($manifestAddress.Host)
+    if ($AllowedPackageHost) { $allowedHosts += $AllowedPackageHost }
+    $allowedHosts = @($allowedHosts | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.Trim().ToLowerInvariant() } | Sort-Object -Unique)
 
-    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    $schemaVersion = [int](Require-ManifestProperty -Manifest $manifest -Name 'schemaVersion')
-    if ($schemaVersion -ne 1) { throw "Unsupported update manifest schemaVersion: $schemaVersion" }
-    if ([string](Require-ManifestProperty -Manifest $manifest -Name 'product') -ne 'QS3D') { throw 'Update manifest product must be QS3D.' }
-    if ([string](Require-ManifestProperty -Manifest $manifest -Name 'target') -ne 'BricsCAD V25 x64') { throw 'Update manifest target must be BricsCAD V25 x64.' }
+    $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-update-' + [Guid]::NewGuid().ToString('N'))
+    $manifestPath = Join-Path $tempRoot 'manifest.json'
+    $zipPath = Join-Path $tempRoot 'package.zip'
+    $extractRoot = Join-Path $tempRoot 'package'
 
-    $versionText = [string](Require-ManifestProperty -Manifest $manifest -Name 'version')
-    try { $targetVersion = [Version]::Parse($versionText) }
-    catch { throw "Update manifest version is invalid: $versionText" }
+    try {
+        New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+        Invoke-BoundedHttpsDownload -Address $manifestAddress -DestinationPath $manifestPath -MaxBytes 65536 -TimeoutMilliseconds 30000 -Label 'Update manifest' | Out-Null
+        $manifestFile = Get-Item -LiteralPath $manifestPath
+        if ($manifestFile.Length -le 0 -or $manifestFile.Length -gt 65536) { throw 'Update manifest must be between 1 byte and 64 KiB.' }
 
-    $packageAddress = Convert-ToSafeHttpsUri -Value ([string](Require-ManifestProperty -Manifest $manifest -Name 'packageUri')) -Label 'packageUri'
-    if ($allowedHosts -notcontains $packageAddress.Host.ToLowerInvariant()) {
-        throw "Package host '$($packageAddress.Host)' is not approved. Allowed hosts: $($allowedHosts -join ', ')"
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        $schemaVersion = [int](Require-ManifestProperty -Manifest $manifest -Name 'schemaVersion')
+        if ($schemaVersion -ne 2) { throw "Unsupported update manifest schemaVersion: $schemaVersion. Secure auto-update requires schemaVersion 2 with productVersion binding." }
+        if ([string](Require-ManifestProperty -Manifest $manifest -Name 'product') -ne 'QS3D') { throw 'Update manifest product must be QS3D.' }
+        if ([string](Require-ManifestProperty -Manifest $manifest -Name 'target') -ne 'BricsCAD V25 x64') { throw 'Update manifest target must be BricsCAD V25 x64.' }
+
+        $targetProductVersion = Convert-ToStrictSemVer -Value ([string](Require-ManifestProperty -Manifest $manifest -Name 'productVersion')) -Label 'Update manifest productVersion'
+        if ($officialReleaseSnapshot -and -not [string]::Equals($targetProductVersion.Text, [string]$officialReleaseSnapshot.ProductVersion, [StringComparison]::Ordinal)) {
+            throw "Update manifest productVersion $($targetProductVersion.Text) does not match scheduled GitHub release $($officialReleaseSnapshot.Tag)."
+        }
+        $versionText = [string](Require-ManifestProperty -Manifest $manifest -Name 'version')
+        try { $targetVersion = [Version]::Parse($versionText) }
+        catch { throw "Update manifest version is invalid: $versionText" }
+
+        $packageAddress = Convert-ToSafeHttpsUri -Value ([string](Require-ManifestProperty -Manifest $manifest -Name 'packageUri')) -Label 'packageUri'
+        if ($officialReleaseSnapshot) {
+            Assert-OfficialGitHubPackageSnapshot -PackageAddress $packageAddress -Snapshot $officialReleaseSnapshot
+        }
+        if ($allowedHosts -notcontains $packageAddress.Host.ToLowerInvariant()) {
+            throw "Package host '$($packageAddress.Host)' is not approved. Allowed hosts: $($allowedHosts -join ', ')"
+        }
+
+        $expectedZipHash = ([string](Require-ManifestProperty -Manifest $manifest -Name 'sha256')).Trim().ToUpperInvariant()
+        if ($expectedZipHash -notmatch '^[0-9A-F]{64}$') { throw 'Update manifest sha256 must be 64 hexadecimal characters.' }
+        $manifestSigner = Normalize-Thumbprint ([string](Require-ManifestProperty -Manifest $manifest -Name 'signerThumbprint'))
+        if ($manifestSigner -ne $expectedSigner) { throw 'Update manifest signerThumbprint does not match ExpectedSignerThumbprint.' }
+
+        $installedVersion = Read-InstalledVersion -Directory $InstallDirectory
+        if ($targetVersion -lt $installedVersion) { throw "Refusing assembly-version downgrade from $installedVersion to $targetVersion." }
+        if ($targetVersion -eq $installedVersion -and -not $AllowSameVersion) { throw "QS3D assembly version $targetVersion is already installed. Use -AllowSameVersion only when the product SemVer is independently newer." }
+
+        $installedProductVersion = Read-InstalledProductVersion -Directory $InstallDirectory
+        $productComparison = Compare-StrictSemVer -Left $targetProductVersion -Right $installedProductVersion
+        if ($productComparison -lt 0) {
+            throw "Refusing product-version downgrade from $($installedProductVersion.Text) to $($targetProductVersion.Text)."
+        }
+        if ($productComparison -eq 0) {
+            throw "QS3D product version $($targetProductVersion.Text) is already installed. -AllowSameVersion never authorizes product-version replay or repair."
+        }
+
+        if (-not $PSCmdlet.ShouldProcess($InstallDirectory, "Update QS3D product $($installedProductVersion.Text) -> $($targetProductVersion.Text); assembly $installedVersion -> $targetVersion")) { return }
+
+        $maxBytes = [int64]$MaxPackageSizeMB * 1MB
+        Invoke-BoundedHttpsDownload -Address $packageAddress -DestinationPath $zipPath -MaxBytes $maxBytes -TimeoutMilliseconds 120000 -Label 'Update package' | Out-Null
+        $zipFile = Get-Item -LiteralPath $zipPath
+        if ($zipFile.Length -le 0 -or $zipFile.Length -gt $maxBytes) {
+            throw "Downloaded package size $($zipFile.Length) bytes is outside the allowed range (max $maxBytes)."
+        }
+        $actualZipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToUpperInvariant()
+        if ($actualZipHash -ne $expectedZipHash) { throw 'Downloaded package SHA-256 does not match the update manifest.' }
+
+        $maxExpandedBytes = [int64]$MaxExpandedPackageSizeMB * 1MB
+        Assert-SafeArchive -ZipPath $zipPath -DestinationRoot $extractRoot -MaxExpandedBytes $maxExpandedBytes -MaxEntries $MaxArchiveEntries
+        New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
+        Expand-Archive -LiteralPath $zipPath -DestinationPath $extractRoot -Force
+        Assert-PackageRoot -Directory $extractRoot -ExpectedSigner $expectedSigner
+
+        $downloadedPluginPath = Join-Path $extractRoot 'QS3D.BricsCAD.V25.dll'
+        $signedPluginVersion = Read-SignedPluginVersion -Path $downloadedPluginPath
+        if ($signedPluginVersion -ne $targetVersion) {
+            throw "Signed QS3D plugin assembly version $signedPluginVersion does not match manifest version $targetVersion. Refusing replay/downgrade metadata substitution."
+        }
+
+        $downloadedMetadata = Get-Content -LiteralPath (Join-Path $extractRoot 'PACKAGE-METADATA.json') -Raw | ConvertFrom-Json
+        if (-not $downloadedMetadata.PSObject.Properties['version']) { throw 'Downloaded PACKAGE-METADATA.json is missing version.' }
+        if (-not $downloadedMetadata.PSObject.Properties['productVersion']) { throw 'Downloaded PACKAGE-METADATA.json is missing productVersion.' }
+        $packageVersion = [Version]::Parse([string]$downloadedMetadata.version)
+        if ($packageVersion -ne $signedPluginVersion) {
+            throw "Downloaded package metadata version $packageVersion does not match signed plugin assembly version $signedPluginVersion."
+        }
+        if ($packageVersion -ne $targetVersion) { throw "Downloaded package version $packageVersion does not match manifest version $targetVersion." }
+
+        $packageProductVersion = Convert-ToStrictSemVer -Value ([string]$downloadedMetadata.productVersion) -Label 'Downloaded PACKAGE-METADATA productVersion'
+        $signedPluginProductVersion = Read-PluginProductVersion -Path $downloadedPluginPath -Label 'Downloaded signed QS3D plugin product version'
+        if (-not [string]::Equals($packageProductVersion.Text, $signedPluginProductVersion.Text, [StringComparison]::Ordinal)) {
+            throw "Downloaded PACKAGE-METADATA productVersion $($packageProductVersion.Text) does not match signed plugin product version $($signedPluginProductVersion.Text)."
+        }
+        if (-not [string]::Equals($packageProductVersion.Text, $targetProductVersion.Text, [StringComparison]::Ordinal)) {
+            throw "Downloaded package productVersion $($packageProductVersion.Text) does not match manifest productVersion $($targetProductVersion.Text)."
+        }
+        if ((Compare-StrictSemVer -Left $packageProductVersion -Right $installedProductVersion) -le 0) {
+            throw "Downloaded package productVersion $($packageProductVersion.Text) is not newer than installed productVersion $($installedProductVersion.Text)."
+        }
+
+        $currentInstalledVersion = Read-InstalledVersion -Directory $InstallDirectory
+        if ($currentInstalledVersion -ne $installedVersion) {
+            throw "Installed QS3D assembly version changed during update preparation ($installedVersion -> $currentInstalledVersion). Refusing concurrent/stale install."
+        }
+        $currentInstalledProductVersion = Read-InstalledProductVersion -Directory $InstallDirectory
+        if (-not [string]::Equals($currentInstalledProductVersion.Text, $installedProductVersion.Text, [StringComparison]::Ordinal)) {
+            throw "Installed QS3D productVersion changed during update preparation ($($installedProductVersion.Text) -> $($currentInstalledProductVersion.Text)). Refusing concurrent/stale install."
+        }
+
+        $installer = Join-Path $extractRoot 'install-v25-autoload.ps1'
+        $arguments = @{
+            PackageDirectory = $extractRoot
+            InstallDirectory = $InstallDirectory
+            LoadMode = $LoadMode
+            Force = $true
+            RequireSigned = $true
+            ExpectedSignerThumbprint = $expectedSigner
+        }
+        if ($VersionKeys) { $arguments.VersionKeys = $VersionKeys }
+        if ($LanguageKeys) { $arguments.LanguageKeys = $LanguageKeys }
+        & $installer @arguments
+
+        Write-Host "QS3D updated securely to product $($targetProductVersion.Text) (assembly $targetVersion)."
     }
-
-    $expectedZipHash = ([string](Require-ManifestProperty -Manifest $manifest -Name 'sha256')).Trim().ToUpperInvariant()
-    if ($expectedZipHash -notmatch '^[0-9A-F]{64}$') { throw 'Update manifest sha256 must be 64 hexadecimal characters.' }
-    $manifestSigner = Normalize-Thumbprint ([string](Require-ManifestProperty -Manifest $manifest -Name 'signerThumbprint'))
-    if ($manifestSigner -ne $expectedSigner) { throw 'Update manifest signerThumbprint does not match ExpectedSignerThumbprint.' }
-
-    $installedVersion = Read-InstalledVersion -Directory $InstallDirectory
-    if ($targetVersion -lt $installedVersion) { throw "Refusing downgrade from $installedVersion to $targetVersion." }
-    if ($targetVersion -eq $installedVersion -and -not $AllowSameVersion) { throw "QS3D $targetVersion is already installed. Use -AllowSameVersion only for an intentional repair." }
-
-    if (-not $PSCmdlet.ShouldProcess($InstallDirectory, "Update QS3D from $installedVersion to $targetVersion")) { return }
-
-    Invoke-WebRequest -Uri $packageAddress.AbsoluteUri -OutFile $zipPath -UseBasicParsing
-    $zipFile = Get-Item -LiteralPath $zipPath
-    $maxBytes = [int64]$MaxPackageSizeMB * 1MB
-    if ($zipFile.Length -le 0 -or $zipFile.Length -gt $maxBytes) {
-        throw "Downloaded package size $($zipFile.Length) bytes is outside the allowed range (max $maxBytes)."
+    finally {
+        if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
     }
-    $actualZipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToUpperInvariant()
-    if ($actualZipHash -ne $expectedZipHash) { throw 'Downloaded package SHA-256 does not match the update manifest.' }
-
-    $maxExpandedBytes = [int64]$MaxExpandedPackageSizeMB * 1MB
-    Assert-SafeArchive -ZipPath $zipPath -DestinationRoot $extractRoot -MaxExpandedBytes $maxExpandedBytes -MaxEntries $MaxArchiveEntries
-    New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
-    Expand-Archive -LiteralPath $zipPath -DestinationPath $extractRoot -Force
-    Assert-PackageRoot -Directory $extractRoot -ExpectedSigner $expectedSigner
-
-    $signedPluginVersion = Read-SignedPluginVersion -Path (Join-Path $extractRoot 'QS3D.BricsCAD.V25.dll')
-    if ($signedPluginVersion -ne $targetVersion) {
-        throw "Signed QS3D plugin assembly version $signedPluginVersion does not match manifest version $targetVersion. Refusing replay/downgrade metadata substitution."
-    }
-
-    $downloadedMetadata = Get-Content -LiteralPath (Join-Path $extractRoot 'PACKAGE-METADATA.json') -Raw | ConvertFrom-Json
-    if (-not $downloadedMetadata.PSObject.Properties['version']) { throw 'Downloaded PACKAGE-METADATA.json is missing version.' }
-    $packageVersion = [Version]::Parse([string]$downloadedMetadata.version)
-    if ($packageVersion -ne $signedPluginVersion) {
-        throw "Downloaded package metadata version $packageVersion does not match signed plugin assembly version $signedPluginVersion."
-    }
-    if ($packageVersion -ne $targetVersion) { throw "Downloaded package version $packageVersion does not match manifest version $targetVersion." }
-
-    $installer = Join-Path $extractRoot 'install-v25-autoload.ps1'
-    $arguments = @{
-        PackageDirectory = $extractRoot
-        InstallDirectory = $InstallDirectory
-        LoadMode = $LoadMode
-        Force = $true
-        RequireSigned = $true
-        ExpectedSignerThumbprint = $expectedSigner
-    }
-    if ($VersionKeys) { $arguments.VersionKeys = $VersionKeys }
-    if ($LanguageKeys) { $arguments.LanguageKeys = $LanguageKeys }
-    & $installer @arguments
-
-    Write-Host "QS3D updated securely to $targetVersion."
 }
 finally {
-    if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
+    Exit-Qs3dUpdateMutex -Mutex $updateMutex
 }

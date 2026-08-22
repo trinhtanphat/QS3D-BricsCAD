@@ -20,7 +20,9 @@ if CODEC.is_file():
     text = CODEC.read_text(encoding="utf-8")
     for token in (
         'OpeningIdsKey = "PhysicalOpeningCutOpeningIdsV1"',
-        "StrictUtf8.GetString(Convert.FromBase64String(encoded))",
+        "var bytes = Convert.FromBase64String(encoded);",
+        "Convert.ToBase64String(bytes), encoded, StringComparison.Ordinal",
+        "id = StrictUtf8.GetString(bytes);",
         "Convert.ToBase64String(StrictUtf8.GetBytes(x))",
         "Resolve(ProjectState project, ProjectElement host",
         'opening.Properties.TryGetValue("HostWallId"',
@@ -112,4 +114,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: physical-cut target ids are shared through the Core codec; manual/auto rehost and unlink fail closed before mutation, curved cuts persist exact ids, and regression smoke covers destructive-host safety.")
+print("PASS: physical-cut target ids use canonical Base64 + strict UTF-8 through the shared Core codec; manual/auto rehost and unlink fail closed before mutation, curved cuts persist exact ids, and regression smoke covers destructive-host safety.")
