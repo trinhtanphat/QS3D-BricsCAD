@@ -78,13 +78,14 @@ namespace QS3D.BricsCAD.V25.UI
                 if (handles.Length == 0)
                     throw new InvalidOperationException("Scope cây đang chọn chưa có CAD Handle provenance để tạo Selection export.");
 
-                var live = Cad.EntitySnapshotReader.ReadHandles(document, handles);
-                if (live.Count != handles.Length)
-                    throw new InvalidOperationException("Một hoặc nhiều CAD Handle của scope đã stale/missing; từ chối export Selection mơ hồ.");
+                // Resolve the entire live set before touching PICKFIRST. If any Handle became
+                // stale between Quantity Insight refresh and this click, the user's existing
+                // selection remains unchanged and ED2 is never dispatched with a partial scope.
+                var resolved = Cad.CadHandleService.Resolve(document, handles);
+                if (resolved.Count != handles.Length)
+                    throw new InvalidOperationException("Một hoặc nhiều CAD Handle của scope đã stale/missing; giữ nguyên selection và từ chối export Selection mơ hồ.");
 
-                var selectedCount = Cad.CadHandleService.Select(document, handles);
-                if (selectedCount != handles.Length)
-                    throw new InvalidOperationException("Không thể thiết lập đầy đủ Selection cho node đang chọn; từ chối xuất scope không đầy đủ.");
+                document.Editor.SetImpliedSelection(resolved.ToArray());
 
                 var scopeLabel = DescribeSelectedScope();
                 DispatchExistingCommand(
@@ -102,7 +103,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             DispatchExistingCommand(
                 "QS3DEXCELLOCATE ",
-                "Truy ngược Excel: chọn workbook/sheet/dòng; QS3D sẽ kiểm ElementId + Handle + Drawing Fingerprint trước khi locate."
+                "Truy ngược Excel: chọn workbook và số dòng CHI_TIET; QS3D sẽ kiểm ElementId + Handle + Drawing Fingerprint trước khi locate."
             );
         }
 
