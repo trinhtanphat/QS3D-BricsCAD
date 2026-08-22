@@ -93,7 +93,7 @@ namespace QS3D.BricsCAD.V25.Reporting
                 {
                     var target = targetSolids[componentIndex].Solid;
                     grossVolumeCad += SafeVolumeCad(target);
-                    faceSeeds.AddRange(ReadFaces(target, componentIndex, faceSeeds.Count, diagnostics));
+                    faceSeeds.AddRange(ReadFaces(target, targetElement.Category, componentIndex, faceSeeds.Count, diagnostics));
 
                     using (var volumeResidual = Clone(target))
                     {
@@ -153,6 +153,7 @@ namespace QS3D.BricsCAD.V25.Reporting
 
                 var faces = BuildFaceResults(
                     targetElement.Id,
+                    targetElement.Category,
                     faceSeeds,
                     residualForFormwork,
                     candidates,
@@ -249,6 +250,7 @@ namespace QS3D.BricsCAD.V25.Reporting
 
         private static IReadOnlyList<QuantityFormworkFaceExplanation> BuildFaceResults(
             string targetElementId,
+            ElementCategory targetCategory,
             IReadOnlyList<FaceSeed> seeds,
             IReadOnlyList<Solid3d> residuals,
             IReadOnlyList<OwnedSolid> candidates,
@@ -281,6 +283,7 @@ namespace QS3D.BricsCAD.V25.Reporting
             for (var index = 0; index < seeds.Count; index++)
             {
                 var seed = seeds[index];
+                if (!IncludeFormworkFace(targetCategory, seed.Type)) continue;
                 var netCad = seed.Plane == null ? seed.GrossAreaCad : Math.Min(seed.GrossAreaCad, residualAreasCad[index]);
                 if (seed.Plane == null)
                     diagnostics.Add(seed.Id + ": mặt không phẳng được giữ nguyên diện tích; cần native curved-face probe nếu phải khấu trừ mặt cong.");
@@ -316,6 +319,7 @@ namespace QS3D.BricsCAD.V25.Reporting
 
         private static List<FaceSeed> ReadFaces(
             Solid3d solid,
+            ElementCategory category,
             int componentIndex,
             int globalOffset,
             ICollection<string> diagnostics)
@@ -323,7 +327,10 @@ namespace QS3D.BricsCAD.V25.Reporting
             var result = new List<FaceSeed>();
             try
             {
-                var endAxis = DominantHorizontalAxis(solid);
+                // Foundation formwork follows the canonical semantic rule S = perimeter × height:
+                // all vertical perimeter faces are side faces, even for elongated rectangular pads.
+                // Keeping the original BREP enumeration index preserves exact SOLID-xx/FACE-yy identity.
+                var endAxis = category == ElementCategory.Foundation ? -1 : DominantHorizontalAxis(solid);
                 using (var brep = new Brep(solid))
                 {
                     var localIndex = 0;
@@ -404,6 +411,16 @@ namespace QS3D.BricsCAD.V25.Reporting
             // target face and the contact deduction collapses back to zero.
             var planeToleranceCad = Math.Max(toleranceCad * 1e-3d, 1e-12d);
             return Math.Abs((right.PointOnPlane - left.PointOnPlane).DotProduct(ln)) <= planeToleranceCad;
+        }
+
+        private static bool IncludeFormworkFace(ElementCategory category, string faceType)
+        {
+            // BLT/QS3D foundation parity is intentionally side-only: top and bottom are not
+            // formwork, and Foundation ReadFaces disables End classification so all four
+            // vertical perimeter faces remain eligible. Other categories retain their
+            // existing explanation behavior in this bounded compatibility correction.
+            if (category != ElementCategory.Foundation) return true;
+            return string.Equals(faceType, "Side", StringComparison.Ordinal);
         }
 
         private static int DominantHorizontalAxis(Solid3d solid)
