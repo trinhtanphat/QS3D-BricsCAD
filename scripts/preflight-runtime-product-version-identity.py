@@ -14,6 +14,7 @@ UPDATE_CENTER = ROOT / "src" / "QS3D.BricsCAD.V25" / "Updates" / "UpdateCenterWi
 INSTALLER = ROOT / "scripts" / "install-v25-autoload.ps1"
 PACKAGE_V25 = ROOT / "scripts" / "package-v25.ps1"
 PACKAGE_V26 = ROOT / "scripts" / "package-v26.ps1"
+BUILD_PROPS = ROOT / "Directory.Build.props"
 PROJECTS = [
     ROOT / "src" / "QS3D.BricsCAD.V25" / "QS3D.BricsCAD.V25.csproj",
     ROOT / "src" / "QS3D.BricsCAD.V26" / "QS3D.BricsCAD.V26.csproj",
@@ -69,6 +70,10 @@ def main():
                     f"{path} FileVersion must identify preview build {identity['Version']}; "
                     f"expected {expected_file}, got {identity['FileVersion']}"
                 )
+
+    build_props = BUILD_PROPS.read_text(encoding="utf-8")
+    if "<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>" not in build_props:
+        return fail("Directory.Build.props must prevent SDK-added git metadata from changing declared product identity")
 
     runtime = RUNTIME.read_text(encoding="utf-8")
     required_runtime_tokens = [

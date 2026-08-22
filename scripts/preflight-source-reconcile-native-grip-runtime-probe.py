@@ -108,4 +108,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: LOCAL-004 P05 source-prep pins manual Beam endpoint-grip ESC/commit, pre-sync isolation, production reconcile/rebuild and cold-reopen; licensed V25 execution remains PENDING_LOCAL.")
+print("PASS: LOCAL-004 P05 source-prep pins manual Beam endpoint-grip ESC/commit, pre-sync isolation, production reconcile/rebuild and cold-reopen; runner argument forwarding is guarded; licensed V25 execution remains PENDING_LOCAL.")
