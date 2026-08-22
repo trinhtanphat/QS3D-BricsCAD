@@ -1,12 +1,16 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using QS3D.Core.Coordination;
+using QS3D.Core.Domain;
 using QS3D.Core.Export;
 using QS3D.Core.Reporting;
+using QS3D.Platform.Domain;
+using QS3D.Platform.Parity;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -16,6 +20,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             SixSheetWorkbookRoundTripsAllTraceKinds();
+            CanonicalLifecyclePairMismatchFailsClosed();
             MixedDrawingFailsBeforeReplacingExistingWorkbook();
         }
 
@@ -36,14 +41,27 @@ namespace QS3D.Core.SmokeTests
                     new[] { new CoordinationRule("PIPE_BEAM_HARD", 2, "Pipe", "Beam", CoordinationRuleKind.HardClash, "Critical", 0d) });
                 var created = new DateTimeOffset(2026, 8, 22, 6, 0, 0, TimeSpan.Zero);
                 var model = new Qs3dReviewModelInfo("ABC-TOWER", "Tower_A.dwg", "drawing-fp", "REV-2026-08-22-01", created, 186.42d);
-                var metadata = new[]
+                var lifecycleRow = LifecycleRow(
+                    "ABC-TOWER", "drawing-fp", "ISSUE-CLASH-001",
+                    clash.LeftElementId, clash.LeftHandle, clash.RightElementId, clash.RightHandle,
+                    created.UtcDateTime);
+                var lifecycle = new Dictionary<string, CoordinationIssueExcelRow>(StringComparer.OrdinalIgnoreCase)
                 {
-                    new Qs3dReviewIssueMetadata(clash.ClashId, "Open", "Critical", 0.02d, 0.03d, 0.04d, createdAtUtc: created, lastCheckedAtUtc: created.AddMinutes(5), comment: "review clash"),
-                    new Qs3dReviewIssueMetadata(duplicate.DuplicateId, "Reviewed", distanceMm: 0d, rotationDeltaDegrees: 0d, confidencePercent: 100d, createdAtUtc: created, lastCheckedAtUtc: created.AddMinutes(7), comment: "exact duplicate")
+                    { clash.ClashId, lifecycleRow }
+                };
+                var geometry = new[]
+                {
+                    new Qs3dReviewIssueGeometry(
+                        clash.ClashId, 0.02d, 0.03d, 0.04d,
+                        createdAtUtc: created, lastCheckedAtUtc: created.AddMinutes(5)),
+                    new Qs3dReviewIssueGeometry(
+                        duplicate.DuplicateId,
+                        distanceMm: 0d, rotationDeltaDegrees: 0d, confidencePercent: 100d,
+                        createdAtUtc: created, lastCheckedAtUtc: created.AddMinutes(7))
                 };
 
                 Qs3dReviewWorkbookExporter.Export(
-                    path, new[] { detail }, new[] { summary }, new[] { clash }, new[] { duplicate }, profile, model, metadata);
+                    path, new[] { detail }, new[] { summary }, new[] { clash }, new[] { duplicate }, profile, model, lifecycle, geometry);
 
                 var qtoTrace = Qs3dReviewWorkbookTraceReader.Read(path, Qs3dReviewWorkbookExporter.QuantitySheet, 2);
                 var clashTrace = Qs3dReviewWorkbookTraceReader.Read(path, Qs3dReviewWorkbookExporter.ClashSheet, 2);
@@ -72,7 +90,53 @@ namespace QS3D.Core.SmokeTests
                         throw new InvalidOperationException("Qs3dReviewWorkbookSmoke: no-evidence LengthM must be a blank cell, not numeric zero.");
                     if (!qtoXml.Contains("<col min=\"25\" max=\"28\" hidden=\"1\"", StringComparison.Ordinal))
                         throw new InvalidOperationException("Qs3dReviewWorkbookSmoke: QTO technical trace columns must stay hidden in the customer view.");
+
+                    var clashXml = Read(archive, "xl/worksheets/sheet3.xml");
+                    Contains(clashXml, "ISSUE-CLASH-001", "canonical issue id was not projected into CLASHES");
+                    Contains(clashXml, "InReview", "canonical issue status was not projected into CLASHES");
+                    Contains(clashXml, "Critical", "canonical issue severity was not projected into CLASHES");
+                    Contains(clashXml, "Coordination Lead", "canonical issue assignee was not projected into CLASHES");
+                    if (!clashXml.Contains("<c r=\"R2\"", StringComparison.Ordinal) ||
+                        !clashXml.Contains("<c r=\"S2\"", StringComparison.Ordinal) ||
+                        !clashXml.Contains("<c r=\"T2\"", StringComparison.Ordinal))
+                        throw new InvalidOperationException("Qs3dReviewWorkbookSmoke: clash overlap geometry evidence was not exported.");
+
+                    var duplicateXml = Read(archive, "xl/worksheets/sheet4.xml");
+                    if (!duplicateXml.Contains("<c r=\"R2\"", StringComparison.Ordinal) ||
+                        !duplicateXml.Contains("<c r=\"S2\"", StringComparison.Ordinal) ||
+                        !duplicateXml.Contains("<c r=\"T2\"", StringComparison.Ordinal))
+                        throw new InvalidOperationException("Qs3dReviewWorkbookSmoke: duplicate geometry evidence was not exported.");
                 }
+            }
+            finally
+            {
+                TryDelete(path);
+            }
+        }
+
+        private static void CanonicalLifecyclePairMismatchFailsClosed()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-review-lifecycle-mismatch-" + Guid.NewGuid().ToString("N") + ".xlsx");
+            try
+            {
+                var detail = QuantityRow("drawing-fp", "EL-QTO-01", "A", 1d, 0d, 1d, 2d);
+                var summary = QuantityRow("drawing-fp", "EL-QTO-01", "A", 1d, 0d, 1d, 2d);
+                var clash = CoordinationClashExportRow.CreateExactHard(
+                    "drawing-fp", "B", "C", "EL-B", "EL-C", "Pipe", "Beam", "L01");
+                var model = new Qs3dReviewModelInfo("P", "A.dwg", "drawing-fp", "R1", DateTimeOffset.UtcNow);
+                var wrong = LifecycleRow(
+                    "P", "drawing-fp", "ISSUE-WRONG-PAIR",
+                    "OTHER-A", "B", "OTHER-B", "C",
+                    DateTime.UtcNow.AddMinutes(-5));
+                var lifecycle = new Dictionary<string, CoordinationIssueExcelRow>(StringComparer.OrdinalIgnoreCase)
+                {
+                    { clash.ClashId, wrong }
+                };
+
+                Throws<InvalidDataException>(() => Qs3dReviewWorkbookExporter.Export(
+                    path, new[] { detail }, new[] { summary }, new[] { clash }, Array.Empty<CoordinationDuplicateExportRow>(), null, model, lifecycle));
+                if (File.Exists(path))
+                    throw new InvalidOperationException("Qs3dReviewWorkbookSmoke: lifecycle semantic mismatch created a workbook instead of failing closed.");
             }
             finally
             {
@@ -101,6 +165,46 @@ namespace QS3D.Core.SmokeTests
             {
                 TryDelete(path);
             }
+        }
+
+        private static CoordinationIssueExcelRow LifecycleRow(
+            string projectId,
+            string fingerprint,
+            string issueId,
+            string leftSemanticId,
+            string leftHandle,
+            string rightSemanticId,
+            string rightHandle,
+            DateTime createdAtUtc)
+        {
+            if (createdAtUtc.Kind != DateTimeKind.Utc) createdAtUtc = createdAtUtc.ToUniversalTime();
+            var drawingId = new DrawingId(Guid.Parse("a320e15f-221c-4c7c-b8d3-1c1df35ca70e"));
+            var issue = new CoordinationIssue(
+                issueId,
+                CoordinationIssueKind.HardClash,
+                CoordinationIssueSeverity.Critical,
+                "Coordination review " + issueId,
+                leftSemanticId,
+                rightSemanticId,
+                new CadReference(drawingId, new CadHandle(leftHandle)),
+                new CadReference(drawingId, new CadHandle(rightHandle)),
+                "MEP/Structure",
+                "Pipe/Beam",
+                "Supply",
+                "L03",
+                0d,
+                createdAtUtc,
+                "Coordination Lead");
+            issue.TransitionTo(CoordinationIssueStatus.InReview, createdAtUtc.AddMinutes(2));
+
+            var project = new ProjectState(projectId, "QS3D Review Workbook Smoke")
+            {
+                DrawingFingerprint = fingerprint
+            };
+            CoordinationIssuePersistence.Save(project, new[] { issue }, 9L);
+            var snapshot = CoordinationIssuePersistence.Load(project)
+                ?? throw new InvalidOperationException("Qs3dReviewWorkbookSmoke: canonical coordination snapshot was not restored.");
+            return CoordinationIssueExcelLifecycle.Project(snapshot).Single();
         }
 
         private static QuantityReportRow QuantityRow(string fingerprint, string elementId, string handle, double gross, double deduction, double net, double formwork)
@@ -142,6 +246,12 @@ namespace QS3D.Core.SmokeTests
         {
             var entry = archive.GetEntry(path) ?? throw new InvalidOperationException("Qs3dReviewWorkbookSmoke: missing " + path + ".");
             using (var reader = new StreamReader(entry.Open(), Encoding.UTF8, true)) return reader.ReadToEnd();
+        }
+
+        private static void Contains(string text, string token, string message)
+        {
+            if (!text.Contains(token, StringComparison.Ordinal))
+                throw new InvalidOperationException("Qs3dReviewWorkbookSmoke: " + message + ".");
         }
 
         private static void TryDelete(string path)
