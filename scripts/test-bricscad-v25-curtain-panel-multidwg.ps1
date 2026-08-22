@@ -107,15 +107,9 @@ $gitStatus = @(& $git.Source -C $repoRoot status --porcelain=v1 --untracked-file
 $gitStatusExitCode = $LASTEXITCODE
 if ($gitStatusExitCode -ne 0) { throw "Cannot inspect the Curtain P12 candidate worktree." }
 if ($gitStatus.Count -ne 0) { throw "Curtain P12 qualification requires a clean exact-SHA worktree." }
-$expectedAssemblyRevision = "+" + $gitHead
-foreach ($assemblyPath in @($PluginDll, $coreDll)) {
-    $productVersion = [string](Get-Item -LiteralPath $assemblyPath).VersionInfo.ProductVersion
-    if (-not $productVersion.EndsWith($expectedAssemblyRevision, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Curtain P12 assembly was not built from the exact Git candidate SHA."
-    }
-}
-if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
-    throw "Close existing BricsCAD processes before isolated Curtain P12 qualification."
+Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead
+if (@(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe).Count -gt 0) {
+    throw "Close existing BricsCAD V25 processes before isolated Curtain P12 qualification."
 }
 
 if (Test-Path -LiteralPath $ArtifactDir) {
@@ -253,7 +247,7 @@ finally {
             catch { if ($null -eq $cleanupError) { $cleanupError = $_ } }
         }
         try {
-            if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) { throw "Curtain P12 cleanup left a BricsCAD process." }
+            if (-not (Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30)) { throw "Curtain P12 cleanup left a BricsCAD V25 process." }
             $processCleanupVerified = $true
         }
         catch { if ($null -eq $cleanupError) { $cleanupError = $_ } }

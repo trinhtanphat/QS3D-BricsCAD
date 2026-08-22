@@ -128,6 +128,9 @@ if RUNNER.is_file():
         'PluginDll must be the exact repository x64 Release V25 build output.',
         'ArtifactDir must stay outside the repository.', 'rev-parse HEAD',
         'status --porcelain --untracked-files=normal', 'ArtifactDir must be empty.',
+        'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead',
+        'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
+        'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
         'Stop-Qs3dLaunchedProcess -Process $process', 'function Remove-Qs3dDrawingLocks',
         '[IO.Path]::ChangeExtension($DrawingCopy, ".dwl")', '[IO.Path]::ChangeExtension($DrawingCopy, ".dwl2")',
         'Remove-Qs3dDrawingLocks -Paths $drawingLocks',
@@ -175,6 +178,9 @@ if RUNNER.is_file():
     for forbidden in ("profile =", "drawing_path", "plugin_path", "artifact_path", "handle"):
         if forbidden in metadata:
             errors.append("Curtain-panel P07 metadata contains private/identity field: " + forbidden)
+    for forbidden in ('Get-Process -Name "bricscad"', '$expectedAssemblyRevision'):
+        if forbidden in text:
+            errors.append("Curtain-panel P07 runner must isolate V25 and use SourceLink exact-source identity: " + forbidden)
 
 if RUNBOOK.is_file():
     text = RUNBOOK.read_text(encoding="utf-8")

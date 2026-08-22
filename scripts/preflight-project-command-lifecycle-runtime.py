@@ -40,7 +40,13 @@ for token in (
     '"native_unit_resolution_noncreating=true"',
     '"explicit_unit_override_persisted=true"',
     '"automation_confirmation_consumed=true"',
+    '"unbound_binding_evidence_absent=true"',
+    '"effective_override_resolved=true"',
     "DrawingUnitResolutionPolicy.BoundMetadataKey",
+    "DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey",
+    "DrawingUnitResolutionPolicy.BindingSourceMetadataKey",
+    "Cad.CadUnitService.TryGetPolicy(document, out _, out var effectiveResolution)",
+    "effectiveResolution.Source != DrawingUnitResolutionSource.ProjectOverride",
     "Teigha.DatabaseServices.UnitsValue.Undefined",
     "DrawingUnitAutomationConfirmation.Arm(document, LengthUnit.Meter)",
     "DrawingUnitAutomationConfirmation.IsArmed(document)",
@@ -71,6 +77,7 @@ for token in (
     'legacyBqUnitBindingPersisted = $true',
     'nativeBqAbsentNoncreating = $true',
     'explicitUnitOverrideBootstrap = $true',
+    '"unbound_binding_evidence_absent", "effective_override_resolved"',
 ):
     if token not in runner:
         errors.append("runner unit/execution lifecycle contract missing token: " + token)
@@ -90,6 +97,9 @@ else:
 for token in (
     "git -C $repoRoot status --porcelain",
     "$exactSha = (& git -C $repoRoot rev-parse HEAD).Trim()",
+    "Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $exactSha",
+    "Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe",
+    "Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30",
     '"QS3D_LIFECYCLE_PHASE"',
     "Restore-EnvironmentValue -Name $name",
     "Stop-Qs3dLaunchedProcess -Process $process",
@@ -99,6 +109,10 @@ for token in (
 ):
     if token not in runner:
         errors.append("runner exact-SHA/scope/cleanup contract missing token: " + token)
+
+for forbidden in ('Get-Process -Name "bricscad"', '$expectedAssemblyRevision'):
+    if forbidden in runner:
+        errors.append("runner must isolate V25 and use SourceLink exact-source identity: " + forbidden)
 
 for token in (
     "QS3DLIFECYCLECOMMANDPREP",
