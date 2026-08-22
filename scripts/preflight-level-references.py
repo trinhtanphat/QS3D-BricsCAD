@@ -226,17 +226,24 @@ for token in [
 for token in [
     "ConfirmDisposableCopy",
     "*.level-z-probe-copy.dwg",
+    "bricscad-runner-window-interop.ps1",
+    ". $windowInteropPath",
     "QS3D_LEVEL_Z_RESULT",
     "QS3D_LEVEL_Z_NONCE",
     "QS3D_LEVEL_Z_SOURCE_SHA",
     "ExpectedSourceSha",
     "status --porcelain=v1 --untracked-files=all",
+    "Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $ExpectedSourceSha",
     "source_sha = $ExpectedSourceSha",
-    "Assembly was not built from ExpectedSourceSha",
     "drawingHashBefore",
     "drawingHashAfter",
     "QS3D_LEVEL_Z_RUNTIME_V1",
 ]:
     require(runtime_runner, token, "guarded Level Z runtime runner")
+
+for stale_token in ["Assembly was not built from ExpectedSourceSha", "$expectedAssemblyRevision"]:
+    if stale_token in runtime_runner:
+        print(f"[FAIL] guarded Level Z runtime runner retains stale ProductVersion source identity: {stale_token}")
+        sys.exit(1)
 
 print("[PASS] Level references preserve legacy placement, resolve qualified native/dependent Z through one adapter, expose guarded Bottom/Top/Clear UI, and health-check generated vertical snapshots")
