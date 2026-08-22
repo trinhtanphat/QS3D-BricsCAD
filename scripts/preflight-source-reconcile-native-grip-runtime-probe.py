@@ -33,7 +33,9 @@ if not errors:
         "manual_grip_cancel_verified=true",
         "manual_grip_commit_verified=true",
         "source_reconcile_verified=true",
-        "generated_replacement_verified=true",
+        "replacement_generated=true",
+        "production_local004_p05_reopen_candidate=true",
+        "prior_session_phases_replayed=false",
         "cold_reopen_verified=true",
         "RequireSource(context.Document, owner, 5d)",
         "RequireSource(context.Document, owner, 8d)",
@@ -55,10 +57,22 @@ if not errors:
         "OpenMode.ForWrite", "StartTransaction()", "AppendEntity(", ".Erase(",
         "SendStringToExecute", ".Editor.Command(", "ProjectContextCoordinator.GetOrCreate",
         "SemanticCaptureService.Capture", "RegenerateDirtySubset", "BuildSelected(",
+        "production_local004_p05_qualified_candidate=true",
     )
     for token in forbidden_probe:
         if token in probe:
             errors.append(f"read-only P05 probe must not perform native edit/reconcile/build directly: {token}")
+
+    phase_claims = (
+        "manual_grip_cancel_verified=true",
+        "manual_grip_commit_verified=true",
+        "source_reconcile_verified=true",
+        "replacement_generated=true",
+        "cold_reopen_verified=true",
+    )
+    for token in phase_claims:
+        if probe.count(token) != 1:
+            errors.append(f"P05 phase claim must be emitted exactly once by its own phase: {token}")
 
     required_runner = (
         "preflight-source-reconcile-native-grip-runtime-probe.py",
@@ -77,10 +91,17 @@ if not errors:
         "ESC",
         "PENDING_LOCAL",
         "status --porcelain=v1",
+        "[string[]]$ArgumentList",
+        "@ArgumentList",
+        "REOPEN proves only current cold state",
     )
     for token in required_runner:
         if token not in runner:
             errors.append(f"P05 runner missing exact-SHA/manual-native token: {token}")
+
+    for token in ("[string[]]$Args", "@Args"):
+        if token in runner:
+            errors.append(f"P05 runner must not shadow PowerShell automatic $Args: {token}")
 
 if errors:
     for error in errors:
