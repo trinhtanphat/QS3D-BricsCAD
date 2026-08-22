@@ -63,6 +63,24 @@ Run from a dedicated V26 desktop with all existing BricsCAD processes closed:
 
 The gate must fail closed if the configured `bricscad.exe` is not major version 26, if the plugin is not the V26 assembly, if the host is not x64, or if `QS3DRUNTIMEPROBE` does not report Ribbon and palette readiness.
 
+### Bounded native Slab P02 gate
+
+Issue `#3576` owns one representative production native-edit cell under `LOCAL-017`. After the exact V26 Release build, run:
+
+```powershell
+.\scripts\test-bricscad-v26-native-polyline-edit.ps1 `
+  -BricsCadDir $env:BRICSCAD_V26_DIR `
+  -PluginDll .\src\QS3D.BricsCAD.V26\bin\x64\Release\net8.0-windows\QS3D.BricsCAD.V26.dll `
+  -FixtureDwg .\samples\generated\QS3D-Sample.dwg `
+  -Profile Default `
+  -ArtifactDir <outside-repository-empty-directory> `
+  -ConfirmDisposableCopies
+```
+
+The shared runner must reject a V25/V26 host or plugin-major mismatch. If the process environment sets `DOTNET_ROOT`, it must point to a complete .NET 8 host/runtime containing `dotnet.exe`, an 8.x `hostfxr.dll` and an 8.x `coreclr.dll`; an invalid override must be refused before artifact creation or BricsCAD launch.
+
+This bounded gate uses the repository-generated disposable fixture and the existing production Slab probe. It drives one real top-level closed-POLYLINE crossing-window `STRETCH`, verifies pre-sync generated isolation, production source reconcile/metric and quantity refresh, generated invalidation/rebuild, scoped Health, save/sidecar persistence and a fresh-process cold reopen. It remains `PENDING_LOCAL` until a clean pushed exact SHA passes on licensed V26; even a PASS cannot close the broader #80 or #1462 matrix.
+
 ## Package/install gate
 
 After the exact V26 Release build passes source/build checks:

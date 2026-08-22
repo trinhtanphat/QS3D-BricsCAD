@@ -294,6 +294,19 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Related source/docs: `src/QS3D.BricsCAD.V25/ReferenceSearchCommands.cs`; `src/QS3D.BricsCAD.V25/UI/ReferenceSearchWindow.xaml`; `src/QS3D.BricsCAD.V25/UI/ReferenceSearchWindow.xaml.cs`; `scripts/preflight-construction-reference-search.py`; `docs/CONSTRUCTION-REFERENCE-SEARCH.md`
 - Updated: 2026-08-11
 
+## LOCAL-017 — BricsCAD V26 native Slab POLYLINE qualification
+
+- Priority: P0
+- Status: IN_PROGRESS
+- Area: issues `#80`, `#1462`, and bounded carrier `#3576`; V26 `.NET 8` native source-edit lifecycle
+- Why local: Requires licensed BricsCAD V26 x64, the exact `net8.0-windows` plugin, a real top-level native crossing-window `STRETCH`, production reconcile/rebuild and a fresh-process save/cold-reopen sequence. Existing V25 evidence is not transferable.
+- Source/runner status: the V25 P02 runner is host-major-aware while preserving its default V25 contract; `scripts/test-bricscad-v26-native-polyline-edit.ps1` is the thin V26 entrypoint. Exact-source binding accepts the declared stable ProductVersion only when the colocated portable PDB SourceLink record names the exact Git SHA. The runner also fails closed on an invalid configured V26 `DOTNET_ROOT` before artifact creation or host launch.
+- Scenario: On a disposable copy of `samples/generated/QS3D-Sample.dwg`, NETLOAD the exact V26 DLL; use production Direct Draw to create and build a closed 4 m by 3 m Slab; run one real top-level crossing-window `STRETCH` that changes only the top-right source vertex from `(4,3)` to `(5,3)` m while excluding the overlapping generated solid; prove the old solid is unchanged before sync; run `QS3DSYNCSOURCE`; verify area/perimeter/quantity refresh and generated invalidation; run `QS3DBUILD3D`; verify distinct expected native output and scoped Health; save drawing/sidecar; close; cold reopen in a new V26 process; restore the fixture copy and leave zero BricsCAD process residue.
+- Evidence required: exact clean pushed SHA, V26 host/CLR/x64 identity, declared ProductVersion, plugin SHA-256, repository fixture SHA-256, production marker booleans, drawing/sidecar persistence, fresh-process cold reopen, script/private-state/drawing restoration and zero process residue. No raw paths, ProjectIds, handles, proprietary DLLs or customer drawings may be published.
+- Evidence: PENDING_LOCAL
+- Related source/docs: `docs/LOCAL-V26-QUALIFICATION.md`; `scripts/test-bricscad-v26-native-polyline-edit.ps1`; `scripts/preflight-v26-native-polyline-edit.py`; `src/QS3D.BricsCAD.V25/SourceReconcileNativePolylineEditRuntimeProbeCommands.cs`; issue `#3576`.
+- Updated: 2026-08-22
+
 ## Close-out rule
 
 Closing all `OPEN` P0/P1 items does not automatically mean the product is commercially released. Release publication still follows `CI_POLICY.md` and requires the owner's separate explicit release authorization. This inbox only records local engineering qualification truth.
