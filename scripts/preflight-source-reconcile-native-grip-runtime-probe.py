@@ -77,14 +77,20 @@ if not errors:
         "ESC",
         "PENDING_LOCAL",
         "status --porcelain=v1",
+        "[string[]]$ArgumentList",
+        "@ArgumentList",
     )
     for token in required_runner:
         if token not in runner:
             errors.append(f"P05 runner missing exact-SHA/manual-native token: {token}")
+
+    for token in ("[string[]]$Args", "@Args"):
+        if token in runner:
+            errors.append(f"P05 runner must not shadow PowerShell automatic $Args: {token}")
 
 if errors:
     for error in errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: LOCAL-004 P05 source-prep pins manual Beam endpoint-grip ESC/commit, pre-sync isolation, production reconcile/rebuild and cold-reopen; licensed V25 execution remains PENDING_LOCAL.")
+print("PASS: LOCAL-004 P05 source-prep pins manual Beam endpoint-grip ESC/commit, pre-sync isolation, production reconcile/rebuild and cold-reopen; runner argument forwarding is guarded; licensed V25 execution remains PENDING_LOCAL.")
