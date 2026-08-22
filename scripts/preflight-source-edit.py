@@ -55,16 +55,27 @@ for path, needles in checks.items():
 
 if command.is_file():
     text = command.read_text(encoding="utf-8")
-    validate = text.find("ValidateAuthoritativeOwnership(project, handles)")
-    prompt = text.find("var operation = PromptOperation(document)")
-    freshness = text.find("RequireFreshSelection(document, selection)")
-    mutate = text.find("ApplyTransform(document, selection, transform.Value.Forward)")
-    reconcile_call = text.find("SourceReconcileService.ReconcileSelection(document)")
-    reverse = text.find("ApplyTransform(document, selection, transform.Value.Inverse)")
-    if min(validate, prompt, freshness, mutate, reconcile_call, reverse) < 0 or not (
-        validate < prompt < freshness < mutate < reconcile_call < reverse
+
+    # EditSource executes ownership validation through CaptureAuthoritativeSelection.
+    # Do not compare the textual location of the validation statement inside its helper
+    # with the caller's PromptOperation line: helper definitions naturally appear later
+    # in the file even though the helper executes first.
+    capture = text.find("var selection = CaptureAuthoritativeSelection(document)")
+    prompt = text.find("var operation = PromptOperation(document)", capture)
+    freshness = text.find("RequireFreshSelection(document, selection)", prompt)
+    mutate = text.find("ApplyTransform(document, selection, transform.Value.Forward)", freshness)
+    reconcile_call = text.find("SourceReconcileService.ReconcileSelection(document)", mutate)
+    reverse = text.find("ApplyTransform(document, selection, transform.Value.Inverse)", reconcile_call)
+    if min(capture, prompt, freshness, mutate, reconcile_call, reverse) < 0 or not (
+        capture < prompt < freshness < mutate < reconcile_call < reverse
     ):
-        errors.append("QS3DEDITSOURCE must validate ownership -> prompt -> revalidate freshness -> mutate -> reconcile -> reverse on reconcile failure")
+        errors.append("QS3DEDITSOURCE must capture/validate ownership -> prompt -> revalidate freshness -> mutate -> reconcile -> reverse on reconcile failure")
+
+    capture_helper = text.find("private static SourceEditSelection? CaptureAuthoritativeSelection(Document document)")
+    capture_validate = text.find("ValidateAuthoritativeOwnership(project, handles)", capture_helper)
+    capture_return = text.find("return new SourceEditSelection(", capture_validate)
+    if min(capture_helper, capture_validate, capture_return) < 0 or not capture_helper < capture_validate < capture_return:
+        errors.append("QS3DEDITSOURCE capture must validate authoritative ownership before returning a mutable selection")
 
     generated = text.find("GeneratedHandleOwnershipIndex.Build(project)")
     generated_reject = text.find("generatedOwners.TryFindOwner(handle", generated)
