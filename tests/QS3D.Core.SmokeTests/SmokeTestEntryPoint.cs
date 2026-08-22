@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
                 BltLegacyAdapterSmoke.Run();
                 QuantityEvidenceGraphSmoke.Run();
                 CoordinationIssuePersistenceSmoke.Run();
+                CoordinationIssueExcelLifecycleSmoke.Run();
 
                 var legacyMain = typeof(Program).GetMethod(
                     "Main",
