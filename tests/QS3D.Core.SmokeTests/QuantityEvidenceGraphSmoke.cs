@@ -185,7 +185,7 @@ namespace QS3D.Core.SmokeTests
                 GrossVolume = geometry.GrossVolume,
                 DeductionVolume = geometry.DeductionVolume,
                 NetVolume = geometry.NetVolume,
-                FormworkFaces = faces.Reverse().ToArray()
+                FormworkFaces = faces.AsEnumerable().Reverse().ToArray()
             };
             var rebuilt = QuantityGeometryEvidenceAdapter.Create(reordered);
             Equal(evidence.Concrete.EvidenceId, rebuilt.Concrete.EvidenceId, "geometry adapter concrete stable id");
