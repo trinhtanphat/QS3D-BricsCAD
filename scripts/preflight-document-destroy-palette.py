@@ -29,11 +29,20 @@ require(lifecycle, "docs.DocumentDestroyed -= OnDocumentDestroyed;", "lifecycle 
 require(lifecycle, "private static void OnDocumentDestroyed(object sender, DocumentDestroyedEventArgs e)", "destroyed handler")
 require(lifecycle, "if (docs.Count == 0)", "last-document guard")
 require(lifecycle, "_pendingNoDocumentReset = true;", "deferred no-document reset")
-require(lifecycle, "StartLifecycleIdleTimer();", "deferred lifecycle reset scheduling")
+require(lifecycle, "ScheduleLifecycleIdleDrain();", "deferred lifecycle reset scheduling")
+require(lifecycle, "private static DispatcherOperation? _lifecycleIdleOperation;", "one-shot lifecycle operation state")
+require(lifecycle, "Dispatcher.CurrentDispatcher.BeginInvoke(", "one-shot lifecycle dispatch")
+require(lifecycle, "DispatcherPriority.ApplicationIdle", "application-idle lifecycle dispatch")
+require(lifecycle, "new Action(OnLifecycleIdle)", "lifecycle idle callback")
+require(lifecycle, "CancelLifecycleIdleDrain();", "lifecycle drain cancellation")
+require(lifecycle, "operation.Abort();", "queued lifecycle operation abort")
 require(lifecycle, "PaletteCoordinator.ResetForNoDocument();", "last-document palette reset")
 require(lifecycle, "ScheduleReconcile(active, true);", "remaining-document deferred rebind")
 require(lifecycle, "EnsureProject(document, refreshUi);", "deferred project reconcile")
 require(lifecycle, "PaletteCoordinator.ResetForUnavailableProject(message);", "project-load failure workspace reset")
+
+if "StartLifecycleIdleTimer" in lifecycle or "new DispatcherTimer(" in lifecycle or "TimeSpan.FromMilliseconds(1d)" in lifecycle:
+    errors.append("DocumentLifecycleCoordinator must keep document teardown/reconcile on the one-shot ApplicationIdle dispatcher operation, not the retired timer cadence")
 
 require(palette, "public static void ResetForNoDocument()", "no-document palette reset API")
 require(palette, "private static void ResetPreservingVisibility()", "no-document palette teardown implementation")
@@ -62,4 +71,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: destroyed or unavailable projects cannot leave stale Workspace semantic callbacks; no-document visibility is preserved and remaining drawings rebind through the idle reconcile boundary.")
+print("PASS: destroyed or unavailable projects cannot leave stale Workspace semantic callbacks; no-document visibility is preserved and remaining drawings rebind through the one-shot ApplicationIdle reconcile boundary.")

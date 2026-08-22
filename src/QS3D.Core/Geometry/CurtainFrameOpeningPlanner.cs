@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -94,19 +95,30 @@ namespace QS3D.Core.Geometry
         {
             if (frames == null) throw new ArgumentNullException(nameof(frames));
             if (openings == null) throw new ArgumentNullException(nameof(openings));
-            var result = new List<CurtainWallRect>();
+
+            var frameKnownCount = SnapshotKnownCount(frames, MaxOutputFragments, "frame");
+            var result = frameKnownCount.HasValue
+                ? new List<CurtainWallRect>(frameKnownCount.Value)
+                : new List<CurtainWallRect>();
             foreach (var frame in frames)
             {
                 if (result.Count >= MaxOutputFragments) throw new InvalidOperationException("Curtain frame input exceeds safety limit " + MaxOutputFragments + ".");
                 result.Add(ValidateFrame(frame));
             }
-            var cuts = new List<CurtainOpeningRect>();
+            RequireObservedCount(frameKnownCount, result.Count, "frame");
+
+            var openingKnownCount = SnapshotKnownCount(openings, MaxOpenings, "opening");
+            var cuts = openingKnownCount.HasValue
+                ? new List<CurtainOpeningRect>(openingKnownCount.Value)
+                : new List<CurtainOpeningRect>();
             foreach (var opening in openings)
             {
                 if (opening == null) throw new ArgumentException("Opening collection contains null.", nameof(openings));
                 if (cuts.Count >= MaxOpenings) throw new InvalidOperationException("Curtain opening input exceeds safety limit " + MaxOpenings + ".");
                 cuts.Add(opening);
             }
+            RequireObservedCount(openingKnownCount, cuts.Count, "opening");
+
             foreach (var opening in cuts)
             {
                 var next = new List<CurtainWallRect>();
@@ -119,6 +131,35 @@ namespace QS3D.Core.Geometry
                 if (result.Count == 0) break;
             }
             return result.AsReadOnly();
+        }
+
+        private static int? SnapshotKnownCount<T>(IEnumerable<T> values, int maximum, string subject)
+        {
+            int? knownCount = null;
+            if (values is ICollection<T> genericCollection)
+                AcceptKnownCount(genericCollection.Count, maximum, subject, ref knownCount);
+            if (values is IReadOnlyCollection<T> readOnlyCollection)
+                AcceptKnownCount(readOnlyCollection.Count, maximum, subject, ref knownCount);
+            if (values is ICollection nonGenericCollection)
+                AcceptKnownCount(nonGenericCollection.Count, maximum, subject, ref knownCount);
+            return knownCount;
+        }
+
+        private static void AcceptKnownCount(int count, int maximum, string subject, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Curtain " + subject + " collection exposes an invalid negative count.");
+            if (count > maximum)
+                throw new InvalidOperationException("Curtain " + subject + " input exceeds safety limit " + maximum + ".");
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException("Curtain " + subject + " collection exposes conflicting known counts.");
+            knownCount = count;
+        }
+
+        private static void RequireObservedCount(int? knownCount, int observedCount, string subject)
+        {
+            if (knownCount.HasValue && knownCount.Value != observedCount)
+                throw new InvalidOperationException("Curtain " + subject + " collection count changed during enumeration.");
         }
 
         private static CurtainWallRect ValidateFrame(CurtainWallRect frame)

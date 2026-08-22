@@ -25,19 +25,26 @@ namespace QS3D.Core.Geometry
         public static string Compute(CurtainWallPanelFingerprintInput input)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
-            Positive(input.SourceLengthM, nameof(input.SourceLengthM));
-            Positive(input.HeightM, nameof(input.HeightM));
-            Finite(input.BottomOffsetM, nameof(input.BottomOffsetM));
-            Positive(input.PanelDepthM, nameof(input.PanelDepthM));
+
+            var sourceLengthM = input.SourceLengthM;
+            var heightM = input.HeightM;
+            var bottomOffsetM = input.BottomOffsetM;
+            var panelDepthM = input.PanelDepthM;
             var sourceKind = input.SourceKind ?? string.Empty;
+            var pathSegmentCount = input.PathSegmentCount;
+
+            Positive(sourceLengthM, nameof(input.SourceLengthM));
+            Positive(heightM, nameof(input.HeightM));
+            Finite(bottomOffsetM, nameof(input.BottomOffsetM));
+            Positive(panelDepthM, nameof(input.PanelDepthM));
             if (!string.Equals(sourceKind, sourceKind.Trim(), StringComparison.Ordinal))
                 throw new ArgumentException("Curtain panel source kind must not contain leading or trailing whitespace.", nameof(input.SourceKind));
             if (!string.Equals(sourceKind, "Line", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(sourceKind, "OpenPolyline", StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException("Curtain panel source kind must be Line or OpenPolyline.", nameof(input.SourceKind));
-            if (input.PathSegmentCount < 0 ||
-                (string.Equals(sourceKind, "Line", StringComparison.OrdinalIgnoreCase) && input.PathSegmentCount != 0) ||
-                (string.Equals(sourceKind, "OpenPolyline", StringComparison.OrdinalIgnoreCase) && input.PathSegmentCount < 1))
+            if (pathSegmentCount < 0 ||
+                (string.Equals(sourceKind, "Line", StringComparison.OrdinalIgnoreCase) && pathSegmentCount != 0) ||
+                (string.Equals(sourceKind, "OpenPolyline", StringComparison.OrdinalIgnoreCase) && pathSegmentCount < 1))
                 throw new ArgumentOutOfRangeException(nameof(input.PathSegmentCount));
             if (input.Pieces == null) throw new ArgumentNullException(nameof(input.Pieces));
             var pieceCount = input.Pieces.Count;
@@ -53,12 +60,12 @@ namespace QS3D.Core.Geometry
                 throw new InvalidOperationException("Curtain panel fingerprint Pieces Count changed while being validated.");
 
             var canonical = new StringBuilder("CURTAIN_PANEL_V1")
-                .Append('|').Append(R(input.SourceLengthM))
-                .Append('|').Append(R(input.HeightM))
-                .Append('|').Append(R(input.BottomOffsetM))
-                .Append('|').Append(R(input.PanelDepthM))
+                .Append('|').Append(R(sourceLengthM))
+                .Append('|').Append(R(heightM))
+                .Append('|').Append(R(bottomOffsetM))
+                .Append('|').Append(R(panelDepthM))
                 .Append('|').Append(sourceKind.ToUpperInvariant())
-                .Append('|').Append(input.PathSegmentCount.ToString(CultureInfo.InvariantCulture));
+                .Append('|').Append(pathSegmentCount.ToString(CultureInfo.InvariantCulture));
 
             foreach (var piece in pieces
                 .OrderBy(x => x.SourcePanelIndex)
@@ -89,12 +96,28 @@ namespace QS3D.Core.Geometry
             Finite(piece.Z_M, nameof(piece.Z_M));
             Positive(piece.WidthM, nameof(piece.WidthM));
             Positive(piece.HeightM, nameof(piece.HeightM));
-            Finite(piece.X_M + piece.WidthM, "panel right");
-            Finite(piece.Z_M + piece.HeightM, "panel top");
+            var right = piece.X_M + piece.WidthM;
+            var top = piece.Z_M + piece.HeightM;
+            Finite(right, "panel right");
+            Finite(top, "panel top");
+            if (!(right > piece.X_M))
+                throw new OverflowException("Curtain panel fingerprint piece width is below the representable coordinate resolution.");
+            if (!(top > piece.Z_M))
+                throw new OverflowException("Curtain panel fingerprint piece height is below the representable coordinate resolution.");
             var area = piece.WidthM * piece.HeightM;
             if (double.IsNaN(area) || double.IsInfinity(area))
                 throw new OverflowException("Curtain panel fingerprint piece area must remain finite.");
-            return piece;
+            if (area == 0d && piece.WidthM != 0d && piece.HeightM != 0d)
+                throw new OverflowException("Curtain panel fingerprint piece area underflowed to zero.");
+
+            return new CurtainWallPanelPiece
+            {
+                SourcePanelIndex = piece.SourcePanelIndex,
+                X_M = piece.X_M,
+                Z_M = piece.Z_M,
+                WidthM = piece.WidthM,
+                HeightM = piece.HeightM
+            };
         }
 
         private static double Positive(double value, string label)

@@ -8,6 +8,117 @@ $required = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')
 $forbidden = @('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')
 $sampleSource = Join-Path $root 'samples/generated'
 
+function Get-CanonicalFullPath {
+    param([string]$Path, [string]$Label)
+    if ([string]::IsNullOrWhiteSpace($Path)) { throw "$Label path is required." }
+    try { return [IO.Path]::GetFullPath($Path) }
+    catch { throw "$Label path is invalid: $($_.Exception.Message)" }
+}
+
+function Test-PathEqualOrContained {
+    param([string]$Path, [string]$Container)
+    $pathFull = Get-CanonicalFullPath -Path $Path -Label 'candidate'
+    $containerFull = (Get-CanonicalFullPath -Path $Container -Label 'container').TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    if ([string]::Equals($pathFull.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar), $containerFull, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+    $prefix = $containerFull + [IO.Path]::DirectorySeparatorChar
+    return $pathFull.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Assert-OrdinaryDirectory {
+    param([string]$Path, [string]$Label)
+    $fullPath = Get-CanonicalFullPath -Path $Path -Label $Label
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Container)) { throw "$Label directory was not found: $fullPath" }
+    $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
+    if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "$Label must be an ordinary non-reparse directory: $fullPath"
+    }
+    return $fullPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+}
+
+function Assert-SafeOutputDirectoryTarget {
+    param([string]$Path, [string]$RepositoryRoot, [string]$Label, [switch]$MayBeMissing)
+
+    $repo = Assert-OrdinaryDirectory -Path $RepositoryRoot -Label 'repository root'
+    $fullPath = Get-CanonicalFullPath -Path $Path -Label $Label
+    $pathRoot = [IO.Path]::GetPathRoot($fullPath)
+    if (-not [string]::IsNullOrWhiteSpace($pathRoot) -and [string]::Equals($fullPath, $pathRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Label must not be a filesystem root: $fullPath"
+    }
+    if (-not (Test-PathEqualOrContained -Path $fullPath -Container $repo) -or [string]::Equals($fullPath, $repo, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Label must stay below the repository root: $fullPath"
+    }
+
+    $current = [IO.Path]::GetDirectoryName($fullPath)
+    while (-not [string]::IsNullOrWhiteSpace($current) -and (Test-PathEqualOrContained -Path $current -Container $repo)) {
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+            if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "$Label traverses a non-directory or reparse-backed ancestor: $current"
+            }
+        }
+        if ([string]::Equals($current, $repo, [System.StringComparison]::OrdinalIgnoreCase)) { break }
+        $parent = [IO.Path]::GetDirectoryName($current)
+        if ([string]::IsNullOrWhiteSpace($parent) -or [string]::Equals($parent, $current, [System.StringComparison]::OrdinalIgnoreCase)) { break }
+        $current = $parent
+    }
+
+    if (Test-Path -LiteralPath $fullPath) {
+        $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
+        if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "$Label must be an ordinary non-reparse directory target: $fullPath"
+        }
+    } elseif (-not $MayBeMissing) {
+        throw "$Label directory was not found: $fullPath"
+    }
+
+    return $fullPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+}
+
+function Assert-SafeOutputFileTarget {
+    param([string]$Path, [string]$RepositoryRoot, [string]$Label)
+
+    $repo = Assert-OrdinaryDirectory -Path $RepositoryRoot -Label 'repository root'
+    $fullPath = Get-CanonicalFullPath -Path $Path -Label $Label
+    if (-not (Test-PathEqualOrContained -Path $fullPath -Container $repo) -or [string]::Equals($fullPath, $repo, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Label must stay below the repository root: $fullPath"
+    }
+    $parent = [IO.Path]::GetDirectoryName($fullPath)
+    $null = Assert-SafeOutputDirectoryTarget -Path $parent -RepositoryRoot $repo -Label ("$Label parent") -MayBeMissing
+    if (Test-Path -LiteralPath $fullPath) {
+        $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
+        if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "$Label must be an ordinary non-reparse file target: $fullPath"
+        }
+    }
+    return $fullPath
+}
+
+function Get-SafePackageFiles {
+    param([string]$PackageRoot)
+
+    $package = Assert-OrdinaryDirectory -Path $PackageRoot -Label 'package staging root'
+    $pending = New-Object 'System.Collections.Generic.Stack[string]'
+    $files = New-Object 'System.Collections.Generic.List[System.IO.FileInfo]'
+    $pending.Push($package)
+    while ($pending.Count -gt 0) {
+        $directory = $pending.Pop()
+        foreach ($item in Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop) {
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Package staging contains a reparse-backed entry: $($item.FullName)"
+            }
+            if ($item.PSIsContainer) {
+                $pending.Push($item.FullName)
+                continue
+            }
+            if (-not ($item -is [IO.FileInfo])) {
+                throw "Package staging contains a non-regular filesystem entry: $($item.FullName)"
+            }
+            $files.Add($item)
+        }
+    }
+    return @($files | Sort-Object FullName)
+}
+
 function Read-ProjectProductVersion {
     param([string]$ProjectPath)
     if (-not (Test-Path -LiteralPath $ProjectPath -PathType Leaf)) { throw "Project file was not found: $ProjectPath" }
@@ -66,9 +177,17 @@ if (-not [string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
 }
 
 if (-not (Test-Path $source)) { throw "V25 Release output was not found: $source" }
+$root = Assert-OrdinaryDirectory -Path $root -Label 'repository root'
+$distRoot = Assert-SafeOutputDirectoryTarget -Path $distRoot -RepositoryRoot $root -Label 'package dist root' -MayBeMissing
+$dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Label 'package staging directory' -MayBeMissing
+$zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
 New-Item -ItemType Directory -Path $distRoot -Force | Out-Null
-Remove-Item $dist -Recurse -Force -ErrorAction SilentlyContinue
+$distRoot = Assert-SafeOutputDirectoryTarget -Path $distRoot -RepositoryRoot $root -Label 'package dist root'
+$dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Label 'package staging directory' -MayBeMissing
+$zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
+if (Test-Path -LiteralPath $dist) { Remove-Item -LiteralPath $dist -Recurse -Force }
 New-Item -ItemType Directory -Path $dist -Force | Out-Null
+$dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Label 'package staging directory'
 
 foreach ($name in $required) {
     $path = Join-Path $source $name
@@ -175,23 +294,30 @@ Native Solid3d and DemandLoad behavior still require the real licensed V25 runti
 "@ | Set-Content -Path (Join-Path $dist 'README.txt') -Encoding UTF8
 
 foreach ($name in $forbidden) {
-    if (Get-ChildItem $dist -Recurse -Filter $name -ErrorAction SilentlyContinue) {
+    if (Get-SafePackageFiles -PackageRoot $dist | Where-Object { [string]::Equals($_.Name, $name, [System.StringComparison]::OrdinalIgnoreCase) }) {
         throw "Proprietary BricsCAD assembly must not be packaged: $name"
     }
 }
 
+$dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Label 'package staging directory'
 $distFull = [IO.Path]::GetFullPath($dist).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-$hashLines = Get-ChildItem $dist -Recurse -File | Sort-Object FullName | ForEach-Object {
-    $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+# Legacy manifest-coverage contract marker (non-executable); hashing below intentionally uses safe traversal:
+# Get-ChildItem $dist -Recurse -File | Sort-Object FullName | ForEach-Object
+$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object {
+    $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
     $relativePath = $_.FullName.Substring($distFull.Length + 1).Replace([IO.Path]::DirectorySeparatorChar, '/')
     "$hash  $relativePath"
 }
 if (-not $hashLines) { throw 'No package files were available for hashing.' }
 $hashLines | Set-Content -Path (Join-Path $dist 'SHA256SUMS.txt') -Encoding ASCII
 
-Remove-Item $zip -Force -ErrorAction SilentlyContinue
-Compress-Archive -Path "$dist/*" -DestinationPath $zip -CompressionLevel Optimal
-$zipHash = (Get-FileHash $zip -Algorithm SHA256).Hash
+$zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
+if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
+$dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Label 'package staging directory'
+$zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
+Compress-Archive -Path (Join-Path $dist '*') -DestinationPath $zip -CompressionLevel Optimal
+$zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
+$zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
 Write-Host "Package ready: $zip"
 Write-Host "Product version: $productVersion"
 Write-Host "Assembly version: $($assemblyVersion.ToString())"

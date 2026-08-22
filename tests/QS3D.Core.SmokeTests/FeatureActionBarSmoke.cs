@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Features;
 
@@ -14,6 +16,10 @@ namespace QS3D.Core.SmokeTests
             SimpleFeatureRemainsSimple();
             PilotProfilesExposeGeometry3DCapability();
             ActionMetadataIsConsistent();
+            AvailabilityExactBoundaryIsAccepted();
+            OversizedKnownAvailabilityIsRejectedBeforeEnumeration();
+            LazyAvailabilityStopsAtBoundaryPlusOne();
+            InvalidAndDuplicateActionIdsFailClosed();
         }
 
         private static void CapabilitiesDriveVisibilityAndStableOrdering()
@@ -103,16 +109,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void ActionMetadataIsConsistent()
         {
-            var profile = Profile(
-                FeatureCapability.Create |
-                FeatureCapability.EditParameters |
-                FeatureCapability.Material |
-                FeatureCapability.Geometry3D |
-                FeatureCapability.Quantity |
-                FeatureCapability.Regenerate |
-                FeatureCapability.Locate |
-                FeatureCapability.Delete,
-                Recipe("direct", CreateInputMode.Direct));
+            var profile = AllActionsProfile();
             var bar = FeatureActionBarBuilder.Build(profile);
 
             foreach (var action in bar.Actions)
@@ -123,6 +120,63 @@ namespace QS3D.Core.SmokeTests
                 True(!string.IsNullOrWhiteSpace(action.StatusHintKey), "Action status hint key must be stable and nonblank.");
             }
         }
+
+        private static void AvailabilityExactBoundaryIsAccepted()
+        {
+            var states = Enum.GetValues(typeof(FeatureActionId))
+                .Cast<FeatureActionId>()
+                .Select(id => new FeatureActionAvailability(id, true))
+                .ToArray();
+
+            Equal(8, states.Length);
+            var bar = FeatureActionBarBuilder.Build(AllActionsProfile(), states);
+            Equal(8, bar.Actions.Count);
+            True(bar.Actions.All(x => x.IsEnabled), "Exact-bound availability must preserve enabled state for every supported action.");
+        }
+
+        private static void OversizedKnownAvailabilityIsRejectedBeforeEnumeration()
+        {
+            var oversized = new OversizedReadOnlyAvailability();
+            ExpectInvalidOperation(
+                () => FeatureActionBarBuilder.Build(AllActionsProfile(), oversized),
+                "Known availability count above the supported action set must fail before enumeration.");
+            False(oversized.EnumerationAttempted, "Oversized known-count availability must be rejected before enumeration starts.");
+        }
+
+        private static void LazyAvailabilityStopsAtBoundaryPlusOne()
+        {
+            var lazy = new BoundaryPlusOneAvailability();
+            ExpectInvalidOperation(
+                () => FeatureActionBarBuilder.Build(AllActionsProfile(), lazy),
+                "Unknown-count availability must fail at the first item beyond the supported action set.");
+            Equal(9, lazy.YieldedCount);
+        }
+
+        private static void InvalidAndDuplicateActionIdsFailClosed()
+        {
+            ExpectInvalidArgument(
+                () => new FeatureActionAvailability((FeatureActionId)999, true),
+                "Undefined feature-action enum values must fail at construction.");
+
+            ExpectInvalidOperation(
+                () => FeatureActionBarBuilder.Build(AllActionsProfile(), new[]
+                {
+                    new FeatureActionAvailability(FeatureActionId.Quantity, true),
+                    new FeatureActionAvailability(FeatureActionId.Quantity, false, "duplicate")
+                }),
+                "Duplicate availability ids must remain rejected.");
+        }
+
+        private static InteractionProfile AllActionsProfile() => Profile(
+            FeatureCapability.Create |
+            FeatureCapability.EditParameters |
+            FeatureCapability.Material |
+            FeatureCapability.Geometry3D |
+            FeatureCapability.Quantity |
+            FeatureCapability.Regenerate |
+            FeatureCapability.Locate |
+            FeatureCapability.Delete,
+            Recipe("direct", CreateInputMode.Direct));
 
         private static InteractionProfile Profile(FeatureCapability capabilities, params CreateRecipeDescriptor[] recipes)
         {
@@ -168,6 +222,53 @@ namespace QS3D.Core.SmokeTests
             }
 
             throw new Exception(message);
+        }
+
+        private static void ExpectInvalidOperation(Action action, string message)
+        {
+            try
+            {
+                action();
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+
+            throw new Exception(message);
+        }
+
+        private sealed class OversizedReadOnlyAvailability : IReadOnlyCollection<FeatureActionAvailability>
+        {
+            public int Count => 9;
+            public bool EnumerationAttempted { get; private set; }
+
+            public IEnumerator<FeatureActionAvailability> GetEnumerator()
+            {
+                EnumerationAttempted = true;
+                throw new Exception("Oversized known-count availability must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class BoundaryPlusOneAvailability : IEnumerable<FeatureActionAvailability>
+        {
+            public int YieldedCount { get; private set; }
+
+            public IEnumerator<FeatureActionAvailability> GetEnumerator()
+            {
+                for (var index = 0; index < 9; index++)
+                {
+                    YieldedCount++;
+                    var id = index < 8 ? (FeatureActionId)index : FeatureActionId.Add;
+                    yield return new FeatureActionAvailability(id, true);
+                }
+
+                throw new Exception("Feature action availability read past boundary+1.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
     }
 }

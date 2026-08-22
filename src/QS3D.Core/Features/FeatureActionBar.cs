@@ -28,6 +28,8 @@ namespace QS3D.Core.Features
     {
         public FeatureActionAvailability(FeatureActionId actionId, bool isEnabled, string? disabledReason = null)
         {
+            if (!Enum.IsDefined(typeof(FeatureActionId), actionId))
+                throw new ArgumentOutOfRangeException(nameof(actionId), "Feature action id is not supported.");
             if (!isEnabled && string.IsNullOrWhiteSpace(disabledReason))
                 throw new ArgumentException("A disabled feature action must explain its missing precondition.", nameof(disabledReason));
 
@@ -203,15 +205,53 @@ namespace QS3D.Core.Features
             IEnumerable<FeatureActionAvailability>? availability)
         {
             var result = new Dictionary<FeatureActionId, FeatureActionAvailability>();
-            foreach (var state in availability ?? Enumerable.Empty<FeatureActionAvailability>())
+            if (availability == null) return result;
+
+            var expectedCount = SnapshotKnownCount(availability);
+            var observed = 0;
+            foreach (var state in availability)
             {
+                if (observed == Definitions.Length)
+                    throw TooManyAvailabilityStates();
+                observed++;
                 if (state == null) throw new InvalidOperationException("Feature action availability cannot contain null values.");
+                if (!Enum.IsDefined(typeof(FeatureActionId), state.ActionId))
+                    throw new InvalidOperationException("Feature action availability contains an unsupported action id: " + state.ActionId + ".");
                 if (result.ContainsKey(state.ActionId))
                     throw new InvalidOperationException("Feature action availability contains duplicate action ids: " + state.ActionId);
                 result.Add(state.ActionId, state);
             }
+
+            if (expectedCount.HasValue && observed != expectedCount.Value)
+                throw new InvalidOperationException("Feature action availability count changed during enumeration.");
             return result;
         }
+
+        private static int? SnapshotKnownCount(IEnumerable<FeatureActionAvailability> availability)
+        {
+            int? expected = null;
+            if (availability is ICollection<FeatureActionAvailability> genericCollection)
+                AcceptKnownCount(genericCollection.Count, ref expected);
+            if (availability is IReadOnlyCollection<FeatureActionAvailability> readOnlyCollection)
+                AcceptKnownCount(readOnlyCollection.Count, ref expected);
+            if (availability is System.Collections.ICollection nonGenericCollection)
+                AcceptKnownCount(nonGenericCollection.Count, ref expected);
+            return expected;
+        }
+
+        private static void AcceptKnownCount(int count, ref int? expected)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Feature action availability exposes an invalid negative count.");
+            if (count > Definitions.Length)
+                throw TooManyAvailabilityStates();
+            if (expected.HasValue && expected.Value != count)
+                throw new InvalidOperationException("Feature action availability exposes conflicting known counts.");
+            expected = count;
+        }
+
+        private static InvalidOperationException TooManyAvailabilityStates() =>
+            new InvalidOperationException("Feature action availability supports at most " + Definitions.Length + " states.");
 
         private static FeatureActionAvailability ResolveAvailability(
             FeatureActionId actionId,
