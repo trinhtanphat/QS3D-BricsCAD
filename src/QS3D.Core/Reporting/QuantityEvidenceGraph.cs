@@ -472,13 +472,14 @@ internal static class QuantityEvidenceIdentity
 
     public static string NormalizeText(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        var candidate = value ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(candidate))
         {
             return string.Empty;
         }
 
         return string.Join(
             " ",
-            value.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            candidate.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
     }
 }
