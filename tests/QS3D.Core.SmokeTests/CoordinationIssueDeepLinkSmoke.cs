@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using QS3D.Core.Coordination;
 using QS3D.Core.Domain;
 using QS3D.Platform.Domain;
+using QS3D.Platform.Parity;
 
 namespace QS3D.Core.SmokeTests
 {
