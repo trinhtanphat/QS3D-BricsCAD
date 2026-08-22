@@ -164,6 +164,7 @@ jobs:
         if: ${{ needs.preflight.outputs.build_validation == 'true' }}
         with:
           persist-credentials: false
+          submodules: recursive
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         if: ${{ needs.preflight.outputs.build_validation == 'true' }}
         with:
