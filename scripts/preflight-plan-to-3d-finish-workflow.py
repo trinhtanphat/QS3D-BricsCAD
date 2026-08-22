@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+WINDOW = ROOT / "src" / "QS3D.BricsCAD.V25" / "DirectDrawWindowCommands.cs"
+RIBBON = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "QuickWorkflowRibbonAugmenter.cs"
+PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
+PLAN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PlanTo3DCommands.cs"
+SCHEDULE = ROOT / "src" / "QS3D.Core" / "Reporting" / "DoorOpeningSchedule.cs"
+DOC = ROOT / "docs" / "PLAN-TO-3D-WORKFLOW.md"
+errors = []
+
+
+def read(path):
+    if not path.is_file():
+        errors.append("missing quick-workflow file: " + str(path.relative_to(ROOT)))
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+window = read(WINDOW)
+ribbon = read(RIBBON)
+plugin = read(PLUGIN)
+plan = read(PLAN)
+schedule = read(SCHEDULE)
+doc = read(DOC)
+
+for token, label in (
+    ('CommandMethod("QS3DDRAWWINDOW"', "Window command"),
+    ('ElementCategory.WallOpening', "canonical WallOpening category"),
+    ('SetProperty("OpeningUsage", "Window")', "Window semantic usage"),
+    ('SetProperty("SillHeightM"', "window sill property"),
+    ('new AutoHostLinkCommands().AutoLinkHosts()', "window Auto Host"),
+    ('createdElementId', "stable semantic id across Auto Host"),
+    ('rollback.Restore(project)', "window semantic rollback"),
+    ('EraseSource(document, sourceId)', "window source rollback"),
+    ('QS3DCUTSELECTEDOPENINGS', "explicit targeted-cut handoff"),
+):
+    if token not in window:
+        errors.append(label + " missing token: " + token)
+
+if 'ElementCategory.Window' in window:
+    errors.append("window authoring must reuse WallOpening instead of introducing an adapter-local Window category")
+
+for token, label in (
+    ('TabId = "QS3D_AUTHOR"', "author tab binding"),
+    ('"2D → Tường 3D", "QS3DCONVERT2D"', "2D-to-3D ribbon entry"),
+    ('"Vẽ Cửa Sổ", "QS3DDRAWWINDOW"', "window ribbon entry"),
+    ('"Vật liệu", "QS3DMATERIALS"', "material ribbon entry"),
+    ('CollectionContainsId(items, spec.Id)', "idempotent ribbon insertion"),
+):
+    if token not in ribbon:
+        errors.append(label + " missing token: " + token)
+
+for token in ('QuickWorkflowRibbonAugmenter.TryInitialize()', 'QuickWorkflowRibbonAugmenter.Reset()'):
+    if token not in plugin:
+        errors.append("PluginEntry missing quick-workflow lifecycle token: " + token)
+
+for token, label in (
+    ('CommandMethod("QS3DCONVERT2D"', "2D conversion command"),
+    ('CommandMethod("QS3DPLAN2WALLS"', "2D conversion alias"),
+    ('GeneratedGeometryService.FindMatchingOwnedHandles', "owned rollback discovery"),
+    ('rollback.Restore(project)', "plan conversion rollback"),
+):
+    if token not in plan:
+        errors.append(label + " missing token: " + token)
+
+for token, label in (
+    ('ScheduleCategory(element)', "schedule category normalization"),
+    ('Properties.TryGetValue("OpeningUsage"', "schedule OpeningUsage read"),
+    ('? "Window"', "schedule Window group"),
+):
+    if token not in schedule:
+        errors.append(label + " missing token: " + token)
+
+for token in ('QS3DCONVERT2D', 'QS3DDRAWWINDOW', 'OpeningUsage=Window', 'QS3DMATERIALS', 'Preview-to-commit freshness', 'LOCAL-008'):
+    if token not in doc:
+        errors.append("workflow doc missing token: " + token)
+
+if errors:
+    print("QS3D 2D-plan -> 3D finish workflow preflight")
+    for error in errors:
+        print("ERROR:", error)
+    print("FAILED with", len(errors), "error(s).")
+    sys.exit(1)
+
+print("PASS: quick 2D->3D workflow is discoverable in TẠO MỚI, Window authoring reuses guarded WallOpening+AutoHost semantics with rollback, schedules preserve a Window usage group, and existing preview-to-commit/local-runtime qualification contracts remain documented.")
