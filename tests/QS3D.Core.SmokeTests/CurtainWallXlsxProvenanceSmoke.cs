@@ -59,27 +59,42 @@ namespace QS3D.Core.SmokeTests
 
         private static void AssertOversizedProvenanceFailsBeforeFilesystemCreation()
         {
-            var root = Path.Combine(Path.GetTempPath(), "qs3d-curtain-xlsx-provenance-bound-" + Guid.NewGuid().ToString("N"));
+            AssertOversizedListFailsBeforeFilesystemCreation(
+                "element-ids",
+                row => row.ElementIds.Add(new string('E', 32768)),
+                "Element IDs");
+            AssertOversizedListFailsBeforeFilesystemCreation(
+                "source-handles",
+                row => row.SourceHandles.Add(new string('H', 32768)),
+                "Source Handles");
+        }
+
+        private static void AssertOversizedListFailsBeforeFilesystemCreation(
+            string scenario,
+            Action<CurtainWallScheduleRow> makeOversized,
+            string expectedField)
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-curtain-xlsx-provenance-bound-" + scenario + "-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(root);
             try
             {
                 var untouchedDirectory = Path.Combine(root, "must-not-be-created");
                 var row = ValidRow();
-                row.SourceHandles.Add(new string('A', 32768));
+                makeOversized(row);
                 try
                 {
                     CurtainWallXlsxExporter.Export(Path.Combine(untouchedDirectory, "curtain.xlsx"), new[] { row });
                 }
                 catch (ArgumentOutOfRangeException ex)
                 {
-                    if (ex.Message.IndexOf("Source Handles", StringComparison.OrdinalIgnoreCase) < 0)
-                        throw new InvalidOperationException("Curtain XLSX oversized source-handle failure must identify the provenance field.", ex);
+                    if (ex.Message.IndexOf(expectedField, StringComparison.OrdinalIgnoreCase) < 0)
+                        throw new InvalidOperationException("Curtain XLSX oversized provenance failure must identify " + expectedField + ".", ex);
                     if (Directory.Exists(untouchedDirectory))
-                        throw new InvalidOperationException("Curtain XLSX oversized provenance touched the filesystem before failing.");
+                        throw new InvalidOperationException("Curtain XLSX oversized " + expectedField + " provenance touched the filesystem before failing.");
                     return;
                 }
 
-                throw new InvalidOperationException("Curtain XLSX exporter accepted source handles exceeding Excel's cell text limit.");
+                throw new InvalidOperationException("Curtain XLSX exporter accepted " + expectedField + " exceeding Excel's cell text limit.");
             }
             finally
             {
