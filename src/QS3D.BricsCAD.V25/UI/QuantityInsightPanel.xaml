@@ -28,10 +28,26 @@
             </Style>
 
             <HierarchicalDataTemplate DataType="{x:Type vm:QuantityInsightFloorViewModel}"
-                                      ItemsSource="{Binding Items}">
+                                      ItemsSource="{Binding Types}">
                 <DockPanel Margin="0,2">
                     <TextBlock Text="▣" Foreground="{StaticResource AccentBrush}" Margin="0,0,5,0"/>
                     <TextBlock Text="{Binding Header}" FontWeight="SemiBold"/>
+                </DockPanel>
+            </HierarchicalDataTemplate>
+
+            <HierarchicalDataTemplate DataType="{x:Type vm:QuantityInsightTypeViewModel}"
+                                      ItemsSource="{Binding Names}">
+                <DockPanel Margin="0,1">
+                    <TextBlock Text="◆" Foreground="{StaticResource LuxuryBrush}" Margin="0,0,5,0"/>
+                    <TextBlock Text="{Binding Header}" FontWeight="SemiBold"/>
+                </DockPanel>
+            </HierarchicalDataTemplate>
+
+            <HierarchicalDataTemplate DataType="{x:Type vm:QuantityInsightNameViewModel}"
+                                      ItemsSource="{Binding Items}">
+                <DockPanel Margin="0,1">
+                    <TextBlock Text="◇" Foreground="{StaticResource MutedBrush}" Margin="0,0,5,0"/>
+                    <TextBlock Text="{Binding Header}"/>
                 </DockPanel>
             </HierarchicalDataTemplate>
 
@@ -84,7 +100,7 @@
                                        Margin="0"
                                        TextWrapping="NoWrap"
                                        TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Text="Cây cấu kiện • Floor / Family"
+                            <TextBlock Text="Cây cấu kiện • Floor / Type / Name / Element"
                                        Style="{StaticResource Caption}"
                                        Margin="0,2,0,0"
                                        TextWrapping="NoWrap"
@@ -112,6 +128,12 @@
                                     ToolTip="Mở bảng khối lượng QS3DBQ đầy đủ"/>
                             <Button Content="Định vị" Click="OnLocateClick" Style="{StaticResource DenseButton}"
                                     ToolTip="Chọn và zoom các đối tượng CAD của dòng khối lượng đang chọn"/>
+                            <Button Content="Xuất Excel" Click="OnExcelExportClick" Style="{StaticResource AccentButton}"
+                                    ToolTip="Xuất ED2 CHI_TIET + TONG_HOP. Nếu đang chọn node cây, node đó trở thành scope Selection an toàn."/>
+                            <Button Content="Truy ngược Excel" Click="OnExcelTracebackClick" Style="{StaticResource DenseButton}"
+                                    ToolTip="Chọn workbook/dòng CHI_TIET và định vị ngược đúng cấu kiện bằng Element ID + Handle + Drawing Fingerprint; sai provenance sẽ bị từ chối."/>
+                            <Button Content="Xuất evidence" Click="OnQuantityEvidenceExportClick" Style="{StaticResource DenseButton}"
+                                    ToolTip="Xuất đúng Quantity Explanation/evidence đang review ra XLSX, không tính lại khối lượng bằng một engine khác"/>
                             <CheckBox x:Name="AutoRevealCheck" Content="Click = 3D" IsChecked="True"
                                       VerticalAlignment="Center" Margin="7,0,2,0"
                                       ToolTip="Bật: click một dòng cấu kiện sẽ chọn và zoom đối tượng tương ứng trong View 3D. Tắt: dùng nút Định vị hoặc double-click."/>

@@ -59,18 +59,62 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
-    public sealed class QuantityInsightFloorViewModel
+    public sealed class QuantityInsightNameViewModel
     {
-        public QuantityInsightFloorViewModel(string name, IEnumerable<QuantityInsightItemViewModel> items)
+        public QuantityInsightNameViewModel(string name, IEnumerable<QuantityInsightItemViewModel> items)
         {
-            Name = string.IsNullOrWhiteSpace(name) ? "Chưa gán tầng" : name;
-            Items = new ObservableCollection<QuantityInsightItemViewModel>(items ?? Array.Empty<QuantityInsightItemViewModel>());
+            Name = string.IsNullOrWhiteSpace(name) ? "Chưa gán tên/Family" : name.Trim();
+            Items = new ObservableCollection<QuantityInsightItemViewModel>(
+                (items ?? Array.Empty<QuantityInsightItemViewModel>())
+                    .OrderBy(x => x.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+                    .ThenBy(x => string.Join("|", x.ElementIds), StringComparer.OrdinalIgnoreCase));
         }
 
         public string Name { get; }
         public ObservableCollection<QuantityInsightItemViewModel> Items { get; }
         public int Count => Items.Sum(x => x.Count);
-        public string Header => Name + " • " + Count.ToString("N0", CultureInfo.CurrentCulture) + " cấu kiện";
+        public string Header => "Tên: " + Name + " • " + Count.ToString("N0", CultureInfo.CurrentCulture);
+    }
+
+    public sealed class QuantityInsightTypeViewModel
+    {
+        public QuantityInsightTypeViewModel(string name, IEnumerable<QuantityInsightItemViewModel> items)
+        {
+            Name = string.IsNullOrWhiteSpace(name) ? "Chưa gán loại" : name.Trim();
+            var snapshot = (items ?? Array.Empty<QuantityInsightItemViewModel>()).ToArray();
+            Names = new ObservableCollection<QuantityInsightNameViewModel>(
+                snapshot
+                    .GroupBy(x => string.IsNullOrWhiteSpace(x.FamilyName) ? "Chưa gán tên/Family" : x.FamilyName.Trim(), StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(x => x.Key, StringComparer.CurrentCultureIgnoreCase)
+                    .Select(group => new QuantityInsightNameViewModel(group.Key, group)));
+            Count = snapshot.Sum(x => x.Count);
+        }
+
+        public string Name { get; }
+        public ObservableCollection<QuantityInsightNameViewModel> Names { get; }
+        public int Count { get; }
+        public string Header => "Loại: " + Name + " • " + Count.ToString("N0", CultureInfo.CurrentCulture);
+    }
+
+    public sealed class QuantityInsightFloorViewModel
+    {
+        public QuantityInsightFloorViewModel(string name, IEnumerable<QuantityInsightItemViewModel> items)
+        {
+            Name = string.IsNullOrWhiteSpace(name) ? "Chưa gán tầng" : name.Trim();
+            var snapshot = (items ?? Array.Empty<QuantityInsightItemViewModel>()).ToArray();
+            Items = new ObservableCollection<QuantityInsightItemViewModel>(snapshot);
+            Types = new ObservableCollection<QuantityInsightTypeViewModel>(
+                snapshot
+                    .GroupBy(x => string.IsNullOrWhiteSpace(x.Category) ? "Chưa gán loại" : x.Category.Trim(), StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(x => x.Key, StringComparer.CurrentCultureIgnoreCase)
+                    .Select(group => new QuantityInsightTypeViewModel(group.Key, group)));
+        }
+
+        public string Name { get; }
+        public ObservableCollection<QuantityInsightItemViewModel> Items { get; }
+        public ObservableCollection<QuantityInsightTypeViewModel> Types { get; }
+        public int Count => Items.Sum(x => x.Count);
+        public string Header => "Tầng: " + Name + " • " + Count.ToString("N0", CultureInfo.CurrentCulture) + " cấu kiện";
     }
 
     public sealed class QuantityInsightViewModel : INotifyPropertyChanged

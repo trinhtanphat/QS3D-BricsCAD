@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Xml;
+using QS3D.Core.Coordination;
 
 namespace QS3D.Core.Domain
 {
@@ -195,7 +196,9 @@ namespace QS3D.Core.Domain
 
         private static bool IsReservedKey(string key)
         {
-            return ProjectMeasurementWorkItemMappingCodec.IsReservedKey(key) || ProjectTbqWorkspaceCodec.IsReservedKey(key);
+            return ProjectMeasurementWorkItemMappingCodec.IsReservedKey(key) ||
+                   ProjectTbqWorkspaceCodec.IsReservedKey(key) ||
+                   CoordinationIssuePersistenceCodec.IsReservedKey(key);
         }
 
         private static bool TracksSemanticDirtyState(string key)
@@ -207,6 +210,7 @@ namespace QS3D.Core.Domain
         {
             ProjectMeasurementWorkItemMappingCodec.Read(metadata);
             ProjectTbqWorkspaceCodec.Read(metadata);
+            CoordinationIssuePersistenceCodec.Read(metadata);
         }
 
         private static string RequirePublicKey(string key)

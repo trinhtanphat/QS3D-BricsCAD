@@ -58,13 +58,14 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static IReadOnlyList<ExactClashPair> DetectExact(
+        internal static IReadOnlyList<ExactClashPair> DetectExact(
             Document document,
             IReadOnlyList<ObjectId> ids,
             IReadOnlyDictionary<string, EntitySnapshot> snapshotByHandle,
             out int recognizedSolids,
             out int skipped,
-            out int broadPhasePairs)
+            out int broadPhasePairs,
+            ISet<string>? allowedHandlePairKeys = null)
         {
             var results = new List<ExactClashPair>();
             var candidates = new List<SolidCandidate>();
@@ -125,6 +126,10 @@ namespace QS3D.BricsCAD.V25
                             continue;
                         if (!ExtentsMayIntersect(left.Extents, right.Extents)) continue;
 
+                        var handlePairKey = BuildHandlePairKey(left.Handle, right.Handle);
+                        if (allowedHandlePairKeys != null && !allowedHandlePairKeys.Contains(handlePairKey))
+                            continue;
+
                         broadPhasePairs++;
                         if (broadPhasePairs > MaxBroadPhasePairs)
                             throw new InvalidOperationException(
@@ -148,6 +153,22 @@ namespace QS3D.BricsCAD.V25
             return new ReadOnlyCollection<ExactClashPair>(results.ToArray());
         }
 
+        internal static string BuildHandlePairKey(string leftHandle, string rightHandle)
+        {
+            var left = (leftHandle ?? string.Empty).Trim();
+            var right = (rightHandle ?? string.Empty).Trim();
+            if (left.Length == 0 || right.Length == 0)
+                throw new ArgumentException("Exact clash handle-pair identity requires two non-empty handles.");
+            var compare = StringComparer.OrdinalIgnoreCase.Compare(left, right);
+            if (compare > 0 || (compare == 0 && StringComparer.Ordinal.Compare(left, right) > 0))
+            {
+                var swap = left;
+                left = right;
+                right = swap;
+            }
+            return left + "\u001f" + right;
+        }
+
         private static bool TryRecognize(EntitySnapshot snapshot, out MepRecognitionDiscipline discipline)
         {
             snapshot.Metadata.TryGetValue("BlockName", out var blockName);
@@ -161,7 +182,7 @@ namespace QS3D.BricsCAD.V25
             return true;
         }
 
-        private static IReadOnlyDictionary<string, EntitySnapshot> BuildSnapshotIndex(IReadOnlyList<EntitySnapshot> snapshots)
+        internal static IReadOnlyDictionary<string, EntitySnapshot> BuildSnapshotIndex(IReadOnlyList<EntitySnapshot> snapshots)
         {
             var result = new Dictionary<string, EntitySnapshot>(StringComparer.OrdinalIgnoreCase);
             for (var i = 0; i < snapshots.Count; i++)
@@ -217,7 +238,7 @@ namespace QS3D.BricsCAD.V25
             internal Extents3d Extents { get; }
         }
 
-        private sealed class ExactClashPair
+        internal sealed class ExactClashPair
         {
             internal ExactClashPair(string leftHandle, string rightHandle)
             {
