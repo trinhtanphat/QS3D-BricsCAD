@@ -86,9 +86,7 @@ namespace QS3D.Core.Domain
 
         private static string NormalizeName(string value)
         {
-            var raw = value ?? string.Empty;
-            RequireNoControlCharacters(raw, nameof(value), "Floor name");
-            var normalized = raw.Trim();
+            var normalized = (value ?? string.Empty).Trim();
             if (normalized.Length == 0 || normalized.Length > MaxFloorNameLength)
                 throw new ArgumentException("Floor name must contain 1.." + MaxFloorNameLength + " characters.", nameof(value));
             RequireWellFormedUnicode(normalized, nameof(value), "Floor name");
