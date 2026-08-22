@@ -1,0 +1,37 @@
+.vs/
+.idea/
+bin/
+obj/
+TestResults/
+dist/
+<<<<<<< HEAD
+artifacts/
+=======
+>>>>>>> 645b39943 (feat: add B4D scan and Excel handle round-trip)
+*.user
+*.suo
+*.nupkg
+*.snupkg
+*.dwg
+*.dxf
+*.bak
+*.sv$
+*.xlsx
+*.xls
+*.pfx
+*.p12
+*.pvk
+*.snk
+*.key
+*.pem
+BrxMgd.dll
+TD_Mgd.dll
+TD_MgdBrep.dll
+BLT/
+BLT3D/
+samples/private/
+
+# Only these repository-owned synthetic fixtures may bypass the binary guards above.
+!samples/generated/QS3D-Sample.dxf
+!samples/generated/QS3D-Sample.dwg
+!samples/generated/QS3D-Quantity-Template.xlsx
