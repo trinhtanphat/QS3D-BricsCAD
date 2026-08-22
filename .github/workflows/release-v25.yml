@@ -1,0 +1,398 @@
+name: QS3D Manual V25 Commercial Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Exact source product tag, for example v1.2.3 or v1.2.3-rc.1"
+        required: true
+        type: string
+      confirm_release:
+        description: "Explicit commercial publish confirmation"
+        required: true
+        default: "NO"
+        type: choice
+        options:
+          - "NO"
+          - "RELEASE"
+      run_runtime:
+        description: "Run licensed BricsCAD V25 runtime validation on the exact signed release plugin"
+        required: true
+        default: true
+        type: boolean
+      prerelease:
+        description: "Publish as a signed GitHub prerelease"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qs3d-manual-v25-commercial-release
+  cancel-in-progress: false
+
+jobs:
+  build_sign:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}
+    runs-on: [self-hosted, windows, x64, bricscad-v25]
+    environment: commercial-release
+    permissions:
+      contents: read
+    env:
+      BRICSCAD_V25_DIR: ${{ vars.BRICSCAD_V25_DIR }}
+      BRICSCAD_V25_PROFILE: ${{ vars.BRICSCAD_V25_PROFILE }}
+      QS3D_SIGNING_CERT_THUMBPRINT: ${{ vars.QS3D_SIGNING_CERT_THUMBPRINT }}
+      QS3D_TIMESTAMP_SERVER: ${{ vars.QS3D_TIMESTAMP_SERVER }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      RELEASE_PRERELEASE: ${{ inputs.prerelease }}
+      RELEASE_RUN_RUNTIME: ${{ inputs.run_runtime }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Validate commercial release request
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:GITHUB_REF -ne 'refs/heads/main') {
+            throw "Commercial V25 releases must be dispatched from refs/heads/main. Current ref: $env:GITHUB_REF"
+          }
+          if ($env:RELEASE_TAG -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$') {
+            throw 'release_tag must be strict SemVer prefixed with v.'
+          }
+          $head = ([string](git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $head -ne $env:GITHUB_SHA.ToLowerInvariant()) {
+            throw 'Checked-out release HEAD does not match the workflow SHA.'
+          }
+          if (git tag --list $env:RELEASE_TAG) {
+            throw "Tag already exists locally: $env:RELEASE_TAG"
+          }
+          $isPrerelease = $env:RELEASE_PRERELEASE -eq 'true'
+          $hasPrereleaseSuffix = $env:RELEASE_TAG -match '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)-'
+          if ($isPrerelease -ne $hasPrereleaseSuffix) {
+            throw 'prerelease input must match whether release_tag contains a SemVer prerelease suffix.'
+          }
+          if (-not $isPrerelease -and $env:RELEASE_RUN_RUNTIME -ne 'true') {
+            throw 'Stable commercial releases require run_runtime=true.'
+          }
+          if ($env:QS3D_SIGNING_CERT_THUMBPRINT -notmatch '^[0-9A-Fa-f]{40}$') {
+            throw 'QS3D_SIGNING_CERT_THUMBPRINT must be one exact 40-hex certificate thumbprint.'
+          }
+          $timestamp = $null
+          if (-not [Uri]::TryCreate($env:QS3D_TIMESTAMP_SERVER, [UriKind]::Absolute, [ref]$timestamp) -or $timestamp.Scheme -ne 'https') {
+            throw 'QS3D_TIMESTAMP_SERVER must be an absolute HTTPS timestamp URL.'
+          }
+
+      - name: Validate commercial release PowerShell syntax
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($script in @(
+            'scripts/import-v25-signing-certificate.ps1',
+            'scripts/sign-v25.ps1',
+            'scripts/verify-v25-signatures.ps1',
+            'scripts/finalize-v25-signed-package.ps1',
+            'scripts/new-v25-update-manifest.ps1'
+          )) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script).Path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count -gt 0) { throw "PowerShell parse failure: $script :: $($parseErrors -join '; ')" }
+          }
+
+      - name: Manual-only CI policy gate
+        run: python scripts/preflight-ci-manual-only.py
+
+      - name: Generic source guard
+        run: python scripts/preflight.py
+
+      - name: All discovered feature source guards
+        run: python scripts/preflight-all.py
+
+      - name: Build Core Release
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+
+      - name: Deterministic Core smoke tests
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
+
+      - name: Validate BricsCAD V25 references
+        shell: powershell
+        run: |
+          if (-not $env:BRICSCAD_V25_DIR) { throw 'BRICSCAD_V25_DIR repository variable is not set.' }
+          foreach ($name in @('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')) {
+            if (-not (Test-Path (Join-Path $env:BRICSCAD_V25_DIR $name))) { throw "Required BricsCAD V25 runtime file is missing: $name" }
+          }
+
+      - name: Build BricsCAD V25 plugin
+        run: dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64
+
+      - name: Build V25 release package
+        shell: powershell
+        run: .\scripts\package-v25-release.ps1
+
+      - name: Validate exact release tag, product version and source binding
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $metadata = Get-Content -LiteralPath 'dist\QS3D-BricsCAD-V25\PACKAGE-METADATA.json' -Raw | ConvertFrom-Json
+          if (-not [string]::Equals([string]$metadata.productVersion, $env:RELEASE_TAG.Substring(1), [StringComparison]::Ordinal)) {
+            throw "Release tag $env:RELEASE_TAG does not exactly match source product version $($metadata.productVersion)."
+          }
+          if (-not [string]::Equals(([string]$metadata.gitCommit).Trim(), $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Package source commit $($metadata.gitCommit) does not match workflow SHA $env:GITHUB_SHA."
+          }
+
+      - name: Import ephemeral code-signing certificate
+        shell: powershell
+        env:
+          QS3D_SIGNING_CERT_PFX_BASE64: ${{ secrets.QS3D_SIGNING_CERT_PFX_BASE64 }}
+          QS3D_SIGNING_CERT_PASSWORD: ${{ secrets.QS3D_SIGNING_CERT_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:QS3D_SIGNING_CERT_PFX_BASE64)) { throw 'QS3D_SIGNING_CERT_PFX_BASE64 secret is required.' }
+          if ([string]::IsNullOrWhiteSpace($env:QS3D_SIGNING_CERT_PASSWORD)) { throw 'QS3D_SIGNING_CERT_PASSWORD secret is required.' }
+          $password = ConvertTo-SecureString $env:QS3D_SIGNING_CERT_PASSWORD -AsPlainText -Force
+          $lines = @(& .\scripts\import-v25-signing-certificate.ps1 -PfxBase64 $env:QS3D_SIGNING_CERT_PFX_BASE64 -Password $password -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT)
+          $public = @{}
+          foreach ($line in $lines) {
+            if ($line -match '^(SIGNING_THUMBPRINT|IMPORTED_THUMBPRINTS)=(.+)$') { $public[$Matches[1]] = $Matches[2] }
+          }
+          if (-not $public.SIGNING_THUMBPRINT -or -not $public.IMPORTED_THUMBPRINTS) { throw 'Certificate import did not return the expected public identifiers.' }
+          "SIGNING_THUMBPRINT=$($public.SIGNING_THUMBPRINT)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "IMPORTED_THUMBPRINTS=$($public.IMPORTED_THUMBPRINTS)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Authenticode-sign commercial V25 payload
+        shell: powershell
+        run: |
+          $payload = @(
+            'dist\QS3D-BricsCAD-V25\QS3D.BricsCAD.V25.dll',
+            'dist\QS3D-BricsCAD-V25\QS3D.Core.dll',
+            'dist\QS3D-BricsCAD-V25\install-v25-autoload.ps1',
+            'dist\QS3D-BricsCAD-V25\uninstall-v25-autoload.ps1',
+            'dist\QS3D-BricsCAD-V25\update-v25.ps1',
+            'dist\QS3D-BricsCAD-V25\unblock-v25-netload.ps1'
+          )
+          & .\scripts\sign-v25.ps1 -Path $payload -CertificateThumbprint $env:SIGNING_THUMBPRINT -TimestampServer $env:QS3D_TIMESTAMP_SERVER -Confirm:$false
+
+      - name: Verify Authenticode publisher and trusted timestamp
+        shell: powershell
+        run: |
+          $payload = @(
+            'dist\QS3D-BricsCAD-V25\QS3D.BricsCAD.V25.dll',
+            'dist\QS3D-BricsCAD-V25\QS3D.Core.dll',
+            'dist\QS3D-BricsCAD-V25\install-v25-autoload.ps1',
+            'dist\QS3D-BricsCAD-V25\uninstall-v25-autoload.ps1',
+            'dist\QS3D-BricsCAD-V25\update-v25.ps1',
+            'dist\QS3D-BricsCAD-V25\unblock-v25-netload.ps1'
+          )
+          & .\scripts\verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:SIGNING_THUMBPRINT
+
+      - name: Finalize signed V25 package
+        shell: powershell
+        run: .\scripts\finalize-v25-signed-package.ps1 -ExpectedSignerThumbprint $env:SIGNING_THUMBPRINT -Confirm:$false
+
+      - name: Remove ephemeral signing certificate and private key
+        if: ${{ always() }}
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:IMPORTED_THUMBPRINTS)) { return }
+          foreach ($thumbprint in $env:IMPORTED_THUMBPRINTS.Split(',', [StringSplitOptions]::RemoveEmptyEntries)) {
+            $normalized = $thumbprint.Replace(' ', '').ToUpperInvariant()
+            if ($normalized -notmatch '^[0-9A-F]{40}$') { throw "Invalid imported certificate thumbprint in cleanup list: $thumbprint" }
+            $certificatePath = "Cert:\CurrentUser\My\$normalized"
+            if (Test-Path -LiteralPath $certificatePath) { Remove-Item -Path $certificatePath -DeleteKey -Force }
+          }
+
+      - name: Verify finalized package after private-key cleanup
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $verificationRoot = Join-Path $env:RUNNER_TEMP ('qs3d-commercial-package-' + [Guid]::NewGuid().ToString('N'))
+          try {
+            Expand-Archive -LiteralPath 'dist\QS3D-BricsCAD-V25.zip' -DestinationPath $verificationRoot
+            $payload = @(
+              (Join-Path $verificationRoot 'QS3D.BricsCAD.V25.dll'), (Join-Path $verificationRoot 'QS3D.Core.dll'),
+              (Join-Path $verificationRoot 'install-v25-autoload.ps1'), (Join-Path $verificationRoot 'uninstall-v25-autoload.ps1'),
+              (Join-Path $verificationRoot 'update-v25.ps1'), (Join-Path $verificationRoot 'unblock-v25-netload.ps1')
+            )
+            & .\scripts\verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT
+          }
+          finally { Remove-Item -LiteralPath $verificationRoot -Recurse -Force -ErrorAction SilentlyContinue }
+
+      - name: Licensed V25 runtime validation for exact signed payload
+        if: ${{ inputs.run_runtime }}
+        shell: powershell
+        run: |
+          $plugin = (Resolve-Path 'dist\QS3D-BricsCAD-V25\QS3D.BricsCAD.V25.dll').Path
+          & .\scripts\test-bricscad-v25-runtime.ps1 -BricsCadDir $env:BRICSCAD_V25_DIR -PluginDll $plugin -Profile $env:BRICSCAD_V25_PROFILE -ArtifactDir "$env:GITHUB_WORKSPACE\artifacts\bricscad-v25-runtime-signed"
+
+      - name: Create signed auto-update manifest
+        shell: powershell
+        run: |
+          $packageUri = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RELEASE_TAG/QS3D-BricsCAD-V25.zip"
+          & .\scripts\new-v25-update-manifest.ps1 -PackageUri $packageUri -ExpectedSignerThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT -OutputPath 'dist\QS3D-BricsCAD-V25.update.json' -Confirm:$false
+
+      - name: Create commercial checksum and provenance
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = (Resolve-Path 'dist\QS3D-BricsCAD-V25.zip').Path
+          $zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$zipHash  QS3D-BricsCAD-V25.zip" | Set-Content 'dist\QS3D-BricsCAD-V25.zip.sha256' -Encoding ASCII
+          $metadata = Get-Content -LiteralPath 'dist\QS3D-BricsCAD-V25\PACKAGE-METADATA.json' -Raw | ConvertFrom-Json
+          $updateHash = (Get-FileHash -LiteralPath 'dist\QS3D-BricsCAD-V25.update.json' -Algorithm SHA256).Hash.ToLowerInvariant()
+          [ordered]@{
+            schemaVersion = 1; product = 'QS3D'; target = 'BricsCAD V25 x64'; releaseTag = $env:RELEASE_TAG
+            productVersion = [string]$metadata.productVersion; sourceCommit = $env:GITHUB_SHA.ToLowerInvariant()
+            signerThumbprint = $env:QS3D_SIGNING_CERT_THUMBPRINT.Replace(' ', '').ToUpperInvariant(); timestampServer = $env:QS3D_TIMESTAMP_SERVER
+            packageFile = 'QS3D-BricsCAD-V25.zip'; packageSha256 = $zipHash
+            updateManifestFile = 'QS3D-BricsCAD-V25.update.json'; updateManifestSha256 = $updateHash
+          } | ConvertTo-Json -Depth 4 | Set-Content 'dist\QS3D-BricsCAD-V25.provenance.json' -Encoding UTF8
+
+      - name: Upload signed commercial candidate
+        uses: actions/upload-artifact@v7
+        with:
+          name: QS3D-BricsCAD-V25-commercial-${{ inputs.release_tag }}-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist/QS3D-BricsCAD-V25.zip
+            dist/QS3D-BricsCAD-V25.zip.sha256
+            dist/QS3D-BricsCAD-V25.update.json
+            dist/QS3D-BricsCAD-V25.provenance.json
+            artifacts/bricscad-v25-runtime-signed/
+
+  release:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}
+    needs: build_sign
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      RELEASE_PRERELEASE: ${{ inputs.prerelease }}
+      QS3D_SIGNING_CERT_THUMBPRINT: ${{ vars.QS3D_SIGNING_CERT_THUMBPRINT }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: QS3D-BricsCAD-V25-commercial-${{ inputs.release_tag }}-${{ github.sha }}
+          path: commercial-candidate
+
+      - name: Verify candidate after job boundary
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = (Resolve-Path 'commercial-candidate\dist').Path
+          $zip = Join-Path $dist 'QS3D-BricsCAD-V25.zip'
+          $checksum = Join-Path $dist 'QS3D-BricsCAD-V25.zip.sha256'
+          $update = Join-Path $dist 'QS3D-BricsCAD-V25.update.json'
+          $provenancePath = Join-Path $dist 'QS3D-BricsCAD-V25.provenance.json'
+          foreach ($path in @($zip, $checksum, $update, $provenancePath)) { if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing commercial candidate asset: $path" } }
+          $checksumText = (Get-Content -LiteralPath $checksum -Raw).Trim()
+          if ($checksumText -notmatch '^([0-9a-f]{64})  QS3D-BricsCAD-V25\.zip$') { throw 'Commercial checksum file is malformed.' }
+          $zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($zipHash -ne $Matches[1]) { throw 'Commercial ZIP checksum mismatch.' }
+          $provenance = Get-Content -LiteralPath $provenancePath -Raw | ConvertFrom-Json
+          if ([int]$provenance.schemaVersion -ne 1 -or [string]$provenance.product -ne 'QS3D' -or [string]$provenance.target -ne 'BricsCAD V25 x64' -or
+              -not [string]::Equals([string]$provenance.releaseTag, $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
+              -not [string]::Equals([string]$provenance.productVersion, $env:RELEASE_TAG.Substring(1), [StringComparison]::Ordinal) -or
+              -not [string]::Equals([string]$provenance.sourceCommit, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase) -or
+              -not [string]::Equals([string]$provenance.signerThumbprint, $env:QS3D_SIGNING_CERT_THUMBPRINT.Replace(' ', ''), [StringComparison]::OrdinalIgnoreCase) -or
+              -not [string]::Equals([string]$provenance.packageSha256, $zipHash, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Commercial candidate provenance does not exactly bind tag, product, source, signer and ZIP digest.'
+          }
+          $updateHash = (Get-FileHash -LiteralPath $update -Algorithm SHA256).Hash.ToLowerInvariant()
+          if (-not [string]::Equals([string]$provenance.updateManifestSha256, $updateHash, [StringComparison]::OrdinalIgnoreCase)) { throw 'Update manifest digest mismatch.' }
+          $extract = Join-Path $env:RUNNER_TEMP ('qs3d-commercial-publish-' + [Guid]::NewGuid().ToString('N'))
+          try {
+            Expand-Archive -LiteralPath $zip -DestinationPath $extract
+            $metadata = Get-Content -LiteralPath (Join-Path $extract 'PACKAGE-METADATA.json') -Raw | ConvertFrom-Json
+            if (-not [string]::Equals([string]$metadata.productVersion, $env:RELEASE_TAG.Substring(1), [StringComparison]::Ordinal) -or -not [string]::Equals(([string]$metadata.gitCommit).Trim(), $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) { throw 'Packaged metadata lost exact tag/source binding.' }
+            $payload = @(
+              (Join-Path $extract 'QS3D.BricsCAD.V25.dll'), (Join-Path $extract 'QS3D.Core.dll'),
+              (Join-Path $extract 'install-v25-autoload.ps1'), (Join-Path $extract 'uninstall-v25-autoload.ps1'),
+              (Join-Path $extract 'update-v25.ps1'), (Join-Path $extract 'unblock-v25-netload.ps1')
+            )
+            & .\scripts\verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT
+          }
+          finally { Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue }
+
+      - name: Create draft, verify uploaded bytes, then publish
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = (Resolve-Path 'commercial-candidate\dist').Path
+          $assetNames = @('QS3D-BricsCAD-V25.zip','QS3D-BricsCAD-V25.zip.sha256','QS3D-BricsCAD-V25.update.json','QS3D-BricsCAD-V25.provenance.json')
+          $assets = @($assetNames | ForEach-Object { Join-Path $dist $_ })
+          $tagRef = "refs/tags/$env:RELEASE_TAG"
+          $existing = @(git ls-remote --tags origin $tagRef ($tagRef + '^{}'))
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to query remote tag state.' }
+          if ($existing.Count -gt 0) { throw "Remote release tag already exists: $env:RELEASE_TAG" }
+          $notes = 'Commercial QS3D V25 release. Exact source/product/tag binding, Authenticode signer and trusted timestamp verification, licensed runtime policy, SHA-256 provenance, and downloaded draft-byte verification are enforced before publication.'
+          $createArgs = @('release', 'create', $env:RELEASE_TAG, '--repo', $env:GITHUB_REPOSITORY, '--target', $env:GITHUB_SHA, '--title', "QS3D for BricsCAD V25 $env:RELEASE_TAG", '--notes', $notes, '--draft')
+          if ($env:RELEASE_PRERELEASE -eq 'true') { $createArgs += '--prerelease' }
+          $createArgs += $assets
+          & gh @createArgs
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to create draft commercial release.' }
+
+          $remoteLines = @(git ls-remote --tags origin $tagRef ($tagRef + '^{}'))
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to resolve newly created release tag; release remains a draft.' }
+          $resolved = @()
+          foreach ($line in $remoteLines) {
+            if ($line -notmatch '^([0-9a-fA-F]{40})\s+(.+)$') { throw 'Malformed remote tag response; release remains a draft.' }
+            if ($Matches[2] -eq ($tagRef + '^{}')) { $resolved = @($Matches[1]); break }
+            if ($Matches[2] -eq $tagRef) { $resolved += $Matches[1] }
+          }
+          if ($resolved.Count -ne 1 -or -not [string]::Equals($resolved[0], $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) { throw 'Release tag does not target exact qualified workflow SHA; release remains a draft.' }
+
+          $downloadRoot = Join-Path $env:RUNNER_TEMP ('qs3d-commercial-draft-' + [Guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
+          try {
+            & gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --dir $downloadRoot
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to download draft release assets for verification.' }
+            $downloadedNames = @(Get-ChildItem -LiteralPath $downloadRoot -File | ForEach-Object Name | Sort-Object)
+            $expectedNames = @($assetNames | Sort-Object)
+            if (($downloadedNames -join "`n") -cne ($expectedNames -join "`n")) { throw 'Draft release asset set mismatch.' }
+            foreach ($name in $assetNames) {
+              $localHash = (Get-FileHash -LiteralPath (Join-Path $dist $name) -Algorithm SHA256).Hash
+              $remoteHash = (Get-FileHash -LiteralPath (Join-Path $downloadRoot $name) -Algorithm SHA256).Hash
+              if (-not [string]::Equals($localHash, $remoteHash, [StringComparison]::OrdinalIgnoreCase)) { throw "Draft release asset SHA-256 mismatch for $name; release remains a draft." }
+            }
+            $remoteChecksum = (Get-Content -LiteralPath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip.sha256') -Raw).Trim()
+            if ($remoteChecksum -notmatch '^([0-9a-f]{64})  QS3D-BricsCAD-V25\.zip$') { throw 'Downloaded draft checksum is malformed.' }
+            $remoteZip = Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip'
+            if ((Get-FileHash -LiteralPath $remoteZip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Matches[1]) { throw 'Downloaded draft ZIP fails its SHA-256 checksum.' }
+            $extract = Join-Path $downloadRoot 'verified-package'
+            Expand-Archive -LiteralPath $remoteZip -DestinationPath $extract
+            $payload = @(
+              (Join-Path $extract 'QS3D.BricsCAD.V25.dll'), (Join-Path $extract 'QS3D.Core.dll'),
+              (Join-Path $extract 'install-v25-autoload.ps1'), (Join-Path $extract 'uninstall-v25-autoload.ps1'),
+              (Join-Path $extract 'update-v25.ps1'), (Join-Path $extract 'unblock-v25-netload.ps1')
+            )
+            & .\scripts\verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT
+          }
+          finally { Remove-Item -LiteralPath $downloadRoot -Recurse -Force -ErrorAction SilentlyContinue }
+
+          & gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --draft=false
+          if ($LASTEXITCODE -ne 0) { throw 'Draft verification passed but GitHub release publication failed.' }
+          $published = (& gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --json isDraft --jq '.isDraft').Trim()
+          if ($LASTEXITCODE -ne 0 -or $published -ne 'false') { throw 'GitHub release remained a draft after publication request.' }
