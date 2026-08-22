@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+errors = []
+
+required = [
+    "src/QS3D.Core/Domain/ProjectElement.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedGeometryStaleHealthService.cs",
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedGeometryService.cs",
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs",
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs",
+    "src/QS3D.BricsCAD.V25/GeneratedGeometryHealthCommands.cs",
+    "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs",
+    "src/QS3D.BricsCAD.V25/WallJunctionSnapCommands.cs",
+    "tests/QS3D.Core.SmokeTests/GeneratedGeometryStaleSmoke.cs",
+    "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs",
+]
+for rel in required:
+    if not (ROOT / rel).is_file(): errors.append("missing generated-geometry lifecycle file: " + rel)
+
+element = ROOT / "src/QS3D.Core/Domain/ProjectElement.cs"
+if element.is_file():
+    text = element.read_text(encoding="utf-8")
+    for needle in (
+        "GeneratedGeometryStateKey", "GeneratedGeometryStaleReasonKey",
+        "GeneratedSolidStateKey", "GeneratedRebarStateKey", "GeneratedShapeRebarStateKey",
+        "GeneratedTieRebarStateKey", "GeneratedBeamStirrupStateKey",
+        "GeneratedSolidStaleSnapshotKey", "GeneratedRebarStaleSnapshotKey", "GeneratedShapeRebarStaleSnapshotKey",
+        "GeneratedTieRebarStaleSnapshotKey", "GeneratedBeamStirrupStaleSnapshotKey",
+        "MarkGeneratedGeometryStale", "IsGeneratedGeometryStale", "IsGeneratedSolidStale", "IsGeneratedRebarStale",
+        "IsGeneratedShapeRebarStale", "IsGeneratedTieRebarStale", "IsGeneratedBeamStirrupStale",
+        "ClearGeneratedSolidStale", "ClearGeneratedRebarStale", "ClearGeneratedShapeRebarStale",
+        "ClearGeneratedTieRebarStale", "ClearGeneratedBeamStirrupStale", "ClearGeneratedGeometryStale",
+        "Semantic/source state changed.", "Remove(stateKey)", "Remove(snapshotKey)",
+    ):
+        if needle not in text: errors.append("ProjectElement generated lifecycle guard missing: " + needle)
+    if "MarkGeneratedGeometryStale(\"Semantic/source state changed.\")" not in text:
+        errors.append("MarkDirty must propagate semantic/source edits into generated stale state")
+
+health = ROOT / "src/QS3D.Core/Diagnostics/GeneratedGeometryStaleHealthService.cs"
+if health.is_file():
+    text = health.read_text(encoding="utf-8")
+    for needle in (
+        "GENERATED_SOLID_STALE", "REBAR_GENERATED_STALE", "SHAPE_REBAR_GENERATED_STALE",
+        "TIE_REBAR_GENERATED_STALE", "BEAM_STIRRUP_GENERATED_STALE",
+        "IsGeneratedSolidStale", "IsGeneratedRebarStale", "IsGeneratedShapeRebarStale",
+        "IsGeneratedTieRebarStale", "IsGeneratedBeamStirrupStale",
+    ):
+        if needle not in text: errors.append("generated stale health missing: " + needle)
+
+host = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedGeometryService.cs"
+if host.is_file() and "ClearGeneratedSolidStale" not in host.read_text(encoding="utf-8"):
+    errors.append("GeneratedGeometryService must clear host stale state after successful replacement metadata commit")
+
+invalidator = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs"
+if invalidator.is_file():
+    text = invalidator.read_text(encoding="utf-8")
+    for needle in (
+        "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles",
+        "GeneratedTieRebarCount", "GeneratedBeamStirrupCount", "GeneratedRebarBeamTopCount", "GeneratedRebarBeamBottomCount",
+        "ClearGeneratedGeometryStale",
+    ):
+        if needle not in text: errors.append("dependent generated-geometry invalidation missing: " + needle)
+
+ownership = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs"
+if ownership.is_file():
+    text = ownership.read_text(encoding="utf-8")
+    for needle in (
+        "SourceHandles", "GeneratedSolidHandle", "PhysicalOpeningCutSolidHandle",
+        "GeneratedRebarHandles", "GeneratedShapeRebarHandles", "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles",
+    ):
+        if needle not in text: errors.append("cross-set generated ownership guard missing: " + needle)
+
+workspace = ROOT / "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs"
+if workspace.is_file():
+    text = workspace.read_text(encoding="utf-8")
+    for needle in ("element.SetProperty(key, next)", "element.MarkDirty(ElementDirtyFlags.All)"):
+        if needle not in text: errors.append("Workspace semantic edit must flow through stale-aware element mutation: " + needle)
+
+wall_snap = ROOT / "src/QS3D.BricsCAD.V25/WallJunctionSnapCommands.cs"
+if wall_snap.is_file():
+    text = wall_snap.read_text(encoding="utf-8")
+    for needle in ("GeneratedDependentGeometryInvalidator.Prepare", "invalidation.CommitMetadata", "ElementDirtyFlags.Geometry | ElementDirtyFlags.Quantity"):
+        if needle not in text: errors.append("wall snap generated invalidation contract missing: " + needle)
+
+command = ROOT / "src/QS3D.BricsCAD.V25/GeneratedGeometryHealthCommands.cs"
+if command.is_file():
+    text = command.read_text(encoding="utf-8")
+    for needle in ('CommandMethod("QS3DGENERATEDHEALTH"', "GeneratedGeometryStaleHealthService().Inspect"):
+        if needle not in text: errors.append("generated health command missing: " + needle)
+
+smoke = ROOT / "tests/QS3D.Core.SmokeTests/GeneratedGeometryStaleSmoke.cs"
+if smoke.is_file():
+    text = smoke.read_text(encoding="utf-8")
+    for needle in (
+        "GeneratedOutputsBecomeStaleAfterSemanticEdit();", "ReplacedHandleAutoResolvesOnlyItsOwnStaleKind();",
+        "ExplicitClearPreservesOtherStaleKinds();", "StaleHealthReportsAllGeneratedKinds();",
+        "GeneratedTieRebarHandles", "GeneratedBeamStirrupHandles",
+    ):
+        if needle not in text: errors.append("generated stale regression missing: " + needle)
+
+registration = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
+if registration.is_file() and "GeneratedGeometryStaleSmoke.Run();" not in registration.read_text(encoding="utf-8"):
+    errors.append("GeneratedGeometryStaleSmoke is not registered")
+
+print("QS3D generated-geometry lifecycle preflight")
+if errors:
+    for error in errors: print("ERROR:", error)
+    print(f"FAILED with {len(errors)} error(s).")
+    sys.exit(1)
+print("PASS: stale snapshots, auto-resolution, five generated output kinds, destructive invalidation, cross-set ownership, UI mutation path, health command and regression coverage are present.")
