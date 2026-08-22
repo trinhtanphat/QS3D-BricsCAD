@@ -81,6 +81,26 @@ Issue `#3573` owns the first representative V26 native authoring/dependent-outpu
 
 The runner reuses the existing production Beam P03 probe commands compiled into the shared V26 adapter. It must prove production Beam authoring, host/longitudinal/stirrup output, a real native top-level `MOVE`, pre-sync generated isolation, `QS3DSYNCSOURCE`, dependent rebuild, scoped Health, save/sidecar persistence and fresh-process cold reopen. Host major 26, the exact V26 output path, runtimeconfig, declared product version and exact Git SHA in the portable PDB SourceLink record are all fail-closed inputs. Until an exact pushed candidate completes this matrix on licensed V26, report `#3573` as `PENDING_LOCAL`; a V25 result cannot be reused.
 
+### Bounded native Slab P02 gate
+
+Issue `#3576` owns one representative production native-edit cell under `LOCAL-017`. After the exact V26 Release build, run:
+
+```powershell
+.\scripts\test-bricscad-v26-native-polyline-edit.ps1 `
+  -BricsCadDir $env:BRICSCAD_V26_DIR `
+  -PluginDll .\src\QS3D.BricsCAD.V26\bin\x64\Release\net8.0-windows\QS3D.BricsCAD.V26.dll `
+  -FixtureDwg .\samples\generated\QS3D-Sample.dwg `
+  -Profile Default `
+  -ArtifactDir <outside-repository-empty-directory> `
+  -ConfirmDisposableCopies
+```
+
+The shared runner must reject a V25/V26 host or plugin-major mismatch. If the process environment sets `DOTNET_ROOT`, it must point to a complete .NET 8 host/runtime containing `dotnet.exe`, an 8.x `hostfxr.dll` and an 8.x `coreclr.dll`; an invalid override must be refused before artifact creation or BricsCAD launch.
+
+This bounded gate uses the repository-generated disposable fixture and the existing production Slab probe. It drives one real top-level closed-POLYLINE crossing-window `STRETCH`, verifies pre-sync generated isolation, production source reconcile/metric and quantity refresh, generated invalidation/rebuild, scoped Health, save/sidecar persistence and a fresh-process cold reopen. The gate was `PENDING_LOCAL` until the exact evidence below passed; its bounded PASS cannot close the broader #80 or #1462 matrix.
+
+Bounded P02 evidence is `LOCAL_PASS` on clean pushed exact SHA `54b7fce6127208085817f20dd0781b580a18e4bd`. The V26 `Release|x64` build completed with zero warnings/errors; ProductVersion was `0.1.0-preview.10081`, plugin SHA-256 was `BA0A0758BD2440D50455FDD9A36D992EE14869800B1700396CE5580F53E1882D`, and the portable plugin/Core PDB SourceLink records named the exact tested SHA. Licensed BricsCAD V26.2.07 / CLR 8.0.29 passed the generic x64/native-runtime identity control. The two-process P02 run then passed every sanitized production marker, including vertex STRETCH, pre-sync isolation, metric/quantity reconcile, invalidation/rebuild, native bounds, scoped Health, save/sidecar persistence and fresh-process cold reopen. The repository fixture hash remained `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`; drawing, script and private state were restored with zero BricsCAD processes left. This remains a bounded synthetic Slab cell only; the broader native/private-DWG and release matrix is still pending.
+
 ## Package/install gate
 
 After the exact V26 Release build passes source/build checks:
