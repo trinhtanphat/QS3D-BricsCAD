@@ -1,0 +1,30 @@
+namespace QS3D.Core.Units
+{
+    public enum DrawingUnit
+    {
+        Millimeter,
+        Centimeter,
+        Meter,
+        Inch,
+        Foot,
+        Yard,
+        Mile,
+        Kilometer,
+        Microinch,
+        Mil,
+        Angstrom,
+        Nanometer,
+        Micrometer,
+        Decimeter,
+        Decameter,
+        Hectometer,
+        Gigameter,
+        AstronomicalUnit,
+        LightYear,
+        Parsec,
+        USSurveyFoot,
+        USSurveyInch,
+        USSurveyYard,
+        USSurveyMile
+    }
+}
