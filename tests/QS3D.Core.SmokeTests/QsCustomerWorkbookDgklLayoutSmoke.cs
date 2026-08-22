@@ -185,15 +185,15 @@ namespace QS3D.Core.SmokeTests
         {
             var workbook = LoadEntry(archive, "xl/workbook.xml");
             var sheet = workbook.Descendants(SpreadsheetNs + "sheet")
-                .SingleOrDefault(item => string.Equals((string)item.Attribute("name"), QsCustomerWorkbookExporter.TraceSheet, StringComparison.Ordinal));
+                .SingleOrDefault(item => string.Equals((string?)item.Attribute("name"), QsCustomerWorkbookExporter.TraceSheet, StringComparison.Ordinal));
             True(sheet != null, "TRACE_MODEL worksheet must exist");
-            Equal("hidden", (string)sheet!.Attribute("state") ?? string.Empty, "TRACE_MODEL worksheet visibility");
+            Equal("hidden", (string?)sheet!.Attribute("state") ?? string.Empty, "TRACE_MODEL worksheet visibility");
         }
 
         private static void AssertBusinessSheet(XDocument document, IReadOnlyList<string> expectedHeaders, int hiddenTraceColumn, string expectedFilter)
         {
             var headerRow = document.Descendants(SpreadsheetNs + "row")
-                .Single(item => string.Equals((string)item.Attribute("r"), "1", StringComparison.Ordinal));
+                .Single(item => string.Equals((string?)item.Attribute("r"), "1", StringComparison.Ordinal));
             var actualHeaders = headerRow.Elements(SpreadsheetNs + "c").Select(ReadCellText).ToArray();
             Equal(expectedHeaders.Count, actualHeaders.Length, "business header count");
             for (var index = 0; index < expectedHeaders.Count; index++)
@@ -203,16 +203,16 @@ namespace QS3D.Core.SmokeTests
             {
                 int min;
                 int max;
-                return int.TryParse((string)column.Attribute("min"), NumberStyles.Integer, CultureInfo.InvariantCulture, out min) &&
-                       int.TryParse((string)column.Attribute("max"), NumberStyles.Integer, CultureInfo.InvariantCulture, out max) &&
+                return int.TryParse((string?)column.Attribute("min"), NumberStyles.Integer, CultureInfo.InvariantCulture, out min) &&
+                       int.TryParse((string?)column.Attribute("max"), NumberStyles.Integer, CultureInfo.InvariantCulture, out max) &&
                        min <= hiddenTraceColumn && hiddenTraceColumn <= max &&
-                       string.Equals((string)column.Attribute("hidden"), "1", StringComparison.Ordinal);
+                       string.Equals((string?)column.Attribute("hidden"), "1", StringComparison.Ordinal);
             });
             True(hidden, "TRACE_KEY technical column must be hidden");
 
             var filter = document.Descendants(SpreadsheetNs + "autoFilter").SingleOrDefault();
             True(filter != null, "business sheet auto-filter must exist");
-            Equal(expectedFilter, (string)filter!.Attribute("ref") ?? string.Empty, "auto-filter must exclude hidden TRACE_KEY");
+            Equal(expectedFilter, (string?)filter!.Attribute("ref") ?? string.Empty, "auto-filter must exclude hidden TRACE_KEY");
         }
 
         private static XDocument LoadEntry(ZipArchive archive, string path)
@@ -229,13 +229,13 @@ namespace QS3D.Core.SmokeTests
         private static bool HasCell(XDocument document, string reference)
         {
             return document.Descendants(SpreadsheetNs + "c")
-                .Any(cell => string.Equals((string)cell.Attribute("r"), reference, StringComparison.Ordinal));
+                .Any(cell => string.Equals((string?)cell.Attribute("r"), reference, StringComparison.Ordinal));
         }
 
         private static double NumberCell(XDocument document, string reference)
         {
             var cell = document.Descendants(SpreadsheetNs + "c")
-                .SingleOrDefault(item => string.Equals((string)item.Attribute("r"), reference, StringComparison.Ordinal));
+                .SingleOrDefault(item => string.Equals((string?)item.Attribute("r"), reference, StringComparison.Ordinal));
             if (cell == null) throw new InvalidOperationException("Missing numeric cell " + reference + ".");
             var raw = cell.Element(SpreadsheetNs + "v")?.Value ?? string.Empty;
             double value;
