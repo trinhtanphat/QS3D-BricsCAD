@@ -72,6 +72,9 @@ if RUNNER.is_file():
         'rev-parse HEAD',
         'status --porcelain --untracked-files=normal',
         'Curtain-panel runtime qualification requires a clean exact-SHA worktree.',
+        'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead',
+        'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
+        'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
         'ArtifactDir must be empty.',
         'Stop-Qs3dLaunchedProcess -Process $process',
         'Stop-Process -Id $Process.Id -Force -ErrorAction Stop',
@@ -90,7 +93,7 @@ if RUNNER.is_file():
     ):
         if token not in text:
             errors.append("curtain-panel runtime runner missing contract token: " + token)
-    for forbidden in ("Get-Process -Name '*'", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
+    for forbidden in ("Get-Process -Name '*'", 'Get-Process -Name "bricscad"', "$expectedAssemblyRevision", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
         if forbidden in text:
             errors.append("curtain-panel runtime runner contains broad process/window action: " + forbidden)
     stop_start = text.find("function Stop-Qs3dLaunchedProcess")

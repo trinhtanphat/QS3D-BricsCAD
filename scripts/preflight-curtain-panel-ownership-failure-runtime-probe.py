@@ -138,7 +138,9 @@ if RUNNER.is_file():
         'Remove-Qs3dDrawingLocks -Paths $drawingLocks',
         'Curtain P06 drawing-lock cleanup failed.',
         'Stop-Process -Id $Process.Id -Force -ErrorAction Stop',
-        'Get-Process -Name "bricscad" -ErrorAction SilentlyContinue',
+        'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead',
+        'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
+        'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
         'Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop',
         'drawing_copy_sha256_before',
         'drawing_copy_sha256_after',
@@ -160,6 +162,9 @@ if RUNNER.is_file():
     for token in required:
         if token not in text:
             errors.append("Curtain-panel P06 runner missing contract token: " + token)
+    for forbidden in ('Get-Process -Name "bricscad"', '$expectedAssemblyRevision'):
+        if forbidden in text:
+            errors.append("Curtain-panel P06 runner must isolate V25 and use SourceLink exact-source identity: " + forbidden)
     ordered = (
         '"QS3DCURTAINP06SEED"', '"QS3DGLASSWALL"', '"QS3DCURTAINP06PREPARE"',
         '"QS3DCURTAIN3D"', '"QS3DCURTAINP06BASELINE"', '"QS3DCURTAINP06MISSING"',

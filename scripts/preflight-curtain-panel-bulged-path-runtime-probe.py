@@ -121,7 +121,9 @@ if RUNNER.is_file():
         'Stop-Qs3dLaunchedProcess -Process $process',
         'Stop-Process -Id $Process.Id -Force -ErrorAction Stop',
         'Launched BricsCAD Curtain bulged-path process did not exit.',
-        'Get-Process -Name "bricscad" -ErrorAction SilentlyContinue',
+        'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead',
+        'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
+        'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
         'Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop',
         'Curtain bulged-path runtime script cleanup failed.',
         'drawing_copy_sha256_before',
@@ -151,7 +153,7 @@ if RUNNER.is_file():
     for token in required:
         if token not in text:
             errors.append("Curtain-panel P04 runner missing contract token: " + token)
-    for forbidden in ("Get-Process -Name '*'", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
+    for forbidden in ("Get-Process -Name '*'", 'Get-Process -Name "bricscad"', "$expectedAssemblyRevision", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
         if forbidden in text:
             errors.append("Curtain-panel P04 runner contains broad process/window action: " + forbidden)
     fail_start = text.find('if ($marker.ContainsKey("status")')

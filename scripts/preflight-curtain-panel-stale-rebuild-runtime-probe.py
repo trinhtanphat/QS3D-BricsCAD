@@ -157,7 +157,9 @@ if RUNNER.is_file():
         'Stop-Qs3dLaunchedProcess -Process $process',
         'Stop-Process -Id $Process.Id -Force -ErrorAction Stop',
         'Launched BricsCAD Curtain P05 process did not exit.',
-        'Get-Process -Name "bricscad" -ErrorAction SilentlyContinue',
+        'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead',
+        'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
+        'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
         'Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop',
         'Curtain P05 runtime script cleanup failed.',
         'drawing_copy_sha256_before',
@@ -192,7 +194,7 @@ if RUNNER.is_file():
     positions = [text.find(token) for token in ordered_commands]
     if any(position < 0 for position in positions) or positions != sorted(positions):
         errors.append("Curtain-panel P05 runner command state machine is not in canonical order")
-    for forbidden in ("Get-Process -Name '*'", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
+    for forbidden in ("Get-Process -Name '*'", 'Get-Process -Name "bricscad"', "$expectedAssemblyRevision", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
         if forbidden in text:
             errors.append("Curtain-panel P05 runner contains broad process/window action: " + forbidden)
     fail_start = text.find('if ($marker.ContainsKey("status")')
