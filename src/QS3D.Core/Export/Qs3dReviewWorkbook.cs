@@ -48,34 +48,32 @@ namespace QS3D.Core.Export
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
     }
 
-    public sealed class Qs3dReviewIssueMetadata
+    public sealed class Qs3dReviewIssueGeometry
     {
-        public Qs3dReviewIssueMetadata(
-            string issueId, string status = "", string severity = "",
+        public Qs3dReviewIssueGeometry(
+            string findingId,
             double? overlapX = null, double? overlapY = null, double? overlapZ = null,
             double? distanceMm = null, double? rotationDeltaDegrees = null, double? confidencePercent = null,
-            DateTimeOffset? createdAtUtc = null, DateTimeOffset? lastCheckedAtUtc = null, string comment = "")
+            DateTimeOffset? createdAtUtc = null, DateTimeOffset? lastCheckedAtUtc = null)
         {
-            IssueId = Required(issueId, nameof(issueId));
-            Status = Optional(status, nameof(status));
-            Severity = Optional(severity, nameof(severity));
+            FindingId = Required(findingId, nameof(findingId));
             OverlapX = NonNegative(overlapX, nameof(overlapX));
             OverlapY = NonNegative(overlapY, nameof(overlapY));
             OverlapZ = NonNegative(overlapZ, nameof(overlapZ));
             DistanceMm = NonNegative(distanceMm, nameof(distanceMm));
-            if (rotationDeltaDegrees.HasValue && (!Finite(rotationDeltaDegrees.Value) || rotationDeltaDegrees.Value < 0d || rotationDeltaDegrees.Value > 360d)) throw new ArgumentOutOfRangeException(nameof(rotationDeltaDegrees));
-            if (confidencePercent.HasValue && (!Finite(confidencePercent.Value) || confidencePercent.Value < 0d || confidencePercent.Value > 100d)) throw new ArgumentOutOfRangeException(nameof(confidencePercent));
+            if (rotationDeltaDegrees.HasValue && (!Finite(rotationDeltaDegrees.Value) || rotationDeltaDegrees.Value < 0d || rotationDeltaDegrees.Value > 360d))
+                throw new ArgumentOutOfRangeException(nameof(rotationDeltaDegrees));
+            if (confidencePercent.HasValue && (!Finite(confidencePercent.Value) || confidencePercent.Value < 0d || confidencePercent.Value > 100d))
+                throw new ArgumentOutOfRangeException(nameof(confidencePercent));
             RotationDeltaDegrees = rotationDeltaDegrees;
             ConfidencePercent = confidencePercent;
             CreatedAtUtc = createdAtUtc?.ToUniversalTime();
             LastCheckedAtUtc = lastCheckedAtUtc?.ToUniversalTime();
-            if (CreatedAtUtc.HasValue && LastCheckedAtUtc.HasValue && LastCheckedAtUtc.Value < CreatedAtUtc.Value) throw new ArgumentException("LastCheckedAtUtc cannot be earlier than CreatedAtUtc.", nameof(lastCheckedAtUtc));
-            Comment = Optional(comment, nameof(comment));
+            if (CreatedAtUtc.HasValue && LastCheckedAtUtc.HasValue && LastCheckedAtUtc.Value < CreatedAtUtc.Value)
+                throw new ArgumentException("LastCheckedAtUtc cannot be earlier than CreatedAtUtc.", nameof(lastCheckedAtUtc));
         }
 
-        public string IssueId { get; }
-        public string Status { get; }
-        public string Severity { get; }
+        public string FindingId { get; }
         public double? OverlapX { get; }
         public double? OverlapY { get; }
         public double? OverlapZ { get; }
@@ -84,24 +82,20 @@ namespace QS3D.Core.Export
         public double? ConfidencePercent { get; }
         public DateTimeOffset? CreatedAtUtc { get; }
         public DateTimeOffset? LastCheckedAtUtc { get; }
-        public string Comment { get; }
 
         private static double? NonNegative(double? value, string parameterName)
         {
             if (value.HasValue && (!Finite(value.Value) || value.Value < 0d)) throw new ArgumentOutOfRangeException(parameterName);
             return value;
         }
+
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
         private static string Required(string value, string parameterName)
-        {
-            var normalized = Optional(value, parameterName);
-            if (normalized.Length == 0) throw new ArgumentException("Value is required.", parameterName);
-            return normalized;
-        }
-        private static string Optional(string value, string parameterName)
         {
             var normalized = (value ?? string.Empty).Trim();
             Qs3dReviewModelInfo.VerifyXml(normalized, parameterName);
+            if (normalized.Length == 0) throw new ArgumentException("Value is required.", parameterName);
             return normalized;
         }
     }
