@@ -149,15 +149,16 @@ namespace QS3D.BricsCAD.V25
             var result = new Dictionary<string, SemanticProjection>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in project.Elements)
             {
-                var floor = project.FindFloor(element.FloorId);
+                var floorId = (element.FloorId ?? string.Empty).Trim();
+                var floor = floorId.Length == 0 ? null : project.FindFloor(floorId);
                 var projection = new SemanticProjection(
                     element.Id,
                     element.Category.ToString(),
-                    floor == null ? (element.FloorId ?? string.Empty).Trim() : floor.Name);
+                    floor == null ? floorId : floor.Name);
                 foreach (var rawHandle in SemanticReferenceHandles.GetSelectionAliases(element))
                 {
-                    var handle = CadHandleService.NormalizeHexHandle(rawHandle);
-                    if (string.IsNullOrWhiteSpace(handle)) continue;
+                    var handle = (CadHandleService.NormalizeHexHandle(rawHandle) ?? string.Empty).Trim();
+                    if (handle.Length == 0) continue;
                     if (result.TryGetValue(handle, out var existing) &&
                         !string.Equals(existing.ElementId, element.Id, StringComparison.OrdinalIgnoreCase))
                         throw new InvalidOperationException(
