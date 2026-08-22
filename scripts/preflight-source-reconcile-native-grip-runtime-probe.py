@@ -63,7 +63,7 @@ if not errors:
     required_runner = (
         "preflight-source-reconcile-native-grip-runtime-probe.py",
         "BRICSCAD_V25_DIR",
-        "QS3DDRAWA",
+        "QS3DDRAWBEAM",
         "QS3DSRGRIPP05BASELINE",
         "QS3DSRGRIPP05SELECT",
         "QS3DSRGRIPP05CANCELCHECK",
