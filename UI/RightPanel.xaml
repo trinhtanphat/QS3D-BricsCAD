@@ -1,0 +1,62 @@
+<UserControl x:Class="QS3D.BricsCAD.V25.UI.RightPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MinWidth="255" MinHeight="480">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="Theme.xaml"/></ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid Background="{StaticResource Bg0Brush}">
+        <Grid.RowDefinitions><RowDefinition Height="250" MinHeight="150"/><RowDefinition Height="4"/><RowDefinition Height="*"/><RowDefinition Height="27"/></Grid.RowDefinitions>
+        <Border Grid.Row="0" Background="{StaticResource Bg1Brush}" BorderThickness="0,0,0,1" Padding="6">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <DockPanel>
+                        <TextBlock Text="QUẢN LÝ BẢN VẼ" Style="{StaticResource PanelTitle}"/>
+                        <Button DockPanel.Dock="Right" Content="Bỏ chọn" ToolTip="Bỏ chọn Xref và selection CAD" Click="OnClearDrawingSelectionClick" Style="{StaticResource DenseButton}"/>
+                    </DockPanel>
+                    <WrapPanel>
+                        <Button Content="+ Thêm" Style="{StaticResource AccentButton}" Click="OnAttachXrefClick" ToolTip="Gắn thêm Xref"/>
+                        <Button Content="Nạp lại" Click="OnReloadXrefClick" ToolTip="Nạp lại Xref đang chọn"/>
+                        <Button Content="Di chuyển" Click="OnMoveDrawingClick" ToolTip="Di chuyển instance của Xref đang chọn"/>
+                        <Button Content="Gỡ Xref" Style="{StaticResource DangerButton}" Click="OnDeleteDrawingClick" ToolTip="Detach Xref khỏi bản vẽ; không xóa file nguồn"/>
+                    </WrapPanel>
+                    <Button Content="Khoanh vùng" HorizontalAlignment="Left" Click="OnZoomWindowClick" Style="{StaticResource DenseButton}" Margin="1,3,1,3"/>
+                </StackPanel>
+                <ListView x:Name="DrawingList" ItemsSource="{Binding Drawings}" SelectionMode="Single" SelectionChanged="OnDrawingSelectionChanged">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Tên" Width="125" DisplayMemberBinding="{Binding Name}"/>
+                            <GridViewColumn Header="Khóa" Width="42"><GridViewColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding IsLocked}" IsEnabled="False" HorizontalAlignment="Center"/></DataTemplate></GridViewColumn.CellTemplate></GridViewColumn>
+                            <GridViewColumn Header="Loại" Width="55" DisplayMemberBinding="{Binding Kind}"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </DockPanel>
+        </Border>
+        <GridSplitter Grid.Row="1" Height="4" Background="{StaticResource BorderBrush}" HorizontalAlignment="Stretch"/>
+        <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" BorderThickness="0,1,0,0" Padding="6">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <DockPanel>
+                        <TextBlock Text="QUẢN LÝ LỚP" Style="{StaticResource PanelTitle}"/>
+                        <Button DockPanel.Dock="Right" Content="Làm mới" Click="OnRefreshClick" Style="{StaticResource DenseButton}"/>
+                    </DockPanel>
+                    <TextBlock Text="Bỏ tick = ẩn. Ctrl/Shift để chọn nhiều lớp." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                    <TextBox x:Name="LayerSearchBox" ToolTip="Tìm layer" Margin="0,0,0,4" TextChanged="OnLayerSearchChanged"/>
+                    <WrapPanel>
+                        <Button Content="Hiện" Click="OnShowLayersClick" Style="{StaticResource DenseButton}"/>
+                        <Button Content="Ẩn" Click="OnHideLayersClick" Style="{StaticResource DenseButton}"/>
+                        <Button Content="Đảo chọn" Click="OnInvertSelectionClick" Style="{StaticResource DenseButton}"/>
+                        <Button Content="Bỏ chọn" Click="OnClearLayerSelectionClick" Style="{StaticResource DenseButton}"/>
+                    </WrapPanel>
+                </StackPanel>
+                <ListView x:Name="LayerList" ItemsSource="{Binding Layers}" SelectionMode="Extended">
+                    <ListView.ItemTemplate><DataTemplate><Grid Margin="0,1"><Grid.ColumnDefinitions><ColumnDefinition Width="22"/><ColumnDefinition Width="17"/><ColumnDefinition Width="*"/><ColumnDefinition Width="38"/></Grid.ColumnDefinitions><CheckBox IsChecked="{Binding IsVisible, Mode=TwoWay}" Checked="OnLayerChecked" Unchecked="OnLayerUnchecked"/><Border Grid.Column="1" Width="9" Height="9" CornerRadius="1" Background="{StaticResource AccentBrush}" Opacity="0.75"/><TextBlock Grid.Column="2" Text="{Binding Name}" TextTrimming="CharacterEllipsis"/><TextBlock Grid.Column="3" Text="{Binding ColorIndex}" Style="{StaticResource Caption}" HorizontalAlignment="Right"/></Grid></DataTemplate></ListView.ItemTemplate>
+                </ListView>
+            </DockPanel>
+        </Border>
+        <Border Grid.Row="3" Background="{StaticResource Bg1Brush}" BorderThickness="0,1,0,0" Padding="6,2"><TextBlock Text="{Binding Status}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Status}"/></Border>
+    </Grid>
+</UserControl>
