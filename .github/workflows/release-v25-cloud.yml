@@ -163,6 +163,29 @@ jobs:
       - name: All discovered feature source guards
         run: python scripts/preflight-all.py
 
+      - name: Materialize pinned Platform dependency
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & git submodule sync -- external/QS3D-Platform
+          if ($LASTEXITCODE -ne 0) { throw 'Could not synchronize external/QS3D-Platform submodule metadata.' }
+          & git submodule update --init --recursive -- external/QS3D-Platform
+          if ($LASTEXITCODE -ne 0) { throw 'Could not materialize pinned external/QS3D-Platform dependency.' }
+          $treeLine = [string](& git ls-tree HEAD external/QS3D-Platform | Select-Object -First 1)
+          if ($LASTEXITCODE -ne 0 -or $treeLine -notmatch '^160000 commit ([0-9a-f]{40})\s+external/QS3D-Platform$') {
+            throw 'Could not resolve the exact Platform gitlink from the release source commit.'
+          }
+          $expectedPlatformSha = $Matches[1].ToLowerInvariant()
+          $actualPlatformSha = ([string](& git -C external/QS3D-Platform rev-parse HEAD)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $actualPlatformSha -ne $expectedPlatformSha) {
+            throw "Platform dependency SHA mismatch. Expected $expectedPlatformSha, got $actualPlatformSha."
+          }
+          $platformProject = 'external\QS3D-Platform\src\QS3D.Platform.Parity\QS3D.Platform.Parity.csproj'
+          if (-not (Test-Path -LiteralPath $platformProject -PathType Leaf)) {
+            throw "Pinned Platform project is missing after submodule materialization: $platformProject"
+          }
+          Write-Host "Materialized exact Platform dependency: $actualPlatformSha"
+
       - name: Restore Core smoke projects
         run: dotnet restore tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj
 
