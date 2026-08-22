@@ -130,16 +130,17 @@ Network failure must never block plugin initialization or drawing work.
 2. Coordinator re-checks that the selected release is still newer and has the required signed-manifest asset.
 3. Resolve the running plugin DLL and its installation directory from the actual assembly location, not a hard-coded AppData path.
 4. Require the installed `update-v25.ps1` beside the plugin DLL.
-5. Resolve the current `bricscad.exe` path from the host process.
-6. Read and pin the running plugin Authenticode signer thumbprint.
-7. Start a detached PowerShell worker with only fixed script logic and safely encoded literal inputs.
-8. Request `CloseMainWindow()` on the current BricsCAD host. This is a graceful window-close request, not process termination; BricsCAD remains responsible for unsaved-document save/cancel prompts.
-9. Worker waits for all BricsCAD processes to exit. If the user cancels BricsCAD shutdown, the worker keeps waiting and never kills the host.
-10. Worker validates the installed updater script Authenticode signature and exact signer thumbprint.
-11. Worker runs `update-v25.ps1` with the GitHub manifest URL, expected signer, current install directory, approved `github.com` package host, and `-AllowSameVersion` only for the already-proven newer GitHub SemVer handoff.
-12. Existing updater downloads/verifies/installs atomically.
-13. On success, worker restarts the exact BricsCAD executable used for the session.
-14. Worker writes a per-update transcript under `%LOCALAPPDATA%\QS3D\UpdateLogs`, outside the replaceable plugin directory.
+5. Read every locale-scoped `Applications\QS3D` registration for the matching host major and freeze its current DemandLoad mode. Every registration must use `Loader` REG_SZ pointing to the running plugin DLL and the same `LoadCtrls` REG_DWORD value: `2` (`OnStartup`) or `4` (`OnCommand`). Missing, stale, malformed, or mixed registrations fail closed before a worker is scheduled.
+6. Resolve the current `bricscad.exe` path from the host process.
+7. Read and pin the running plugin Authenticode signer thumbprint.
+8. Start a detached PowerShell worker with only fixed script logic and safely encoded literal inputs, including the frozen DemandLoad mode.
+9. Request `CloseMainWindow()` on the current BricsCAD host. This is a graceful window-close request, not process termination; BricsCAD remains responsible for unsaved-document save/cancel prompts.
+10. Worker waits for all BricsCAD processes to exit. If the user cancels BricsCAD shutdown, the worker keeps waiting and never kills the host.
+11. Worker validates the installed updater script Authenticode signature and exact signer thumbprint.
+12. Worker runs `update-v25.ps1` with the GitHub manifest URL, expected signer, current install directory, frozen `-LoadMode`, approved `github.com` package host, and `-AllowSameVersion` only for the already-proven newer GitHub SemVer handoff.
+13. Existing updater downloads/verifies/installs atomically and re-registers QS3D with that frozen mode. The template default remains `OnCommand` for new/manual installs that do not have an existing running registration to preserve.
+14. On success, worker restarts the exact BricsCAD executable used for the session.
+15. Worker writes a per-update transcript under `%LOCALAPPDATA%\QS3D\UpdateLogs`, outside the replaceable plugin directory.
 
 ## 10. Release workflow change
 
