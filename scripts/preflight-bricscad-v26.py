@@ -104,7 +104,7 @@ for token in ("workflow_dispatch:", "github.event_name == 'workflow_dispatch'", 
 for forbidden in ("\n  push:", "\n  pull_request:", "\n  schedule:", "\n  workflow_run:"):
     forbid(workflow, forbidden, "V26 workflow")
 
-for token in ("FileMajorPart -ne 26", "QS3D.BricsCAD.V26.dll", "BrxMgd.dll", "TD_Mgd.dll", "QS3DRUNTIMEPROBE", "ribbon_ready", "palette_visible", "QS3D_RUNTIME_RESULT"):
+for token in ("FileMajorPart -ne 26", "QS3D.BricsCAD.V26.dll", "BrxMgd.dll", "TD_Mgd.dll", "QS3DRUNTIMEPROBE", "ribbon_ready", "palette_visible", "QS3D_RUNTIME_RESULT", "Assert-Qs3dV26DotNetRoot", '[Environment]::GetEnvironmentVariable("DOTNET_ROOT", "Process")', 'Join-Path $root "host\\fxr"', 'Join-Path $root "shared\\Microsoft.NETCore.App"', 'Join-Path $_.FullName "hostfxr.dll"', 'Join-Path $_.FullName "coreclr.dll"'):
     require(runtime, token, "V26 runtime gate")
 if "QS3D.BricsCAD.V25.dll" in runtime:
     errors.append("V26 runtime gate must reject/circumvent V25 adapter binaries, not load them")
