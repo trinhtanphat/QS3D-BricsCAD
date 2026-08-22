@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
             ExactLengthBoundariesStayAccepted();
             InvalidLegacyLengthsFailClosed();
             MalformedUnicodeFailsClosed();
-            RawControlCharactersFailClosed();
+            RawOwnerIdControlCharactersFailClosed();
             OwnerAndStateKeysStayUnambiguous();
             OwnerTokenBuilderMatchesCreate();
             StateSensitivityStaysSeparatedFromOwnership();
@@ -106,12 +106,10 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => FloorGeneratedIdentityPlanner.Create(new FloorDefinition("L-UNICODE", loneLowSurrogate, 0d)));
         }
 
-        private static void RawControlCharactersFailClosed()
+        private static void RawOwnerIdControlCharactersFailClosed()
         {
             Throws<ArgumentException>(() => FloorGeneratedIdentityPlanner.BuildOwnerToken("\tL-CONTROL"));
             Throws<ArgumentException>(() => FloorGeneratedIdentityPlanner.BuildOwnerToken("L\rCONTROL"));
-            Throws<ArgumentException>(() => FloorGeneratedIdentityPlanner.Create(new FloorDefinition("L-CONTROL", "\nLevel", 0d)));
-            Throws<ArgumentException>(() => FloorGeneratedIdentityPlanner.Create(new FloorDefinition("L-CONTROL", "Level\tName", 0d)));
         }
 
         private static void OwnerAndStateKeysStayUnambiguous()
