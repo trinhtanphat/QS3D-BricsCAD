@@ -168,10 +168,10 @@ namespace QS3D.BricsCAD.V25
             return result;
         }
 
-        private static string CommonFloor(SemanticProjection left, SemanticProjection right)
+        private static string CommonFloor(SemanticProjection? left, SemanticProjection? right)
         {
             if (left == null && right == null) return string.Empty;
-            if (left == null) return right.Floor;
+            if (left == null) return right!.Floor;
             if (right == null) return left.Floor;
             return string.Equals(left.Floor, right.Floor, StringComparison.OrdinalIgnoreCase) ? left.Floor : string.Empty;
         }
