@@ -349,6 +349,15 @@ namespace QS3D.BricsCAD.V25
 #endif
         }
 
+        internal static bool CurrentNativeRuntimeMatches() =>
+            NativeRuntimeAssembliesMatch(typeof(Application).Assembly, typeof(Database).Assembly);
+
+        internal static int CurrentNativeRuntimeMajor => ExpectedRuntimeMajor;
+
+        internal static string CurrentNativeRuntimeLabel => ExpectedRuntimeLabel;
+
+        internal static string CurrentNativeBrepIdentity() => NativeBrepVersion();
+
         private static string NativeBrepVersion()
         {
 #if BRICSCAD_V26
