@@ -280,7 +280,9 @@ namespace QS3D.Core.Domain
         {
             if (family == null) return false;
             if (!family.Properties.TryGetValue(MaterialKey, out var raw)) return false;
-            var material = (raw ?? string.Empty).Trim();
+            var material = raw ?? string.Empty;
+            if (material.Any(char.IsControl)) return false;
+            material = material.Trim();
             try
             {
                 ValidateMaterial(material, family.Category);
