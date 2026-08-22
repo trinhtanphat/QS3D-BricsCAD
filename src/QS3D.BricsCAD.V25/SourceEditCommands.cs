@@ -266,7 +266,7 @@ namespace QS3D.BricsCAD.V25
         }
 
         private static string NormalizeHandle(string handle) =>
-            GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
+            QS3D.Core.Diagnostics.GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
 
         private static void FinalizeSuccess(Document document, SourceEditOperation operation, SourceReconcileResult result)
         {
