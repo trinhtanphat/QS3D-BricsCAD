@@ -9,6 +9,7 @@ using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 using QS3D.Core.Coordination;
+using QS3D.Core.Persistence;
 
 namespace QS3D.Core.Export
 {
