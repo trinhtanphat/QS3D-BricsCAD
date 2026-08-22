@@ -4,8 +4,10 @@
 - Agent: `codex-issue987-curtain-native-undo-20260813` (`/root/fix_source_reconcile_undo`, continued by `/root/fix_curtain_undo`)
 - Registered: `2026-08-13T17:05:00+07:00`
 - Reactivated after exact-SHA rerun: `2026-08-13T17:44:00+07:00`
+- Reactivated after observer-candidate rerun: `2026-08-13T17:55:00+07:00`
 - Baseline main SHA: `8d819d51a25009d2b99eea2dda0a9e158baa8439`
 - Observer follow-up baseline: `559c5f2ea955f839e502f5f8b9f527a4275649b3`
+- Undo-stack follow-up baseline: `68bbfc36f3ce1f178db8b716454c1435a9027fe5`
 - Priority: GitHub issue `#987` / `LOCAL-002 P11` production blocker reproduced on licensed BricsCAD V25
 
 ## Reserved scope
@@ -22,6 +24,7 @@ The implementation will use a native transaction-bound Curtain revision marker p
 - `src/QS3D.BricsCAD.V25/ProjectContextCoordinator.cs` only for exact cached-project identity and lifecycle cleanup
 - focused deterministic/static regression coverage under `scripts/`
 - matched native-command observer registration and stable command-boundary reconciliation inside `src/QS3D.BricsCAD.V25/CurtainWallUndoCoordinator.cs`
+- removal of the separately queued post-commit `QS3DVIEW3D` / native view-command chain from `QS3DCURTAIN3D`, so the Curtain generation revision remains the next `UNDO 1` target
 - `src/QS3D.Core/Persistence/ProjectPersistenceCheckpoint.cs` plus focused Core smoke registration, only for an exact, selected-element persistence stamp checkpoint that restores `ProjectState.ChangeVersion` / `UpdatedUtc` and selected-owner `Dirty` / `UpdatedUtc` without `Touch()` or public setter sequencing
 - `docs/CURTAIN-NATIVE-PANELS.md`, `docs/LOCAL-AGENT-INBOX.md`, and this claim for the corrected exact-SHA handoff
 
@@ -38,6 +41,7 @@ The implementation will use a native transaction-bound Curtain revision marker p
 - Add focused source/static coverage proving the Curtain marker is staged in the same outer native transaction only after semantic after-snapshot allocation, published history advances only after successful CAD commit, and command failure rollback remains unchanged.
 - Cover consecutive builds, semantic-only intervening work/rebase, known Undo/Redo marker transitions, unknown revision refusal, exact cached-project/document affinity, lifecycle cleanup, and unambiguous command-name filtering.
 - Cover matched active-document `CommandWillStart`/`CommandEnded` intent, cancellation/failure token cleanup, ambiguous/nested start refusal, and recovery of a missed terminal observation at the next stable command boundary before that command executes.
+- Prove `QS3DCURTAIN3D` does not enqueue a later `QS3DVIEW3D`, `VPOINT`, `ZOOM` or other native command after publishing its Curtain revision; retain palette/status/editor regeneration without adding a replacement native command.
 - Deterministically prove exact persistence checkpoint restore at `long.MaxValue` without overflow/`Touch()`, exact selected-owner `Dirty`/timestamp restoration, project/element affinity refusal before mutation, unrelated element preservation, and no audit mutation.
 - Run focused Curtain/Undo preflights, strict manual-CI policy, generic preflight, all discovered feature gates, Core smoke, and installed-reference V25 `Release|x64` compile without launching BricsCAD.
 - Request the existing guarded P11 runner be rerun by its local owner on the exact merged source SHA.
@@ -60,6 +64,10 @@ Concurrent claim `2026-08-13-1702-chatgpt-web-gpt56sol-curtain-undo-semantic-coh
 ## Exact-SHA observer follow-up
 
 The licensed rerun at `b48503307c28ae8abbc5e324e53c581915f51a23` still returned `native_undo / SEMANTIC_NATIVE_DIVERGENCE`, while native Redo, cold reopen, rebuild, source/sentinel preservation, ownership/count stability, Health and cleanup all passed. This disproves persistence-stamp restoration as the sole defect. The current Curtain coordinator observes only `CommandEnded`; unlike the corrected Source Reconcile precedent, it does not bind terminal handling to a matching active-document command start, clear ambiguous/aborted intent, or reconcile a known marker transition at the next stable command boundary when the terminal callback races or is missed. This continuation reserves that bounded observer correction and its static lifecycle model. It does not change the marker, snapshot scope, persistence checkpoint, native build transaction or local P11 automation.
+
+## Exact-SHA Undo-stack follow-up
+
+The next licensed rerun at `af910adb05f66f22198dd38c38397312723fa755` again returned the identical `native_undo / SEMANTIC_NATIVE_DIVERGENCE` verdict, with Redo/reopen/rebuild, 1/10/15 counts, ownership, source/sentinel preservation, Health and cleanup all passing. Audit of the unchanged runner and production command found a deterministic native-history collision: after committing the Curtain geometry/revision, `QS3DCURTAIN3D` calls `SendStringToExecute("QS3DVIEW3D ", ...)`; that command then queues native `VPOINT` and `ZOOM` commands. The runner's deliberate single `UNDO 1` can therefore target a post-commit view operation rather than the Curtain revision. The probe's aggregate Undo boolean cannot distinguish that no Curtain generation was undone from a one-sided semantic restore, and the coherent Redo/stable generated output is consistent with this ordering. This continuation reserves only removal of that automatic post-commit command queue from the Curtain build and a focused static ordering guard. Explicit user-invoked viewport commands and other commands' UX remain outside scope.
 
 ## Completion condition
 
