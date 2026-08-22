@@ -273,6 +273,9 @@ namespace QS3D.BricsCAD.V25
         private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
         private static bool IsRecoverableEntityFailure(Exception exception) =>
+            !(exception is InvalidOperationException) &&
+            !(exception is InvalidDataException) &&
+            !(exception is ArgumentException) &&
             !(exception is OutOfMemoryException) &&
             !(exception is StackOverflowException) &&
             !(exception is AccessViolationException);
