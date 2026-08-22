@@ -1,0 +1,102 @@
+<Window x:Class="QS3D.BricsCAD.V25.UI.RebarScheduleWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QS3D • Bảng thống kê cốt thép (BBS)"
+        Height="680" Width="1320" MinHeight="540" MinWidth="900"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource Bg0Brush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Background="{StaticResource Bg1Brush}" Padding="16,12" BorderThickness="0,0,0,1">
+            <Grid x:Name="RebarScheduleHeaderGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" MinWidth="0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="BẢNG THỐNG KÊ CỐT THÉP" FontWeight="Bold" FontSize="18"/>
+                        <Border Background="{StaticResource AccentSoftBrush}"
+                                BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1"
+                                CornerRadius="8" Padding="7,1" Margin="8,0,0,0">
+                            <TextBlock Text="BBS REVIEW" Foreground="{StaticResource LuxuryBrush}"
+                                       FontWeight="SemiBold" FontSize="9"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="Review bar mark • notation • cutting length • weight • fabrication provenance trước khi xuất"
+                               Foreground="{StaticResource MutedBrush}" Margin="0,4,8,0"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Right">
+                    <Button Content="Locate" Click="OnLocateClick" Style="{StaticResource DenseButton}"/>
+                    <Button Content="Xuất XLSX" Style="{StaticResource AccentButton}" Click="OnExportClick" Margin="7,0,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Style="{StaticResource Card}" Padding="0" Margin="12,10">
+            <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True"
+                      CanUserAddRows="False" MouseDoubleClick="OnGridDoubleClick"
+                      BorderThickness="0" SelectionMode="Single"
+                      HorizontalScrollBarVisibility="Auto">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Element" Binding="{Binding ElementId}" Width="135"/>
+                    <DataGridTextColumn Header="Mark" Binding="{Binding BarMark}" Width="100"/>
+                    <DataGridTextColumn Header="Shape" Binding="{Binding ShapeCode}" Width="70"/>
+                    <DataGridTextColumn Header="Notation" Binding="{Binding Notation}" Width="95"/>
+                    <DataGridTextColumn Header="Ø (mm)" Binding="{Binding DiameterMm, StringFormat=0.#}" Width="70"/>
+                    <DataGridTextColumn Header="SL" Binding="{Binding Quantity}" Width="55"/>
+                    <DataGridTextColumn Header="L cắt (m)" Binding="{Binding CuttingLengthM, StringFormat=0.###}" Width="85"/>
+                    <DataGridTextColumn Header="ΣL (m)" Binding="{Binding TotalLengthM, StringFormat=0.###}" Width="85"/>
+                    <DataGridTextColumn Header="kg/m" Binding="{Binding UnitWeightKgM, StringFormat=0.###}" Width="75"/>
+                    <DataGridTextColumn Header="Net kg" Binding="{Binding NetWeightKg, StringFormat=0.###}" Width="80"/>
+                    <DataGridTextColumn Header="Waste %" Binding="{Binding WastePercent, StringFormat=0.##}" Width="75"/>
+                    <DataGridTextColumn Header="Σ kg" Binding="{Binding TotalWeightKg, StringFormat=0.###}" Width="90"/>
+                    <DataGridTextColumn Header="Fabrication" Binding="{Binding FabricationStatus}" Width="115"/>
+                    <DataGridTextColumn Header="Standard" Binding="{Binding FabricationStandardCode}" Width="110"/>
+                    <DataGridTextColumn Header="Detailing Rev." Binding="{Binding FabricationDetailingRevision}" Width="115"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+
+        <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="11,7" BorderThickness="0,1,0,0">
+            <Grid x:Name="RebarScheduleStatusGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0"
+                        Background="{StaticResource SuccessBrush}" CornerRadius="5"
+                        Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                <TextBlock x:Name="Totals"
+                           Grid.Column="1"
+                           FontWeight="SemiBold"
+                           MinWidth="0"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="2"
+                           Text="PROVENANCE ≠ CODE COMPLIANCE • DOUBLE-CLICK TO LOCATE • EXPORT XLSX"
+                           Style="{StaticResource Caption}"
+                           Margin="12,0,0,0"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
