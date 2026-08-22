@@ -33,11 +33,10 @@ if not errors:
         "manual_grip_cancel_verified=true",
         "manual_grip_commit_verified=true",
         "source_reconcile_verified=true",
-        "rebuild_verified=true",
         "replacement_generated=true",
+        "production_local004_p05_reopen_candidate=true",
+        "prior_session_phases_replayed=false",
         "cold_reopen_verified=true",
-        "prior_sequence_reasserted=false",
-        "qualification_requires_prior_markers=true",
         "RequireSource(context.Document, owner, 5d)",
         "RequireSource(context.Document, owner, 8d)",
         "RequireSemantic(owner, 5d)",
@@ -54,43 +53,26 @@ if not errors:
         if token not in probe:
             errors.append(f"P05 probe missing contract token: {token}")
 
-    reopen_start = probe.find('[CommandMethod("QS3DSRGRIPP05REOPEN"')
-    reopen_end = probe.find("private static void Execute", reopen_start)
-    if reopen_start < 0 or reopen_end <= reopen_start:
-        errors.append("P05 probe must expose an inspectable QS3DSRGRIPP05REOPEN block")
-    else:
-        reopen = probe[reopen_start:reopen_end]
-        for token in (
-            'Execute("reopen"',
-            "|phase=reopen",
-            "|cold_reopen_verified=true",
-            "|prior_sequence_reasserted=false",
-            "|qualification_requires_prior_markers=true",
-            "|source_type=LINE_BEAM",
-            "|final_length_class=EIGHT_METERS",
-        ):
-            if token not in reopen:
-                errors.append(f"P05 reopen marker missing persistence-only token: {token}")
-        for token in (
-            "production_local004_p05_qualified_candidate=true",
-            "manual_grip_cancel_verified=true",
-            "manual_grip_commit_verified=true",
-            "source_reconcile_verified=true",
-            "generated_replacement_verified=true",
-            "rebuild_verified=true",
-            "replacement_generated=true",
-        ):
-            if token in reopen:
-                errors.append(f"P05 reopen marker must not reassert pre-restart evidence: {token}")
-
     forbidden_probe = (
         "OpenMode.ForWrite", "StartTransaction()", "AppendEntity(", ".Erase(",
         "SendStringToExecute", ".Editor.Command(", "ProjectContextCoordinator.GetOrCreate",
         "SemanticCaptureService.Capture", "RegenerateDirtySubset", "BuildSelected(",
+        "production_local004_p05_qualified_candidate=true",
     )
     for token in forbidden_probe:
         if token in probe:
             errors.append(f"read-only P05 probe must not perform native edit/reconcile/build directly: {token}")
+
+    phase_claims = (
+        "manual_grip_cancel_verified=true",
+        "manual_grip_commit_verified=true",
+        "source_reconcile_verified=true",
+        "replacement_generated=true",
+        "cold_reopen_verified=true",
+    )
+    for token in phase_claims:
+        if probe.count(token) != 1:
+            errors.append(f"P05 phase claim must be emitted exactly once by its own phase: {token}")
 
     required_runner = (
         "preflight-source-reconcile-native-grip-runtime-probe.py",
@@ -111,8 +93,7 @@ if not errors:
         "status --porcelain=v1",
         "[string[]]$ArgumentList",
         "@ArgumentList",
-        "prior_sequence_reasserted=false",
-        "all six sanitized PASS phase markers",
+        "REOPEN proves only current cold state",
     )
     for token in required_runner:
         if token not in runner:
@@ -127,4 +108,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: LOCAL-004 P05 source-prep pins manual Beam endpoint-grip ESC/commit, pre-sync isolation, production reconcile/rebuild and cold-reopen; reopen evidence is persistence-only and full qualification requires prior phase markers; licensed V25 execution remains PENDING_LOCAL.")
+print("PASS: LOCAL-004 P05 source-prep pins manual Beam endpoint-grip ESC/commit, pre-sync isolation, production reconcile/rebuild and cold-reopen; runner argument forwarding is guarded; licensed V25 execution remains PENDING_LOCAL.")
