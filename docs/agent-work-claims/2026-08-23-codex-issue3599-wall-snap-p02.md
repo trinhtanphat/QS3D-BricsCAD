@@ -12,6 +12,8 @@ Lane-Key: `issue-3599`
 
 Qualification branch: `agent/codex/issue3599-v25-wall-snap-p02`
 
+Sanitized evidence PR: #3602
+
 Exact runtime baseline: `b6cd726ef76c5fc0c9c044d5823b341004c912cd`
 
 ## Boundary
