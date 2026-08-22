@@ -205,17 +205,26 @@ namespace QS3D.Core.SmokeTests
             Contains(workbook, "name=\"COP_PHA\"", "COP_PHA sheet is missing.");
             Contains(workbook, "name=\"CHI_TIET\"", "CHI_TIET sheet is missing.");
             Contains(workbook, "name=\"TRACE_MODEL\"", "TRACE_MODEL sheet is missing.");
+            Contains(workbook, "name=\"TRACE_MODEL\" sheetId=\"4\" state=\"hidden\"", "TRACE_MODEL must remain hidden from ordinary QS users.");
 
-            var detailXml = Read(archive, "xl/worksheets/sheet3.xml");
-            Contains(detailXml, "dimension ref=\"A1:W9\"", "CHI_TIET must contain exactly eight P0 acceptance rows.");
+            var dgklXml = Read(archive, "xl/worksheets/sheet1.xml");
+            Contains(dgklXml, "dimension ref=\"A1:M9\"", "DGKL must contain exactly eight P0 acceptance rows plus the hidden TRACE_KEY column.");
             foreach (var row in details)
             {
-                Contains(detailXml, ">" + row.Category + "<", "CHI_TIET lost category " + row.Category + ".");
-                Contains(detailXml, ">" + row.FamilyId + "<", "CHI_TIET lost Family ID " + row.FamilyId + ".");
+                Contains(dgklXml, ">" + row.Category + "<", "DGKL lost category " + row.Category + ".");
+                Contains(dgklXml, ">" + row.ElementName + "<", "DGKL lost element name " + row.ElementName + ".");
             }
 
-            Contains(detailXml, "r=\"L3\"", "Beam length evidence must be exported as a numeric cell.");
-            NotContains(detailXml, "r=\"L8\"", "Door length is not applicable and must stay blank instead of exporting a zero cell.");
+            var detailXml = Read(archive, "xl/worksheets/sheet3.xml");
+            Contains(detailXml, "dimension ref=\"A1:L9\"", "CHI_TIET must contain exactly eight P0 acceptance rows plus the hidden TRACE_KEY column.");
+            foreach (var row in details)
+            {
+                Contains(detailXml, ">" + row.FamilyName + "<", "CHI_TIET lost family/group name " + row.FamilyName + ".");
+                Contains(detailXml, ">" + row.ElementName + "<", "CHI_TIET lost element name " + row.ElementName + ".");
+            }
+
+            Contains(detailXml, "r=\"E3\"", "Beam length evidence must be exported as a numeric cell.");
+            NotContains(detailXml, "r=\"E8\"", "Door length is not applicable and must stay blank instead of exporting a zero cell.");
             NotContains(detailXml, "r=\"H8\"", "Door concrete volume is not applicable and must stay blank instead of exporting a zero cell.");
 
             var traceXml = Read(archive, "xl/worksheets/sheet4.xml");
