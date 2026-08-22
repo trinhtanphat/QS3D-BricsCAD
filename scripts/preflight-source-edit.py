@@ -40,7 +40,7 @@ checks = {
         '`QS3DSYNCSOURCE`',
         'LOCAL_ONLY',
         'STRETCH',
-        'không',
+        'does not silently rebuild destructive downstream native output',
     ],
 }
 
