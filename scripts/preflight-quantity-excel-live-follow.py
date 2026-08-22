@@ -43,7 +43,8 @@ def main():
 
     require(xaml, 'Content="Dòng Excel đang chọn" Click="OnExcelActiveRowClick"', "active Excel row action", failures)
     require(xaml, 'x:Name="ExcelFollowCheck" Content="Bám Excel"', "live-follow opt-in", failures)
-    require(xaml, 'Checked="OnExcelFollowChecked" Unchecked="OnExcelFollowUnchecked"', "live-follow lifecycle events", failures)
+    require(xaml, 'Checked="OnExcelFollowChecked"', "live-follow checked lifecycle event", failures)
+    require(xaml, 'Unchecked="OnExcelFollowUnchecked"', "live-follow unchecked lifecycle event", failures)
 
     require(active, 'CLSIDFromProgID(ExcelProgId', "Excel CLSID lookup without starting Excel", failures)
     require(active, 'GetActiveObject(ref excelClassId', "running-object-table lookup", failures)
