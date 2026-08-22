@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+PATH = ROOT / "src" / "QS3D.BricsCAD.V25" / "RuntimeDiagnosticsCommands.cs"
+
+errors = []
+
+if not PATH.is_file():
+    errors.append("missing RuntimeDiagnosticsCommands.cs")
+else:
+    text = PATH.read_text(encoding="utf-8")
+    if '[CommandMethod("QS3DRUNTIMECHECK", CommandFlags.Modal)]' not in text:
+        errors.append("QS3DRUNTIMECHECK command registration is missing.")
+    if "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" not in text:
+        errors.append("QS3DRUNTIMECHECK must resolve project state read-only when available.")
+    if "ProjectContextCoordinator.GetOrCreate(document)" in text:
+        errors.append("QS3DRUNTIMECHECK must not create/cache project state merely to inspect runtime/package metadata.")
+    if "runtime diagnostics remain read-only and do not create project state" not in text:
+        errors.append("QS3DRUNTIMECHECK must explain its no-project read-only behavior.")
+    if "var ok = v25Runtime && x64Runtime && packageVersionMatches;" not in text:
+        errors.append("Runtime qualification must remain independent of semantic-project presence.")
+
+if errors:
+    for error in errors:
+        print("ERROR:", error)
+    print("FAILED with %d error(s)." % len(errors))
+    sys.exit(1)
+
+print("PASS: QS3DRUNTIMECHECK inspects runtime/package state without creating a semantic project.")
