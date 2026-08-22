@@ -1,0 +1,25 @@
+# Agent work claim — Shape Rebar 3D read-only target resolve
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-12 (UTC+7)
+- Status: `COMPLETED`
+- Scope: make `QS3DREBAR3DSHAPE` resolve selected semantic elements with non-empty `RebarNotation` from read-only project state before canonical mutation binding, then revalidate project/target freshness before the unchanged native builder; reconcile the existing Shape atomicity gate with the builder's current AuditTrail-owned revision contract.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/ShapeRebarGeometryCommands.cs`
+  - `scripts/preflight-shape-rebar-atomicity.py`
+  - `scripts/preflight-shape-rebar-single-bind.py`
+  - this claim file
+- Implemented contract:
+  - `CadSelectionGuard.AcquireCurrentSelection` interactive/PICKFIRST handoff and implied-selection behavior are preserved;
+  - selected source handles resolve builder-eligible semantic elements (`SourceHandles` match + non-empty `RebarNotation`) against `TryGetReadOnly` before mutation binding;
+  - missing project or zero eligible targets returns without `ExistingProjectMutationContext.Require`;
+  - preview `ProjectId` + `ChangeVersion` + target IDs are frozen;
+  - canonical project is bound exactly once, project/version and target-set drift fail closed, then unchanged `ShapeRebarSolidBuilder.BuildSelected` owns BBS/native geometry/transaction behavior;
+  - builder ownership, BBS schedule, native transaction/rollback/audit and post-commit UI behavior are unchanged;
+  - stale `preflight-shape-rebar-atomicity.py` no longer requires the removed standalone batch `project.Touch()` and now locks per-element `geometry.rebar.shape` AuditTrail-owned revision without weakening native ownership/transaction/rollback checks.
+- Source commit: `c12d9ed44efc2e4544c30487a3c38aa41caf575d` — `fix(rebar): resolve shape targets before bind`.
+- Atomicity gate reconciliation: `608f152009728dc9fceed5514da3584eaeb2e642` — `test(rebar): align shape atomicity revision owner`.
+- Focused regression guard: `db25bdba4f2565473137722ff5c4f79c869def53` — `scripts/preflight-shape-rebar-single-bind.py`.
+- Validation actually performed: connector-side wrapper/builder source review, existing atomicity gate reconciliation review and focused guard source review. Preflight scripts were not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed.
+- Reservation released.

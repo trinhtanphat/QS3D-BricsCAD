@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+FLOOR = ROOT / "src" / "QS3D.Core" / "Domain" / "ProjectFloorService.cs"
+ZONE = ROOT / "src" / "QS3D.Core" / "Domain" / "ProjectZoneService.cs"
+PROJECT_STATE = ROOT / "src" / "QS3D.Core" / "Domain" / "ProjectState.cs"
+SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "ProjectFloorZoneMutationIntegritySmoke.cs"
+REGISTRATION = ROOT / "tests" / "QS3D.Core.SmokeTests" / "ProjectFloorZoneMutationIntegritySmokeRegistration.cs"
+
+
+def require(text, tokens, label, missing):
+    missing.extend(label + ": " + token for token in tokens if token not in text)
+
+
+def method_slice(text, start_token, end_token):
+    start = text.find(start_token)
+    if start < 0:
+        return ""
+    end = text.find(end_token, start)
+    return text[start:] if end < 0 else text[start:end]
+
+
+def require_create_revision_contract(text, label, active_property, item_name, collection_name, start_token, end_token, missing):
+    create = method_slice(text, start_token, end_token)
+    if not create:
+        missing.append(label + ": cannot isolate Create method")
+        return
+
+    activate = "var activate = string.IsNullOrWhiteSpace(project." + active_property + ");"
+    active_assign = "if (activate) project." + active_property + " = " + item_name + ".Id;"
+    touch = "else project.Touch();"
+    add = "project." + collection_name + ".Add(" + item_name + ");"
+    require(create, [activate, active_assign, touch, add], label + " create", missing)
+
+    positions = [create.find(activate), create.find(active_assign), create.find(touch), create.find(add)]
+    if all(position >= 0 for position in positions) and positions != sorted(positions):
+        missing.append(label + ": Create revision owner must be selected before collection insertion")
+
+    if create.count("project.Touch();") != 1:
+        missing.append(label + ": Create must contain exactly one Touch in the non-activation branch")
+    if "project.Touch();\n            if (activate)" in create or "project.Touch();\n            project." + active_property in create:
+        missing.append(label + ": Create must not Touch before assigning the first active id")
+
+
+def main():
+    floor = FLOOR.read_text(encoding="utf-8")
+    zone = ZONE.read_text(encoding="utf-8")
+    project_state = PROJECT_STATE.read_text(encoding="utf-8")
+    smoke = SMOKE.read_text(encoding="utf-8")
+    registration = REGISTRATION.read_text(encoding="utf-8")
+
+    missing = []
+    require(floor, [
+        'string.Equals((project.ActiveFloorId ?? string.Empty).Trim(), floor.Id, StringComparison.OrdinalIgnoreCase)',
+        'targets.Where(x => !string.Equals((x.FloorId ?? string.Empty).Trim(), floor.Id, StringComparison.OrdinalIgnoreCase))',
+        'throw new InvalidOperationException("Floor mutation target collection contains a null element.");',
+    ], "floor", missing)
+    require(zone, [
+        'string.Equals((project.ActiveZoneId ?? string.Empty).Trim(), zone.Id, StringComparison.OrdinalIgnoreCase)',
+        '.Where(x => !string.Equals((x.ZoneId ?? string.Empty).Trim(), zone.Id, StringComparison.OrdinalIgnoreCase))',
+        'throw new InvalidOperationException("Zone assignment target collection contains a null element.");',
+    ], "zone", missing)
+    require(project_state, [
+        'set => SetPersistedScalar(ref _activeFloorId, value);',
+        'set => SetPersistedScalar(ref _activeZoneId, value);',
+        'var nextChangeVersion = checked(ChangeVersion + 1L);',
+    ], "project state", missing)
+    require(smoke, [
+        'FloorActiveAliasIsCanonicalRepair();',
+        'ZoneActiveAliasIsCanonicalRepair();',
+        'FloorAssignmentCanonicalIdentityIsNoOp();',
+        'ZoneAssignmentCanonicalIdentityIsNoOp();',
+        'FloorNullTargetFailsAtomically();',
+        'ZoneNullTargetFailsAtomically();',
+        'Equal(beforeVersion + 1L, project.ChangeVersion);',
+        'Equal(floor.Id, project.ActiveFloorId);',
+        'Equal(zone.Id, project.ActiveZoneId);',
+        'Equal(beforeVersion, project.ChangeVersion);',
+        'Equal(beforeUpdatedUtc, element.UpdatedUtc);',
+        'new ProjectElement[] { element, null! }',
+    ], "smoke", missing)
+    require(registration, [
+        '[ModuleInitializer]',
+        'ProjectFloorZoneMutationIntegritySmoke.Run();',
+    ], "registration", missing)
+
+    require_create_revision_contract(
+        floor,
+        "floor",
+        "ActiveFloorId",
+        "floor",
+        "Floors",
+        'public static FloorDefinition Create(ProjectState project, string id, string name, double elevationM)',
+        'public static FloorDefinition Update(ProjectState project, string id, string name, double elevationM)',
+        missing)
+    require_create_revision_contract(
+        zone,
+        "zone",
+        "ActiveZoneId",
+        "zone",
+        "Zones",
+        'public static ZoneDefinition Create(ProjectState project, string id, string name)',
+        'public static ZoneDefinition Update(ProjectState project, string id, string name)',
+        missing)
+
+    if missing:
+        print("ERROR: Floor/Zone mutation-integrity contract is incomplete:")
+        for token in missing:
+            print(" -", token)
+        return 1
+
+    floor_active = method_slice(
+        floor,
+        'public static void SetActive(ProjectState project, string floorId)',
+        'public static int Assign(ProjectState project, string floorId')
+    floor_assign = method_slice(
+        floor,
+        'public static int Assign(ProjectState project, string floorId',
+        'public static int AssignBottomLevel')
+    floor_resolver = method_slice(
+        floor,
+        'private static IReadOnlyList<ProjectElement> ResolveOwnedElements',
+        'private static IReadOnlyList<ProjectElement> ResolveProjectElements')
+    zone_active = method_slice(
+        zone,
+        'public static void SetActive(ProjectState project, string zoneId)',
+        'public static int Assign(ProjectState project, string zoneId')
+    zone_assign = method_slice(
+        zone,
+        'public static int Assign(ProjectState project, string zoneId',
+        'public static bool Delete')
+
+    unsafe = [
+        ("floor SetActive", floor_active, 'string.Equals(project.ActiveFloorId, floor.Id, StringComparison.OrdinalIgnoreCase)'),
+        ("floor Assign", floor_assign, 'string.Equals(x.FloorId, floor.Id, StringComparison.OrdinalIgnoreCase)'),
+        ("zone SetActive", zone_active, 'string.Equals(project.ActiveZoneId, zone.Id, StringComparison.OrdinalIgnoreCase)'),
+        ("zone Assign", zone_assign, 'string.Equals(x.ZoneId, zone.Id, StringComparison.OrdinalIgnoreCase)'),
+        ("floor target validation", floor_resolver, 'if (element == null) continue;'),
+        ("zone target validation", zone_assign, 'if (element == null) continue;'),
+    ]
+    for label, text, token in unsafe:
+        if token in text:
+            print("ERROR: unsafe " + label + " behavior returned: " + token)
+            return 1
+
+    floor_resolve_call = floor_assign.find('var targets = ResolveOwnedElements(project, elements);')
+    floor_touch = floor_assign.find('project.Touch();')
+    floor_null_guard = floor_resolver.find('if (element == null)')
+    floor_ownership_guard = floor_resolver.find('if (!projectElements.TryGetValue(element.Id')
+    if floor_resolve_call < 0 or floor_touch < 0 or floor_resolve_call > floor_touch:
+        print("ERROR: Floor target resolution must complete before mutation.")
+        return 1
+    if floor_null_guard < 0 or floor_ownership_guard < 0 or floor_null_guard > floor_ownership_guard:
+        print("ERROR: Floor null-target guard must run before ownership dereference.")
+        return 1
+
+    zone_null_guard = zone_assign.find('if (element == null)')
+    zone_touch = zone_assign.find('project.Touch();')
+    if zone_null_guard < 0 or zone_touch < 0 or zone_null_guard > zone_touch:
+        print("ERROR: Zone null-target validation must complete before mutation.")
+        return 1
+
+    print("PASS: Floor/Zone first create and subsequent create each have exactly one revision owner; active aliases are repaired canonically once, canonical activation/assignment remain no-ops, and null-containing target batches fail closed before mutation.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
