@@ -1,0 +1,139 @@
+<Window x:Class="QS3D.BricsCAD.V25.UI.ReferenceSearchWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QS3D • Tham khảo thi công"
+        Width="940" Height="610"
+        MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterOwner">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="SearchCategoryButton" TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                <Setter Property="Padding" Value="13,7"/>
+                <Setter Property="Margin" Value="0,0,8,8"/>
+                <Setter Property="MinWidth" Value="108"/>
+                <Setter Property="MinHeight" Value="34"/>
+            </Style>
+            <Style x:Key="QuickQueryButton" TargetType="Button" BasedOn="{StaticResource DenseButton}">
+                <Setter Property="Padding" Value="10,5"/>
+                <Setter Property="Margin" Value="0,0,8,8"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource Bg0Brush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{StaticResource Bg1Brush}" Padding="18,14" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="THAM KHẢO THI CÔNG" FontSize="18" FontWeight="Bold"/>
+                        <Border Background="{StaticResource AccentSoftBrush}"
+                                BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1"
+                                CornerRadius="8" Padding="7,1" Margin="8,0,0,0">
+                            <TextBlock Text="SAFE WEB LAUNCHER" Foreground="{StaticResource LuxuryBrush}"
+                                       FontWeight="SemiBold" FontSize="9"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="Tra cứu ảnh • web • video • mua sắm • video ngắn • tin tức bằng trình duyệt mặc định"
+                               Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="Không scrape / không API key"
+                           Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="16,0,0,0"/>
+            </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="18">
+                <Border Style="{StaticResource Card}" Padding="14">
+                    <StackPanel>
+                        <TextBlock Text="TỪ KHÓA" Style="{StaticResource PanelTitle}"/>
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="QueryBox"
+                                     Text="Ván khuôn móng"
+                                     FontSize="15"
+                                     MinHeight="38"
+                                     VerticalContentAlignment="Center"
+                                     KeyDown="OnQueryKeyDown"
+                                     ToolTip="Nhập nội dung cần tham khảo. Enter mở Hình ảnh."/>
+                            <Button Grid.Column="1" Content="Tìm Hình ảnh"
+                                    Tag="images"
+                                    Click="OnSearchClick"
+                                    Style="{StaticResource AccentButton}"
+                                    MinWidth="135" Margin="10,0,0,0"/>
+                        </Grid>
+
+                        <CheckBox x:Name="TechnicalContextCheck"
+                                  Content="Ưu tiên ngữ cảnh kỹ thuật xây dựng / chi tiết thi công"
+                                  IsChecked="False" Margin="0,10,0,0"
+                                  ToolTip="Khi bật, QS3D thêm cụm kỹ thuật xây dựng vào từ khóa trước khi mở kết quả."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Padding="14" Margin="0,12,0,0">
+                    <StackPanel>
+                        <TextBlock Text="LOẠI KẾT QUẢ" Style="{StaticResource PanelTitle}"/>
+                        <WrapPanel Margin="0,9,0,0">
+                            <Button Content="Hình ảnh" Tag="images" Click="OnSearchClick" Style="{StaticResource SearchCategoryButton}"/>
+                            <Button Content="Web" Tag="web" Click="OnSearchClick" Style="{StaticResource SearchCategoryButton}"/>
+                            <Button Content="Video" Tag="video" Click="OnSearchClick" Style="{StaticResource SearchCategoryButton}"/>
+                            <Button Content="Mua sắm" Tag="shopping" Click="OnSearchClick" Style="{StaticResource SearchCategoryButton}"/>
+                            <Button Content="Video ngắn" Tag="shorts" Click="OnSearchClick" Style="{StaticResource SearchCategoryButton}"/>
+                            <Button Content="Tin tức" Tag="news" Click="OnSearchClick" Style="{StaticResource SearchCategoryButton}"/>
+                        </WrapPanel>
+                        <TextBlock Text="QS3D chỉ tạo URL HTTPS cố định, mã hóa từ khóa và mở trình duyệt hệ thống. Không tải/scrape HTML kết quả vào plugin."
+                                   Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Padding="14" Margin="0,12,0,0">
+                    <StackPanel>
+                        <TextBlock Text="TỪ KHÓA NHANH" Style="{StaticResource PanelTitle}"/>
+                        <WrapPanel Margin="0,9,0,0">
+                            <Button Content="Ván khuôn móng" Tag="Ván khuôn móng" Click="OnQuickQueryClick" Style="{StaticResource QuickQueryButton}"/>
+                            <Button Content="Cốt thép móng" Tag="Cốt thép móng" Click="OnQuickQueryClick" Style="{StaticResource QuickQueryButton}"/>
+                            <Button Content="Chi tiết dầm" Tag="Chi tiết dầm" Click="OnQuickQueryClick" Style="{StaticResource QuickQueryButton}"/>
+                            <Button Content="Chi tiết sàn" Tag="Chi tiết sàn" Click="OnQuickQueryClick" Style="{StaticResource QuickQueryButton}"/>
+                            <Button Content="Cấu tạo tường" Tag="Cấu tạo tường" Click="OnQuickQueryClick" Style="{StaticResource QuickQueryButton}"/>
+                            <Button Content="Mặt cắt móng" Tag="Mặt cắt móng" Click="OnQuickQueryClick" Style="{StaticResource QuickQueryButton}"/>
+                        </WrapPanel>
+                        <TextBlock Text="Chọn từ khóa nhanh chỉ điền ô tìm kiếm; bạn vẫn quyết định loại kết quả trước khi mở trình duyệt."
+                                   Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{StaticResource Bg1Brush}" BorderBrush="{StaticResource BorderStrongBrush}"
+                        BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,12,0,0">
+                    <TextBlock Text="Mẹo: dùng từ khóa chuyên ngành cụ thể, ví dụ “ván khuôn móng băng”, “chi tiết cốt thép móng đơn”, “wall formwork construction detail”. Kết quả thuộc website bên ngoài và được mở trong trình duyệt mặc định của máy."
+                               Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="11,7" BorderThickness="0,1,0,0">
+            <DockPanel>
+                <Border Background="{StaticResource SuccessBrush}" CornerRadius="5"
+                        Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                <TextBlock x:Name="StatusText" Text="Sẵn sàng • Enter = Hình ảnh"
+                           Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+                <TextBlock DockPanel.Dock="Right" Text="DOCUMENT-BOUND • HTTPS • SAFESEARCH"
+                           Style="{StaticResource Caption}" Margin="12,0,0,0"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>
