@@ -18,6 +18,7 @@ public sealed class QuantityEvidenceSelector
         QuantityEvidenceSelectorKind kind,
         string? entityKey,
         int? faceIndex,
+        string? faceKey,
         string? sourceEntityKey,
         string? targetEntityKey,
         string? intersectionKey)
@@ -25,6 +26,7 @@ public sealed class QuantityEvidenceSelector
         Kind = kind;
         EntityKey = entityKey;
         FaceIndex = faceIndex;
+        FaceKey = faceKey;
         SourceEntityKey = sourceEntityKey;
         TargetEntityKey = targetEntityKey;
         IntersectionKey = intersectionKey;
@@ -34,6 +36,7 @@ public sealed class QuantityEvidenceSelector
     public QuantityEvidenceSelectorKind Kind { get; }
     public string? EntityKey { get; }
     public int? FaceIndex { get; }
+    public string? FaceKey { get; }
     public string? SourceEntityKey { get; }
     public string? TargetEntityKey { get; }
     public string? IntersectionKey { get; }
@@ -44,6 +47,7 @@ public sealed class QuantityEvidenceSelector
         return new QuantityEvidenceSelector(
             QuantityEvidenceSelectorKind.Entity,
             QuantityEvidenceIdentity.RequireKey(entityKey, nameof(entityKey)),
+            null,
             null,
             null,
             null,
@@ -63,6 +67,24 @@ public sealed class QuantityEvidenceSelector
             faceIndex,
             null,
             null,
+            null,
+            null);
+    }
+
+    /// <summary>
+    /// Selects a stable host-neutral face identifier such as
+    /// SOLID-01/FACE-03 without reducing it to a transient numeric index.
+    /// Existing numeric face selector canonical keys remain unchanged.
+    /// </summary>
+    public static QuantityEvidenceSelector ForFaceKey(string entityKey, string faceKey)
+    {
+        return new QuantityEvidenceSelector(
+            QuantityEvidenceSelectorKind.Face,
+            QuantityEvidenceIdentity.RequireKey(entityKey, nameof(entityKey)),
+            null,
+            QuantityEvidenceIdentity.RequireKey(faceKey, nameof(faceKey)),
+            null,
+            null,
             null);
     }
 
@@ -75,6 +97,7 @@ public sealed class QuantityEvidenceSelector
             QuantityEvidenceSelectorKind.Intersection,
             null,
             null,
+            null,
             QuantityEvidenceIdentity.RequireKey(sourceEntityKey, nameof(sourceEntityKey)),
             QuantityEvidenceIdentity.RequireKey(targetEntityKey, nameof(targetEntityKey)),
             QuantityEvidenceIdentity.RequireKey(intersectionKey, nameof(intersectionKey)));
@@ -85,10 +108,15 @@ public sealed class QuantityEvidenceSelector
         return Kind switch
         {
             QuantityEvidenceSelectorKind.Entity => QuantityEvidenceIdentity.Join("entity", EntityKey!),
-            QuantityEvidenceSelectorKind.Face => QuantityEvidenceIdentity.Join(
+            QuantityEvidenceSelectorKind.Face when FaceIndex.HasValue => QuantityEvidenceIdentity.Join(
                 "face",
                 EntityKey!,
-                FaceIndex!.Value.ToString(CultureInfo.InvariantCulture)),
+                FaceIndex.Value.ToString(CultureInfo.InvariantCulture)),
+            QuantityEvidenceSelectorKind.Face when !string.IsNullOrWhiteSpace(FaceKey) => QuantityEvidenceIdentity.Join(
+                "face-key",
+                EntityKey!,
+                FaceKey!),
+            QuantityEvidenceSelectorKind.Face => throw new InvalidOperationException("Face selector requires a face index or stable face key."),
             QuantityEvidenceSelectorKind.Intersection => QuantityEvidenceIdentity.Join(
                 "intersection",
                 SourceEntityKey!,

@@ -12,7 +12,7 @@ def main():
         "private static IReadOnlyList<QuantityReportRow> BuildPreviewRows(ProjectState project, out int regenerated)",
         "var previewProject = ProjectStateSnapshot.CreateDetachedCopy(project);",
         "regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(previewProject);",
-        "return ProjectQuantityReportBuilder.Group(previewProject);",
+        "return ProjectQuantityReportBuilder.Detail(previewProject);",
         "var rows = BuildPreviewRows(project, out var regenerated);",
         "var currentRows = BuildPreviewRows(project, out _);",
         "preview-regenerate ",
@@ -28,11 +28,11 @@ def main():
     helper_pos = text.find("private static IReadOnlyList<QuantityReportRow> BuildPreviewRows")
     copy_pos = text.find("ProjectStateSnapshot.CreateDetachedCopy(project)", helper_pos)
     regen_pos = text.find("RegenerateDirty(previewProject)", copy_pos)
-    group_pos = text.find("ProjectQuantityReportBuilder.Group(previewProject)", regen_pos)
-    if min(helper_pos, copy_pos, regen_pos, group_pos) < 0 or not (
-        helper_pos < copy_pos < regen_pos < group_pos
+    detail_pos = text.find("ProjectQuantityReportBuilder.Detail(previewProject)", regen_pos)
+    if min(helper_pos, copy_pos, regen_pos, detail_pos) < 0 or not (
+        helper_pos < copy_pos < regen_pos < detail_pos
     ):
-        print("ERROR: preview rows must be built in detached-copy -> regenerate -> grouped-report order.")
+        print("ERROR: preview rows must be built in detached-copy -> regenerate -> element-detail-report order.")
         return 1
 
     refresh_pos = text.find("public void RefreshQuantityInsights()")
@@ -59,15 +59,16 @@ def main():
         "ExistingProjectMutationContext.Require",
         "RegenerateDirty(project)",
         "ProjectQuantityReportBuilder.Group(project)",
+        "ProjectQuantityReportBuilder.Detail(project)",
     ]
     found = [token for token in forbidden if token in text]
     if found:
-        print("ERROR: Quantity Insight preview must not create/mutate or regenerate/group the live canonical project directly:")
+        print("ERROR: Quantity Insight preview must not create/mutate or regenerate/materialize the live canonical project directly:")
         for token in found:
             print(" - forbidden:", token)
         return 1
 
-    print("PASS: Quantity Insight totals/tree and stale-row revalidation use detached regenerated project snapshots without mutating the live project.")
+    print("PASS: Quantity Insight totals/tree and stale-row revalidation use detached regenerated element-detail project snapshots without mutating the live project.")
     return 0
 
 
