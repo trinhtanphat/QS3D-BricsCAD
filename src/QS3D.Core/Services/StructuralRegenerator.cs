@@ -146,8 +146,6 @@ namespace QS3D.Core.Services
             }
             else
             {
-                // Level-enabled Foundation uses the native ThicknessM contract. Bottom+Top does
-                // not inspect it; Bottom-only uses it with the same 0.5 m fallback as the builder.
                 thickness = SemanticVertical.Height(project, element, "ThicknessM", .5d);
             }
             var perimeter = QuantityMath.Positive(SemanticNumber.Get(element, "PerimeterM"));
@@ -268,13 +266,21 @@ namespace QS3D.Core.Services
 
                 var doubleHeight = QuantityMath.Multiply(2d, height, child.Id + "/opening reveal jamb length");
                 var revealLength = QuantityMath.Add(doubleHeight, width, child.Id + "/opening reveal jamb-and-head length");
-                var sillHeight = QuantityMath.Positive(SemanticNumber.Get(child, "SillHeightM"));
-                if (sillHeight > 0d)
+                if (HasBottomReveal(child))
                     revealLength = QuantityMath.Add(revealLength, width, child.Id + "/opening reveal perimeter");
                 var childRevealFormwork = QuantityMath.Multiply(revealLength, wallThickness, child.Id + "/opening reveal formwork");
                 revealFormwork = QuantityMath.Add(revealFormwork, childRevealFormwork, wall.Id + "/linked opening reveal formwork");
             }
             return total;
+        }
+
+        private static bool HasBottomReveal(ProjectElement opening)
+        {
+            if (opening.Properties.ContainsKey("SillOffsetMm"))
+                return QuantityMath.Positive(SemanticNumber.Get(opening, "SillOffsetMm")) > 0d;
+            if (opening.Properties.ContainsKey("SillHeightM"))
+                return QuantityMath.Positive(SemanticNumber.Get(opening, "SillHeightM")) > 0d;
+            return false;
         }
 
         private static string CanonicalOptionalHostId(string? value, string elementId)
