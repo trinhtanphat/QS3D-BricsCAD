@@ -1,0 +1,77 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Windows.Input;
+using Bricscad.ApplicationServices;
+namespace QS3D.BricsCAD.V25.Ribbon
+{
+    internal static class RibbonBootstrapper
+    {
+        private const string AssemblyName = "BrxMgd"; private static bool _initialized;
+        private sealed class RibbonButtonSpec { public RibbonButtonSpec(string text, string command) { Text = text; Command = command; } public string Text { get; } public string Command { get; } }
+        private sealed class RibbonTabSpec { public RibbonTabSpec(string id, string title, params RibbonButtonSpec[] buttons) { Id = id; Title = title; Buttons = buttons; } public string Id { get; } public string Title { get; } public IReadOnlyList<RibbonButtonSpec> Buttons { get; } }
+        public static bool TryInitialize()
+        {
+            if (_initialized) return true;
+<<<<<<< origin/main
+            try { var control = FindRibbonControl(); if (control == null) return false; var tabs = GetProperty(control, "Tabs"); if (tabs == null) return false; foreach (var spec in CreateSpecs()) { if (CollectionContainsId(tabs, spec.Id)) continue; var tab = Create("Bricscad.Windows.RibbonTab"); SetProperty(tab, "Id", spec.Id); SetProperty(tab, "Name", spec.Id); SetProperty(tab, "Title", spec.Title); var panels = GetProperty(tab, "Panels") ?? throw new InvalidOperationException("RibbonTab.Panels was not available."); var source = Create("Bricscad.Windows.RibbonPanelSource"); SetProperty(source, "Id", spec.Id + "_PANEL_SOURCE"); SetProperty(source, "Name", spec.Title); SetProperty(source, "Title", spec.Title); var items = GetProperty(source, "Items") ?? throw new InvalidOperationException("RibbonPanelSource.Items was not available."); foreach (var buttonSpec in spec.Buttons) { var button = Create("Bricscad.Windows.RibbonButton"); SetProperty(button, "Id", spec.Id + "_" + Normalize(buttonSpec.Text)); SetProperty(button, "Name", buttonSpec.Text); SetProperty(button, "Text", buttonSpec.Text); SetProperty(button, "ShowText", true); SetProperty(button, "ShowImage", false); SetProperty(button, "CommandParameter", buttonSpec.Command); SetProperty(button, "CommandHandler", new RibbonCommandHandler()); Add(items, button); } var panel = Create("Bricscad.Windows.RibbonPanel"); SetProperty(panel, "Source", source); Add(panels, panel); Add(tabs, tab); } _initialized = true; return true; } catch { return false; }
+=======
+            try
+            {
+                var control = FindRibbonControl(); if (control == null) return false; var tabs = GetProperty(control, "Tabs"); if (tabs == null) return false;
+                foreach (var spec in CreateSpecs())
+                {
+                    if (CollectionContainsId(tabs, spec.Id)) continue; var tab = Create("Bricscad.Windows.RibbonTab"); SetProperty(tab, "Id", spec.Id); SetProperty(tab, "Name", spec.Id); SetProperty(tab, "Title", spec.Title); var panels = GetProperty(tab, "Panels") ?? throw new InvalidOperationException("RibbonTab.Panels was not available.");
+                    var source = Create("Bricscad.Windows.RibbonPanelSource"); SetProperty(source, "Id", spec.Id + "_PANEL_SOURCE"); SetProperty(source, "Name", spec.Title); SetProperty(source, "Title", spec.Title); var items = GetProperty(source, "Items") ?? throw new InvalidOperationException("RibbonPanelSource.Items was not available.");
+                    foreach (var buttonSpec in spec.Buttons) { var button = Create("Bricscad.Windows.RibbonButton"); SetProperty(button, "Id", spec.Id + "_" + Normalize(buttonSpec.Text)); SetProperty(button, "Name", buttonSpec.Text); SetProperty(button, "Text", buttonSpec.Text); SetProperty(button, "ShowText", true); SetProperty(button, "ShowImage", false); SetProperty(button, "CommandParameter", buttonSpec.Command); SetProperty(button, "CommandHandler", new RibbonCommandHandler()); Add(items, button); }
+                    var panel = Create("Bricscad.Windows.RibbonPanel"); SetProperty(panel, "Source", source); Add(panels, panel); Add(tabs, tab);
+                }
+                _initialized = true; return true;
+            }
+            catch { return false; }
+>>>>>>> origin/agent/full-domain-20260810
+        }
+        public static void Reset() => _initialized = false;
+        private static IEnumerable<RibbonTabSpec> CreateSpecs()
+        {
+<<<<<<< origin/main
+            yield return new RibbonTabSpec("QS3D_HOME", "KHỞI ĐẦU", new RibbonButtonSpec("QS3D", "QS3D"), new RibbonButtonSpec("Lưu", "QS3DSAVE"), new RibbonButtonSpec("Regenerate", "QS3DREGEN"), new RibbonButtonSpec("BQ", "QS3DBQ"), new RibbonButtonSpec("BBS", "QS3DBBSVIEW"), new RibbonButtonSpec("Health", "QS3DHEALTH"));
+            yield return new RibbonTabSpec("QS3D_PROJECT", "THIẾT LẬP DỰ ÁN", new RibbonButtonSpec("Làm mới", "QS3DREFRESH"), new RibbonButtonSpec("Nạp dự án", "QS3DRELOAD"), new RibbonButtonSpec("Layer/Xref", "QS3D"));
+            yield return new RibbonTabSpec("QS3D_BIM", "MÔ HÌNH BIM", new RibbonButtonSpec("Phòng", "QS3DROOM"), new RibbonButtonSpec("Tường KT", "QS3DWALL"), new RibbonButtonSpec("Dầm", "QS3DBEAM"), new RibbonButtonSpec("Sàn", "QS3DSLAB"), new RibbonButtonSpec("Cột", "QS3DCOLUMN"), new RibbonButtonSpec("Vách BTCT", "QS3DSTRUCTWALL"), new RibbonButtonSpec("Móng", "QS3DFOUNDATION"), new RibbonButtonSpec("Cầu thang", "QS3DSTAIR"), new RibbonButtonSpec("Lan can", "QS3DRAILING"), new RibbonButtonSpec("Đào đất", "QS3DEARTHWORK"), new RibbonButtonSpec("Lỗ mở", "QS3DOPENING"), new RibbonButtonSpec("Cửa", "QS3DDOOR"), new RibbonButtonSpec("Link Host", "QS3DLINKHOST"), new RibbonButtonSpec("HT_Phòng", "QS3DFINISH"), new RibbonButtonSpec("Vẽ 3D", "QS3DBUILD3D"));
+            yield return new RibbonTabSpec("QS3D_RECOGNIZE", "NHẬN DẠNG", new RibbonButtonSpec("Nhận dạng", "QS3DRECOGNIZE"), new RibbonButtonSpec("Auto chắc chắn", "QS3DRECOGNIZEAUTO"), new RibbonButtonSpec("Quick Takeoff", "QS3DTAKEOFF"), new RibbonButtonSpec("Inspect", "QS3DINSPECT"));
+            yield return new RibbonTabSpec("QS3D_DRAW", "VẼ", new RibbonButtonSpec("Điểm", "_POINT"), new RibbonButtonSpec("Đường thẳng", "_LINE"), new RibbonButtonSpec("Cung", "_ARC"), new RibbonButtonSpec("Chữ nhật", "_RECTANG"), new RibbonButtonSpec("Di chuyển", "_MOVE"), new RibbonButtonSpec("Xoay", "_ROTATE"), new RibbonButtonSpec("Đối xứng", "_MIRROR"), new RibbonButtonSpec("Sao chép", "_COPY"), new RibbonButtonSpec("Chia cấu kiện", "_BREAK"), new RibbonButtonSpec("Nối liền", "_JOIN"), new RibbonButtonSpec("Đo khoảng cách", "_DIST"), new RibbonButtonSpec("Section", "_SECTIONPLANE"));
+            yield return new RibbonTabSpec("QS3D_TOOL", "TOOL", new RibbonButtonSpec("Inspect", "QS3DINSPECT"), new RibbonButtonSpec("Locate", "QS3DLOCATE"), new RibbonButtonSpec("Zoom chọn", "QS3DZOOMSELECTED"), new RibbonButtonSpec("Regenerate", "QS3DREGEN"), new RibbonButtonSpec("Health", "QS3DHEALTH"));
+            yield return new RibbonTabSpec("QS3D_MODELING", "MODELING", new RibbonButtonSpec("Vẽ 3D", "QS3DBUILD3D"), new RibbonButtonSpec("Tường KT", "QS3DWALL"), new RibbonButtonSpec("Dầm", "QS3DBEAM"), new RibbonButtonSpec("Sàn", "QS3DSLAB"), new RibbonButtonSpec("Cột", "QS3DCOLUMN"), new RibbonButtonSpec("Vách", "QS3DSTRUCTWALL"), new RibbonButtonSpec("Móng", "QS3DFOUNDATION"), new RibbonButtonSpec("Phòng", "QS3DROOM"), new RibbonButtonSpec("Cửa", "QS3DDOOR"));
+            yield return new RibbonTabSpec("QS3D_VIEW", "XEM", new RibbonButtonSpec("3D", "QS3DVIEW3D"), new RibbonButtonSpec("Top", "QS3DVIEWTOP"), new RibbonButtonSpec("Orbit", "QS3DORBIT"), new RibbonButtonSpec("Zoom chọn", "QS3DZOOMSELECTED"), new RibbonButtonSpec("Zoom all", "QS3DZOOMALL"), new RibbonButtonSpec("Workspace", "QS3D"), new RibbonButtonSpec("BQ", "QS3DBQ"), new RibbonButtonSpec("Refresh", "QS3DREFRESH"));
+            yield return new RibbonTabSpec("QS3D_QTY", "ĐỊNH LƯỢNG", new RibbonButtonSpec("Regenerate", "QS3DREGEN"), new RibbonButtonSpec("BQ", "QS3DBQ"), new RibbonButtonSpec("Takeoff", "QS3DTAKEOFF"), new RibbonButtonSpec("BBS Review", "QS3DBBSVIEW"), new RibbonButtonSpec("BBS XLSX", "QS3DBBS"));
+            yield return new RibbonTabSpec("QS3D_REV", "BẢN SỬA ĐỔI", new RibbonButtonSpec("Tạo baseline", "QS3DREVBASE"), new RibbonButtonSpec("So sánh", "QS3DREVDIFF"), new RibbonButtonSpec("Health", "QS3DHEALTH"), new RibbonButtonSpec("Lưu", "QS3DSAVE"));
+=======
+            yield return new RibbonTabSpec("QS3D_HOME", "KHỞI ĐẦU", B("QS3D","QS3D"), B("Lưu","QS3DSAVE"), B("Regenerate","QS3DREGEN"), B("BQ","QS3DBQ"), B("Health","QS3DHEALTH"));
+            yield return new RibbonTabSpec("QS3D_PROJECT", "THIẾT LẬP DỰ ÁN", B("Làm mới","QS3DREFRESH"), B("Nạp dự án","QS3DRELOAD"), B("Layer/Xref","QS3D"));
+            yield return new RibbonTabSpec("QS3D_BIM", "MÔ HÌNH BIM", B("Phòng","QS3DROOM"), B("Tường KT","QS3DWALL"), B("Dầm","QS3DBEAM"), B("Sàn","QS3DSLAB"), B("Cột","QS3DCOLUMN"), B("Vách KC","QS3DSTRUCTWALL"), B("Móng","QS3DFOUNDATION"), B("Đào đắp","QS3DEARTHWORK"), B("Cửa","QS3DDOOR"), B("Lỗ mở","QS3DOPENING"), B("Link Host","QS3DLINKHOST"), B("HT_Phòng","QS3DFINISH"));
+            yield return new RibbonTabSpec("QS3D_RECOGNIZE", "NHẬN DẠNG", B("Nhận dạng","QS3DRECOGNIZE"), B("Auto chắc chắn","QS3DRECOGNIZEAUTO"), B("Quick Takeoff","QS3DTAKEOFF"), B("Inspect","QS3DINSPECT"));
+            yield return new RibbonTabSpec("QS3D_DRAW", "VẼ", B("Đường","_LINE"), B("Cung","_ARC"), B("Chữ nhật","_RECTANG"), B("Di chuyển","_MOVE"), B("Xoay","_ROTATE"), B("Đối xứng","_MIRROR"), B("Sao chép","_COPY"), B("Khoảng cách","_DIST"));
+            yield return new RibbonTabSpec("QS3D_TOOL", "TOOL", B("Inspect","QS3DINSPECT"), B("Locate","QS3DLOCATE"), B("Health","QS3DHEALTH"), B("Regenerate","QS3DREGEN"));
+            yield return new RibbonTabSpec("QS3D_MODELING", "MODELING", B("Tường KT","QS3DWALL"), B("Dầm","QS3DBEAM"), B("Sàn","QS3DSLAB"), B("Cột","QS3DCOLUMN"), B("Vách KC","QS3DSTRUCTWALL"), B("Phòng","QS3DROOM"));
+            yield return new RibbonTabSpec("QS3D_VIEW", "XEM", B("Workspace","QS3D"), B("BQ","QS3DBQ"), B("Refresh","QS3DREFRESH"));
+            yield return new RibbonTabSpec("QS3D_QTY", "ĐỊNH LƯỢNG", B("BQ","QS3DBQ"), B("Takeoff","QS3DTAKEOFF"), B("Cốt thép","QS3DREBAR"), B("BBS","QS3DBBS"), B("Excel","QS3DBQ"));
+            yield return new RibbonTabSpec("QS3D_REV", "BẢN SỬA ĐỔI", B("Chốt baseline","QS3DREVBASE"), B("So sánh","QS3DREVDIFF"), B("Health","QS3DHEALTH"), B("Lưu","QS3DSAVE"));
+        }
+        private static RibbonButtonSpec B(string text, string command) => new RibbonButtonSpec(text, command);
+        private static object? FindRibbonControl()
+        {
+            var servicesType = Type.GetType("Bricscad.Ribbon.RibbonServices, " + AssemblyName, false); if (servicesType == null) return null; var paletteProperty = servicesType.GetProperty("RibbonPaletteSet", BindingFlags.Public | BindingFlags.Static); var palette = paletteProperty?.GetValue(null, null); if (palette == null) { servicesType.GetMethod("CreateRibbonPaletteSet", BindingFlags.Public | BindingFlags.Static)?.Invoke(null, null); palette = paletteProperty?.GetValue(null, null); } if (palette == null) return null; if (palette.GetType().Name == "RibbonControl") return palette; var direct = GetProperty(palette, "RibbonControl"); if (direct != null) return direct; foreach (var property in palette.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public)) { if (property.PropertyType.Name != "RibbonControl" || property.GetIndexParameters().Length != 0) continue; var value = property.GetValue(palette, null); if (value != null) return value; } return null;
+>>>>>>> origin/agent/full-domain-20260810
+        }
+        private static object? FindRibbonControl() { var servicesType = Type.GetType("Bricscad.Ribbon.RibbonServices, " + AssemblyName, false); if (servicesType == null) return null; var paletteProperty = servicesType.GetProperty("RibbonPaletteSet", BindingFlags.Public | BindingFlags.Static); var palette = paletteProperty?.GetValue(null, null); if (palette == null) { servicesType.GetMethod("CreateRibbonPaletteSet", BindingFlags.Public | BindingFlags.Static)?.Invoke(null, null); palette = paletteProperty?.GetValue(null, null); } if (palette == null) return null; if (palette.GetType().Name == "RibbonControl") return palette; var direct = GetProperty(palette, "RibbonControl"); if (direct != null) return direct; foreach (var property in palette.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public)) { if (property.PropertyType.Name != "RibbonControl" || property.GetIndexParameters().Length != 0) continue; var value = property.GetValue(palette, null); if (value != null) return value; } return null; }
+        private static object Create(string fullName) => Activator.CreateInstance(Type.GetType(fullName + ", " + AssemblyName, true)!) ?? throw new InvalidOperationException("Cannot create " + fullName);
+        private static object? GetProperty(object target, string name) => target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public)?.GetValue(target, null);
+        private static void SetProperty(object target, string name, object value) { var property = target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public); if (property == null || !property.CanWrite) return; if (value == null || property.PropertyType.IsInstanceOfType(value) || property.PropertyType == value.GetType()) property.SetValue(target, value, null); }
+        private static void Add(object collection, object item) { var method = collection.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public).FirstOrDefault(x => x.Name == "Add" && x.GetParameters().Length == 1 && x.GetParameters()[0].ParameterType.IsAssignableFrom(item.GetType())); if (method == null) throw new InvalidOperationException("Collection does not expose a compatible Add method."); method.Invoke(collection, new[] { item }); }
+        private static bool CollectionContainsId(object collection, string id) { if (!(collection is IEnumerable enumerable)) return false; foreach (var item in enumerable) { if (item == null) continue; var value = GetProperty(item, "Id") as string; if (string.Equals(value, id, StringComparison.OrdinalIgnoreCase)) return true; } return false; }
+        private static string Normalize(string text) => new string((text ?? string.Empty).Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+        private sealed class RibbonCommandHandler : ICommand { public bool CanExecute(object? parameter) => parameter is string text && !string.IsNullOrWhiteSpace(text); public void Execute(object? parameter) { if (!(parameter is string command) || string.IsNullOrWhiteSpace(command)) return; Application.DocumentManager.MdiActiveDocument?.SendStringToExecute(command + " ", true, false, false); } public event EventHandler? CanExecuteChanged { add { } remove { } } }
+    }
+}
