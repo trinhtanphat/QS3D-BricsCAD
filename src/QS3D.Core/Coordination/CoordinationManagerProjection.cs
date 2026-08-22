@@ -45,6 +45,10 @@ namespace QS3D.Core.Coordination
             bool isStale,
             string nonActionableReason = null)
         {
+            RequireDefined(kind, nameof(kind));
+            RequireDefined(status, nameof(status));
+            RequireDefined(severity, nameof(severity));
+
             Id = RequireToken(id, nameof(id));
             Kind = kind;
             Status = status;
@@ -77,6 +81,12 @@ namespace QS3D.Core.Coordination
         public bool IsStale { get; }
         public string NonActionableReason { get; private set; }
         public bool IsActionable => ReferenceAResolved && ReferenceBResolved && !IsStale;
+
+        private static void RequireDefined<TEnum>(TEnum value, string parameterName) where TEnum : struct
+        {
+            if (!Enum.IsDefined(typeof(TEnum), value))
+                throw new ArgumentOutOfRangeException(parameterName, value, "Unsupported enum value.");
+        }
 
         private static string RequireToken(string value, string parameterName)
         {
@@ -122,6 +132,7 @@ namespace QS3D.Core.Coordination
         {
             if (findings == null) throw new ArgumentNullException(nameof(findings));
             filter = filter ?? new CoordinationManagerFilter();
+            ValidateFilter(filter);
 
             var byId = new Dictionary<string, CoordinationManagerFinding>(StringComparer.OrdinalIgnoreCase);
             foreach (var finding in findings)
@@ -137,7 +148,10 @@ namespace QS3D.Core.Coordination
             if (filter.Status.HasValue)
                 query = query.Where(x => x.Status == filter.Status.Value);
             if (filter.MinimumSeverity.HasValue)
-                query = query.Where(x => x.Severity >= filter.MinimumSeverity.Value);
+            {
+                var minimum = (int)filter.MinimumSeverity.Value;
+                query = query.Where(x => (int)x.Severity >= minimum);
+            }
             if (filter.Kind.HasValue)
                 query = query.Where(x => x.Kind == filter.Kind.Value);
             if (!string.IsNullOrWhiteSpace(filter.FloorId))
@@ -161,14 +175,24 @@ namespace QS3D.Core.Coordination
                 query = query.Where(x => x.IsActionable);
 
             var rows = query
-                .OrderByDescending(x => x.Severity)
+                .OrderByDescending(x => (int)x.Severity)
                 .ThenBy(x => x.FloorId, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(x => x.Kind)
+                .ThenBy(x => (int)x.Kind)
                 .ThenBy(x => x.RuleId, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
             return new ReadOnlyCollection<CoordinationManagerFinding>(rows);
+        }
+
+        private static void ValidateFilter(CoordinationManagerFilter filter)
+        {
+            if (filter.Status.HasValue && !Enum.IsDefined(typeof(CoordinationFindingStatus), filter.Status.Value))
+                throw new ArgumentOutOfRangeException(nameof(filter.Status), filter.Status.Value, "Unsupported status filter.");
+            if (filter.MinimumSeverity.HasValue && !Enum.IsDefined(typeof(CoordinationFindingSeverity), filter.MinimumSeverity.Value))
+                throw new ArgumentOutOfRangeException(nameof(filter.MinimumSeverity), filter.MinimumSeverity.Value, "Unsupported severity filter.");
+            if (filter.Kind.HasValue && !Enum.IsDefined(typeof(CoordinationFindingKind), filter.Kind.Value))
+                throw new ArgumentOutOfRangeException(nameof(filter.Kind), filter.Kind.Value, "Unsupported kind filter.");
         }
     }
 }
