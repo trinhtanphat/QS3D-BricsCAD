@@ -6,6 +6,7 @@ using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI.ViewModels;
 using QS3D.Core.Reporting;
+using QS3D.Core.Services;
 
 namespace QS3D.BricsCAD.V25.UI
 {
