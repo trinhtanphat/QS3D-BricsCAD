@@ -32,6 +32,8 @@ namespace QS3D.Core.SmokeTests
                     snapshot.Issues[0].UpdatedAtUtc.AddMinutes(1));
                 if (plan.ChangedIssueCount != 0 || plan.Issues.Count != 1)
                     throw new InvalidOperationException("Unedited coordination issue workbook produced unexpected mutations.");
+                if (plan.SourceRevision != snapshot.Revision || plan.NextRevision != snapshot.Revision)
+                    throw new InvalidOperationException("Unedited coordination issue workbook advanced the persistence revision.");
                 if (!string.Equals(plan.Issues[0].IssueId, snapshot.Issues[0].IssueId, StringComparison.Ordinal) ||
                     plan.Issues[0].Status != snapshot.Issues[0].Status ||
                     plan.Issues[0].Severity != snapshot.Issues[0].Severity)
@@ -100,7 +102,9 @@ namespace QS3D.Core.SmokeTests
                 var entry = archive.GetEntry("xl/worksheets/sheet2.xml")
                     ?? throw new InvalidOperationException("ISSUES worksheet package part was not found.");
                 string xml;
-                using (var reader = new StreamReader(entry.Open(), Encoding.UTF8, true, 4096, true)) xml = reader.ReadToEnd();
+                using (var stream = entry.Open())
+                using (var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, false))
+                    xml = reader.ReadToEnd();
                 if (xml.IndexOf(expected, StringComparison.Ordinal) < 0)
                     throw new InvalidOperationException("Expected immutable workbook value was not found for tamper smoke.");
                 xml = xml.Replace(expected, replacement);
