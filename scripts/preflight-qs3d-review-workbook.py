@@ -52,7 +52,7 @@ def main():
         'public static class Qs3dReviewWorkbookTraceReader',
         'DtdProcessing = DtdProcessing.Prohibit',
         'XmlResolver = null',
-        'hidden=\"1\"',
+        r'hidden=\"1\"',
         '"CoordinationIssueId"',
         '"IssueRevision"',
         '"Assignee"',
@@ -71,12 +71,12 @@ def main():
         return fail("review workbook must remain a host-neutral composition over canonical projections", ["forbidden: " + token for token in found])
 
     ordered = [
-        '<sheet name=\"01_TONG_HOP\"',
-        '<sheet name=\"02_CHI_TIET_QTO\"',
-        '<sheet name=\"03_CLASHES\"',
-        '<sheet name=\"04_DUPLICATES\"',
-        '<sheet name=\"05_RULES\"',
-        '<sheet name=\"06_MODEL_INFO\"',
+        r'<sheet name=\"01_TONG_HOP\"',
+        r'<sheet name=\"02_CHI_TIET_QTO\"',
+        r'<sheet name=\"03_CLASHES\"',
+        r'<sheet name=\"04_DUPLICATES\"',
+        r'<sheet name=\"05_RULES\"',
+        r'<sheet name=\"06_MODEL_INFO\"',
     ]
     positions = [source.find(token) for token in ordered]
     if min(positions) < 0 or positions != sorted(positions):
@@ -89,7 +89,7 @@ def main():
         "CoordinationIssueExcelLifecycle.Project",
         "Qs3dReviewIssueGeometry",
         "Qs3dReviewWorkbookTraceReader.Read",
-        'qtoXml.Contains("<c r=\\"O2\\""',
+        r'qtoXml.Contains("<c r=\"O2\""',
         '"KEEP-ME"',
     ]
     missing_smoke = [token for token in smoke_required if token not in smoke]
