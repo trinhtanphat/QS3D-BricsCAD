@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qs3dTemplate schema="1" id="qs3d-synthetic-architecture-v1" name="QS3D Synthetic Architecture">
+  <families>
+    <family id="sample-wall-200" name="Sample Wall 200" category="ArchitecturalWall">
+      <properties>
+        <p name="HeightM" value="3.6" />
+        <p name="Material" value="Concrete" />
+        <p name="ThicknessM" value="0.2" />
+      </properties>
+    </family>
+    <family id="sample-glass-12" name="Sample Glass Wall 12" category="GlassWall">
+      <properties>
+        <p name="CurtainFrameDepthM" value="0.05" />
+        <p name="HeightM" value="3.6" />
+        <p name="Material" value="Glass" />
+        <p name="PanelHeightM" value="1.2" />
+        <p name="PanelWidthM" value="1.5" />
+        <p name="ThicknessM" value="0.012" />
+      </properties>
+    </family>
+    <family id="sample-column-400" name="Sample Column 400x400" category="Column">
+      <properties>
+        <p name="HeightM" value="3.6" />
+        <p name="Material" value="Concrete" />
+      </properties>
+    </family>
+    <family id="sample-slab-150" name="Sample Slab 150" category="Slab">
+      <properties>
+        <p name="Material" value="Concrete" />
+        <p name="ThicknessM" value="0.15" />
+      </properties>
+    </family>
+    <family id="sample-beam-300x500" name="Sample Beam 300x500" category="Beam">
+      <properties>
+        <p name="HeightM" value="0.5" />
+        <p name="Material" value="Concrete" />
+        <p name="WidthM" value="0.3" />
+      </properties>
+    </family>
+    <family id="sample-door-1000" name="Sample Door 1000x2200" category="Door">
+      <properties>
+        <p name="HeightM" value="2.2" />
+        <p name="Material" value="Timber" />
+        <p name="WidthM" value="1.0" />
+      </properties>
+    </family>
+    <family id="sample-room-3600" name="Sample Room 3.6m" category="Room">
+      <properties>
+        <p name="HeightM" value="3.6" />
+      </properties>
+    </family>
+  </families>
+  <rules>
+    <rule id="sample-wall-gross" category="ArchitecturalWall" output="GrossConcreteM3" expression="LengthM*HeightM*ThicknessM" version="1" />
+    <rule id="sample-slab-gross" category="Slab" output="GrossConcreteM3" expression="AreaM2*ThicknessM" version="1" />
+    <rule id="sample-beam-gross" category="Beam" output="GrossConcreteM3" expression="LengthM*WidthM*HeightM" version="1" />
+  </rules>
+  <layerMappings>
+    <map pattern="QS3D_WALL" category="ArchitecturalWall" />
+    <map pattern="QS3D_GLASS" category="GlassWall" />
+    <map pattern="QS3D_COLUMN" category="Column" />
+    <map pattern="QS3D_SLAB" category="Slab" />
+    <map pattern="QS3D_BEAM" category="Beam" />
+    <map pattern="QS3D_DOOR" category="Door" />
+    <map pattern="QS3D_ROOM" category="Room" />
+  </layerMappings>
+  <bqColumns>
+    <column name="Floor" />
+    <column name="Category" />
+    <column name="FamilyName" />
+    <column name="Count" />
+    <column name="GrossConcreteM3" />
+    <column name="NetConcreteM3" />
+    <column name="FormworkM2" />
+    <column name="ElementIdText" />
+    <column name="SourceHandleText" />
+  </bqColumns>
+</qs3dTemplate>
