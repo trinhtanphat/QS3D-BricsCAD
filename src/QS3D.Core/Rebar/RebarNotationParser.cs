@@ -15,7 +15,8 @@ namespace QS3D.Core.Rebar
         {
             if (string.IsNullOrWhiteSpace(notation)) throw new ArgumentException("Rebar notation is required.", nameof(notation));
             var normalized = notation.Replace(" ", string.Empty);
-            var parts = normalized.Split(new[] { '+' }, StringSplitOptions.RemoveEmptyEntries);
+            var parts = normalized.Split(new[] { '+' }, StringSplitOptions.None);
+            if (Array.Exists(parts, string.IsNullOrWhiteSpace)) throw new FormatException("Rebar notation contains an empty bar group.");
             var result = new List<RebarGroup>(parts.Length);
             foreach (var raw in parts)
             {

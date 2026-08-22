@@ -112,12 +112,9 @@ namespace QS3D.Core.Revisions
             }
         }
 
-        private static void ValidateSerializedFile(string path)
+        private void ValidateSerializedFile(string path)
         {
-            var root = LoadDocument(path).Root ?? throw new InvalidDataException("Serialized revision has no root.");
-            if (!string.Equals(root.Name.LocalName, "qs3dRevision", StringComparison.Ordinal)) throw new InvalidDataException("Serialized revision root is invalid.");
-            Required(root, "id");
-            Date(root.Attribute("createdUtc")?.Value);
+            Load(path);
         }
 
         private static XDocument Serialize(RevisionSnapshot snapshot) => new XDocument(

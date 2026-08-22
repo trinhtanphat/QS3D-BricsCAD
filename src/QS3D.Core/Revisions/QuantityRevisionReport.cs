@@ -40,11 +40,23 @@ namespace QS3D.Core.Revisions
                 if (names.Count == 0 && (a == null || b == null)) rows.Add(new QuantityRevisionRow { ElementId = id, Category = b?.Category ?? a?.Category ?? string.Empty, Change = a == null ? "Added" : "Removed" });
                 foreach (var name in names)
                 {
-                    var beforeValue = a != null && a.Quantities.TryGetValue(name, out var av) ? RevisionMath.Finite(av, id + "/" + name + "/before") : 0d;
-                    var afterValue = b != null && b.Quantities.TryGetValue(name, out var bv) ? RevisionMath.Finite(bv, id + "/" + name + "/after") : 0d;
+                    var av = 0d;
+                    var bv = 0d;
+                    var hasBefore = a != null && a.Quantities.TryGetValue(name, out av);
+                    var hasAfter = b != null && b.Quantities.TryGetValue(name, out bv);
+                    var beforeValue = hasBefore ? RevisionMath.Finite(av, id + "/" + name + "/before") : 0d;
+                    var afterValue = hasAfter ? RevisionMath.Finite(bv, id + "/" + name + "/after") : 0d;
                     var delta = RevisionMath.Subtract(afterValue, beforeValue, id + "/" + name);
-                    if (a != null && b != null && Math.Abs(delta) <= 1e-9) continue;
-                    rows.Add(new QuantityRevisionRow { ElementId = id, Category = b?.Category ?? a?.Category ?? string.Empty, QuantityName = name, Change = a == null ? "Added" : b == null ? "Removed" : "Changed", Before = beforeValue, After = afterValue });
+                    if (a != null && b != null && hasBefore == hasAfter && Math.Abs(delta) <= 1e-9) continue;
+                    rows.Add(new QuantityRevisionRow
+                    {
+                        ElementId = id,
+                        Category = b?.Category ?? a?.Category ?? string.Empty,
+                        QuantityName = name,
+                        Change = a == null || !hasBefore ? "Added" : b == null || !hasAfter ? "Removed" : "Changed",
+                        Before = beforeValue,
+                        After = afterValue
+                    });
                 }
             }
             return rows;

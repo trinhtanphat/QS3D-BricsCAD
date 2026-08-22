@@ -60,7 +60,9 @@ namespace QS3D.Core.Rebar
 
             var groups = RebarNotationParser.Parse(input.Notation);
             if (input.CountOverride.HasValue && groups.Count > 1) throw new InvalidOperationException("CountOverride is ambiguous for compound rebar notation.");
-            var cuttingLength = input.CuttingLengthM + input.LapLengthM + input.AnchorLengthM + input.HookAllowanceM;
+            var cuttingLength = FiniteAdd(input.CuttingLengthM, input.LapLengthM, "Rebar cutting length");
+            cuttingLength = FiniteAdd(cuttingLength, input.AnchorLengthM, "Rebar cutting length");
+            cuttingLength = FiniteAdd(cuttingLength, input.HookAllowanceM, "Rebar cutting length");
             if (cuttingLength <= 0d) throw new InvalidOperationException("Rebar cutting length must be greater than zero.");
             var baseMark = string.IsNullOrWhiteSpace(input.BarMark) ? (string.IsNullOrWhiteSpace(input.ElementId) ? "BAR" : input.ElementId) : input.BarMark.Trim();
 
@@ -70,8 +72,9 @@ namespace QS3D.Core.Rebar
                 var quantity = ResolveQuantity(group, input);
                 var mark = groups.Count == 1 ? baseMark : baseMark + "-" + (index + 1).ToString(CultureInfo.InvariantCulture);
                 var unitWeight = RebarWeight.KilogramsPerMeter(group.DiameterMm);
-                var totalLength = cuttingLength * quantity;
-                var netWeight = unitWeight * totalLength;
+                var totalLength = FiniteProduct(cuttingLength, quantity, "Rebar total length");
+                var netWeight = RebarWeight.TotalKilograms(group.DiameterMm, totalLength);
+                var totalWeight = RebarWeight.TotalKilograms(group.DiameterMm, totalLength, input.WastePercent);
                 rows.Add(new RebarScheduleRow
                 {
                     ElementId = input.ElementId ?? string.Empty,
@@ -85,7 +88,7 @@ namespace QS3D.Core.Rebar
                     UnitWeightKgM = unitWeight,
                     NetWeightKg = netWeight,
                     WastePercent = input.WastePercent,
-                    TotalWeightKg = netWeight * (1d + input.WastePercent / 100d)
+                    TotalWeightKg = totalWeight
                 });
             }
         }
@@ -106,6 +109,20 @@ namespace QS3D.Core.Rebar
         private static void EnsureFiniteNonNegative(double value, string name)
         {
             if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d) throw new ArgumentOutOfRangeException(name);
+        }
+
+        private static double FiniteAdd(double left, double right, string label)
+        {
+            var result = left + right;
+            if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " is not finite.");
+            return result;
+        }
+
+        private static double FiniteProduct(double left, double right, string label)
+        {
+            var result = left * right;
+            if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " is not finite.");
+            return result;
         }
     }
 

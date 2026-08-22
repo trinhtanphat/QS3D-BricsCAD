@@ -213,15 +213,11 @@ namespace QS3D.Core.Persistence
             }
         }
 
-        private static void ValidateSerializedFile(string path)
+        private void ValidateSerializedFile(string path)
         {
-            var document = LoadDocument(path);
-            var root = document.Root ?? throw new InvalidDataException("Serialized QSDB has no root element.");
-            if (!string.Equals(root.Name.LocalName, "qs3d", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Serialized QSDB root is invalid.");
-            var schema = Int(root.Attribute("schema")?.Value, 0);
-            if (schema != ProjectState.CurrentSchemaVersion) throw new InvalidDataException("Serialized QSDB schema is invalid.");
-            Required(root, "projectId");
-            Required(root, "name");
+            var reloaded = Load(path);
+            if (reloaded.SchemaVersion != ProjectState.CurrentSchemaVersion)
+                throw new InvalidDataException("Serialized QSDB schema is invalid.");
         }
 
         private static void ValidateProject(ProjectState project)
