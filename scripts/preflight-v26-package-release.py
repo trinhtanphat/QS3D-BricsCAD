@@ -58,6 +58,8 @@ v25_release_client = read("src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs"
 v26_release_client = read("src/QS3D.BricsCAD.V26/Updates/GitHubReleaseClient.cs")
 v26_manifest_probe = read("src/QS3D.BricsCAD.V26/Updates/UpdateManifestProbe.cs")
 v26_launcher = read("src/QS3D.BricsCAD.V26/Updates/SecureUpdateLauncher.cs")
+v26_preferences = read("src/QS3D.BricsCAD.V26/Updates/UpdatePreferences.cs")
+v26_preview_downloader = read("src/QS3D.BricsCAD.V26/Updates/VerifiedReleaseDownloader.cs")
 v26_update_command = read("src/QS3D.BricsCAD.V26/Updates/UpdateCommands.cs")
 v26_entry = read("src/QS3D.BricsCAD.V26/PluginEntry.cs")
 build_props = read("Directory.Build.props")
@@ -118,6 +120,7 @@ for token in (
     "update-v26.ps1",
     "BrxMgd.dll",
     "TD_Mgd.dll",
+    "TD_MgdBrep.dll",
     "SHA256SUMS.txt",
 ):
     require(package, token, "V26 packager")
@@ -196,6 +199,17 @@ for token in (
 for token in ("QS3D-BricsCAD-V25-Update-", "update-v25.ps1"):
     forbid(v26_launcher, token, "V26 secure update launcher")
 
+require(v26_release_client, "HasVerifiedPreviewPackage => false", "V26 release client")
+require(v26_preferences, 'RegistryPath = @"Software\\QS3D\\BricsCAD-V26\\Updates"', "V26 update preferences")
+for token in ("Task.FromException<VerifiedReleaseDownload>", "Tải package preview trực tiếp bị tắt cho BricsCAD V26"):
+    require(v26_preview_downloader, token, "V26 preview download fail-closed shim")
+for text, label in (
+    (v26_preferences, "V26 update preferences"),
+    (v26_preview_downloader, "V26 preview download fail-closed shim"),
+):
+    for token in ("BricsCAD-V25", "QS3D-BricsCAD-V25"):
+        forbid(text, token, label)
+
 for token in ("QS3DUPDATE", "UpdateCenterWindowHost.Show()", "QS3DUPDATE V26 error"):
     require(v26_update_command, token, "V26 update command")
 for token in ("UpdateBootstrapper.Start();", "UpdateBootstrapper.Stop();"):
@@ -207,6 +221,7 @@ for token in (
     "runs-on: [self-hosted, windows, x64, bricscad-v26]",
     "BRICSCAD_V26_DIR",
     "FileMajorPart -ne 26",
+    "TD_MgdBrep.dll",
     "Microsoft\\.WindowsDesktop\\.App 8\\.",
     "preflight-bricscad-v26.py",
     "preflight-v26-package-release.py",
@@ -252,6 +267,9 @@ for trigger in ("\n  push:", "\n  pull_request:", "\n  schedule:", "\n  workflow
 for token in (
     "<TargetFramework>net8.0-windows</TargetFramework>",
     "<AssemblyName>QS3D.BricsCAD.V26</AssemblyName>",
+    "<Nullable>annotations</Nullable>",
+    '<Reference Include="TD_MgdBrep">',
+    "$(BRICSCAD_V26_DIR)\\TD_MgdBrep.dll",
     "Updates\\SemanticReleaseVersion.cs",
     "Updates\\UpdateBootstrapper.cs",
     "Updates\\UpdateCenterWindow.cs",

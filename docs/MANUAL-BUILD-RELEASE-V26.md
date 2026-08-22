@@ -24,7 +24,7 @@ Set:
 $env:BRICSCAD_V26_DIR = 'C:\Program Files\Bricsys\BricsCAD V26 en_US'
 ```
 
-Use the actual licensed installation path if the locale/path differs. `bricscad.exe` must report file major version 26.
+Use the actual licensed installation path if the locale/path differs. `bricscad.exe` must report file major version 26, and the directory must contain the matching host-owned `BrxMgd.dll`, `TD_Mgd.dll` and `TD_MgdBrep.dll`. The V26 exact-face quantity source requires the BREP compile reference; every host reference uses `Private=false` and stays outside release packages.
 
 ## Source/build gate
 
@@ -164,6 +164,6 @@ V25 assets are a separate channel and must not appear in the V26 release lane.
 - Never point `BRICSCAD_V26_DIR` at V25.
 - Never load `QS3D.BricsCAD.V25.dll` as the V26 release payload.
 - Never use `QS3D-BricsCAD-V25.update.json` or `QS3D-BricsCAD-V25.zip` for V26.
-- Never package `BrxMgd.dll`, `TD_Mgd.dll` or other proprietary BricsCAD runtime assemblies.
+- Never package `BrxMgd.dll`, `TD_Mgd.dll`, `TD_MgdBrep.dll` or other proprietary BricsCAD runtime assemblies.
 - Never publish a stable release without exact signed-payload V26 runtime evidence.
 - Never claim signing, clean-machine install/update or runtime PASS from source review alone.

@@ -4,9 +4,9 @@ Status: `LOCAL_ONLY` / `DO_NOT_RETRY_REMOTE` until a licensed interactive BricsC
 
 ## Why V26 is a separate gate
 
-BricsCAD V26 hosts managed plugins on .NET 8 instead of the .NET Framework 4.8 lane used by BricsCAD V25. QS3D therefore emits a distinct `QS3D.BricsCAD.V26.dll` from `src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj`, targeting `net8.0-windows` and resolving `BrxMgd.dll` / `TD_Mgd.dll` from the installed V26 directory only.
+BricsCAD V26 hosts managed plugins on .NET 8 instead of the .NET Framework 4.8 lane used by BricsCAD V25. QS3D therefore emits a distinct `QS3D.BricsCAD.V26.dll` from `src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj`, targeting `net8.0-windows` and resolving `BrxMgd.dll`, `TD_Mgd.dll` and `TD_MgdBrep.dll` from the installed V26 directory only. The BREP reference is required by the shared exact-face quantity source; all three references remain host-owned with `Private=false` and must not enter the QS3D package.
 
-The V25 project remains `net48`. Passing source/static checks or the Core smoke suite does **not** prove V26 runtime compatibility.
+The V25 project remains `net48`. The V26 project preserves nullable annotations from the linked source while disabling V26-specific nullable flow reinterpretation caused by the different host API metadata; repository-wide warnings-as-errors and all other compiler diagnostics remain in force. Passing source/static checks or the Core smoke suite does **not** prove V26 runtime compatibility.
 
 ## Prerequisites
 
@@ -25,6 +25,7 @@ $env:BRICSCAD_V26_DIR = 'C:\Program Files\Bricsys\BricsCAD V26 en_US'
 ```
 
 If the installed locale/path differs, use that licensed V26 installation directory instead.
+The selected directory must contain `bricscad.exe`, `BrxMgd.dll`, `TD_Mgd.dll` and `TD_MgdBrep.dll`; source/build and runtime gates fail closed when any file is missing.
 
 ## Source/build gate
 

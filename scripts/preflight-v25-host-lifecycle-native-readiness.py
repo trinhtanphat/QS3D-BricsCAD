@@ -66,8 +66,8 @@ def main():
     require(runtime, "TD_MgdBrep version:", "BREP runtime output", failures)
     require(runtime, "complete native dependency set", "runtime PASS contract", failures)
     require(v26_project, "<DefineConstants>$(DefineConstants);BRICSCAD_V26</DefineConstants>", "V26 shared-source compile symbol", failures)
-    if "<Reference Include=\"TD_MgdBrep\"" in v26_project:
-        failures.append("V26 project unexpectedly acquired a V25-only TD_MgdBrep compile reference")
+    require(v26_project, "<Reference Include=\"TD_MgdBrep\"", "V26 shared exact-face BREP compile reference", failures)
+    require(v26_project, "$(BRICSCAD_V26_DIR)\\TD_MgdBrep.dll", "V26 host-owned BREP reference path", failures)
 
     if failures:
         print("V25 host lifecycle/native readiness preflight FAILED")
@@ -75,7 +75,7 @@ def main():
             print(" -", failure)
         return 1
 
-    print("PASS: V25 host lifecycle teardown is contained and native runtime readiness includes guarded BREP identity.")
+    print("PASS: V25 host lifecycle teardown is contained; V25 runtime identity remains guarded and V26 shared exact-face source resolves its host-owned BREP reference.")
     return 0
 
 

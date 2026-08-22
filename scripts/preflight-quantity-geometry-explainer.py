@@ -9,7 +9,8 @@ FILES = {
     "service": ROOT / "src/QS3D.BricsCAD.V25/Reporting/QuantityGeometryExplanationService.cs",
     "ui": ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.Geometry.cs",
     "render": ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.Render.cs",
-    "csproj": ROOT / "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
+    "v25_csproj": ROOT / "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
+    "v26_csproj": ROOT / "src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj",
 }
 
 REQUIRED = {
@@ -71,7 +72,11 @@ REQUIRED = {
         "geometry?.NetFormworkArea",
         "RenderQuantityGeometry(geometry)",
     ],
-    "csproj": [
+    "v25_csproj": [
+        'Reference Include="TD_MgdBrep"',
+        "TD_MgdBrep.dll",
+    ],
+    "v26_csproj": [
         'Reference Include="TD_MgdBrep"',
         "TD_MgdBrep.dll",
     ],

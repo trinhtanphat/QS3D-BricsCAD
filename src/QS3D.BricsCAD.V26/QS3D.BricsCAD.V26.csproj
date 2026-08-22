@@ -14,6 +14,9 @@
     <FileVersion>0.1.0.10081</FileVersion>
     <InformationalVersion>0.1.0-preview.10081</InformationalVersion>
     <DefineConstants>$(DefineConstants);BRICSCAD_V26</DefineConstants>
+    <!-- Preserve nullable annotations in shared source, but do not reinterpret
+         V26 host-API metadata as new flow errors for the established V25 adapter. -->
+    <Nullable>annotations</Nullable>
   </PropertyGroup>
 
   <!--
@@ -56,11 +59,16 @@
       <HintPath>$(BRICSCAD_V26_DIR)\TD_Mgd.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="TD_MgdBrep">
+      <HintPath>$(BRICSCAD_V26_DIR)\TD_MgdBrep.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <Target Name="ValidateBricsCadV26References" BeforeTargets="ResolveReferences">
     <Error Condition="'$(BRICSCAD_V26_DIR)' == ''" Text="BRICSCAD_V26_DIR is not set. Point it to the licensed BricsCAD V26 installation directory." />
     <Error Condition="!Exists('$(BRICSCAD_V26_DIR)\BrxMgd.dll')" Text="BrxMgd.dll not found under BRICSCAD_V26_DIR." />
     <Error Condition="!Exists('$(BRICSCAD_V26_DIR)\TD_Mgd.dll')" Text="TD_Mgd.dll not found under BRICSCAD_V26_DIR." />
+    <Error Condition="!Exists('$(BRICSCAD_V26_DIR)\TD_MgdBrep.dll')" Text="TD_MgdBrep.dll not found under BRICSCAD_V26_DIR." />
   </Target>
 </Project>

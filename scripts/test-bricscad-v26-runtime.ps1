@@ -54,9 +54,10 @@ $PluginDll = [IO.Path]::GetFullPath($PluginDll)
 $bricscadExe = Join-Path $BricsCadDir "bricscad.exe"
 $brxMgd = Join-Path $BricsCadDir "BrxMgd.dll"
 $tdMgd = Join-Path $BricsCadDir "TD_Mgd.dll"
+$tdMgdBrep = Join-Path $BricsCadDir "TD_MgdBrep.dll"
 $coreDll = Join-Path (Split-Path -Parent $PluginDll) "QS3D.Core.dll"
 
-foreach ($required in @($bricscadExe, $brxMgd, $tdMgd, $PluginDll, $coreDll)) {
+foreach ($required in @($bricscadExe, $brxMgd, $tdMgd, $tdMgdBrep, $PluginDll, $coreDll)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Required V26 runtime file is missing: $required"
     }

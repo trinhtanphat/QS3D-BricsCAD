@@ -33,6 +33,8 @@ v25_release_client = read("src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs"
 v26_release_client = read("src/QS3D.BricsCAD.V26/Updates/GitHubReleaseClient.cs")
 v26_manifest_probe = read("src/QS3D.BricsCAD.V26/Updates/UpdateManifestProbe.cs")
 v26_launcher = read("src/QS3D.BricsCAD.V26/Updates/SecureUpdateLauncher.cs")
+v26_preferences = read("src/QS3D.BricsCAD.V26/Updates/UpdatePreferences.cs")
+v26_preview_downloader = read("src/QS3D.BricsCAD.V26/Updates/VerifiedReleaseDownloader.cs")
 workflow = read(".github/workflows/bricscad-v26.yml")
 runtime = read("scripts/test-bricscad-v26-runtime.ps1")
 runtime_probe = read("src/QS3D.BricsCAD.V25/RuntimeProbeCommands.cs")
@@ -45,7 +47,7 @@ build_props = read("Directory.Build.props")
 for token in ("<TargetFramework>net48</TargetFramework>", "QS3D.BricsCAD.V25", "BRICSCAD_V25_DIR"):
     require(v25, token, "V25 project")
 
-for token in ('<Project Sdk="Microsoft.NET.Sdk">', "<TargetFramework>net8.0-windows</TargetFramework>", "<UseWPF>true</UseWPF>", "<AssemblyName>QS3D.BricsCAD.V26</AssemblyName>", "<RootNamespace>QS3D.BricsCAD.V25</RootNamespace>", "BRICSCAD_V26_DIR", "..\\QS3D.BricsCAD.V25\\**\\*.cs", "..\\QS3D.BricsCAD.V25\\PluginEntry.cs", "..\\QS3D.BricsCAD.V25\\Updates\\**\\*.cs", "Updates\\SemanticReleaseVersion.cs", "Updates\\UpdateBootstrapper.cs", "Updates\\UpdateCenterWindow.cs", "Updates\\UpdateCoordinator.cs", "<Reference Include=\"BrxMgd\">", "<Reference Include=\"TD_Mgd\">", "<Private>false</Private>", "ValidateBricsCadV26References"):
+for token in ('<Project Sdk="Microsoft.NET.Sdk">', "<TargetFramework>net8.0-windows</TargetFramework>", "<UseWPF>true</UseWPF>", "<AssemblyName>QS3D.BricsCAD.V26</AssemblyName>", "<RootNamespace>QS3D.BricsCAD.V25</RootNamespace>", "<Nullable>annotations</Nullable>", "BRICSCAD_V26_DIR", "..\\QS3D.BricsCAD.V25\\**\\*.cs", "..\\QS3D.BricsCAD.V25\\PluginEntry.cs", "..\\QS3D.BricsCAD.V25\\Updates\\**\\*.cs", "Updates\\SemanticReleaseVersion.cs", "Updates\\UpdateBootstrapper.cs", "Updates\\UpdateCenterWindow.cs", "Updates\\UpdateCoordinator.cs", "<Reference Include=\"BrxMgd\">", "<Reference Include=\"TD_Mgd\">", "<Reference Include=\"TD_MgdBrep\">", "TD_MgdBrep.dll", "<Private>false</Private>", "ValidateBricsCadV26References"):
     require(v26, token, "V26 project")
 for token in ("Microsoft.NET.Sdk.WindowsDesktop", "BRICSCAD_V25_DIR", "<TargetFramework>net48</TargetFramework>", "<TargetFrameworks>", "QS3D-BricsCAD-V25.update.json"):
     forbid(v26, token, "V26 project")
@@ -87,12 +89,23 @@ for token in ('UpdateMutexPrefix = "Global\\\\QS3D-BricsCAD-V26-Update-"', 'Path
 for token in ("QS3D-BricsCAD-V25-Update-", "update-v25.ps1"):
     forbid(v26_launcher, token, "V26 secure update launcher")
 
-for token in ("workflow_dispatch:", "github.event_name == 'workflow_dispatch'", "runs-on: [self-hosted, windows, x64, bricscad-v26]", "BRICSCAD_V26_DIR", "dotnet-version: \"8.0.x\"", "preflight-bricscad-v26.py", "QS3D.BricsCAD.V26.csproj", "test-bricscad-v26-runtime.ps1"):
+for token in ('RegistryPath = @"Software\\QS3D\\BricsCAD-V26\\Updates"', "RegistryValueKind.DWord", "Preferences must never prevent QS3D from loading"):
+    require(v26_preferences, token, "V26 update preferences")
+for token in ("BricsCAD-V25", "QS3D-BricsCAD-V25"):
+    forbid(v26_preferences, token, "V26 update preferences")
+
+require(v26_release_client, "HasVerifiedPreviewPackage => false", "V26 release client")
+for token in ("Task.FromException<VerifiedReleaseDownload>", "Tải package preview trực tiếp bị tắt cho BricsCAD V26", "manifest và package ký số đã xác minh"):
+    require(v26_preview_downloader, token, "V26 preview download fail-closed shim")
+for token in ("WebRequest", "HttpWebRequest", "QS3D-BricsCAD-V25", "BricsCAD-V25"):
+    forbid(v26_preview_downloader, token, "V26 preview download fail-closed shim")
+
+for token in ("workflow_dispatch:", "github.event_name == 'workflow_dispatch'", "runs-on: [self-hosted, windows, x64, bricscad-v26]", "BRICSCAD_V26_DIR", "dotnet-version: \"8.0.x\"", "TD_MgdBrep.dll", "preflight-bricscad-v26.py", "QS3D.BricsCAD.V26.csproj", "test-bricscad-v26-runtime.ps1"):
     require(workflow, token, "V26 workflow")
 for forbidden in ("\n  push:", "\n  pull_request:", "\n  schedule:", "\n  workflow_run:"):
     forbid(workflow, forbidden, "V26 workflow")
 
-for token in ("FileMajorPart -ne 26", "QS3D.BricsCAD.V26.dll", "BrxMgd.dll", "TD_Mgd.dll", "QS3DRUNTIMEPROBE", "ribbon_ready", "palette_visible", "QS3D_RUNTIME_RESULT"):
+for token in ("FileMajorPart -ne 26", "QS3D.BricsCAD.V26.dll", "BrxMgd.dll", "TD_Mgd.dll", "TD_MgdBrep.dll", "QS3DRUNTIMEPROBE", "ribbon_ready", "palette_visible", "QS3D_RUNTIME_RESULT"):
     require(runtime, token, "V26 runtime gate")
 if "QS3D.BricsCAD.V25.dll" in runtime:
     errors.append("V26 runtime gate must reject/circumvent V25 adapter binaries, not load them")
@@ -122,4 +135,4 @@ if errors:
         print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: V25 remains net48; V26 uses the current Microsoft.NET.Sdk on net8.0-windows with WPF, a dedicated solution, V26-only refs/runtime/update assets, HttpClient-only updater networking, manifest-channel-isolated release discovery, and helper-based host-major-aware shared runtime diagnostics with stale-binary identity checks.")
+print("PASS: V25 remains net48; V26 uses the current Microsoft.NET.Sdk on net8.0-windows with WPF, preserves shared-source nullable annotations without treating V26 host metadata as new adapter flow errors, uses the complete host-owned managed reference set including TD_MgdBrep, keeps preferences/assets host-major isolated, fails closed for unsigned preview downloads, and retains manifest-channel-isolated release discovery plus stale-binary identity checks.")

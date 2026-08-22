@@ -34,6 +34,7 @@ namespace QS3D.BricsCAD.V25.Updates
         internal Uri? ManifestUri { get; }
         internal string Notes { get; }
         internal bool HasSignedUpdateManifest => ManifestUri != null;
+        internal bool HasVerifiedPreviewPackage => false;
     }
 
     internal sealed class GitHubReleaseClient
@@ -138,7 +139,8 @@ namespace QS3D.BricsCAD.V25.Updates
                     manifestUri = candidate;
 
                 // V25 and V26 share one repository release stream. Channel membership is
-                // defined by the exact signed manifest asset for this host major.
+                // defined by the exact signed manifest asset for this host major. Unsigned
+                // V26 previews stay on the release-page path instead of reusing V25 assets.
                 if (manifestUri == null) continue;
 
                 var publishedUtc = DateTime.MinValue;
