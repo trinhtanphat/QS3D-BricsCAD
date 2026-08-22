@@ -33,6 +33,16 @@ if not errors:
         'accepted_segments=',
         'minimum_segments=',
         'preview_model=DrawJigProfileStrip',
+        'coordinate_model=EDITOR_UCS_TO_JIG_WCS_UCS_PLANE',
+        'var ucsToWcs = editor.CurrentUserCoordinateSystem;',
+        'var start = first.Value.TransformBy(ucsToWcs);',
+        'BasePoint = _startWcs',
+        '_endWcs = result.Value;',
+        '_wcsToUcs = ucsToWcs.Inverse();',
+        'var localStart = _startWcs.TransformBy(_wcsToUcs);',
+        'var localEnd = _endWcs.TransformBy(_wcsToUcs);',
+        'var centerStart = _startWcs;',
+        'var centerEnd = _endWcs;',
         'persistent_writes=0',
         'ownership_writes=0',
         'QS3D_DIRECT_DRAW_JIG_RUNTIME_V1',
@@ -47,10 +57,16 @@ if not errors:
         'RegenerateDirtySubset', 'GeneratedGeometryService', 'SendStringToExecute',
         '.Editor.Command(',
         '"|qualified_candidate=true"',
+        'coordinate_model=WCS_INPUT_UCS_PLANE',
+        'var start = first.Value;',
+        'var centerStart = _startWcs.TransformBy(',
+        'var centerEnd = _endWcs.TransformBy(',
+        '_start.TransformBy(_ucs)',
+        '_end.TransformBy(_ucs)',
     )
     for token in forbidden_probe:
         if token in probe:
-            errors.append(f"LOCAL-008 P02 probe must stay database/ownership free: {token}")
+            errors.append(f"LOCAL-008 P02 probe must stay database/ownership free and preserve Editor-UCS -> Jig-WCS coordinate boundaries: {token}")
 
     if probe.count('CommandMethod("QS3DPROBEDIRECTDRAWJIG"') != 1:
         errors.append("QS3DPROBEDIRECTDRAWJIG must be registered exactly once")
@@ -62,8 +78,12 @@ if not errors:
         'BRICSCAD_V25_DIR',
         'QS3DPROBEDIRECTDRAWJIG',
         'QS3D_DIRECT_DRAW_JIG_RUNTIME_V1',
+        'coordinate_model=EDITOR_UCS_TO_JIG_WCS_UCS_PLANE',
         'git', 'rev-parse', 'status --porcelain=v1',
         '[string[]]$ArgumentList', '@ArgumentList',
+        'rotated or translated UCS',
+        'first point',
+        'anchored to the picked cursor points',
         'PENDING_LOCAL',
     )
     for token in required_runner:
@@ -80,4 +100,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: LOCAL-008 P02 source-prep pins real DrawJig profile preview, repeated click lifecycle, document/UCS safety and zero persistent preview writes; licensed V25 execution remains PENDING_LOCAL.")
+print("PASS: LOCAL-008 P02 source-prep pins Editor first-point UCS->WCS normalization, WCS DrawJig acquisition/base points, UCS-plane profile offset math, repeated click lifecycle, document/UCS safety and zero persistent preview writes; licensed V25 execution remains PENDING_LOCAL.")
