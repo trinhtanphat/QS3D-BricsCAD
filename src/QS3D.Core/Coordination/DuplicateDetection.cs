@@ -35,8 +35,9 @@ namespace QS3D.Core.Coordination
 
         private static string NormalizeOptionalIdentity(string? value, string parameterName)
         {
-            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+            if (value == null) return string.Empty;
             var normalized = value.Trim();
+            if (normalized.Length == 0) return string.Empty;
             for (var index = 0; index < normalized.Length; index++)
             {
                 if (char.IsControl(normalized[index]))
