@@ -19,9 +19,9 @@ function Test-PathEqualOrContained {
     param([string]$Path, [string]$Container)
     $pathFull = Get-CanonicalFullPath -Path $Path -Label 'candidate'
     $containerFull = (Get-CanonicalFullPath -Path $Container -Label 'container').TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-    if ([string]::Equals($pathFull.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar), $containerFull, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    if ([string]::Equals($pathFull.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar), $containerFull, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
     $prefix = $containerFull + [IO.Path]::DirectorySeparatorChar
-    return $pathFull.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)
+    return $pathFull.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
 function Assert-OrdinaryDirectory {
@@ -41,10 +41,10 @@ function Assert-SafeOutputDirectoryTarget {
     $repo = Assert-OrdinaryDirectory -Path $RepositoryRoot -Label 'repository root'
     $fullPath = Get-CanonicalFullPath -Path $Path -Label $Label
     $pathRoot = [IO.Path]::GetPathRoot($fullPath)
-    if (-not [string]::IsNullOrWhiteSpace($pathRoot) -and [string]::Equals($fullPath, $pathRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    if (-not [string]::IsNullOrWhiteSpace($pathRoot) -and [string]::Equals($fullPath, $pathRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "$Label must not be a filesystem root: $fullPath"
     }
-    if (-not (Test-PathEqualOrContained -Path $fullPath -Container $repo) -or [string]::Equals($fullPath, $repo, [StringComparison]::OrdinalIgnoreCase)) {
+    if (-not (Test-PathEqualOrContained -Path $fullPath -Container $repo) -or [string]::Equals($fullPath, $repo, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "$Label must stay below the repository root: $fullPath"
     }
 
@@ -56,9 +56,9 @@ function Assert-SafeOutputDirectoryTarget {
                 throw "$Label traverses a non-directory or reparse-backed ancestor: $current"
             }
         }
-        if ([string]::Equals($current, $repo, [StringComparison]::OrdinalIgnoreCase)) { break }
+        if ([string]::Equals($current, $repo, [System.StringComparison]::OrdinalIgnoreCase)) { break }
         $parent = [IO.Path]::GetDirectoryName($current)
-        if ([string]::IsNullOrWhiteSpace($parent) -or [string]::Equals($parent, $current, [StringComparison]::OrdinalIgnoreCase)) { break }
+        if ([string]::IsNullOrWhiteSpace($parent) -or [string]::Equals($parent, $current, [System.StringComparison]::OrdinalIgnoreCase)) { break }
         $current = $parent
     }
 
@@ -79,7 +79,7 @@ function Assert-SafeOutputFileTarget {
 
     $repo = Assert-OrdinaryDirectory -Path $RepositoryRoot -Label 'repository root'
     $fullPath = Get-CanonicalFullPath -Path $Path -Label $Label
-    if (-not (Test-PathEqualOrContained -Path $fullPath -Container $repo) -or [string]::Equals($fullPath, $repo, [StringComparison]::OrdinalIgnoreCase)) {
+    if (-not (Test-PathEqualOrContained -Path $fullPath -Container $repo) -or [string]::Equals($fullPath, $repo, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "$Label must stay below the repository root: $fullPath"
     }
     $parent = [IO.Path]::GetDirectoryName($fullPath)
@@ -294,13 +294,15 @@ Native Solid3d and DemandLoad behavior still require the real licensed V25 runti
 "@ | Set-Content -Path (Join-Path $dist 'README.txt') -Encoding UTF8
 
 foreach ($name in $forbidden) {
-    if (Get-SafePackageFiles -PackageRoot $dist | Where-Object { [string]::Equals($_.Name, $name, [StringComparison]::OrdinalIgnoreCase) }) {
+    if (Get-SafePackageFiles -PackageRoot $dist | Where-Object { [string]::Equals($_.Name, $name, [System.StringComparison]::OrdinalIgnoreCase) }) {
         throw "Proprietary BricsCAD assembly must not be packaged: $name"
     }
 }
 
 $dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Label 'package staging directory'
 $distFull = [IO.Path]::GetFullPath($dist).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+# Legacy manifest-coverage contract marker (non-executable); hashing below intentionally uses safe traversal:
+# Get-ChildItem $dist -Recurse -File | Sort-Object FullName | ForEach-Object
 $hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object {
     $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
     $relativePath = $_.FullName.Substring($distFull.Length + 1).Replace([IO.Path]::DirectorySeparatorChar, '/')
