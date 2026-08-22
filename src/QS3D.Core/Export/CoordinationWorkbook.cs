@@ -206,7 +206,7 @@ namespace QS3D.Core.Export
         {
             var result = new List<CoordinationClashExportRow>(source.Count);
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            string fingerprint = null;
+            string? fingerprint = null;
             foreach (var row in source)
             {
                 if (row == null) throw new InvalidDataException("Coordination workbook contains a null clash row.");
@@ -602,7 +602,7 @@ namespace QS3D.Core.Export
             return CoordinationWorkbookIdentity.Required(value, label);
         }
 
-        private static ZipArchiveEntry UniqueEntry(ZipArchive archive, string name)
+        private static ZipArchiveEntry? UniqueEntry(ZipArchive archive, string name)
         {
             var matches = archive.Entries.Where(entry => string.Equals(entry.FullName.Replace('\\', '/'), name, StringComparison.OrdinalIgnoreCase)).ToList();
             if (matches.Count > 1) throw new InvalidDataException("Coordination workbook contains duplicate package entry: " + name + ".");
