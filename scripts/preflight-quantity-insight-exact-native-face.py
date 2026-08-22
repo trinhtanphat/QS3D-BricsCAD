@@ -60,9 +60,14 @@ def main():
     if missing_geometry:
         return fail("Quantity Insight geometry surface no longer exposes the expected exact-face/revalidation seam", ["missing: " + token for token in missing_geometry])
 
+    # Keep the existing deduction/contact preview contract intact. The current
+    # implementation rebuilds regions through QuantityGeometryRegionPreviewService
+    # and then presents/clears them through the panel's transient helpers; the guard
+    # must follow those real production seams instead of a retired helper name.
     transient_required = [
         "QuantityGeometryDeduction",
-        "BuildQuantityRegionEntities",
+        "QuantityGeometryRegionPreviewService.Build",
+        "ShowQuantityRegionPreview",
         "ClearQuantityRegionPreview",
     ]
     missing_transient = [token for token in transient_required if token not in transient]
