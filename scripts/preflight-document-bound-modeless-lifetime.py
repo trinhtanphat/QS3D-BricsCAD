@@ -48,7 +48,8 @@ if not errors:
         "_window.Closed += OnWindowClosed",
         "_window.Closed -= OnWindowClosed",
         "_window.Dispatcher.CheckAccess()",
-        "_window.Dispatcher.BeginInvoke(new Action(_window.Close))",
+        "_window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher))",
+        "private void TryCloseWindowOnDispatcher()",
     ):
         if needle not in text["lifetime"]:
             errors.append("document-bound lifetime coordinator missing: " + needle)
