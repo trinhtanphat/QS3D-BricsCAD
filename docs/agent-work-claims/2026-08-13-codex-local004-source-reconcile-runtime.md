@@ -1,0 +1,128 @@
+# Work claim — LOCAL-004 Source Reconcile native atomicity
+
+- Status: `ACTIVE`
+- Agent: `codex-local-root-20260813`
+- Registered: `2026-08-13T15:02:00+07:00`
+- Baseline main SHA: `bd429d3ceec1058f984fca068ce54aeb88e391fe`
+- Priority: `LOCAL-004 / P0` — `QS3DSYNCSOURCE` requires licensed BricsCAD V25 transactions, real source edits, native generated-output invalidation, Undo/Redo, multi-DWG and cold reopen.
+
+## Reserved scope
+
+Prepare and execute one exact-SHA synthetic V25 qualification for the complete current LOCAL-004 scenario. Create tracked LINE/open-POLYLINE semantic sources and owned generated output through production authoring/build commands; edit their live CAD geometry; invoke production `QS3DSYNCSOURCE`; and verify source-derived semantics, dependency regeneration, ownership-scoped native invalidation and explicit rebuild.
+
+The matrix must also select generated output and an intentionally ambiguous source owner to prove fail-closed refusal without mutation; force one post-invalidation/pre-commit failure through an incompatible native `INSUNITS` versus canonical bound unit to prove CAD transaction abort plus semantic snapshot restoration; exercise native Undo/Redo; run an isolated B-document refusal without cross-project mutation; and cold save/reopen the successful A result. Any semantic/native Undo divergence or ordinary production bug is reported with sanitized evidence to a remote source-fix issue instead of being fixed in this local lane.
+
+## Expected surfaces
+
+- new `src/QS3D.BricsCAD.V25/SourceReconcileRuntimeProbeCommands.cs`
+- new `scripts/test-bricscad-v25-source-reconcile.ps1`
+- new `scripts/preflight-source-reconcile-runtime-probe.py`
+- `docs/SOURCE-RECONCILE-GENERATED-OUTPUTS.md` only for guarded runtime handoff/result
+- `docs/LOCAL-AGENT-INBOX.md` only for exact LOCAL-004 result
+- this claim file
+
+## Excluded scope
+
+- No edits to `SourceReconcileCommands.cs`, `Services/SourceReconcileService.cs`, `Cad/GeneratedDependentGeometryInvalidator.cs`, production builders, unit policy, project persistence, Undo integration or other product behavior.
+- No customer/private DWG, BLT/BRC binary inspection, GitHub Actions, release/signing/installer/V26 work, broad LOCAL-001 baseline or LOCAL-003 Level work.
+- No overlap with open responsive UI PR #975 or any ACTIVE/BLOCKED remote source claim.
+
+## Validation plan
+
+- Re-fetch `origin/main`, claims, PRs and issues before each commit; claim-only PR must merge before probe implementation.
+- Use only ordinary copies of repository-generated `samples/generated/QS3D-Sample.dwg` under a fresh outside-repository artifact root and exact clean-SHA V25 x64 Release DLL/Core pair.
+- Capture deterministic semantic/native/source digests around every success/refusal/rollback phase; never publish raw Handles, semantic/project IDs, paths, profiles, drawing contents or exception text.
+- Require production command boundaries for Direct Draw, `QS3DSYNCSOURCE`, rebuild, Undo/Redo, `QS3DSAVE`, native save and reopen. Automation may prepare selection/edit/corruption state and inspect results but may not call Source Reconcile internals to manufacture a pass.
+- Accept PASS or sanitized allowlisted source-blocking FAIL only after every launched PID exits, private scripts and exact sidecar/backup/lock files are removed, and disposable DWGs are restored byte-for-byte.
+- Run the focused runtime gate, existing Source Reconcile gates, generic preflight, installed-reference V25 Release build and licensed runner. Do not dispatch Actions.
+
+## Coordination
+
+The baseline scan found no ACTIVE/BLOCKED claim, open PR or existing runner owning `LOCAL-004`, `QS3DSYNCSOURCE` licensed qualification or the three proposed additive files. Prior Source Reconcile source claims are completed. The active LOCAL-003 claim explicitly excludes LOCAL-004.
+
+## Completion condition
+
+The claim is visible on `origin/main`; the guarded probe/runner/gate are merged; an exact-SHA licensed result covers success, generated/ambiguous refusal, forced rollback, Undo/Redo, multi-DWG and cold reopen; LOCAL-004 evidence is recorded; and the claim is `COMPLETED`. A reproduced production defect leaves LOCAL-004 source-blocked/PENDING with a remote issue and sanitized handoff rather than a false local pass.
+
+## 2026-08-14 exact-SHA rerun evidence
+
+- Clean candidate `f42171d3f9dab336fa8874547a3016271977546d` built against installed BricsCAD V25 references with `0 warnings / 0 errors`; Core smoke returned `ALL PASS`, and the focused Source Reconcile runtime/coherence/preflight gates passed before launch. The exact adapter SHA-256 was `E36D98EC5097339F0D76EBB78CF6C38C7C1F9D78A0C43590E99B50666583F4B8`.
+- The guarded BricsCAD `25.2.10` runner returned sanitized `FAIL` at `verify_final_reconcile / SEMANTIC_SOURCE_MISMATCH`. Selection was `BOTH_SOURCES`, owner match was `NONE`, generated state was `RETAINED_ALL`, and project/revision/native marker were all `UNCHANGED`. History was already `DESYNCHRONIZED` before the final command and remained so afterward, with entry class `MULTIPLE` on both sides.
+- Process, private script, private state and drawing restoration were all verified clean; launcher handoffs were zero. No source file or runtime harness was changed by the local worker. Sanitized handoff is recorded in GitHub issue `#1005` comment `#issuecomment-5289658766`.
+- The claim remains `ACTIVE / PENDING_LOCAL`. The source defect is assigned back to the non-local source-fix lane; no LOCAL-004 acceptance or issue closure is claimed.
+
+## 2026-08-14 source-candidate repeat result
+
+- The exact source candidate requested by issue `#1005`, `032cb6e3923772cf40755fb62fe891ea2a239010`, passed Core smoke, all four focused Source Reconcile gates and the installed-reference V25 `Release|x64` build. Plugin/Core ProductVersion matched the exact SHA; adapter SHA-256 was `DBF90108F6304714A7E0B297D0601E3927BF432B9D7264346C8DE68BA58978B7`.
+- The licensed runner again returned `verify_final_reconcile / SEMANTIC_SOURCE_MISMATCH` with the same sanitized tuple: `BOTH_SOURCES`, owner match `NONE`, generated `RETAINED_ALL`, project/revision/native marker all `UNCHANGED`, and history `DESYNCHRONIZED` with `MULTIPLE` entries before and after the final command. Process/script/private-state/drawing cleanup all passed and launcher handoffs were zero.
+- The global command-depth/detach suppression therefore did not prevent the pre-final-command desynchronization. Sanitized handoff is issue comment `#issuecomment-5289769355`; no source or runner change was made locally. The claim remains `ACTIVE / PENDING_LOCAL`.
+
+## 2026-08-14 post-Undo marker discriminator split
+
+- After exact candidate `8a5fbb2ca6b406a5ad4776da1b110b4d863af37b` reached `native_undo / NATIVE_UNDO_SEMANTIC_DIVERGENCE` with `undo_coherent=false` and `redo_coherent=true`, `/root` explicitly delegated one narrow automation-only edit to `/root/fix_source_reconcile_desync` under claim `2026-08-14-gpt56sol-issue1005-post-undo-marker-discriminator.md`.
+- That successor owns only sanitized post-Undo/post-Redo marker classification in the probe/runner/focused privacy gate. This claim retains exclusive ownership of licensed BricsCAD execution, the complete LOCAL-004 matrix, private/local evidence, cleanup, and result publication. Production Source Reconcile behavior remains outside both automation edits until the discriminator is rerun.
+
+### Discriminator implementation handoff
+
+- The delegated lane implemented the discriminator as additive automation-only `SourceReconcilePostUndoMarkerProbeCommands.cs`, leaving production Undo/history/marker code and the existing main runtime probe behavior untouched.
+- The unchanged runner sequence now surrounds final reconcile and guarded native Undo/Redo with private snapshot captures, then publishes only four bounded fields into the existing session-one marker: `post_undo_marker_vs_pre_final_state`, `post_undo_marker_vs_post_final_state`, `post_redo_marker_vs_pre_final_state`, and `post_redo_marker_vs_post_final_state`.
+- Each field is allowlisted to `ADVANCED`, `UNCHANGED`, or `MISSING_OR_INVALID`; the runner keeps the sanitized session-one marker in local metadata so the local owner can hand the tuple back even when the unchanged cold-reopen acceptance still reports `NATIVE_UNDO_SEMANTIC_DIVERGENCE`.
+- No licensed BricsCAD execution or acceptance conclusion is transferred to the delegated lane. After merge, this root claim should rerun the unchanged exact-SHA matrix and publish the four-field discriminator tuple to issue `#1005`.
+
+## 2026-08-15 post-Undo marker classification continuation
+
+- Exact clean candidate `8a5fbb2ca6b406a5ad4776da1b110b4d863af37b` retained the licensed result `undo_coherent=false` / `redo_coherent=true`; generated native entities participated in Undo, while reconciled semantics remained after-state. The predecessor discriminator did not retain a decisive post-Undo marker class on that failure path.
+- `/root` explicitly delegated one automation-only continuation to `/root/local004_postundo_marker` under claim `2026-08-15-codex-local004-post-undo-marker-classification.md`. That successor owns only probe/runner/focused-gate capture of the post-Undo native marker relative to the private before/after tokens and may publish only `BEFORE`, `AFTER`, or `OTHER_OR_INVALID` (plus the same optional post-Redo class).
+- This root claim retains licensed execution, private evidence, complete LOCAL-004 acceptance and result publication. Production Source Reconcile coordinator/service/native-marker behavior remains excluded from the delegated lane. If a later licensed run returns post-Undo `AFTER`, the bounded non-local production handoff is explicit ModelSpace block-table-record undo recording; this delegation does not implement it.
+
+### Classification source handoff
+
+- Exact implementation commit `eea8822bcb962dd01fc126d1fd046c5b67e07170` captures the post-Undo marker before the semantic coherence check and persists it in a dedicated exact-key diagnostic. Only `BEFORE`, `AFTER`, or `OTHER_OR_INVALID` may be published; an optional post-Redo class uses the same allowlist.
+- All six focused Source Reconcile gates and the PowerShell parser passed. The installed-reference V25 `Release|x64` adapter/Core build completed with `0 warnings / 0 errors`, and both ProductVersion values identify exact commit `eea8822bcb962dd01fc126d1fd046c5b67e07170`.
+- The root LOCAL-004 owner should run the licensed matrix on an exact clean descendant containing that commit. A post-Undo `AFTER` receipt bounds the next production lane to explicit ModelSpace block-table-record undo recording; this source handoff does not promote LOCAL-004 or alter production behavior.
+
+## 2026-08-15 database Undo lifecycle diagnostic matrix
+
+Three exact licensed candidates changed only the Source Reconcile revision carrier's
+existing-object XData enrollment and all returned the same sanitized result: native
+generated output was removed by Undo while the revision marker remained `AFTER`.
+The tested variants were ModelSpace BTR late object enable, ModelSpace BTR
+ForRead/object-enable/UpgradeOpen, and the existing ModelSpace BlockBegin entity with
+the same read/enable/upgrade sequence. This disproves further carrier substitution as
+an evidence-backed production fix.
+
+This existing LOCAL-004 claim is expanded before implementation to own one additive,
+repository-synthetic V25 diagnostic matrix that isolates the database-level Undo
+lifecycle without changing Source Reconcile production behavior:
+
+- new `src/QS3D.BricsCAD.V25/SourceReconcileUndoLifecycleProbeCommands.cs`;
+- new `scripts/test-bricscad-v25-source-reconcile-undo-lifecycle.ps1`;
+- new `scripts/preflight-source-reconcile-undo-lifecycle-probe.py`;
+- this claim and the existing LOCAL-004/Source Reconcile handoff notes for the
+  sanitized result only.
+
+Each variant must run in a fresh disposable repository-sample drawing/process and
+mutate one existing object's XData plus one topology sentinel in the same native
+transaction. The exact variants are `OBJECT_ONLY`, `DB_ENABLE_OBJECT`,
+`DB_START_OBJECT`, and `DB_ENABLE_DB_START_OBJECT`. Output is restricted to the
+variant plus allowlisted classes for database recording at entry/after enable/after
+start and for existing-object/topology state after native Undo. No raw IDs, Handles,
+revision tokens, paths, messages, counts, drawing data or private state may be
+published. The runner must require a clean exact-SHA build, zero pre-existing
+BricsCAD processes, fresh copies, close-without-save, byte-for-byte fixture recovery,
+and exact process/script/environment cleanup.
+
+This matrix is diagnostic only. It must not call `Database.StartUndoRecord()` or
+database-wide `DisableUndoRecording(false)` from production code, alter the current
+Source Reconcile marker/history/event guards, infer `LOCAL_PASS`, or close issue
+`#1005`. A production change is allowed only after the matrix distinguishes a
+database lifecycle that records the existing-object mutation in the same Undo group
+as the topology sentinel. The current operator-owned BricsCAD process is out of
+scope; execution waits for the mandatory zero-process boundary.
+
+### Diagnostic implementation handoff
+
+- Claim expansion commit `8dbf11da3ba09f875a926e115b19b8543ef4a608` merged first through PR `#1498` at `de7aba1295abbc113cd548a6f86b8c6462172b2a`.
+- Implementation commit `5e319c34b8b9d125c0985784f4263591bbb2f518` merged through PR `#1507` at `3e5bb15b6f55968234bcc2c784c07e770f88439a`. The production Source Reconcile coordinator/service and existing LOCAL-004 runner/probe remain unchanged.
+- Exact implementation validation passed: PowerShell AST; seven focused Source Reconcile/manual-policy gates; aggregate preflight `809/809`; Core Release build `0 warnings / 0 errors`; Core smoke `ALL PASS`; installed-reference V25 `Release|x64` build `0 warnings / 0 errors`; adapter/Core ProductVersion suffix `+5e319c34b8b9d125c0985784f4263591bbb2f518`.
+- Licensed execution was intentionally not attempted because an operator-owned BricsCAD process was active. The claim remains `ACTIVE / PENDING_LOCAL`; issue `#1005` and LOCAL-004 remain open until a clean exact-SHA, zero-process matrix run returns the four sanitized variant tuples.

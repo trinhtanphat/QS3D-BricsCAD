@@ -1,0 +1,124 @@
+<Window x:Class="QS3D.BricsCAD.V25.UI.MaterialCatalogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QS3D • Vật liệu" Width="820" Height="720"
+        MinWidth="700" MinHeight="560"
+        WindowStartupLocation="CenterOwner">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource Bg0Brush}">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
+        <Border Background="{StaticResource Bg1Brush}" Padding="16,12" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="MATERIAL CATALOG" FontSize="18" FontWeight="Bold"/>
+                        <Border Background="{StaticResource AccentSoftBrush}" BorderBrush="{StaticResource BorderStrongBrush}"
+                                BorderThickness="1" CornerRadius="8" Padding="7,1" Margin="8,0,0,0">
+                            <TextBlock Text="PROJECT MATERIALS" Foreground="{StaticResource LuxuryBrush}" FontSize="9" FontWeight="SemiBold"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="Built-in + vật liệu tùy chỉnh • semantic assignment • material usage XLSX"
+                               Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
+                </StackPanel>
+                <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+                    <Button Content="Xuất bảng vật liệu" Style="{StaticResource AccentButton}" Click="OnExportClick"/>
+                    <Button Content="Làm mới" Click="OnRefreshClick" Style="{StaticResource DenseButton}" Margin="8,0,0,0"/>
+                </WrapPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="14">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="1.1*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="0.9*"/></Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource Card}" Padding="10" CornerRadius="5">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="DANH MỤC" Style="{StaticResource PanelTitle}"/>
+                        <TextBlock Text="Vật liệu hiện có trong project và built-in catalog."
+                                   Style="{StaticResource Caption}" Margin="0,0,0,6"/>
+                    </StackPanel>
+                    <ListView x:Name="MaterialList" Grid.Row="1" SelectionChanged="OnMaterialSelectionChanged">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Tên" Width="195" DisplayMemberBinding="{Binding Name}"/>
+                                <GridViewColumn Header="Đơn vị" Width="75" DisplayMemberBinding="{Binding Unit}"/>
+                                <GridViewColumn Header="Mô tả" Width="200" DisplayMemberBinding="{Binding Description}"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                    <Border Grid.Row="2" Background="{StaticResource Bg2Brush}" BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,10,0,0">
+                        <StackPanel>
+                            <TextBlock Text="PROJECT REFERENCES" Style="{StaticResource Caption}"/>
+                            <TextBlock x:Name="ReferencedText" Text="—" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Column="2">
+                <Border Style="{StaticResource Card}" Padding="10" CornerRadius="5" Margin="0,0,0,10">
+                    <StackPanel>
+                        <DockPanel>
+                            <TextBlock Text="CUSTOM MATERIAL" Style="{StaticResource PanelTitle}"/>
+                            <TextBlock DockPanel.Dock="Right" Text="CUSTOM"
+                                       Foreground="{StaticResource LuxuryBrush}" FontSize="9" FontWeight="SemiBold"/>
+                        </DockPanel>
+                        <TextBlock Text="Tên vật liệu" Style="{StaticResource Caption}" Margin="0,0,0,2"/>
+                        <TextBox x:Name="NameBox" Margin="0,0,0,8"/>
+                        <TextBlock Text="Đơn vị" Style="{StaticResource Caption}" Margin="0,0,0,2"/>
+                        <TextBox x:Name="UnitBox" Margin="0,0,0,8"/>
+                        <TextBlock Text="Mô tả" Style="{StaticResource Caption}" Margin="0,0,0,2"/>
+                        <TextBox x:Name="DescriptionBox" Margin="0,0,0,8" AcceptsReturn="True" Height="72" TextWrapping="Wrap"/>
+                        <WrapPanel>
+                            <Button Content="Mới" Click="OnNewClick"/>
+                            <Button Content="Lưu custom" Style="{StaticResource AccentButton}" Click="OnSaveClick"/>
+                            <Button Content="Xóa custom" Style="{StaticResource DangerButton}" Click="OnDeleteClick"/>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Padding="10" CornerRadius="5">
+                    <StackPanel>
+                        <TextBlock Text="ÁP DỤNG CHO SELECTION" Style="{StaticResource PanelTitle}"/>
+                        <TextBlock Text="Thuộc tính đích" Style="{StaticResource Caption}" Margin="0,0,0,2"/>
+                        <ComboBox x:Name="TargetCombo" SelectedIndex="0" Margin="0,0,0,8">
+                            <ComboBoxItem Content="Vật liệu chính (Material)" Tag="Material"/>
+                            <ComboBoxItem Content="Khung Vách Kính (CurtainFrameMaterial)" Tag="CurtainFrameMaterial"/>
+                        </ComboBox>
+                        <Button Content="Áp dụng material đang chọn" Style="{StaticResource AccentButton}" Click="OnApplyClick"/>
+                        <TextBlock Text="Selection có thể là source CAD hoặc generated QS3D object. Nếu một selected handle bị nhiều semantic element claim, QS3D sẽ từ chối thay vì sửa mơ hồ. Bảng vật liệu kế thừa Family khi Instance chưa override và tách riêng CurtainFrameMaterial."
+                                   Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,9,0,0"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Grid>
+
+        <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="11,7" BorderThickness="0,1,0,0">
+            <Grid x:Name="MaterialCatalogStatusGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="{StaticResource SuccessBrush}" CornerRadius="5"
+                        Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                <TextBlock Grid.Column="1" x:Name="StatusText" Text="Sẵn sàng"
+                           MinWidth="0" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+                <TextBlock Grid.Column="2" Text="AMBIGUOUS HANDLE = FAIL CLOSED"
+                           HorizontalAlignment="Right" TextWrapping="NoWrap"
+                           Style="{StaticResource Caption}" Margin="12,0,0,0"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
