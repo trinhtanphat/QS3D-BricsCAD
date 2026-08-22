@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
+# Lane issue-3485: keep this guard scoped to the Excel↔Model integration seam.
 ROOT = Path(__file__).resolve().parents[1]
 XAML = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml"
 BRIDGE = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.ExcelRoundTrip.cs"
