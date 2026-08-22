@@ -1,0 +1,54 @@
+name: QS3D Full Domain Validated Ref
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ci/full-domain-integration-final-20260810
+
+permissions:
+  contents: write
+  statuses: write
+
+env:
+  VALIDATED_BRANCH: validated/full-domain-20260810
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-domain-integrate-20260810
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Full-domain preflight on integration head
+        run: python scripts/preflight-full-domain.py
+      - name: Build core
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - name: Run deterministic smoke tests
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
+      - name: Publish success status and validated ref
+        shell: powershell
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $sha = (git rev-parse HEAD).Trim()
+          $headers = @{
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $body = @{
+            state = "success"
+            context = "qs3d/full-domain-final"
+            description = "Full-domain preflight, Release build and smoke tests passed"
+            target_url = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } | ConvertTo-Json
+          Invoke-RestMethod -Method Post -Headers $headers -ContentType "application/json" -Body $body -Uri "https://api.github.com/repos/${{ github.repository }}/statuses/$sha" | Out-Null
+          git push origin "HEAD:refs/heads/$env:VALIDATED_BRANCH" --force
