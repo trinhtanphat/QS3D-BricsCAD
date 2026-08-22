@@ -9,6 +9,7 @@ using System.Windows.Input;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Reporting;
 using QS3D.BricsCAD.V25.Services;
+using QS3D.Core.Reporting;
 using Teigha.BoundaryRepresentation;
 using Teigha.DatabaseServices;
 using BcadApplication = Bricscad.ApplicationServices.Application;
