@@ -1,0 +1,28 @@
+using System;
+using Bricscad.ApplicationServices;
+using QS3D.BricsCAD.V25.UI;
+using Teigha.Runtime;
+
+namespace QS3D.BricsCAD.V25
+{
+    public sealed class MaterialCatalogCommands
+    {
+        [CommandMethod("QS3DMATERIALS", CommandFlags.Modal)]
+        public void ShowMaterialCatalog()
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) return;
+            try
+            {
+                Application.ShowModelessWindow(IntPtr.Zero, new MaterialCatalogWindow(), true);
+                PaletteCoordinator.SetStatus("Material Catalog: built-in + custom + apply theo semantic selection.");
+            }
+            catch (System.Exception ex)
+            {
+                var message = "QS3DMATERIALS lỗi: " + ex.Message;
+                PaletteCoordinator.SetStatus(message);
+                document.Editor.WriteMessage("\n" + message);
+            }
+        }
+    }
+}
