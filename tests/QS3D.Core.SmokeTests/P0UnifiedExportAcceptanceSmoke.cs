@@ -29,7 +29,7 @@ namespace QS3D.Core.SmokeTests
                     Require(dgklXml.Contains(">" + row.Material + "</t>"), "DGKL lost material/concrete-grade identity for " + row.Category + ".");
                     Require(detailXml.Contains(">" + row.FamilyName + "</t>"), "CHI_TIET lost family/group display identity: " + row.FamilyName + ".");
                     Require(detailXml.Contains(">" + row.ElementName + "</t>"), "CHI_TIET lost element display identity: " + row.ElementName + ".");
-                    Require(detailXml.Contains(">" + row.FloorZoneText + "</t>"), "CHI_TIET lost floor/zone identity for " + row.Category + ".");
+                    Require(detailXml.Contains(">" + row.Floor + "</t>"), "CHI_TIET lost floor identity for " + row.Category + ".");
                 }
 
                 for (var index = 0; index < details.Count; index++)
