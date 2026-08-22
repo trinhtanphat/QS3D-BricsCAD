@@ -128,6 +128,8 @@
                                     ToolTip="Mở bảng khối lượng QS3DBQ đầy đủ"/>
                             <Button Content="Định vị" Click="OnLocateClick" Style="{StaticResource DenseButton}"
                                     ToolTip="Chọn và zoom các đối tượng CAD của dòng khối lượng đang chọn"/>
+                            <Button Content="Xuất evidence" Click="OnQuantityEvidenceExportClick" Style="{StaticResource DenseButton}"
+                                    ToolTip="Xuất đúng Quantity Explanation/evidence đang review ra XLSX, không tính lại khối lượng bằng một engine khác"/>
                             <CheckBox x:Name="AutoRevealCheck" Content="Click = 3D" IsChecked="True"
                                       VerticalAlignment="Center" Margin="7,0,2,0"
                                       ToolTip="Bật: click một dòng cấu kiện sẽ chọn và zoom đối tượng tương ứng trong View 3D. Tắt: dùng nút Định vị hoặc double-click."/>
