@@ -89,7 +89,7 @@ def main():
         "CoordinationIssueExcelLifecycle.Project",
         "Qs3dReviewIssueGeometry",
         "Qs3dReviewWorkbookTraceReader.Read",
-        'qtoXml.Contains("<c r=\\\"O2\\\""',
+        r'qtoXml.Contains("<c r=\"O2\""',
         '"KEEP-ME"',
     ]
     missing_smoke = [token for token in smoke_required if token not in smoke]
