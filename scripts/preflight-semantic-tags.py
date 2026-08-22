@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def read(path: str) -> str:
+    target = ROOT / path
+    if not target.exists():
+        print(f"[FAIL] missing {path}")
+        sys.exit(1)
+    return target.read_text(encoding="utf-8")
+
+
+def require(text: str, token: str, label: str) -> None:
+    if token not in text:
+        print(f"[FAIL] {label}: missing {token}")
+        sys.exit(1)
+
+
+renderer = read("src/QS3D.Core/Documentation/SemanticTagRenderer.cs")
+renderer_smoke = read("tests/QS3D.Core.SmokeTests/SemanticTagRendererSmoke.cs")
+health = read("src/QS3D.Core/Diagnostics/GeneratedSemanticTagHealthService.cs")
+comprehensive = read("src/QS3D.Core/Diagnostics/ComprehensiveModelHealthService.cs")
+builder = read("src/QS3D.BricsCAD.V25/Cad/SemanticTagBuilder.cs")
+remove_service = read("src/QS3D.BricsCAD.V25/Cad/SemanticTagRemovalService.cs")
+command = read("src/QS3D.BricsCAD.V25/SemanticTagCommands.cs")
+remove_command = read("src/QS3D.BricsCAD.V25/SemanticTagRemovalCommands.cs")
+runtime_health = read("src/QS3D.BricsCAD.V25/Cad/GeneratedSemanticTagRuntimeHealthService.cs")
+runtime_aggregator = read("src/QS3D.BricsCAD.V25/Cad/GeneratedSolidRuntimeHealthService.cs")
+release = read("src/QS3D.BricsCAD.V25/ReleaseReadinessCommands.cs")
+tag_health_command = read("src/QS3D.BricsCAD.V25/SemanticTagHealthCommands.cs")
+health_smoke = read("tests/QS3D.Core.SmokeTests/GeneratedSemanticTagHealthSmoke.cs")
+registration = read("tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs")
+doc = read("docs/SEMANTIC-TAGS.md")
+
+for token in [
+    "MaxTemplateLength = 512",
+    "MaxRenderedLength = 2048",
+    "MaxTokens = 64",
+    '"Id"',
+    '"Category"',
+    '"Family"',
+    '"Floor"',
+    '"Zone"',
+    'token.StartsWith("P:"',
+    'token.StartsWith("Q:"',
+    "GeneratedHandleOwnershipPolicy.IsOwnerSlot(key)",
+    'key.StartsWith("Generated"',
+    'key.StartsWith("QS3D.Generated"',
+    'key.StartsWith("PhysicalOpeningCut"',
+    "Unsupported semantic tag token",
+]:
+    require(renderer, token, "semantic tag renderer")
+
+for token in [
+    "StableSemanticReferencesRender",
+    "OptionalPropertyAndQuantityRender",
+    "GeneratedOwnershipCannotLeakIntoTag",
+    "UnsupportedTokenFailsClosed",
+    "MissingReferenceFailsClosed",
+]:
+    require(renderer_smoke, token, "semantic tag renderer smoke")
+
+for token in [
+    'public const string HandlesKey = "GeneratedSemanticTagHandles"',
+    'public const string DrawingLocalWcs = "DrawingLocalWcs"',
+    "SemanticTagRenderer.Render(project, element, template)",
+    '"SEMANTIC_TAG_TEXT_STALE"',
+    '"SEMANTIC_TAG_RENDER_INVALID"',
+    '"SEMANTIC_TAG_PROJECT_MISMATCH"',
+    '"SEMANTIC_TAG_POSITION_SCOPE_INVALID"',
+    '"SEMANTIC_TAG_POSITION_INVALID"',
+]:
+    require(health, token, "semantic tag health")
+
+for token in ['"SEMANTIC_TAG"', "new GeneratedSemanticTagHealthService().Inspect(project)"]:
+    require(comprehensive, token, "comprehensive semantic tag health")
+
+for token in [
+    'internal const string TemplatePropertyKey = "SemanticTagTemplate"',
+    'internal const string TextHeightPropertyKey = "SemanticTagTextHeightM"',
+    "SemanticTagRenderer.Render(project, element, template)",
+    "GeneratedHandleOwnershipIndex.Build(project)",
+    "ProjectStateSnapshot.Capture(project)",
+    "var cadCommitted = false;",
+    "if (!(entity is MText))",
+    "GeneratedGeometryService.RequireMatchingOwnership(entity, project, element",
+    "GeneratedHandleOwnershipPolicy.CanonicalOwnerSlot(slot)",
+    "var tag = new MText",
+    "Contents = EncodePlainMText(rendered)",
+    "GeneratedGeometryService.MarkGenerated(document, transaction, tag, project.ProjectId, element.Id, element.Category)",
+    "element.Properties[GeneratedSemanticTagHealthService.TextKey] = rendered;",
+    "element.Properties[GeneratedSemanticTagHealthService.PositionScopeKey] = GeneratedSemanticTagHealthService.DrawingLocalWcs;",
+    '"documentation.semantic-tag.replace"',
+    "project.Touch();",
+    "transaction.Commit();",
+    "cadCommitted = true;",
+    "rollback.Restore(project)",
+    "EncodePlainMText",
+]:
+    require(builder, token, "native semantic tag builder")
+
+render = builder.find("SemanticTagRenderer.Render(project, element, template)")
+erase = builder.find("ErasePrevious(document, transaction, project, element, ownership)")
+metadata = builder.find("element.Properties[GeneratedSemanticTagHealthService.HandlesKey] = generatedHandle;")
+audit = builder.find('AuditTrail.ForProject(project).Record(')
+touch = builder.find("project.Touch();", audit)
+commit = builder.find("transaction.Commit();", touch)
+if min(render, erase, metadata, audit, touch, commit) < 0 or not render < erase < metadata < audit < touch < commit:
+    print("[FAIL] native semantic tag builder: render/validate must precede erase and semantic ownership/audit/revision must precede CAD commit")
+    sys.exit(1)
+if "Editor.Regen(" in builder or "PaletteCoordinator" in builder:
+    print("[FAIL] native semantic tag builder: UI work must remain command-level post-commit")
+    sys.exit(1)
+
+for token in [
+    '[CommandMethod("QS3DTAG", CommandFlags.Modal)]',
+    '[CommandMethod("QS3DTAGREFRESH", CommandFlags.Modal)]',
+    "GeneratedHandleOwnershipIndex.Build(project)",
+    "generated.TryFindOwner(handle",
+    "QS3D-generated output",
+    'generatedOwner.Id + "/" + generatedSlot',
+    "SourceHandles.Any",
+    "RequireSupportedUcs(document)",
+    "result.Value.TransformBy(document.Editor.CurrentUserCoordinateSystem)",
+    "Math.Atan2",
+    "SemanticTagBuilder.StoredWorldPosition(element)",
+    "SemanticTagBuilder.StoredRotation(element)",
+    "SemanticTagBuilder.Build(document, project, element",
+    "document.Editor.Regen();",
+    "UI sync warning:",
+]:
+    require(command, token, "semantic tag commands")
+
+for token in [
+    "GeneratedHandleOwnershipIndex.Build(project)",
+    "GeneratedHandleOwnershipPolicy.CanonicalOwnerSlot(slot)",
+    "GeneratedGeometryService.RequireMatchingOwnership",
+    "if (!(entity is MText))",
+    "ProjectStateSnapshot.Capture(project)",
+    '"documentation.semantic-tag.remove"',
+    "transaction.Commit();",
+    "rollback.Restore(project)",
+]:
+    require(remove_service, token, "semantic tag removal service")
+
+for token in [
+    '[CommandMethod("QS3DTAGREMOVE", CommandFlags.Modal)]',
+    "SemanticTagRemovalService.Remove(document, project, element)",
+]:
+    require(remove_command, token, "semantic tag remove command")
+
+for token in [
+    "SEMANTIC_TAG_MTEXT_MISSING",
+    "SEMANTIC_TAG_MTEXT_TYPE_MISMATCH",
+    "SEMANTIC_TAG_MTEXT_OWNERSHIP_MISMATCH",
+    "SEMANTIC_TAG_MTEXT_CONTENT_DRIFT",
+    "SEMANTIC_TAG_MTEXT_HEIGHT_DRIFT",
+    "SEMANTIC_TAG_MTEXT_POSITION_DRIFT",
+    "SEMANTIC_TAG_MTEXT_ROTATION_DRIFT",
+    "SEMANTIC_TAG_MTEXT_NORMAL_DRIFT",
+    "GeneratedGeometryService.HasMatchingOwnership(tag, project, element)",
+    "OpenMode.ForRead",
+]:
+    require(runtime_health, token, "semantic tag live runtime health")
+for forbidden in ["Erase()", "OpenMode.ForWrite"]:
+    if forbidden in runtime_health:
+        print("[FAIL] semantic tag live runtime health must remain read-only: " + forbidden)
+        sys.exit(1)
+
+require(runtime_aggregator, "GeneratedSemanticTagRuntimeHealthService.Inspect(document, project)", "runtime health aggregator")
+require(release, "GeneratedSolidRuntimeHealthService.Inspect(document, project)", "release readiness live health wiring")
+
+for token in [
+    '[CommandMethod("QS3DTAGHEALTH", CommandFlags.Modal)]',
+    "GeneratedSemanticTagHealthService().Inspect(project)",
+    "GeneratedSemanticTagRuntimeHealthService.Inspect(document, project)",
+]:
+    require(tag_health_command, token, "semantic tag health command")
+
+for token in [
+    "NoMetadataIsOptional",
+    "HealthyTagPasses",
+    "SemanticChangeMarksRenderedTextStale",
+    "GeneratedRuntimeTemplateFailsClosed",
+    "OwnerAndPositionCorruptionAreDetected",
+    '"SEMANTIC_TAG_TEXT_STALE"',
+    '"SEMANTIC_TAG_RENDER_INVALID"',
+]:
+    require(health_smoke, token, "semantic tag health smoke")
+
+require(registration, "SemanticTagRendererSmoke.Run();", "renderer smoke registration")
+require(registration, "GeneratedSemanticTagHealthSmoke.Run();", "health smoke registration")
+
+for token in [
+    "QS3DTAG",
+    "QS3DTAGREFRESH",
+    "QS3DTAGREMOVE",
+    "QS3DTAGHEALTH",
+    "GeneratedSemanticTagHandles",
+    "DrawingLocalWcs",
+    "GeneratedSemanticTagRuntimeHealthService",
+    "QS3DRELEASECHECK",
+    "MLeader",
+    "sheet/layout",
+    "exact-SHA licensed BricsCAD V25",
+]:
+    require(doc, token, "semantic tag lifecycle docs")
+
+print("[PASS] semantic tag rendering remains bounded/model-linked and native create/refresh/remove/live-health paths preserve guarded ownership, rollback, read-only runtime diagnostics and release wiring; MLeader/sheet/exact-V25 runtime remain explicit gates")
