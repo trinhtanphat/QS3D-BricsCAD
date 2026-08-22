@@ -50,9 +50,9 @@ namespace QS3D.Core.Export
                 throw new InvalidDataException("Customer workbook TRACE_MODEL exceeds the Excel row limit.");
 
             var traces = new List<TraceProjection>();
-            var dgklXml = BuildBusinessSheet(DgklSheet, summaries, false, traces);
-            var formworkXml = BuildBusinessSheet(FormworkSheet, formwork, true, traces);
-            var detailXml = BuildBusinessSheet(DetailSheet, details, false, traces);
+            var dgklXml = BuildDgklSheet(summaries, traces);
+            var formworkXml = BuildFormworkSheet(formwork, traces);
+            var detailXml = BuildDetailSheet(details, traces);
             var traceXml = BuildTraceSheet(traces);
 
             var fullPath = Path.GetFullPath(path);
@@ -208,22 +208,82 @@ namespace QS3D.Core.Export
             }
         }
 
+        private static string BuildDgklSheet(IReadOnlyList<QuantityReportRow> rows, ICollection<TraceProjection> traces)
+        {
+            var headers = new[] { "STT", "Tầng", "Loại", "Tên cấu kiện", "SL", "Mác BT", "BT gộp (m³)", "Trừ giao (m³)", "BT còn (m³)", "Dài (m)", "Chu vi ngoài (m)", "Chu vi trong (m)", TraceHeader };
+            return BuildBusinessSheet(DgklSheet, headers, 12, rows, traces, (sb, row, excelRow, index, traceKey) =>
+            {
+                Number(sb, Cell(0, excelRow), index + 1, IntegerStyle);
+                Text(sb, Cell(1, excelRow), FloorText(row), 0);
+                Text(sb, Cell(2, excelRow), row.Category, 0);
+                Text(sb, Cell(3, excelRow), DisplayName(row), 0);
+                Number(sb, Cell(4, excelRow), row.Count, IntegerStyle);
+                Text(sb, Cell(5, excelRow), row.Material, 0);
+                Evidence(sb, Cell(6, excelRow), row.GrossConcreteM3, row.HasGrossConcreteM3Evidence);
+                Evidence(sb, Cell(7, excelRow), row.DeductionM3, row.HasDeductionM3Evidence);
+                Evidence(sb, Cell(8, excelRow), row.NetConcreteM3, row.HasNetConcreteM3Evidence);
+                Evidence(sb, Cell(9, excelRow), row.LengthM, row.HasLengthMEvidence);
+                Evidence(sb, Cell(10, excelRow), row.OuterPerimeterM, row.HasOuterPerimeterMEvidence);
+                Evidence(sb, Cell(11, excelRow), row.InnerPerimeterM, row.HasInnerPerimeterMEvidence);
+                Text(sb, Cell(12, excelRow), traceKey, WrappedStyle);
+            });
+        }
+
+        private static string BuildFormworkSheet(IReadOnlyList<QuantityReportRow> rows, ICollection<TraceProjection> traces)
+        {
+            var headers = new[] { "STT", "Tầng", "Loại", "Tên cấu kiện", "SL", "CP gộp (m²)", "Trừ giao (m²)", "CP còn (m²)", TraceHeader };
+            return BuildBusinessSheet(FormworkSheet, headers, 8, rows, traces, (sb, row, excelRow, index, traceKey) =>
+            {
+                Number(sb, Cell(0, excelRow), index + 1, IntegerStyle);
+                Text(sb, Cell(1, excelRow), FloorText(row), 0);
+                Text(sb, Cell(2, excelRow), row.Category, 0);
+                Text(sb, Cell(3, excelRow), DisplayName(row), 0);
+                Number(sb, Cell(4, excelRow), row.Count, IntegerStyle);
+                Evidence(sb, Cell(5, excelRow), row.FormworkM2, row.HasFormworkM2Evidence);
+                if (row.HasFormworkM2Evidence) Number(sb, Cell(6, excelRow), 0d, DecimalStyle);
+                Evidence(sb, Cell(7, excelRow), row.FormworkM2, row.HasFormworkM2Evidence);
+                Text(sb, Cell(8, excelRow), traceKey, WrappedStyle);
+            });
+        }
+
+        private static string BuildDetailSheet(IReadOnlyList<QuantityReportRow> rows, ICollection<TraceProjection> traces)
+        {
+            var headers = new[] { "STT", "Nhóm", "Cấu kiện", "Tầng", "Dài", "Rộng", "Cao", "BT gộp", "Trừ giao", "BT còn", "VK", TraceHeader };
+            return BuildBusinessSheet(DetailSheet, headers, 11, rows, traces, (sb, row, excelRow, index, traceKey) =>
+            {
+                Number(sb, Cell(0, excelRow), index + 1, IntegerStyle);
+                Text(sb, Cell(1, excelRow), GroupName(row), 0);
+                Text(sb, Cell(2, excelRow), DisplayName(row), 0);
+                Text(sb, Cell(3, excelRow), FloorText(row), 0);
+                Evidence(sb, Cell(4, excelRow), row.LengthM, row.HasLengthMEvidence);
+                // Width and height are intentionally blank: QuantityReportRow currently has no real evidence fields for them.
+                Evidence(sb, Cell(7, excelRow), row.GrossConcreteM3, row.HasGrossConcreteM3Evidence);
+                Evidence(sb, Cell(8, excelRow), row.DeductionM3, row.HasDeductionM3Evidence);
+                Evidence(sb, Cell(9, excelRow), row.NetConcreteM3, row.HasNetConcreteM3Evidence);
+                Evidence(sb, Cell(10, excelRow), row.FormworkM2, row.HasFormworkM2Evidence);
+                Text(sb, Cell(11, excelRow), traceKey, WrappedStyle);
+            });
+        }
+
+        private delegate void BusinessRowWriter(StringBuilder sb, QuantityReportRow row, int excelRow, int index, string traceKey);
+
         private static string BuildBusinessSheet(
             string sheetName,
+            string[] headers,
+            int visibleColumnCount,
             IReadOnlyList<QuantityReportRow> rows,
-            bool formworkOnly,
-            ICollection<TraceProjection> traces)
+            ICollection<TraceProjection> traces,
+            BusinessRowWriter writeRow)
         {
-            var headers = formworkOnly
-                ? new[] { "STT", "Tên cấu kiện", "Loại", "Vật liệu", "Family ID", "Tầng/Zone", "SL", "Cốp pha (m²)", "Thành bên (m²)", "DT đáy (m²)", "DT đỉnh (m²)", "DT khác (m²)", "DT cửa (m²)", TraceHeader }
-                : new[] { "STT", "Tên cấu kiện", "Loại", "Vật liệu", "Family ID", "Tầng/Zone", "SL", "BT gộp (m³)", "Trừ giao (m³)", "BT còn (m³)", "Cốp pha (m²)", "Dài (m)", "Chu vi ngoài (m)", "Chu vi trong (m)", "DT cửa (m²)", "Thành bên (m²)", "DT đáy (m²)", "DT đỉnh (m²)", "DT khác (m²)", "Khối lượng riêng (kg/m³)", "Khối lượng (kg)", "Ghi chú", TraceHeader };
+            if (headers.Length != visibleColumnCount + 1 || !string.Equals(headers[headers.Length - 1], TraceHeader, StringComparison.Ordinal))
+                throw new InvalidDataException("Customer workbook business sheet must end with one hidden TRACE_KEY column.");
 
             var lastRow = Math.Max(1, rows.Count + 1);
             var lastColumn = ColumnName(headers.Length - 1);
             var range = "A1:" + lastColumn + lastRow.ToString(CultureInfo.InvariantCulture);
+            var visibleRange = "A1:" + ColumnName(visibleColumnCount - 1) + lastRow.ToString(CultureInfo.InvariantCulture);
             var sb = BeginSheet(range);
-            sb.Append("<cols><col min=\"1\" max=\"1\" width=\"7\" customWidth=\"1\"/><col min=\"2\" max=\"6\" width=\"20\" customWidth=\"1\"/><col min=\"7\" max=\"")
-              .Append(headers.Length).Append("\" width=\"15\" customWidth=\"1\"/></cols>");
+            AppendBusinessColumns(sb, visibleColumnCount);
             sb.Append("<sheetData><row r=\"1\" ht=\"30\" customHeight=\"1\">");
             for (var column = 0; column < headers.Length; column++) Text(sb, Cell(column, 1), headers[column], HeaderStyle);
             sb.Append("</row>");
@@ -234,49 +294,41 @@ namespace QS3D.Core.Export
                 var excelRow = index + 2;
                 var traceKey = BuildTraceKey(sheetName, row);
                 traces.Add(new TraceProjection(traceKey, sheetName, excelRow, row.ElementIds, row.SourceHandles, row.DrawingFingerprint));
-                var displayName = string.IsNullOrWhiteSpace(row.ElementName) ? row.FamilyName : row.ElementName;
                 sb.Append("<row r=\"").Append(excelRow).Append("\">");
-                Number(sb, Cell(0, excelRow), index + 1, IntegerStyle);
-                Text(sb, Cell(1, excelRow), displayName, 0);
-                Text(sb, Cell(2, excelRow), row.Category, 0);
-                Text(sb, Cell(3, excelRow), row.Material, 0);
-                Text(sb, Cell(4, excelRow), row.FamilyId, 0);
-                Text(sb, Cell(5, excelRow), row.FloorZoneText, 0);
-                Number(sb, Cell(6, excelRow), row.Count, IntegerStyle);
-                if (formworkOnly)
-                {
-                    Evidence(sb, Cell(7, excelRow), row.FormworkM2, row.HasFormworkM2Evidence);
-                    Evidence(sb, Cell(8, excelRow), row.SideAreaM2, row.HasSideAreaM2Evidence);
-                    Evidence(sb, Cell(9, excelRow), row.BottomAreaM2, row.HasBottomAreaM2Evidence);
-                    Evidence(sb, Cell(10, excelRow), row.TopAreaM2, row.HasTopAreaM2Evidence);
-                    Evidence(sb, Cell(11, excelRow), row.OtherAreaM2, row.HasOtherAreaM2Evidence);
-                    Evidence(sb, Cell(12, excelRow), row.DoorAreaM2, row.HasDoorAreaM2Evidence);
-                    Text(sb, Cell(13, excelRow), traceKey, WrappedStyle);
-                }
-                else
-                {
-                    Evidence(sb, Cell(7, excelRow), row.GrossConcreteM3, row.HasGrossConcreteM3Evidence);
-                    Evidence(sb, Cell(8, excelRow), row.DeductionM3, row.HasDeductionM3Evidence);
-                    Evidence(sb, Cell(9, excelRow), row.NetConcreteM3, row.HasNetConcreteM3Evidence);
-                    Evidence(sb, Cell(10, excelRow), row.FormworkM2, row.HasFormworkM2Evidence);
-                    Evidence(sb, Cell(11, excelRow), row.LengthM, row.HasLengthMEvidence);
-                    Evidence(sb, Cell(12, excelRow), row.OuterPerimeterM, row.HasOuterPerimeterMEvidence);
-                    Evidence(sb, Cell(13, excelRow), row.InnerPerimeterM, row.HasInnerPerimeterMEvidence);
-                    Evidence(sb, Cell(14, excelRow), row.DoorAreaM2, row.HasDoorAreaM2Evidence);
-                    Evidence(sb, Cell(15, excelRow), row.SideAreaM2, row.HasSideAreaM2Evidence);
-                    Evidence(sb, Cell(16, excelRow), row.BottomAreaM2, row.HasBottomAreaM2Evidence);
-                    Evidence(sb, Cell(17, excelRow), row.TopAreaM2, row.HasTopAreaM2Evidence);
-                    Evidence(sb, Cell(18, excelRow), row.OtherAreaM2, row.HasOtherAreaM2Evidence);
-                    Nullable(sb, Cell(19, excelRow), row.DensityKgM3);
-                    Nullable(sb, Cell(20, excelRow), row.MassKg);
-                    Text(sb, Cell(21, excelRow), row.Note, WrappedStyle);
-                    Text(sb, Cell(22, excelRow), traceKey, WrappedStyle);
-                }
+                writeRow(sb, row, excelRow, index, traceKey);
                 sb.Append("</row>");
             }
 
-            sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
+            sb.Append("</sheetData><autoFilter ref=\"").Append(visibleRange).Append("\"/></worksheet>");
             return sb.ToString();
+        }
+
+        private static void AppendBusinessColumns(StringBuilder sb, int visibleColumnCount)
+        {
+            sb.Append("<cols><col min=\"1\" max=\"1\" width=\"7\" customWidth=\"1\"/>");
+            if (visibleColumnCount > 1)
+                sb.Append("<col min=\"2\" max=\"").Append(visibleColumnCount).Append("\" width=\"18\" customWidth=\"1\"/>");
+            var traceColumn = visibleColumnCount + 1;
+            sb.Append("<col min=\"").Append(traceColumn).Append("\" max=\"").Append(traceColumn)
+              .Append("\" width=\"2\" hidden=\"1\" customWidth=\"1\"/></cols>");
+        }
+
+        private static string DisplayName(QuantityReportRow row)
+        {
+            return string.IsNullOrWhiteSpace(row.ElementName) ? row.FamilyName : row.ElementName;
+        }
+
+        private static string GroupName(QuantityReportRow row)
+        {
+            if (!string.IsNullOrWhiteSpace(row.FamilyName)) return row.FamilyName;
+            if (!string.IsNullOrWhiteSpace(row.FamilyId)) return row.FamilyId;
+            return row.Category;
+        }
+
+        private static string FloorText(QuantityReportRow row)
+        {
+            if (!string.IsNullOrWhiteSpace(row.Floor)) return row.Floor;
+            return row.Zone ?? string.Empty;
         }
 
         private static string BuildTraceSheet(IReadOnlyList<TraceProjection> traces)
@@ -370,11 +422,6 @@ namespace QS3D.Core.Export
             if (hasEvidence) Number(sb, cell, value, DecimalStyle);
         }
 
-        private static void Nullable(StringBuilder sb, string cell, double? value)
-        {
-            if (value.HasValue) Number(sb, cell, value.Value, DecimalStyle);
-        }
-
         private static void Text(StringBuilder sb, string cell, string value, int style)
         {
             var text = value ?? string.Empty;
@@ -434,7 +481,7 @@ namespace QS3D.Core.Export
 
         private const string RootRelationshipsXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>";
         private const string ContentTypesXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet3.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet4.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/></Types>";
-        private const string WorkbookXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"DGKL\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"COP_PHA\" sheetId=\"2\" r:id=\"rId2\"/><sheet name=\"CHI_TIET\" sheetId=\"3\" r:id=\"rId3\"/><sheet name=\"TRACE_MODEL\" sheetId=\"4\" r:id=\"rId4\"/></sheets></workbook>";
+        private const string WorkbookXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"DGKL\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"COP_PHA\" sheetId=\"2\" r:id=\"rId2\"/><sheet name=\"CHI_TIET\" sheetId=\"3\" r:id=\"rId3\"/><sheet name=\"TRACE_MODEL\" sheetId=\"4\" state=\"hidden\" r:id=\"rId4\"/></sheets></workbook>";
         private const string WorkbookRelationshipsXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/><Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet3.xml\"/><Relationship Id=\"rId4\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet4.xml\"/><Relationship Id=\"rId5\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>";
         private const string StylesXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><numFmts count=\"1\"><numFmt numFmtId=\"164\" formatCode=\"#,##0.000\"/></numFmts><fonts count=\"2\"><font><sz val=\"11\"/><name val=\"Segoe UI\"/></font><font><b/><sz val=\"11\"/><name val=\"Segoe UI\"/></font></fonts><fills count=\"3\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFC000\"/><bgColor indexed=\"64\"/></patternFill></fill></fills><borders count=\"2\"><border/><border><left style=\"thin\"/><right style=\"thin\"/><top style=\"thin\"/><bottom style=\"thin\"/></border></borders><cellStyleXfs count=\"1\"><xf/></cellStyleXfs><cellXfs count=\"5\"><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/><xf fontId=\"1\" fillId=\"2\" borderId=\"1\" xfId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" numFmtId=\"3\" applyNumberFormat=\"1\"/><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" numFmtId=\"164\" applyNumberFormat=\"1\"/><xf fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyAlignment=\"1\"><alignment vertical=\"top\" wrapText=\"1\"/></xf></cellXfs></styleSheet>";
     }

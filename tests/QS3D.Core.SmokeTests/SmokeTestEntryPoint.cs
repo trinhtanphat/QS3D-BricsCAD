@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
                 WorkspaceModalPrimitivesSmoke.Run();
                 BltLegacyAdapterSmoke.Run();
                 QuantityEvidenceGraphSmoke.Run();
+                QsCustomerWorkbookDgklLayoutSmoke.Run();
                 CoordinationIssuePersistenceSmoke.Run();
                 CoordinationIssueExcelLifecycleSmoke.Run();
                 CoordinationIssueExcelWorkbookSmoke.Run();
