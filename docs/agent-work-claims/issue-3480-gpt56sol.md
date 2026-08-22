@@ -8,7 +8,7 @@ Session: quantity-review-exact-face
 Baseline main: `b0635b0b2d16836850a564f2de00a9e43a2465e6`
 Reconciled main: `b0635b0b2d16836850a564f2de00a9e43a2465e6`
 Canonical branch: `agent/gpt56sol/3480-quantity-review-exact-face`
-Canonical PR: PENDING
+Canonical PR: #3487
 Supersedes: none
 
 ## Scope
