@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Mep;
@@ -18,6 +19,7 @@ namespace QS3D.BricsCAD.V25
     public sealed class MepExactClashCommands
     {
         private const int MaxRecognizedSolids = 500;
+        private const int MaxSparseRecognizedSolids = 5000;
         private const int MaxBroadPhasePairs = 100000;
         private static MepRecognitionProfile RecognitionProfile => MepRecognitionProfileProvider.Current;
 
@@ -72,6 +74,15 @@ namespace QS3D.BricsCAD.V25
             skipped = 0;
             broadPhasePairs = 0;
 
+            if (allowedHandlePairKeys != null && allowedHandlePairKeys.Count > MaxBroadPhasePairs)
+                throw new InvalidOperationException(
+                    "QS3D sparse exact recheck vượt " + MaxBroadPhasePairs +
+                    " allowed native pair; hãy partition coordination scope trước khi scan.");
+
+            var candidateLimit = allowedHandlePairKeys == null
+                ? MaxRecognizedSolids
+                : MaxSparseRecognizedSolids;
+
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
                 for (var i = 0; i < ids.Count; i++)
@@ -107,46 +118,56 @@ namespace QS3D.BricsCAD.V25
                         skipped++;
                     }
 
-                    if (candidates.Count > MaxRecognizedSolids)
+                    if (candidates.Count > candidateLimit)
+                    {
+                        if (allowedHandlePairKeys == null)
+                            throw new InvalidOperationException(
+                                "QS3DMEPEXACTCLASH giới hạn " + MaxRecognizedSolids +
+                                " Solid3d đã nhận diện mỗi lần; hãy thu hẹp selection.");
+
                         throw new InvalidOperationException(
-                            "QS3DMEPEXACTCLASH giới hạn " + MaxRecognizedSolids +
-                            " Solid3d đã nhận diện mỗi lần; hãy thu hẹp selection.");
+                            "QS3D sparse exact recheck giới hạn " + MaxSparseRecognizedSolids +
+                            " Solid3d đã nhận diện; hãy partition coordination scope trước khi scan.");
+                    }
                 }
 
                 candidates.Sort(CompareCandidates);
                 recognizedSolids = candidates.Count;
-                for (var i = 0; i < candidates.Count; i++)
+
+                if (allowedHandlePairKeys == null)
                 {
-                    for (var j = i + 1; j < candidates.Count; j++)
+                    for (var i = 0; i < candidates.Count; i++)
                     {
-                        var left = candidates[i];
-                        var right = candidates[j];
-                        if (left.Discipline != MepRecognitionDiscipline.Mep &&
-                            right.Discipline != MepRecognitionDiscipline.Mep)
-                            continue;
-                        if (!ExtentsMayIntersect(left.Extents, right.Extents)) continue;
-
-                        var handlePairKey = BuildHandlePairKey(left.Handle, right.Handle);
-                        if (allowedHandlePairKeys != null && !allowedHandlePairKeys.Contains(handlePairKey))
-                            continue;
-
-                        broadPhasePairs++;
-                        if (broadPhasePairs > MaxBroadPhasePairs)
-                            throw new InvalidOperationException(
-                                "QS3DMEPEXACTCLASH vượt " + MaxBroadPhasePairs +
-                                " broad-phase pair; hãy thu hẹp selection.");
-
-                        try
-                        {
-                            if (left.Solid.CheckInterference(right.Solid))
-                                results.Add(new ExactClashPair(left.Handle, right.Handle));
-                        }
-                        catch (System.Exception ex) when (IsRecoverableEntityFailure(ex))
-                        {
-                            skipped++;
-                        }
+                        for (var j = i + 1; j < candidates.Count; j++)
+                            EvaluateCandidatePair(candidates[i], candidates[j], results, ref skipped, ref broadPhasePairs);
                     }
                 }
+                else
+                {
+                    var candidateByHandle = new Dictionary<string, SolidCandidate>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var candidate in candidates)
+                    {
+                        if (candidateByHandle.ContainsKey(candidate.Handle))
+                            throw new InvalidOperationException(
+                                "QS3D sparse exact recheck gặp duplicate live Handle: " + candidate.Handle + ".");
+                        candidateByHandle.Add(candidate.Handle, candidate);
+                    }
+
+                    foreach (var pairKey in allowedHandlePairKeys.OrderBy(value => value, StringComparer.Ordinal))
+                    {
+                        if (!TryParseHandlePairKey(pairKey, out var leftHandle, out var rightHandle))
+                            throw new ArgumentException(
+                                "Sparse exact recheck received a malformed or non-canonical allowed Handle pair key.",
+                                nameof(allowedHandlePairKeys));
+
+                        if (!candidateByHandle.TryGetValue(leftHandle, out var left) ||
+                            !candidateByHandle.TryGetValue(rightHandle, out var right))
+                            continue;
+
+                        EvaluateCandidatePair(left, right, results, ref skipped, ref broadPhasePairs);
+                    }
+                }
+
                 transaction.Commit();
             }
 
@@ -167,6 +188,56 @@ namespace QS3D.BricsCAD.V25
                 right = swap;
             }
             return left + "\u001f" + right;
+        }
+
+        private static bool TryParseHandlePairKey(string value, out string leftHandle, out string rightHandle)
+        {
+            leftHandle = string.Empty;
+            rightHandle = string.Empty;
+            var key = (value ?? string.Empty).Trim();
+            if (key.Length == 0 || !string.Equals(value, key, StringComparison.Ordinal)) return false;
+
+            var separator = key.IndexOf('\u001f');
+            if (separator <= 0 || separator != key.LastIndexOf('\u001f') || separator >= key.Length - 1)
+                return false;
+
+            leftHandle = key.Substring(0, separator);
+            rightHandle = key.Substring(separator + 1);
+            if (string.Equals(leftHandle, rightHandle, StringComparison.OrdinalIgnoreCase)) return false;
+
+            return string.Equals(
+                BuildHandlePairKey(leftHandle, rightHandle),
+                key,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void EvaluateCandidatePair(
+            SolidCandidate left,
+            SolidCandidate right,
+            List<ExactClashPair> results,
+            ref int skipped,
+            ref int broadPhasePairs)
+        {
+            if (left.Discipline != MepRecognitionDiscipline.Mep &&
+                right.Discipline != MepRecognitionDiscipline.Mep)
+                return;
+            if (!ExtentsMayIntersect(left.Extents, right.Extents)) return;
+
+            broadPhasePairs++;
+            if (broadPhasePairs > MaxBroadPhasePairs)
+                throw new InvalidOperationException(
+                    "QS3DMEPEXACTCLASH vượt " + MaxBroadPhasePairs +
+                    " broad-phase pair; hãy thu hẹp selection hoặc partition coordination scope.");
+
+            try
+            {
+                if (left.Solid.CheckInterference(right.Solid))
+                    results.Add(new ExactClashPair(left.Handle, right.Handle));
+            }
+            catch (System.Exception ex) when (IsRecoverableEntityFailure(ex))
+            {
+                skipped++;
+            }
         }
 
         private static bool TryRecognize(EntitySnapshot snapshot, out MepRecognitionDiscipline discipline)
