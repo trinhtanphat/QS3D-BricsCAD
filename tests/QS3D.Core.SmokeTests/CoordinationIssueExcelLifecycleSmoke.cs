@@ -203,10 +203,11 @@ namespace QS3D.Core.SmokeTests
 
         private static bool SameCadReference(CadReference? left, CadReference? right)
         {
-            if (left.HasValue != right.HasValue) return false;
-            if (!left.HasValue) return true;
-            return left.Value.DrawingId.Value == right.Value.DrawingId.Value &&
-                   string.Equals(left.Value.Handle.Value, right.Value.Handle.Value, StringComparison.Ordinal);
+            if (!left.HasValue || !right.HasValue) return left.HasValue == right.HasValue;
+            var leftValue = left.GetValueOrDefault();
+            var rightValue = right.GetValueOrDefault();
+            return leftValue.DrawingId.Value == rightValue.DrawingId.Value &&
+                   string.Equals(leftValue.Handle.Value, rightValue.Handle.Value, StringComparison.Ordinal);
         }
 
         private static void Expect<T>(Action action) where T : Exception
