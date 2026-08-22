@@ -100,7 +100,9 @@ namespace QS3D.Core.Coordination
 
         private static string NormalizeOptional(string? value)
         {
-            return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+            if (value == null) return string.Empty;
+            var normalized = value.Trim();
+            return normalized.Length == 0 ? string.Empty : normalized;
         }
 
         private static string BuildNonActionableReason(bool aResolved, bool bResolved, bool stale)
