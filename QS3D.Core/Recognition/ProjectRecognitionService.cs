@@ -1,0 +1,110 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using QS3D.Core.Domain;
+using QS3D.Core.Model;
+using QS3D.Core.Templates;
+
+namespace QS3D.Core.Recognition
+{
+    public sealed class ProjectRecognitionService
+    {
+        private readonly RecognitionEngine _fallback = new RecognitionEngine();
+
+        public RecognitionResult Suggest(ProjectState project, EntitySnapshot snapshot)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            var mapped = ExactLayerMapping(project, snapshot);
+            if (mapped != null) return new RecognitionResult(snapshot, new[] { mapped });
+            return _fallback.Suggest(snapshot);
+        }
+
+        public RecognitionBatch SuggestBatch(ProjectState project, IEnumerable<EntitySnapshot> snapshots, double autoAcceptConfidence = 0.92d, double minimumMargin = 0.15d)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (snapshots == null) throw new ArgumentNullException(nameof(snapshots));
+            var mappingStateBeforeEnumeration = CaptureLayerMappingState(project);
+            var versionBeforeEnumeration = project.ChangeVersion;
+            var materialized = RecognitionInputBounds.Materialize(snapshots, RecognitionInputBounds.MaxBatchItems, "Project recognition snapshot batch");
+            if (project.ChangeVersion != versionBeforeEnumeration)
+                throw new InvalidOperationException("Project changed while recognition snapshots were being enumerated.");
+            var mappingStateAfterEnumeration = CaptureLayerMappingState(project);
+            if (!SameLayerMappingState(mappingStateBeforeEnumeration, mappingStateAfterEnumeration))
+                throw new InvalidOperationException("Project recognition layer mappings changed while recognition snapshots were being enumerated.");
+            return new RecognitionBatch(materialized.Select(x => Suggest(project, x)), autoAcceptConfidence, minimumMargin);
+        }
+
+        internal static void ValidateLayerMappings(IEnumerable<KeyValuePair<string, string>> mappings, string label)
+        {
+            if (mappings == null) throw new ArgumentNullException(nameof(mappings));
+            var normalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in mappings)
+            {
+                var pattern = (item.Key ?? string.Empty).Trim();
+                if (pattern.Length == 0) throw new InvalidOperationException(label + " contains an empty layer mapping pattern.");
+                var key = RecognitionText.Normalize(pattern);
+                if (key.Length == 0) throw new InvalidOperationException(label + " contains a layer mapping pattern that normalizes to empty: " + pattern);
+                if (!TryParseNamedCategory(item.Value, out _))
+                    throw new InvalidOperationException(label + " contains an invalid layer mapping category for " + pattern + ": " + item.Value);
+                if (normalized.TryGetValue(key, out var previous))
+                    throw new InvalidOperationException(label + " contains ambiguous normalized layer mappings: " + previous + " and " + pattern + ".");
+                normalized.Add(key, pattern);
+            }
+        }
+
+        private static RecognitionCandidate? ExactLayerMapping(ProjectState project, EntitySnapshot snapshot)
+        {
+            var mappings = project.Metadata
+                .Where(x => x.Key.StartsWith(TemplateProfileStore.LayerMappingPrefix, StringComparison.OrdinalIgnoreCase))
+                .Select(x => new KeyValuePair<string, string>(x.Key.Substring(TemplateProfileStore.LayerMappingPrefix.Length), x.Value))
+                .ToList();
+            ValidateLayerMappings(mappings, "Project recognition mappings");
+
+            var normalizedLayer = RecognitionText.Normalize(snapshot.Layer);
+            foreach (var item in mappings)
+            {
+                var pattern = item.Key.Trim();
+                if (!string.Equals(RecognitionText.Normalize(pattern), normalizedLayer, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!TryParseNamedCategory(item.Value, out var category))
+                    throw new InvalidOperationException("Invalid project layer mapping category: " + item.Value);
+                var candidate = new RecognitionCandidate { RuleId = "project-layer:" + pattern, Category = category, Confidence = 0.99d };
+                candidate.Evidence.Add("project-layer:" + pattern);
+                return candidate;
+            }
+            return null;
+        }
+
+        private static List<KeyValuePair<string, string>> CaptureLayerMappingState(ProjectState project)
+        {
+            return project.Metadata
+                .Where(x => x.Key.StartsWith(TemplateProfileStore.LayerMappingPrefix, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => new KeyValuePair<string, string>(x.Key, x.Value))
+                .ToList();
+        }
+
+        private static bool SameLayerMappingState(
+            IReadOnlyList<KeyValuePair<string, string>> before,
+            IReadOnlyList<KeyValuePair<string, string>> after)
+        {
+            if (before.Count != after.Count) return false;
+            for (var index = 0; index < before.Count; index++)
+            {
+                if (!string.Equals(before[index].Key, after[index].Key, StringComparison.Ordinal) ||
+                    !string.Equals(before[index].Value, after[index].Value, StringComparison.Ordinal))
+                    return false;
+            }
+            return true;
+        }
+
+        private static bool TryParseNamedCategory(string? raw, out ElementCategory category)
+        {
+            category = default;
+            var token = (raw ?? string.Empty).Trim();
+            if (!Enum.TryParse(token, true, out category) || !Enum.IsDefined(typeof(ElementCategory), category)) return false;
+            var name = Enum.GetName(typeof(ElementCategory), category);
+            return name != null && string.Equals(token, name, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+}

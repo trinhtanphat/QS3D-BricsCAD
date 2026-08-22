@@ -1,0 +1,309 @@
+<UserControl x:Class="QS3D.BricsCAD.V25.UI.RightPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MinWidth="255" MinHeight="480"
+             PreviewKeyDown="OnRightPanelPreviewKeyDown">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <Style x:Key="RightBadge" TargetType="Border" BasedOn="{StaticResource StatusPill}">
+                <Setter Property="CornerRadius" Value="8"/>
+                <Setter Property="Padding" Value="6,1"/>
+                <Setter Property="Margin" Value="4,0,0,0"/>
+            </Style>
+            <Style x:Key="RightToolbarBand" TargetType="Border" BasedOn="{StaticResource PremiumCard}">
+                <Setter Property="Padding" Value="4"/>
+                <Setter Property="Margin" Value="0,4,0,0"/>
+            </Style>
+            <Style x:Key="RightListSurface" TargetType="Border" BasedOn="{StaticResource PremiumCard}">
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Margin" Value="0"/>
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid Background="{StaticResource Bg0Brush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="258" MinHeight="155"/>
+            <RowDefinition Height="4"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="31"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{StaticResource Bg1Brush}"
+                BorderThickness="0,0,0,1" Padding="8">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <Grid x:Name="DrawingHeaderGrid">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" MinWidth="0" Margin="0,0,8,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="3"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="{StaticResource LuxuryBrush}"
+                                    CornerRadius="2" Margin="0,1,0,1"/>
+                            <StackPanel Grid.Column="1" MinWidth="0" Margin="8,0,0,0">
+                                <TextBlock Text="QUẢN LÝ BẢN VẼ"
+                                           Style="{StaticResource PanelTitle}"
+                                           Margin="0"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="Xref / Drawing"
+                                           Style="{StaticResource Caption}"
+                                           Margin="0,2,0,0"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center">
+                            <Border Style="{StaticResource RightBadge}" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Drawings.Count, StringFormat={}{0} bản vẽ}"
+                                           Style="{StaticResource Caption}"
+                                           TextWrapping="NoWrap"/>
+                            </Border>
+                            <Button Content="Bỏ chọn" ToolTip="Bỏ chọn Xref và selection CAD"
+                                    Click="OnClearDrawingSelectionClick"
+                                    Style="{StaticResource DenseButton}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Border Style="{StaticResource RightToolbarBand}" Margin="0,7,0,5">
+                        <WrapPanel>
+                            <Button Content="+ Thêm" Style="{StaticResource AccentButton}"
+                                    Click="OnAttachXrefClick" ToolTip="Gắn thêm Xref"/>
+                            <Button Content="Nạp lại" Click="OnReloadXrefClick"
+                                    ToolTip="Nạp lại Xref đang chọn"/>
+                            <Button Content="Di chuyển" Click="OnMoveDrawingClick"
+                                    ToolTip="Di chuyển instance của Xref đang chọn"/>
+                            <Button Content="Khóa" Click="OnLockXrefClick"
+                                    Style="{StaticResource DenseButton}"
+                                    ToolTip="Khóa các layer native đang chứa instance của Xref được chọn trong space hiện tại"/>
+                            <Button Content="Mở khóa" Click="OnUnlockXrefClick"
+                                    Style="{StaticResource DenseButton}"
+                                    ToolTip="Mở khóa các layer native đang chứa instance của Xref được chọn trong space hiện tại"/>
+                            <Button Content="Khoanh vùng" Click="OnZoomWindowClick"
+                                    Style="{StaticResource DenseButton}"
+                                    ToolTip="Khoanh vùng để zoom trong viewport"/>
+                            <Button Content="Gỡ Xref" Style="{StaticResource DangerButton}"
+                                    Click="OnDeleteDrawingClick"
+                                    ToolTip="Detach Xref khỏi bản vẽ; không xóa file nguồn"/>
+                        </WrapPanel>
+                    </Border>
+                </StackPanel>
+
+                <Border Style="{StaticResource RightListSurface}">
+                    <ListView x:Name="DrawingList"
+                              ItemsSource="{Binding Drawings}"
+                              SelectionMode="Single"
+                              SelectionChanged="OnDrawingSelectionChanged"
+                              PreviewMouseRightButtonDown="OnDrawingListPreviewMouseRightButtonDown">
+                        <ListView.ContextMenu>
+                            <ContextMenu Background="{StaticResource Bg2Brush}"
+                                         Foreground="{StaticResource TextBrush}"
+                                         BorderBrush="{StaticResource BorderStrongBrush}"
+                                         BorderThickness="1" Padding="2">
+                                <MenuItem Header="Nạp lại Xref" Click="OnReloadXrefClick"
+                                          Foreground="{StaticResource TextBrush}" Background="Transparent"/>
+                                <MenuItem Header="Di chuyển Xref" Click="OnMoveDrawingClick"
+                                          Foreground="{StaticResource TextBrush}" Background="Transparent"/>
+                                <Separator/>
+                                <MenuItem Header="Khóa layer Xref" Click="OnLockXrefClick"
+                                          Foreground="{StaticResource TextBrush}" Background="Transparent"/>
+                                <MenuItem Header="Mở khóa layer Xref" Click="OnUnlockXrefClick"
+                                          Foreground="{StaticResource TextBrush}" Background="Transparent"/>
+                                <Separator/>
+                                <MenuItem Header="Khoanh vùng" Click="OnZoomWindowClick"
+                                          Foreground="{StaticResource TextBrush}" Background="Transparent"/>
+                                <MenuItem Header="Gỡ Xref" Click="OnDeleteDrawingClick"
+                                          Foreground="{StaticResource TextBrush}" Background="Transparent"/>
+                                <Separator/>
+                                <MenuItem Header="Bỏ chọn" Click="OnClearDrawingSelectionClick"
+                                          Foreground="{StaticResource TextBrush}" Background="Transparent"/>
+                            </ContextMenu>
+                        </ListView.ContextMenu>
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Tên" Width="105"
+                                                DisplayMemberBinding="{Binding Name}"/>
+                                <GridViewColumn Header="Khóa" Width="52"
+                                                DisplayMemberBinding="{Binding LockState}"/>
+                                <GridViewColumn Header="SL" Width="28"
+                                                DisplayMemberBinding="{Binding InstanceText}"/>
+                                <GridViewColumn Header="Tỉ lệ Xref" Width="66"
+                                                DisplayMemberBinding="{Binding ScaleText}"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </Border>
+            </DockPanel>
+        </Border>
+
+        <GridSplitter Grid.Row="1" Height="4"
+                      Background="{StaticResource BorderStrongBrush}"
+                      HorizontalAlignment="Stretch"/>
+
+        <Border Grid.Row="2" Background="{StaticResource Bg1Brush}"
+                BorderThickness="0,1,0,0" Padding="8">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <Grid x:Name="LayerHeaderGrid">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" MinWidth="0" Margin="0,0,8,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="3"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="{StaticResource LuxuryBrush}"
+                                    CornerRadius="2" Margin="0,1,0,1"/>
+                            <StackPanel Grid.Column="1" MinWidth="0" Margin="8,0,0,0">
+                                <TextBlock Text="QUẢN LÝ LỚP"
+                                           Style="{StaticResource PanelTitle}"
+                                           Margin="0"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="Hiện / Ẩn / Khóa / Màu native"
+                                           Style="{StaticResource Caption}"
+                                           Margin="0,2,0,0"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center">
+                            <Border Style="{StaticResource RightBadge}" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding LayerCountText}"
+                                           Style="{StaticResource Caption}"
+                                           TextWrapping="NoWrap"
+                                           ToolTip="Số lớp đang hiển thị / tổng số lớp"/>
+                            </Border>
+                            <Button Content="Làm mới" Click="OnRefreshClick"
+                                    Style="{StaticResource DenseButton}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Text="Tick đầu = hiện/ẩn; ô khóa = trạng thái native. Ctrl/Shift để chọn nhiều lớp."
+                               Style="{StaticResource Caption}" TextWrapping="Wrap"
+                               Margin="0,7,0,4"/>
+
+                    <TextBlock Text="Tìm lớp" Style="{StaticResource Caption}" Margin="0,0,0,2"/>
+                    <TextBox x:Name="LayerSearchBox"
+                             ToolTip="Tìm layer • Ctrl+F"
+                             Margin="0,0,0,5"
+                             TextChanged="OnLayerSearchChanged"/>
+
+                    <Border Style="{StaticResource RightToolbarBand}" Margin="0,0,0,5">
+                        <WrapPanel>
+                            <Button Content="Hiện" Click="OnShowLayersClick"
+                                    Style="{StaticResource DenseButton}"/>
+                            <Button Content="Ẩn" Click="OnHideLayersClick"
+                                    Style="{StaticResource DenseButton}"/>
+                            <Button Content="Khóa" Click="OnLockLayersClick"
+                                    Style="{StaticResource DenseButton}"/>
+                            <Button Content="Mở khóa" Click="OnUnlockLayersClick"
+                                    Style="{StaticResource DenseButton}"/>
+                            <Button Content="Đảo chọn" Click="OnInvertSelectionClick"
+                                    Style="{StaticResource DenseButton}"/>
+                            <Button Content="Bỏ chọn" Click="OnClearLayerSelectionClick"
+                                    Style="{StaticResource DenseButton}"/>
+                        </WrapPanel>
+                    </Border>
+                </StackPanel>
+
+                <Border Style="{StaticResource RightListSurface}">
+                    <ListView x:Name="LayerList"
+                              ItemsSource="{Binding Layers}"
+                              SelectionMode="Extended"
+                              PreviewMouseRightButtonDown="OnLayerListPreviewMouseRightButtonDown">
+                        <ListView.ContextMenu>
+                            <ContextMenu Background="{StaticResource Bg2Brush}"
+                                         Foreground="{StaticResource TextBrush}"
+                                         BorderBrush="{StaticResource BorderStrongBrush}"
+                                         BorderThickness="1" Padding="2">
+                                <MenuItem Header="Hiện layer" Click="OnShowLayersClick"
+                                          Foreground="{StaticResource TextBrush}" Background="Transparent"/>
+                                <MenuItem Header="Ẩn layer" Click="OnHideLayersClick"
+                                          Foreground="{StaticResource TextBrush}" Background="Transparent"/>
+                                <Separator/>
+                                <MenuItem Header="Khóa layer" Click="OnLockLayersClick"
+                                          Foreground="{StaticResource TextBrush}" Background="Transparent"/>
+                                <MenuItem Header="Mở khóa layer" Click="OnUnlockLayersClick"
+                                          Foreground="{StaticResource TextBrush}" Background="Transparent"/>
+                                <Separator/>
+                                <MenuItem Header="Đảo chọn" Click="OnInvertSelectionClick"
+                                          Foreground="{StaticResource TextBrush}" Background="Transparent"/>
+                                <MenuItem Header="Bỏ chọn" Click="OnClearLayerSelectionClick"
+                                          Foreground="{StaticResource TextBrush}" Background="Transparent"/>
+                            </ContextMenu>
+                        </ListView.ContextMenu>
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="22"/>
+                                        <ColumnDefinition Width="20"/>
+                                        <ColumnDefinition Width="18"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="38"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <CheckBox IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                                              Checked="OnLayerChecked"
+                                              Unchecked="OnLayerUnchecked"
+                                              ToolTip="Hiện/ẩn layer"/>
+                                    <CheckBox Grid.Column="1"
+                                              IsChecked="{Binding IsLocked}"
+                                              IsEnabled="False"
+                                              HorizontalAlignment="Center"
+                                              ToolTip="Trạng thái khóa native của layer"/>
+                                    <Border Grid.Column="2"
+                                            Width="10" Height="10" CornerRadius="2"
+                                            Background="{Binding ColorBrush}"
+                                            BorderBrush="{StaticResource BorderStrongBrush}"
+                                            BorderThickness="1"
+                                            ToolTip="Màu layer native"/>
+                                    <TextBlock Grid.Column="3"
+                                               Text="{Binding Name}"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding Name}"/>
+                                    <TextBlock Grid.Column="4"
+                                               Text="{Binding ColorIndex}"
+                                               Style="{StaticResource Caption}"
+                                               HorizontalAlignment="Right"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Border>
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Row="3" Background="{StaticResource BgRaisedBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,1,0,0" Padding="8,3">
+            <DockPanel>
+                <Border Background="{StaticResource LuxuryBrush}"
+                        CornerRadius="5" Width="6" Height="6"
+                        VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock Text="{Binding Status}"
+                           Style="{StaticResource Caption}"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Status}"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</UserControl>
