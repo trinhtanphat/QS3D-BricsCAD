@@ -23,6 +23,12 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 if (!Environment.Is64BitProcess) throw new InvalidOperationException("QS3D BricsCAD runtime must be 64-bit.");
+                if (!RuntimeDiagnosticsCommands.CurrentNativeRuntimeMatches())
+                {
+                    throw new InvalidOperationException(
+                        "QS3D native runtime dependency identity does not match " +
+                        RuntimeDiagnosticsCommands.CurrentNativeRuntimeLabel + ".");
+                }
                 PaletteCoordinator.Show();
                 var ribbonReady = RibbonBootstrapper.TryInitialize();
                 if (!ribbonReady) throw new InvalidOperationException("QS3D ribbon initialization did not complete.");
@@ -44,6 +50,10 @@ namespace QS3D.BricsCAD.V25
                     "host_file_version=" + OneLine(hostVersion),
                     "clr=" + OneLine(Environment.Version.ToString()),
                     "is_64bit=true",
+                    "native_runtime_major=" + RuntimeDiagnosticsCommands.CurrentNativeRuntimeMajor,
+                    "native_runtime_label=" + OneLine(RuntimeDiagnosticsCommands.CurrentNativeRuntimeLabel),
+                    "native_runtime_matches=true",
+                    "native_brep_identity=" + OneLine(RuntimeDiagnosticsCommands.CurrentNativeBrepIdentity()),
                     "assembly=" + OneLine(assembly.Location),
                     "assembly_version=" + OneLine(assembly.GetName().Version?.ToString() ?? "unknown"),
                     "ribbon_ready=true",

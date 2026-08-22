@@ -26,6 +26,8 @@ $env:BRICSCAD_V26_DIR = 'C:\Program Files\Bricsys\BricsCAD V26 en_US'
 
 Use the actual licensed installation path if the locale/path differs. `bricscad.exe` must report file major version 26.
 
+Confirm that `dotnet --list-runtimes` exposes both `Microsoft.NETCore.App 8.x` and `Microsoft.WindowsDesktop.App 8.x` for x64 before `NETLOAD`. The V26 build emits `QS3D.BricsCAD.V26.runtimeconfig.json`; keep it beside the plugin DLL through packaging and installation.
+
 ## Source/build gate
 
 ```powershell
@@ -69,7 +71,7 @@ The gate validates the V26 host major, x64 process, exact V26 plugin assembly an
 The packager:
 
 - reads `net8.0-windows` V26 Release output;
-- requires `QS3D.BricsCAD.V26.dll` plus `QS3D.Core.dll` identity parity;
+- requires `QS3D.BricsCAD.V26.dll`, its Windows Desktop `QS3D.BricsCAD.V26.runtimeconfig.json`, plus `QS3D.Core.dll` identity parity;
 - derives standalone `install-v26-autoload.ps1`, `uninstall-v26-autoload.ps1` and `update-v26.ps1` from the current hardened V25 templates through the guarded V25→V26 transformer;
 - emits `PACKAGE-METADATA.json` with `target = BricsCAD V26 x64`;
 - creates `COMMANDS.txt`, full `SHA256SUMS.txt` and `QS3D-BricsCAD-V26.zip`;
@@ -164,6 +166,6 @@ V25 assets are a separate channel and must not appear in the V26 release lane.
 - Never point `BRICSCAD_V26_DIR` at V25.
 - Never load `QS3D.BricsCAD.V25.dll` as the V26 release payload.
 - Never use `QS3D-BricsCAD-V25.update.json` or `QS3D-BricsCAD-V25.zip` for V26.
-- Never package `BrxMgd.dll`, `TD_Mgd.dll` or other proprietary BricsCAD runtime assemblies.
+- Never package `BrxMgd.dll`, `TD_Mgd.dll`, `TD_MgdBrep.dll`, or other proprietary BricsCAD runtime assemblies.
 - Never publish a stable release without exact signed-payload V26 runtime evidence.
 - Never claim signing, clean-machine install/update or runtime PASS from source review alone.

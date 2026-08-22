@@ -122,6 +122,9 @@ try {
     Require-Qs3dMarkerValue -Marker $marker -Key "command" -Expected "QS3DRUNTIMEPROBE"
     Require-Qs3dMarkerValue -Marker $marker -Key "process" -Expected "bricscad"
     Require-Qs3dMarkerValue -Marker $marker -Key "is_64bit" -Expected "true"
+    Require-Qs3dMarkerValue -Marker $marker -Key "native_runtime_major" -Expected "26"
+    Require-Qs3dMarkerValue -Marker $marker -Key "native_runtime_label" -Expected "V26"
+    Require-Qs3dMarkerValue -Marker $marker -Key "native_runtime_matches" -Expected "true"
     Require-Qs3dMarkerValue -Marker $marker -Key "ribbon_ready" -Expected "true"
     Require-Qs3dMarkerValue -Marker $marker -Key "palette_visible" -Expected "true"
     Require-Qs3dMarkerValue -Marker $marker -Key "workspace_palette_visible" -Expected "true"
@@ -142,6 +145,9 @@ try {
         completed_at = [DateTime]::UtcNow.ToString("O")
         plugin_sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $PluginDll).Hash
         load_mode = if ($DemandLoadOnly) { "DemandLoad" } else { "NETLOAD" }
+        native_runtime_major = 26
+        native_runtime_label = "V26"
+        native_runtime_matches = $true
         ribbon_ready = $true
         palette_visible = $true
         workspace_palette_visible = $true
