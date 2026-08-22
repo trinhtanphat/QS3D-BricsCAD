@@ -65,7 +65,7 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 RequireSameDocument(document);
-                var ucs = editor.CurrentUserCoordinateSystem;
+                var ucsToWcs = editor.CurrentUserCoordinateSystem;
                 var start = first.Value;
                 var accepted = 0;
                 var termination = "UNKNOWN";
@@ -73,7 +73,7 @@ namespace QS3D.BricsCAD.V25
                 while (true)
                 {
                     RequireSameDocument(document);
-                    var jig = new ProfileStripJig(start, widthDrawingUnits, ucs);
+                    var jig = new ProfileStripJig(start, widthDrawingUnits, ucsToWcs);
                     var drag = editor.Drag(jig);
                     RequireSameDocument(document);
 
@@ -124,36 +124,42 @@ namespace QS3D.BricsCAD.V25
                 "|minimum_segments=" + MinimumQualifiedSegments +
                 "|termination=" + termination +
                 "|preview_model=DrawJigProfileStrip" +
+                "|coordinate_model=WCS_INPUT_UCS_PLANE" +
                 "|persistent_writes=0" +
                 "|ownership_writes=0");
         }
 
         private sealed class ProfileStripJig : DrawJig
         {
-            private readonly Point3d _start;
+            // Editor.GetPoint/JigPrompts.AcquirePoint are consumed as WCS API points. Snapshot the
+            // active UCS once so only the profile-offset math is performed in UCS-local XY. The
+            // resulting strip corners are then transformed back to WCS exactly once for WorldDraw.
+            private readonly Point3d _startWcs;
             private readonly double _widthDrawingUnits;
-            private readonly Matrix3d _ucs;
-            private Point3d _end;
+            private readonly Matrix3d _ucsToWcs;
+            private readonly Matrix3d _wcsToUcs;
+            private Point3d _endWcs;
             private bool _hasSample;
 
-            internal ProfileStripJig(Point3d start, double widthDrawingUnits, Matrix3d ucs)
+            internal ProfileStripJig(Point3d startWcs, double widthDrawingUnits, Matrix3d ucsToWcs)
             {
-                _start = start;
-                _end = start;
+                _startWcs = startWcs;
+                _endWcs = startWcs;
                 _widthDrawingUnits = widthDrawingUnits;
-                _ucs = ucs;
+                _ucsToWcs = ucsToWcs;
+                _wcsToUcs = ucsToWcs.Inverse();
                 LastPromptStatus = PromptStatus.None;
             }
 
-            internal Point3d EndPoint => _end;
+            internal Point3d EndPoint => _endWcs;
             internal PromptStatus LastPromptStatus { get; private set; }
-            internal bool HasUsableEndPoint => _hasSample && _start.DistanceTo(_end) > 1e-9d;
+            internal bool HasUsableEndPoint => _hasSample && _startWcs.DistanceTo(_endWcs) > 1e-9d;
 
             protected override SamplerStatus Sampler(JigPrompts prompts)
             {
                 var options = new JigPromptPointOptions("\nNext endpoint (Enter/ESC exits): ")
                 {
-                    BasePoint = _start,
+                    BasePoint = _startWcs,
                     UseBasePoint = true,
                     UserInputControls =
                         UserInputControls.Accept3dCoordinates |
@@ -167,21 +173,23 @@ namespace QS3D.BricsCAD.V25
                 if (result.Status != PromptStatus.OK)
                     return SamplerStatus.Cancel;
 
-                if (_hasSample && result.Value.DistanceTo(_end) <= 1e-9d)
+                if (_hasSample && result.Value.DistanceTo(_endWcs) <= 1e-9d)
                     return SamplerStatus.NoChange;
 
-                _end = result.Value;
+                _endWcs = result.Value;
                 _hasSample = true;
                 return SamplerStatus.OK;
             }
 
             protected override bool WorldDraw(WorldDraw worldDraw)
             {
-                if (!_hasSample || _start.DistanceTo(_end) <= 1e-9d)
+                if (!_hasSample || _startWcs.DistanceTo(_endWcs) <= 1e-9d)
                     return true;
 
-                var dx = _end.X - _start.X;
-                var dy = _end.Y - _start.Y;
+                var localStart = _startWcs.TransformBy(_wcsToUcs);
+                var localEnd = _endWcs.TransformBy(_wcsToUcs);
+                var dx = localEnd.X - localStart.X;
+                var dy = localEnd.Y - localStart.Y;
                 var planLength = Math.Sqrt((dx * dx) + (dy * dy));
                 if (planLength <= 1e-12d)
                     return true;
@@ -189,12 +197,12 @@ namespace QS3D.BricsCAD.V25
                 var half = _widthDrawingUnits / 2d;
                 var offset = new Vector3d(-dy / planLength * half, dx / planLength * half, 0d);
 
-                var a = (_start + offset).TransformBy(_ucs);
-                var b = (_end + offset).TransformBy(_ucs);
-                var c = (_end - offset).TransformBy(_ucs);
-                var d = (_start - offset).TransformBy(_ucs);
-                var centerStart = _start.TransformBy(_ucs);
-                var centerEnd = _end.TransformBy(_ucs);
+                var a = (localStart + offset).TransformBy(_ucsToWcs);
+                var b = (localEnd + offset).TransformBy(_ucsToWcs);
+                var c = (localEnd - offset).TransformBy(_ucsToWcs);
+                var d = (localStart - offset).TransformBy(_ucsToWcs);
+                var centerStart = _startWcs;
+                var centerEnd = _endWcs;
 
                 worldDraw.Geometry.WorldLine(a, b);
                 worldDraw.Geometry.WorldLine(b, c);
