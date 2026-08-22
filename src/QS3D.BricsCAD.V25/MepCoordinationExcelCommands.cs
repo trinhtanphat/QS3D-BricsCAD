@@ -79,7 +79,10 @@ namespace QS3D.BricsCAD.V25
                 };
                 if (dialog.ShowDialog() != true) return;
 
-                CoordinationWorkbookExporter.Export(dialog.FileName, rows);
+                CoordinationUnifiedWorkbookExporter.Export(
+                    dialog.FileName,
+                    rows,
+                    Array.Empty<CoordinationDuplicateExportRow>());
                 var status = "Clash → Excel: " + rows.Count + " exact clash • solids=" + recognizedSolids +
                              " • broad-phase=" + broadPhasePairs + " • skipped=" + skipped + " • " + dialog.FileName;
                 PaletteCoordinator.SetStatus(status);
@@ -122,7 +125,7 @@ namespace QS3D.BricsCAD.V25
                 var row = document.Editor.GetInteger(rowPrompt);
                 if (row.Status != PromptStatus.OK) return;
 
-                var trace = CoordinationWorkbookTraceReader.Read(dialog.FileName, row.Value);
+                var trace = CoordinationUnifiedWorkbookTraceReader.ReadClash(dialog.FileName, row.Value);
                 if (!string.Equals(project.DrawingFingerprint, trace.DrawingFingerprint, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException(
                         "Workbook thuộc drawing/project khác (Drawing Fingerprint mismatch). Locate bị chặn để tránh chọn nhầm model.");
