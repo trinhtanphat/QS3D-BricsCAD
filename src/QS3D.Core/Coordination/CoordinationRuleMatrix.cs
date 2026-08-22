@@ -137,7 +137,7 @@ namespace QS3D.Core.Coordination
         public int ProfileVersion { get; }
         public IReadOnlyList<CoordinationRule> Rules => _rules;
 
-        public CoordinationRuleResolution Resolve(string leftCategory, string rightCategory)
+        public CoordinationRuleResolution? Resolve(string leftCategory, string rightCategory)
         {
             var left = CoordinationRule.NormalizeCategory(leftCategory, nameof(leftCategory));
             var right = CoordinationRule.NormalizeCategory(rightCategory, nameof(rightCategory));
