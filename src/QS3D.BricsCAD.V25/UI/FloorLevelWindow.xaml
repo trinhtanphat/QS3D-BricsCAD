@@ -1,0 +1,132 @@
+<Window x:Class="QS3D.BricsCAD.V25.UI.FloorLevelWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QS3D • Tầng / Cao độ" Width="740" Height="700"
+        MinWidth="650" MinHeight="560"
+        WindowStartupLocation="CenterOwner">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="LevelMetric" TargetType="Border" BasedOn="{StaticResource Card}">
+                <Setter Property="Padding" Value="9,7"/>
+                <Setter Property="CornerRadius" Value="4"/>
+                <Setter Property="Margin" Value="3"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource Bg0Brush}">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
+        <Border Background="{StaticResource Bg1Brush}" Padding="16,12" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="TẦNG / LEVEL PICKER" FontSize="18" FontWeight="Bold"/>
+                        <Border Background="{StaticResource AccentSoftBrush}" BorderBrush="{StaticResource BorderStrongBrush}"
+                                BorderThickness="1" CornerRadius="8" Padding="7,1" Margin="8,0,0,0">
+                            <TextBlock Text="SEMANTIC LEVEL" Foreground="{StaticResource LuxuryBrush}" FontSize="9" FontWeight="SemiBold"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="Quản lý tầng • active floor • gán FloorId hoặc Bottom/Top Level cho semantic selection"
+                               Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1" Content="Làm mới" Click="OnRefreshClick"
+                        Style="{StaticResource DenseButton}" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Border Style="{StaticResource Card}" Padding="9" CornerRadius="5">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Text="DANH SÁCH TẦNG" Style="{StaticResource PanelTitle}"/>
+                        <TextBlock Text="Chọn tầng để xem và chỉnh thông tin project-level."
+                                   Style="{StaticResource Caption}" Margin="0,0,0,6"/>
+                    </StackPanel>
+                    <ListView x:Name="FloorList" SelectionChanged="OnFloorSelectionChanged">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Tên tầng" Width="280" DisplayMemberBinding="{Binding Name}"/>
+                                <GridViewColumn Header="Cao độ (m)" Width="145" DisplayMemberBinding="{Binding ElevationM}"/>
+                                <GridViewColumn Header="ID" Width="190" DisplayMemberBinding="{Binding Id}"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Row="1" Style="{StaticResource Card}" Padding="10" CornerRadius="5" Margin="0,10,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="150"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                        <TextBlock Text="Tên tầng" Style="{StaticResource Caption}" Margin="0,0,0,2"/>
+                        <TextBox x:Name="FloorNameBox"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Margin="8,0,8,0">
+                        <TextBlock Text="Cao độ (m)" Style="{StaticResource Caption}" Margin="0,0,0,2"/>
+                        <TextBox x:Name="FloorElevationBox"/>
+                    </StackPanel>
+                    <WrapPanel Grid.Column="2" VerticalAlignment="Bottom">
+                        <Button Content="Mới" Click="OnNewFloorClick"/>
+                        <Button Content="Lưu" Style="{StaticResource AccentButton}" Click="OnSaveFloorFirstBootstrapClick"/>
+                        <Button Content="Xóa" Style="{StaticResource DangerButton}" Click="OnDeleteFloorClick"/>
+                    </WrapPanel>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="2" Margin="-3,7,-3,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Style="{StaticResource LevelMetric}"><StackPanel><TextBlock Text="TẦNG ACTIVE" Style="{StaticResource Caption}"/><TextBlock x:Name="ActiveFloorText" Text="—" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,2,0,0"/></StackPanel></Border>
+                <Border Grid.Column="1" Style="{StaticResource LevelMetric}"><StackPanel><TextBlock Text="TẦNG ĐƯỢC CHỌN" Style="{StaticResource Caption}"/><TextBlock x:Name="SelectedFloorText" Text="—" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,2,0,0"/></StackPanel></Border>
+                <Border Grid.Column="2" Style="{StaticResource LevelMetric}"><StackPanel><TextBlock Text="THAM CHIẾU" Style="{StaticResource Caption}"/><TextBlock x:Name="ReferenceCountText" Text="0" FontWeight="SemiBold" FontSize="15" Foreground="{StaticResource AccentHoverBrush}" Margin="0,2,0,0"/></StackPanel></Border>
+                <Border Grid.Column="3" Style="{StaticResource LevelMetric}"><StackPanel><TextBlock Text="SELECTION" Style="{StaticResource Caption}"/><TextBlock x:Name="SelectionCountText" Text="0" FontWeight="SemiBold" FontSize="15" Margin="0,2,0,0"/></StackPanel></Border>
+            </Grid>
+
+            <Border Grid.Row="3" Style="{StaticResource Card}" Padding="10" CornerRadius="5" Margin="0,7,0,0">
+                <StackPanel>
+                    <WrapPanel>
+                        <Button Content="Đặt làm tầng hoạt động" Click="OnActivateClick"/>
+                        <Button Content="Gán tầng cho selection" Style="{StaticResource AccentButton}" Click="OnAssignClick"/>
+                        <Button Content="Gán Level đáy" Style="{StaticResource AccentButton}" Click="OnAssignBottomLevelClick"
+                                ToolTip="Đặt cao độ đáy native theo Level được chọn; source CAD không bị Move."/>
+                        <Button Content="Gán Level đỉnh" Style="{StaticResource AccentButton}" Click="OnAssignTopLevelClick"
+                                ToolTip="Đặt cao độ đỉnh native theo Level được chọn; phải gán Level đáy trước."/>
+                        <Button Content="Xóa Level đứng" Click="OnClearVerticalLevelsClick"
+                                ToolTip="Trở về Height/Thickness + BottomOffset tương đối source cho selection."/>
+                        <Button Content="Kiểm tra selection" Click="OnInspectSelectionClick"/>
+                    </WrapPanel>
+                    <TextBlock Text="Bottom/Top Level điều khiển đáy và chiều cao hiệu dụng của host, rebar, opening/cutter và Curtain khi rebuild. Gán/xóa Level hoặc đổi cao độ sẽ đánh dấu output liên quan stale; QS3D KHÔNG tự Move/Translate source CAD. Xóa Level đứng sẽ quay lại Height/Thickness + BottomOffset legacy. Không thể xóa tầng active hoặc tầng còn semantic element tham chiếu."
+                               Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,9,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="11,7" BorderThickness="0,1,0,0">
+            <Grid x:Name="FloorLevelStatusGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="{StaticResource SuccessBrush}" CornerRadius="5"
+                        Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                <TextBlock Grid.Column="1" x:Name="StatusText" Text="Sẵn sàng"
+                           MinWidth="0" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+                <TextBlock Grid.Column="2" Text="NO CAD MOVE • STALE ON LEVEL CHANGE"
+                           HorizontalAlignment="Right" TextWrapping="NoWrap"
+                           Style="{StaticResource Caption}" Margin="12,0,0,0"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

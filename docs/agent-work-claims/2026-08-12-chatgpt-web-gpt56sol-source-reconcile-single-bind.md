@@ -1,0 +1,25 @@
+# Agent work claim — Source Reconcile read-only target resolve
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-12 (UTC+7)
+- Status: `COMPLETED`
+- Scope: validate `QS3DSYNCSOURCE` selected ownership against read-only project state before canonical mutation binding, revalidate target freshness after one bind, and reconcile the aggregate Source Reconcile gate with the already-completed AuditTrail-owned revision contract.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/Services/SourceReconcileService.cs`
+  - `scripts/preflight-source-reconcile.py`
+  - `scripts/preflight-source-reconcile-single-bind.py`
+  - this claim file
+- Implemented contract:
+  - selection remains first and empty/cancel remains side-effect free;
+  - existing project is read-probed through `TryGetReadOnly` and the existing generated/source ownership validation runs before canonical mutation binding;
+  - generated output, untracked source, ambiguous ownership, non-P0 ownership and duplicate semantic-target selections fail before `ExistingProjectMutationContext.Require`;
+  - preview `ProjectId` + `ChangeVersion` + resolved target IDs are frozen;
+  - canonical project is bound exactly once, project/version and target-set drift fail closed, then existing invalidation/regeneration/CAD transaction/rollback behavior continues unchanged;
+  - per-target `source.reconcile` AuditTrail remains the revision owner with no standalone `project.Touch()`;
+  - aggregate `preflight-source-reconcile.py` was reconciled from its stale standalone-Touch expectation to the current AuditTrail-owned revision and read-only/single-bind freshness contract without weakening its ownership/performance/rollback/native-boundary checks.
+- Source commit: `4e154bb32722d57d75afd25decf770fb6fa67eab` — `fix(sync): validate source targets before bind`.
+- Aggregate guard reconciliation: `7a65d12fb5e402e503c07122ed327528bd757de4` — `test(sync): align reconcile gate with single bind`.
+- Focused regression guard: `b4966e04e60b8baf67e96f1c8ffd4af8b877ff75` — `scripts/preflight-source-reconcile-single-bind.py`.
+- Validation actually performed: connector-side source review, aggregate gate contract reconciliation review and focused guard source review. Preflight scripts were not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed.
+- Reservation released.
