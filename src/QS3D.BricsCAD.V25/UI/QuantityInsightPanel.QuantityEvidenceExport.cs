@@ -1,8 +1,9 @@
 using System;
 using System.IO;
-using System.Linq;
 using System.Windows;
 using Microsoft.Win32;
+using QS3D.BricsCAD.V25.Services;
+using QS3D.BricsCAD.V25.UI.ViewModels;
 using QS3D.Core.Export;
 using QS3D.Core.Reporting;
 using BcadApplication = Bricscad.ApplicationServices.Application;
@@ -24,7 +25,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _viewModel.Status = "Xuất evidence cần QS3D semantic element; selection CAD thô không có quantity-rule provenance.";
                 return;
             }
-            if (!Services.ProjectContextCoordinator.TryGetReadOnly(document, out var project) || !SameProjectIdentity(project))
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project) || !SameProjectIdentity(project))
             {
                 _viewModel.Status = "Không thể xuất evidence: QS3D project đã thay đổi; hãy bấm Làm mới.";
                 return;
@@ -34,7 +35,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 var option = _quantityDetailSelector?.SelectedItem as QuantityInsightDetailOption;
                 if (option == null && _quantityDetailOptions.Count == 1) option = _quantityDetailOptions[0];
-                if (option == null && QuantityTree.SelectedItem is ViewModels.QuantityInsightItemViewModel selectedItem)
+                if (option == null && QuantityTree.SelectedItem is QuantityInsightItemViewModel selectedItem)
                 {
                     RefreshQuantityDetail(selectedItem);
                     option = _quantityDetailSelector?.SelectedItem as QuantityInsightDetailOption;
