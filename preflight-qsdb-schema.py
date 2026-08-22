@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+MIGRATOR = ROOT / "src/QS3D.Core/Persistence/ProjectSchemaMigrator.cs"
+VALIDATOR = ROOT / "src/QS3D.Core/Persistence/QsdbProjectXmlSchemaValidator.cs"
+SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/QsdbProjectSchemaRegressionSmoke.cs"
+errors = []
+
+for path in (MIGRATOR, VALIDATOR, SMOKE):
+    if not path.is_file():
+        errors.append("missing " + str(path.relative_to(ROOT)))
+
+if not errors:
+    migrator = MIGRATOR.read_text(encoding="utf-8")
+    validator = VALIDATOR.read_text(encoding="utf-8")
+    smoke = SMOKE.read_text(encoding="utf-8")
+
+    migration = migrator.find("while (schema < ProjectState.CurrentSchemaVersion)")
+    persistence = migrator.find("ValidateCurrentPersistenceState(root);")
+    shape = migrator.find("QsdbProjectXmlSchemaValidator.ValidateCurrent(root);")
+    returned = migrator.find("return document;", shape)
+    if min(migration, persistence, shape, returned) < 0 or not migration < persistence < shape < returned:
+        errors.append("ProjectSchemaMigrator must validate strict XML shape after migration and before returning current QSDB")
+
+    required_validator_tokens = [
+        '"schema", "projectId", "name", "updatedUtc", "changeVersion"',
+        '"drawingPath", "drawingFingerprint", "activeZoneId", "activeFloorId"',
+        '"metadata", "zones", "floors", "families", "rules", "elements", "audit"',
+        'new[] { "id", "name", "category" }',
+        'new[] { "id", "category", "output", "expression", "version" }',
+        '"dirty", "updatedUtc"',
+        'new[] { "handles", "dependencies", "properties", "quantities" }',
+        'RequireAtMostOne(element, "handles")',
+        'RequireAtMostOne(element, "dependencies")',
+        'RequireAtMostOne(element, "properties")',
+        'RequireAtMostOne(element, "quantities")',
+        'attribute.IsNamespaceDeclaration || attribute.Name.Namespace != XNamespace.None || !attributes.Contains(attribute.Name)',
+        'child.Name.Namespace != XNamespace.None || !children.Contains(child.Name)',
+        '!allowText && !string.IsNullOrWhiteSpace(text.Value)',
+        'element.Name.Namespace != XNamespace.None',
+        'string.Equals(element.Name.LocalName, expectedName, StringComparison.OrdinalIgnoreCase)',
+        'parent.Elements(XName.Get(childName)).Skip(1).Any()',
+    ]
+    for token in required_validator_tokens:
+        if token not in validator:
+            errors.append("QSDB schema validator missing contract token: " + token)
+
+    required_smoke_tokens = [
+        "LegacyV1StillMigrates();",
+        "RootNameCasingRemainsCompatible();",
+        "RejectsForeignNamespace();",
+        "RejectsUnknownRootAttribute();",
+        "RejectsUnknownChild();",
+        "RejectsDuplicateNestedContainer();",
+        "RejectsNamespacedAttribute();",
+        "RejectsMixedTextContent();",
+        "catch (InvalidDataException)",
+    ]
+    for token in required_smoke_tokens:
+        if token not in smoke:
+            errors.append("QSDB schema regression smoke missing contract token: " + token)
+
+print("QS3D QSDB XML schema preflight")
+if errors:
+    for error in errors:
+        print("ERROR:", error)
+    print("FAILED with", len(errors), "error(s).")
+    sys.exit(1)
+
+print("PASS: migrated QSDB XML fails closed on forward-unknown shape while legacy migration remains covered.")
