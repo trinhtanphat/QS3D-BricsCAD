@@ -29,6 +29,8 @@ $env:BRICSCAD_V26_DIR = 'C:\Program Files\Bricsys\BricsCAD V26 en_US'
 
 If the installed locale/path differs, use that licensed V26 installation directory instead.
 
+If the process overrides `DOTNET_ROOT`, it must name a real .NET 8 host/runtime root containing `dotnet.exe`, an 8.x `host/fxr/hostfxr.dll`, and an 8.x `shared/Microsoft.NETCore.App/coreclr.dll`. The V26 runtime and native Beam runners reject an incomplete or stale override before starting BricsCAD; either unset the override so the licensed host uses its normal runtime resolution or point it to a verified local runtime root.
+
 Before starting BricsCAD, verify that `dotnet --list-runtimes` reports both `Microsoft.NETCore.App 8.x` and `Microsoft.WindowsDesktop.App 8.x` for x64. A machine with BricsCAD V26 but no discoverable .NET 8 Windows Desktop runtime can enter `NETLOAD` without ever reaching the plugin initializer; that host prerequisite failure is not a plugin runtime PASS.
 
 ## Source/build gate
