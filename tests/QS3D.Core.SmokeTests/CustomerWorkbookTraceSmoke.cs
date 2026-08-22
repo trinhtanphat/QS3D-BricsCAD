@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             CustomerWorkbookRoundTripsDetailAndAggregateTrace();
+            CustomerWorkbookMatchesDgklVisibleLayoutAndHiddenTrace();
             CustomerWorkbookPreservesEvidenceBlankVersusMeasuredZero();
             CustomerTraceReaderSupportsSharedStringResave();
             CustomerTraceReaderSupportsRichSharedStrings();
@@ -59,6 +60,64 @@ namespace QS3D.Core.SmokeTests
                 Require(highBit.ElementIds.Count == 1 && highBit.ElementIds[0] == "E2", "CHI_TIET high-bit trace lost its semantic element.");
                 Require(highBit.Handles.Count == 1 && highBit.Handles[0] == "8000000000000000",
                     "Customer workbook must preserve unsigned 64-bit CAD Handles.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
+        private static void CustomerWorkbookMatchesDgklVisibleLayoutAndHiddenTrace()
+        {
+            var root = TempDirectory("customer-workbook-dgkl-layout");
+            try
+            {
+                var path = Path.Combine(root, "qs-customer.xlsx");
+                QsCustomerWorkbookExporter.Export(path, Details(), Summary());
+
+                var workbook = XDocument.Parse(ReadEntry(path, "xl/workbook.xml"));
+                XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+                var traceSheet = workbook.Descendants(ns + "sheet")
+                    .Single(sheet => string.Equals((string?)sheet.Attribute("name"), QsCustomerWorkbookExporter.TraceSheet, StringComparison.Ordinal));
+                Require(string.Equals((string?)traceSheet.Attribute("state"), "hidden", StringComparison.Ordinal),
+                    "TRACE_MODEL must be hidden from ordinary QS workbook users.");
+
+                var dgkl = ReadEntry(path, "xl/worksheets/sheet1.xml");
+                RequireHeaderRow(dgkl, new[]
+                {
+                    "STT", "Tầng", "Loại", "Tên cấu kiện", "SL", "Mác BT", "BT gộp (m³)", "Trừ giao (m³)",
+                    "BT còn (m³)", "Dài (m)", "Chu vi ngoài (m)", "Chu vi trong (m)", QsCustomerWorkbookExporter.TraceHeader
+                }, "DGKL");
+                RequireHiddenColumn(dgkl, 13, "DGKL TRACE_KEY must be a hidden technical column.");
+                RequireAutoFilter(dgkl, "A1:L2", "DGKL filter must exclude the hidden TRACE_KEY column.");
+                RequireCellValue(dgkl, "G2", "2", "DGKL must export grouped gross concrete evidence.");
+                RequireMissingCell(dgkl, "H2", "DGKL must not fabricate a concrete deduction without evidence.");
+                RequireCellValue(dgkl, "I2", "2", "DGKL must export grouped net concrete evidence.");
+                RequireCellValue(dgkl, "J2", "12", "DGKL must export length when real length evidence exists.");
+
+                var formwork = ReadEntry(path, "xl/worksheets/sheet2.xml");
+                RequireHeaderRow(formwork, new[]
+                {
+                    "STT", "Tầng", "Loại", "Tên cấu kiện", "SL", "CP gộp (m²)", "Trừ giao (m²)", "CP còn (m²)",
+                    QsCustomerWorkbookExporter.TraceHeader
+                }, "COP_PHA");
+                RequireHiddenColumn(formwork, 9, "COP_PHA TRACE_KEY must be a hidden technical column.");
+                RequireAutoFilter(formwork, "A1:H2", "COP_PHA filter must exclude the hidden TRACE_KEY column.");
+                RequireCellValue(formwork, "F2", "30", "Current formwork evidence must map to CP gộp.");
+                RequireCellValue(formwork, "G2", "0", "Current formwork contract must expose zero deduction until a dedicated evidence field exists.");
+                RequireCellValue(formwork, "H2", "30", "Current formwork evidence must map to CP còn.");
+
+                var detail = ReadEntry(path, "xl/worksheets/sheet3.xml");
+                RequireHeaderRow(detail, new[]
+                {
+                    "STT", "Nhóm", "Cấu kiện", "Tầng", "Dài", "Rộng", "Cao", "BT gộp", "Trừ giao", "BT còn", "VK",
+                    QsCustomerWorkbookExporter.TraceHeader
+                }, "CHI_TIET");
+                RequireHiddenColumn(detail, 12, "CHI_TIET TRACE_KEY must be a hidden technical column.");
+                RequireAutoFilter(detail, "A1:K3", "CHI_TIET filter must exclude the hidden TRACE_KEY column.");
+                RequireCellValue(detail, "E2", "5", "CHI_TIET must export detail length evidence.");
+                RequireMissingCell(detail, "F2", "CHI_TIET width must remain blank until real width evidence exists.");
+                RequireMissingCell(detail, "G2", "CHI_TIET height must remain blank until real height evidence exists.");
             }
             finally
             {
@@ -324,8 +383,12 @@ namespace QS3D.Core.SmokeTests
             var first = NewRow("E1", "A1", 0d, 12d);
             first.HasDeductionM3Evidence = false;
             first.DeductionM3 = 0d;
+            first.LengthM = 5d;
+            first.HasLengthMEvidence = true;
             var second = NewRow("E2", "8000000000000000", 2d, 18d);
             second.DeductionM3 = 0d;
+            second.LengthM = 7d;
+            second.HasLengthMEvidence = true;
             return new[] { first, second };
         }
 
@@ -345,11 +408,12 @@ namespace QS3D.Core.SmokeTests
                 DeductionM3 = 0d,
                 NetConcreteM3 = 2d,
                 FormworkM2 = 30d,
+                LengthM = 12d,
                 HasGrossConcreteM3Evidence = true,
                 HasDeductionM3Evidence = false,
                 HasNetConcreteM3Evidence = true,
                 HasFormworkM2Evidence = true,
-                HasLengthMEvidence = false,
+                HasLengthMEvidence = true,
                 HasOuterPerimeterMEvidence = false,
                 HasInnerPerimeterMEvidence = false,
                 HasDoorAreaM2Evidence = false,
@@ -489,6 +553,42 @@ namespace QS3D.Core.SmokeTests
                 var replacement = archive.CreateEntry(entryName, CompressionLevel.Optimal);
                 using (var writer = new StreamWriter(replacement.Open(), new UTF8Encoding(false))) writer.Write(content);
             }
+        }
+
+        private static void RequireHeaderRow(string sheet, IReadOnlyList<string> expected, string sheetName)
+        {
+            XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            var document = XDocument.Parse(sheet);
+            var row = document.Descendants(ns + "row")
+                .Single(item => string.Equals((string?)item.Attribute("r"), "1", StringComparison.Ordinal));
+            var cells = row.Elements(ns + "c").ToList();
+            Require(cells.Count == expected.Count, sheetName + " header count does not match the DGKL contract.");
+            for (var index = 0; index < expected.Count; index++)
+            {
+                var value = string.Concat(cells[index].Descendants(ns + "t").Select(text => text.Value));
+                Require(string.Equals(value, expected[index], StringComparison.Ordinal),
+                    sheetName + " header order mismatch at column " + (index + 1) + ".");
+            }
+        }
+
+        private static void RequireHiddenColumn(string sheet, int column, string message)
+        {
+            XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            var document = XDocument.Parse(sheet);
+            var token = column.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var hidden = document.Descendants(ns + "col").Any(item =>
+                string.Equals((string?)item.Attribute("min"), token, StringComparison.Ordinal) &&
+                string.Equals((string?)item.Attribute("max"), token, StringComparison.Ordinal) &&
+                string.Equals((string?)item.Attribute("hidden"), "1", StringComparison.Ordinal));
+            Require(hidden, message);
+        }
+
+        private static void RequireAutoFilter(string sheet, string expectedRange, string message)
+        {
+            XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            var document = XDocument.Parse(sheet);
+            var actual = document.Descendants(ns + "autoFilter").Select(item => (string?)item.Attribute("ref")).SingleOrDefault();
+            Require(string.Equals(actual, expectedRange, StringComparison.Ordinal), message);
         }
 
         private static void RequireCellValue(string sheet, string cellRef, string value, string message)
