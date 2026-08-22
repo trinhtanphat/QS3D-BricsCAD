@@ -25,6 +25,8 @@ if COMMAND.is_file():
         'CadUnitService.TryGetNativeLengthUnit(document, out var nativeUnit)',
         'DrawingUnitResolutionPolicy.BindQuantityUnit(',
         'DrawingUnitResolutionSource.NativeInsunits',
+        'var project = ProjectContextCoordinator.GetOrCreate(document);',
+        'Level Z runtime probe requires a fresh canonical project.',
         'CadGeometryGuard.ToDrawingUnits(document, 1d, "Level Z probe meter scale")',
         'RequireAssemblyRevision(typeof(LevelZRuntimeProbeCommands).Assembly, sourceSha',
         'RequireAssemblyRevision(typeof(ProjectState).Assembly, sourceSha',
@@ -53,6 +55,13 @@ if COMMAND.is_file():
         'LEVEL_Z_RUNTIME_CURTAIN_RANGE_FAILED',
         'LEVEL_Z_RUNTIME_CURTAIN_MODE_FAILED',
         'LEVEL_Z_RUNTIME_REBAR_FAILED',
+        'hostBuildStage = "legacy_wall_build";',
+        'hostBuildStage = "bounded_wall_build";',
+        'hostBuildStage = "glass_wall_build";',
+        'hostBuildStage = "beam_build";',
+        'hostBuildStage = "range_read";',
+        'host_build_stage=',
+        'RequireHostBuildStage(',
         'rebarStage = "longitudinal_build";',
         'rebarStage = "longitudinal_count";',
         'rebarStage = "stirrup_build";',
@@ -102,6 +111,10 @@ if COMMAND.is_file():
     for forbidden in ("error.Message", "error.StackTrace", "error.Source", "error.Data"):
         if forbidden in text:
             errors.append("Level-Z failure marker exposes raw exception detail: " + forbidden)
+    canonical = text.find('var project = CreateProject(document);')
+    structural_build = text.find('StructuralSolidBuilder.BuildSelected(document, project, ElementCategory.Beam)')
+    if canonical < 0 or structural_build < 0 or canonical >= structural_build:
+        errors.append("Level-Z probe must bind a canonical drawing project before structural generation")
 
 if STRUCTURAL.is_file():
     text = STRUCTURAL.read_text(encoding="utf-8")
@@ -130,9 +143,13 @@ if RUNNER.is_file():
         '$sourceShaExitCode = $LASTEXITCODE',
         'git -C $repoRoot status --porcelain=v1 --untracked-files=all',
         '$worktreeExitCode = $LASTEXITCODE',
-        'Assembly was not built from ExpectedSourceSha',
+        'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $ExpectedSourceSha',
+        'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
+        'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
         '. $windowInteropPath',
         'Close-Qs3dProxyInformationDialog -Process $process',
+        'Close-Qs3dUnsavedProjectChangesDialog -Process $process',
+        'if ($unsavedProjectChangesDialogsDiscarded -eq 0)',
         '"_.OPEN", (\'"\' + $DrawingCopy + \'"\')',
         '"QS3DLEVELZPROBE"',
         '"Millimeter" { "4" }',
@@ -147,10 +164,12 @@ if RUNNER.is_file():
         'function Restore-Qs3dLevelDrawingAndPrivateState {',
         'Restore-Qs3dLevelDrawingAndPrivateState -ScriptPath $scriptPath -ProjectSidecar $projectSidecar -DrawingCopy $DrawingCopy -DrawingBackupPath $drawingBackupPath -OriginalDrawingAttributes $originalDrawingAttributes',
         'Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue',
-        '$gracefulExit = $process.WaitForExit($GracefulExitTimeoutSeconds * 1000)',
+        '$gracefulDeadline = (Get-Date).AddSeconds($GracefulExitTimeoutSeconds)',
+        'if ($process.WaitForExit(250))',
         'BricsCAD did not exit gracefully within $GracefulExitTimeoutSeconds seconds after the Level Z marker.',
         'graceful_exit = $gracefulExit',
         'graceful_exit_timeout_seconds = $GracefulExitTimeoutSeconds',
+        'unsaved_project_changes_dialogs_discarded = $unsavedProjectChangesDialogsDiscarded',
         'drawing_copy_sha256_before',
         'drawing_copy_sha256_after',
         'process_cleanup_verified = $processCleanupVerified',
@@ -190,15 +209,32 @@ if RUNNER.is_file():
         '"observed_beam_rebar_count", "observed_beam_stirrup_element_count", "observed_beam_stirrup_count"',
         '"observed_rebar_min_z_m", "observed_rebar_max_z_m", "observed_stirrup_min_z_m", "observed_stirrup_max_z_m"',
         '"exception_type", "exception_target", "exception_hresult"',
+        '"legacy_wall_build", "bounded_wall_build", "glass_wall_build", "beam_build", "range_read"',
         'Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_RESULT"',
         'Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_NONCE"',
         'Restore-EnvironmentValue -Name "QS3D_LEVEL_Z_SOURCE_SHA"',
     ):
         if token not in text:
             errors.append("Level-Z runner missing contract token: " + token)
-    for forbidden in ("Get-Process -Name '*'", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
+    for forbidden in ("Get-Process -Name '*'", 'Get-Process -Name "bricscad"', "$expectedAssemblyRevision", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
         if forbidden in text:
             errors.append("Level-Z runner contains broad process/window action: " + forbidden)
+    helper_text = HELPER.read_text(encoding="utf-8")
+    for token in (
+        'DiscardUnsavedProjectChangesDialogs(int processId)',
+        '"QS3D \\u2014 Unsaved project changes"',
+        'private const int IdNo = 7;',
+        'PostMessage(window, WmCommand, (IntPtr)IdNo, IntPtr.Zero)',
+        'function Close-Qs3dUnsavedProjectChangesDialog',
+        'function Get-Qs3dExactBricsCadProcesses',
+        'function Wait-Qs3dNoExactBricsCadProcesses',
+        'function Assert-Qs3dExactSourceIdentity',
+        "Read-Qs3dSingleProjectValue -ProjectPath $pluginProject -Element 'InformationalVersion'",
+        "Read-Qs3dSingleProjectValue -ProjectPath $coreProject -Element 'InformationalVersion'",
+        "'https://raw.githubusercontent.com/trinhtanphat/QS3D-BricsCAD/'",
+    ):
+        if token not in helper_text:
+            errors.append("Level-Z runner interop is missing guarded unsaved-project discard token: " + token)
     if "rev-parse HEAD 2>$null | Select-Object -First 1" in text:
         errors.append("Level-Z runner must not pipe rev-parse through Select-Object because early pipeline closure can corrupt LASTEXITCODE")
     if '$argumentParts.Add(\'"\' + $DrawingCopy + \'"\')' in text:

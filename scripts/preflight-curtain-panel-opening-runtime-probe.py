@@ -139,6 +139,9 @@ if RUNNER.is_file():
         'rev-parse HEAD',
         'status --porcelain --untracked-files=normal',
         'Curtain-opening runtime qualification requires a clean exact-SHA worktree.',
+        'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead',
+        'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
+        'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
         'ArtifactDir must be empty.',
         'Stop-Qs3dLaunchedProcess -Process $process',
         'Stop-Process -Id $Process.Id -Force -ErrorAction Stop',
@@ -146,6 +149,10 @@ if RUNNER.is_file():
         'git_sha = $gitHead',
         'process_cleanup_verified = $true',
         'script_cleanup_verified = $true',
+        'drawing_lock_cleanup_verified = $true',
+        'function Remove-Qs3dDrawingLocks',
+        '$drawingLocks = @([IO.Path]::ChangeExtension($DrawingCopy, ".dwl"), [IO.Path]::ChangeExtension($DrawingCopy, ".dwl2"))',
+        'Remove-Qs3dDrawingLocks -Paths $drawingLocks',
         'sidecar_absent_verified = $true',
         'Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop',
         'Curtain-opening runtime script cleanup failed.',
@@ -171,7 +178,9 @@ if RUNNER.is_file():
     for token in required:
         if token not in text:
             errors.append("Curtain-panel P02 runner missing contract token: " + token)
-    for forbidden in ("Get-Process -Name '*'", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
+    if text.count('Remove-Qs3dDrawingLocks -Paths $drawingLocks') != 2:
+        errors.append("Curtain-panel P02 runner must clean drawing locks on success and finally paths")
+    for forbidden in ("Get-Process -Name '*'", 'Get-Process -Name "bricscad"', "$expectedAssemblyRevision", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
         if forbidden in text:
             errors.append("Curtain-panel P02 runner contains broad process/window action: " + forbidden)
     fail_start = text.find('if ($marker.ContainsKey("status")')
@@ -183,8 +192,9 @@ if RUNNER.is_file():
     deferred_failure = text.find("if ($diagnosticFailure)", fail_start)
     drawing_hash_after = text.find("$drawingHashAfter =", fail_start)
     sidecar_after = text.find("Curtain-opening runtime probe unexpectedly persisted a QS3D sidecar.", fail_start)
-    if deferred_failure < 0 or drawing_hash_after < 0 or sidecar_after < 0 or deferred_failure < drawing_hash_after or deferred_failure < sidecar_after:
-        errors.append("Curtain-panel P02 sanitized FAIL must be deferred until process/script/DWG/sidecar cleanup checks finish")
+    lock_cleanup_after = text.find("Remove-Qs3dDrawingLocks -Paths $drawingLocks", fail_start)
+    if min(deferred_failure, drawing_hash_after, sidecar_after, lock_cleanup_after) < 0 or deferred_failure < drawing_hash_after or deferred_failure < sidecar_after or deferred_failure < lock_cleanup_after:
+        errors.append("Curtain-panel P02 sanitized FAIL must be deferred until process/script/DWG/lock/sidecar cleanup checks finish")
     stop_start = text.find("function Stop-Qs3dLaunchedProcess")
     stop_end = text.find("if ([Environment]::OSVersion.Platform", stop_start)
     stop_body = text[stop_start:stop_end]
