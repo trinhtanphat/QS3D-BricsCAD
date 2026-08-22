@@ -99,7 +99,7 @@ namespace QS3D.Core.Coordination
         internal CoordinationIssueExcelImportPlan(long sourceRevision, IReadOnlyList<CoordinationIssue> issues, int changedIssueCount)
         {
             SourceRevision = sourceRevision;
-            NextRevision = checked(sourceRevision + 1L);
+            NextRevision = changedIssueCount == 0 ? sourceRevision : checked(sourceRevision + 1L);
             Issues = issues ?? throw new ArgumentNullException(nameof(issues));
             ChangedIssueCount = changedIssueCount;
         }
@@ -268,6 +268,10 @@ namespace QS3D.Core.Coordination
             for (var i = 0; i < source.Comments.Count; i++) clone.AddComment(source.Comments[i]);
             if (source.Status != CoordinationIssueStatus.Open)
                 clone.TransitionTo(source.Status, source.UpdatedAtUtc);
+            else if (clone.UpdatedAtUtc < source.UpdatedAtUtc)
+                clone.Rename(clone.Title, source.UpdatedAtUtc);
+            if (clone.UpdatedAtUtc != source.UpdatedAtUtc)
+                throw new InvalidOperationException("Coordination issue clone did not preserve UpdatedAtUtc for IssueId " + source.IssueId + ".");
             return clone;
         }
 
