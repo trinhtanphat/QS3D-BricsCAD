@@ -128,6 +128,10 @@
                                     ToolTip="Mở bảng khối lượng QS3DBQ đầy đủ"/>
                             <Button Content="Định vị" Click="OnLocateClick" Style="{StaticResource DenseButton}"
                                     ToolTip="Chọn và zoom các đối tượng CAD của dòng khối lượng đang chọn"/>
+                            <Button Content="Xuất Excel" Click="OnExcelExportClick" Style="{StaticResource AccentButton}"
+                                    ToolTip="Xuất ED2 CHI_TIET + TONG_HOP. Nếu đang chọn node cây, node đó trở thành scope Selection an toàn."/>
+                            <Button Content="Truy ngược Excel" Click="OnExcelTracebackClick" Style="{StaticResource DenseButton}"
+                                    ToolTip="Chọn workbook/dòng CHI_TIET và định vị ngược đúng cấu kiện bằng Element ID + Handle + Drawing Fingerprint; sai provenance sẽ bị từ chối."/>
                             <Button Content="Xuất evidence" Click="OnQuantityEvidenceExportClick" Style="{StaticResource DenseButton}"
                                     ToolTip="Xuất đúng Quantity Explanation/evidence đang review ra XLSX, không tính lại khối lượng bằng một engine khác"/>
                             <CheckBox x:Name="AutoRevealCheck" Content="Click = 3D" IsChecked="True"
