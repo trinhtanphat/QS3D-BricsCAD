@@ -66,7 +66,9 @@ namespace QS3D.BricsCAD.V25
 
                 RequireSameDocument(document);
                 var ucsToWcs = editor.CurrentUserCoordinateSystem;
-                var start = first.Value;
+                // Editor.GetPoint is expressed in the current UCS. DrawJig AcquirePoint/base-point
+                // coordinates are WCS, so normalize only this first non-jig point to WCS once.
+                var start = first.Value.TransformBy(ucsToWcs);
                 var accepted = 0;
                 var termination = "UNKNOWN";
 
@@ -124,16 +126,17 @@ namespace QS3D.BricsCAD.V25
                 "|minimum_segments=" + MinimumQualifiedSegments +
                 "|termination=" + termination +
                 "|preview_model=DrawJigProfileStrip" +
-                "|coordinate_model=WCS_INPUT_UCS_PLANE" +
+                "|coordinate_model=EDITOR_UCS_TO_JIG_WCS_UCS_PLANE" +
                 "|persistent_writes=0" +
                 "|ownership_writes=0");
         }
 
         private sealed class ProfileStripJig : DrawJig
         {
-            // Editor.GetPoint/JigPrompts.AcquirePoint are consumed as WCS API points. Snapshot the
-            // active UCS once so only the profile-offset math is performed in UCS-local XY. The
-            // resulting strip corners are then transformed back to WCS exactly once for WorldDraw.
+            // The first Editor.GetPoint value is normalized from current UCS to WCS before this jig
+            // is created. JigPrompts.AcquirePoint and JigPromptPointOptions.BasePoint are consumed
+            // in WCS. Snapshot the active UCS once so only profile-offset math is performed in
+            // UCS-local XY; strip corners are transformed back to WCS exactly once for WorldDraw.
             private readonly Point3d _startWcs;
             private readonly double _widthDrawingUnits;
             private readonly Matrix3d _ucsToWcs;
