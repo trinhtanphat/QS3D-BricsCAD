@@ -1,0 +1,31 @@
+name: QS3D Core CI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Preflight source guard
+        run: python scripts/preflight.py
+
+  core:
+    needs: preflight
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build core
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - name: Run deterministic smoke tests
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
