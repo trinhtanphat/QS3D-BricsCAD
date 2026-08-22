@@ -3,7 +3,7 @@
 Parent issue: #80  
 Source-prep issue: #3532  
 Lane-Key: `issue-local004-p05`  
-Canonical branch: `agent/web-gpt56sol-20260822-grip1/issue-3532-native-grip-p05`
+Canonical active hardening branch: `agent/web-gpt56sol-20260822-grip1/issue-3532-reopen-evidence-fix`
 
 ## Boundary
 
@@ -47,4 +47,15 @@ Production commands used by the matrix remain `QS3DDRAWBEAM`, `QS3DSYNCSOURCE`, 
 
 Only sanitized markers beginning `QS3D_SOURCE_RECONCILE_NATIVE_GRIP_RUNTIME_V1` may be posted. Keep paths, source/generated handles, ProjectId/ElementId, raw DWGs, proprietary DLLs and stack traces out of GitHub.
 
-Remote/source state becomes `SOURCE_READY` only after exact-head CI/build is green. Licensed state remains `PENDING_LOCAL` until an agent performs the real manual grip + ESC/commit sequence on the exact pushed SHA. Parent #80 stays open for additional topology/category matrices.
+A full LOCAL-004 P05 qualification requires the ordered PASS evidence set from the **same exact candidate/run**:
+
+1. `phase=baseline` — verified 5 m source/semantic/quantity/generated baseline;
+2. `phase=cancel_check` — includes `manual_grip_cancel_verified=true`;
+3. `phase=edit_check` — includes `manual_grip_commit_verified=true` and source-only 8 m state;
+4. `phase=sync_check` — includes `source_reconcile_verified=true` and baseline generated invalidation;
+5. `phase=final` — includes `rebuild_verified=true` plus `replacement_generated=true`;
+6. `phase=reopen` — includes `production_local004_p05_reopen_candidate=true`, `prior_session_phases_replayed=false`, and `cold_reopen_verified=true`.
+
+`QS3DSRGRIPP05REOPEN` runs after a real process restart, so in-memory probe state from the earlier phases no longer exists. Its PASS marker proves current persisted final-state continuity only. It MUST NOT replay or substitute for manual cancel/commit/reconcile/rebuild evidence from the prior process and MUST NOT be treated as a standalone aggregate qualification marker.
+
+Remote/source state becomes `SOURCE_READY` only after exact-head CI/build is green. Licensed state remains `PENDING_LOCAL` until an agent performs the real manual grip + ESC/commit sequence and records all six PASS phase markers on the exact pushed SHA. Parent #80 stays open for additional topology/category matrices.
