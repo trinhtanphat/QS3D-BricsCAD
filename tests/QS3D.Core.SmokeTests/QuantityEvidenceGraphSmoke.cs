@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             VolumeAndFormworkParity();
             DeterministicIdentityAndOrdering();
             DeductionProvenance();
+            GeometryEvidenceAdapterParity();
             InvalidEvidenceFailsClosed();
             XlsxCarriesGraphValuesAndEvidenceIds();
             Console.WriteLine("PASS quantity evidence graph/export parity");
@@ -105,11 +106,18 @@ namespace QS3D.Core.SmokeTests
             var graphB = QuantityExplanation.Create(
                 "W-001", "Wall", "Review", "unit", 15m, 15m,
                 new[] { other, second });
+            Equal(first.EvidenceId, second.EvidenceId, "contribution deterministic id");
             Equal(graphA.EvidenceId, graphB.EvidenceId, "graph deterministic id");
             Equal(
                 string.Join("|", graphA.Contributions.Select(item => item.EvidenceId)),
                 string.Join("|", graphB.Contributions.Select(item => item.EvidenceId)),
                 "deterministic contribution order");
+
+            var indexed = QuantityEvidenceSelector.ForFace("W-001", 4);
+            var stableKey = QuantityEvidenceSelector.ForFaceKey("W-001", "SOLID-01/FACE-04");
+            Equal(QuantityEvidenceSelectorKind.Face, stableKey.Kind, "stable face selector kind");
+            Equal("SOLID-01/FACE-04", stableKey.FaceKey, "stable face selector key");
+            True(!string.Equals(indexed.CanonicalKey, stableKey.CanonicalKey, StringComparison.Ordinal), "indexed and keyed face selectors remain distinct");
         }
 
         private static void DeductionProvenance()
@@ -136,15 +144,118 @@ namespace QS3D.Core.SmokeTests
             Equal(deduction.EvidenceId, row.EvidenceId, "deduction evidence id");
         }
 
+        private static void GeometryEvidenceAdapterParity()
+        {
+            var faces = new[]
+            {
+                Face("SOLID-01/FACE-01", 0.300d),
+                Face("SOLID-01/FACE-02", 0.300d),
+                Face("SOLID-01/FACE-03", 0.300d),
+                Face("SOLID-01/FACE-04", 0.300d)
+            };
+            var geometry = new QuantityGeometryExplanation
+            {
+                ElementId = "F-001",
+                ElementName = "Móng Bè-4",
+                GeometryFingerprint = "fp-foundation-001",
+                GrossVolume = 0.450d,
+                DeductionVolume = 0d,
+                NetVolume = 0.450d,
+                FormworkFaces = faces
+            };
+            var evidence = QuantityGeometryEvidenceAdapter.Create(geometry);
+            Equal(0.450m, evidence.Concrete.GrossValue, "geometry adapter gross concrete");
+            Equal(0.450m, evidence.Concrete.NetValue, "geometry adapter net concrete");
+            Equal(1.200m, evidence.Formwork.GrossValue, "geometry adapter gross formwork");
+            Equal(1.200m, evidence.Formwork.NetValue, "geometry adapter net formwork");
+
+            var faceRows = evidence.Formwork.Contributions
+                .Where(x => x.Operation == QuantityEvidenceOperation.Add && x.Selector.Kind == QuantityEvidenceSelectorKind.Face)
+                .OrderBy(x => x.Selector.FaceKey, StringComparer.Ordinal)
+                .ToArray();
+            Equal(4, faceRows.Length, "geometry adapter face contribution count");
+            Equal(4, faceRows.Select(x => x.Selector.FaceKey).Distinct(StringComparer.Ordinal).Count(), "geometry adapter distinct face keys");
+            foreach (var row in faceRows) Equal(0.300m, row.Value, "geometry adapter face value");
+
+            var reordered = new QuantityGeometryExplanation
+            {
+                ElementId = geometry.ElementId,
+                ElementName = "Presentation-only renamed",
+                GeometryFingerprint = geometry.GeometryFingerprint,
+                GrossVolume = geometry.GrossVolume,
+                DeductionVolume = geometry.DeductionVolume,
+                NetVolume = geometry.NetVolume,
+                FormworkFaces = faces.Reverse().ToArray()
+            };
+            var rebuilt = QuantityGeometryEvidenceAdapter.Create(reordered);
+            Equal(evidence.Concrete.EvidenceId, rebuilt.Concrete.EvidenceId, "geometry adapter concrete stable id");
+            Equal(evidence.Formwork.EvidenceId, rebuilt.Formwork.EvidenceId, "geometry adapter formwork stable id");
+
+            var deductionGeometry = new QuantityGeometryExplanation
+            {
+                ElementId = "W-100",
+                ElementName = "Wall",
+                GeometryFingerprint = "fp-wall-100",
+                GrossVolume = 2.500d,
+                DeductionVolume = 0.300d,
+                NetVolume = 2.200d,
+                VolumeDeductions = new[]
+                {
+                    new QuantityGeometryDeduction
+                    {
+                        ElementId = "O-200",
+                        ElementName = "Opening",
+                        Relation = QuantityGeometryRelation.VolumeIntersection,
+                        Volume = 0.300d,
+                        RegionKey = "W-100|V|O-200"
+                    }
+                }
+            };
+            var deductionEvidence = QuantityGeometryEvidenceAdapter.Create(deductionGeometry);
+            var cause = deductionEvidence.Concrete.Contributions.Single(x =>
+                x.Operation == QuantityEvidenceOperation.Deduct &&
+                x.Selector.Kind == QuantityEvidenceSelectorKind.Intersection);
+            Equal(-0.300m, cause.Value, "geometry adapter deduction cause value");
+            Equal("W-100", cause.Selector.SourceEntityKey, "geometry adapter deduction source selector");
+            Equal("O-200", cause.Selector.TargetEntityKey, "geometry adapter deduction target selector");
+
+            var causeExport = QuantityEvidenceExportProjection.Create(deductionEvidence.Concrete)
+                .Single(x => x.RecordKind == "Contribution" && x.EvidenceId == cause.EvidenceId);
+            Equal("W-100", causeExport.SourceReference, "geometry adapter deduction export source");
+            Equal("O-200", causeExport.TargetReference, "geometry adapter deduction export target");
+            Equal("Intersection", causeExport.SelectorKind, "geometry adapter deduction export selector");
+            Equal(-0.300m, causeExport.Value, "geometry adapter deduction export value");
+        }
+
+        private static QuantityFormworkFaceExplanation Face(string faceId, double area)
+        {
+            return new QuantityFormworkFaceExplanation
+            {
+                FaceId = faceId,
+                FaceType = "Side",
+                GrossArea = area,
+                DeductionArea = 0d,
+                NetArea = area
+            };
+        }
+
         private static void InvalidEvidenceFailsClosed()
         {
             Throws<ArgumentException>(() => QuantityEvidenceSelector.ForEntity("   "));
             Throws<ArgumentOutOfRangeException>(() => QuantityEvidenceSelector.ForFace("W-1", -1));
+            Throws<ArgumentException>(() => QuantityEvidenceSelector.ForFaceKey("W-1", "   "));
             Throws<ArgumentException>(() => QuantityAdjustment.Create(
                 "deduct", "rule", "reason", QuantityEvidenceOperation.Deduct,
                 "W-1", "O-1", -0.1m, QuantityEvidenceSelector.ForIntersection("W-2", "O-1", "cut")));
             Throws<ArgumentException>(() => QuantityExplanation.Create(
                 "W-1", "Wall", "Volume", "m3", 1m, 0.8m));
+            Throws<InvalidOperationException>(() => QuantityGeometryEvidenceAdapter.Create(new QuantityGeometryExplanation
+            {
+                ElementId = "W-1",
+                GrossVolume = 1d,
+                NetVolume = 1d,
+                GeometryFingerprint = "   "
+            }));
         }
 
         private static void XlsxCarriesGraphValuesAndEvidenceIds()
