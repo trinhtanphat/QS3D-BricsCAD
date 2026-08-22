@@ -1,0 +1,72 @@
+<Window x:Class="QS3D.BricsCAD.V25.UI.RecognitionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QS3D • Nhận dạng cấu kiện" Height="650" Width="1160"
+        MinHeight="500" MinWidth="860" WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource Bg0Brush}">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
+        <Border Background="{StaticResource Bg1Brush}" Padding="16,12" BorderThickness="0,0,0,1">
+            <DockPanel>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="NHẬN DẠNG THEO QUY TẮC" FontWeight="Bold" FontSize="18"/>
+                        <Border Background="{StaticResource AccentSoftBrush}" BorderBrush="{StaticResource BorderStrongBrush}"
+                                BorderThickness="1" CornerRadius="8" Padding="7,1" Margin="8,0,0,0">
+                            <TextBlock Text="REVIEW GATED" Foreground="{StaticResource LuxuryBrush}" FontWeight="SemiBold" FontSize="9"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="Layer + text/block + loại entity • kết quả độ tin cậy thấp hoặc gần nhau cần kiểm tra"
+                               Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Định vị" Click="OnLocateClick" Style="{StaticResource DenseButton}"/>
+                    <Button Content="Áp dụng dòng chọn" Click="OnApplyClick" Margin="6,0,0,0"/>
+                    <Button Content="Áp dụng chắc chắn" Style="{StaticResource AccentButton}" Click="OnApplyConfidentClick" Margin="6,0,0,0"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Row="1" Style="{StaticResource Card}" Padding="0" Margin="12,10">
+            <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True"
+                      CanUserAddRows="False" SelectionMode="Extended"
+                      MouseDoubleClick="OnGridDoubleClick" BorderThickness="0">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Handle" Binding="{Binding Handle}" Width="85"/>
+                    <DataGridTextColumn Header="Entity" Binding="{Binding Snapshot.EntityType}" Width="100"/>
+                    <DataGridTextColumn Header="Layer" Binding="{Binding Snapshot.Layer}" Width="180"/>
+                    <DataGridTextColumn Header="Gợi ý" Binding="{Binding SuggestedCategory}" Width="130"/>
+                    <DataGridTextColumn Header="Độ tin cậy" Binding="{Binding Confidence, StringFormat=P0}" Width="95"/>
+                    <DataGridTextColumn Header="Biên" Binding="{Binding Margin, StringFormat=P0}" Width="70"/>
+                    <DataGridCheckBoxColumn Header="Cần duyệt" Binding="{Binding RequiresReview}" Width="75"/>
+                    <DataGridTextColumn Header="Căn cứ" Binding="{Binding Evidence}" Width="*"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+
+        <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="11,7" BorderThickness="0,1,0,0">
+            <Grid x:Name="RecognitionStatusGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="{StaticResource WarningBrush}" CornerRadius="5"
+                        Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                <TextBlock Grid.Column="1" x:Name="Status" MinWidth="0"
+                           TextTrimming="CharacterEllipsis" Foreground="{StaticResource MutedBrush}"/>
+                <TextBlock Grid.Column="2" Text="LOW CONFIDENCE = REVIEW"
+                           HorizontalAlignment="Right" TextWrapping="NoWrap"
+                           Style="{StaticResource Caption}" Margin="12,0,0,0"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
