@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using QS3D.Platform.Domain;
+using QS3D.Platform.Parity;
 
 namespace QS3D.Core.Coordination
 {
