@@ -27,8 +27,8 @@ namespace QS3D.Core.SmokeTests
                     new CoordinationRule("PIPE-BEAM-HARD", 4, "Pipe", "Beam", CoordinationRuleKind.HardClash, "Error", 0d)
                 });
 
-            var forward = profile.Resolve("Pipe", "Beam");
-            var reverse = profile.Resolve("beam", "pipe");
+            var forward = profile.Resolve("Pipe", "Beam") ?? throw new InvalidOperationException("Expected forward rule resolution.");
+            var reverse = profile.Resolve("beam", "pipe") ?? throw new InvalidOperationException("Expected reverse rule resolution.");
             Equal("PIPE-BEAM-HARD", forward.RuleId, "exact rule did not outrank wildcard rule");
             Equal(forward.RuleId, reverse.RuleId, "rule resolution changed when pair order changed");
             Equal(CoordinationRuleKind.HardClash, reverse.Kind, "resolved rule kind changed when pair order changed");
@@ -59,7 +59,7 @@ namespace QS3D.Core.SmokeTests
                     new CoordinationRule("FALLBACK", 2, "*", "*", CoordinationRuleKind.Clearance, "Info", 0.025d)
                 });
 
-            var resolved = profile.Resolve("Pipe", "Beam");
+            var resolved = profile.Resolve("Pipe", "Beam") ?? throw new InvalidOperationException("Expected fallback rule resolution.");
             Equal("FALLBACK", resolved.RuleId, "disabled exact rule participated in resolution");
         }
 
@@ -90,7 +90,7 @@ namespace QS3D.Core.SmokeTests
                     new CoordinationRule("DUCT-WALL-CLEARANCE", 12, "Duct", "Wall", CoordinationRuleKind.Clearance, "Warning", 0.075d)
                 });
 
-            var resolved = profile.Resolve("Wall", "Duct");
+            var resolved = profile.Resolve("Wall", "Duct") ?? throw new InvalidOperationException("Expected trace rule resolution.");
             Equal("PROJECT-A", resolved.ProfileId, "profile identity was not projected");
             Equal(7, resolved.ProfileVersion, "profile version was not projected");
             Equal("DUCT-WALL-CLEARANCE", resolved.RuleId, "rule identity was not projected");
