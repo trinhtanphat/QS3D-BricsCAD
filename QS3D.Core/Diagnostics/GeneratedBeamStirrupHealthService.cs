@@ -1,0 +1,181 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using QS3D.Core.Domain;
+
+namespace QS3D.Core.Diagnostics
+{
+    public sealed class GeneratedBeamStirrupHealthService
+    {
+        private const string HandlesKey = "GeneratedBeamStirrupHandles";
+        private const string CountKey = "GeneratedBeamStirrupCount";
+        private const string DiameterKey = "GeneratedBeamStirrupDiameterMm";
+        private const string ModeKey = "GeneratedBeamStirrupMode";
+        private const string CenterlineKey = "GeneratedBeamStirrupCenterlineLengthM";
+        private const string TotalCenterlineKey = "GeneratedBeamStirrupTotalCenterlineLengthM";
+        private const string PolylineKey = "GeneratedBeamStirrupPolylineLengthM";
+        private const string BendRadiusKey = "GeneratedBeamStirrupBendRadiusM";
+        private const string HookLengthKey = "GeneratedBeamStirrupHookLengthM";
+        private const string HookAngleKey = "GeneratedBeamStirrupHookTailAngleDeg";
+
+        public IReadOnlyList<ModelHealthIssue> Inspect(ProjectState project, ISet<string>? liveSolidHandles = null)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var issues = new List<ModelHealthIssue>();
+            var owners = BuildOwnershipIndex(project);
+            foreach (var element in project.Elements)
+            {
+                if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+                var local = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var validCount = 0;
+                foreach (var item in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var handle = (item ?? string.Empty).Trim();
+                    if (handle.Length == 0 || !long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+                    {
+                        issues.Add(new ModelHealthIssue("INVALID_BEAM_STIRRUP_GENERATED_HANDLE", HealthSeverity.Error, HandlesKey + " chứa handle không hợp lệ.", element.Id));
+                        continue;
+                    }
+                    if (!local.Add(handle))
+                    {
+                        issues.Add(new ModelHealthIssue("DUPLICATE_BEAM_STIRRUP_GENERATED_HANDLE", HealthSeverity.Error, "Một beam stirrup handle bị lặp trong cùng element: " + handle, element.Id));
+                        continue;
+                    }
+                    validCount++;
+                    var expectedOwner = element.Id + "/" + HandlesKey;
+                    if (owners.TryGetValue(handle, out var owner) && !string.Equals(owner, expectedOwner, StringComparison.OrdinalIgnoreCase))
+                        issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_OWNERSHIP_CONFLICT", HealthSeverity.Error, "Generated beam stirrup solid xung đột owner/project handle khác: " + owner, element.Id));
+                    if (element.SourceHandles.Any(x => string.Equals((x ?? string.Empty).Trim(), handle, StringComparison.OrdinalIgnoreCase)))
+                        issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated beam stirrup handle không được nằm trong SourceHandles.", element.Id));
+                    if (liveSolidHandles != null && !liveSolidHandles.Contains(handle))
+                        issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_SOLID_MISSING", HealthSeverity.Error, "Không còn tìm thấy generated beam stirrup Solid3d: " + handle, element.Id));
+                }
+
+                if (!element.Properties.TryGetValue(CountKey, out var countText) ||
+                    !int.TryParse(countText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) || count < 0 || count != validCount)
+                    issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_COUNT_MISMATCH", HealthSeverity.Warning, CountKey + " không khớp số handle hợp lệ.", element.Id));
+
+                if (!element.Properties.TryGetValue(DiameterKey, out var diameterText) ||
+                    !double.TryParse(diameterText, NumberStyles.Float, CultureInfo.InvariantCulture, out var diameter) ||
+                    double.IsNaN(diameter) || double.IsInfinity(diameter) || diameter <= 0d)
+                    issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_DIAMETER_INVALID", HealthSeverity.Warning, DiameterKey + " thiếu hoặc không hợp lệ.", element.Id));
+
+                if (element.Category != ElementCategory.Beam)
+                    issues.Add(new ModelHealthIssue("BEAM_STIRRUP_CATEGORY_MISMATCH", HealthSeverity.Error, "Generated beam stirrup metadata chỉ hợp lệ trên Beam element.", element.Id));
+
+                InspectAdvancedMetadata(element, validCount, issues);
+
+                if (element.IsGeneratedBeamStirrupStale())
+                    issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_STALE", HealthSeverity.Warning, "Generated beam stirrup snapshot không còn khớp semantic/source hiện tại; rebuild stirrups trước khi phát hành bản vẽ.", element.Id));
+            }
+            return issues;
+        }
+
+        private static void InspectAdvancedMetadata(ProjectElement element, int validCount, ICollection<ModelHealthIssue> issues)
+        {
+            var hasAdvancedMetadata =
+                element.Properties.ContainsKey(CenterlineKey) ||
+                element.Properties.ContainsKey(TotalCenterlineKey) ||
+                element.Properties.ContainsKey(PolylineKey) ||
+                element.Properties.ContainsKey(BendRadiusKey) ||
+                element.Properties.ContainsKey(HookLengthKey) ||
+                element.Properties.ContainsKey(HookAngleKey);
+
+            element.Properties.TryGetValue(ModeKey, out var rawMode);
+            var mode = (rawMode ?? string.Empty).Trim();
+            var isClosed = string.Equals(mode, "Beam.Line.RectangularClosedLoop", StringComparison.OrdinalIgnoreCase);
+            var isRounded = string.Equals(mode, "Beam.Line.RectangularRoundedLoop", StringComparison.OrdinalIgnoreCase);
+            var isHooked = string.Equals(mode, "Beam.Line.RectangularHookedPath", StringComparison.OrdinalIgnoreCase);
+            if (mode.Length > 0 && !isClosed && !isRounded && !isHooked)
+                issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_MODE_INVALID", HealthSeverity.Warning, ModeKey + " không phải mode beam stirrup được hỗ trợ.", element.Id));
+
+            // Old generated snapshots predate bend/hook length metadata. Keep them valid until rebuilt.
+            if (!hasAdvancedMetadata) return;
+            if (mode.Length == 0)
+                issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_MODE_INVALID", HealthSeverity.Warning, ModeKey + " bắt buộc khi advanced stirrup metadata đã tồn tại.", element.Id));
+
+            if (!TryNumber(element, CenterlineKey, out var centerline) || centerline <= 0d)
+            {
+                issues.Add(InvalidMetadata(element, CenterlineKey + " phải là số hữu hạn > 0."));
+                return;
+            }
+            if (!TryNumber(element, TotalCenterlineKey, out var totalCenterline) || totalCenterline <= 0d)
+                issues.Add(InvalidMetadata(element, TotalCenterlineKey + " phải là số hữu hạn > 0."));
+            if (!TryNumber(element, PolylineKey, out var polyline) || polyline <= 0d)
+                issues.Add(InvalidMetadata(element, PolylineKey + " phải là số hữu hạn > 0."));
+            else if (polyline > centerline + Math.Max(1e-9d, centerline * 1e-9d))
+                issues.Add(InvalidMetadata(element, PolylineKey + " không được dài hơn exact centerline length."));
+
+            if (!TryNumber(element, BendRadiusKey, out var bendRadius) || bendRadius < 0d)
+                issues.Add(InvalidMetadata(element, BendRadiusKey + " phải là số hữu hạn >= 0."));
+            if (!TryNumber(element, HookLengthKey, out var hookLength) || hookLength < 0d)
+                issues.Add(InvalidMetadata(element, HookLengthKey + " phải là số hữu hạn >= 0."));
+            if (!TryNumber(element, HookAngleKey, out var hookAngle))
+                issues.Add(InvalidMetadata(element, HookAngleKey + " phải là số hữu hạn."));
+
+            if (TryNumber(element, TotalCenterlineKey, out totalCenterline))
+            {
+                var expected = centerline * validCount;
+                var tolerance = Math.Max(1e-9d, Math.Abs(expected) * 1e-9d);
+                if (Math.Abs(totalCenterline - expected) > tolerance)
+                    issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_LENGTH_MISMATCH", HealthSeverity.Warning, TotalCenterlineKey + " không khớp centerline length × số stirrup handle.", element.Id));
+            }
+
+            if (TryNumber(element, BendRadiusKey, out bendRadius) && TryNumber(element, HookLengthKey, out hookLength) && TryNumber(element, HookAngleKey, out hookAngle))
+            {
+                const double epsilon = 1e-12d;
+                if (hookLength > epsilon && !(hookAngle > 0d && hookAngle < 180d))
+                    issues.Add(InvalidMetadata(element, HookAngleKey + " phải nằm trong (0,180) khi hook length > 0."));
+                if (hookLength <= epsilon && Math.Abs(hookAngle) > epsilon)
+                    issues.Add(InvalidMetadata(element, HookAngleKey + " phải bằng 0 khi hook length bằng 0."));
+                if (isClosed && (bendRadius > epsilon || hookLength > epsilon))
+                    issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_MODE_MISMATCH", HealthSeverity.Warning, "ClosedLoop mode không khớp bend/hook metadata.", element.Id));
+                if (isRounded && (bendRadius <= epsilon || hookLength > epsilon))
+                    issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_MODE_MISMATCH", HealthSeverity.Warning, "RoundedLoop mode yêu cầu bend radius > 0 và không có hook tail.", element.Id));
+                if (isHooked && hookLength <= epsilon)
+                    issues.Add(new ModelHealthIssue("BEAM_STIRRUP_GENERATED_MODE_MISMATCH", HealthSeverity.Warning, "HookedPath mode yêu cầu hook length > 0.", element.Id));
+            }
+        }
+
+        private static ModelHealthIssue InvalidMetadata(ProjectElement element, string message) =>
+            new ModelHealthIssue("BEAM_STIRRUP_GENERATED_METADATA_INVALID", HealthSeverity.Warning, message, element.Id);
+
+        private static bool TryNumber(ProjectElement element, string key, out double value)
+        {
+            value = 0d;
+            if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return false;
+            if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value)) return false;
+            return !double.IsNaN(value) && !double.IsInfinity(value);
+        }
+
+        private static Dictionary<string, string> BuildOwnershipIndex(ProjectState project)
+        {
+            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in project.Elements)
+            {
+                foreach (var handle in element.SourceHandles) Reserve(owners, handle, element.Id + "/SourceHandles");
+                foreach (var property in element.Properties)
+                {
+                    if (!GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)) continue;
+                    ReserveProperty(owners, element, property.Key);
+                }
+            }
+            return owners;
+        }
+
+        private static void ReserveProperty(Dictionary<string, string> owners, ProjectElement element, string key)
+        {
+            if (!element.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return;
+            foreach (var handle in raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
+                Reserve(owners, handle, element.Id + "/" + key);
+        }
+
+        private static void Reserve(Dictionary<string, string> owners, string? handle, string token)
+        {
+            var normalized = (handle ?? string.Empty).Trim();
+            if (normalized.Length == 0 || owners.ContainsKey(normalized)) return;
+            owners[normalized] = token;
+        }
+    }
+}
