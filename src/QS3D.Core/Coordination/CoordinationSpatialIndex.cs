@@ -219,7 +219,7 @@ namespace QS3D.Core.Coordination
 
         private void AddPairsForItem(
             CoordinationSpatialItem item,
-            HashSet<string> changed,
+            HashSet<string>? changed,
             HashSet<string> keys,
             List<CoordinationCandidatePair> pairs)
         {
