@@ -58,7 +58,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static IReadOnlyList<ExactClashPair> DetectExact(
+        internal static IReadOnlyList<ExactClashPair> DetectExact(
             Document document,
             IReadOnlyList<ObjectId> ids,
             IReadOnlyDictionary<string, EntitySnapshot> snapshotByHandle,
@@ -161,7 +161,7 @@ namespace QS3D.BricsCAD.V25
             return true;
         }
 
-        private static IReadOnlyDictionary<string, EntitySnapshot> BuildSnapshotIndex(IReadOnlyList<EntitySnapshot> snapshots)
+        internal static IReadOnlyDictionary<string, EntitySnapshot> BuildSnapshotIndex(IReadOnlyList<EntitySnapshot> snapshots)
         {
             var result = new Dictionary<string, EntitySnapshot>(StringComparer.OrdinalIgnoreCase);
             for (var i = 0; i < snapshots.Count; i++)
@@ -217,7 +217,7 @@ namespace QS3D.BricsCAD.V25
             internal Extents3d Extents { get; }
         }
 
-        private sealed class ExactClashPair
+        internal sealed class ExactClashPair
         {
             internal ExactClashPair(string leftHandle, string rightHandle)
             {
