@@ -474,11 +474,12 @@ namespace QS3D.Core.Domain
 
         private static string Required(string value, string parameterName, int maxLength)
         {
-            var text = (value ?? string.Empty).Trim();
+            var raw = value ?? string.Empty;
+            if (raw.Any(char.IsControl))
+                throw new ArgumentException(parameterName + " cannot contain control characters.", parameterName);
+            var text = raw.Trim();
             if (text.Length == 0 || text.Length > maxLength)
                 throw new ArgumentException(parameterName + " must contain 1.." + maxLength + " characters.", parameterName);
-            if (text.Any(char.IsControl))
-                throw new ArgumentException(parameterName + " cannot contain control characters.", parameterName);
             try
             {
                 XmlConvert.VerifyXmlChars(text);

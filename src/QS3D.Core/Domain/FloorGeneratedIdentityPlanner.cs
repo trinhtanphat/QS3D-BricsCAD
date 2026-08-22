@@ -74,7 +74,9 @@ namespace QS3D.Core.Domain
 
         private static string CanonicalFloorId(string value)
         {
-            var normalized = (value ?? string.Empty).Trim();
+            var raw = value ?? string.Empty;
+            RequireNoControlCharacters(raw, nameof(value), "Floor id");
+            var normalized = raw.Trim();
             if (normalized.Length == 0 || normalized.Length > MaxFloorIdLength)
                 throw new ArgumentException("Floor id must contain 1.." + MaxFloorIdLength + " characters.", nameof(value));
             var canonical = normalized.ToUpperInvariant();
@@ -89,6 +91,15 @@ namespace QS3D.Core.Domain
                 throw new ArgumentException("Floor name must contain 1.." + MaxFloorNameLength + " characters.", nameof(value));
             RequireWellFormedUnicode(normalized, nameof(value), "Floor name");
             return normalized;
+        }
+
+        private static void RequireNoControlCharacters(string value, string parameterName, string label)
+        {
+            foreach (var character in value)
+            {
+                if (char.IsControl(character))
+                    throw new ArgumentException(label + " cannot contain control characters.", parameterName);
+            }
         }
 
         private static void RequireWellFormedUnicode(string value, string parameterName, string label)

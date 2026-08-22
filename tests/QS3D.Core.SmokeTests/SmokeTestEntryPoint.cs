@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
                 AddCreateStateMachineSmoke.Run();
                 FeatureNavigationRegistrySmoke.Run();
                 WorkspaceModalPrimitivesSmoke.Run();
+                PolygonScanlineOrientationSmoke.Run();
                 BltLegacyAdapterSmoke.Run();
                 QuantityEvidenceGraphSmoke.Run();
                 QsCustomerWorkbookDgklLayoutSmoke.Run();

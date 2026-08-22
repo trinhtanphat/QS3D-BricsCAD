@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 
 namespace QS3D.Core.Geometry
 {
@@ -181,10 +182,16 @@ namespace QS3D.Core.Geometry
         {
             var firstProduct = ax * by;
             var secondProduct = ay * bx;
-            if (Finite(firstProduct) && Finite(secondProduct))
+            var firstProductUnderflowed = firstProduct == 0d && ax != 0d && by != 0d;
+            var secondProductUnderflowed = secondProduct == 0d && ay != 0d && bx != 0d;
+            if (Finite(firstProduct) && Finite(secondProduct) && !firstProductUnderflowed && !secondProductUnderflowed)
             {
                 var direct = firstProduct - secondProduct;
-                if (Finite(direct)) return direct;
+                if (Finite(direct))
+                {
+                    if (direct != 0d || firstProduct == 0d || secondProduct == 0d) return direct;
+                    return ExactCrossFinite(ax, ay, bx, by);
+                }
             }
 
             var scaleA = Math.Max(Math.Abs(ax), Math.Abs(ay));
@@ -194,7 +201,89 @@ namespace QS3D.Core.Geometry
 
             var normalized = ax / scaleA * (by / scaleB) - ay / scaleA * (bx / scaleB);
             if (!Finite(normalized)) throw new OverflowException(label + " exceeds the supported numeric range.");
+            if (normalized == 0d) return ExactCrossFinite(ax, ay, bx, by);
             return RestorePredicateCross(normalized, scaleA, scaleB);
+        }
+
+        private static double ExactCrossFinite(double ax, double ay, double bx, double by)
+        {
+            BigInteger firstSignificand;
+            BigInteger secondSignificand;
+            int firstExponent;
+            int secondExponent;
+            ExactProduct(ax, by, out firstSignificand, out firstExponent);
+            ExactProduct(ay, bx, out secondSignificand, out secondExponent);
+
+            var commonExponent = Math.Min(firstExponent, secondExponent);
+            var exact = (firstSignificand << (firstExponent - commonExponent))
+                - (secondSignificand << (secondExponent - commonExponent));
+            if (exact.IsZero) return 0d;
+            return ScaleDyadicPredicate(exact, commonExponent);
+        }
+
+        private static void ExactProduct(double first, double second, out BigInteger significand, out int exponent)
+        {
+            BigInteger firstSignificand;
+            BigInteger secondSignificand;
+            int firstExponent;
+            int secondExponent;
+            DecomposeFinite(first, out firstSignificand, out firstExponent);
+            DecomposeFinite(second, out secondSignificand, out secondExponent);
+            significand = firstSignificand * secondSignificand;
+            exponent = firstExponent + secondExponent;
+        }
+
+        private static void DecomposeFinite(double value, out BigInteger significand, out int exponent)
+        {
+            var bits = unchecked((ulong)BitConverter.DoubleToInt64Bits(value));
+            var exponentBits = (int)((bits >> 52) & 0x7ffUL);
+            var fraction = bits & 0x000fffffffffffffUL;
+
+            if (exponentBits == 0)
+            {
+                significand = new BigInteger(fraction);
+                exponent = -1074;
+            }
+            else
+            {
+                significand = new BigInteger(fraction | 0x0010000000000000UL);
+                exponent = exponentBits - 1023 - 52;
+            }
+
+            if ((bits & 0x8000000000000000UL) != 0UL) significand = -significand;
+        }
+
+        private static double ScaleDyadicPredicate(BigInteger significand, int exponent)
+        {
+            var sign = significand.Sign;
+            var value = (double)significand;
+            if (!Finite(value)) return sign > 0 ? double.MaxValue : -double.MaxValue;
+
+            while (exponent > 512)
+            {
+                var scaled = value * Math.Pow(2d, 512d);
+                if (!Finite(scaled)) return sign > 0 ? double.MaxValue : -double.MaxValue;
+                value = scaled;
+                exponent -= 512;
+            }
+
+            while (exponent < -512)
+            {
+                var scaled = value * Math.Pow(2d, -512d);
+                if (scaled == 0d) return sign > 0 ? double.Epsilon : -double.Epsilon;
+                value = scaled;
+                exponent += 512;
+            }
+
+            if (exponent != 0)
+            {
+                var scaled = value * Math.Pow(2d, exponent);
+                if (!Finite(scaled)) return sign > 0 ? double.MaxValue : -double.MaxValue;
+                if (scaled == 0d) return sign > 0 ? double.Epsilon : -double.Epsilon;
+                value = scaled;
+            }
+
+            return value;
         }
 
         private static double RestorePredicateCross(double normalized, double firstScale, double secondScale)
