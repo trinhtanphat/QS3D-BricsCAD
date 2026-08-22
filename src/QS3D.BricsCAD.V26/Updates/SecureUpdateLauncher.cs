@@ -7,6 +7,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
 using System.Text;
 using System.Threading;
+using Microsoft.Win32;
 
 namespace QS3D.BricsCAD.V25.Updates
 {
@@ -19,6 +20,8 @@ namespace QS3D.BricsCAD.V25.Updates
         private const uint WtdStateActionVerify = 1;
         private const uint WtdStateActionClose = 2;
         private const string UpdateMutexPrefix = "Global\\QS3D-BricsCAD-V26-Update-";
+        private const string DemandLoadRegistryRoot = @"Software\Bricsys\BricsCAD\V26x64";
+        private const int MaximumRegistrySubKeys = 64;
         private const int WorkerReadyTimeoutMilliseconds = 5000;
         private static int _scheduled;
         private static Mutex? _crossProcessReservation;
@@ -76,6 +79,10 @@ namespace QS3D.BricsCAD.V25.Updates
                 return false;
             }
             if (!TryGetCurrentSignerThumbprint(out var signerThumbprint, out error)) return false;
+
+            var pluginPath = Assembly.GetExecutingAssembly().Location;
+            if (!TryResolveRegisteredLoadMode(pluginPath, out var loadMode, out error)) return false;
+
             if (Interlocked.CompareExchange(ref _scheduled, 1, 0) != 0)
             {
                 error = "Bản cập nhật V26 đã được lên lịch trong phiên này.";
@@ -90,7 +97,6 @@ namespace QS3D.BricsCAD.V25.Updates
 
             try
             {
-                var pluginPath = Assembly.GetExecutingAssembly().Location;
                 var installDirectory = Path.GetDirectoryName(pluginPath);
                 if (string.IsNullOrWhiteSpace(installDirectory))
                     throw new InvalidOperationException("Không xác định được thư mục cài QS3D V26.");
@@ -125,6 +131,7 @@ namespace QS3D.BricsCAD.V25.Updates
                         manifestUri.AbsoluteUri,
                         signerThumbprint,
                         installDirectory,
+                        loadMode,
                         bricscadPath,
                         logDirectory,
                         mutexName,
@@ -306,11 +313,109 @@ namespace QS3D.BricsCAD.V25.Updates
             }
         }
 
+        private static bool TryResolveRegisteredLoadMode(string pluginPath, out string loadMode, out string reason)
+        {
+            loadMode = string.Empty;
+            reason = string.Empty;
+            try
+            {
+                if (string.IsNullOrWhiteSpace(pluginPath) || !Path.IsPathRooted(pluginPath) || !File.Exists(pluginPath))
+                {
+                    reason = "Không xác định được DLL QS3D V26 đang chạy để bảo toàn chế độ DemandLoad.";
+                    return false;
+                }
+
+                var canonicalPluginPath = Path.GetFullPath(pluginPath);
+                using (var hostKey = Registry.CurrentUser.OpenSubKey(DemandLoadRegistryRoot, writable: false))
+                {
+                    if (hostKey == null)
+                    {
+                        reason = "Không tìm thấy registry BricsCAD V26 để bảo toàn chế độ DemandLoad QS3D.";
+                        return false;
+                    }
+
+                    var languageNames = hostKey.GetSubKeyNames();
+                    if (languageNames.Length > MaximumRegistrySubKeys)
+                    {
+                        reason = "Registry BricsCAD V26 có quá nhiều nhánh con; one-click update đã dừng để tránh đọc trạng thái DemandLoad mơ hồ.";
+                        return false;
+                    }
+                    Array.Sort(languageNames, StringComparer.OrdinalIgnoreCase);
+
+                    int? registeredLoadCtrls = null;
+                    foreach (var languageName in languageNames)
+                    {
+                        if (!IsLanguageKeyName(languageName)) continue;
+                        using (var appKey = hostKey.OpenSubKey(languageName + @"\Applications\QS3D", writable: false))
+                        {
+                            if (appKey == null) continue;
+
+                            if (appKey.GetValueKind("Loader") != RegistryValueKind.String ||
+                                appKey.GetValueKind("LoadCtrls") != RegistryValueKind.DWord)
+                            {
+                                reason = "DemandLoad QS3D V26 phải dùng Loader REG_SZ và LoadCtrls REG_DWORD; one-click update đã dừng.";
+                                return false;
+                            }
+
+                            var loader = appKey.GetValue(
+                                "Loader",
+                                null,
+                                RegistryValueOptions.DoNotExpandEnvironmentNames) as string;
+                            if (string.IsNullOrWhiteSpace(loader) || !Path.IsPathRooted(loader) ||
+                                !string.Equals(Path.GetFullPath(loader), canonicalPluginPath, StringComparison.OrdinalIgnoreCase))
+                            {
+                                reason = "DemandLoad QS3D V26 không trỏ đúng DLL đang chạy; hãy cài lại bản hiện tại trước khi dùng one-click update.";
+                                return false;
+                            }
+
+                            var loadCtrlsValue = appKey.GetValue("LoadCtrls", null, RegistryValueOptions.DoNotExpandEnvironmentNames);
+                            if (!(loadCtrlsValue is int loadCtrls) || (loadCtrls != 2 && loadCtrls != 4))
+                            {
+                                reason = "DemandLoad QS3D V26 chỉ chấp nhận LoadCtrls 2 (OnStartup) hoặc 4 (OnCommand).";
+                                return false;
+                            }
+                            if (registeredLoadCtrls.HasValue && registeredLoadCtrls.Value != loadCtrls)
+                            {
+                                reason = "Các ngôn ngữ BricsCAD V26 đang đăng ký QS3D với chế độ DemandLoad khác nhau; one-click update đã dừng.";
+                                return false;
+                            }
+                            registeredLoadCtrls = loadCtrls;
+                        }
+                    }
+
+                    if (!registeredLoadCtrls.HasValue)
+                    {
+                        reason = "Không tìm thấy DemandLoad QS3D V26 hợp lệ trỏ tới DLL đang chạy.";
+                        return false;
+                    }
+
+                    loadMode = registeredLoadCtrls.Value == 2 ? "OnStartup" : "OnCommand";
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                reason = "Không đọc được DemandLoad QS3D V26 để bảo toàn chế độ hiện tại: " + ex.Message;
+                return false;
+            }
+        }
+
+        private static bool IsLanguageKeyName(string value)
+        {
+            return value.Length == 5 &&
+                   char.IsLetter(value[0]) &&
+                   char.IsLetter(value[1]) &&
+                   value[2] == '_' &&
+                   char.IsLetter(value[3]) &&
+                   char.IsLetter(value[4]);
+        }
+
         private static string BuildWorkerScript(
             string updaterPath,
             string manifestUri,
             string signerThumbprint,
             string installDirectory,
+            string loadMode,
             string bricscadPath,
             string logDirectory,
             string mutexName,
@@ -323,6 +428,7 @@ namespace QS3D.BricsCAD.V25.Updates
             script.AppendLine("$manifest = " + PsLiteral(manifestUri));
             script.AppendLine("$expectedSigner = " + PsLiteral(signerThumbprint));
             script.AppendLine("$install = " + PsLiteral(installDirectory));
+            script.AppendLine("$loadMode = " + PsLiteral(loadMode));
             script.AppendLine("$bricscad = " + PsLiteral(bricscadPath));
             script.AppendLine("$logDirectory = " + PsLiteral(logDirectory));
             script.AppendLine("$mutexName = " + PsLiteral(mutexName));
@@ -359,7 +465,7 @@ namespace QS3D.BricsCAD.V25.Updates
             script.AppendLine("  $actualSigner = $signature.SignerCertificate.Thumbprint.Replace(' ', '').ToUpperInvariant()");
             script.AppendLine("  if ($actualSigner -ne $expectedSigner) { throw ('Installed V26 updater signer mismatch. Expected ' + $expectedSigner + ', got ' + $actualSigner) }");
             script.AppendLine("  if ($cancelEvent.WaitOne(0)) { throw 'QS3D V26 updater was cancelled before installer execution.' }");
-            script.AppendLine("  & $updater -ManifestUri $manifest -ExpectedSignerThumbprint $expectedSigner -InstallDirectory $install -AllowedPackageHost @('github.com') -AllowSameVersion -Confirm:$false");
+            script.AppendLine("  & $updater -ManifestUri $manifest -ExpectedSignerThumbprint $expectedSigner -InstallDirectory $install -LoadMode $loadMode -AllowedPackageHost @('github.com') -AllowSameVersion -Confirm:$false");
             script.AppendLine("  if (-not $?) { throw 'QS3D V26 update script reported failure.' }");
             script.AppendLine("  Stop-Transcript | Out-Null");
             script.AppendLine("  Start-Process -FilePath $bricscad | Out-Null");
