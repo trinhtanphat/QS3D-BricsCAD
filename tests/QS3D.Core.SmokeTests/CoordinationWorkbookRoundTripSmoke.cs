@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             StablePairIdentityIsOrderIndependent();
             WorkbookRoundTripsCanonicalPairProvenance();
             DuplicatePairRowsFailClosed();
+            ConflictingDrawingFingerprintsFailClosed();
         }
 
         private static void StablePairIdentityIsOrderIndependent()
@@ -61,6 +62,23 @@ namespace QS3D.Core.SmokeTests
             {
                 var row = CoordinationClashExportRow.CreateExactHard("drawing-fp", "A", "B");
                 Throws<InvalidDataException>(() => CoordinationWorkbookExporter.Export(path, new[] { row, row }));
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        }
+
+        private static void ConflictingDrawingFingerprintsFailClosed()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-coordination-mixed-drawing-" + Guid.NewGuid().ToString("N") + ".xlsx");
+            try
+            {
+                var first = CoordinationClashExportRow.CreateExactHard("drawing-a", "A", "B");
+                var second = CoordinationClashExportRow.CreateExactHard("drawing-b", "C", "D");
+                Throws<InvalidDataException>(() => CoordinationWorkbookExporter.Export(path, new[] { first, second }));
             }
             finally
             {
