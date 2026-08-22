@@ -7,9 +7,8 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using Bricscad.ApplicationServices;
+using QS3D.BricsCAD.V25.Reporting;
 using QS3D.BricsCAD.V25.Services;
-using QS3D.Core.Domain;
-using QS3D.Core.Reporting;
 using Teigha.BoundaryRepresentation;
 using Teigha.DatabaseServices;
 using BcadApplication = Bricscad.ApplicationServices.Application;
@@ -162,8 +161,7 @@ namespace QS3D.BricsCAD.V25.UI
         }
 
         private bool IsDirectQuantityGeometryChild(UIElement element) =>
-            _quantityGeometryPanel != null && ReferenceEquals(element, element) &&
-            _quantityGeometryPanel.Children.Contains(element);
+            _quantityGeometryPanel != null && _quantityGeometryPanel.Children.Contains(element);
 
         private bool TryResolveQuantityExactFaceButton(Button button, out string faceId)
         {
