@@ -33,6 +33,12 @@ if not errors:
         'accepted_segments=',
         'minimum_segments=',
         'preview_model=DrawJigProfileStrip',
+        'coordinate_model=WCS_INPUT_UCS_PLANE',
+        '_wcsToUcs = ucsToWcs.Inverse();',
+        'var localStart = _startWcs.TransformBy(_wcsToUcs);',
+        'var localEnd = _endWcs.TransformBy(_wcsToUcs);',
+        'var centerStart = _startWcs;',
+        'var centerEnd = _endWcs;',
         'persistent_writes=0',
         'ownership_writes=0',
         'QS3D_DIRECT_DRAW_JIG_RUNTIME_V1',
@@ -47,10 +53,14 @@ if not errors:
         'RegenerateDirtySubset', 'GeneratedGeometryService', 'SendStringToExecute',
         '.Editor.Command(',
         '"|qualified_candidate=true"',
+        'var centerStart = _startWcs.TransformBy(',
+        'var centerEnd = _endWcs.TransformBy(',
+        '_start.TransformBy(_ucs)',
+        '_end.TransformBy(_ucs)',
     )
     for token in forbidden_probe:
         if token in probe:
-            errors.append(f"LOCAL-008 P02 probe must stay database/ownership free: {token}")
+            errors.append(f"LOCAL-008 P02 probe must stay database/ownership free and avoid WCS double-transform: {token}")
 
     if probe.count('CommandMethod("QS3DPROBEDIRECTDRAWJIG"') != 1:
         errors.append("QS3DPROBEDIRECTDRAWJIG must be registered exactly once")
@@ -64,6 +74,8 @@ if not errors:
         'QS3D_DIRECT_DRAW_JIG_RUNTIME_V1',
         'git', 'rev-parse', 'status --porcelain=v1',
         '[string[]]$ArgumentList', '@ArgumentList',
+        'rotated or translated UCS',
+        'anchored to the picked cursor points',
         'PENDING_LOCAL',
     )
     for token in required_runner:
@@ -80,4 +92,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: LOCAL-008 P02 source-prep pins real DrawJig profile preview, repeated click lifecycle, document/UCS safety and zero persistent preview writes; licensed V25 execution remains PENDING_LOCAL.")
+print("PASS: LOCAL-008 P02 source-prep pins real DrawJig profile preview, WCS input/UCS-plane offset math, repeated click lifecycle, document/UCS safety and zero persistent preview writes; licensed V25 execution remains PENDING_LOCAL.")
