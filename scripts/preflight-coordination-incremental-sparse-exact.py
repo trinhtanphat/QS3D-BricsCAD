@@ -5,6 +5,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 EXACT = ROOT / "src" / "QS3D.BricsCAD.V25" / "MepExactClashCommands.cs"
 INCREMENTAL = ROOT / "src" / "QS3D.BricsCAD.V25" / "CoordinationIncrementalCommands.cs"
+V26_PROJECT = ROOT / "src" / "QS3D.BricsCAD.V26" / "QS3D.BricsCAD.V26.csproj"
 
 errors = []
 
@@ -23,6 +24,7 @@ def require(blob: str, token: str, label: str) -> None:
 
 exact = read(EXACT)
 incremental = read(INCREMENTAL)
+v26_project = read(V26_PROJECT)
 
 for token, label in (
     ("private const int MaxRecognizedSolids = 500;", "standalone exact-scan 500-solid safety limit"),
@@ -54,6 +56,12 @@ for token, label in (
 if "private const int MaxLiveSolidComponents = 500;" in incremental:
     errors.append("incremental adapter regressed to the legacy 500-live-solid pre-spatial limit")
 
+require(
+    v26_project,
+    r'<Compile Include="..\QS3D.BricsCAD.V25\**\*.cs"',
+    "V26 shared V25 adapter source include",
+)
+
 if errors:
     print("ERROR: issue-3537 incremental sparse exact source guard failed:")
     for error in errors:
@@ -61,4 +69,5 @@ if errors:
     sys.exit(1)
 
 print("PASS: issue-3537 changed-only coordination uses bounded sparse native exact pairs without changing the standalone 500-solid exact-scan contract.")
+print("PASS: V26 continues to consume the shared V25 adapter source that contains this fix.")
 print("NOTE: this is source/static evidence only; licensed V25/V26 correctness and performance remain LOCAL_ONLY/PENDING_LOCAL.")
