@@ -1,0 +1,43 @@
+# Agent work claim — right-panel quantity workspace
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Status: `COMPLETED`
+- Baseline main SHA: `5f929a1dae7caba121ce6f35c6ce972123539508`
+- Implementation snapshot SHA: `b9040d93324daedd53b663e4da733af969494875`
+- Scope: extend the existing BricsCAD right-side workspace to match the supplied BLT3D reference more closely by adding a live quantity explanation/project overview surface while preserving the already-functional Xref and layer manager.
+- Implementation shape: separate dockable far-right quantity palette so the existing drawing/layer palette remains intact and functional rather than being replaced or overloaded.
+- Files delivered:
+  - `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml`
+  - `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml.cs`
+  - `src/QS3D.BricsCAD.V25/UI/ViewModels/QuantityInsightViewModel.cs`
+  - `src/QS3D.BricsCAD.V25/PaletteCoordinator.cs`
+  - `scripts/preflight-right-panel-quantity-workspace.py`
+- Existing coexistence surfaces audited and intentionally left unchanged:
+  - `src/QS3D.BricsCAD.V25/UI/RightPanel.xaml`
+  - `src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs`
+  - `src/QS3D.BricsCAD.V25/UI/ViewModels/RightPanelViewModel.cs`
+- Functional result:
+  - read-only quantity overview is computed from the current canonical QS3D project with `ProjectContextCoordinator.TryGetReadOnly` + `ProjectQuantityReportBuilder.Group`; no project bootstrap/save/mutation path was added;
+  - explanation tree groups quantity rows by floor and shows live element/family quantity summaries;
+  - project totals show count, gross/deduction/net concrete, formwork and length;
+  - CAD/semantic selection sync highlights related quantity rows without mutating project state;
+  - selected rows can be located back in CAD using current-project `SourceHandleResolver` + `CadHandleService.Select`, then `QS3DZOOMSELECTED`;
+  - `Tính lại` dispatches the real existing `QS3DREGEN` workflow and `Mở BQ` dispatches the real existing `QS3DBQ` workflow; `Làm mới` and `Định vị` are direct functional actions, not decorative controls;
+  - `PaletteCoordinator.RefreshProject()` refreshes both Workspace and quantity insight after committed project workflows, while existing Xref/layer refresh remains on the existing right panel;
+  - Show/Hide/Safe Mode/reset/dispose paths now include the quantity palette and preserve visibility across document reset;
+  - existing Xref attach/reload/move/detach/zoom and layer visibility/lock/search code was not replaced.
+- Commit chain:
+  - `019f627263359b3f3d7bb1efe64b3cd6af166f7b` — quantity insight view model;
+  - `2aa01bc0ab2c333e7a9609357063ea7567972d47` — quantity insight WPF surface;
+  - `34d1201b61fd823fd2b1e5db50cf23e517bec298` — live read-only reporting, selection, locate/zoom and real command dispatch;
+  - `9a5824e417dfffe55df77dce1a0628dfb82966b8` — far-right palette integration and refresh/reset lifecycle;
+  - `b9040d93324daedd53b663e4da733af969494875` — static regression preflight.
+- Validation evidence:
+  - implementation XAML, code-behind and view model were re-fetched from `main` after the commits;
+  - `compare b9040d9...main` reported `ahead` with `behind_by=0`, proving the implementation snapshot remains an ancestor of current `main` and later concurrent commits did not replace this lane;
+  - GitHub exposed no commit status checks and no PR-triggered workflow runs for the implementation snapshot, so no CI PASS is claimed;
+  - remote container cannot resolve `github.com`, and this environment does not have the licensed BricsCAD V25 runtime/references, so no native build/NETLOAD/runtime PASS is claimed here. The repository's existing `LOCAL-001` exact-V25 build/load qualification lane is the matching local handoff; do not create a duplicate live queue.
+- Explicit exclusions honored:
+  - no edits to `Commands.cs`, Ribbon files, Start Center, Core reporting builders/formulas, Core persistence/mutation, Direct Draw/Create Similar, or Room Auto paths reserved by other active claims.
+- Completion: source-side implementation and regression guard are complete on `main`; remaining licensed BricsCAD V25 runtime qualification belongs to the existing LOCAL_ONLY lane.
