@@ -157,7 +157,7 @@ namespace QS3D.Core.SmokeTests
                 foreach (var replacement in replacements)
                 {
                     var cell = document.Descendants(SpreadsheetNs + "c")
-                        .SingleOrDefault(x => string.Equals((string)x.Attribute("r"), replacement.Key, StringComparison.OrdinalIgnoreCase))
+                        .SingleOrDefault(x => string.Equals((string?)x.Attribute("r"), replacement.Key, StringComparison.OrdinalIgnoreCase))
                         ?? throw new InvalidOperationException("Expected workbook cell was not found: " + replacement.Key + ".");
                     var text = cell.Descendants(SpreadsheetNs + "t").SingleOrDefault()
                         ?? throw new InvalidOperationException("Expected inline string cell was not found: " + replacement.Key + ".");
