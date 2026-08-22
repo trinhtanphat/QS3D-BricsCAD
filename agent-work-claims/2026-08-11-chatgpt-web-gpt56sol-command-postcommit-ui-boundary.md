@@ -1,0 +1,22 @@
+# Agent work claim — command post-commit UI boundary
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Completed: 2026-08-11 (UTC+7)
+- Status: `COMPLETED`
+- Scope: source-safe hardening of post-commit UI finalization for semantic/persistence commands in `src/QS3D.BricsCAD.V25/Commands.cs`, plus a dedicated static preflight under `scripts/`.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/Commands.cs`
+  - `scripts/preflight-command-postcommit-ui.py`
+  - this claim file for close-out
+- Problem fixed: several commands performed a successful semantic mutation/save/reload/regeneration and then called Palette/editor finalization inside the same outer `Guard`. A Palette/status/editor exception after the business operation had already succeeded could therefore be reported as if the command itself failed.
+- Implemented contract:
+  - business/mutation/persistence exceptions remain command failures;
+  - once the business operation returns successfully, Palette/status/editor finalization is best-effort and non-fatal;
+  - UI finalization failure emits only a best-effort warning and cannot change the committed operation result;
+  - `QS3DREGEN`, `QS3DSAVE`, `QS3DRELOAD`, `QS3DWALL`, `QS3DFINISH`, and the generic semantic capture path use the shared finalization boundary;
+  - no changes were made to native geometry transactions, Direct Draw/Create Similar, Ribbon/Start Center, Core reporting, or LOCAL_ONLY V25 qualification.
+- Source commit: `7d7bcd2e5bcda8075b5680b4b3e6d442420ed09c` (`fix(commands): isolate post-commit UI failures`).
+- Regression guard commit: `aeecf201925a12c9edc0af2b12b02e59576a9a7e` (`test(commands): guard post-commit UI boundary`).
+- Validation: reviewed the exact source diff after commit and added auto-discovered `scripts/preflight-command-postcommit-ui.py` to lock operation-before-UI ordering plus non-fatal finalization. No GitHub Actions were dispatched; `continue all` does not authorize CI. No new LOCAL_ONLY scenario was introduced by this source-only error-reporting boundary.
+- Handoff: reservation released; future agents may edit these files after re-checking current `main` and active claims.
