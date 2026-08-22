@@ -122,8 +122,10 @@ namespace QS3D.Core.SmokeTests
             var key = project.Metadata.Keys.Single(x => x.StartsWith("QS3D.Coordination.", StringComparison.Ordinal));
             var payload = project.Metadata[key];
             if (!payload.StartsWith("1:1", StringComparison.Ordinal)) throw new InvalidOperationException("Unexpected coordination payload version prefix.");
-            project.Metadata[key] = "1:2" + payload.Substring(3);
-            Expect<FormatException>(() => CoordinationIssuePersistence.Load(project));
+            var unsupported = "1:2" + payload.Substring(3);
+            Expect<FormatException>(() => project.Metadata[key] = unsupported);
+            if (!string.Equals(project.Metadata[key], payload, StringComparison.Ordinal))
+                throw new InvalidOperationException("Rejected coordination metadata mutation changed the stored canonical payload.");
         }
 
         private static ProjectState CreateProject()
