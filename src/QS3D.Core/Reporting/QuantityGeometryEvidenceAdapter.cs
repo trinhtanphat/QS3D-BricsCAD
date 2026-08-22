@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 
 namespace QS3D.Core.Reporting
@@ -234,9 +233,9 @@ namespace QS3D.Core.Reporting
                 throw new InvalidOperationException(label + " must be a finite non-negative value.");
             try
             {
-                return decimal.Round(Convert.ToDecimal(value, CultureInfo.InvariantCulture), DecimalPlaces, MidpointRounding.AwayFromZero);
+                return decimal.Round(Convert.ToDecimal(value), DecimalPlaces, MidpointRounding.AwayFromZero);
             }
-            catch (Exception ex) when (ex is OverflowException || ex is FormatException)
+            catch (OverflowException ex)
             {
                 throw new InvalidOperationException(label + " cannot be represented by the canonical decimal evidence contract.", ex);
             }
