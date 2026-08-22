@@ -34,9 +34,10 @@ namespace QS3D.Core.Domain
 
         private static string Required(string value, string name, int max)
         {
-            var text = (value ?? string.Empty).Trim();
+            var raw = value ?? string.Empty;
+            if (raw.Any(char.IsControl)) throw new ArgumentException(name + " cannot contain control characters.", name);
+            var text = raw.Trim();
             if (text.Length == 0 || text.Length > max) throw new ArgumentException(name + " must contain 1.." + max + " characters.", name);
-            if (text.Any(char.IsControl)) throw new ArgumentException(name + " cannot contain control characters.", name);
             RequireWellFormedUnicode(text, name);
             RequireXmlText(text, name);
             return text;
