@@ -146,7 +146,7 @@ namespace QS3D.Core.SmokeTests
             new StructuralRegenerator().Regenerate(project, wall);
             Near(13.02, wall.Quantities["NetWallAreaM2"]); Near(2.604, wall.Quantities["NetVolumeM3"]); Near(27.10, wall.Quantities["FormworkM2"]);
 
-            opening.Properties["SillHeightM"] = "0.5";
+            opening.Properties["SillOffsetMm"] = "500";
             new StructuralRegenerator().Regenerate(project, wall);
             Near(27.28, wall.Quantities["FormworkM2"]);
 
