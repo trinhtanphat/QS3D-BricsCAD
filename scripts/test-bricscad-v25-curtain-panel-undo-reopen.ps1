@@ -101,6 +101,18 @@ function Stop-Qs3dLaunchedProcess {
     if (-not $Process.HasExited) { throw "Launched Curtain P11 BricsCAD process did not exit." }
 }
 
+function Wait-Qs3dNoBricsCadProcess {
+    param([ValidateRange(1, 60)][int]$TimeoutSeconds = 30)
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -eq 0) {
+            return $true
+        }
+        Start-Sleep -Milliseconds 250
+    } while ([DateTime]::UtcNow -lt $deadline)
+    return @(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -eq 0
+}
+
 function Wait-Qs3dMarker {
     param(
         [Parameter(Mandatory = $true)][Diagnostics.Process]$Process,
@@ -409,7 +421,7 @@ finally {
             catch { if ($null -eq $cleanupError) { $cleanupError = $_ } }
         }
         try {
-            if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
+            if (-not (Wait-Qs3dNoBricsCadProcess -TimeoutSeconds 30)) {
                 throw "Curtain P11 cleanup left a BricsCAD process."
             }
             $processCleanupVerified = $true

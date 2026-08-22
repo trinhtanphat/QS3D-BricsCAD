@@ -133,6 +133,10 @@ if RUNNER.is_file():
         'Remove-ExactFile -Path $privatePath',
         'Stop-Qs3dLaunchedProcess -Process $processOne',
         'Stop-Qs3dLaunchedProcess -Process $processTwo',
+        'function Wait-Qs3dNoBricsCadProcess',
+        '[ValidateRange(1, 60)][int]$TimeoutSeconds = 30',
+        'Start-Sleep -Milliseconds 250',
+        'Wait-Qs3dNoBricsCadProcess -TimeoutSeconds 30',
         'process_cleanup_verified',
         'script_cleanup_verified',
         'sidecar_cleanup_verified',
@@ -147,6 +151,8 @@ if RUNNER.is_file():
 
     if text.count('Start-Process -FilePath $bricscadExe') != 2:
         errors.append("Curtain P11 runner must launch exactly two isolated BricsCAD sessions")
+    if text.count('Wait-Qs3dNoBricsCadProcess -TimeoutSeconds 30') != 1:
+        errors.append("Curtain P11 runner must perform exactly one bounded post-exit process-drain check")
     if text.count('"QS3DCURTAINP11SELECT"') != 3:
         errors.append("Curtain P11 runner must restore the canonical source selection immediately before all three builds")
     if text.count('"QS3DCURTAIN3D", "P", ""') != 3:
