@@ -30,6 +30,10 @@ namespace QS3D.BricsCAD.V25
         private const string DrawingBVariable = "QS3D_SOURCE_RECONCILE_DWG_B";
         private const string UndoVariable = "QS3D_SOURCE_RECONCILE_UNDO_COHERENT";
         private const string RedoVariable = "QS3D_SOURCE_RECONCILE_REDO_COHERENT";
+        private const string PostUndoMarkerVsBeforeVariable = "QS3D_SOURCE_RECONCILE_POST_UNDO_MARKER_VS_BEFORE";
+        private const string PostUndoMarkerVsAfterVariable = "QS3D_SOURCE_RECONCILE_POST_UNDO_MARKER_VS_AFTER";
+        private const string PostRedoMarkerVsBeforeVariable = "QS3D_SOURCE_RECONCILE_POST_REDO_MARKER_VS_BEFORE";
+        private const string PostRedoMarkerVsAfterVariable = "QS3D_SOURCE_RECONCILE_POST_REDO_MARKER_VS_AFTER";
         private const string ResultFileName = "source-reconcile-result.txt";
         private const string PhaseFileName = "source-reconcile-session1.txt";
         private const string Schema = "QS3D_SOURCE_RECONCILE_RUNTIME_V1";
@@ -298,6 +302,7 @@ namespace QS3D.BricsCAD.V25
                 state.FinalHistoryAfterState = afterUndo.HistoryState;
                 state.FinalHistoryEntryBeforeClass = beforeUndo.EntryClass;
                 state.FinalHistoryEntryAfterClass = afterUndo.EntryClass;
+                state.FinalAfterUndoDiagnostic = afterUndo;
                 state.FinalDiagnosticsCaptured = true;
 
                 if (!string.Equals(state.FinalOwnerMatchClass, "BOTH", StringComparison.Ordinal))
@@ -319,6 +324,11 @@ namespace QS3D.BricsCAD.V25
             {
                 var context = ContextA();
                 var state = State(context);
+                var diagnostic = SourceReconcileUndoCoordinator.CaptureSanitizedState(context.Document, context.Project);
+                state.PostUndoNativeMarkerVsBeforeState = diagnostic.CompareMarkerTo(
+                    state.FinalBeforeUndoDiagnostic ?? throw new InvalidOperationException("LOCAL-004 pre-final marker baseline is missing."));
+                state.PostUndoNativeMarkerVsAfterState = diagnostic.CompareMarkerTo(
+                    state.FinalAfterUndoDiagnostic ?? throw new InvalidOperationException("LOCAL-004 post-final marker baseline is missing."));
                 var current = Capture(context.Document, context.Project, RequireOwners(context.Document, context.Project, state));
                 state.UndoCoherent = Same(state.BeforeFinalSync ?? throw new InvalidOperationException("LOCAL-004 Undo baseline is missing."), current);
                 state.UndoChecked = true;
@@ -332,6 +342,11 @@ namespace QS3D.BricsCAD.V25
             {
                 var context = ContextA();
                 var state = State(context);
+                var diagnostic = SourceReconcileUndoCoordinator.CaptureSanitizedState(context.Document, context.Project);
+                state.PostRedoNativeMarkerVsBeforeState = diagnostic.CompareMarkerTo(
+                    state.FinalBeforeUndoDiagnostic ?? throw new InvalidOperationException("LOCAL-004 pre-final marker baseline is missing."));
+                state.PostRedoNativeMarkerVsAfterState = diagnostic.CompareMarkerTo(
+                    state.FinalAfterUndoDiagnostic ?? throw new InvalidOperationException("LOCAL-004 post-final marker baseline is missing."));
                 var current = Capture(context.Document, context.Project, RequireOwners(context.Document, context.Project, state));
                 state.RedoCoherent = Same(state.AfterFinalSync ?? throw new InvalidOperationException("LOCAL-004 Redo baseline is missing."), current);
                 state.RedoChecked = true;
@@ -398,6 +413,10 @@ namespace QS3D.BricsCAD.V25
                 RequireSemanticMatchesSources(context.Document, owners);
                 var undo = RequiredBooleanEnvironment(UndoVariable);
                 var redo = RequiredBooleanEnvironment(RedoVariable);
+                var postUndoMarkerVsBefore = RequiredMarkerClassificationEnvironment(PostUndoMarkerVsBeforeVariable);
+                var postUndoMarkerVsAfter = RequiredMarkerClassificationEnvironment(PostUndoMarkerVsAfterVariable);
+                var postRedoMarkerVsBefore = RequiredMarkerClassificationEnvironment(PostRedoMarkerVsBeforeVariable);
+                var postRedoMarkerVsAfter = RequiredMarkerClassificationEnvironment(PostRedoMarkerVsAfterVariable);
                 var pass = undo && redo;
                 WriteMarkerAtomic(RequiredPath(ResultVariable, ResultFileName), new[]
                 {
@@ -419,6 +438,10 @@ namespace QS3D.BricsCAD.V25
                     "cold_reopen_verified=true",
                     "undo_coherent=" + Boolean(undo),
                     "redo_coherent=" + Boolean(redo),
+                    "post_undo_native_marker_vs_before_state=" + postUndoMarkerVsBefore,
+                    "post_undo_native_marker_vs_after_state=" + postUndoMarkerVsAfter,
+                    "post_redo_native_marker_vs_before_state=" + postRedoMarkerVsBefore,
+                    "post_redo_native_marker_vs_after_state=" + postRedoMarkerVsAfter,
                     "error_code=" + (pass ? "NONE" : "NATIVE_UNDO_SEMANTIC_DIVERGENCE"),
                     "failure_phase=" + (pass ? "none" : "native_undo"),
                     "failure_code=" + (pass ? "NONE" : "NATIVE_UNDO_SEMANTIC_DIVERGENCE")
@@ -781,6 +804,16 @@ namespace QS3D.BricsCAD.V25
             throw new ProbeFailure("REOPEN_EXPECTATION_REJECTED");
         }
 
+        private static string RequiredMarkerClassificationEnvironment(string variable)
+        {
+            var value = Environment.GetEnvironmentVariable(variable) ?? string.Empty;
+            if (string.Equals(value, "ADVANCED", StringComparison.Ordinal) ||
+                string.Equals(value, "UNCHANGED", StringComparison.Ordinal) ||
+                string.Equals(value, "MISSING_OR_INVALID", StringComparison.Ordinal))
+                return value;
+            throw new ProbeFailure("REOPEN_EXPECTATION_REJECTED");
+        }
+
         private static void TryWriteFailure(string phase, string code)
         {
             try
@@ -817,6 +850,10 @@ namespace QS3D.BricsCAD.V25
             yield return "final_history_after_state=" + state.FinalHistoryAfterState;
             yield return "final_history_entry_before_class=" + state.FinalHistoryEntryBeforeClass;
             yield return "final_history_entry_after_class=" + state.FinalHistoryEntryAfterClass;
+            yield return "post_undo_native_marker_vs_before_state=" + state.PostUndoNativeMarkerVsBeforeState;
+            yield return "post_undo_native_marker_vs_after_state=" + state.PostUndoNativeMarkerVsAfterState;
+            yield return "post_redo_native_marker_vs_before_state=" + state.PostRedoNativeMarkerVsBeforeState;
+            yield return "post_redo_native_marker_vs_after_state=" + state.PostRedoNativeMarkerVsAfterState;
         }
 
         private static void WriteMarkerAtomic(string path, IEnumerable<string> lines)
@@ -916,6 +953,7 @@ namespace QS3D.BricsCAD.V25
             public long FinalBeforeChangeVersion { get; set; }
             public int FinalBeforeAuditCount { get; set; }
             public SourceReconcileUndoCoordinator.SanitizedDiagnosticSnapshot? FinalBeforeUndoDiagnostic { get; set; }
+            public SourceReconcileUndoCoordinator.SanitizedDiagnosticSnapshot? FinalAfterUndoDiagnostic { get; set; }
             public string FinalSelectionClass { get; set; } = "OTHER_OR_MISSING";
             public string FinalOwnerMatchClass { get; set; } = "NONE";
             public string FinalGeneratedState { get; set; } = "PARTIAL";
@@ -926,6 +964,10 @@ namespace QS3D.BricsCAD.V25
             public string FinalHistoryAfterState { get; set; } = "NONE";
             public string FinalHistoryEntryBeforeClass { get; set; } = "ONE";
             public string FinalHistoryEntryAfterClass { get; set; } = "ONE";
+            public string PostUndoNativeMarkerVsBeforeState { get; set; } = "MISSING_OR_INVALID";
+            public string PostUndoNativeMarkerVsAfterState { get; set; } = "MISSING_OR_INVALID";
+            public string PostRedoNativeMarkerVsBeforeState { get; set; } = "MISSING_OR_INVALID";
+            public string PostRedoNativeMarkerVsAfterState { get; set; } = "MISSING_OR_INVALID";
             public bool FinalDiagnosticsCaptured { get; set; }
             public bool ForcedRollbackVerified { get; set; }
             public bool GeneratedRefusalVerified { get; set; }

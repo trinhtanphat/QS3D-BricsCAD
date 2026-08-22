@@ -61,6 +61,10 @@ function Require-FinalReconcileDiagnostics {
     Require-Qs3dAllowedValue $Marker "final_history_after_state" @("NONE", "SYNCED", "MARKER_MISMATCH", "DESYNCHRONIZED")
     Require-Qs3dAllowedValue $Marker "final_history_entry_before_class" @("ONE", "MULTIPLE")
     Require-Qs3dAllowedValue $Marker "final_history_entry_after_class" @("ONE", "MULTIPLE")
+    Require-Qs3dAllowedValue $Marker "post_undo_native_marker_vs_before_state" @("ADVANCED", "UNCHANGED", "MISSING_OR_INVALID")
+    Require-Qs3dAllowedValue $Marker "post_undo_native_marker_vs_after_state" @("ADVANCED", "UNCHANGED", "MISSING_OR_INVALID")
+    Require-Qs3dAllowedValue $Marker "post_redo_native_marker_vs_before_state" @("ADVANCED", "UNCHANGED", "MISSING_OR_INVALID")
+    Require-Qs3dAllowedValue $Marker "post_redo_native_marker_vs_after_state" @("ADVANCED", "UNCHANGED", "MISSING_OR_INVALID")
 }
 
 function Read-PositiveMarkerInt {
@@ -284,7 +288,9 @@ $pluginHash = (Get-FileHash -LiteralPath $PluginDll -Algorithm SHA256).Hash.ToUp
 $environmentNames = @(
     "QS3D_SOURCE_RECONCILE_RESULT", "QS3D_SOURCE_RECONCILE_PHASE_RESULT", "QS3D_SOURCE_RECONCILE_NONCE",
     "QS3D_SOURCE_RECONCILE_DWG_A", "QS3D_SOURCE_RECONCILE_DWG_B",
-    "QS3D_SOURCE_RECONCILE_UNDO_COHERENT", "QS3D_SOURCE_RECONCILE_REDO_COHERENT"
+    "QS3D_SOURCE_RECONCILE_UNDO_COHERENT", "QS3D_SOURCE_RECONCILE_REDO_COHERENT",
+    "QS3D_SOURCE_RECONCILE_POST_UNDO_MARKER_VS_BEFORE", "QS3D_SOURCE_RECONCILE_POST_UNDO_MARKER_VS_AFTER",
+    "QS3D_SOURCE_RECONCILE_POST_REDO_MARKER_VS_BEFORE", "QS3D_SOURCE_RECONCILE_POST_REDO_MARKER_VS_AFTER"
 )
 $oldEnvironment = @{}
 foreach ($name in $environmentNames) { $oldEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, "Process") }
@@ -361,6 +367,10 @@ try {
     Require-FinalReconcileDiagnostics -Marker $phaseMarker
     $env:QS3D_SOURCE_RECONCILE_UNDO_COHERENT = [string]$phaseMarker["undo_coherent"]
     $env:QS3D_SOURCE_RECONCILE_REDO_COHERENT = [string]$phaseMarker["redo_coherent"]
+    $env:QS3D_SOURCE_RECONCILE_POST_UNDO_MARKER_VS_BEFORE = [string]$phaseMarker["post_undo_native_marker_vs_before_state"]
+    $env:QS3D_SOURCE_RECONCILE_POST_UNDO_MARKER_VS_AFTER = [string]$phaseMarker["post_undo_native_marker_vs_after_state"]
+    $env:QS3D_SOURCE_RECONCILE_POST_REDO_MARKER_VS_BEFORE = [string]$phaseMarker["post_redo_native_marker_vs_before_state"]
+    $env:QS3D_SOURCE_RECONCILE_POST_REDO_MARKER_VS_AFTER = [string]$phaseMarker["post_redo_native_marker_vs_after_state"]
     Remove-ExactFile -Path $scriptOnePath
 
     $scriptTwo = @(
@@ -381,6 +391,9 @@ try {
     Require-Qs3dValue -Marker $finalMarker -Key "nonce" -Expected $nonce
     Require-Qs3dValue -Marker $finalMarker -Key "cold_reopen_verified" -Expected "true"
     [void](Read-PositiveMarkerInt -Marker $finalMarker -Key "generated_solid_count")
+    foreach ($key in @("post_undo_native_marker_vs_before_state", "post_undo_native_marker_vs_after_state", "post_redo_native_marker_vs_before_state", "post_redo_native_marker_vs_after_state")) {
+        Require-Qs3dAllowedValue $finalMarker $key @("ADVANCED", "UNCHANGED", "MISSING_OR_INVALID")
+    }
     if ([string]::Equals([string]$finalMarker["status"], "PASS", [StringComparison]::OrdinalIgnoreCase)) {
         Require-Qs3dValue -Marker $finalMarker -Key "production_local004_qualified" -Expected "true"
         Require-Qs3dValue -Marker $finalMarker -Key "undo_coherent" -Expected "true"

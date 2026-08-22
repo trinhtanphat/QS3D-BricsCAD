@@ -66,6 +66,15 @@ if COMMAND.is_file():
         'final_history_after_state=',
         'final_history_entry_before_class=',
         'final_history_entry_after_class=',
+        'diagnostic.CompareMarkerTo(',
+        'post_undo_native_marker_vs_before_state=',
+        'post_undo_native_marker_vs_after_state=',
+        'post_redo_native_marker_vs_before_state=',
+        'post_redo_native_marker_vs_after_state=',
+        'RequiredMarkerClassificationEnvironment(PostUndoMarkerVsBeforeVariable)',
+        'RequiredMarkerClassificationEnvironment(PostUndoMarkerVsAfterVariable)',
+        'RequiredMarkerClassificationEnvironment(PostRedoMarkerVsBeforeVariable)',
+        'RequiredMarkerClassificationEnvironment(PostRedoMarkerVsAfterVariable)',
         'FileMode.CreateNew',
         'File.Move(temp, path)',
     )
@@ -86,7 +95,7 @@ if COMMAND.is_file():
     marker_start = text.find('WriteMarkerAtomic(RequiredPath(ResultVariable')
     marker_end = text.find('});', marker_start)
     marker = text[marker_start:marker_end].lower()
-    for forbidden in ('handle=', 'element_id=', 'project_id=', 'drawing_path=', 'profile=', 'source_digest=', 'native_digest='):
+    for forbidden in ('handle=', 'element_id=', 'project_id=', 'drawing_path=', 'profile=', 'source_digest=', 'native_digest=', 'native_revision=', 'revision_token='):
         if forbidden in marker:
             errors.append("LOCAL-004 result marker leaks an identity/private field: " + forbidden)
     failure_start = text.find('private static void TryWriteFailure')
@@ -130,6 +139,14 @@ if RUNNER.is_file():
         'LOCAL_004_ONLY',
         'NATIVE_UNDO_SEMANTIC_DIVERGENCE',
         'Require-FinalReconcileDiagnostics',
+        '"post_undo_native_marker_vs_before_state"',
+        '"post_undo_native_marker_vs_after_state"',
+        '"post_redo_native_marker_vs_before_state"',
+        '"post_redo_native_marker_vs_after_state"',
+        '$env:QS3D_SOURCE_RECONCILE_POST_UNDO_MARKER_VS_BEFORE',
+        '$env:QS3D_SOURCE_RECONCILE_POST_UNDO_MARKER_VS_AFTER',
+        '$env:QS3D_SOURCE_RECONCILE_POST_REDO_MARKER_VS_BEFORE',
+        '$env:QS3D_SOURCE_RECONCILE_POST_REDO_MARKER_VS_AFTER',
         '@("BOTH_SOURCES", "LINE_ONLY", "POLY_ONLY", "OTHER_OR_MISSING")',
         '@("REMOVED_ALL", "RETAINED_ALL", "PARTIAL")',
         '@("ADVANCED", "UNCHANGED", "MISSING_OR_INVALID")',
