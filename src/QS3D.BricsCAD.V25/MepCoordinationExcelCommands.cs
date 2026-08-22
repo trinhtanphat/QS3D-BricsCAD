@@ -125,7 +125,7 @@ namespace QS3D.BricsCAD.V25
                 var row = document.Editor.GetInteger(rowPrompt);
                 if (row.Status != PromptStatus.OK) return;
 
-                var trace = CoordinationUnifiedWorkbookTraceReader.ReadClash(dialog.FileName, row.Value);
+                var trace = ReadClashTrace(dialog.FileName, row.Value);
                 if (!string.Equals(project.DrawingFingerprint, trace.DrawingFingerprint, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException(
                         "Workbook thuộc drawing/project khác (Drawing Fingerprint mismatch). Locate bị chặn để tránh chọn nhầm model.");
@@ -144,6 +144,40 @@ namespace QS3D.BricsCAD.V25
             catch (Exception error)
             {
                 Report(document, "QS3DEXCELLOCATECLASH", error);
+            }
+        }
+
+        private static ClashLocateTrace ReadClashTrace(string path, int rowNumber)
+        {
+            try
+            {
+                var trace = CoordinationUnifiedWorkbookTraceReader.ReadClash(path, rowNumber);
+                return new ClashLocateTrace(
+                    trace.RowNumber,
+                    trace.ClashId,
+                    trace.LeftHandle,
+                    trace.RightHandle,
+                    trace.DrawingFingerprint);
+            }
+            catch (InvalidDataException unifiedError)
+            {
+                try
+                {
+                    // Workbooks exported before #3484 contain the historical two-sheet
+                    // CLASHES + TRACE_MODEL contract. Keep that strict reader available so
+                    // introducing DUPLICATES does not strand already-issued clash workbooks.
+                    var legacy = CoordinationWorkbookTraceReader.Read(path, rowNumber);
+                    return new ClashLocateTrace(
+                        legacy.RowNumber,
+                        legacy.ClashId,
+                        legacy.LeftHandle,
+                        legacy.RightHandle,
+                        legacy.DrawingFingerprint);
+                }
+                catch (InvalidDataException)
+                {
+                    throw unifiedError;
+                }
             }
         }
 
@@ -185,6 +219,24 @@ namespace QS3D.BricsCAD.V25
             var message = error is AggregateException aggregate ? aggregate.GetBaseException().Message : error.Message;
             try { PaletteCoordinator.SetStatus(operation + ": " + message); } catch { }
             try { document.Editor.WriteMessage("\nQS3D " + operation + ": " + message); } catch { }
+        }
+
+        private sealed class ClashLocateTrace
+        {
+            internal ClashLocateTrace(int rowNumber, string clashId, string leftHandle, string rightHandle, string drawingFingerprint)
+            {
+                RowNumber = rowNumber;
+                ClashId = clashId;
+                LeftHandle = leftHandle;
+                RightHandle = rightHandle;
+                DrawingFingerprint = drawingFingerprint;
+            }
+
+            internal int RowNumber { get; }
+            internal string ClashId { get; }
+            internal string LeftHandle { get; }
+            internal string RightHandle { get; }
+            internal string DrawingFingerprint { get; }
         }
 
         private sealed class SemanticProjection
