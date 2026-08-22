@@ -56,14 +56,12 @@ namespace QS3D.Core.Coordination
 
             var previous = _current;
             ValidatePendingIds(previous, current);
+            var explicitlyDirty = _pendingDirtyIds.ToArray();
             var delta = current.Diff(previous);
             var cellSizeChanged = !previous.CellSize.Equals(current.CellSize);
 
-            if (!cellSizeChanged && delta.IsEmpty)
+            if (!cellSizeChanged && delta.IsEmpty && explicitlyDirty.Length == 0)
             {
-                // A native event may mark an item dirty even when the stable source revision and bounds
-                // did not change. Treat that as a no-op: consume the notification without invalidating
-                // pair state or creating recomputation churn.
                 Commit(current);
                 return new CoordinationIncrementalScanResult(
                     false,
@@ -89,8 +87,14 @@ namespace QS3D.Core.Coordination
                 var previousIds = new HashSet<string>(
                     previous.Items.Select(item => item.ItemId),
                     StringComparer.OrdinalIgnoreCase);
+                var currentIds = new HashSet<string>(
+                    current.Items.Select(item => item.ItemId),
+                    StringComparer.OrdinalIgnoreCase);
+
                 var previousDirty = delta.AllDirtyIds
+                    .Concat(explicitlyDirty)
                     .Where(previousIds.Contains)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(id => id, StringComparer.Ordinal)
                     .ToArray();
 
@@ -101,9 +105,16 @@ namespace QS3D.Core.Coordination
                         .OrderBy(key => key, StringComparer.Ordinal)
                         .ToArray());
 
-                candidates = delta.ChangedOrAddedIds.Count == 0
+                var currentDirty = delta.ChangedOrAddedIds
+                    .Concat(explicitlyDirty)
+                    .Where(currentIds.Contains)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(id => id, StringComparer.Ordinal)
+                    .ToArray();
+
+                candidates = currentDirty.Length == 0
                     ? Array.Empty<CoordinationCandidatePair>()
-                    : current.QueryChangedPairs(delta.ChangedOrAddedIds);
+                    : current.QueryChangedPairs(currentDirty);
             }
 
             Commit(current);
