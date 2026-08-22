@@ -310,8 +310,8 @@ namespace QS3D.BricsCAD.V25.UI
             private readonly Document _document;
             private readonly List<ObjectId> _highlighted = new List<ObjectId>();
             private bool _isolationActive;
-            private object _objectIsolationModeBefore;
-            private ViewSnapshot _viewBeforeSection;
+            private object? _objectIsolationModeBefore;
+            private ViewSnapshot? _viewBeforeSection;
             private bool _destroyed;
             private bool _disposed;
 
