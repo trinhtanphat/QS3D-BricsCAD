@@ -92,6 +92,7 @@ def main():
         r'qtoXml.Contains("<c r=\"O2\""',
         '"KEEP-ME"',
     ]
+    smoke_required[-2] = r'qtoXml.Contains("<c r=\"O2\""'.replace(r'Contains(\"', 'Contains("')
     missing_smoke = [token for token in smoke_required if token not in smoke]
     if missing_smoke:
         return fail("review workbook smoke does not cover lifecycle/trace/blank-evidence/atomic refusal", ["missing: " + token for token in missing_smoke])
