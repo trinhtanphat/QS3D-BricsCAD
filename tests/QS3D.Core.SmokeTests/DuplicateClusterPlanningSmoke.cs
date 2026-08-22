@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             ConflictingQuantityOwnershipFailsClosed();
             StaleAndProtectedEvidenceFailClosed();
             MissingEvidenceFailsClosed();
+            RawIdentityControlsFailClosed();
         }
 
         private static void ConnectedPairsBecomeOneStableCluster()
@@ -131,6 +132,31 @@ namespace QS3D.Core.SmokeTests
             Blocked(plan, DuplicateRemediationBlockedReason.MissingElementEvidence);
         }
 
+        private static void RawIdentityControlsFailClosed()
+        {
+            Throws<ArgumentException>(() => new DuplicateRemediationEvidence("\tA", "SEM-1", "QTY-1"));
+            Throws<ArgumentException>(() => new DuplicateRemediationEvidence("A", "\rSEM-1", "QTY-1"));
+            Throws<ArgumentException>(() => new DuplicateRemediationEvidence("A", "SEM-1", "QTY-1\n"));
+
+            var normalized = new DuplicateRemediationEvidence(" A ", " SEM-1 ", " QTY-1 ");
+            Equal("A", normalized.ElementId, "Ordinary surrounding spaces should still normalize for element identity.");
+            Equal("SEM-1", normalized.SemanticOwnerId, "Ordinary surrounding spaces should still normalize for semantic owner identity.");
+            Equal("QTY-1", normalized.QuantityOwnerId, "Ordinary surrounding spaces should still normalize for quantity owner identity.");
+
+            var cluster = ExactCluster("A", "B");
+            var evidence = new[]
+            {
+                Evidence("A", "SEM-1", "QTY-1"),
+                Evidence("B", "SEM-1", "QTY-1")
+            };
+            Throws<ArgumentException>(() => new DuplicateRemediationPlanner().Plan(cluster, evidence, "\tA"));
+
+            var spacedPreferred = new DuplicateRemediationPlanner().Plan(cluster, evidence, " A ");
+            if (!spacedPreferred.CanApply)
+                throw new Exception("Ordinary surrounding spaces should still normalize for preferred representative identity.");
+            Equal("A", spacedPreferred.RepresentativeElementId, "Normalized preferred representative selected the wrong element.");
+        }
+
         private static DuplicateCluster ExactCluster(string leftId, string rightId)
         {
             var box = Box(0d, 0d, 0d, 1d, 1d, 1d);
@@ -179,6 +205,20 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Expected blocked reason " + reason + ", got: " + string.Join(",", plan.BlockedReasons) + ".");
             if (plan.RepresentativeElementId.Length != 0 || plan.RemovableElementIds.Count != 0)
                 throw new Exception("Blocked remediation plans must not expose an actionable representative/removal set.");
+        }
+
+        private static void Throws<T>(Action action) where T : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (T)
+            {
+                return;
+            }
+
+            throw new Exception("Expected " + typeof(T).Name + ".");
         }
 
         private static void Equal(string expected, string actual, string message)
