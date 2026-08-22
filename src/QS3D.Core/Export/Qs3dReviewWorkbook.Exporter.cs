@@ -29,7 +29,8 @@ namespace QS3D.Core.Export
             IReadOnlyList<CoordinationDuplicateExportRow> duplicates,
             CoordinationRuleProfile? ruleProfile,
             Qs3dReviewModelInfo modelInfo,
-            IReadOnlyList<Qs3dReviewIssueMetadata>? issueMetadata = null)
+            IReadOnlyDictionary<string, CoordinationIssueExcelRow>? lifecycleByFindingId = null,
+            IReadOnlyList<Qs3dReviewIssueGeometry>? issueGeometry = null)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (quantityDetails == null) throw new ArgumentNullException(nameof(quantityDetails));
@@ -47,13 +48,14 @@ namespace QS3D.Core.Export
             Scope(details, summaries);
             var clashRows = Clash(clashes, modelInfo.DrawingFingerprint);
             var duplicateRows = Duplicate(duplicates, modelInfo.DrawingFingerprint);
-            var metadata = Metadata(issueMetadata, clashRows, duplicateRows);
+            var lifecycle = Lifecycle(lifecycleByFindingId, clashRows, duplicateRows);
+            var geometry = Geometry(issueGeometry, clashRows, duplicateRows);
 
             Qs3dReviewXlsx.WritePackage(path,
                 Summary(summaries, clashRows.Count, duplicateRows.Count, modelInfo),
                 QuantitySheetXml(details, modelInfo),
-                ClashSheetXml(clashRows, metadata, modelInfo),
-                DuplicateSheetXml(duplicateRows, metadata, modelInfo),
+                ClashSheetXml(clashRows, lifecycle, geometry, modelInfo),
+                DuplicateSheetXml(duplicateRows, lifecycle, geometry, modelInfo),
                 Rules(ruleProfile),
                 ModelInfo(details.Count, summaries.Count, clashRows.Count, duplicateRows.Count, ruleProfile, modelInfo));
         }
@@ -132,21 +134,61 @@ namespace QS3D.Core.Export
             }
             return result;
         }
-        private static Dictionary<string, Qs3dReviewIssueMetadata> Metadata(IReadOnlyList<Qs3dReviewIssueMetadata>? source, IReadOnlyList<CoordinationClashExportRow> clashes, IReadOnlyList<CoordinationDuplicateExportRow> duplicates)
+        private static Dictionary<string, CoordinationIssueExcelRow> Lifecycle(
+            IReadOnlyDictionary<string, CoordinationIssueExcelRow>? source,
+            IReadOnlyList<CoordinationClashExportRow> clashes,
+            IReadOnlyList<CoordinationDuplicateExportRow> duplicates)
         {
-            var result = new Dictionary<string, Qs3dReviewIssueMetadata>(StringComparer.OrdinalIgnoreCase);
+            var result = new Dictionary<string, CoordinationIssueExcelRow>(StringComparer.OrdinalIgnoreCase);
             if (source == null) return result;
-            var issueIds = new HashSet<string>(clashes.Select(row => row.ClashId), StringComparer.OrdinalIgnoreCase);
-            foreach (var row in duplicates) issueIds.Add(row.DuplicateId);
-            foreach (var item in source)
+            var pairs = FindingPairs(clashes, duplicates);
+            foreach (var pair in source)
             {
-                if (item == null) throw new InvalidDataException("QS3D Review issue metadata contains null.");
-                if (!issueIds.Contains(item.IssueId)) throw new InvalidDataException("QS3D Review issue metadata references an IssueId that is not exported: " + item.IssueId + ".");
-                if (result.ContainsKey(item.IssueId)) throw new InvalidDataException("QS3D Review issue metadata contains duplicate IssueId: " + item.IssueId + ".");
-                result.Add(item.IssueId, item);
+                var findingId = Required(pair.Key, "Lifecycle finding id");
+                var item = pair.Value ?? throw new InvalidDataException("QS3D Review lifecycle mapping contains null for " + findingId + ".");
+                string[] semanticPair;
+                if (!pairs.TryGetValue(findingId, out semanticPair))
+                    throw new InvalidDataException("QS3D Review lifecycle mapping references a finding that is not exported: " + findingId + ".");
+                if (!SamePair(semanticPair[0], semanticPair[1], item.LeftSemanticId, item.RightSemanticId))
+                    throw new InvalidDataException("QS3D Review lifecycle semantic pair does not match exported finding " + findingId + ".");
+                result.Add(findingId, item);
             }
             return result;
         }
 
+        private static Dictionary<string, Qs3dReviewIssueGeometry> Geometry(
+            IReadOnlyList<Qs3dReviewIssueGeometry>? source,
+            IReadOnlyList<CoordinationClashExportRow> clashes,
+            IReadOnlyList<CoordinationDuplicateExportRow> duplicates)
+        {
+            var result = new Dictionary<string, Qs3dReviewIssueGeometry>(StringComparer.OrdinalIgnoreCase);
+            if (source == null) return result;
+            var findingIds = new HashSet<string>(clashes.Select(row => row.ClashId), StringComparer.OrdinalIgnoreCase);
+            foreach (var row in duplicates) findingIds.Add(row.DuplicateId);
+            foreach (var item in source)
+            {
+                if (item == null) throw new InvalidDataException("QS3D Review issue geometry contains null.");
+                if (!findingIds.Contains(item.FindingId))
+                    throw new InvalidDataException("QS3D Review issue geometry references a finding that is not exported: " + item.FindingId + ".");
+                if (result.ContainsKey(item.FindingId))
+                    throw new InvalidDataException("QS3D Review issue geometry contains duplicate finding id: " + item.FindingId + ".");
+                result.Add(item.FindingId, item);
+            }
+            return result;
+        }
+
+        private static Dictionary<string, string[]> FindingPairs(
+            IReadOnlyList<CoordinationClashExportRow> clashes,
+            IReadOnlyList<CoordinationDuplicateExportRow> duplicates)
+        {
+            var result = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in clashes) result.Add(row.ClashId, new[] { row.LeftElementId, row.RightElementId });
+            foreach (var row in duplicates) result.Add(row.DuplicateId, new[] { row.LeftElementId, row.RightElementId });
+            return result;
+        }
+
+        private static bool SamePair(string leftA, string rightA, string leftB, string rightB) =>
+            (string.Equals(leftA, leftB, StringComparison.OrdinalIgnoreCase) && string.Equals(rightA, rightB, StringComparison.OrdinalIgnoreCase)) ||
+            (string.Equals(leftA, rightB, StringComparison.OrdinalIgnoreCase) && string.Equals(rightA, leftB, StringComparison.OrdinalIgnoreCase));
     }
 }
