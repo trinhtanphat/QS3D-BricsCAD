@@ -257,10 +257,19 @@ namespace QS3D.Core.Coordination
             if (xCount > MaxCellsPerItem / yCount || xCount * yCount > MaxCellsPerItem / zCount)
                 throw new InvalidOperationException("Spatial item spans too many grid cells; increase cell size or partition the input.");
 
-            for (var x = minX; x <= maxX; x++)
-                for (var y = minY; y <= maxY; y++)
-                    for (var z = minZ; z <= maxZ; z++)
+            for (var xi = 0L; xi < xCount; xi++)
+            {
+                var x = minX + xi;
+                for (var yi = 0L; yi < yCount; yi++)
+                {
+                    var y = minY + yi;
+                    for (var zi = 0L; zi < zCount; zi++)
+                    {
+                        var z = minZ + zi;
                         yield return new CellKey(x, y, z);
+                    }
+                }
+            }
         }
 
         private long CellCoordinate(double value)
@@ -273,12 +282,11 @@ namespace QS3D.Core.Coordination
 
         private static long CheckedCellCount(long min, long max)
         {
-            if (max < min || (min < 0 && max > long.MaxValue + min - 1))
-                throw new InvalidOperationException("Spatial grid range overflow.");
-            var count = max - min + 1;
-            if (count <= 0 || count > MaxCellsPerItem)
+            if (max < min) throw new InvalidOperationException("Spatial grid range is invalid.");
+            var count = (decimal)max - (decimal)min + 1m;
+            if (count <= 0m || count > MaxCellsPerItem)
                 throw new InvalidOperationException("Spatial item spans too many grid cells.");
-            return count;
+            return decimal.ToInt64(count);
         }
 
         private struct CellKey : IEquatable<CellKey>
