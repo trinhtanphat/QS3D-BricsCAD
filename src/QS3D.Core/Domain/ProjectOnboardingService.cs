@@ -297,7 +297,8 @@ namespace QS3D.Core.Domain
 
         private static FloorDefinition? ResolveExistingFloorActivationPlan(ProjectState project)
         {
-            var activeFloorId = (project.ActiveFloorId ?? string.Empty).Trim();
+            var rawActiveFloorId = project.ActiveFloorId ?? string.Empty;
+            var activeFloorId = rawActiveFloorId.Trim();
             if (activeFloorId.Length > 0)
             {
                 var activeFloor = project.Floors.SingleOrDefault(
@@ -305,7 +306,10 @@ namespace QS3D.Core.Domain
                 if (activeFloor == null)
                     throw new InvalidOperationException(
                         "Project active Floor '" + activeFloorId + "' was not found in the current Floor catalog. Repair the active Floor reference before onboarding.");
-                return null;
+
+                return string.Equals(rawActiveFloorId, activeFloor.Id, StringComparison.Ordinal)
+                    ? null
+                    : activeFloor;
             }
 
             if (project.Floors.Count == 0) return null;
