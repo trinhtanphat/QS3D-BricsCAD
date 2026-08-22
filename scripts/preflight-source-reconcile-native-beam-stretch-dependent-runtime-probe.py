@@ -82,12 +82,31 @@ required_runner = (
     "QS3D_SOURCE_RECONCILE_NATIVE_BEAM_STRETCH_DEPENDENT_DWG",
     "status --porcelain=v1 --untracked-files=all",
     "ProductVersion",
+    "Read-SingleProjectValue",
+    "InformationalVersion",
+    "dotnet",
+    "-p:Platform=x64",
+    "BRICSCAD_V25_DIR=",
+    "Require-PdbSourceLink",
+    "https://raw.githubusercontent.com/trinhtanphat/QS3D-BricsCAD/",
+    "exact_source_link_verified",
+    "core_sha256",
+    "plugin_pdb_sha256",
+    "core_pdb_sha256",
+    '"LOGFILEPATH",$ArtifactDir,"LOGFILEMODE","1"',
+    '"PICKFIRST","0","PICKADD","1","PICKAUTO","1"',
+    "Get-ExactBricsCadProcesses",
+    "Wait-NoExactBricsCadProcesses",
+    "Get-ExactBricsCadProcesses -ExpectedExe $bricscadExe",
+    "Wait-NoExactBricsCadProcesses -ExpectedExe $bricscadExe -Deadline (Get-Date).AddSeconds(15)",
+    '($sidecar + ".bak")',
+    '($sidecar + ".lock")',
     "ArtifactDir must stay outside repository",
-    "Close BricsCAD before isolated P04 run",
+    "Close BricsCAD V25 before isolated P04 run",
     '"QS3DDRAWBEAM","0,0","5000,0"',
     '"QS3DSRBEAMP04PREPARE","QS3DBEAMREBAR3D"',
     '"QS3DSRBEAMP04SELECT","QS3DBEAMSTIRRUP3D","QS3DSRBEAMP04BASELINE"',
-    '"QS3DSRBEAMP04SELECT","_.STRETCH","_C","4900,-100","5100,100","","0,0","3000,0","QS3DSRBEAMP04STRETCHCHECK"',
+    '"QS3DSRBEAMP04SELECT","_.STRETCH","_C","_non","4900,-100","_non","5100,100","","_non","0,0","_non","3000,0","PICKFIRST","1","QS3DSRBEAMP04STRETCHCHECK"',
     '"QS3DSRBEAMP04SELECT","QS3DSYNCSOURCE","QS3DSRBEAMP04SYNCCHECK"',
     '"QS3DSRBEAMP04SELECT","QS3DBUILD3D"',
     '"QS3DSRBEAMP04SELECT","QS3DBEAMREBAR3D"',
@@ -109,6 +128,14 @@ if runner.count('"QS3DBEAMREBAR3D"') != 2 or runner.count('"QS3DBEAMSTIRRUP3D"')
     errors.append("P04 runner must build dependent bars/stirrups once before and once after reconcile")
 if "Get-Clipboard" in runner or "Set-Clipboard" in runner:
     errors.append("P04 runner must not inspect or mutate clipboard")
+if '.EndsWith("+" + $gitHead' in runner:
+    errors.append("P04 runner must not conflate public ProductVersion with exact-source provenance")
+if '$sidecar+".bak"' in runner or '$sidecar+".lock"' in runner:
+    errors.append("P04 runner must parenthesize sidecar cleanup paths so PowerShell does not split them")
+if '"PICKADD","2"' in runner:
+    errors.append("P04 runner must use the BricsCAD V25 PICKADD range")
+if "@(Get-Process -Name bricscad" in runner:
+    errors.append("P04 runner must not block or wait on another BricsCAD host-major")
 
 # Pin the production arithmetic behind the 5 m -> 8 m redistribution assertion.
 for token in (
