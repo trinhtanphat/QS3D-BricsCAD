@@ -166,6 +166,10 @@ if RUNNER.is_file():
         'drawing_copy_sha256_after',
         'process_cleanup_verified = $true',
         'script_cleanup_verified = $true',
+        'drawing_lock_cleanup_verified = $true',
+        'function Remove-Qs3dDrawingLocks',
+        '$drawingLocks = @([IO.Path]::ChangeExtension($DrawingCopy, ".dwl"), [IO.Path]::ChangeExtension($DrawingCopy, ".dwl2"))',
+        'Remove-Qs3dDrawingLocks -Paths $drawingLocks',
         'sidecar_absent_verified = $true',
         'backup_absent_verified = $true',
         'Read-Qs3dAllowedValue',
@@ -183,6 +187,8 @@ if RUNNER.is_file():
     for token in required:
         if token not in text:
             errors.append("Curtain-panel P05 runner missing contract token: " + token)
+    if text.count('Remove-Qs3dDrawingLocks -Paths $drawingLocks') != 2:
+        errors.append("Curtain-panel P05 runner must clean drawing locks on success and finally paths")
     ordered_commands = (
         '"QS3DCURTAINSTALEBASELINE"', '"QS3DCURTAINSTALEMUTATEGRID"', '"QS3DCURTAINSTALEVERIFYGRID"',
         '"QS3DCURTAINSTALEMUTATEDEPTH"', '"QS3DCURTAINSTALEVERIFYDEPTH"',
@@ -206,8 +212,9 @@ if RUNNER.is_file():
     deferred_failure = text.find("if ($diagnosticFailure)", fail_start)
     drawing_hash_after = text.find("$drawingHashAfter =", fail_start)
     backup_after = text.find("Curtain P05 runtime probe persisted an unexpected sidecar or backup.", fail_start)
-    if deferred_failure < 0 or drawing_hash_after < 0 or backup_after < 0 or deferred_failure < drawing_hash_after or deferred_failure < backup_after:
-        errors.append("Curtain-panel P05 sanitized FAIL must be deferred until process/script/DWG/sidecar/backup cleanup checks finish")
+    lock_cleanup_after = text.find("Remove-Qs3dDrawingLocks -Paths $drawingLocks", fail_start)
+    if min(deferred_failure, drawing_hash_after, backup_after, lock_cleanup_after) < 0 or deferred_failure < drawing_hash_after or deferred_failure < backup_after or deferred_failure < lock_cleanup_after:
+        errors.append("Curtain-panel P05 sanitized FAIL must be deferred until process/script/DWG/lock/sidecar/backup cleanup checks finish")
     stop_start = text.find("function Stop-Qs3dLaunchedProcess")
     stop_end = text.find("if ([Environment]::OSVersion.Platform", stop_start)
     stop_body = text[stop_start:stop_end]

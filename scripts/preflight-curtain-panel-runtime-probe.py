@@ -82,6 +82,10 @@ if RUNNER.is_file():
         'git_sha = $gitHead',
         'process_cleanup_verified = $true',
         'script_cleanup_verified = $true',
+        'drawing_lock_cleanup_verified = $true',
+        'function Remove-Qs3dDrawingLocks',
+        '$drawingLocks = @([IO.Path]::ChangeExtension($DrawingCopy, ".dwl"), [IO.Path]::ChangeExtension($DrawingCopy, ".dwl2"))',
+        'Remove-Qs3dDrawingLocks -Paths $drawingLocks',
         'Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop',
         'Curtain-panel runtime script cleanup failed.',
         'drawing_copy_sha256_before',
@@ -93,6 +97,8 @@ if RUNNER.is_file():
     ):
         if token not in text:
             errors.append("curtain-panel runtime runner missing contract token: " + token)
+    if text.count('Remove-Qs3dDrawingLocks -Paths $drawingLocks') != 2:
+        errors.append("curtain-panel runtime runner must clean drawing locks on success and finally paths")
     for forbidden in ("Get-Process -Name '*'", 'Get-Process -Name "bricscad"', "$expectedAssemblyRevision", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
         if forbidden in text:
             errors.append("curtain-panel runtime runner contains broad process/window action: " + forbidden)

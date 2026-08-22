@@ -72,6 +72,14 @@ function Stop-Qs3dLaunchedProcess {
     if (-not $Process.HasExited) { throw "Launched BricsCAD curtain-panel process did not exit." }
 }
 
+function Remove-Qs3dDrawingLocks {
+    param([Parameter(Mandatory = $true)][string[]]$Paths)
+    foreach ($path in $Paths) {
+        if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force -ErrorAction Stop }
+        if (Test-Path -LiteralPath $path) { throw "Curtain-panel drawing-lock cleanup failed." }
+    }
+}
+
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw "Curtain-panel runtime qualification requires Windows." }
 if (-not [Environment]::UserInteractive) { throw "Curtain-panel runtime qualification requires an interactive Windows session." }
 if (-not $ConfirmDisposableCopy) { throw "Pass -ConfirmDisposableCopy only for a disposable synthetic drawing copy." }
@@ -112,8 +120,9 @@ if (@(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe).Count -gt
 }
 
 $projectSidecar = [IO.Path]::ChangeExtension($DrawingCopy, ".qsdb")
-if ((Test-Path -LiteralPath $projectSidecar) -or (Test-Path -LiteralPath ($projectSidecar + ".bak"))) {
-    throw "The disposable curtain drawing copy must not have a pre-existing QS3D sidecar."
+$drawingLocks = @([IO.Path]::ChangeExtension($DrawingCopy, ".dwl"), [IO.Path]::ChangeExtension($DrawingCopy, ".dwl2"))
+foreach ($forbiddenInput in @($projectSidecar, ($projectSidecar + ".bak")) + $drawingLocks) {
+    if (Test-Path -LiteralPath $forbiddenInput) { throw "The disposable curtain drawing copy must not have pre-existing private state." }
 }
 
 if (Test-Path -LiteralPath $ArtifactDir) {
@@ -194,6 +203,7 @@ try {
     if ($panelCount -ne $panelMetadataCount) { throw "Curtain-panel native and metadata counts differ." }
 
     Stop-Qs3dLaunchedProcess -Process $process
+    Remove-Qs3dDrawingLocks -Paths $drawingLocks
     if (-not (Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30)) { throw "Curtain-panel V25 process cleanup is incomplete." }
     if (Test-Path -LiteralPath $scriptPath) {
         Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop
@@ -219,6 +229,7 @@ try {
         drawing_copy_sha256_after = $drawingHashAfter
         process_cleanup_verified = $true
         script_cleanup_verified = $true
+        drawing_lock_cleanup_verified = $true
         proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed
         marker = $marker
     }
@@ -232,6 +243,7 @@ try {
 finally {
     try {
         Stop-Qs3dLaunchedProcess -Process $process
+        Remove-Qs3dDrawingLocks -Paths $drawingLocks
         if (Test-Path -LiteralPath $scriptPath) {
             Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop
         }
