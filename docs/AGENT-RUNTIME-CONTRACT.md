@@ -41,6 +41,26 @@ The following are intermediate states, not normal completion: edited, committed,
 
 A failed current-carrier CI check is an automatic remediation trigger while a safe same-lane fix exists. Diagnose the exact failing SHA/job/step, fix the root cause on the same canonical branch, commit/push, and revalidate. Do not require the owner to repeat `fix CI`, `continue`, or `merge main` for the same task.
 
+## Deferred LOCAL_ONLY validation
+
+When source-safe implementation, tests, guards, documentation, or adapter work can be completed without a licensed BricsCAD host, continue that work instead of waiting for a local agent. Complete the available source/static/build/CI validation, commit coherently, and push the canonical branch.
+
+For the unavailable runtime tail:
+
+- record the exact intended source-ready SHA;
+- mark it `PENDING_LOCAL` / `PENDING_LOCAL_AGENT` and `DO_NOT_RETRY_REMOTE` where applicable;
+- register any new or materially changed local scenario in `docs/LOCAL-AGENT-INBOX.md`;
+- let a later local agent fetch/sync Git, check out the exact intended SHA in a clean workspace, run the linked licensed/runtime runbook, and record sanitized exact-SHA PASS/FAIL evidence;
+- never promote source review, hosted CI, managed-reference compile, mock execution, or `-SkipRuntime` output to `LOCAL_PASS`.
+
+Local-agent unavailability is not by itself a blocker for source coding, source-safe fixes, docs, commit/push, branch CI, or PR preparation. It blocks merge/release only when the exact task acceptance contract, repository rule, or explicit owner instruction requires LOCAL_ONLY evidence before that step.
+
+If local validation later exposes a normal source bug, the local agent records sanitized evidence and hands it back; the source lane fixes and pushes a new exact SHA, then the local agent syncs Git and resumes the affected local validation against that SHA.
+
+If the owner explicitly says to `commit + push and leave the branch`, `stop before merge`, `PR only`, or clearly equivalent wording for the exact task, treat that as an opt-out of the default same-task merge endpoint for that task. Keep the canonical carrier available for later pickup instead of recreating the work.
+
+See `docs/DEFERRED-LOCAL-VALIDATION.md` for the full source-to-local handoff contract.
+
 ## Main write and merge authorization
 
 - `origin/main` is read-only for direct task writes, including source, tests, scripts, workflows, docs, Markdown, claims, handoffs, status files and chores.
@@ -141,6 +161,7 @@ Use specialist documents for details instead of duplicating them here:
 - duplicate/race handling: `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`;
 - PR timing correction: `docs/PR-CI-LIFECYCLE.md`;
 - full terminal reporting contract: `docs/AGENT-PROMPT-TO-RELEASE-CONTRACT.md`;
+- deferred source-to-local validation: `docs/DEFERRED-LOCAL-VALIDATION.md`;
 - local-only work: `docs/LOCAL-AGENT-INBOX.md` and linked local runbooks;
 - product boundary: `docs/PRODUCT-BOUNDARY.md`.
 
