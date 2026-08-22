@@ -307,8 +307,8 @@ namespace QS3D.BricsCAD.V25.UI
                 var solids = new List<Solid3d>();
                 foreach (var objectId in objectIds)
                 {
-                    var solid = transaction.GetObject(objectId, OpenMode.ForRead, false) as Solid3d;
-                    if (solid != null && !solid.IsErased) solids.Add(solid);
+                    var candidateSolid = transaction.GetObject(objectId, OpenMode.ForRead, false) as Solid3d;
+                    if (candidateSolid != null && !candidateSolid.IsErased) solids.Add(candidateSolid);
                 }
 
                 var expectedSolidCount = QuantityExactFaceSolidCount(geometry.FormworkFaces);
