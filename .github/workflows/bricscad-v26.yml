@@ -1,0 +1,93 @@
+name: QS3D Manual BricsCAD V26 Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_runtime:
+        description: "Run licensed BricsCAD V26 NETLOAD/runtime validation"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qs3d-manual-bricscad-v26
+  cancel-in-progress: false
+
+jobs:
+  build-v26:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: [self-hosted, windows, x64, bricscad-v26]
+    env:
+      BRICSCAD_V26_DIR: ${{ vars.BRICSCAD_V26_DIR }}
+      BRICSCAD_V26_PROFILE: ${{ vars.BRICSCAD_V26_PROFILE }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Manual-only CI policy gate
+        run: python scripts/preflight-ci-manual-only.py
+
+      - name: Generic source guard
+        run: python scripts/preflight.py
+
+      - name: BricsCAD V26 compatibility guard
+        run: python scripts/preflight-bricscad-v26.py
+
+      - name: Validate V26 host references and runtime identity
+        shell: powershell
+        run: |
+          if (-not $env:BRICSCAD_V26_DIR) { throw "BRICSCAD_V26_DIR repository variable is not set." }
+          foreach ($name in @('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll')) {
+            $path = Join-Path $env:BRICSCAD_V26_DIR $name
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Required BricsCAD V26 runtime file is missing: $name"
+            }
+          }
+          $version = (Get-Item -LiteralPath (Join-Path $env:BRICSCAD_V26_DIR 'bricscad.exe')).VersionInfo
+          if ($version.FileMajorPart -ne 26) {
+            throw "BRICSCAD_V26_DIR is not BricsCAD V26. Detected $($version.FileVersion)."
+          }
+          $desktopRuntimes = @(dotnet --list-runtimes | Where-Object { $_ -match '^Microsoft\.WindowsDesktop\.App 8\.' })
+          if ($desktopRuntimes.Count -eq 0) {
+            throw ".NET 8 Windows Desktop Runtime/SDK is required for the BricsCAD V26 managed host."
+          }
+
+      - name: Build Core Release
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+
+      - name: Deterministic Core smoke tests
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
+
+      - name: Build BricsCAD V26 plugin
+        run: dotnet build src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj -c Release -p:Platform=x64
+
+      - name: Licensed V26 NETLOAD runtime gate
+        if: ${{ inputs.run_runtime }}
+        shell: powershell
+        run: |
+          $plugin = (Resolve-Path "src\QS3D.BricsCAD.V26\bin\x64\Release\net8.0-windows\QS3D.BricsCAD.V26.dll").Path
+          & .\scripts\test-bricscad-v26-runtime.ps1 `
+            -BricsCadDir $env:BRICSCAD_V26_DIR `
+            -PluginDll $plugin `
+            -Profile $env:BRICSCAD_V26_PROFILE `
+            -ArtifactDir "$env:GITHUB_WORKSPACE\artifacts\bricscad-v26-runtime"
+
+      - name: Upload V26 qualification artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: QS3D-BricsCAD-V26-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            src/QS3D.BricsCAD.V26/bin/x64/Release/net8.0-windows/QS3D.BricsCAD.V26.dll
+            src/QS3D.BricsCAD.V26/bin/x64/Release/net8.0-windows/QS3D.Core.dll
+            artifacts/bricscad-v26-runtime/
