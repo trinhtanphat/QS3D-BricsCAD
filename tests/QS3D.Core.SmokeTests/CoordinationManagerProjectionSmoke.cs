@@ -25,7 +25,7 @@ namespace QS3D.Core.SmokeTests
             };
 
             var forward = CoordinationManagerProjection.Build(rows);
-            var reverse = CoordinationManagerProjection.Build(rows.Reverse());
+            var reverse = CoordinationManagerProjection.Build(rows.AsEnumerable().Reverse());
             Equal(string.Join(",", forward.Select(x => x.Id)), string.Join(",", reverse.Select(x => x.Id)), "order stable");
             Equal("A,C,B", string.Join(",", forward.Select(x => x.Id)), "severity order");
 
