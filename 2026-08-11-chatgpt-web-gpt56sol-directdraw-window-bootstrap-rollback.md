@@ -1,0 +1,23 @@
+# Agent work claim — Direct Draw Window bootstrap rollback
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Completed: 2026-08-11 (UTC+7)
+- Status: `COMPLETED`
+- Scope: source-safe project-context rollback for failed projectless Window Direct Draw after deferred post-prompt binding.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/DirectDrawWindowCommands.cs`
+  - `scripts/preflight-directdraw-window-bootstrap-rollback.py`
+  - this claim file for close-out
+- Problem fixed: Window correctly deferred project binding until prompts finished, but `BindProjectAfterPrompts` could bootstrap a project before `Execute`. `Execute` previously received only `ProjectState`, so later source/capture/Auto Host failure restored semantic state and erased source without knowing this command had created the project context.
+- Implemented contract:
+  - the pre-prompt `projectPreview.HasProject` ownership signal is preserved as `hasProjectBeforePrompts` and passed through deferred binding into `Execute`;
+  - existing-project failures preserve project context;
+  - failed projectless Window authoring erases source, restores semantic state, then calls `ProjectContextCoordinator.Forget(document)`;
+  - cleanup runs before secondary rollback-error aggregation;
+  - project freshness, exact-project checks, Auto Host stable-id checks, scoped opening+host regeneration and success/UI behavior remain unchanged.
+- Source commit: `d41feb1d3cdc2d34811316d5a7b400c1f2b4079d` (`fix(authoring): roll back failed Window bootstrap`).
+- Regression guard commit: `7f63f7939aea0e9b13dbb5de217b61612d84fc3f` (`test(authoring): guard Window bootstrap rollback`).
+- Validation: exact source diff contains only ownership propagation, conditional cleanup and EOF newline normalization. The static preflight locks deferred post-prompt binding, ChangeVersion freshness, exact-project guards, Auto Host/stable-id/scoped-regeneration behavior, rollback ordering and aggregation; it follows the existing auto-discovered `preflight-*.py` convention. No GitHub Actions were dispatched and no BricsCAD V25 runtime PASS is claimed.
+- LOCAL_ONLY: no new local-only scenario introduced; exact native runtime rollback proof remains under the existing V25 qualification boundary.
+- Handoff: reservation released; future agents may edit these files after re-checking current `main` and active claims.
