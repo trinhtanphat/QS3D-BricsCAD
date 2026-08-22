@@ -1,0 +1,84 @@
+name: QS3D BricsCAD V25 Integration Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_runtime:
+        description: "Run real BricsCAD V25 NETLOAD/runtime test and capture UI screenshot"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  plugin:
+    runs-on: [self-hosted, windows, x64, bricscad-v25]
+    env:
+      BRICSCAD_V25_DIR: ${{ vars.BRICSCAD_V25_DIR }}
+      BRICSCAD_V25_PROFILE: ${{ vars.BRICSCAD_V25_PROFILE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Preflight
+        run: python scripts/preflight.py
+      - name: Full-domain and release preflight
+        run: python scripts/preflight-full-domain.py
+      - name: Auto-room lifecycle preflight
+        run: python scripts/preflight-room-lifecycle.py
+      - name: Geometry completion preflight
+        run: python scripts/preflight-geometry-completion.py
+      - name: Direct room curve-source preflight
+        run: python scripts/preflight-room-curve-sources.py
+      - name: Wall junction source preflight
+        run: python scripts/preflight-wall-junctions.py
+      - name: Safe opening auto-host preflight
+        run: python scripts/preflight-auto-host.py
+      - name: Native section-review preflight
+        run: python scripts/preflight-section-review.py
+      - name: Build core
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - name: Smoke tests
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
+      - name: Validate BricsCAD references
+        shell: powershell
+        run: |
+          if (-not $env:BRICSCAD_V25_DIR) { throw "BRICSCAD_V25_DIR repository variable is not set." }
+          if (-not (Test-Path "$env:BRICSCAD_V25_DIR\bricscad.exe")) { throw "bricscad.exe missing." }
+          if (-not (Test-Path "$env:BRICSCAD_V25_DIR\BrxMgd.dll")) { throw "BrxMgd.dll missing." }
+          if (-not (Test-Path "$env:BRICSCAD_V25_DIR\TD_Mgd.dll")) { throw "TD_Mgd.dll missing." }
+      - name: Build V25 plugin
+        run: dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64
+      - name: Build V25 release package
+        shell: powershell
+        run: .\scripts\package-v25.ps1
+      - name: Real V25 NETLOAD/runtime + screenshot
+        if: ${{ inputs.run_runtime }}
+        shell: powershell
+        run: |
+          $plugin = (Resolve-Path "src\QS3D.BricsCAD.V25\bin\Release\net48\QS3D.BricsCAD.V25.dll").Path
+          & .\scripts\test-bricscad-v25-runtime.ps1 `
+            -BricsCadDir $env:BRICSCAD_V25_DIR `
+            -PluginDll $plugin `
+            -Profile $env:BRICSCAD_V25_PROFILE `
+            -ArtifactDir "$env:GITHUB_WORKSPACE\artifacts\bricscad-v25-runtime"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QS3D-BricsCAD-V25
+          path: |
+            src/QS3D.BricsCAD.V25/bin/Release/net48/QS3D.BricsCAD.V25.dll
+            src/QS3D.BricsCAD.V25/bin/Release/net48/QS3D.Core.dll
+            dist/QS3D-BricsCAD-V25.zip
+      - name: Upload V25 runtime evidence
+        if: ${{ always() && inputs.run_runtime }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: QS3D-BricsCAD-V25-runtime
+          if-no-files-found: warn
+          path: artifacts/bricscad-v25-runtime/
