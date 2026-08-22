@@ -1,0 +1,220 @@
+<<<<<<< HEAD
+<Window x:Class="QS3D.BricsCAD.V25.UI.QuantitySummaryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QS3D • Bảng Tổng Hợp Khối Lượng"
+        Height="730" Width="1320" MinHeight="560" MinWidth="1020"
+        WindowStartupLocation="CenterOwner">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource Bg0Brush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Background="{StaticResource Bg1Brush}" Padding="16,12" BorderThickness="0,0,0,1">
+            <DockPanel>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="BẢNG TỔNG HỢP KHỐI LƯỢNG" FontSize="18" FontWeight="Bold"/>
+                        <Border Background="{StaticResource AccentSoftBrush}"
+                                BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1"
+                                CornerRadius="8" Padding="7,1" Margin="8,0,0,0">
+                            <TextBlock Text="BQ REVIEW" Foreground="{StaticResource LuxuryBrush}"
+                                       FontWeight="SemiBold" FontSize="9"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="Tổng hợp • diễn giải từng cấu kiện • Bám 3D để click dòng và chọn/zoom nguồn CAD trong View 3D"
+                               Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Định vị" Click="OnLocateClick" Style="{StaticResource DenseButton}"/>
+                    <Button Content="Tính lại" Click="OnRecalculateClick" Style="{StaticResource DenseButton}"
+                            Margin="6,0,0,0" ToolTip="Regenerate trên snapshot tách rời và nạp lại số liệu"/>
+                    <Button Content="ED2 • Excel" Click="OnEd2ExportClick" Style="{StaticResource DenseButton}"
+                            Margin="6,0,0,0" ToolTip="Chọn scope Selection/Floor/Zone/All và xuất CHI_TIET/TONG_HOP"/>
+                    <Button Content="Excel → CAD" Click="OnExcelLocateClick" Style="{StaticResource DenseButton}"
+                            Margin="6,0,0,0" ToolTip="Định vị ngược từ dòng CHI_TIET theo Handle/fingerprint"/>
+                    <Button Content="BQ • 1 sheet" Style="{StaticResource AccentButton}"
+                            Click="OnExportClick" Margin="6,0,0,0"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Row="1" Style="{StaticResource Card}" Padding="8" Margin="12,10,12,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="14"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="250"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Tầng" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <ComboBox Grid.Column="1" x:Name="FloorCombo" SelectionChanged="OnFloorChanged"/>
+                <TextBlock Grid.Column="3" Text="Tìm" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBox Grid.Column="4" x:Name="SearchBox"
+                         ToolTip="Tìm theo tầng, Zone, loại, tên cấu kiện, ElementId hoặc Handle"
+                         TextChanged="OnSearchChanged"/>
+                <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
+                    <RadioButton x:Name="SummaryModeRadio" Content="Khối lượng" IsChecked="True"
+                                 Checked="OnViewModeChanged" VerticalAlignment="Center"/>
+                    <RadioButton x:Name="DetailModeRadio" Content="Diễn giải chi tiết"
+                                 Checked="OnViewModeChanged" Margin="12,0,0,0" VerticalAlignment="Center"
+                                 ToolTip="Một semantic element trên mỗi dòng"/>
+                    <CheckBox x:Name="AutoRevealCheck" Content="Bám 3D" IsChecked="True"
+                              Margin="12,0,0,0" VerticalAlignment="Center"
+                              ToolTip="Bật để click dòng tổng hợp và reveal cả nhóm, hoặc click dòng diễn giải để reveal cấu kiện tương ứng trong View 3D"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2" Margin="12,10,12,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="190"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="285"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource Card}" Padding="9" CornerRadius="4">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Text="LOẠI CẤU KIỆN" Style="{StaticResource PanelTitle}"/>
+                        <TextBlock Text="Lọc nhanh BQ theo category" Style="{StaticResource Caption}" Margin="0,0,0,6"/>
+                    </StackPanel>
+                    <ListBox x:Name="CategoryList" SelectionChanged="OnCategoryChanged"/>
+                </DockPanel>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="5" Background="{StaticResource BorderBrush}"/>
+
+            <Border Grid.Column="2" Style="{StaticResource Card}" Padding="0" CornerRadius="4">
+                <DataGrid x:Name="QuantityGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                          CanUserAddRows="False" CanUserDeleteRows="False"
+                          SelectionChanged="OnQuantityGridSelectionChanged"
+                          MouseDoubleClick="OnQuantityGridDoubleClick" BorderThickness="0">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Tầng" Binding="{Binding Floor}" Width="85"/>
+                        <DataGridTextColumn Header="Zone" Binding="{Binding Zone}" Width="85"/>
+                        <DataGridTextColumn Header="Loại" Binding="{Binding Category}" Width="110"/>
+                        <DataGridTextColumn Header="Tên cấu kiện" Binding="{Binding ElementName}" Width="160"/>
+                        <DataGridTextColumn Header="SL" Binding="{Binding Count}" Width="55"/>
+                        <DataGridTextColumn Header="BT gộp (m³)" Binding="{Binding GrossConcreteM3, StringFormat=0.###}" Width="95"/>
+                        <DataGridTextColumn Header="Trừ giao (m³)" Binding="{Binding DeductionM3, StringFormat=0.###}" Width="95"/>
+                        <DataGridTextColumn Header="BT còn (m³)" Binding="{Binding NetConcreteM3, StringFormat=0.###}" Width="95"/>
+                        <DataGridTextColumn Header="Cốp pha (m²)" Binding="{Binding FormworkM2, StringFormat=0.###}" Width="95"/>
+                        <DataGridTextColumn Header="Dài (m)" Binding="{Binding LengthM, StringFormat=0.###}" Width="85"/>
+                        <DataGridTextColumn Header="Chu vi ngoài" Binding="{Binding OuterPerimeterM, StringFormat=0.###}" Width="90"/>
+                        <DataGridTextColumn Header="Chu vi trong" Binding="{Binding InnerPerimeterM, StringFormat=0.###}" Width="90"/>
+                        <DataGridTextColumn Header="DT cửa" Binding="{Binding DoorAreaM2, StringFormat=0.###}" Width="80"/>
+                        <DataGridTextColumn Header="Thành bên" Binding="{Binding SideAreaM2, StringFormat=0.###}" Width="85"/>
+                        <DataGridTextColumn Header="DT đáy" Binding="{Binding BottomAreaM2, StringFormat=0.###}" Width="80"/>
+                        <DataGridTextColumn Header="DT đỉnh" Binding="{Binding TopAreaM2, StringFormat=0.###}" Width="80"/>
+                        <DataGridTextColumn Header="DT khác" Binding="{Binding OtherAreaM2, StringFormat=0.###}" Width="80"/>
+                        <DataGridTextColumn Header="Handle CAD" Binding="{Binding SourceHandleText}" Width="150"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+
+            <GridSplitter Grid.Column="3" Width="5" Background="{StaticResource BorderBrush}"/>
+
+            <Border Grid.Column="4" Style="{StaticResource Card}" Padding="9" CornerRadius="4">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0">
+                        <TextBlock Text="DIỄN GIẢI KHỐI LƯỢNG" Style="{StaticResource PanelTitle}"/>
+                        <TextBlock x:Name="ModeHintText" Text="Khối lượng đang được gộp theo Floor / Zone / Category / Family"
+                                   Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,7"/>
+                        <Border Background="{StaticResource Bg2Brush}" BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1" CornerRadius="4" Padding="8">
+                            <StackPanel>
+                                <TextBlock x:Name="ExplanationTitleText" Text="Chọn một dòng để xem diễn giải"
+                                           FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                <TextBlock x:Name="ExplanationConcreteText" Style="{StaticResource Caption}"
+                                           TextWrapping="Wrap" Margin="0,5,0,0"/>
+                                <TextBlock x:Name="ExplanationFormworkText" Style="{StaticResource Caption}"
+                                           TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                <TextBlock x:Name="ExplanationGeometryText" Style="{StaticResource Caption}"
+                                           TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                <TextBlock x:Name="ExplanationProvenanceText" Style="{StaticResource Caption}"
+                                           TextWrapping="Wrap" Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="Bám 3D bật: click dòng tổng hợp → reveal cả nhóm; click dòng diễn giải → reveal cấu kiện. Tắt Bám 3D vẫn dùng double-click hoặc Định vị."
+                                   Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,9"/>
+                    </StackPanel>
+
+                    <Border Grid.Row="1" Height="1" Background="{StaticResource BorderBrush}" Margin="0,0,0,8"/>
+
+                    <DockPanel Grid.Row="2">
+                        <StackPanel DockPanel.Dock="Top">
+                            <TextBlock Text="CỘT HIỂN THỊ" Style="{StaticResource PanelTitle}"/>
+                            <TextBlock Text="Bật / tắt cột theo nhu cầu review" Style="{StaticResource Caption}" Margin="0,0,0,7"/>
+                        </StackPanel>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <CheckBox Content="Tầng" Tag="0" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="Zone" Tag="1" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="Loại" Tag="2" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="Tên cấu kiện" Tag="3" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="SL" Tag="4" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="BT gộp (m³)" Tag="5" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="Trừ giao (m³)" Tag="6" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="BT còn (m³)" Tag="7" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="Cốp pha (m²)" Tag="8" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="Dài (m)" Tag="9" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="Chu vi ngoài (m)" Tag="10" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="Chu vi trong (m)" Tag="11" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="DT cửa (m²)" Tag="12" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="Thành bên (m²)" Tag="13" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="DT đáy (m²)" Tag="14" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="DT đỉnh (m²)" Tag="15" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="DT khác (m²)" Tag="16" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                                <CheckBox Content="Handle CAD" Tag="17" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="3" Background="{StaticResource Bg1Brush}" BorderThickness="0,1,0,0" Padding="11,7">
+            <Grid x:Name="QuantitySummaryStatusGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="{StaticResource SuccessBrush}" CornerRadius="5"
+                        Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                <TextBlock Grid.Column="1" x:Name="TotalsText" MinWidth="0" FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="2"
+                           Text="BÁM 3D: CLICK → LOCATE • TẮT BÁM 3D: DOUBLE-CLICK / ĐỊNH VỊ • EXPORT XLSX"
+                           HorizontalAlignment="Right" TextWrapping="NoWrap"
+                           Style="{StaticResource Caption}" Margin="12,0,0,0"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
+=======
+<Window x:Class="QS3D.BricsCAD.V25.UI.QuantitySummaryWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Bảng Tổng Hợp Khối Lượng" Height="680" Width="1240" MinHeight="520" MinWidth="900" WindowStartupLocation="CenterOwner"><Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="Theme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources><Grid Background="{StaticResource Bg0Brush}"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Border Grid.Row="0" Background="{StaticResource Bg1Brush}" BorderThickness="0,0,0,1" Padding="8"><DockPanel><StackPanel Orientation="Horizontal"><TextBlock Text="Tầng:" Foreground="{StaticResource MutedBrush}"/><ComboBox x:Name="FloorCombo" Width="140" Margin="6,0,12,0" SelectionChanged="OnFloorChanged"/><TextBox x:Name="SearchBox" Width="240" ToolTip="Tìm theo tầng, loại, tên cấu kiện hoặc Handle" TextChanged="OnSearchChanged"/><CheckBox x:Name="GroupCheck" Content="Gộp theo Family" IsChecked="True" IsEnabled="False" Margin="14,0,0,0" ToolTip="Bảng đang được tổng hợp theo Floor/Category/Family"/></StackPanel><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="Định vị" Click="OnLocateClick"/><Button Content="Tính lại" Click="OnRecalculateClick" ToolTip="Regenerate model và nạp lại số liệu"/><Button Content="Xuất Excel" Style="{StaticResource AccentButton}" Click="OnExportClick"/></StackPanel></DockPanel></Border><Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="180"/><ColumnDefinition Width="5"/><ColumnDefinition Width="*"/><ColumnDefinition Width="5"/><ColumnDefinition Width="230"/></Grid.ColumnDefinitions><Border Grid.Column="0" Background="{StaticResource Bg1Brush}" Padding="8" BorderThickness="0,0,1,0"><DockPanel><TextBlock DockPanel.Dock="Top" Text="Loại cấu kiện" FontWeight="SemiBold" Margin="0,0,0,6"/><ListBox x:Name="CategoryList" SelectionChanged="OnCategoryChanged"/></DockPanel></Border><GridSplitter Grid.Column="1" Width="5" Background="{StaticResource BorderBrush}"/><DataGrid Grid.Column="2" x:Name="QuantityGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False" MouseDoubleClick="OnQuantityGridDoubleClick"><DataGrid.Columns><DataGridTextColumn Header="Tầng" Binding="{Binding Floor}" Width="85"/><DataGridTextColumn Header="Loại" Binding="{Binding Category}" Width="110"/><DataGridTextColumn Header="Tên cấu kiện" Binding="{Binding FamilyName}" Width="150"/><DataGridTextColumn Header="SL" Binding="{Binding Count}" Width="55"/><DataGridTextColumn Header="BT gộp (m³)" Binding="{Binding GrossConcreteM3, StringFormat=0.###}" Width="95"/><DataGridTextColumn Header="Trừ giao (m³)" Binding="{Binding DeductionM3, StringFormat=0.###}" Width="95"/><DataGridTextColumn Header="BT còn (m³)" Binding="{Binding NetConcreteM3, StringFormat=0.###}" Width="95"/><DataGridTextColumn Header="Cốp pha (m²)" Binding="{Binding FormworkM2, StringFormat=0.###}" Width="95"/><DataGridTextColumn Header="Dài (m)" Binding="{Binding LengthM, StringFormat=0.###}" Width="85"/><DataGridTextColumn Header="Chu vi ngoài" Binding="{Binding OuterPerimeterM, StringFormat=0.###}" Width="90"/><DataGridTextColumn Header="Chu vi trong" Binding="{Binding InnerPerimeterM, StringFormat=0.###}" Width="90"/><DataGridTextColumn Header="DT cửa" Binding="{Binding DoorAreaM2, StringFormat=0.###}" Width="80"/><DataGridTextColumn Header="Thành bên" Binding="{Binding SideAreaM2, StringFormat=0.###}" Width="85"/><DataGridTextColumn Header="DT đáy" Binding="{Binding BottomAreaM2, StringFormat=0.###}" Width="80"/><DataGridTextColumn Header="DT đỉnh" Binding="{Binding TopAreaM2, StringFormat=0.###}" Width="80"/><DataGridTextColumn Header="DT khác" Binding="{Binding OtherAreaM2, StringFormat=0.###}" Width="80"/><DataGridTextColumn Header="Handle CAD" Binding="{Binding SourceHandleText}" Width="150"/></DataGrid.Columns></DataGrid><GridSplitter Grid.Column="3" Width="5" Background="{StaticResource BorderBrush}"/><Border Grid.Column="4" Background="{StaticResource Bg1Brush}" Padding="8" BorderThickness="1,0,0,0"><DockPanel><StackPanel DockPanel.Dock="Top"><TextBlock Text="Cột hiển thị" FontWeight="SemiBold"/><TextBlock Text="Bật/tắt cột theo nhu cầu" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,8"/></StackPanel><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel><CheckBox Content="Tầng" Tag="0" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="Loại" Tag="1" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="Tên cấu kiện" Tag="2" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="SL" Tag="3" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="BT gộp (m³)" Tag="4" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="Trừ giao (m³)" Tag="5" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="BT còn (m³)" Tag="6" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="Cốp pha (m²)" Tag="7" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="Dài (m)" Tag="8" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="Chu vi ngoài (m)" Tag="9" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="Chu vi trong (m)" Tag="10" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="DT cửa (m²)" Tag="11" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="Thành bên (m²)" Tag="12" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="DT đáy (m²)" Tag="13" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="DT đỉnh (m²)" Tag="14" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="DT khác (m²)" Tag="15" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/><CheckBox Content="Handle CAD" Tag="16" IsChecked="True" Checked="OnColumnVisibilityChanged" Unchecked="OnColumnVisibilityChanged"/></StackPanel></ScrollViewer></DockPanel></Border></Grid><Border Grid.Row="2" Background="{StaticResource Bg1Brush}" BorderThickness="0,1,0,0" Padding="8"><TextBlock x:Name="TotalsText" FontWeight="SemiBold"/></Border></Grid></Window>
+>>>>>>> 645b39943 (feat: add B4D scan and Excel handle round-trip)
