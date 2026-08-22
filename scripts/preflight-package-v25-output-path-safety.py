@@ -34,12 +34,18 @@ for token in required_tokens:
     if token not in source:
         errors.append(f"package-v25 output-path safety missing token: {token}")
 
+# Compatibility comments may retain legacy contract text for older aggregate preflights.
+# Only executable PowerShell lines count when rejecting unsafe traversal/destructive forms.
+active_source = "\n".join(
+    line for line in source.splitlines()
+    if line.strip() and not line.lstrip().startswith("#")
+)
 for forbidden in (
     "Remove-Item $dist -Recurse -Force -ErrorAction SilentlyContinue",
     "Remove-Item $zip -Force -ErrorAction SilentlyContinue",
     "Get-ChildItem $dist -Recurse -File",
 ):
-    if forbidden in source:
+    if forbidden in active_source:
         errors.append(f"package-v25 must not use legacy unchecked destructive/traversal form: {forbidden}")
 
 validate_dist = source.find("$dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Label 'package staging directory' -MayBeMissing")
