@@ -153,7 +153,7 @@ namespace QS3D.BricsCAD.V25.UI
             if (project == null) throw new ArgumentNullException(nameof(project));
             var previewProject = ProjectStateSnapshot.CreateDetachedCopy(project);
             regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(previewProject);
-            return ProjectQuantityReportBuilder.Group(previewProject);
+            return ProjectQuantityReportBuilder.Detail(previewProject);
         }
 
         private static QuantityInsightItemViewModel ToInsightItem(

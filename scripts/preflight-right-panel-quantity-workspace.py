@@ -53,7 +53,7 @@ for needle in (
 
 for needle in (
     "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
-    "ProjectQuantityReportBuilder.Group(previewProject)",
+    "ProjectQuantityReportBuilder.Detail(previewProject)",
     "QuantityReportTotals.FromRows(rows)",
     "SourceHandleResolver.Resolve(project, currentRow.ElementIds)",
     "Cad.CadHandleService.Select(document, handles)",
@@ -132,7 +132,7 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: the BLT-inspired far-right quantity workspace is backed by live read-only QS3D reporting, "
+    "PASS: the BLT-inspired far-right quantity workspace is backed by live read-only QS3D element-detail reporting, "
     "selection highlighting, direct CAD locate/zoom, QS3DREGEN/QS3DBQ dispatch, project totals, centralized palette visibility, and the existing "
     "drawing/Xref/layer manager remains wired to its real handlers."
 )
