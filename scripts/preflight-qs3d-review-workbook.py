@@ -52,7 +52,7 @@ def main():
         'DtdProcessing = DtdProcessing.Prohibit',
         'XmlResolver = null',
         'hidden=\"1\"',
-        '"CoordinationIssueExcelId"' if False else '"CoordinationIssueId"',
+        '"CoordinationIssueId"',
         '"IssueRevision"',
         '"Assignee"',
     ]
