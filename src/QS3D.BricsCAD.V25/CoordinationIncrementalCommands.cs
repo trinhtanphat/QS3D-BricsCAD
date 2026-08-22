@@ -22,7 +22,8 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     public sealed class CoordinationIncrementalCommands
     {
-        private const int MaxLiveSolidComponents = 500;
+        private const int MaxLiveSolidComponents = 5000;
+        private const int MaxAllowedNativeHandlePairs = 100000;
         private static readonly Dictionary<string, RuntimeState> States =
             new Dictionary<string, RuntimeState>(StringComparer.OrdinalIgnoreCase);
 
@@ -82,7 +83,12 @@ namespace QS3D.BricsCAD.V25
                             foreach (var rightHandle in rightHandles)
                             {
                                 involvedHandles.Add(rightHandle);
-                                allowedHandlePairs.Add(MepExactClashCommands.BuildHandlePairKey(leftHandle, rightHandle));
+                                var handlePairKey = MepExactClashCommands.BuildHandlePairKey(leftHandle, rightHandle);
+                                if (allowedHandlePairs.Add(handlePairKey) &&
+                                    allowedHandlePairs.Count > MaxAllowedNativeHandlePairs)
+                                    throw new InvalidOperationException(
+                                        "Coordination changed-only vượt " + MaxAllowedNativeHandlePairs +
+                                        " allowed native pair; hãy partition coordination scope trước khi scan.");
                             }
                         }
                     }
