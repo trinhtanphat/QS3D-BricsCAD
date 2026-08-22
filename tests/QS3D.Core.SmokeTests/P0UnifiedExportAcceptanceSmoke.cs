@@ -21,12 +21,14 @@ namespace QS3D.Core.SmokeTests
                 var path = Path.Combine(root, "p0-unified-export.xlsx");
                 QsCustomerWorkbookExporter.Export(path, details, summaries);
 
+                var dgklXml = ReadEntry(path, "xl/worksheets/sheet1.xml");
                 var detailXml = ReadEntry(path, "xl/worksheets/sheet3.xml");
                 foreach (var row in details)
                 {
-                    Require(detailXml.Contains(">" + row.Category + "</t>"), "CHI_TIET lost P0 category: " + row.Category + ".");
-                    Require(detailXml.Contains(">" + row.FamilyId + "</t>"), "CHI_TIET lost family identity: " + row.FamilyId + ".");
-                    Require(detailXml.Contains(">" + row.Material + "</t>"), "CHI_TIET lost material identity for " + row.Category + ".");
+                    Require(dgklXml.Contains(">" + row.Category + "</t>"), "DGKL lost P0 category: " + row.Category + ".");
+                    Require(dgklXml.Contains(">" + row.Material + "</t>"), "DGKL lost material/concrete-grade identity for " + row.Category + ".");
+                    Require(detailXml.Contains(">" + row.FamilyName + "</t>"), "CHI_TIET lost family/group display identity: " + row.FamilyName + ".");
+                    Require(detailXml.Contains(">" + row.ElementName + "</t>"), "CHI_TIET lost element display identity: " + row.ElementName + ".");
                     Require(detailXml.Contains(">" + row.FloorZoneText + "</t>"), "CHI_TIET lost floor/zone identity for " + row.Category + ".");
                 }
 
@@ -46,8 +48,8 @@ namespace QS3D.Core.SmokeTests
                 Require(!detailXml.Contains("r=\"K8\""), "Door formwork must remain blank when no evidence exists.");
                 Require(!detailXml.Contains("r=\"H9\""), "WallOpening gross concrete must remain blank when no evidence exists.");
                 Require(!detailXml.Contains("r=\"K9\""), "WallOpening formwork must remain blank when no evidence exists.");
-                Require(detailXml.Contains("r=\"O8\""), "Door opening area evidence must be exported.");
-                Require(detailXml.Contains("r=\"O9\""), "WallOpening area evidence must be exported.");
+                Require(!detailXml.Contains("r=\"O8\""), "CHI_TIET sample-layout contract must not reintroduce legacy opening-area columns.");
+                Require(!detailXml.Contains("r=\"O9\""), "CHI_TIET sample-layout contract must not reintroduce legacy opening-area columns.");
 
                 var traceXml = ReadEntry(path, "xl/worksheets/sheet4.xml");
                 Require(Count(traceXml, "DWG-P0-EXPORT") == 24,
