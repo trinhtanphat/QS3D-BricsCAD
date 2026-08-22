@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
                 FeatureNavigationRegistrySmoke.Run();
                 WorkspaceModalPrimitivesSmoke.Run();
                 BltLegacyAdapterSmoke.Run();
+                SlabOpeningCutPlannerSpanPrecisionSmoke.Run();
 
                 var legacyMain = typeof(Program).GetMethod(
                     "Main",
