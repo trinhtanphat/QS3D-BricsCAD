@@ -1,0 +1,121 @@
+using System;
+using System.Globalization;
+using System.IO;
+using System.Text;
+using Bricscad.ApplicationServices;
+using Microsoft.Win32;
+using QS3D.BricsCAD.V25.Services;
+using QS3D.Core.Export;
+using Teigha.Runtime;
+
+namespace QS3D.BricsCAD.V25
+{
+    public sealed class ProjectInterchangeUseSourceCommands
+    {
+        private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
+
+        [CommandMethod("QS3DINTERCHANGEUSESOURCE", CommandFlags.Modal)]
+        public void ImportSourceElementSemanticData()
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) return;
+
+            try
+            {
+                var dialog = new OpenFileDialog
+                {
+                    Title = "Nạp QS3D Snapshot — dùng semantic nguồn cho Element trùng ID",
+                    Filter = "QS3D Semantic Snapshot (*.qs3d.json)|*.qs3d.json|JSON (*.json)|*.json",
+                    CheckFileExists = true,
+                    Multiselect = false
+                };
+                if (dialog.ShowDialog() != true) return;
+
+                var json = ReadGuardedSnapshotText(dialog.FileName);
+                var project = ProjectContextCoordinator.GetOrCreate(document);
+                var previewChangeVersion = project.ChangeVersion;
+                var plan = InterchangeUseSourceElementImportService.Plan(project, json);
+                if (plan.ElementsToReplace <= 0)
+                {
+                    var noReplacement = "Interchange UseSource: snapshot không có Element ID collision để replace. Dùng QS3DINTERCHANGEAPPEND cho append-only.";
+                    try { PaletteCoordinator.SetStatus(noReplacement); } catch { }
+                    document.Editor.WriteMessage("\nQS3D " + noReplacement);
+                    return;
+                }
+
+                var confirmText =
+                    "Áp dụng semantic từ snapshot cho Element trùng ID?\n\n" +
+                    "Source project: " + plan.SourceProjectId + "\n" +
+                    "Element replace semantic: " + plan.ElementsToReplace.ToString(CultureInfo.InvariantCulture) +
+                    " • Element mới: " + plan.ElementsToAdd.ToString(CultureInfo.InvariantCulture) + "\n" +
+                    "Zone mới: " + plan.ZonesToAdd.ToString(CultureInfo.InvariantCulture) +
+                    " • Floor mới: " + plan.FloorsToAdd.ToString(CultureInfo.InvariantCulture) +
+                    " • Family mới: " + plan.FamiliesToAdd.ToString(CultureInfo.InvariantCulture) + "\n" +
+                    "Incoming source CAD handles sẽ bỏ: " + plan.SourceHandlesToDiscard.ToString(CultureInfo.InvariantCulture) +
+                    " • target source handles giữ nguyên: " + plan.TargetSourceHandlesToPreserve.ToString(CultureInfo.InvariantCulture) + "\n\n" +
+                    "QUAN TRỌNG:\n" +
+                    "• Zone/Floor/Family trùng ID vẫn giữ dữ liệu target.\n" +
+                    "• Element trùng ID/same category nhận portable semantic state từ source.\n" +
+                    "• SourceHandles + drawing fingerprint hiện có của DWG target được giữ nguyên; handle từ file nguồn không được nhận làm ownership.\n" +
+                    "• Generated 3D/rebar/curtain/grid outputs của Element bị ảnh hưởng sẽ bị xóa ownership-safely trong CAD transaction và đánh dấu cần rebuild.\n" +
+                    "• Không tự chạy QS3DBUILD3D, không tự cut opening, không tự lưu .qsdb.\n\n" +
+                    "Nếu transaction hoặc semantic validation lỗi trước CAD commit, DWG transaction abort và project semantic được rollback.";
+
+                if (System.Windows.MessageBox.Show(
+                        confirmText,
+                        "QS3D — Interchange UseSource Element",
+                        System.Windows.MessageBoxButton.YesNo,
+                        System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes) return;
+
+                var confirmedProject = InterchangeConfirmationGuard.RequireFresh(
+                    document,
+                    project,
+                    previewChangeVersion,
+                    "Interchange UseSource Element");
+                var result = InterchangeUseSourceElementImportService.Import(document, confirmedProject, json);
+                try { PaletteCoordinator.RefreshProject(); } catch { }
+
+                var status =
+                    "Interchange UseSource: Element replace " + result.ElementsReplaced.ToString(CultureInfo.InvariantCulture) +
+                    " • Element +" + result.ElementsAdded.ToString(CultureInfo.InvariantCulture) +
+                    " • catalog +" + (result.ZonesAdded + result.FloorsAdded + result.FamiliesAdded).ToString(CultureInfo.InvariantCulture) +
+                    " • generated closure invalidated " + result.GeneratedElementsInvalidated.ToString(CultureInfo.InvariantCulture) +
+                    " • incoming source handles discarded " + result.SourceHandlesDiscarded.ToString(CultureInfo.InvariantCulture) +
+                    " • target source handles preserved " + result.TargetSourceHandlesPreserved.ToString(CultureInfo.InvariantCulture) +
+                    ". Rebuild explicit; chưa tự lưu .qsdb.";
+                try { PaletteCoordinator.SetStatus(status); } catch { }
+                document.Editor.WriteMessage("\nQS3D " + status);
+                document.Editor.WriteMessage("\nQS3D chạy QS3DHEALTHALL rồi rebuild 3D/rebar/curtain/opening theo nhu cầu. Import này không nhận source CAD handles từ snapshot làm ownership của DWG hiện tại.");
+            }
+            catch (Exception ex)
+            {
+                try { PaletteCoordinator.SetStatus("QS3DINTERCHANGEUSESOURCE lỗi: " + ex.Message); } catch { }
+                document.Editor.WriteMessage("\nQS3DINTERCHANGEUSESOURCE error: " + ex.Message + " Không claim import thành công nếu transaction/semantic apply chưa commit.");
+            }
+        }
+
+        private static string ReadGuardedSnapshotText(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Interchange snapshot path is required.", nameof(path));
+            var fullPath = Path.GetFullPath(path);
+            using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                if (stream.Length > ProjectInterchangeJsonValidator.MaxFileBytes)
+                    throw new InvalidDataException("Semantic snapshot exceeds the guarded " + ProjectInterchangeJsonValidator.MaxFileBytes.ToString(CultureInfo.InvariantCulture) + " byte limit.");
+                var length = checked((int)stream.Length);
+                var bytes = new byte[length];
+                var offset = 0;
+                while (offset < bytes.Length)
+                {
+                    var read = stream.Read(bytes, offset, bytes.Length - offset);
+                    if (read <= 0) throw new EndOfStreamException("Semantic snapshot changed or ended while it was being read.");
+                    offset += read;
+                }
+                if (stream.ReadByte() != -1)
+                    throw new InvalidDataException("Semantic snapshot changed while it was being read; reopen the file and retry.");
+                try { return StrictUtf8.GetString(bytes); }
+                catch (DecoderFallbackException ex) { throw new InvalidDataException("Semantic snapshot is not valid UTF-8.", ex); }
+            }
+        }
+    }
+}
