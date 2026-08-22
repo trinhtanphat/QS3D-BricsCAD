@@ -1,0 +1,268 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace QS3D.Core.Domain
+{
+    public sealed class FamilyPropertyUpdateResult
+    {
+        public int InheritedInstancesUpdated { get; set; }
+        public int OverridesPreserved { get; set; }
+    }
+
+    public static class ProjectFamilyService
+    {
+        private sealed class PendingFamilyAssignment
+        {
+            public ProjectElement Element { get; set; } = null!;
+            public ProjectFamily? PreviousFamily { get; set; }
+        }
+
+        private const int MaxFamilies = 10000;
+        private const int MaxNameLength = 160;
+        private const int MaxPropertyKeyLength = 120;
+        private const int MaxPropertyValueLength = 1000;
+
+        public static ProjectFamily Create(ProjectState project, string id, string name, ElementCategory category)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var normalizedId = Required(id, nameof(id), 80);
+            var normalizedName = Required(name, nameof(name), MaxNameLength);
+            if (project.Families.Count >= MaxFamilies) throw new InvalidOperationException("Project supports at most " + MaxFamilies + " families.");
+            if (project.Families.Any(x => string.Equals(x.Id, normalizedId, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Family id already exists: " + normalizedId);
+            EnsureUniqueName(project, normalizedName, category, string.Empty);
+            var family = new ProjectFamily(normalizedId, normalizedName, category);
+            project.Families.Add(family);
+            project.Touch();
+            return family;
+        }
+
+        public static ProjectFamily Duplicate(ProjectState project, string sourceFamilyId, string newId, string newName)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var source = FindRequired(project, sourceFamilyId);
+            var properties = new List<KeyValuePair<string, string>>();
+            var canonicalKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in source.Properties)
+            {
+                var normalizedKey = Required(pair.Key, "source property key", MaxPropertyKeyLength);
+                if (!string.Equals(normalizedKey, pair.Key, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Source Family contains a non-canonical property key: '" + pair.Key + "'. Repair the Family before duplication.");
+                if (!canonicalKeys.Add(normalizedKey))
+                    throw new InvalidOperationException("Source Family contains duplicate canonical property key: " + normalizedKey);
+                properties.Add(new KeyValuePair<string, string>(normalizedKey, Value(pair.Value, "source property value", MaxPropertyValueLength)));
+            }
+
+            var clone = Create(project, newId, newName, source.Category);
+            foreach (var pair in properties) clone.Properties[pair.Key] = pair.Value;
+            return clone;
+        }
+
+        public static ProjectFamily Rename(ProjectState project, string familyId, string newName)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var family = FindRequired(project, familyId);
+            var normalized = Required(newName, nameof(newName), MaxNameLength);
+            EnsureUniqueName(project, normalized, family.Category, family.Id);
+            if (string.Equals(family.Name, normalized, StringComparison.Ordinal)) return family;
+            family.Name = normalized;
+            project.Touch();
+            return family;
+        }
+
+        public static FamilyPropertyUpdateResult SetProperty(ProjectState project, string familyId, string key, string value)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var family = FindRequired(project, familyId);
+            var normalizedKey = Required(key, nameof(key), MaxPropertyKeyLength);
+            var normalizedValue = Value(value, nameof(value), MaxPropertyValueLength);
+            var hadPrevious = family.Properties.TryGetValue(normalizedKey, out var previousRaw);
+            var previous = previousRaw ?? string.Empty;
+            if (hadPrevious && string.Equals(previous, normalizedValue, StringComparison.Ordinal)) return new FamilyPropertyUpdateResult();
+            var members = ResolveFamilyMembers(project, family.Id);
+
+            family.Properties[normalizedKey] = normalizedValue;
+            var result = new FamilyPropertyUpdateResult();
+            foreach (var element in members)
+            {
+                var hasInstance = element.Properties.TryGetValue(normalizedKey, out var instanceRaw);
+                var instance = instanceRaw ?? string.Empty;
+                if (!hasInstance || (hadPrevious && string.Equals(instance, previous, StringComparison.Ordinal)))
+                {
+                    element.SetProperty(normalizedKey, normalizedValue);
+                    result.InheritedInstancesUpdated++;
+                }
+                else result.OverridesPreserved++;
+            }
+            project.Touch();
+            return result;
+        }
+
+        public static FamilyPropertyUpdateResult RemoveProperty(ProjectState project, string familyId, string key)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var family = FindRequired(project, familyId);
+            var normalizedKey = Required(key, nameof(key), MaxPropertyKeyLength);
+            if (!family.Properties.TryGetValue(normalizedKey, out var previousRaw)) return new FamilyPropertyUpdateResult();
+            var previous = previousRaw ?? string.Empty;
+            var members = ResolveFamilyMembers(project, family.Id);
+
+            family.Properties.Remove(normalizedKey);
+            var result = new FamilyPropertyUpdateResult();
+            foreach (var element in members)
+            {
+                if (!element.Properties.TryGetValue(normalizedKey, out var instanceRaw)) continue;
+                var instance = instanceRaw ?? string.Empty;
+                if (string.Equals(instance, previous, StringComparison.Ordinal))
+                {
+                    element.Properties.Remove(normalizedKey);
+                    element.MarkDirty(ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity | ElementDirtyFlags.Geometry);
+                    result.InheritedInstancesUpdated++;
+                }
+                else result.OverridesPreserved++;
+            }
+            project.Touch();
+            return result;
+        }
+
+        public static int Assign(ProjectState project, string familyId, IEnumerable<ProjectElement> elements)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (elements == null) throw new ArgumentNullException(nameof(elements));
+            var target = FindRequired(project, familyId);
+            var targetProperties = new List<KeyValuePair<string, string>>();
+            var canonicalKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in target.Properties)
+            {
+                var normalizedKey = Required(pair.Key, "target property key", MaxPropertyKeyLength);
+                if (!string.Equals(normalizedKey, pair.Key, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Target Family contains a non-canonical property key: '" + pair.Key + "'. Repair the Family before assignment.");
+                if (!canonicalKeys.Add(normalizedKey))
+                    throw new InvalidOperationException("Target Family contains duplicate canonical property key: " + normalizedKey);
+                targetProperties.Add(new KeyValuePair<string, string>(normalizedKey, Value(pair.Value, "target property value", MaxPropertyValueLength)));
+            }
+
+            var owned = ResolveOwnedElements(project, elements, target);
+            var pending = new List<PendingFamilyAssignment>();
+
+            foreach (var element in owned)
+            {
+                if (string.Equals(element.FamilyId, target.Id, StringComparison.OrdinalIgnoreCase)) continue;
+                var previousFamilyId = (element.FamilyId ?? string.Empty).Trim();
+                ProjectFamily? previous = null;
+                if (previousFamilyId.Length > 0)
+                {
+                    previous = project.FindFamily(previousFamilyId) ??
+                        throw new InvalidOperationException("Element " + element.Id + " references missing family id: " + previousFamilyId + ". Repair the relation before reassignment.");
+                }
+                pending.Add(new PendingFamilyAssignment { Element = element, PreviousFamily = previous });
+            }
+
+            foreach (var item in pending)
+            {
+                var element = item.Element;
+                var previous = item.PreviousFamily;
+                if (previous != null)
+                {
+                    foreach (var pair in previous.Properties)
+                    {
+                        if (!element.Properties.TryGetValue(pair.Key, out var instance)) continue;
+                        if (string.Equals(instance, pair.Value, StringComparison.Ordinal)) element.Properties.Remove(pair.Key);
+                    }
+                }
+                element.FamilyId = target.Id;
+                foreach (var pair in targetProperties)
+                    if (!element.Properties.ContainsKey(pair.Key)) element.Properties[pair.Key] = pair.Value;
+                element.MarkDirty(ElementDirtyFlags.All);
+            }
+            if (pending.Count > 0) project.Touch();
+            return pending.Count;
+        }
+
+        public static bool Delete(ProjectState project, string familyId)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var family = FindRequired(project, familyId);
+            var references = ResolveFamilyMembers(project, family.Id).Count;
+            if (references > 0)
+                throw new InvalidOperationException("Family '" + family.Name + "' is referenced by " + references + " semantic element(s). Reassign them before deletion.");
+            if (project.Metadata.TryGetValue("ActiveFamilyId", out var active) && string.Equals(active, family.Id, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Cannot delete the active Family. Activate another Family first.");
+            var removed = project.Families.Remove(family);
+            if (removed) project.Touch();
+            return removed;
+        }
+
+        public static int ReferenceCount(ProjectState project, string familyId)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var family = FindRequired(project, familyId);
+            return ResolveFamilyMembers(project, family.Id).Count;
+        }
+
+        private static IReadOnlyList<ProjectElement> ResolveFamilyMembers(ProjectState project, string familyId)
+        {
+            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var result = new List<ProjectElement>();
+            foreach (var element in project.Elements)
+            {
+                if (element == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
+                if (!ids.Add(element.Id)) throw new InvalidOperationException("Project contains duplicate semantic element id: " + element.Id);
+                if (string.Equals(element.FamilyId, familyId, StringComparison.OrdinalIgnoreCase)) result.Add(element);
+            }
+            result.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Id, right.Id));
+            return result.AsReadOnly();
+        }
+
+        private static IReadOnlyList<ProjectElement> ResolveOwnedElements(ProjectState project, IEnumerable<ProjectElement> elements, ProjectFamily target)
+        {
+            var projectElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var projectElement in project.Elements)
+            {
+                if (projectElement == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
+                if (projectElements.ContainsKey(projectElement.Id))
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + projectElement.Id);
+                projectElements[projectElement.Id] = projectElement;
+            }
+
+            var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in elements)
+            {
+                if (element == null) continue;
+                if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
+                    throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
+                if (owned.Category != target.Category)
+                    throw new InvalidOperationException("Family '" + target.Name + "' category " + target.Category + " cannot be assigned to element " + owned.Id + " category " + owned.Category + ".");
+                unique[owned.Id] = owned;
+            }
+            return unique.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+        }
+
+        private static ProjectFamily FindRequired(ProjectState project, string id)
+        {
+            var normalized = Required(id, nameof(id), 80);
+            return project.FindFamily(normalized) ?? throw new InvalidOperationException("Family not found: " + normalized);
+        }
+
+        private static void EnsureUniqueName(ProjectState project, string name, ElementCategory category, string exceptId)
+        {
+            if (project.Families.Any(x => x.Category == category && !string.Equals(x.Id, exceptId, StringComparison.OrdinalIgnoreCase) && string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Another " + category + " Family already uses the name '" + name + "'.");
+        }
+
+        private static string Required(string value, string parameterName, int maxLength)
+        {
+            var text = (value ?? string.Empty).Trim();
+            if (text.Length == 0 || text.Length > maxLength) throw new ArgumentException(parameterName + " must contain 1.." + maxLength + " characters.", parameterName);
+            return text;
+        }
+
+        private static string Value(string value, string parameterName, int maxLength)
+        {
+            var text = value ?? string.Empty;
+            if (text.Length > maxLength) throw new ArgumentException(parameterName + " must contain at most " + maxLength + " characters.", parameterName);
+            return text;
+        }
+    }
+}
