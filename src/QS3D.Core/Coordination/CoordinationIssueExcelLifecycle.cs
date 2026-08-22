@@ -11,10 +11,7 @@ namespace QS3D.Core.Coordination
 {
     public sealed class CoordinationIssueExcelRow
     {
-        internal CoordinationIssueExcelRow(
-            long workbookRevision,
-            string issueRevision,
-            CoordinationIssue issue)
+        internal CoordinationIssueExcelRow(long workbookRevision, string issueRevision, CoordinationIssue issue)
         {
             WorkbookRevision = workbookRevision;
             IssueRevision = issueRevision ?? throw new ArgumentNullException(nameof(issueRevision));
@@ -58,14 +55,7 @@ namespace QS3D.Core.Coordination
 
     public sealed class CoordinationIssueExcelEdit
     {
-        public CoordinationIssueExcelEdit(
-            string issueId,
-            string issueRevision,
-            string status,
-            string severity,
-            string assignee,
-            string commentAuthor = "",
-            string comment = "")
+        public CoordinationIssueExcelEdit(string issueId, string issueRevision, string status, string severity, string assignee, string commentAuthor = "", string comment = "")
         {
             IssueId = Required(issueId, nameof(issueId));
             IssueRevision = Required(issueRevision, nameof(issueRevision));
@@ -106,10 +96,7 @@ namespace QS3D.Core.Coordination
 
     public sealed class CoordinationIssueExcelImportPlan
     {
-        internal CoordinationIssueExcelImportPlan(
-            long sourceRevision,
-            IReadOnlyList<CoordinationIssue> issues,
-            int changedIssueCount)
+        internal CoordinationIssueExcelImportPlan(long sourceRevision, IReadOnlyList<CoordinationIssue> issues, int changedIssueCount)
         {
             SourceRevision = sourceRevision;
             NextRevision = checked(sourceRevision + 1L);
@@ -166,8 +153,9 @@ namespace QS3D.Core.Coordination
             for (var i = 0; i < current.Issues.Count; i++)
             {
                 var issue = current.Issues[i] ?? throw new InvalidOperationException("Coordination snapshot contains a null issue.");
-                if (!currentById.TryAdd(issue.IssueId, issue))
+                if (currentById.ContainsKey(issue.IssueId))
                     throw new InvalidOperationException("Coordination snapshot contains duplicate issue id: " + issue.IssueId + ".");
+                currentById.Add(issue.IssueId, issue);
             }
 
             var validated = new List<ValidatedEdit>();
@@ -177,7 +165,8 @@ namespace QS3D.Core.Coordination
                 if (edit == null) throw new InvalidOperationException("Coordination workbook edit batch contains a null row.");
                 if (!seen.Add(edit.IssueId))
                     throw new InvalidOperationException("Coordination workbook contains duplicate issue id: " + edit.IssueId + ".");
-                if (!currentById.TryGetValue(edit.IssueId, out var issue))
+                CoordinationIssue issue;
+                if (!currentById.TryGetValue(edit.IssueId, out issue))
                     throw new InvalidOperationException("Coordination workbook references an unknown IssueId: " + edit.IssueId + ".");
                 if (!string.Equals(edit.IssueRevision, Revision(current, issue), StringComparison.Ordinal))
                     throw new InvalidOperationException("Coordination issue revision is stale for IssueId " + edit.IssueId + ". Re-export before importing edits.");
@@ -231,10 +220,7 @@ namespace QS3D.Core.Coordination
 
             var ordered = new List<CoordinationIssue>(clones.Values);
             ordered.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.IssueId, right.IssueId));
-            return new CoordinationIssueExcelImportPlan(
-                current.Revision,
-                new ReadOnlyCollection<CoordinationIssue>(ordered),
-                changedCount);
+            return new CoordinationIssueExcelImportPlan(current.Revision, new ReadOnlyCollection<CoordinationIssue>(ordered), changedCount);
         }
 
         public static string Revision(CoordinationIssuePersistenceSnapshot snapshot, CoordinationIssue issue)
@@ -255,7 +241,7 @@ namespace QS3D.Core.Coordination
         private static T ParseCanonical<T>(string value, string field, string issueId) where T : struct
         {
             T parsed;
-            if (!Enum.TryParse(value, false, out parsed) || !Enum.IsDefined(typeof(T), parsed) ||
+            if (!Enum.TryParse<T>(value, false, out parsed) || !Enum.IsDefined(typeof(T), parsed) ||
                 !string.Equals(parsed.ToString(), value, StringComparison.Ordinal))
                 throw new InvalidOperationException("Coordination workbook contains invalid " + field + " for IssueId " + issueId + ": " + value + ".");
             return parsed;
@@ -298,13 +284,7 @@ namespace QS3D.Core.Coordination
 
         private sealed class ValidatedEdit
         {
-            internal ValidatedEdit(
-                CoordinationIssue source,
-                CoordinationIssueStatus status,
-                CoordinationIssueSeverity severity,
-                string assignee,
-                string commentAuthor,
-                string comment)
+            internal ValidatedEdit(CoordinationIssue source, CoordinationIssueStatus status, CoordinationIssueSeverity severity, string assignee, string commentAuthor, string comment)
             {
                 Source = source;
                 Status = status;
