@@ -1,11 +1,13 @@
 # Agent work claim — issue #3495
 
-- Status: ACTIVE
+- Status: COMPLETED
 - Lane-Key: issue-3495
 - Agent/session: gpt56sol
 - Baseline main: `9303fb34109e0b5859d8fc2ff1122afdc3cefa83`
 - Canonical branch: `agent/gpt56sol/3495-deferred-local-validation`
-- Canonical PR: not opened in this execution; owner requested commit + push and leave the branch for later pickup
+- Canonical PR: #3497 — MERGED
+- Final source-ready head: `d78e42be2b0c76b54d14c01a094b7a9f9910379b`
+- Merged main: `939e0d1dec4f436a9ec26b8b5e42e0e9c019b120`
 - Supersedes: none
 
 ## Scope
@@ -30,9 +32,12 @@ Document the owner-approved source-first workflow for work with a licensed/local
 - no source-code/runtime implementation changes;
 - no CI workflow/script changes;
 - no direct `main` write;
-- no licensed BricsCAD runtime claim;
-- no merge to `main` in this execution unless the owner changes the explicit stop instruction.
+- no licensed BricsCAD runtime claim.
 
-## Validation plan
+## Validation and landing
 
-Push the exact branch commit and observe the repository-selected shared branch CI if triggered. The documentation change itself does not require licensed BricsCAD execution.
+Owner first requested commit + push only, then explicitly changed the endpoint to merge `main`. The canonical carrier was synchronized with then-current `main@65e789a406a2208bb1c2de5fe501ed333a858e72` and revalidated on exact head `d78e42be2b0c76b54d14c01a094b7a9f9910379b`.
+
+Shared PR CI run `32558530870` / run number `12483` completed `SUCCESS`: protected `preflight` and `core` both succeeded. The candidate was current and mergeable, then PR #3497 merged through the protected PR path to `main@939e0d1dec4f436a9ec26b8b5e42e0e9c019b120`.
+
+Licensed BricsCAD runtime evidence remains outside this documentation-only task and is not claimed here.
