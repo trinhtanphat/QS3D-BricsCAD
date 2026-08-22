@@ -61,18 +61,33 @@ namespace QS3D.BricsCAD.V25
                         StringComparer.Ordinal);
                     state.ExactPairKeys.ExceptWith(candidateKeys);
 
-                    var involvedElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var handlesByElement = snapshot.BindingByHandle
+                        .GroupBy(pair => pair.Value.ElementId, StringComparer.OrdinalIgnoreCase)
+                        .ToDictionary(
+                            group => group.Key,
+                            group => group.Select(pair => pair.Key).OrderBy(handle => handle, StringComparer.Ordinal).ToArray(),
+                            StringComparer.OrdinalIgnoreCase);
+                    var involvedHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var allowedHandlePairs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var pair in result.CandidatePairs)
                     {
-                        involvedElementIds.Add(pair.LeftId);
-                        involvedElementIds.Add(pair.RightId);
+                        if (!handlesByElement.TryGetValue(pair.LeftId, out var leftHandles) ||
+                            !handlesByElement.TryGetValue(pair.RightId, out var rightHandles))
+                            throw new InvalidOperationException(
+                                "Changed-only candidate không còn đủ live semantic handle evidence: " + pair.PairKey + ".");
+
+                        foreach (var leftHandle in leftHandles)
+                        {
+                            involvedHandles.Add(leftHandle);
+                            foreach (var rightHandle in rightHandles)
+                            {
+                                involvedHandles.Add(rightHandle);
+                                allowedHandlePairs.Add(MepExactClashCommands.BuildHandlePairKey(leftHandle, rightHandle));
+                            }
+                        }
                     }
 
-                    var handles = snapshot.BindingByHandle
-                        .Where(pair => involvedElementIds.Contains(pair.Value.ElementId))
-                        .Select(pair => pair.Key)
-                        .OrderBy(handle => handle, StringComparer.Ordinal)
-                        .ToArray();
+                    var handles = involvedHandles.OrderBy(handle => handle, StringComparer.Ordinal).ToArray();
                     var ids = CadHandleService.Resolve(document, handles);
                     var clashes = MepExactClashCommands.DetectExact(
                         document,
@@ -80,7 +95,8 @@ namespace QS3D.BricsCAD.V25
                         snapshot.SnapshotByHandle,
                         out _,
                         out skipped,
-                        out narrowPhasePairs);
+                        out narrowPhasePairs,
+                        allowedHandlePairs);
 
                     var exactThisPass = new HashSet<string>(StringComparer.Ordinal);
                     foreach (var clash in clashes)
