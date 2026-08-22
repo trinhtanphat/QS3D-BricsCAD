@@ -294,6 +294,19 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Related source/docs: `src/QS3D.BricsCAD.V25/ReferenceSearchCommands.cs`; `src/QS3D.BricsCAD.V25/UI/ReferenceSearchWindow.xaml`; `src/QS3D.BricsCAD.V25/UI/ReferenceSearchWindow.xaml.cs`; `scripts/preflight-construction-reference-search.py`; `docs/CONSTRUCTION-REFERENCE-SEARCH.md`
 - Updated: 2026-08-11
 
+## LOCAL-016 — BricsCAD V26 native authoring and dependent-output qualification
+
+- Priority: P0
+- Status: IN_PROGRESS
+- Area: issue `#1462`; V26 `.NET 8` native authoring/semantic/generated-geometry lifecycle
+- Why local: Requires licensed BricsCAD V26 x64, an interactive Windows desktop, the exact `net8.0-windows` plugin, real native editor commands and fresh-process save/cold-reopen behavior. V25 evidence is not transferable.
+- Source/runner status: issue `#3573` owns bounded P01. `scripts/test-bricscad-v26-native-beam-dependent.ps1` reuses the guarded production Beam/native-MOVE/reconcile/dependent-rebuild/cold-reopen probe through a host-major-aware shared runner. Exact-source binding accepts the declared stable ProductVersion only when the colocated portable PDB SourceLink record names the exact Git SHA. Static/source/build success remains `PENDING_LOCAL` until licensed V26 execution.
+- Scenario: P01 runs on a disposable copy of `samples/generated/QS3D-Sample.dwg`: NETLOAD the exact V26 DLL; create a 5 m production Beam; build host, four longitudinal bars and six stirrups; native-MOVE only the authoritative LINE by +1 m WCS Y; prove old generated output is unchanged before sync; run `QS3DSYNCSOURCE`; rebuild all dependent families; verify scoped Health; save drawing/sidecar; close; cold reopen in a new V26 process; verify source/semantic/generated continuity; restore the fixture copy and leave zero BricsCAD processes.
+- Evidence required: exact pushed SHA, V26 host/CLR/x64/native-runtime identity, declared ProductVersion, plugin SHA-256, repository fixture SHA-256, production marker booleans, drawing/sidecar persistence, fresh-process cold reopen, script/private-state/drawing restoration and zero process residue. No raw paths, ProjectIds, handles, proprietary DLLs or customer drawings may be published.
+- Evidence: PENDING_LOCAL
+- Related source/docs: `docs/LOCAL-V26-QUALIFICATION.md`; `scripts/test-bricscad-v26-native-beam-dependent.ps1`; `scripts/preflight-v26-native-beam-dependent.py`; `src/QS3D.BricsCAD.V25/SourceReconcileNativeBeamDependentRuntimeProbeCommands.cs`; issue `#3573`.
+- Updated: 2026-08-22
+
 ## Close-out rule
 
 Closing all `OPEN` P0/P1 items does not automatically mean the product is commercially released. Release publication still follows `CI_POLICY.md` and requires the owner's separate explicit release authorization. This inbox only records local engineering qualification truth.
