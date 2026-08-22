@@ -32,17 +32,11 @@ public sealed class QuantityEvidenceSelector
     }
 
     public QuantityEvidenceSelectorKind Kind { get; }
-
     public string? EntityKey { get; }
-
     public int? FaceIndex { get; }
-
     public string? SourceEntityKey { get; }
-
     public string? TargetEntityKey { get; }
-
     public string? IntersectionKey { get; }
-
     public string CanonicalKey { get; }
 
     public static QuantityEvidenceSelector ForEntity(string entityKey)
@@ -90,9 +84,7 @@ public sealed class QuantityEvidenceSelector
     {
         return Kind switch
         {
-            QuantityEvidenceSelectorKind.Entity => QuantityEvidenceIdentity.Join(
-                "entity",
-                EntityKey!),
+            QuantityEvidenceSelectorKind.Entity => QuantityEvidenceIdentity.Join("entity", EntityKey!),
             QuantityEvidenceSelectorKind.Face => QuantityEvidenceIdentity.Join(
                 "face",
                 EntityKey!,
@@ -134,9 +126,7 @@ public sealed class QuantityEvidenceOperand
     }
 
     public string Key { get; }
-
     public decimal Value { get; }
-
     public string Unit { get; }
 
     internal string CanonicalKey => QuantityEvidenceIdentity.Join(
@@ -177,19 +167,12 @@ public sealed class QuantityContribution
     }
 
     public string EvidenceId { get; }
-
     public string SemanticKey { get; }
-
     public string Label { get; }
-
     public QuantityEvidenceOperation Operation { get; }
-
     public string Formula { get; }
-
     public decimal Value { get; }
-
     public QuantityEvidenceSelector Selector { get; }
-
     public IReadOnlyList<QuantityEvidenceOperand> Operands { get; }
 
     public static QuantityContribution Create(
@@ -274,21 +257,13 @@ public sealed class QuantityAdjustment
     }
 
     public string EvidenceId { get; }
-
     public string SemanticKey { get; }
-
     public string RuleKey { get; }
-
     public string Reason { get; }
-
     public QuantityEvidenceOperation Operation { get; }
-
     public string SourceReference { get; }
-
     public string TargetReference { get; }
-
     public decimal Delta { get; }
-
     public QuantityEvidenceSelector Selector { get; }
 
     public static QuantityAdjustment Create(
@@ -376,21 +351,13 @@ public sealed class QuantityExplanation
     }
 
     public string EvidenceId { get; }
-
     public string SubjectKey { get; }
-
     public string Category { get; }
-
     public string Metric { get; }
-
     public string Unit { get; }
-
     public decimal GrossValue { get; }
-
     public decimal NetValue { get; }
-
     public IReadOnlyList<QuantityContribution> Contributions { get; }
-
     public IReadOnlyList<QuantityAdjustment> Adjustments { get; }
 
     public static QuantityExplanation Create(
@@ -423,11 +390,12 @@ public sealed class QuantityExplanation
             .OrderBy(static item => item.EvidenceId, StringComparer.Ordinal)
             .ToArray();
 
-        var expectedNet = grossValue + orderedAdjustments.Sum(static adjustment => adjustment.Delta);
+        var adjustmentTotal = orderedAdjustments.Sum(static adjustment => adjustment.Delta);
+        var expectedNet = grossValue + adjustmentTotal;
         if (expectedNet != netValue)
         {
             throw new ArgumentException(
-                $"Quantity evidence arithmetic mismatch: gross {QuantityEvidenceIdentity.Decimal(grossValue)} + adjustments {QuantityEvidenceIdentity.Decimal(orderedAdjustments.Sum(static adjustment => adjustment.Delta))} != net {QuantityEvidenceIdentity.Decimal(netValue)}.",
+                $"Quantity evidence arithmetic mismatch: gross {QuantityEvidenceIdentity.Decimal(grossValue)} + adjustments {QuantityEvidenceIdentity.Decimal(adjustmentTotal)} != net {QuantityEvidenceIdentity.Decimal(netValue)}.",
                 nameof(netValue));
         }
 
@@ -448,8 +416,17 @@ internal static class QuantityEvidenceIdentity
     public static string CreateId(params string[] fields)
     {
         var canonical = Join(fields);
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
-        return "qe_" + Convert.ToHexString(hash).ToLowerInvariant()[..24];
+        using (var sha = SHA256.Create())
+        {
+            var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(canonical));
+            var builder = new StringBuilder(hash.Length * 2);
+            for (var index = 0; index < hash.Length; index++)
+            {
+                builder.Append(hash[index].ToString("x2", CultureInfo.InvariantCulture));
+            }
+
+            return "qe_" + builder.ToString().Substring(0, 24);
+        }
     }
 
     public static string Join(params string[] fields)
