@@ -122,8 +122,17 @@ For a newly downloaded ZIP, another safe option is to right-click the ZIP in Win
 ### 1. Clone and inspect repository policy
 
 ```bash
-git clone https://github.com/trinhtanphat/QS3D-BricsCAD.git
+git clone --recurse-submodules https://github.com/trinhtanphat/QS3D-BricsCAD.git
 cd QS3D-BricsCAD
+```
+
+`QS3D.Core` references the pinned `external/QS3D-Platform` submodule. If the
+repository was cloned without `--recurse-submodules`, materialize that exact
+pin before running any preflight, build, or smoke command:
+
+```bash
+git submodule sync --recursive
+git submodule update --init --recursive
 ```
 
 Before substantive edits, read:
