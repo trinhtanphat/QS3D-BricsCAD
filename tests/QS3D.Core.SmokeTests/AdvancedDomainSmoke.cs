@@ -144,7 +144,21 @@ namespace QS3D.Core.SmokeTests
             new HostLinkService().LinkOpening(project, opening.Id, wall.Id);
             new OpeningRegenerator().Regenerate(project, opening);
             new StructuralRegenerator().Regenerate(project, wall);
-            Near(13.02, wall.Quantities["NetWallAreaM2"]); Near(2.604, wall.Quantities["NetVolumeM3"]); Near(26.04, wall.Quantities["FormworkM2"]);
+            Near(13.02, wall.Quantities["NetWallAreaM2"]); Near(2.604, wall.Quantities["NetVolumeM3"]); Near(27.10, wall.Quantities["FormworkM2"]);
+
+            opening.Properties["SillHeightM"] = "0.5";
+            new StructuralRegenerator().Regenerate(project, wall);
+            Near(27.28, wall.Quantities["FormworkM2"]);
+
+            var door = new ProjectElement("D1", ElementCategory.Door, "", "f", "z"); door.Properties["WidthM"] = "1"; door.Properties["HeightM"] = "2"; project.Elements.Add(door);
+            new HostLinkService().LinkOpening(project, door.Id, wall.Id);
+            new OpeningRegenerator().Regenerate(project, door);
+            new StructuralRegenerator().Regenerate(project, wall);
+            Near(11.02, wall.Quantities["NetWallAreaM2"]); Near(2.204, wall.Quantities["NetVolumeM3"]); Near(24.28, wall.Quantities["FormworkM2"]);
+
+            var areaOnlyWall = new ProjectElement("SW-AREA", ElementCategory.StructuralWall, "", "f", "z"); areaOnlyWall.Properties["LengthM"] = "5"; areaOnlyWall.Properties["HeightM"] = "3"; areaOnlyWall.Properties["ThicknessM"] = "0.2"; areaOnlyWall.Properties["OpeningAreaM2"] = "2"; project.Elements.Add(areaOnlyWall);
+            new StructuralRegenerator().Regenerate(project, areaOnlyWall);
+            Near(13, areaOnlyWall.Quantities["NetWallAreaM2"]); Near(2.6, areaOnlyWall.Quantities["NetVolumeM3"]); Near(26, areaOnlyWall.Quantities["FormworkM2"]);
         }
 
         private static void FixedPointRegeneration()
