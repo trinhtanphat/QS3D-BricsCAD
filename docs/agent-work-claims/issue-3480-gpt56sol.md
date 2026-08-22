@@ -26,6 +26,7 @@ Supersedes: none
 - No licensed BricsCAD V25 runtime PASS can be claimed from source/CI alone.
 
 ## Validation
+- PR metadata carries the literal unformatted `Lane-Key: issue-3480` required by the runtime collision parser.
 - Feature source guard and aggregate preflight.
 - Core build and deterministic smoke.
 - Trusted BricsCAD V25 compile-reference validation and V25 plugin compile.
