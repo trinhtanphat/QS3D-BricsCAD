@@ -6,7 +6,7 @@ Issue: #3476
 Agent: gpt56sol
 Session: quantity-review-evidence-nav
 Baseline main: `4e27ced6bb1519610921ed8470f02fc32796db0d`
-Reconciled main: `e3b27191d32504256ae113b457e37c5031937b96`
+Reconciled main: `e5e9502860524f059ad573c983c83359ce271a1f`
 Canonical branch: `agent/gpt56sol/3476-quantity-review-evidence-nav`
 Canonical PR: #3477
 Supersedes: none
@@ -28,4 +28,3 @@ Supersedes: none
 - Shared branch CI on exact branch SHA before PR.
 - Trusted V25 compile reference validation and BricsCAD V25 plugin compile when selected by CI.
 - Protected PR `preflight` + `core` must be green on the exact current head before merge.
-- PR Lane-Key is kept as bare `issue-3476` metadata so the runtime collision gate parses this canonical carrier deterministically.
