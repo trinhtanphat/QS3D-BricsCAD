@@ -1,0 +1,170 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using QS3D.Core.Cost;
+
+namespace QS3D.Core.SmokeTests
+{
+    internal static class RateBookSmoke
+    {
+        internal static void Run()
+        {
+            DeterministicOrderingAndLatestLookup();
+            ExplicitUnmatchedState();
+            SnapshotIsolationAndReadOnlyView();
+            DuplicateAndAmbiguousRatesFailClosed();
+            InvalidInputsFailClosed();
+        }
+
+        private static void DeterministicOrderingAndLatestLookup()
+        {
+            var jan = Utc(2026, 1, 1);
+            var feb = Utc(2026, 2, 1);
+            var concreteEarly = Item("RATE-CONC-1", "CONC", "m3", "VND", 1500000m, jan, "v1");
+            var concreteLate = Item("RATE-CONC-2", "CONC", "m3", "VND", 1600000m, feb, "v2");
+            var steel = Item("RATE-STEEL-1", "STEEL", "kg", "VND", 18000m, jan, "v1");
+
+            var previousCulture = CultureInfo.CurrentCulture;
+            try
+            {
+                CultureInfo.CurrentCulture = new CultureInfo("vi-VN");
+                var left = new RateBook("BOOK-2026", new[] { steel, concreteLate, concreteEarly });
+                CultureInfo.CurrentCulture = new CultureInfo("en-US");
+                var right = new RateBook("BOOK-2026", new[] { concreteEarly, steel, concreteLate });
+
+                SequenceIds(left.Items, "RATE-CONC-1", "RATE-CONC-2", "RATE-STEEL-1");
+                SequenceIds(right.Items, "RATE-CONC-1", "RATE-CONC-2", "RATE-STEEL-1");
+
+                var january = left.Resolve(new CostCode("conc"), "m3", "VND", Utc(2026, 1, 15));
+                True(january.IsMatched, "January lookup should match the first concrete rate.");
+                Equal("RATE-CONC-1", january.Item!.RateItemId, "January lookup rate id mismatch.");
+                Equal(1500000m, january.Item.UnitRate, "January lookup unit rate mismatch.");
+                Equal("v1", january.Item.Version, "January lookup version mismatch.");
+
+                var february = left.Resolve(new CostCode("CONC"), "m3", "VND", Utc(2026, 2, 15));
+                True(february.IsMatched, "February lookup should select the latest eligible concrete rate.");
+                Equal("RATE-CONC-2", february.Item!.RateItemId, "February lookup rate id mismatch.");
+                Equal(1600000m, february.Item.UnitRate, "February lookup unit rate mismatch.");
+                Equal(Utc(2026, 2, 15), february.AsOfUtc, "Resolution must retain the canonical as-of timestamp.");
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = previousCulture;
+            }
+        }
+
+        private static void ExplicitUnmatchedState()
+        {
+            var book = new RateBook("BOOK", new[]
+            {
+                Item("RATE-1", "CONC", "m3", "VND", 100m, Utc(2026, 2, 1), "v1")
+            });
+
+            var beforeEffective = book.Resolve(new CostCode("CONC"), "m3", "VND", Utc(2026, 1, 1));
+            True(!beforeEffective.IsMatched, "Lookup before the first effective rate must remain explicitly unmatched.");
+            Equal(RateBookResolutionKind.Unmatched, beforeEffective.Kind, "Unmatched resolution kind mismatch.");
+            True(beforeEffective.Item == null, "Unmatched resolution must not invent a rate item.");
+
+            var unknown = book.Resolve(new CostCode("STEEL"), "kg", "VND", Utc(2026, 3, 1));
+            True(!unknown.IsMatched && unknown.Item == null, "Unknown rate scope must remain explicitly unmatched.");
+        }
+
+        private static void SnapshotIsolationAndReadOnlyView()
+        {
+            var input = new List<RateItem>
+            {
+                Item("RATE-1", "CONC", "m3", "VND", 100m, Utc(2026, 1, 1), "v1")
+            };
+            var book = new RateBook("BOOK", input);
+            input.Clear();
+
+            Equal(1, book.Items.Count, "RateBook must detach its item snapshot from caller list mutation.");
+            var list = book.Items as IList<RateItem>;
+            True(list != null && list.IsReadOnly, "RateBook item projection must be read-only.");
+            Throws<NotSupportedException>(() => list!.Add(Item("LATE", "CONC", "m3", "VND", 1m, Utc(2027, 1, 1), "v2")));
+            Equal(1, book.Items.Count, "Rejected mutation must not change RateBook items.");
+        }
+
+        private static void DuplicateAndAmbiguousRatesFailClosed()
+        {
+            var jan = Utc(2026, 1, 1);
+            Throws<ArgumentException>(() => new RateBook("BOOK", new[]
+            {
+                Item("RATE-1", "CONC", "m3", "VND", 100m, jan, "v1"),
+                Item("rate-1", "STEEL", "kg", "VND", 20m, jan, "v1")
+            }));
+
+            Throws<ArgumentException>(() => new RateBook("BOOK", new[]
+            {
+                Item("RATE-A", "CONC", "m3", "VND", 100m, jan, "v1"),
+                Item("RATE-B", "conc", "m3", "VND", 110m, jan, "v2")
+            }));
+        }
+
+        private static void InvalidInputsFailClosed()
+        {
+            Throws<ArgumentException>(() => new CostCode(" CONC"));
+            Throws<ArgumentException>(() => new CostCode("CON C"));
+            Throws<ArgumentNullException>(() => new RateItem("RATE", null!, "m3", "VND", 1m, Utc(2026, 1, 1), "v1"));
+            Throws<ArgumentException>(() => Item("RATE", "CONC", "M3", "VND", 1m, Utc(2026, 1, 1), "v1"));
+            Throws<ArgumentException>(() => Item("RATE", "CONC", "m3", "vnd", 1m, Utc(2026, 1, 1), "v1"));
+            Throws<ArgumentException>(() => Item("RATE", "CONC", "m3", "VN1", 1m, Utc(2026, 1, 1), "v1"));
+            Throws<ArgumentOutOfRangeException>(() => Item("RATE", "CONC", "m3", "VND", -1m, Utc(2026, 1, 1), "v1"));
+            Throws<ArgumentException>(() => Item("RATE", "CONC", "m3", "VND", 1m, DateTime.SpecifyKind(new DateTime(2026, 1, 1), DateTimeKind.Unspecified), "v1"));
+            Throws<ArgumentException>(() => Item("RATE", "CONC", "m3", "VND", 1m, Utc(2026, 1, 1), " v1"));
+            Throws<ArgumentException>(() => new RateBook(" BOOK", Array.Empty<RateItem>()));
+            Throws<ArgumentNullException>(() => new RateBook("BOOK", null!));
+            Throws<ArgumentException>(() => new RateBook("BOOK", new RateItem[] { null! }));
+
+            var book = new RateBook("BOOK", new[] { Item("RATE", "CONC", "m3", "VND", 1m, Utc(2026, 1, 1), "v1") });
+            Throws<ArgumentNullException>(() => book.Resolve(null!, "m3", "VND", Utc(2026, 1, 2)));
+            Throws<ArgumentException>(() => book.Resolve(new CostCode("CONC"), "M3", "VND", Utc(2026, 1, 2)));
+            Throws<ArgumentException>(() => book.Resolve(new CostCode("CONC"), "m3", "vnd", Utc(2026, 1, 2)));
+            Throws<ArgumentException>(() => book.Resolve(new CostCode("CONC"), "m3", "VND", new DateTime(2026, 1, 2)));
+        }
+
+        private static RateItem Item(
+            string id,
+            string costCode,
+            string unit,
+            string currency,
+            decimal rate,
+            DateTime effectiveFromUtc,
+            string version) =>
+            new RateItem(id, new CostCode(costCode), unit, currency, rate, effectiveFromUtc, version);
+
+        private static DateTime Utc(int year, int month, int day) =>
+            new DateTime(year, month, day, 0, 0, 0, DateTimeKind.Utc);
+
+        private static void SequenceIds(IReadOnlyList<RateItem> items, params string[] expected)
+        {
+            Equal(expected.Length, items.Count, "RateBook deterministic order count mismatch.");
+            for (var i = 0; i < expected.Length; i++)
+                Equal(expected[i], items[i].RateItemId, "RateBook deterministic order mismatch at index " + i + ".");
+        }
+
+        private static void Equal<T>(T expected, T actual, string message)
+        {
+            if (!EqualityComparer<T>.Default.Equals(expected, actual))
+                throw new InvalidOperationException(message + " Expected: " + expected + "; actual: " + actual + ".");
+        }
+
+        private static void True(bool condition, string message)
+        {
+            if (!condition) throw new InvalidOperationException(message);
+        }
+
+        private static void Throws<TException>(Action action) where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+            throw new InvalidOperationException("Expected " + typeof(TException).Name + ".");
+        }
+    }
+}

@@ -1,0 +1,38 @@
+name: QS3D Geometry Extensions Gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-and-core:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "8.0.x"
+      - name: Manual-only CI policy gate
+        run: python scripts/preflight-ci-manual-only.py
+      - name: Generic source preflight
+        run: python scripts/preflight.py
+      - name: Geometry completion preflight
+        run: python scripts/preflight-geometry-completion.py
+      - name: Direct room curve-source preflight
+        run: python scripts/preflight-room-curve-sources.py
+      - name: Wall junction topology preflight
+        run: python scripts/preflight-wall-junctions.py
+      - name: Wall snap review/apply safety preflight
+        run: python scripts/preflight-wall-snap-review.py
+      - name: Column tie/rebar ownership preflight
+        run: python scripts/preflight-column-ties.py
+      - name: Build Core Release
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - name: Run deterministic smoke tests
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release

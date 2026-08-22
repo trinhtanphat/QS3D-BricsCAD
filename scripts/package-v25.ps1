@@ -1,0 +1,190 @@
+$ErrorActionPreference = 'Stop'
+$root = Split-Path -Parent $PSScriptRoot
+$source = Join-Path $root 'src/QS3D.BricsCAD.V25/bin/x64/Release/net48'
+$distRoot = Join-Path $root 'dist'
+$dist = Join-Path $distRoot 'QS3D-BricsCAD-V25'
+$zip = Join-Path $distRoot 'QS3D-BricsCAD-V25.zip'
+$required = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')
+$forbidden = @('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')
+$sampleSource = Join-Path $root 'samples/generated'
+
+function Read-ProjectProductVersion {
+    param([string]$ProjectPath)
+    if (-not (Test-Path -LiteralPath $ProjectPath -PathType Leaf)) { throw "Project file was not found: $ProjectPath" }
+    [xml]$project = Get-Content -LiteralPath $ProjectPath -Raw
+    $versions = @($project.Project.PropertyGroup | ForEach-Object { [string]$_.Version } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($versions.Count -ne 1) { throw "Project must declare exactly one Version value: $ProjectPath" }
+    return $versions[0].Trim()
+}
+
+function Convert-ToStrictSemVerText {
+    param([string]$Value, [string]$Label)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Label is missing." }
+    $text = $Value.Trim()
+    $match = [regex]::Match(
+        $text,
+        '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
+        [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+    if (-not $match.Success) { throw "$Label is not strict SemVer: $text" }
+
+    if ($match.Groups[4].Success) {
+        foreach ($identifier in $match.Groups[4].Value.Split('.')) {
+            if ($identifier -match '^[0-9]+$' -and $identifier.Length -gt 1 -and $identifier[0] -eq '0') {
+                throw "$Label has a numeric prerelease identifier with a leading zero: $text"
+            }
+        }
+    }
+    return $text
+}
+
+function Get-SourceGitCommit {
+    $output = @(& git -C $root rev-parse --verify HEAD 2>&1)
+    if ($LASTEXITCODE -ne 0 -or $output.Count -ne 1) {
+        throw "Could not resolve the exact source Git HEAD for package provenance."
+    }
+    $commit = ([string]$output[0]).Trim().ToLowerInvariant()
+    if ($commit -notmatch '^[0-9a-f]{40}$') {
+        throw "Source Git HEAD is not one exact 40-hex commit: '$commit'."
+    }
+    return $commit
+}
+
+$pluginProject = Join-Path $root 'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj'
+$coreProject = Join-Path $root 'src/QS3D.Core/QS3D.Core.csproj'
+$productVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $pluginProject) -Label 'QS3D plugin product version'
+$coreProductVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $coreProject) -Label 'QS3D Core product version'
+$gitCommit = Get-SourceGitCommit
+if (-not [string]::Equals($productVersion, $coreProductVersion, [StringComparison]::Ordinal)) {
+    throw "QS3D plugin/Core product versions differ: plugin=$productVersion core=$coreProductVersion"
+}
+if (-not [string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
+    $expectedTag = 'v' + $productVersion
+    if (-not [string]::Equals($env:RELEASE_TAG.Trim(), $expectedTag, [StringComparison]::Ordinal)) {
+        throw "RELEASE_TAG must exactly match the source product version. Expected $expectedTag, got $env:RELEASE_TAG."
+    }
+}
+
+if (-not (Test-Path $source)) { throw "V25 Release output was not found: $source" }
+New-Item -ItemType Directory -Path $distRoot -Force | Out-Null
+Remove-Item $dist -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Path $dist -Force | Out-Null
+
+foreach ($name in $required) {
+    $path = Join-Path $source $name
+    if (-not (Test-Path $path)) { throw "Missing build artifact: $path" }
+    Copy-Item $path (Join-Path $dist $name)
+}
+
+foreach ($script in @('install-v25-autoload.ps1', 'uninstall-v25-autoload.ps1', 'update-v25.ps1')) {
+    $scriptPath = Join-Path $PSScriptRoot $script
+    if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) { throw "Missing release script: $scriptPath" }
+    Copy-Item -LiteralPath $scriptPath -Destination (Join-Path $dist $script)
+}
+
+$installLauncher = Join-Path $PSScriptRoot 'INSTALL-QS3D.cmd'
+if (-not (Test-Path -LiteralPath $installLauncher -PathType Leaf)) { throw "Missing one-click installer launcher: $installLauncher" }
+Copy-Item -LiteralPath $installLauncher -Destination (Join-Path $dist 'INSTALL-QS3D.cmd')
+
+if (-not (Test-Path -LiteralPath $sampleSource -PathType Container)) { throw "Synthetic sample folder was not found: $sampleSource" }
+$sampleDestination = Join-Path $dist 'Samples'
+New-Item -ItemType Directory -Path $sampleDestination -Force | Out-Null
+foreach ($sampleName in @('README.md', 'QS3D-Sample.dxf', 'QS3D-Sample.qsdb', 'QS3D-Quantity-Template.xlsx', 'QS3D-Architecture.qstemplate')) {
+    $samplePath = Join-Path $sampleSource $sampleName
+    if (-not (Test-Path -LiteralPath $samplePath -PathType Leaf)) { throw "Missing synthetic sample artifact: $samplePath" }
+    Copy-Item -LiteralPath $samplePath -Destination (Join-Path $sampleDestination $sampleName)
+}
+$sampleDwg = Join-Path $sampleSource 'QS3D-Sample.dwg'
+if (Test-Path -LiteralPath $sampleDwg -PathType Leaf) { Copy-Item -LiteralPath $sampleDwg -Destination (Join-Path $sampleDestination 'QS3D-Sample.dwg') }
+
+$commands = @()
+Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V25') -Recurse -Filter '*.cs' | ForEach-Object {
+    $text = Get-Content $_.FullName -Raw
+    [regex]::Matches($text, '\[CommandMethod\("([^\"]+)"') | ForEach-Object { $commands += $_.Groups[1].Value.ToUpperInvariant() }
+}
+$commands = @($commands | Sort-Object -Unique)
+if ($commands.Count -eq 0 -or -not ($commands -contains 'QS3D')) { throw 'No QS3D CommandMethod entries were discovered.' }
+$commands | Set-Content -Path (Join-Path $dist 'COMMANDS.txt') -Encoding ASCII
+
+$pluginPath = Join-Path $dist 'QS3D.BricsCAD.V25.dll'
+$signature = Get-AuthenticodeSignature -FilePath $pluginPath
+$assemblyVersion = [Reflection.AssemblyName]::GetAssemblyName($pluginPath).Version
+if (-not $assemblyVersion) { throw 'Could not read QS3D plugin assembly version.' }
+$metadata = [ordered]@{
+    product = 'QS3D'
+    target = 'BricsCAD V25 x64'
+    productVersion = $productVersion
+    version = $assemblyVersion.ToString()
+    gitCommit = $gitCommit
+    generatedUtc = [DateTime]::UtcNow.ToString('o')
+    commandCount = $commands.Count
+    defaultLoadMode = 'OnCommand'
+    autoloadMethod = 'BricsCAD Registry DemandLoad'
+    pluginSignatureStatus = $signature.Status.ToString()
+    pluginSignerThumbprint = if ($signature.SignerCertificate) { $signature.SignerCertificate.Thumbprint } else { '' }
+    securityPolicy = 'Installer/updater never weaken BricsCAD security settings.'
+}
+$metadata | ConvertTo-Json | Set-Content -Path (Join-Path $dist 'PACKAGE-METADATA.json') -Encoding UTF8
+
+@"
+QS3D for BricsCAD V25 x64
+Product version: $productVersion
+Assembly version: $($assemblyVersion.ToString())
+Source commit: $gitCommit
+
+Recommended install (avoids .NET 0x80131515 / Mark-of-the-Web NETLOAD failures):
+1. Close BricsCAD.
+2. Extract the complete ZIP to a normal local folder.
+3. Double-click INSTALL-QS3D.cmd. Signed installers must have valid Authenticode; invalid/untrusted signatures are rejected. Unsigned cloud previews are explicitly warned, then only the bootstrap installer script is unblocked so it can run under RemoteSigned.
+4. The installer verifies SHA256SUMS.txt/signatures where required, copies QS3D to the per-user install directory and removes Mark-of-the-Web from installed payloads.
+5. Start BricsCAD V25 and run QS3D or QS3DDOMAIN. DemandLoad handles the installed DLL; do not NETLOAD the DLL directly from Downloads.
+6. Run QS3DRUNTIMECHECK to confirm V25/x64/package consistency on the customer machine.
+7. For an intentional upgrade over an existing QS3D registration, use the built-in QS3D Update Center or rerun install-v25-autoload.ps1 with -Force.
+
+Built-in update:
+- QS3D checks GitHub Releases on startup.
+- Run QS3DUPDATE or click Cập nhật QS3D in KHỞI ĐẦU > Hệ thống for one-click secure update.
+- QS3DUPDATEONCLOSE toggles Update khi đóng. When enabled, a release already verified in the current session is scheduled as BricsCAD exits; the detached updater waits for all BricsCAD processes to close, installs it and reopens BricsCAD.
+- Production one-click update remains fail-closed: the updater requires the signed manifest, ZIP SHA-256, internal SHA256SUMS.txt and Authenticode publisher before atomic install.
+
+Manual/developer fallback:
+- Prefer installing first and NETLOAD only the DLL from the installed QS3D directory if debugging requires NETLOAD.
+- Never NETLOAD QS3D.BricsCAD.V25.dll directly from a downloaded ZIP/Downloads folder. Windows may attach Zone.Identifier and .NET Framework can reject it with HRESULT 0x80131515.
+- If you intentionally test an unpackaged development copy, remove Mark-of-the-Web from the complete dependency folder before NETLOAD rather than unblocking only one DLL.
+
+Security:
+- INSTALL-QS3D.cmd uses RemoteSigned and never uses ExecutionPolicy Bypass.
+- Valid Authenticode installers report their signer; invalid/untrusted signatures fail. Unsigned preview bootstrap is visibly warned and only install-v25-autoload.ps1 is unblocked before execution.
+- The installer verifies SHA256SUMS.txt before copying files and removes Mark-of-the-Web only from the verified installed payload.
+- It does not disable or weaken BricsCAD security settings.
+- This package intentionally excludes BricsCAD runtime assemblies.
+- Samples/ contains only repository-owned synthetic DXF/DWG/QSDB/XLSX/template fixtures.
+
+Native Solid3d and DemandLoad behavior still require the real licensed V25 runtime gate before release qualification.
+"@ | Set-Content -Path (Join-Path $dist 'README.txt') -Encoding UTF8
+
+foreach ($name in $forbidden) {
+    if (Get-ChildItem $dist -Recurse -Filter $name -ErrorAction SilentlyContinue) {
+        throw "Proprietary BricsCAD assembly must not be packaged: $name"
+    }
+}
+
+$distFull = [IO.Path]::GetFullPath($dist).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+$hashLines = Get-ChildItem $dist -Recurse -File | Sort-Object FullName | ForEach-Object {
+    $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+    $relativePath = $_.FullName.Substring($distFull.Length + 1).Replace([IO.Path]::DirectorySeparatorChar, '/')
+    "$hash  $relativePath"
+}
+if (-not $hashLines) { throw 'No package files were available for hashing.' }
+$hashLines | Set-Content -Path (Join-Path $dist 'SHA256SUMS.txt') -Encoding ASCII
+
+Remove-Item $zip -Force -ErrorAction SilentlyContinue
+Compress-Archive -Path "$dist/*" -DestinationPath $zip -CompressionLevel Optimal
+$zipHash = (Get-FileHash $zip -Algorithm SHA256).Hash
+Write-Host "Package ready: $zip"
+Write-Host "Product version: $productVersion"
+Write-Host "Assembly version: $($assemblyVersion.ToString())"
+Write-Host "Source commit: $gitCommit"
+Write-Host "Commands: $($commands.Count)"
+Write-Host "Plugin signature: $($signature.Status)"
+Write-Host "SHA256: $zipHash"
