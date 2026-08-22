@@ -151,16 +151,17 @@ namespace QS3D.BricsCAD.V25
             RequireQuantities(owner, 8d);
             RequireHost(context.Document, context.Project, owner, 8d);
 
+            // A true cold reopen necessarily starts with fresh in-memory probe state. This command
+            // therefore proves persisted final-state continuity only; it must not reassert the
+            // manual cancel/commit/reconcile/rebuild phases that were observed before restart.
             context.Document.Editor.WriteMessage(
                 "\n" + Schema +
                 "|status=PASS" +
                 "|qualification_boundary=" + Boundary +
-                "|production_local004_p05_qualified_candidate=true" +
-                "|manual_grip_cancel_verified=true" +
-                "|manual_grip_commit_verified=true" +
-                "|source_reconcile_verified=true" +
-                "|generated_replacement_verified=true" +
+                "|phase=reopen" +
                 "|cold_reopen_verified=true" +
+                "|prior_sequence_reasserted=false" +
+                "|qualification_requires_prior_markers=true" +
                 "|source_type=LINE_BEAM" +
                 "|final_length_class=EIGHT_METERS" +
                 "|error_code=NONE");
