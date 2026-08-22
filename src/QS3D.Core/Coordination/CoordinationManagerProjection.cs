@@ -36,14 +36,14 @@ namespace QS3D.Core.Coordination
             CoordinationFindingKind kind,
             CoordinationFindingStatus status,
             CoordinationFindingSeverity severity,
-            string floorId,
+            string? floorId,
             string categoryA,
             string categoryB,
-            string ruleId,
+            string? ruleId,
             bool referenceAResolved,
             bool referenceBResolved,
             bool isStale,
-            string nonActionableReason = null)
+            string? nonActionableReason = null)
         {
             RequireDefined(kind, nameof(kind));
             RequireDefined(status, nameof(status));
@@ -98,7 +98,7 @@ namespace QS3D.Core.Coordination
             return normalized;
         }
 
-        private static string NormalizeOptional(string value)
+        private static string NormalizeOptional(string? value)
         {
             return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
         }
@@ -117,9 +117,9 @@ namespace QS3D.Core.Coordination
     {
         public CoordinationFindingStatus? Status { get; set; }
         public CoordinationFindingSeverity? MinimumSeverity { get; set; }
-        public string FloorId { get; set; }
-        public string Category { get; set; }
-        public string RuleId { get; set; }
+        public string FloorId { get; set; } = string.Empty;
+        public string Category { get; set; } = string.Empty;
+        public string RuleId { get; set; } = string.Empty;
         public CoordinationFindingKind? Kind { get; set; }
         public bool IncludeNonActionable { get; set; } = true;
     }
@@ -128,10 +128,10 @@ namespace QS3D.Core.Coordination
     {
         public static IReadOnlyList<CoordinationManagerFinding> Build(
             IEnumerable<CoordinationManagerFinding> findings,
-            CoordinationManagerFilter filter = null)
+            CoordinationManagerFilter? filter = null)
         {
             if (findings == null) throw new ArgumentNullException(nameof(findings));
-            filter = filter ?? new CoordinationManagerFilter();
+            filter ??= new CoordinationManagerFilter();
             ValidateFilter(filter);
 
             var byId = new Dictionary<string, CoordinationManagerFinding>(StringComparer.OrdinalIgnoreCase);
