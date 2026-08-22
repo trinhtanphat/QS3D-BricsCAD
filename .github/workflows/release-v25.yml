@@ -1,0 +1,283 @@
+name: QS3D Manual V25 Build & Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag, for example v0.1.0"
+        required: true
+        type: string
+      confirm_release:
+        description: "Explicit publish confirmation"
+        required: true
+        default: "NO"
+        type: choice
+        options:
+          - "NO"
+          - "RELEASE"
+      run_runtime:
+        description: "Run real BricsCAD V25 NETLOAD/runtime validation before packaging"
+        required: true
+        default: true
+        type: boolean
+      sign_package:
+        description: "Authenticode-sign and timestamp the release package (required for stable releases)"
+        required: true
+        default: true
+        type: boolean
+      prerelease:
+        description: "Publish as GitHub prerelease"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: qs3d-manual-v25-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}
+    runs-on: [self-hosted, windows, x64, bricscad-v25]
+    env:
+      BRICSCAD_V25_DIR: ${{ vars.BRICSCAD_V25_DIR }}
+      BRICSCAD_V25_PROFILE: ${{ vars.BRICSCAD_V25_PROFILE }}
+      QS3D_SIGNING_CERT_THUMBPRINT: ${{ vars.QS3D_SIGNING_CERT_THUMBPRINT }}
+      QS3D_TIMESTAMP_SERVER: ${{ vars.QS3D_TIMESTAMP_SERVER }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      RELEASE_PRERELEASE: ${{ inputs.prerelease }}
+      RELEASE_RUN_RUNTIME: ${{ inputs.run_runtime }}
+      RELEASE_SIGN_PACKAGE: ${{ inputs.sign_package }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Validate manual release request
+        shell: powershell
+        run: |
+          if ($env:GITHUB_REF -ne 'refs/heads/main') {
+            throw "V25 releases must be dispatched from refs/heads/main. Current ref: $env:GITHUB_REF"
+          }
+          if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$') {
+            throw "release_tag must look like v1.2.3, v1.2.3-rc.1 or v1.2.3-rc.1+build.4"
+          }
+          git rev-parse --verify HEAD | Out-Null
+          if (git tag --list $env:RELEASE_TAG) {
+            throw "Tag already exists locally: $env:RELEASE_TAG"
+          }
+
+          $isPrerelease = $env:RELEASE_PRERELEASE -eq 'true'
+          $hasPrereleaseSuffix = $env:RELEASE_TAG -match '^v[0-9]+\.[0-9]+\.[0-9]+-'
+          if ($isPrerelease -ne $hasPrereleaseSuffix) {
+            throw "prerelease input must match the release_tag suffix: use prerelease=true only with tags such as v1.2.3-rc.1/beta.1."
+          }
+
+          $runRuntime = $env:RELEASE_RUN_RUNTIME -eq 'true'
+          $signPackage = $env:RELEASE_SIGN_PACKAGE -eq 'true'
+          if (-not $isPrerelease -and -not $runRuntime) {
+            throw "Stable release requires run_runtime=true. Use prerelease=true for an explicitly unqualified preview."
+          }
+          if (-not $isPrerelease -and -not $signPackage) {
+            throw "Stable release requires sign_package=true. Use prerelease=true for an explicitly unsigned preview."
+          }
+          if ($signPackage) {
+            if ($env:QS3D_SIGNING_CERT_THUMBPRINT -notmatch '^[0-9A-Fa-f]{40}$') {
+              throw "QS3D_SIGNING_CERT_THUMBPRINT repository variable must be a 40-hex Authenticode certificate thumbprint when sign_package=true."
+            }
+            $timestamp = $null
+            if (-not [Uri]::TryCreate($env:QS3D_TIMESTAMP_SERVER, [UriKind]::Absolute, [ref]$timestamp) -or $timestamp.Scheme -ne 'https') {
+              throw "QS3D_TIMESTAMP_SERVER repository variable must be an absolute HTTPS URL when sign_package=true."
+            }
+          }
+
+      - name: Manual-only CI policy gate
+        run: python scripts/preflight-ci-manual-only.py
+
+      - name: Generic source guard
+        run: python scripts/preflight.py
+
+      - name: All discovered feature source guards
+        run: python scripts/preflight-all.py
+
+      - name: Build Core Release
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+
+      - name: Deterministic Core smoke tests
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
+
+      - name: Validate BricsCAD V25 references
+        shell: powershell
+        run: |
+          if (-not $env:BRICSCAD_V25_DIR) { throw "BRICSCAD_V25_DIR repository variable is not set." }
+          foreach ($name in @('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll')) {
+            if (-not (Test-Path (Join-Path $env:BRICSCAD_V25_DIR $name))) {
+              throw "Required BricsCAD V25 runtime file is missing: $name"
+            }
+          }
+
+      - name: Build BricsCAD V25 plugin
+        run: dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64
+
+      - name: Real V25 NETLOAD/runtime validation
+        if: ${{ inputs.run_runtime }}
+        shell: powershell
+        run: |
+          $plugin = (Resolve-Path "src\QS3D.BricsCAD.V25\bin\x64\Release\net48\QS3D.BricsCAD.V25.dll").Path
+          & .\scripts\test-bricscad-v25-runtime.ps1 `
+            -BricsCadDir $env:BRICSCAD_V25_DIR `
+            -PluginDll $plugin `
+            -Profile $env:BRICSCAD_V25_PROFILE `
+            -ArtifactDir "$env:GITHUB_WORKSPACE\artifacts\bricscad-v25-runtime"
+
+      - name: Build V25 release package
+        shell: powershell
+        run: .\scripts\package-v25.ps1
+
+      - name: Validate release tag and package version binding
+        shell: powershell
+        run: |
+          $metadataPath = "dist\QS3D-BricsCAD-V25\PACKAGE-METADATA.json"
+          if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "Missing package metadata: $metadataPath" }
+          $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+          $tagBase = (($env:RELEASE_TAG.Substring(1) -split '[-+]')[0])
+          try { $tagVersion = [Version]::Parse($tagBase) }
+          catch { throw "Release tag base version is invalid: $tagBase" }
+          try { $packageVersion = [Version]::Parse([string]$metadata.version) }
+          catch { throw "PACKAGE-METADATA version is invalid: $($metadata.version)" }
+          if ($tagVersion.Major -ne $packageVersion.Major -or
+              $tagVersion.Minor -ne $packageVersion.Minor -or
+              $tagVersion.Build -ne $packageVersion.Build) {
+            throw "Release tag $env:RELEASE_TAG does not match plugin package version $packageVersion. Refusing relabelled release."
+          }
+
+      - name: Authenticode-sign V25 executable payload
+        if: ${{ inputs.sign_package }}
+        shell: powershell
+        run: |
+          $payload = @(
+            'dist\QS3D-BricsCAD-V25\QS3D.BricsCAD.V25.dll',
+            'dist\QS3D-BricsCAD-V25\QS3D.Core.dll',
+            'dist\QS3D-BricsCAD-V25\install-v25-autoload.ps1',
+            'dist\QS3D-BricsCAD-V25\uninstall-v25-autoload.ps1',
+            'dist\QS3D-BricsCAD-V25\update-v25.ps1'
+          )
+          & .\scripts\sign-v25.ps1 `
+            -Path $payload `
+            -CertificateThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT `
+            -TimestampServer $env:QS3D_TIMESTAMP_SERVER `
+            -Confirm:$false
+
+      - name: Verify Authenticode publisher and timestamp
+        if: ${{ inputs.sign_package }}
+        shell: powershell
+        run: |
+          $payload = @(
+            'dist\QS3D-BricsCAD-V25\QS3D.BricsCAD.V25.dll',
+            'dist\QS3D-BricsCAD-V25\QS3D.Core.dll',
+            'dist\QS3D-BricsCAD-V25\install-v25-autoload.ps1',
+            'dist\QS3D-BricsCAD-V25\uninstall-v25-autoload.ps1',
+            'dist\QS3D-BricsCAD-V25\update-v25.ps1'
+          )
+          & .\scripts\verify-v25-signatures.ps1 `
+            -Path $payload `
+            -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT
+
+      - name: Finalize signed V25 package
+        if: ${{ inputs.sign_package }}
+        shell: powershell
+        run: |
+          & .\scripts\finalize-v25-signed-package.ps1 `
+            -ExpectedSignerThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT `
+            -Confirm:$false
+
+      - name: Create package checksum
+        shell: powershell
+        run: |
+          $zip = (Resolve-Path "dist\QS3D-BricsCAD-V25.zip").Path
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  QS3D-BricsCAD-V25.zip" | Set-Content "dist\QS3D-BricsCAD-V25.zip.sha256" -Encoding ASCII
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: QS3D-BricsCAD-V25-${{ inputs.release_tag }}
+          if-no-files-found: error
+          path: |
+            dist/QS3D-BricsCAD-V25.zip
+            dist/QS3D-BricsCAD-V25.zip.sha256
+            artifacts/bricscad-v25-runtime/
+
+      - name: Publish GitHub Release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+            "User-Agent" = "QS3D-Manual-Release"
+          }
+          $isPrerelease = $env:RELEASE_PRERELEASE -eq 'true'
+          $runtimeState = if ($env:RELEASE_RUN_RUNTIME -eq 'true') { 'passed required V25 runtime gate' } else { 'runtime skipped for explicit prerelease preview' }
+          $signingState = if ($env:RELEASE_SIGN_PACKAGE -eq 'true') { 'Authenticode-signed and timestamped' } else { 'unsigned explicit prerelease preview' }
+          $body = @{
+            tag_name = $env:RELEASE_TAG
+            target_commitish = $env:GITHUB_SHA
+            name = "QS3D for BricsCAD V25 $env:RELEASE_TAG"
+            body = "Owner-approved manual build/release. Source checks, Core build/smoke tests and V25 adapter build completed. Runtime: $runtimeState. Package: $signingState. The release tag is bound to the package assembly version before publication."
+            draft = $true
+            prerelease = $isPrerelease
+            generate_release_notes = $true
+          } | ConvertTo-Json
+          $release = Invoke-RestMethod `
+            -Method Post `
+            -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" `
+            -Headers $headers `
+            -ContentType "application/json" `
+            -Body $body
+
+          $uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''
+          foreach ($assetPath in @('dist\QS3D-BricsCAD-V25.zip', 'dist\QS3D-BricsCAD-V25.zip.sha256')) {
+            $asset = (Resolve-Path $assetPath).Path
+            $name = [System.IO.Path]::GetFileName($asset)
+            $encodedName = [Uri]::EscapeDataString($name)
+            $contentType = if ($name.EndsWith('.zip')) { 'application/zip' } else { 'text/plain' }
+            Invoke-RestMethod `
+              -Method Post `
+              -Uri ($uploadBase + '?name=' + $encodedName) `
+              -Headers $headers `
+              -ContentType $contentType `
+               -InFile $asset | Out-Null
+          }
+
+          $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$($release.id)"
+          $draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
+          foreach ($expectedAsset in @('QS3D-BricsCAD-V25.zip', 'QS3D-BricsCAD-V25.zip.sha256')) {
+            if ($expectedAsset -notin @($draftRelease.assets | ForEach-Object { $_.name })) {
+              throw "Expected release asset was not uploaded: $expectedAsset. Release remains a draft."
+            }
+          }
+
+          $publishBody = @{ draft = $false } | ConvertTo-Json
+          $publishedRelease = Invoke-RestMethod `
+            -Method Patch `
+            -Uri $releaseUri `
+            -Headers $headers `
+            -ContentType "application/json" `
+            -Body $publishBody
+          if ($publishedRelease.draft -ne $false) {
+            throw "GitHub release remained a draft after publish request."
+          }
