@@ -28,3 +28,4 @@ Supersedes: none
 - Shared branch CI on exact branch SHA before PR.
 - Trusted V25 compile reference validation and BricsCAD V25 plugin compile when selected by CI.
 - Protected PR `preflight` + `core` must be green on the exact current head before merge.
+- PR Lane-Key is kept as bare `issue-3476` metadata so the runtime collision gate parses this canonical carrier deterministically.
