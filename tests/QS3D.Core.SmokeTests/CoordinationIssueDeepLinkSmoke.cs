@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             UnicodeRoundTripIsDeterministic();
             SnapshotValidationFailsClosed();
             MalformedLinksFailClosed();
+            ConstructorIdentityControlsFailClosed();
             QueryOrderCanCanonicalize();
         }
 
@@ -84,6 +85,36 @@ namespace QS3D.Core.SmokeTests
             Reject("qs3d://coordination/issue?v=1&project=P&drawing=D&issue=I&revision=1#fragment");
         }
 
+        private static void ConstructorIdentityControlsFailClosed()
+        {
+            var controlPadded = new[]
+            {
+                "\tPROJECT",
+                "PROJECT\t",
+                "PRO\tJECT",
+                "\rPROJECT",
+                "PROJECT\r",
+                "\nPROJECT",
+                "PROJECT\n"
+            };
+
+            foreach (var malformed in controlPadded)
+            {
+                RejectConstructor(() => new CoordinationIssueDeepLink(malformed, "DRAWING", "ISSUE", 1L));
+                RejectConstructor(() => new CoordinationIssueDeepLink("PROJECT", malformed, "ISSUE", 1L));
+                RejectConstructor(() => new CoordinationIssueDeepLink("PROJECT", "DRAWING", malformed, 1L));
+            }
+
+            var spaced = new CoordinationIssueDeepLink("  PROJECT  ", "  DRAWING  ", "  ISSUE  ", 1L);
+            Equal("PROJECT", spaced.ProjectId, "Ordinary project-ID surrounding spaces stopped canonicalizing.");
+            Equal("DRAWING", spaced.DrawingFingerprint, "Ordinary drawing surrounding spaces stopped canonicalizing.");
+            Equal("ISSUE", spaced.IssueId, "Ordinary issue-ID surrounding spaces stopped canonicalizing.");
+            Equal(
+                "qs3d://coordination/issue?v=1&project=PROJECT&drawing=DRAWING&issue=ISSUE&revision=1",
+                spaced.ToCanonicalUri(),
+                "Control-free surrounding-space canonical URI changed.");
+        }
+
         private static void QueryOrderCanCanonicalize()
         {
             var reordered = "qs3d://coordination/issue?issue=I%20A&revision=4&drawing=D%2F1&v=1&project=P%201";
@@ -140,6 +171,19 @@ namespace QS3D.Core.SmokeTests
                 return;
             }
             throw new InvalidOperationException("CoordinationIssueDeepLinkSmoke: malformed deep-link was accepted: " + uri);
+        }
+
+        private static void RejectConstructor(Func<CoordinationIssueDeepLink> create)
+        {
+            try
+            {
+                create();
+            }
+            catch (ArgumentException)
+            {
+                return;
+            }
+            throw new InvalidOperationException("CoordinationIssueDeepLinkSmoke: raw constructor identity control was accepted.");
         }
 
         private static void Blocked(
