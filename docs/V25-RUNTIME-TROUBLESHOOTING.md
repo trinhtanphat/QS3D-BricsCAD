@@ -37,6 +37,8 @@ Check in this order:
 
 Do not copy BricsCAD SDK/runtime assemblies such as `BrxMgd.dll`, `TD_Mgd.dll`, or `TD_MgdBrep.dll` into the QS3D package as a generic workaround. The V25 adapter intentionally resolves those host assemblies from the installed BricsCAD runtime.
 
+On a canonical BricsCAD V25 installation, `TD_MgdBrep.dll` may expose assembly version `0.0.0.0` while its loaded file/product version identifies the real V25 host build. `QS3DRUNTIMECHECK` therefore keeps `BrxMgd` and `TD_Mgd` on strict assembly-major validation, but for V25 BREP only it falls back to the loaded file identity when the assembly major is unavailable. Every available file/product version must parse and match V25; a missing path, unreadable/malformed version, conflicting major, or a nonzero wrong assembly major still fails closed. This diagnostic fallback is not permission to copy, relabel, or substitute host DLLs.
+
 ## 3. Installer says BricsCAD is still running
 
 The installer intentionally refuses to replace/register the plugin while a `bricscad.exe` process is alive. Close all BricsCAD windows and wait for the processes to exit before installing/upgrading.

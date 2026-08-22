@@ -32,7 +32,12 @@ else:
         "private const int ExpectedRuntimeMajor = 25;",
         "var expectedRuntime = NativeRuntimeAssembliesMatch(brxAssembly, tdAssembly);",
         "if (Major(brxAssembly) != ExpectedRuntimeMajor || Major(tdAssembly) != ExpectedRuntimeMajor)",
-        "return Major(typeof(Brep).Assembly) == ExpectedRuntimeMajor;",
+        "return NativeAssemblyMajorMatches(",
+        "allowFileVersionFallback: true",
+        "if (assemblyMajor > 0)",
+        "return assemblyMajor == expectedMajor;",
+        "TryPositiveMajor(identity.FileVersion",
+        "TryPositiveMajor(identity.ProductVersion",
         "var ok = expectedRuntime && x64Runtime && packageVersionMatches && diskVersionMatches && diskFingerprintMatches;",
     ):
         if token not in text:

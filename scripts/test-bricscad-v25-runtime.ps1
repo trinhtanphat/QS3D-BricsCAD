@@ -123,6 +123,9 @@ try {
     Require-Qs3dMarkerValue -Marker $marker -Key "command" -Expected "QS3DRUNTIMEPROBE"
     Require-Qs3dMarkerValue -Marker $marker -Key "process" -Expected "bricscad"
     Require-Qs3dMarkerValue -Marker $marker -Key "is_64bit" -Expected "true"
+    Require-Qs3dMarkerValue -Marker $marker -Key "native_runtime_major" -Expected "25"
+    Require-Qs3dMarkerValue -Marker $marker -Key "native_runtime_label" -Expected "V25"
+    Require-Qs3dMarkerValue -Marker $marker -Key "native_runtime_matches" -Expected "true"
     Require-Qs3dMarkerValue -Marker $marker -Key "ribbon_ready" -Expected "true"
     Require-Qs3dMarkerValue -Marker $marker -Key "palette_visible" -Expected "true"
     Require-Qs3dMarkerValue -Marker $marker -Key "workspace_palette_visible" -Expected "true"
@@ -220,6 +223,9 @@ public static class QS3DWin32Capture {
         profile = $Profile
         runner_user = [Environment]::UserName
         interactive = [Environment]::UserInteractive
+        native_runtime_major = 25
+        native_runtime_label = "V25"
+        native_runtime_matches = $true
         ribbon_ready = $true
         palette_visible = $true
         workspace_palette_visible = $true
