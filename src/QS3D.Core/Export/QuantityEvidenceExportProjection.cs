@@ -54,6 +54,7 @@ namespace QS3D.Core.Export
 
             foreach (var contribution in explanation.Contributions)
             {
+                var selector = contribution.Selector;
                 rows.Add(new QuantityEvidenceExportRecord
                 {
                     EvidenceId = contribution.EvidenceId,
@@ -69,8 +70,14 @@ namespace QS3D.Core.Export
                     Operation = contribution.Operation.ToString(),
                     SemanticKey = contribution.SemanticKey,
                     FormulaOrReason = contribution.Formula,
-                    SelectorKind = contribution.Selector.Kind.ToString(),
-                    SelectorKey = contribution.Selector.CanonicalKey
+                    SelectorKind = selector.Kind.ToString(),
+                    SelectorKey = selector.CanonicalKey,
+                    SourceReference = selector.Kind == QuantityEvidenceSelectorKind.Intersection
+                        ? selector.SourceEntityKey ?? string.Empty
+                        : string.Empty,
+                    TargetReference = selector.Kind == QuantityEvidenceSelectorKind.Intersection
+                        ? selector.TargetEntityKey ?? string.Empty
+                        : string.Empty
                 });
             }
 
