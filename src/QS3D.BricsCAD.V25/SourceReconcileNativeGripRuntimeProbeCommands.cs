@@ -151,19 +151,15 @@ namespace QS3D.BricsCAD.V25
             RequireQuantities(owner, 8d);
             RequireHost(context.Document, context.Project, owner, 8d);
 
-            context.Document.Editor.WriteMessage(
-                "\n" + Schema +
-                "|status=PASS" +
-                "|qualification_boundary=" + Boundary +
-                "|production_local004_p05_qualified_candidate=true" +
-                "|manual_grip_cancel_verified=true" +
-                "|manual_grip_commit_verified=true" +
-                "|source_reconcile_verified=true" +
-                "|generated_replacement_verified=true" +
+            WritePass(context.Document.Editor, "reopen",
+                "production_local004_p05_reopen_candidate=true" +
+                "|prior_session_phases_replayed=false" +
                 "|cold_reopen_verified=true" +
                 "|source_type=LINE_BEAM" +
-                "|final_length_class=EIGHT_METERS" +
-                "|error_code=NONE");
+                "|source=EIGHT_METERS" +
+                "|semantic=EIGHT_METERS" +
+                "|generated=COLD_REOPEN_LIVE" +
+                "|final_length_class=EIGHT_METERS");
         });
 
         private static void Execute(string phase, Action action)
