@@ -7,11 +7,15 @@ ROOT = Path(__file__).resolve().parents[1]
 XAML = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml"
 PANEL = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.xaml.cs"
 VIEWMODEL = ROOT / "src/QS3D.BricsCAD.V25/UI/ViewModels/QuantityInsightViewModel.cs"
+REPORT = ROOT / "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs"
+STRUCTURAL = ROOT / "src/QS3D.Core/Services/StructuralRegenerator.cs"
+GEOMETRY_SERVICE = ROOT / "src/QS3D.BricsCAD.V25/Reporting/QuantityGeometryExplanationService.cs"
 GEOMETRY = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.Geometry.cs"
 EXACT_FACE = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.ExactFace.cs"
 TRANSIENT = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.TransientGeometry.cs"
 EVIDENCE = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.QuantityEvidenceExport.cs"
 EXCEL = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.ExcelRoundTrip.cs"
+SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/QuantityEvidenceGraphSmoke.cs"
 V26 = ROOT / "src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj"
 
 
@@ -35,11 +39,15 @@ def main():
     xaml = read(XAML)
     panel = read(PANEL)
     viewmodel = read(VIEWMODEL)
+    report = read(REPORT)
+    structural = read(STRUCTURAL)
+    geometry_service = read(GEOMETRY_SERVICE)
     geometry = read(GEOMETRY)
     exact_face = read(EXACT_FACE)
     transient = read(TRANSIENT)
     evidence = read(EVIDENCE)
     excel_bridge = read(EXCEL)
+    smoke = read(SMOKE)
     v26 = read(V26)
     failures = []
 
@@ -54,6 +62,7 @@ def main():
     require(viewmodel, "QuantityInsightItemViewModel", "Element leaf", failures)
     require(viewmodel, ".GroupBy(x => string.IsNullOrWhiteSpace(x.Category)", "category grouping", failures)
     require(viewmodel, ".GroupBy(x => string.IsNullOrWhiteSpace(x.FamilyName)", "family grouping", failures)
+    require(report, '? "ELEMENT\\u001f" + elementId', "detail report keeps one canonical element per leaf", failures)
 
     # Model -> Quantity and Quantity -> Model use current semantic rows and live handles.
     require(panel, "ProjectStateSnapshot.CreateDetachedCopy(project)", "detached quantity preview", failures)
@@ -63,6 +72,19 @@ def main():
     require(panel, "Cad.CadHandleService.Select(document, handles)", "quantity -> live CAD selection", failures)
     require(panel, "ViewportCommands.TryZoomSelection(document)", "quantity -> live CAD zoom", failures)
     require(panel, "SameProjectIdentity(project)", "quantity row project freshness", failures)
+
+    # Clean-room BLT foundation reference: semantic quantity and native BREP explanation must both be side-only.
+    require(structural, 'var gross = QuantityMath.Multiply(area, thickness, element.Id + "/foundation volume")', "foundation concrete L/W-area x height arithmetic", failures)
+    require(structural, 'var formwork = QuantityMath.Multiply(perimeter, thickness, element.Id + "/foundation formwork")', "foundation side-only perimeter x height formwork", failures)
+    require(geometry_service, "ReadFaces(target, targetElement.Category, componentIndex", "category-aware native face classification", failures)
+    require(geometry_service, "ElementCategory targetCategory", "category-aware formwork result projection", failures)
+    require(geometry_service, "if (!IncludeFormworkFace(targetCategory, seed.Type)) continue;", "native formwork eligibility filter", failures)
+    require(geometry_service, "category == ElementCategory.Foundation ? -1 : DominantHorizontalAxis(solid)", "foundation keeps every vertical perimeter face as Side", failures)
+    require(geometry_service, "if (category != ElementCategory.Foundation) return true;", "bounded foundation compatibility correction", failures)
+    require(geometry_service, 'string.Equals(faceType, "Side", StringComparison.Ordinal)', "foundation excludes top/bottom from formwork", failures)
+    require(smoke, "BltFoundationReferenceArithmetic", "BLT foundation arithmetic regression", failures)
+    for token in ("2.912m", "3.509m", "2.664m", "3.472m", "2.968m", "2.460m", "17.985m", "38.383m", "17.99m", "38.4m"):
+        require(smoke, token, "BLT Móng Bè-1 reference " + token, failures)
 
     # Explanation must remain exact BREP, gross/deduction/net, face-based formwork.
     require(geometry, "QuantityGeometryExplanationService.Build(document, geometryProject, ids[0])", "canonical BREP explanation", failures)
@@ -148,7 +170,7 @@ def main():
             print(" -", failure)
         return 1
 
-    print("PASS: Quantity Review remains one closed loop: CAD/model <-> deterministic quantity tree <-> canonical BREP/evidence explanation <-> exact face/deduction review <-> ED2 Excel traceback, with current-DWG/project/provenance fail-closed boundaries.")
+    print("PASS: Quantity Review remains one closed loop: CAD/model <-> deterministic quantity tree <-> canonical BREP/evidence explanation <-> exact face/deduction review <-> ED2 Excel traceback, with current-DWG/project/provenance fail-closed boundaries and BLT-compatible Foundation side-formwork arithmetic.")
     print("NOTE: licensed interactive face/transient/save-reopen/multi-DWG acceptance remains LOCAL_ONLY and is tracked separately; this guard does not manufacture LOCAL_PASS.")
     return 0
 
