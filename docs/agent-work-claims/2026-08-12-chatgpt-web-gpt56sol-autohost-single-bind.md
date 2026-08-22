@@ -1,0 +1,24 @@
+# Agent work claim — Auto Host read-only target resolve
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-12 (UTC+7)
+- Status: `COMPLETED`
+- Scope: resolve selected Door/WallOpening targets from read-only project state before `QS3DAUTOLINKHOSTS` canonical mutation binding, then revalidate project/target freshness after exactly one bind.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/AutoHostLinkCommands.cs`
+  - `scripts/preflight-auto-host-project-lifecycle.py`
+  - `scripts/preflight-autohost-single-bind.py`
+  - this claim file
+- Implemented contract:
+  - current PICKFIRST/interactive selection acquisition and existing-project-only semantics are preserved;
+  - selected Door/WallOpening targets resolve from `ProjectContextCoordinator.TryGetReadOnly` before mutation binding;
+  - missing project or zero semantic Opening targets returns without `ExistingProjectMutationContext.TryGet`;
+  - preview `ProjectId` + `ChangeVersion` + selected Opening IDs are frozen;
+  - canonical mutation project is obtained exactly once, project/version and target-set drift fail closed, then existing matching, ambiguity/unmatched handling, metadata updates, rollback, scoped regeneration and post-commit UI isolation continue unchanged;
+  - `LinkSingleOpening` remains unchanged.
+- Source commit: `e835859fd6c9aa73a16c621e3652405a0eb28d1a` — `fix(autohost): resolve opening targets before bind`.
+- Existing lifecycle gate reconciliation: `e3a342af87eb854f0f815503d550adad39ba66a3` — `test(autohost): align lifecycle gate with single bind`.
+- Focused regression guard: `82d736fc97c378ba594ecaf4fe190eee447cd600` — `scripts/preflight-autohost-single-bind.py`.
+- Validation actually performed: connector-side exact source review plus lifecycle/focused guard source review. Preflight scripts were not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed.
+- Reservation released.
