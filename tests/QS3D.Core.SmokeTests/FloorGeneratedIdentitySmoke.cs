@@ -85,8 +85,8 @@ namespace QS3D.Core.SmokeTests
 
         private static void InvalidLegacyLengthsFailClosed()
         {
-            Throws<ArgumentNullException>(() => FloorGeneratedIdentityPlanner.Create(null));
-            Throws<ArgumentException>(() => FloorGeneratedIdentityPlanner.BuildOwnerToken(null));
+            Throws<ArgumentNullException>(() => FloorGeneratedIdentityPlanner.Create(null!));
+            Throws<ArgumentException>(() => FloorGeneratedIdentityPlanner.BuildOwnerToken(null!));
             Throws<ArgumentException>(() => FloorGeneratedIdentityPlanner.BuildOwnerToken("   "));
             Throws<ArgumentException>(() => FloorGeneratedIdentityPlanner.BuildOwnerToken(new string('A', 65)));
             Throws<ArgumentException>(() => FloorGeneratedIdentityPlanner.Create(new FloorDefinition("L", "   ", 0d)));
