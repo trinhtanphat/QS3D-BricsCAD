@@ -26,9 +26,13 @@ namespace QS3D.Core.Export
                 var sourceRow = rows[rowIndex];
                 if (sourceRow == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
-                var row = SnapshotRow(sourceRow);
+                var row = SnapshotRow(sourceRow, rowIndex);
+                ValidateCellText(row.ProjectId, rowIndex, "Project ID");
+                ValidateCellText(row.DrawingFingerprint, rowIndex, "Drawing Fingerprint");
                 ValidateCellText(row.Floor, rowIndex, "Floor");
                 ValidateCellText(row.FamilyName, rowIndex, "FamilyName");
+                ValidateJoinedCellText(row.ElementIds, rowIndex, "Element IDs");
+                ValidateJoinedCellText(row.SourceHandles, rowIndex, "Source Handles");
                 ValidateCount(row.WallCount, rowIndex, "WallCount");
                 ValidateCount(row.PanelCount, rowIndex, "PanelCount");
                 ValidateCount(row.VerticalFrameCount, rowIndex, "VerticalFrameCount");
@@ -71,27 +75,55 @@ namespace QS3D.Core.Export
             finally { AtomicFileCommit.TryDelete(tempPath); }
         }
 
-        private static CurtainWallScheduleRow SnapshotRow(CurtainWallScheduleRow row)
+        private static CurtainWallScheduleRow SnapshotRow(CurtainWallScheduleRow source, int rowIndex)
         {
-            return new CurtainWallScheduleRow
+            var row = new CurtainWallScheduleRow
             {
-                Floor = row.Floor ?? string.Empty,
-                FamilyName = row.FamilyName ?? string.Empty,
-                WallCount = row.WallCount,
-                TotalWallLengthM = row.TotalWallLengthM,
-                GrossWallAreaM2 = row.GrossWallAreaM2,
-                OpeningAreaM2 = row.OpeningAreaM2,
-                NetGlassAreaM2 = row.NetGlassAreaM2,
-                FrameFaceAreaM2 = row.FrameFaceAreaM2,
-                FrameLengthM = row.FrameLengthM,
-                PanelCount = row.PanelCount,
-                VerticalFrameCount = row.VerticalFrameCount,
-                HorizontalFrameCount = row.HorizontalFrameCount,
-                MinimumClearPanelWidthM = row.MinimumClearPanelWidthM,
-                MaximumClearPanelWidthM = row.MaximumClearPanelWidthM,
-                MinimumClearPanelHeightM = row.MinimumClearPanelHeightM,
-                MaximumClearPanelHeightM = row.MaximumClearPanelHeightM
+                ProjectId = source.ProjectId ?? string.Empty,
+                DrawingFingerprint = source.DrawingFingerprint ?? string.Empty,
+                Floor = source.Floor ?? string.Empty,
+                FamilyName = source.FamilyName ?? string.Empty,
+                WallCount = source.WallCount,
+                TotalWallLengthM = source.TotalWallLengthM,
+                GrossWallAreaM2 = source.GrossWallAreaM2,
+                OpeningAreaM2 = source.OpeningAreaM2,
+                NetGlassAreaM2 = source.NetGlassAreaM2,
+                FrameFaceAreaM2 = source.FrameFaceAreaM2,
+                FrameLengthM = source.FrameLengthM,
+                PanelCount = source.PanelCount,
+                VerticalFrameCount = source.VerticalFrameCount,
+                HorizontalFrameCount = source.HorizontalFrameCount,
+                MinimumClearPanelWidthM = source.MinimumClearPanelWidthM,
+                MaximumClearPanelWidthM = source.MaximumClearPanelWidthM,
+                MinimumClearPanelHeightM = source.MinimumClearPanelHeightM,
+                MaximumClearPanelHeightM = source.MaximumClearPanelHeightM
             };
+            var label = "worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " ";
+            SnapshotJoinedCellValues(source.ElementIds, row.ElementIds, label + "Element IDs");
+            SnapshotJoinedCellValues(source.SourceHandles, row.SourceHandles, label + "Source Handles");
+            return row;
+        }
+
+        private static void SnapshotJoinedCellValues(IList<string> source, IList<string> target, string label)
+        {
+            if (source == null)
+                throw new ArgumentException("Curtain XLSX " + label + " collection is required.", "rows");
+
+            var count = source.Count;
+            long joinedLength = 0L;
+            for (var index = 0; index < count; index++)
+            {
+                var value = source[index] ?? string.Empty;
+                if (index > 0) joinedLength++;
+                joinedLength += value.Length;
+                if (joinedLength > MaxCellTextCharacters)
+                    throw new ArgumentOutOfRangeException(
+                        "rows",
+                        "Curtain XLSX " + label + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+                target.Add(value);
+            }
+            if (source.Count != count)
+                throw new InvalidOperationException("Curtain XLSX " + label + " count changed during snapshot.");
         }
 
         private static string BuildSheet(IReadOnlyList<CurtainWallScheduleRow> rows)
@@ -100,10 +132,11 @@ namespace QS3D.Core.Export
             {
                 "Tầng", "Family / Loại", "SL vách", "Dài vách (m)", "DT vách gộp (m²)", "DT cửa/lỗ (m²)",
                 "DT kính net (m²)", "DT mặt khung (m²)", "Dài khung (m)", "SL panel", "SL khung đứng", "SL khung ngang",
-                "Panel clear W min (m)", "Panel clear W max (m)", "Panel clear H min (m)", "Panel clear H max (m)"
+                "Panel clear W min (m)", "Panel clear W max (m)", "Panel clear H min (m)", "Panel clear H max (m)",
+                "Project ID", "Drawing Fingerprint", "Element IDs", "Source Handles"
             };
             var lastRow = Math.Max(1, rows.Count + 1);
-            var range = "A1:P" + lastRow.ToString(CultureInfo.InvariantCulture);
+            var range = "A1:T" + lastRow.ToString(CultureInfo.InvariantCulture);
             var sb = new StringBuilder();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
@@ -112,6 +145,7 @@ namespace QS3D.Core.Export
             sb.Append("<cols>");
             sb.Append("<col min=\"1\" max=\"2\" width=\"22\" customWidth=\"1\"/>");
             sb.Append("<col min=\"3\" max=\"16\" width=\"18\" customWidth=\"1\"/>");
+            sb.Append("<col min=\"17\" max=\"20\" width=\"36\" customWidth=\"1\"/>");
             sb.Append("</cols><sheetData>");
             sb.Append("<row r=\"1\">");
             for (var c = 0; c < headers.Length; c++) AppendInlineStringCell(sb, CellRef(c, 1), headers[c], 1);
@@ -138,6 +172,10 @@ namespace QS3D.Core.Export
                 AppendNumberCell(sb, CellRef(13, r), row.MaximumClearPanelWidthM);
                 AppendNumberCell(sb, CellRef(14, r), row.MinimumClearPanelHeightM);
                 AppendNumberCell(sb, CellRef(15, r), row.MaximumClearPanelHeightM);
+                AppendInlineStringCell(sb, CellRef(16, r), row.ProjectId, 0);
+                AppendInlineStringCell(sb, CellRef(17, r), row.DrawingFingerprint, 0);
+                AppendInlineStringCell(sb, CellRef(18, r), string.Join(";", row.ElementIds), 0);
+                AppendInlineStringCell(sb, CellRef(19, r), string.Join(";", row.SourceHandles), 0);
                 sb.Append("</row>");
             }
             sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
@@ -157,6 +195,19 @@ namespace QS3D.Core.Export
         {
             var text = value ?? string.Empty;
             if (text.Length > MaxCellTextCharacters)
+                throw new ArgumentOutOfRangeException(
+                    "rows",
+                    "Curtain XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+        }
+
+        private static void ValidateJoinedCellText(IList<string> values, int rowIndex, string fieldName)
+        {
+            if (values == null)
+                throw new ArgumentException("Curtain XLSX row " + rowIndex + " field " + fieldName + " collection is required.", "rows");
+            long length = values.Count > 0 ? values.Count - 1L : 0L;
+            for (var index = 0; index < values.Count; index++)
+                length += (values[index] ?? string.Empty).Length;
+            if (length > MaxCellTextCharacters)
                 throw new ArgumentOutOfRangeException(
                     "rows",
                     "Curtain XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");

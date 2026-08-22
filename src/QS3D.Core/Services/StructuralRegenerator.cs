@@ -113,7 +113,7 @@ namespace QS3D.Core.Services
             var height = SemanticVertical.Height(project, element, "HeightM", 3.6d);
             var thickness = QuantityMath.Positive(SemanticNumber.Get(element, "ThicknessM"));
             var grossArea = QuantityMath.Multiply(length, height, element.Id + "/structural wall gross area");
-            var linkedOpeningArea = LinkedOpeningArea(project, element);
+            var linkedOpeningArea = LinkedOpeningArea(project, element, thickness, out var linkedOpeningRevealFormwork);
             var explicitOpeningArea = QuantityMath.Positive(SemanticNumber.Get(element, "OpeningAreaM2"));
             var requestedOpeningArea = Math.Max(explicitOpeningArea, linkedOpeningArea);
             var openingArea = QuantityMath.Clamp(requestedOpeningArea, 0d, grossArea, element.Id + "/structural wall opening area");
@@ -121,7 +121,8 @@ namespace QS3D.Core.Services
             var grossVolume = QuantityMath.Multiply(grossArea, thickness, element.Id + "/structural wall gross volume");
             var deduction = QuantityMath.Multiply(openingArea, thickness, element.Id + "/structural wall deduction");
             var netVolume = QuantityMath.Multiply(netArea, thickness, element.Id + "/structural wall net volume");
-            var formwork = QuantityMath.Multiply(2d, netArea, element.Id + "/structural wall formwork");
+            var broadFaceFormwork = QuantityMath.Multiply(2d, netArea, element.Id + "/structural wall broad-face formwork");
+            var formwork = QuantityMath.Add(broadFaceFormwork, linkedOpeningRevealFormwork, element.Id + "/structural wall formwork");
 
             element.SetQuantity("LengthM", length);
             element.SetQuantity("HeightM", height);
@@ -245,9 +246,10 @@ namespace QS3D.Core.Services
             element.SetQuantity("NetExportM3", netExport);
         }
 
-        private static double LinkedOpeningArea(ProjectState project, ProjectElement wall)
+        private static double LinkedOpeningArea(ProjectState project, ProjectElement wall, double wallThickness, out double revealFormwork)
         {
             var total = 0d;
+            revealFormwork = 0d;
             foreach (var child in project.Elements)
             {
                 if (child == null)
@@ -256,17 +258,28 @@ namespace QS3D.Core.Services
                 if (!child.Properties.TryGetValue("HostWallId", out var host)) continue;
                 var hostId = CanonicalOptionalHostId(host, child.Id);
                 if (hostId.Length == 0 || !string.Equals(hostId, wall.Id, StringComparison.OrdinalIgnoreCase)) continue;
+
+                var width = QuantityMath.Positive(SemanticNumber.Get(child, "WidthM"));
+                var height = SemanticVertical.Height(project, child, "HeightM", 2.2d);
                 double area;
                 if (child.Quantities.TryGetValue("OpeningAreaM2", out var stored)) area = QuantityMath.Positive(stored);
-                else
-                {
-                    var width = QuantityMath.Positive(SemanticNumber.Get(child, "WidthM"));
-                    var height = SemanticVertical.Height(project, child, "HeightM", 2.2d);
-                    area = QuantityMath.Multiply(width, height, child.Id + "/opening area");
-                }
+                else area = QuantityMath.Multiply(width, height, child.Id + "/opening area");
                 total = QuantityMath.Add(total, area, wall.Id + "/linked opening area");
+
+                var doubleHeight = QuantityMath.Multiply(2d, height, child.Id + "/opening reveal jamb length");
+                var revealLength = QuantityMath.Add(doubleHeight, width, child.Id + "/opening reveal jamb-and-head length");
+                if (HasBottomReveal(child))
+                    revealLength = QuantityMath.Add(revealLength, width, child.Id + "/opening reveal perimeter");
+                var childRevealFormwork = QuantityMath.Multiply(revealLength, wallThickness, child.Id + "/opening reveal formwork");
+                revealFormwork = QuantityMath.Add(revealFormwork, childRevealFormwork, wall.Id + "/linked opening reveal formwork");
             }
             return total;
+        }
+
+        private static bool HasBottomReveal(ProjectElement opening)
+        {
+            return opening.Properties.ContainsKey("SillOffsetMm")
+                && QuantityMath.Positive(SemanticNumber.Get(opening, "SillOffsetMm")) > 0d;
         }
 
         private static string CanonicalOptionalHostId(string? value, string elementId)
