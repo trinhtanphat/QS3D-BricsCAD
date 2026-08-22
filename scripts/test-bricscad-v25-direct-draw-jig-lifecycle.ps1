@@ -6,8 +6,8 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-function Run([string]$File, [string[]]$Args) {
-    & $File @Args
+function Run([string]$File, [string[]]$ArgumentList) {
+    & $File @ArgumentList
     if ($LASTEXITCODE -ne 0) { throw "$File failed with exit code $LASTEXITCODE" }
 }
 

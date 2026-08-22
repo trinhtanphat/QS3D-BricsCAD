@@ -19,6 +19,7 @@ namespace QS3D.BricsCAD.V25
     public sealed class DirectDrawJigRuntimeProbeCommands
     {
         private const string Schema = "QS3D_DIRECT_DRAW_JIG_RUNTIME_V1";
+        private const int MinimumQualifiedSegments = 3;
 
         [CommandMethod("QS3DPROBEDIRECTDRAWJIG", CommandFlags.Modal)]
         public void ProbeDirectDrawJig()
@@ -112,10 +113,15 @@ namespace QS3D.BricsCAD.V25
 
         private static void WriteResult(Editor editor, int acceptedSegments, string termination)
         {
+            var qualifiedCandidate =
+                acceptedSegments >= MinimumQualifiedSegments &&
+                (termination == "ENTER" || termination == "ESC_OR_CANCEL");
+
             editor.WriteMessage(
                 "\n" + Schema +
-                "|qualified_candidate=true" +
+                "|qualified_candidate=" + (qualifiedCandidate ? "true" : "false") +
                 "|accepted_segments=" + acceptedSegments +
+                "|minimum_segments=" + MinimumQualifiedSegments +
                 "|termination=" + termination +
                 "|preview_model=DrawJigProfileStrip" +
                 "|persistent_writes=0" +

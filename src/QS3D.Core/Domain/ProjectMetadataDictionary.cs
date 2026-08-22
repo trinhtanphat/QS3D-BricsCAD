@@ -65,6 +65,25 @@ namespace QS3D.Core.Domain
 
         internal void EnsureCanAddOwned(string key) => EnsureCanSet(key, true);
         internal void EnsureCanSetOwned(string key) => EnsureCanSet(key, false);
+        internal void EnsureCanApplyOwned(IEnumerable<string> removeKeys, IEnumerable<string> setKeys)
+        {
+            if (removeKeys == null) throw new ArgumentNullException(nameof(removeKeys));
+            if (setKeys == null) throw new ArgumentNullException(nameof(setKeys));
+
+            var finalKeys = new HashSet<string>(_items.Keys, StringComparer.OrdinalIgnoreCase);
+            foreach (var key in removeKeys)
+            {
+                if (key == null) throw new ArgumentNullException(nameof(removeKeys), "Owned metadata removal contains a null key.");
+                finalKeys.Remove(key);
+            }
+            foreach (var key in setKeys)
+            {
+                if (key == null) throw new ArgumentNullException(nameof(setKeys), "Owned metadata update contains a null key.");
+                if (finalKeys.Contains(key)) continue;
+                if (finalKeys.Count >= MaximumEntries) throw MetadataCountError();
+                finalKeys.Add(key);
+            }
+        }
         internal void AddOwned(string key, string value) => Set(key, value, true, false);
         internal void SetOwned(string key, string value) => Set(key, value, false, false);
         internal bool RemoveOwned(string key) => Remove(key, false);
