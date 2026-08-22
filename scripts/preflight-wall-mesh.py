@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import re
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+errors = []
+
+required = [
+    "src/QS3D.Core/Rebar/RectangularWallMeshPlanner.cs",
+    "tests/QS3D.Core.SmokeTests/WallMeshRegressionSmoke.cs",
+    "src/QS3D.BricsCAD.V25/Cad/StructuralWallMeshSolidBuilder.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs",
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs",
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs",
+    "src/QS3D.Core/Diagnostics/GeneratedWallMeshHealthService.cs",
+    "src/QS3D.BricsCAD.V25/StructuralWallMeshCommands.cs",
+    "src/QS3D.BricsCAD.V25/StructuralWallMeshHealthCommands.cs",
+]
+for rel in required:
+    if not (ROOT / rel).is_file(): errors.append("missing structural-wall mesh file: " + rel)
+
+owners = []
+health_owners = []
+for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
+    text = path.read_text(encoding="utf-8")
+    if re.search(r'\[CommandMethod\("QS3DWALLREBAR3D"', text, re.IGNORECASE): owners.append(str(path.relative_to(ROOT)))
+    if re.search(r'\[CommandMethod\("QS3DWALLREBARHEALTH"', text, re.IGNORECASE): health_owners.append(str(path.relative_to(ROOT)))
+if len(owners) != 1: errors.append("QS3DWALLREBAR3D must have exactly one CommandMethod owner; found: " + ", ".join(owners))
+if len(health_owners) != 1: errors.append("QS3DWALLREBARHEALTH must have exactly one CommandMethod owner; found: " + ", ".join(health_owners))
+
+planner = ROOT / "src/QS3D.Core/Rebar/RectangularWallMeshPlanner.cs"
+if planner.is_file():
+    text = planner.read_text(encoding="utf-8")
+    for needle in (
+        "WallMeshFace", "WallMeshDirection", "LinearRebarLayoutPlanner.Plan", "IncludeNear", "IncludeFar",
+        "HorizontalClosestToFace", "two-face mesh", "MaxBars = 8192", "projectedBars",
+        "new List<WallMeshBarPlacement>((int)projectedBars)", "HorizontalActualSpacingM", "VerticalActualSpacingM",
+    ):
+        if needle not in text: errors.append("structural-wall mesh planner missing: " + needle)
+
+builder = ROOT / "src/QS3D.BricsCAD.V25/Cad/StructuralWallMeshSolidBuilder.cs"
+if builder.is_file():
+    text = builder.read_text(encoding="utf-8")
+    for needle in (
+        "ElementCategory.StructuralWall", "RectangularWallMeshPlanner.Plan", 'HandlesKey = "GeneratedWallMeshHandles"',
+        'Mode = "StructuralWallMesh"', "GeneratedRebarOwnershipGuard.Build(project)",
+        "ownership.EnsureOwned(handle, element, HandlesKey)", "duplicateSelectedSource", "MaxBarsPerBatch = 12000",
+        "RebarWallHorizontalNotation", "RebarWallVerticalNotation", "RebarWallCoverM", "RebarWallFaces",
+        "RebarWallHorizontalClosestToFace", "GeneratedWallMeshHorizontalDiameterMm", "GeneratedWallMeshVerticalDiameterMm",
+        "GeneratedWallMeshHorizontalActualSpacingM", "GeneratedWallMeshVerticalActualSpacingM",
+        '"GeneratedWallMeshMode"] = Mode', "CadGeometryGuard.Subtract", "CadGeometryGuard.Multiply",
+        "CadGeometryGuard.Hypot3", "CreateFrustum", "source LINE gần ngang",
+    ):
+        if needle not in text: errors.append("native StructuralWall mesh builder missing: " + needle)
+    for obsolete in ('HandlesKey = "GeneratedRebarHandles"', "EnsureWallMeshOwnsGenericRebarSlot", "cùng đường kính"):
+        if obsolete in text: errors.append("native StructuralWall mesh still contains obsolete generic ownership contract: " + obsolete)
+
+policy = ROOT / "src/QS3D.Core/Diagnostics/GeneratedHandleOwnershipPolicy.cs"
+if policy.is_file():
+    text = policy.read_text(encoding="utf-8")
+    for needle in ("RebarHandleKeys", "GeneratedWallMeshHandles", "IsOwnerSlot", "IsRebarOwnerSlot"):
+        if needle not in text: errors.append("wall-mesh generated ownership policy missing: " + needle)
+
+ownership_guard = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarOwnershipGuard.cs"
+if ownership_guard.is_file():
+    text = ownership_guard.read_text(encoding="utf-8")
+    for needle in ("CoreOwnershipPolicy.IsOwnerSlot", "CoreOwnershipPolicy.IsRebarOwnerSlot", "CoreOwnershipPolicy.RebarHandleKeys"):
+        if needle not in text: errors.append("wall-mesh cross-set generated ownership missing shared policy contract: " + needle)
+
+invalidator = ROOT / "src/QS3D.BricsCAD.V25/Cad/GeneratedDependentGeometryInvalidator.cs"
+if invalidator.is_file():
+    text = invalidator.read_text(encoding="utf-8")
+    for needle in ("CoreOwnershipPolicy.RebarHandleKeys", "MetadataPrefixForHandleKey", "RemoveByPrefix"):
+        if needle not in text: errors.append("wall-mesh invalidation missing shared policy contract: " + needle)
+
+ownership_health = ROOT / "src/QS3D.Core/Diagnostics/GeneratedRebarOwnershipHealthService.cs"
+if ownership_health.is_file():
+    text = ownership_health.read_text(encoding="utf-8")
+    for needle in ("GeneratedHandleOwnershipPolicy.RebarHandleKeys",):
+        if needle not in text: errors.append("wall-mesh cross-family ownership health missing: " + needle)
+
+command = ROOT / "src/QS3D.BricsCAD.V25/StructuralWallMeshCommands.cs"
+if command.is_file():
+    text = command.read_text(encoding="utf-8")
+    for needle in ('CommandMethod("QS3DWALLREBAR3D"', "StructuralWallMeshSolidBuilder.BuildSelected", "RebarWallHorizontalNotation/RebarWallVerticalNotation"):
+        if needle not in text: errors.append("StructuralWall mesh command missing: " + needle)
+
+health_command = ROOT / "src/QS3D.BricsCAD.V25/StructuralWallMeshHealthCommands.cs"
+if health_command.is_file():
+    text = health_command.read_text(encoding="utf-8")
+    for needle in ('CommandMethod("QS3DWALLREBARHEALTH"', "GeneratedWallMeshHealthService", "GeneratedWallMeshHandles"):
+        if needle not in text: errors.append("StructuralWall mesh health command missing: " + needle)
+
+health = ROOT / "src/QS3D.Core/Diagnostics/GeneratedWallMeshHealthService.cs"
+if health.is_file():
+    text = health.read_text(encoding="utf-8")
+    for needle in (
+        "GeneratedHandleOwnershipPolicy.IsOwnerSlot(property.Key)", "GeneratedWallMeshHorizontalDiameterMm",
+        "GeneratedWallMeshVerticalDiameterMm", "GeneratedWallMeshFaces", "ElementCategory.StructuralWall"):
+        if needle not in text: errors.append("StructuralWall mesh health missing: " + needle)
+
+smoke = ROOT / "tests/QS3D.Core.SmokeTests/WallMeshRegressionSmoke.cs"
+if smoke.is_file():
+    text = smoke.read_text(encoding="utf-8")
+    for needle in ("TwoFaceMeshUsesBothDirections();", "SingleFaceCountModeIsDeterministic();", "ThinWallIsRejected();", "AmbiguousDistributionIsRejected();", "OversizedAggregateMeshIsRejected();", "ModuleInitializer"):
+        if needle not in text: errors.append("StructuralWall mesh regression missing: " + needle)
+
+print("QS3D StructuralWall mesh preflight")
+if errors:
+    for error in errors: print("ERROR:", error)
+    print("FAILED with", len(errors), "error(s).")
+    sys.exit(1)
+print("PASS: StructuralWall horizontal/vertical near/far mesh planning uses dedicated ownership, policy-driven cross-family health/erase protection, independent diameters, invalidation, pre-allocation limits, finite Solid3d transforms and command registration; runtime remains V25-gated.")
