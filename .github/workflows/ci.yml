@@ -1,0 +1,53 @@
+name: QS3D Core CI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Preflight source guard
+        run: python scripts/preflight.py
+      - name: Full-domain and release source guard
+        run: python scripts/preflight-full-domain.py
+      - name: Auto-room lifecycle source guard
+        run: python scripts/preflight-room-lifecycle.py
+      - name: Geometry completion source guard
+        run: python scripts/preflight-geometry-completion.py
+      - name: Direct room curve-source guard
+        run: python scripts/preflight-room-curve-sources.py
+      - name: Wall junction source guard
+        run: python scripts/preflight-wall-junctions.py
+      - name: Validate release PowerShell syntax
+        shell: pwsh
+        run: |
+          foreach ($script in @('scripts/package-v25.ps1', 'scripts/install-v25-autoload.ps1', 'scripts/uninstall-v25-autoload.ps1')) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script).Path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count -gt 0) {
+              $parseErrors | Format-Table -AutoSize | Out-String | Write-Host
+              throw "PowerShell parse failure: $script"
+            }
+          }
+
+  core:
+    needs: preflight
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build core
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - name: Run deterministic smoke tests
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
