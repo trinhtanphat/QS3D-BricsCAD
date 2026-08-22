@@ -1,0 +1,38 @@
+name: QS3D Schedule Gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  schedule-core:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Manual-only CI policy preflight
+        run: python scripts/preflight-ci-manual-only.py
+      - name: Generic source preflight
+        run: python scripts/preflight.py
+      - name: Material usage preflight
+        run: python scripts/preflight-material-usage.py
+      - name: Door / Opening schedule preflight
+        run: python scripts/preflight-door-opening-schedule.py
+      - name: Schedule Hub preflight
+        run: python scripts/preflight-schedule-hub.py
+      - name: Room finish schedule preflight
+        run: python scripts/preflight-room-finish-schedule.py
+      - name: Room finish UI preflight
+        run: python scripts/preflight-room-finish-ui.py
+      - name: Build Core Release
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - name: Run deterministic Core smoke tests
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
