@@ -93,7 +93,7 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => new CoordinationRuleProfileBinding(" ", 1));
             Throws<ArgumentOutOfRangeException>(() => new CoordinationRuleProfileBinding("PROJECT-MEP", 0));
             var catalog = new CoordinationRuleProfileCatalog(new CoordinationRuleProfile[0]);
-            Throws<ArgumentNullException>(() => catalog.Resolve(null, "Pipe", "Beam"));
+            Throws<ArgumentNullException>(() => catalog.Resolve(null!, "Pipe", "Beam"));
         }
 
         private static void Throws<T>(Action action) where T : Exception
