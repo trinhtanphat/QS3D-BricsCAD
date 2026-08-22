@@ -2,6 +2,8 @@
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
     <OutputType>Library</OutputType>
     <AssemblyName>QS3D.BricsCAD.V26</AssemblyName>
     <RootNamespace>QS3D.BricsCAD.V25</RootNamespace>
@@ -14,6 +16,11 @@
     <FileVersion>0.1.0.10081</FileVersion>
     <InformationalVersion>0.1.0-preview.10081</InformationalVersion>
     <DefineConstants>$(DefineConstants);BRICSCAD_V26</DefineConstants>
+    <!-- Shared V25 adapter source carries nullable annotations, but .NET 8 BCL
+         annotations expose host-major-specific flow warnings that are not V26
+         implementation failures. Keep annotations available while preserving the
+         established shared-source warning context. -->
+    <Nullable>annotations</Nullable>
   </PropertyGroup>
 
   <!--
@@ -39,6 +46,12 @@
     <Compile Include="..\QS3D.BricsCAD.V25\Updates\UpdateCoordinator.cs">
       <Link>Updates\UpdateCoordinator.cs</Link>
     </Compile>
+    <Compile Include="..\QS3D.BricsCAD.V25\Updates\UpdatePreferences.cs">
+      <Link>Updates\UpdatePreferences.cs</Link>
+    </Compile>
+    <Compile Include="..\QS3D.BricsCAD.V25\Updates\UpdateSettingsCommands.cs">
+      <Link>Updates\UpdateSettingsCommands.cs</Link>
+    </Compile>
     <Page Include="..\QS3D.BricsCAD.V25\UI\**\*.xaml">
       <Link>UI\%(RecursiveDir)%(Filename)%(Extension)</Link>
     </Page>
@@ -56,11 +69,16 @@
       <HintPath>$(BRICSCAD_V26_DIR)\TD_Mgd.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="TD_MgdBrep">
+      <HintPath>$(BRICSCAD_V26_DIR)\TD_MgdBrep.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <Target Name="ValidateBricsCadV26References" BeforeTargets="ResolveReferences">
     <Error Condition="'$(BRICSCAD_V26_DIR)' == ''" Text="BRICSCAD_V26_DIR is not set. Point it to the licensed BricsCAD V26 installation directory." />
     <Error Condition="!Exists('$(BRICSCAD_V26_DIR)\BrxMgd.dll')" Text="BrxMgd.dll not found under BRICSCAD_V26_DIR." />
     <Error Condition="!Exists('$(BRICSCAD_V26_DIR)\TD_Mgd.dll')" Text="TD_Mgd.dll not found under BRICSCAD_V26_DIR." />
+    <Error Condition="!Exists('$(BRICSCAD_V26_DIR)\TD_MgdBrep.dll')" Text="TD_MgdBrep.dll not found under BRICSCAD_V26_DIR. The V26 quantity geometry features require the licensed host BREP API assembly." />
   </Target>
 </Project>
