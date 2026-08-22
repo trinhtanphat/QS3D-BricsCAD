@@ -1,0 +1,22 @@
+# Agent work claim — TKT variant cancel/rollback lifecycle
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Status: `COMPLETED`
+- Scope: make `QS3DGLASSWALL` / `QS3DWALLPIER` selection-cancel safe and batch-atomic without changing their Family defaults.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/TktVariantCommands.cs`
+  - `scripts/preflight-tkt-variant-cancel-rollback.py`
+  - this claim file for close-out
+- Implemented contract:
+  - PICKFIRST/interactive snapshots are acquired before any project/Family mutation;
+  - empty/cancel selection returns without `GetOrCreate`, Family/default or ActiveFamily mutation;
+  - existing TKT Family discovery/backfill/defaults and activation are preserved after selection succeeds;
+  - the already-acquired snapshots are captured through `SemanticCaptureService.CaptureSnapshot`, avoiding a second selection prompt;
+  - Family setup + entire snapshot capture batch are protected by one outer `ProjectStateSnapshot`; failure restores pre-command state and conditionally forgets only a project bootstrapped by this command;
+  - successful capture is outside the UI failure boundary: palette/editor finalization is best effort and cannot turn committed semantic state into a reported business failure.
+- Source commit: `f3dc5be32f3bd86d1e8e617c788f50a59af24896` — `fix(tkt): defer variant mutation until selection`.
+- Regression guard: `7061d70083240f9546f6dca79f0d69436caf7ff3` — `scripts/preflight-tkt-variant-cancel-rollback.py`.
+- Validation actually performed: connector-side exact source diff review plus current generic capture/default source review. Guard source was reviewed but not executed in this web session.
+- No GitHub Actions dispatched. No BricsCAD V25 runtime PASS claimed; native PICKFIRST/interactive editor qualification remains LOCAL_ONLY.
+- Reservation released.
