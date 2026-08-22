@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             SnapshotValidationFailsClosed();
             MalformedLinksFailClosed();
             QueryOrderCanCanonicalize();
+            DirectConstructorRejectsControlsBeforeTrim();
         }
 
         private static void UnicodeRoundTripIsDeterministic()
@@ -95,6 +96,19 @@ namespace QS3D.Core.SmokeTests
                 "Reordered deep-link did not normalize to canonical field order.");
         }
 
+        private static void DirectConstructorRejectsControlsBeforeTrim()
+        {
+            Throws<ArgumentException>(() => new CoordinationIssueDeepLink("\tP", "D", "I", 1L));
+            Throws<ArgumentException>(() => new CoordinationIssueDeepLink("P", "D\r", "I", 1L));
+            Throws<ArgumentException>(() => new CoordinationIssueDeepLink("P", "D", "\nI", 1L));
+
+            var normalized = new CoordinationIssueDeepLink(" P ", " D ", " I ", 4L);
+            Equal("P", normalized.ProjectId, "Ordinary surrounding spaces should still normalize for ProjectId.");
+            Equal("D", normalized.DrawingFingerprint, "Ordinary surrounding spaces should still normalize for DrawingFingerprint.");
+            Equal("I", normalized.IssueId, "Ordinary surrounding spaces should still normalize for IssueId.");
+            Equal(4L, normalized.Revision, "Revision changed while normalizing direct-constructor tokens.");
+        }
+
         private static ProjectState CreateProject()
         {
             var project = new ProjectState("project-deeplink-1", "Deep Link Smoke")
@@ -149,6 +163,20 @@ namespace QS3D.Core.SmokeTests
             if (result.IsActionable || result.Issue != null || result.Status != expected)
                 throw new InvalidOperationException(
                     "CoordinationIssueDeepLinkSmoke: expected blocked status " + expected + ", got " + result.Status + ".");
+        }
+
+        private static void Throws<T>(Action action) where T : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (T)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException("CoordinationIssueDeepLinkSmoke: expected " + typeof(T).Name + ".");
         }
 
         private static void Equal(string expected, string actual, string message)
