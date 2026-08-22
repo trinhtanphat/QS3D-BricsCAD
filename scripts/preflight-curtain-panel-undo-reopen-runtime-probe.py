@@ -105,8 +105,8 @@ if RUNNER.is_file():
         'QS3D_CURTAIN_P11_UNDO_FAILURE_CODE',
         'rev-parse HEAD',
         'status --porcelain=v1 --untracked-files=all',
-        '$expectedAssemblyRevision = "+" + $gitHead',
-        'ProductVersion',
+        'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead',
+        'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
         'Start-Process -FilePath $bricscadExe',
         '-WindowStyle Hidden',
         '"QS3DDRAWGLASSWALL"',
@@ -135,8 +135,8 @@ if RUNNER.is_file():
         'Stop-Qs3dLaunchedProcess -Process $processTwo',
         'function Wait-Qs3dNoBricsCadProcess',
         '[ValidateRange(1, 60)][int]$TimeoutSeconds = 30',
-        'Start-Sleep -Milliseconds 250',
-        'Wait-Qs3dNoBricsCadProcess -TimeoutSeconds 30',
+        'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $ExpectedExecutable -TimeoutSeconds $TimeoutSeconds',
+        'Wait-Qs3dNoBricsCadProcess -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
         'process_cleanup_verified',
         'script_cleanup_verified',
         'sidecar_cleanup_verified',
@@ -151,7 +151,7 @@ if RUNNER.is_file():
 
     if text.count('Start-Process -FilePath $bricscadExe') != 2:
         errors.append("Curtain P11 runner must launch exactly two isolated BricsCAD sessions")
-    if text.count('Wait-Qs3dNoBricsCadProcess -TimeoutSeconds 30') != 1:
+    if text.count('Wait-Qs3dNoBricsCadProcess -ExpectedExecutable $bricscadExe -TimeoutSeconds 30') != 1:
         errors.append("Curtain P11 runner must perform exactly one bounded post-exit process-drain check")
     if text.count('"QS3DCURTAINP11SELECT"') != 3:
         errors.append("Curtain P11 runner must restore the canonical source selection immediately before all three builds")
@@ -203,7 +203,7 @@ if RUNNER.is_file():
         errors.append("Curtain P11 second session must validate cold reopen before rebuild")
     if text.find('Copy-Item -LiteralPath $originalCopyPath -Destination $DrawingCopy -Force') < text.find('Stop-Qs3dLaunchedProcess -Process $processTwo'):
         errors.append("Curtain P11 runner must stop the second host before restoring the disposable DWG")
-    for forbidden in ("Get-Process -Name '*'", "Process.GetProcesses", "SendKeys", "SetForegroundWindow", "git reset", "git clean"):
+    for forbidden in ("Get-Process -Name '*'", 'Get-Process -Name "bricscad"', "$expectedAssemblyRevision", "Process.GetProcesses", "SendKeys", "SetForegroundWindow", "git reset", "git clean"):
         if forbidden in text:
             errors.append("Curtain P11 runner contains a broad/destructive operation: " + forbidden)
 

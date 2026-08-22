@@ -102,15 +102,8 @@ function Stop-Qs3dLaunchedProcess {
 }
 
 function Wait-Qs3dNoBricsCadProcess {
-    param([ValidateRange(1, 60)][int]$TimeoutSeconds = 30)
-    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
-    do {
-        if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -eq 0) {
-            return $true
-        }
-        Start-Sleep -Milliseconds 250
-    } while ([DateTime]::UtcNow -lt $deadline)
-    return @(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -eq 0
+    param([Parameter(Mandatory = $true)][string]$ExpectedExecutable, [ValidateRange(1, 60)][int]$TimeoutSeconds = 30)
+    return Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $ExpectedExecutable -TimeoutSeconds $TimeoutSeconds
 }
 
 function Wait-Qs3dMarker {
@@ -179,15 +172,9 @@ $gitStatus = @(& $git.Source -C $repoRoot status --porcelain=v1 --untracked-file
 $gitStatusExitCode = $LASTEXITCODE
 if ($gitStatusExitCode -ne 0) { throw "Cannot inspect the Curtain P11 candidate worktree." }
 if ($gitStatus.Count -ne 0) { throw "Curtain P11 qualification requires a clean exact-SHA worktree." }
-$expectedAssemblyRevision = "+" + $gitHead
-foreach ($assemblyPath in @($PluginDll, $coreDll)) {
-    $productVersion = [string](Get-Item -LiteralPath $assemblyPath).VersionInfo.ProductVersion
-    if (-not $productVersion.EndsWith($expectedAssemblyRevision, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Curtain P11 assembly was not built from the exact Git candidate SHA."
-    }
-}
-if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
-    throw "Close existing BricsCAD processes before starting isolated Curtain P11 qualification."
+Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead
+if (@(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe).Count -gt 0) {
+    throw "Close existing BricsCAD V25 processes before starting isolated Curtain P11 qualification."
 }
 
 $projectSidecar = [IO.Path]::ChangeExtension($DrawingCopy, ".qsdb")
@@ -421,8 +408,8 @@ finally {
             catch { if ($null -eq $cleanupError) { $cleanupError = $_ } }
         }
         try {
-            if (-not (Wait-Qs3dNoBricsCadProcess -TimeoutSeconds 30)) {
-                throw "Curtain P11 cleanup left a BricsCAD process."
+            if (-not (Wait-Qs3dNoBricsCadProcess -ExpectedExecutable $bricscadExe -TimeoutSeconds 30)) {
+                throw "Curtain P11 cleanup left a BricsCAD V25 process."
             }
             $processCleanupVerified = $true
         }

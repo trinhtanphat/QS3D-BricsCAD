@@ -108,3 +108,85 @@ function Close-Qs3dUnsavedProjectChangesDialog {
         return 0
     }
 }
+
+function Get-Qs3dExactBricsCadProcesses {
+    param([Parameter(Mandatory = $true)][string]$ExpectedExecutable)
+    $expectedPath = [IO.Path]::GetFullPath($ExpectedExecutable)
+    $matches = @()
+    foreach ($record in @(Get-CimInstance Win32_Process -Filter "Name = 'bricscad.exe'")) {
+        if ([string]::IsNullOrWhiteSpace([string]$record.ExecutablePath)) { continue }
+        $actualPath = [IO.Path]::GetFullPath([string]$record.ExecutablePath)
+        if (-not [string]::Equals($actualPath, $expectedPath, [StringComparison]::OrdinalIgnoreCase)) { continue }
+        $process = Get-Process -Id ([int]$record.ProcessId) -ErrorAction SilentlyContinue
+        if ($null -ne $process) { $matches += $process }
+    }
+    return $matches
+}
+
+function Wait-Qs3dNoExactBricsCadProcesses {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExpectedExecutable,
+        [ValidateRange(1, 60)][int]$TimeoutSeconds = 15
+    )
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        if (@(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $ExpectedExecutable).Count -eq 0) { return $true }
+        Start-Sleep -Milliseconds 250
+    } while ([DateTime]::UtcNow -lt $deadline)
+    return @(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $ExpectedExecutable).Count -eq 0
+}
+
+function Read-Qs3dSingleProjectValue {
+    param(
+        [Parameter(Mandatory = $true)][string]$ProjectPath,
+        [Parameter(Mandatory = $true)][string]$Element
+    )
+    try { [xml]$project = Get-Content -LiteralPath $ProjectPath -Raw }
+    catch { throw "Could not read QS3D project identity: $ProjectPath" }
+    $values = @($project.Project.PropertyGroup | ForEach-Object {
+        $property = $_.PSObject.Properties[$Element]
+        if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+            ([string]$property.Value).Trim()
+        }
+    } | Select-Object -Unique)
+    if ($values.Count -ne 1) { throw "QS3D project must declare exactly one $Element identity: $ProjectPath" }
+    return [string]$values[0]
+}
+
+function Assert-Qs3dExactSourceIdentity {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$PluginDll,
+        [Parameter(Mandatory = $true)][ValidatePattern('^[0-9a-fA-F]{40}$')][string]$ExpectedSourceSha
+    )
+    $repoPath = [IO.Path]::GetFullPath($RepoRoot)
+    $pluginPath = [IO.Path]::GetFullPath($PluginDll)
+    $corePath = Join-Path (Split-Path -Parent $pluginPath) 'QS3D.Core.dll'
+    $pluginPdb = [IO.Path]::ChangeExtension($pluginPath, '.pdb')
+    $corePdb = [IO.Path]::ChangeExtension($corePath, '.pdb')
+    $pluginProject = Join-Path $repoPath 'src\QS3D.BricsCAD.V25\QS3D.BricsCAD.V25.csproj'
+    $coreProject = Join-Path $repoPath 'src\QS3D.Core\QS3D.Core.csproj'
+    foreach ($required in @($pluginPath, $corePath, $pluginPdb, $corePdb, $pluginProject, $coreProject)) {
+        if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw "Exact-source identity input is missing: $required" }
+    }
+
+    $pluginVersion = Read-Qs3dSingleProjectValue -ProjectPath $pluginProject -Element 'InformationalVersion'
+    $coreVersion = Read-Qs3dSingleProjectValue -ProjectPath $coreProject -Element 'InformationalVersion'
+    if (-not [string]::Equals($pluginVersion, $coreVersion, [StringComparison]::Ordinal)) {
+        throw 'V25 plugin and Core public ProductVersion declarations disagree.'
+    }
+    foreach ($assemblyPath in @($pluginPath, $corePath)) {
+        $actualVersion = ([string](Get-Item -LiteralPath $assemblyPath).VersionInfo.ProductVersion).Trim()
+        if (-not [string]::Equals($actualVersion, $pluginVersion, [StringComparison]::Ordinal)) {
+            throw "Assembly public ProductVersion does not match the declared QS3D product identity: $assemblyPath"
+        }
+    }
+
+    $sourceLinkPrefix = 'https://raw.githubusercontent.com/trinhtanphat/QS3D-BricsCAD/' + $ExpectedSourceSha.ToLowerInvariant() + '/'
+    foreach ($pdbPath in @($pluginPdb, $corePdb)) {
+        $pdbText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($pdbPath))
+        if ($pdbText.IndexOf($sourceLinkPrefix, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+            throw "PDB SourceLink does not bind the binary to the exact clean Git SHA: $pdbPath"
+        }
+    }
+}

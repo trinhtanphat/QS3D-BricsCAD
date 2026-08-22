@@ -12,6 +12,10 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+$windowInteropPath = Join-Path $PSScriptRoot "bricscad-runner-window-interop.ps1"
+if (-not (Test-Path -LiteralPath $windowInteropPath -PathType Leaf)) { throw "Project lifecycle runner helper is missing." }
+. $windowInteropPath
+
 function Read-Qs3dMarker {
     param([Parameter(Mandatory = $true)][string]$Path)
     $marker = @{}
@@ -140,14 +144,15 @@ $coreDll = Join-Path (Split-Path -Parent $PluginDll) "QS3D.Core.dll"
 foreach ($required in @($bricscadExe, $PluginDll, $coreDll, $FixtureDwg)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw "Required lifecycle input is missing." }
 }
-if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
-    throw "Close existing BricsCAD processes before starting the isolated project-lifecycle probe."
+if (@(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe).Count -gt 0) {
+    throw "Close existing BricsCAD V25 processes before starting the isolated project-lifecycle probe."
 }
 
 $gitStatus = @(& git -C $repoRoot status --porcelain)
 if ($LASTEXITCODE -ne 0 -or $gitStatus.Count -ne 0) { throw "The project-lifecycle probe requires a clean exact Git SHA." }
 $exactSha = (& git -C $repoRoot rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $exactSha -notmatch '^[0-9a-f]{40}$') { throw "Unable to resolve the exact Git SHA." }
+Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $exactSha
 
 $copyDir = Join-Path $ArtifactDir "fixture-copies"
 New-Item -ItemType Directory -Path $copyDir | Out-Null
@@ -342,5 +347,7 @@ try {
 }
 finally {
     foreach ($name in $environmentNames) { Restore-EnvironmentValue -Name $name -Value $oldEnvironment[$name] }
-    foreach ($process in @(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue)) { Stop-Qs3dLaunchedProcess -Process $process }
+    if (-not (Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30)) {
+        throw "Project lifecycle cleanup left a BricsCAD V25 process."
+    }
 }

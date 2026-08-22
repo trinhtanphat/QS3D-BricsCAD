@@ -143,7 +143,9 @@ if RUNNER.is_file():
         '$sourceShaExitCode = $LASTEXITCODE',
         'git -C $repoRoot status --porcelain=v1 --untracked-files=all',
         '$worktreeExitCode = $LASTEXITCODE',
-        'Assembly was not built from ExpectedSourceSha',
+        'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $ExpectedSourceSha',
+        'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
+        'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
         '. $windowInteropPath',
         'Close-Qs3dProxyInformationDialog -Process $process',
         'Close-Qs3dUnsavedProjectChangesDialog -Process $process',
@@ -214,7 +216,7 @@ if RUNNER.is_file():
     ):
         if token not in text:
             errors.append("Level-Z runner missing contract token: " + token)
-    for forbidden in ("Get-Process -Name '*'", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
+    for forbidden in ("Get-Process -Name '*'", 'Get-Process -Name "bricscad"', "$expectedAssemblyRevision", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
         if forbidden in text:
             errors.append("Level-Z runner contains broad process/window action: " + forbidden)
     helper_text = HELPER.read_text(encoding="utf-8")
@@ -224,6 +226,12 @@ if RUNNER.is_file():
         'private const int IdNo = 7;',
         'PostMessage(window, WmCommand, (IntPtr)IdNo, IntPtr.Zero)',
         'function Close-Qs3dUnsavedProjectChangesDialog',
+        'function Get-Qs3dExactBricsCadProcesses',
+        'function Wait-Qs3dNoExactBricsCadProcesses',
+        'function Assert-Qs3dExactSourceIdentity',
+        "Read-Qs3dSingleProjectValue -ProjectPath $pluginProject -Element 'InformationalVersion'",
+        "Read-Qs3dSingleProjectValue -ProjectPath $coreProject -Element 'InformationalVersion'",
+        "'https://raw.githubusercontent.com/trinhtanphat/QS3D-BricsCAD/'",
     ):
         if token not in helper_text:
             errors.append("Level-Z runner interop is missing guarded unsaved-project discard token: " + token)

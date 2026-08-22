@@ -131,7 +131,9 @@ for token in (
     'ExpectedSourceSha',
     'git -C $repoRoot rev-parse --verify HEAD',
     'git -C $repoRoot status --porcelain=v1 --untracked-files=all',
-    'ProductVersion',
+    'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $ExpectedSourceSha',
+    'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
+    'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
     'Get-FileHash -LiteralPath $PluginDll -Algorithm SHA256',
     'curved-structural-probe-copy.dwg',
     'QS3D_CURVED_STRUCTURAL_RESULT',
@@ -167,6 +169,9 @@ for forbidden in (
     'plugin_path=',
 ):
     forbid(command.lower(), forbidden, "command marker contract")
+
+for forbidden in ('Get-Process -Name "bricscad"', '$expectedAssemblyRevision'):
+    forbid(runner, forbidden, "PowerShell runner exact-host/source contract")
 
 for forbidden in (
     'var project = new ProjectState(',
