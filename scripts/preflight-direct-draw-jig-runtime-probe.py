@@ -26,7 +26,12 @@ if not errors:
         'UserInputControls.NullResponseAccepted',
         'worldDraw.Geometry.WorldLine',
         'RequireSameDocument(document)',
+        'MinimumQualifiedSegments = 3',
+        'acceptedSegments >= MinimumQualifiedSegments',
+        'termination == "ENTER" || termination == "ESC_OR_CANCEL"',
+        '"|qualified_candidate=" + (qualifiedCandidate ? "true" : "false")',
         'accepted_segments=',
+        'minimum_segments=',
         'preview_model=DrawJigProfileStrip',
         'persistent_writes=0',
         'ownership_writes=0',
@@ -41,6 +46,7 @@ if not errors:
         'ProjectContextCoordinator.GetOrCreate', 'SemanticCaptureService.Capture',
         'RegenerateDirtySubset', 'GeneratedGeometryService', 'SendStringToExecute',
         '.Editor.Command(',
+        '"|qualified_candidate=true"',
     )
     for token in forbidden_probe:
         if token in probe:
@@ -57,11 +63,17 @@ if not errors:
         'QS3DPROBEDIRECTDRAWJIG',
         'QS3D_DIRECT_DRAW_JIG_RUNTIME_V1',
         'git', 'rev-parse', 'status --porcelain=v1',
+        '[string[]]$ArgumentList', '@ArgumentList',
         'PENDING_LOCAL',
     )
     for token in required_runner:
         if token not in runner:
             errors.append(f"LOCAL-008 P02 runner missing exact-SHA/local token: {token}")
+
+    forbidden_runner = ('[string[]]$Args', '@Args')
+    for token in forbidden_runner:
+        if token in runner:
+            errors.append(f"LOCAL-008 P02 runner must not shadow PowerShell automatic $Args: {token}")
 
 if errors:
     for error in errors:
