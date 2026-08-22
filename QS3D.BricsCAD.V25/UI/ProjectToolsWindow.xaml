@@ -1,0 +1,182 @@
+<Window x:Class="QS3D.BricsCAD.V25.UI.ProjectToolsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QS3D • Thiết lập dự án" Width="760" Height="720"
+        MinWidth="680" MinHeight="600"
+        WindowStartupLocation="CenterOwner">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="ProjectCard" TargetType="Border" BasedOn="{StaticResource Card}">
+                <Setter Property="Padding" Value="10"/>
+                <Setter Property="CornerRadius" Value="5"/>
+                <Setter Property="Margin" Value="0,0,0,10"/>
+            </Style>
+            <Style x:Key="ProjectMetric" TargetType="Border" BasedOn="{StaticResource Card}">
+                <Setter Property="Padding" Value="9,7"/>
+                <Setter Property="CornerRadius" Value="4"/>
+                <Setter Property="Margin" Value="3"/>
+            </Style>
+            <Style x:Key="ProjectCommand" TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                <Setter Property="Padding" Value="10,5"/>
+                <Setter Property="MinHeight" Value="29"/>
+                <Setter Property="Margin" Value="3"/>
+            </Style>
+            <Style x:Key="ProjectAccentCommand" TargetType="Button" BasedOn="{StaticResource AccentButton}">
+                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                <Setter Property="Padding" Value="10,5"/>
+                <Setter Property="MinHeight" Value="29"/>
+                <Setter Property="Margin" Value="3"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource Bg0Brush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Background="{StaticResource Bg1Brush}" Padding="16,12" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="THIẾT LẬP DỰ ÁN" FontSize="18" FontWeight="Bold"/>
+                        <Border Background="{StaticResource AccentSoftBrush}"
+                                BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1"
+                                CornerRadius="8" Padding="7,1" Margin="8,0,0,0">
+                            <TextBlock Text="PROJECT CONTROL" Foreground="{StaticResource LuxuryBrush}"
+                                       FontWeight="SemiBold" FontSize="9"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="Tầng • Zone • Family • vật liệu • template • module • sức khỏe mô hình"
+                               Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1" Content="Làm mới" Tag="QS3DREFRESH"
+                        Click="OnCommandClick" Style="{StaticResource DenseButton}"
+                        VerticalAlignment="Center" Margin="10,0,0,0"/>
+            </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="14">
+                <Border Style="{StaticResource ProjectCard}">
+                    <StackPanel>
+                        <DockPanel Margin="0,0,0,6">
+                            <TextBlock Text="PROJECT SNAPSHOT" Style="{StaticResource PanelTitle}" Margin="0"/>
+                            <TextBlock DockPanel.Dock="Right" Text="LIVE SEMANTIC STATE"
+                                       Foreground="{StaticResource LuxuryBrush}"
+                                       FontSize="9" FontWeight="SemiBold"/>
+                        </DockPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.45*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource ProjectMetric}">
+                                <StackPanel>
+                                    <TextBlock Text="DỰ ÁN" Style="{StaticResource Caption}"/>
+                                    <TextBlock x:Name="ProjectNameText" Text="—" FontWeight="SemiBold"
+                                               FontSize="13" TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Style="{StaticResource ProjectMetric}">
+                                <StackPanel>
+                                    <TextBlock Text="TẦNG ACTIVE" Style="{StaticResource Caption}"/>
+                                    <TextBlock x:Name="FloorText" Text="—" FontWeight="SemiBold"
+                                               FontSize="13" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="2" Style="{StaticResource ProjectMetric}">
+                                <StackPanel>
+                                    <TextBlock Text="FAMILY" Style="{StaticResource Caption}"/>
+                                    <TextBlock x:Name="FamilyCountText" Text="0" FontWeight="SemiBold"
+                                               FontSize="16" Foreground="{StaticResource AccentHoverBrush}" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="3" Style="{StaticResource ProjectMetric}">
+                                <StackPanel>
+                                    <TextBlock Text="CẤU KIỆN" Style="{StaticResource Caption}"/>
+                                    <TextBlock x:Name="ElementCountText" Text="0" FontWeight="SemiBold"
+                                               FontSize="16" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource ProjectCard}">
+                    <StackPanel>
+                        <TextBlock Text="DỮ LIỆU DỰ ÁN" Style="{StaticResource PanelTitle}"/>
+                        <TextBlock Text="Thiết lập dữ liệu nguồn cho toàn bộ workflow BIM/QS."
+                                   Style="{StaticResource Caption}" Margin="0,0,0,5"/>
+                        <UniformGrid Columns="2">
+                            <Button Content="Tầng / Cao độ" Tag="QS3DLEVELS" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
+                            <Button Content="Khu vực / Zone" Tag="QS3DZONES" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
+                            <Button Content="Family Manager" Tag="QS3DFAMILIES" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
+                            <Button Content="Material Catalog" Tag="QS3DMATERIALS" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
+                            <Button Content="Đồng bộ source CAD đã sửa" Tag="QS3DSYNCSOURCE" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
+                            <Button Content="Xuất Semantic Snapshot JSON" Tag="QS3DINTERCHANGEJSON" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                            <Button Content="Kiểm tra Semantic Snapshot JSON" Tag="QS3DINTERCHANGEVALIDATE" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                            <Button Content="Xuất bảng vật liệu" Tag="QS3DMATERIALXLSX" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                            <Button Content="Xuất Template" Tag="QS3DTEMPLATEEXPORT" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                            <Button Content="Nạp Template" Tag="QS3DTEMPLATEIMPORT" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                            <Button Content="Lưu project" Tag="QS3DSAVE" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                            <Button Content="Nạp lại project" Tag="QS3DRELOAD" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                        </UniformGrid>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource ProjectCard}">
+                    <StackPanel>
+                        <TextBlock Text="MODULE CHUYÊN NGÀNH" Style="{StaticResource PanelTitle}"/>
+                        <UniformGrid Columns="2">
+                            <Button Content="Schedule / Bóc khối lượng" Tag="QS3DSCHEDULES" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
+                            <Button Content="Vách Kính / Curtain" Tag="QS3DCURTAIN" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                            <Button Content="Geometry Extensions" Tag="QS3DGEOMETRYEXT" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                            <Button Content="Rebar 3D Hub" Tag="QS3DREBARHUB" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                            <Button Content="Bảng khối lượng" Tag="QS3DBQ" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                        </UniformGrid>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource ProjectCard}" Margin="0">
+                    <StackPanel>
+                        <TextBlock Text="KIỂM TRA / BẢO TRÌ" Style="{StaticResource PanelTitle}"/>
+                        <UniformGrid Columns="2">
+                            <Button Content="Regenerate dirty" Tag="QS3DREGEN" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                            <Button Content="Health All" Tag="QS3DHEALTHALL" Style="{StaticResource ProjectAccentCommand}" Click="OnCommandClick"/>
+                            <Button Content="Kiểm tra runtime BricsCAD" Tag="QS3DRUNTIMECHECK" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                            <Button Content="Audit log" Tag="QS3DAUDIT" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                            <Button Content="Workspace" Tag="QS3D" Style="{StaticResource ProjectCommand}" Click="OnCommandClick"/>
+                        </UniformGrid>
+                        <TextBlock Text="Cửa sổ khóa theo bản vẽ đã mở. Nếu chuyển DWG, command bị từ chối để tránh sửa nhầm context. Thay đổi Tầng/Zone/Family/Material chỉ cập nhật semantic/project data; generated geometry liên quan được đánh stale thay vì âm thầm sửa CAD source."
+                                   Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="3,8,3,0"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="11,7" BorderThickness="0,1,0,0">
+            <DockPanel>
+                <Border Background="{StaticResource SuccessBrush}" CornerRadius="5"
+                        Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                <TextBlock x:Name="StatusText" Text="Sẵn sàng"
+                           Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+                <TextBlock DockPanel.Dock="Right" Text="PROJECT-SAFE • DWG CONTEXT LOCK"
+                           Style="{StaticResource Caption}" Margin="12,0,0,0"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>
