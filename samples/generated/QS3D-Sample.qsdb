@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<qs3d schema="3" projectId="qs3d-synthetic-sample-v1" name="QS3D Synthetic Sample" updatedUtc="2026-08-10T00:00:00.0000000Z" drawingPath="" drawingFingerprint="" activeZoneId="zone-a" activeFloorId="floor-0">
+  <metadata>
+    <p name="QS3D.BqVisibleColumns" value="Floor|Category|FamilyName|Count|GrossConcreteM3|NetConcreteM3|FormworkM2|LengthM|ElementIdText|SourceHandleText" />
+    <p name="QS3D.LayerMapping:QS3D_BEAM" value="Beam" />
+    <p name="QS3D.LayerMapping:QS3D_COLUMN" value="Column" />
+    <p name="QS3D.LayerMapping:QS3D_DOOR" value="Door" />
+    <p name="QS3D.LayerMapping:QS3D_GLASS" value="GlassWall" />
+    <p name="QS3D.LayerMapping:QS3D_ROOM" value="Room" />
+    <p name="QS3D.LayerMapping:QS3D_SLAB" value="Slab" />
+    <p name="QS3D.LayerMapping:QS3D_WALL" value="ArchitecturalWall" />
+    <p name="QS3D.SampleData" value="Synthetic repository-owned fixture; no BLT/private content." />
+  </metadata>
+  <zones>
+    <zone id="zone-a" name="Zone A" />
+  </zones>
+  <floors>
+    <floor id="floor-0" name="Ground Floor" elevationM="0" />
+  </floors>
+  <families>
+    <family id="sample-wall-200" name="Sample Wall 200" category="ArchitecturalWall"><properties><p name="HeightM" value="3.6" /><p name="Material" value="Concrete" /><p name="ThicknessM" value="0.2" /></properties></family>
+    <family id="sample-glass-12" name="Sample Glass Wall 12" category="GlassWall"><properties><p name="CurtainFrameDepthM" value="0.05" /><p name="HeightM" value="3.6" /><p name="Material" value="Glass" /><p name="PanelHeightM" value="1.2" /><p name="PanelWidthM" value="1.5" /><p name="ThicknessM" value="0.012" /></properties></family>
+    <family id="sample-column-400" name="Sample Column 400x400" category="Column"><properties><p name="HeightM" value="3.6" /><p name="Material" value="Concrete" /></properties></family>
+    <family id="sample-slab-150" name="Sample Slab 150" category="Slab"><properties><p name="Material" value="Concrete" /><p name="ThicknessM" value="0.15" /></properties></family>
+    <family id="sample-beam-300x500" name="Sample Beam 300x500" category="Beam"><properties><p name="HeightM" value="0.5" /><p name="Material" value="Concrete" /><p name="WidthM" value="0.3" /></properties></family>
+    <family id="sample-door-1000" name="Sample Door 1000x2200" category="Door"><properties><p name="HeightM" value="2.2" /><p name="Material" value="Timber" /><p name="WidthM" value="1.0" /></properties></family>
+    <family id="sample-room-3600" name="Sample Room 3.6m" category="Room"><properties><p name="HeightM" value="3.6" /></properties></family>
+  </families>
+  <rules>
+    <rule id="sample-wall-gross" category="ArchitecturalWall" output="GrossConcreteM3" expression="LengthM*HeightM*ThicknessM" version="1" />
+    <rule id="sample-slab-gross" category="Slab" output="GrossConcreteM3" expression="AreaM2*ThicknessM" version="1" />
+    <rule id="sample-beam-gross" category="Beam" output="GrossConcreteM3" expression="LengthM*WidthM*HeightM" version="1" />
+  </rules>
+  <elements>
+    <element id="wall-10" category="ArchitecturalWall" familyId="sample-wall-200" floorId="floor-0" zoneId="zone-a" drawingFingerprint="" dirty="0" updatedUtc="2026-08-10T00:00:00.0000000Z"><handles><h>22A</h></handles><dependencies /><properties><p name="HeightM" value="3.6" /><p name="LengthM" value="12" /><p name="ThicknessM" value="0.2" /></properties><quantities><q name="FormworkM2" value="86.4" /><q name="GrossConcreteM3" value="8.64" /><q name="LengthM" value="12" /><q name="NetConcreteM3" value="8.64" /></quantities></element>
+    <element id="wall-11" category="ArchitecturalWall" familyId="sample-wall-200" floorId="floor-0" zoneId="zone-a" drawingFingerprint="" dirty="0" updatedUtc="2026-08-10T00:00:00.0000000Z"><handles><h>22B</h></handles><dependencies /><properties><p name="HeightM" value="3.6" /><p name="LengthM" value="8" /><p name="ThicknessM" value="0.2" /></properties><quantities><q name="FormworkM2" value="57.6" /><q name="GrossConcreteM3" value="5.76" /><q name="LengthM" value="8" /><q name="NetConcreteM3" value="5.76" /></quantities></element>
+    <element id="wall-12" category="ArchitecturalWall" familyId="sample-wall-200" floorId="floor-0" zoneId="zone-a" drawingFingerprint="" dirty="0" updatedUtc="2026-08-10T00:00:00.0000000Z"><handles><h>22C</h></handles><dependencies /><properties><p name="HeightM" value="3.6" /><p name="LengthM" value="12" /><p name="ThicknessM" value="0.2" /></properties><quantities><q name="FormworkM2" value="86.4" /><q name="GrossConcreteM3" value="8.64" /><q name="LengthM" value="12" /><q name="NetConcreteM3" value="8.64" /></quantities></element>
+    <element id="wall-13" category="ArchitecturalWall" familyId="sample-wall-200" floorId="floor-0" zoneId="zone-a" drawingFingerprint="" dirty="0" updatedUtc="2026-08-10T00:00:00.0000000Z"><handles><h>22D</h></handles><dependencies /><properties><p name="HeightM" value="3.6" /><p name="LengthM" value="8" /><p name="ThicknessM" value="0.2" /></properties><quantities><q name="FormworkM2" value="57.6" /><q name="GrossConcreteM3" value="5.76" /><q name="LengthM" value="8" /><q name="NetConcreteM3" value="5.76" /></quantities></element>
+    <element id="door-20" category="Door" familyId="sample-door-1000" floorId="floor-0" zoneId="zone-a" drawingFingerprint="" dirty="0" updatedUtc="2026-08-10T00:00:00.0000000Z"><handles><h>22E</h></handles><dependencies><d>wall-10</d></dependencies><properties><p name="HeightM" value="2.2" /><p name="HostWallId" value="wall-10" /><p name="WidthM" value="1" /></properties><quantities><q name="Count" value="1" /><q name="OpeningAreaM2" value="2.2" /></quantities></element>
+    <element id="column-30" category="Column" familyId="sample-column-400" floorId="floor-0" zoneId="zone-a" drawingFingerprint="" dirty="0" updatedUtc="2026-08-10T00:00:00.0000000Z"><handles><h>22F</h></handles><dependencies /><properties><p name="HeightM" value="3.6" /><p name="ProfileAreaM2" value="0.16" /></properties><quantities><q name="FormworkM2" value="5.76" /><q name="GrossConcreteM3" value="0.576" /><q name="NetConcreteM3" value="0.576" /></quantities></element>
+    <element id="column-31" category="Column" familyId="sample-column-400" floorId="floor-0" zoneId="zone-a" drawingFingerprint="" dirty="0" updatedUtc="2026-08-10T00:00:00.0000000Z"><handles><h>230</h></handles><dependencies /><properties><p name="HeightM" value="3.6" /><p name="ProfileAreaM2" value="0.16" /></properties><quantities><q name="FormworkM2" value="5.76" /><q name="GrossConcreteM3" value="0.576" /><q name="NetConcreteM3" value="0.576" /></quantities></element>
+    <element id="slab-40" category="Slab" familyId="sample-slab-150" floorId="floor-0" zoneId="zone-a" drawingFingerprint="" dirty="0" updatedUtc="2026-08-10T00:00:00.0000000Z"><handles><h>231</h></handles><dependencies /><properties><p name="AreaM2" value="96" /><p name="ThicknessM" value="0.15" /></properties><quantities><q name="BottomAreaM2" value="96" /><q name="GrossConcreteM3" value="14.4" /><q name="NetConcreteM3" value="14.4" /><q name="TopAreaM2" value="96" /></quantities></element>
+    <element id="beam-50" category="Beam" familyId="sample-beam-300x500" floorId="floor-0" zoneId="zone-a" drawingFingerprint="" dirty="0" updatedUtc="2026-08-10T00:00:00.0000000Z"><handles><h>232</h></handles><dependencies /><properties><p name="HeightM" value="0.5" /><p name="LengthM" value="8" /><p name="WidthM" value="0.3" /></properties><quantities><q name="FormworkM2" value="10.4" /><q name="GrossConcreteM3" value="1.2" /><q name="LengthM" value="8" /><q name="NetConcreteM3" value="1.2" /></quantities></element>
+    <element id="glass-60" category="GlassWall" familyId="sample-glass-12" floorId="floor-0" zoneId="zone-a" drawingFingerprint="" dirty="0" updatedUtc="2026-08-10T00:00:00.0000000Z"><handles><h>233</h></handles><dependencies /><properties><p name="HeightM" value="3.6" /><p name="LengthM" value="6" /><p name="ThicknessM" value="0.012" /></properties><quantities><q name="GrossVolumeM3" value="0.2592" /><q name="LengthM" value="6" /><q name="NetVolumeM3" value="0.2592" /><q name="OtherAreaM2" value="21.6" /></quantities></element>
+    <element id="room-70" category="Room" familyId="sample-room-3600" floorId="floor-0" zoneId="zone-a" drawingFingerprint="" dirty="0" updatedUtc="2026-08-10T00:00:00.0000000Z"><handles><h>234</h></handles><dependencies /><properties><p name="HeightM" value="3.6" /></properties><quantities><q name="AreaM2" value="88.16" /><q name="PerimeterM" value="38.4" /></quantities></element>
+  </elements>
+  <audit>
+    <event utc="2026-08-10T00:00:00.0000000Z" action="sample.create" elementId="" detail="Synthetic repository-owned fixture" actor="QS3D" correlationId="sample-v1" />
+  </audit>
+</qs3d>
