@@ -57,13 +57,15 @@ else:
         if token not in detach:
             errors.append("modeless Detach lost best-effort handler cleanup contract: " + token)
 
-    # Preserve the existing safety/identity boundaries.
+    # Preserve the existing safety/identity boundaries while allowing the safer dispatcher
+    # callback that catches Window.Close failures on the UI thread.
     for token in (
         "Registrations.GetValue(window, key => new Registration(key, document))",
         'throw new InvalidOperationException("A modeless QS3D window cannot be rebound to a different BricsCAD document.")',
         "ReferenceEquals(e.Document, _document)",
         "CloseForProjectChange();",
-        "_window.Dispatcher.BeginInvoke(new Action(_window.Close))",
+        "_window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher))",
+        "private void TryCloseWindowOnDispatcher()",
     ):
         if token not in text:
             errors.append("modeless lifetime atomicity change lost existing safety contract: " + token)
