@@ -1,0 +1,24 @@
+# Agent work claim — Direct Draw P1 bootstrap rollback
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Completed: 2026-08-11 (UTC+7)
+- Status: `COMPLETED`
+- Scope: source-safe transactional cleanup of projectless Direct Draw P1 attempts when capture or nested QS3DBUILD3D/native validation fails.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/DirectDrawP1Commands.cs`
+  - `scripts/preflight-directdraw-p1-bootstrap-rollback.py`
+  - this claim file for close-out
+- Problem fixed: P1 `Execute` had the same outer transaction ownership gap proven in P0: it could bootstrap project context before CAD source/capture/nested Build3D, while failure rollback only erased CAD and restored `ProjectState`, leaving a newly-created project cached.
+- Implemented contract:
+  - P1 determines whether project context existed before mutation, before `ResolveForMutation` / `GetOrCreate`;
+  - existing-project failures preserve the project context and the existing CAD/semantic rollback behavior;
+  - failed projectless P1 authoring performs CAD cleanup and semantic snapshot restore, then calls `ProjectContextCoordinator.Forget(document)`;
+  - cleanup runs before secondary rollback-error aggregation;
+  - successful authoring keeps intentional bootstrap;
+  - nested `QS3DBUILD3D`, prompt freshness, generated ownership and UI finalization remain unchanged.
+- Source commit: `32fe03014c033138feef475cf5c3866cf019c496` (`fix(authoring): roll back failed P1 bootstrap`).
+- Regression guard commit: `f88108447f67634cc01137b0d30dd9cb4e1c4a7d` (`test(authoring): guard P1 bootstrap rollback`).
+- Validation: exact source diff contains only bootstrap ownership detection/cleanup plus EOF newline normalization; `scripts/preflight-directdraw-p1-bootstrap-rollback.py` locks ordering, nested Build3D preservation and rollback aggregation. It is auto-discovered by the existing `preflight-*.py` convention. No GitHub Actions were dispatched and no BricsCAD V25 runtime PASS is claimed.
+- LOCAL_ONLY: no new local-only scenario introduced; exact native rollback proof remains under the existing V25 qualification boundary.
+- Handoff: reservation released; future agents may edit these files after re-checking current `main` and active claims.
