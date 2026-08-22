@@ -1,0 +1,24 @@
+# Agent work claim — Direct Draw Opening bootstrap rollback
+
+- Agent: ChatGPT Web / GPT-5.6 Sol
+- Started: 2026-08-11 (UTC+7)
+- Completed: 2026-08-11 (UTC+7)
+- Status: `COMPLETED`
+- Scope: source-safe project-context rollback for projectless Door/WallOpening Direct Draw failure.
+- Files reserved during implementation:
+  - `src/QS3D.BricsCAD.V25/DirectDrawOpeningCommands.cs`
+  - `scripts/preflight-directdraw-opening-bootstrap-rollback.py`
+  - this claim file for close-out
+- Problem fixed: `Execute` resolved/bootstrapped the preview project before source/capture/Auto Host. Its failure path erased the LINE and restored `ProjectState`, but did not release a project context bootstrapped by this authoring attempt.
+- Implemented contract:
+  - project ownership is captured from `projectPreview.HasProject` before `ResolveForMutation`;
+  - existing-project failures preserve the project context;
+  - failed projectless Door/WallOpening authoring erases the source, restores semantic state, then calls `ProjectContextCoordinator.Forget(document)`;
+  - project cleanup runs before secondary rollback-error aggregation;
+  - successful authoring keeps intentional bootstrap;
+  - Auto Host, stable-id re-resolution, scoped opening+host regeneration and UI finalization remain unchanged.
+- Source commit: `0a5e9566e4b18077d92074639a1805aae64f41e9` (`fix(authoring): roll back failed Opening bootstrap`).
+- Regression guard commit: `c8b63565b8001d67203075fe1752c78d07f3ee9e` (`test(authoring): guard Opening bootstrap rollback`).
+- Validation: exact source diff contains only project ownership detection and conditional cleanup. The static preflight locks Auto Host preservation, stable-id re-resolution, scoped regeneration, rollback ordering and aggregation; it follows the existing auto-discovered `preflight-*.py` convention. No GitHub Actions were dispatched and no BricsCAD V25 runtime PASS is claimed.
+- LOCAL_ONLY: no new local-only scenario introduced; exact native runtime rollback proof remains under the existing V25 qualification boundary.
+- Handoff: reservation released; future agents may edit these files after re-checking current `main` and active claims.
