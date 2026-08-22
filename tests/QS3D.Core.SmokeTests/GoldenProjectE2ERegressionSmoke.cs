@@ -154,8 +154,8 @@ namespace QS3D.Core.SmokeTests
                 var trace = QsCustomerWorkbookTraceReader.Read(xlsxPath, QsCustomerWorkbookExporter.DetailSheet, index + 2);
                 True(trace.ElementIds.Count == 1 && trace.ElementIds[0] == expectedId,
                     "Workbook trace lost ElementId for " + expectedId + ".");
-                True(trace.Handles.Count == 1 && trace.Handles[0] == expected.SourceHandles.Single(),
-                    "Workbook trace lost Handle for " + expectedId + ".");
+                True(trace.Handles.SequenceEqual(expected.SourceHandles, StringComparer.OrdinalIgnoreCase),
+                    "Workbook trace did not preserve dependency-expanded Handle provenance for " + expectedId + ".");
                 Equal(DrawingFingerprint, trace.DrawingFingerprint,
                     "Workbook trace lost DrawingFingerprint for " + expectedId + ".");
             }
@@ -206,7 +206,8 @@ namespace QS3D.Core.SmokeTests
             Equal(material, row.Material, id + " lost material.");
             Equal(DrawingFingerprint, row.DrawingFingerprint, id + " lost fingerprint.");
             Equal(1, row.Count, id + " count changed.");
-            True(row.SourceHandles.Count == 1 && row.SourceHandles[0] == handle, id + " lost Handle.");
+            True(row.SourceHandles.Contains(handle, StringComparer.OrdinalIgnoreCase),
+                id + " lost its direct source Handle from the locate provenance closure.");
         }
 
         private static void AssertVolume(IReadOnlyList<QuantityReportRow> rows, string id, double gross, double deduction, double net)
