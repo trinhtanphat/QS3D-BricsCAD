@@ -1,0 +1,262 @@
+<Window x:Class="QS3D.BricsCAD.V25.UI.DomainHubWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QS3D • Trung tâm công việc"
+        Height="760" Width="900" MinHeight="620" MinWidth="760"
+        WindowStartupLocation="CenterOwner">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <Style x:Key="HubSectionCard" TargetType="Border" BasedOn="{StaticResource Card}">
+                <Setter Property="Padding" Value="10"/>
+                <Setter Property="Margin" Value="0,0,0,10"/>
+                <Setter Property="CornerRadius" Value="5"/>
+            </Style>
+            <Style x:Key="HubCommandButton" TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                <Setter Property="Padding" Value="9,4"/>
+                <Setter Property="Margin" Value="0,1"/>
+                <Setter Property="MinHeight" Value="27"/>
+            </Style>
+            <Style x:Key="HubAccentButton" TargetType="Button" BasedOn="{StaticResource AccentButton}">
+                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                <Setter Property="Padding" Value="9,4"/>
+                <Setter Property="Margin" Value="0,1"/>
+                <Setter Property="MinHeight" Value="27"/>
+            </Style>
+            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource HubCommandButton}"/>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource Bg0Brush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Background="{StaticResource Bg1Brush}" Padding="16,13"
+                BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="QS3D" FontWeight="Bold" FontSize="18"/>
+                        <Border Background="{StaticResource AccentBrush}" CornerRadius="3"
+                                Padding="7,2" Margin="8,0,0,0">
+                            <TextBlock Text="WORKFLOW HUB" Foreground="White"
+                                       FontWeight="SemiBold" FontSize="9"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="Trung tâm công việc BIM / QS • Direct Draw • Model • Rebar • Quantity • Review"
+                               Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                    <TextBlock Text="PROFESSIONAL CAD WORKSPACE"
+                               Foreground="{StaticResource LuxuryBrush}"
+                               FontWeight="SemiBold" FontSize="9" HorizontalAlignment="Right"/>
+                    <TextBlock Text="Lệnh được gửi sang BricsCAD V25"
+                               Style="{StaticResource Caption}" Margin="0,3,0,0"
+                               HorizontalAlignment="Right"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <Grid Margin="14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <Border Style="{StaticResource HubSectionCard}">
+                        <StackPanel>
+                            <TextBlock Text="TẠO MỚI / DIRECT DRAW" Style="{StaticResource PanelTitle}"/>
+                            <TextBlock Text="Authoring trực tiếp: CAD source → semantic QS3D → native 3D."
+                                       Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                            <Button Content="Family / Type — chọn bộ thông số" Tag="QS3DFAMILIES"
+                                    Style="{StaticResource HubAccentButton}" Click="OnCommandClick"/>
+                            <Button Content="Vẽ Tường trực tiếp" Tag="QS3DDRAWWALL" Click="OnCommandClick"/>
+                            <Button Content="Vẽ Vách Kính trực tiếp" Tag="QS3DDRAWGLASSWALL" Click="OnCommandClick"/>
+                            <Button Content="Vẽ Trụ Tường trực tiếp" Tag="QS3DDRAWWALLPIER" Click="OnCommandClick"/>
+                            <Button Content="Vẽ Dầm trực tiếp" Tag="QS3DDRAWBEAM" Click="OnCommandClick"/>
+                            <Button Content="Vẽ Vách BTCT trực tiếp" Tag="QS3DDRAWSTRUCTWALL" Click="OnCommandClick"/>
+                            <Button Content="Vẽ Cột trực tiếp" Tag="QS3DDRAWCOLUMN" Click="OnCommandClick"/>
+                            <Button Content="Vẽ Sàn trực tiếp" Tag="QS3DDRAWSLAB" Click="OnCommandClick"/>
+                            <Button Content="Vẽ Móng trực tiếp" Tag="QS3DDRAWFOUNDATION" Click="OnCommandClick"/>
+                            <Button Content="Vẽ Cửa + Auto Host" Tag="QS3DDRAWDOOR" Click="OnCommandClick"/>
+                            <Button Content="Vẽ Lỗ Mở + Auto Host" Tag="QS3DDRAWOPENING" Click="OnCommandClick"/>
+                            <Button Content="Khoét Cửa/Lỗ đang chọn" Tag="QS3DCUTSELECTEDOPENINGS"
+                                    Style="{StaticResource HubAccentButton}" Click="OnCommandClick"/>
+                            <TextBlock Text="Chọn Family / Type trước khi vẽ. Cửa/Lỗ mở tạo source + semantic và Auto Host đúng đối tượng mới; physical boolean vẫn là thao tác riêng có chủ ý."
+                                       TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,7,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource HubSectionCard}">
+                        <StackPanel>
+                            <TextBlock Text="TƯỜNG KT / CỬA / HT_PHÒNG" Style="{StaticResource PanelTitle}"/>
+                            <Button Content="Tường Gạch" Tag="QS3DWALL" Style="{StaticResource HubAccentButton}" Click="OnCommandClick"/>
+                            <Button Content="Vách Kính" Tag="QS3DGLASSWALL" Click="OnCommandClick"/>
+                            <Button Content="Vách Kính Hub" Tag="QS3DCURTAIN" Style="{StaticResource HubAccentButton}" Click="OnCommandClick"/>
+                            <Button Content="Vách Kính — host + khung 3D" Tag="QS3DCURTAIN3D" Click="OnCommandClick"/>
+                            <Button Content="Health khung Vách Kính" Tag="QS3DCURTAINFRAMEHEALTH" Click="OnCommandClick"/>
+                            <Button Content="Trụ Tường" Tag="QS3DWALLPIER" Click="OnCommandClick"/>
+                            <Button Content="Phân tích giao tường L/T/X" Tag="QS3DWALLJUNCTIONS" Click="OnCommandClick"/>
+                            <Button Content="Xem trước snap đầu tim tường" Tag="QS3DWALLSNAPPREVIEW" Click="OnCommandClick"/>
+                            <Button Content="Áp snap đã xem trước" Tag="QS3DWALLSNAPAPPLY" Click="OnCommandClick"/>
+                            <Button Content="Lỗ Mở Vách" Tag="QS3DOPENING" Click="OnCommandClick"/>
+                            <Button Content="Cửa Đi" Tag="QS3DDOOR" Click="OnCommandClick"/>
+                            <Button Content="Bảng Cửa / Lỗ mở" Tag="QS3DDOORSCHEDULE" Style="{StaticResource HubAccentButton}" Click="OnCommandClick"/>
+                            <Button Content="Xuất Cửa / Lỗ mở XLSX" Tag="QS3DDOORXLSX" Click="OnCommandClick"/>
+                            <Button Content="Tự tìm host cho Cửa/Lỗ" Tag="QS3DAUTOLINKHOSTS" Style="{StaticResource HubAccentButton}" Click="OnCommandClick"/>
+                            <Button Content="Liên kết Cửa/Lỗ với host thủ công" Tag="QS3DLINKHOST" Click="OnCommandClick"/>
+                            <Button Content="Khoét Cửa/Lỗ đang chọn" Tag="QS3DCUTSELECTEDOPENINGS" Click="OnCommandClick"/>
+                            <Button Content="Khoét tất cả Cửa/Lỗ đã link" Tag="QS3DCUTOPENINGS" Click="OnCommandClick"/>
+                            <Button Content="Khoét Cửa/Lỗ trên host cong" Tag="QS3DCUTOPENINGSCURVED" Click="OnCommandClick"/>
+                            <Button Content="Tạo / cập nhật HT_Phòng" Tag="QS3DFINISH" Click="OnCommandClick"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource HubSectionCard}">
+                        <StackPanel>
+                            <TextBlock Text="MÔ HÌNH / KẾT CẤU" Style="{StaticResource PanelTitle}"/>
+                            <Button Content="Phòng Auto từ mạng biên" Tag="QS3DROOMAUTO" Style="{StaticResource HubAccentButton}" Click="OnCommandClick"/>
+                            <Button Content="Dầm" Tag="QS3DBEAM" Click="OnCommandClick"/>
+                            <Button Content="Sàn kết cấu" Tag="QS3DSLAB" Click="OnCommandClick"/>
+                            <Button Content="Cột" Tag="QS3DCOLUMN" Click="OnCommandClick"/>
+                            <Button Content="Vách kết cấu" Tag="QS3DSTRUCTWALL" Click="OnCommandClick"/>
+                            <Button Content="Móng" Tag="QS3DFOUNDATION" Click="OnCommandClick"/>
+                            <Button Content="Cầu thang" Tag="QS3DSTAIR" Click="OnCommandClick"/>
+                            <Button Content="Lan can" Tag="QS3DRAILING" Click="OnCommandClick"/>
+                            <Button Content="Đào đất" Tag="QS3DEARTHWORK" Click="OnCommandClick"/>
+                            <Button Content="Tạo / cập nhật 3D từ đối tượng chọn" Tag="QS3DBUILD3D"
+                                    Style="{StaticResource HubAccentButton}" Click="OnCommandClick"/>
+                            <TextBlock Text="Wall Snap chỉ apply source đã capture và bắt buộc Preview trước. Kết cấu giữ fail-closed geometry; Phòng Auto nhận LINE/POLYLINE/ARC/SPLINE plan-view."
+                                       TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,7,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource HubSectionCard}">
+                        <StackPanel>
+                            <TextBlock Text="DỰ ÁN &amp; TEMPLATE" Style="{StaticResource PanelTitle}"/>
+                            <Button Content="Schedule / Bóc khối lượng Hub" Tag="QS3DSCHEDULES"
+                                    Style="{StaticResource HubAccentButton}" Click="OnCommandClick"/>
+                            <Button Content="Lưu project QS3D" Tag="QS3DSAVE" Click="OnCommandClick"/>
+                            <Button Content="Nạp Template" Tag="QS3DTEMPLATEIMPORT" Click="OnCommandClick"/>
+                            <Button Content="Xuất Template" Tag="QS3DTEMPLATEEXPORT" Click="OnCommandClick"/>
+                            <Button Content="Nhật ký thay đổi" Tag="QS3DAUDIT" Click="OnCommandClick"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2">
+                    <Border Style="{StaticResource HubSectionCard}">
+                        <StackPanel>
+                            <TextBlock Text="NHẬN DẠNG" Style="{StaticResource PanelTitle}"/>
+                            <Button Content="Nhận dạng + duyệt kết quả" Tag="QS3DRECOGNIZE"
+                                    Style="{StaticResource HubAccentButton}" Click="OnCommandClick"/>
+                            <Button Content="Tự áp dụng kết quả chắc chắn" Tag="QS3DRECOGNIZEAUTO" Click="OnCommandClick"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource HubSectionCard}">
+                        <StackPanel>
+                            <TextBlock Text="CỐT THÉP / KHỐI LƯỢNG" Style="{StaticResource PanelTitle}"/>
+                            <Button Content="Bảng Cửa / Lỗ mở" Tag="QS3DDOORSCHEDULE" Click="OnCommandClick"/>
+                            <Button Content="Xuất Cửa / Lỗ mở XLSX" Tag="QS3DDOORXLSX" Click="OnCommandClick"/>
+                            <Button Content="Thiết lập lưới thép selection" Tag="QS3DREBARMESHSETUP" Click="OnCommandClick"/>
+                            <Button Content="Tạo / cập nhật cốt thép cột 3D" Tag="QS3DREBAR3D"
+                                    Style="{StaticResource HubAccentButton}" Click="OnCommandClick"/>
+                            <Button Content="Tạo đai cột 3D" Tag="QS3DREBARTIES3D" Click="OnCommandClick"/>
+                            <Button Content="Kiểm tra đai cột 3D" Tag="QS3DREBARTIEHEALTH" Click="OnCommandClick"/>
+                            <Button Content="Tạo thép dọc dầm 3D" Tag="QS3DBEAMREBAR3D" Click="OnCommandClick"/>
+                            <Button Content="Tạo đai dầm 3D" Tag="QS3DREBARSTIRRUP3D" Click="OnCommandClick"/>
+                            <Button Content="Kiểm tra đai dầm 3D" Tag="QS3DREBARSTIRRUPHEALTH" Click="OnCommandClick"/>
+                            <Button Content="Tạo lưới thép sàn X/Y 3D" Tag="QS3DSLABREBAR3D" Click="OnCommandClick"/>
+                            <Button Content="Kiểm tra lưới thép sàn" Tag="QS3DSLABREBARHEALTH" Click="OnCommandClick"/>
+                            <Button Content="Tạo lưới thép vách ngang/dọc 3D" Tag="QS3DWALLREBAR3D" Click="OnCommandClick"/>
+                            <Button Content="Kiểm tra lưới thép vách" Tag="QS3DWALLREBARHEALTH" Click="OnCommandClick"/>
+                            <Button Content="Tạo lưới thép móng X/Y 3D" Tag="QS3DFOUNDATIONREBAR3D" Click="OnCommandClick"/>
+                            <Button Content="Kiểm tra lưới thép móng" Tag="QS3DFOUNDATIONREBARHEALTH" Click="OnCommandClick"/>
+                            <Button Content="Tạo cốt thép 3D theo BBS shape" Tag="QS3DREBAR3DSHAPE" Click="OnCommandClick"/>
+                            <Button Content="Kiểm tra toàn bộ cốt thép 3D" Tag="QS3DREBARHEALTHALL"
+                                    Style="{StaticResource HubAccentButton}" Click="OnCommandClick"/>
+                            <Button Content="Kiểm tra solid cốt thép cột/dầm" Tag="QS3DREBARHEALTH" Click="OnCommandClick"/>
+                            <Button Content="Kiểm tra solid cốt thép shape" Tag="QS3DREBARSHAPEHEALTH" Click="OnCommandClick"/>
+                            <Button Content="Xem bảng cốt thép" Tag="QS3DBBSVIEW" Click="OnCommandClick"/>
+                            <Button Content="Xuất BBS Excel" Tag="QS3DBBS" Click="OnCommandClick"/>
+                            <Button Content="Xuất BBS CSV UTF-8" Tag="QS3DBBSCSV" Click="OnCommandClick"/>
+                            <Button Content="Bảng tổng hợp khối lượng" Tag="QS3DBQ" Click="OnCommandClick"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource HubSectionCard}">
+                        <StackPanel>
+                            <TextBlock Text="XEM / CẮT 3D" Style="{StaticResource PanelTitle}"/>
+                            <Button Content="Section Box BIM (Detail)" Tag="QS3DSECTIONBOX"
+                                    Style="{StaticResource HubAccentButton}" Click="OnCommandClick"/>
+                            <Button Content="Section Plane" Tag="QS3DSECTIONPLANE" Click="OnCommandClick"/>
+                            <Button Content="Bật / tắt Clip Display" Tag="QS3DCLIPDISPLAY" Click="OnCommandClick"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource HubSectionCard}">
+                        <StackPanel>
+                            <TextBlock Text="BẢN SỬA ĐỔI" Style="{StaticResource PanelTitle}"/>
+                            <Button Content="Chốt mốc so sánh" Tag="QS3DREVBASE" Click="OnCommandClick"/>
+                            <Button Content="So sánh với mốc" Tag="QS3DREVDIFF" Click="OnCommandClick"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource HubSectionCard}">
+                        <StackPanel>
+                            <TextBlock Text="KIỂM TRA / RELEASE" Style="{StaticResource PanelTitle}"/>
+                            <Button Content="Release Readiness" Tag="QS3DRELEASECHECK"
+                                    Style="{StaticResource HubAccentButton}" Click="OnCommandClick"/>
+                            <Button Content="Kiểm tra sức khỏe toàn diện" Tag="QS3DHEALTHALL" Click="OnCommandClick"/>
+                            <Button Content="Kiểm tra sức khỏe cơ bản" Tag="QS3DHEALTH" Click="OnCommandClick"/>
+                            <Button Content="Kiểm tra runtime V25" Tag="QS3DRUNTIMECHECK" Click="OnCommandClick"/>
+                            <Button Content="Tạo Support Bundle" Tag="QS3DSUPPORTBUNDLE" Click="OnCommandClick"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <Border Grid.Row="2" Background="{StaticResource Bg1Brush}"
+                Padding="11,7" BorderThickness="0,1,0,0">
+            <Grid x:Name="DomainHubStatusGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0"
+                        Background="{StaticResource SuccessBrush}" CornerRadius="5"
+                        Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                <TextBlock x:Name="StatusText"
+                           Grid.Column="1"
+                           Text="Chọn một thao tác để gửi lệnh sang BricsCAD."
+                           Foreground="{StaticResource MutedBrush}"
+                           MinWidth="0"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="2"
+                           Text="3D native cần runtime gate V25 thật trước release."
+                           Style="{StaticResource Caption}"
+                           Margin="12,0,0,0"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
