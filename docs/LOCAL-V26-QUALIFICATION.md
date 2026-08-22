@@ -29,6 +29,8 @@ $env:BRICSCAD_V26_DIR = 'C:\Program Files\Bricsys\BricsCAD V26 en_US'
 
 If the installed locale/path differs, use that licensed V26 installation directory instead.
 
+If the process overrides `DOTNET_ROOT`, it must name a real .NET 8 host/runtime root containing `dotnet.exe`, an 8.x `host/fxr/hostfxr.dll`, and an 8.x `shared/Microsoft.NETCore.App/coreclr.dll`. The V26 runtime and native Beam runners reject an incomplete or stale override before starting BricsCAD; either unset the override so the licensed host uses its normal runtime resolution or point it to a verified local runtime root.
+
 Before starting BricsCAD, verify that `dotnet --list-runtimes` reports both `Microsoft.NETCore.App 8.x` and `Microsoft.WindowsDesktop.App 8.x` for x64. A machine with BricsCAD V26 but no discoverable .NET 8 Windows Desktop runtime can enter `NETLOAD` without ever reaching the plugin initializer; that host prerequisite failure is not a plugin runtime PASS.
 
 ## Source/build gate
@@ -62,6 +64,22 @@ Run from a dedicated V26 desktop with all existing BricsCAD processes closed:
 ```
 
 The gate must fail closed if the configured `bricscad.exe` is not major version 26, if the plugin is not the V26 assembly, if the host is not x64, or if `QS3DRUNTIMEPROBE` does not report Ribbon and palette readiness.
+
+### Bounded native Beam P01
+
+Issue `#3573` owns the first representative V26 native authoring/dependent-output cell. After the exact V26 build and generic runtime gate pass, run the guarded two-process matrix on the repository-generated sample only:
+
+```powershell
+.\scripts\test-bricscad-v26-native-beam-dependent.ps1 `
+  -BricsCadDir $env:BRICSCAD_V26_DIR `
+  -PluginDll .\src\QS3D.BricsCAD.V26\bin\x64\Release\net8.0-windows\QS3D.BricsCAD.V26.dll `
+  -FixtureDwg .\samples\generated\QS3D-Sample.dwg `
+  -Profile '<initialized disposable V26 profile>' `
+  -ArtifactDir '<outside-repository empty artifact directory>' `
+  -ConfirmDisposableCopies
+```
+
+The runner reuses the existing production Beam P03 probe commands compiled into the shared V26 adapter. It must prove production Beam authoring, host/longitudinal/stirrup output, a real native top-level `MOVE`, pre-sync generated isolation, `QS3DSYNCSOURCE`, dependent rebuild, scoped Health, save/sidecar persistence and fresh-process cold reopen. Host major 26, the exact V26 output path, runtimeconfig, declared product version and exact Git SHA in the portable PDB SourceLink record are all fail-closed inputs. Until an exact pushed candidate completes this matrix on licensed V26, report `#3573` as `PENDING_LOCAL`; a V25 result cannot be reused.
 
 ## Package/install gate
 

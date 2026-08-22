@@ -37,12 +37,40 @@ function Require-Qs3dMarkerValue {
     }
 }
 
+function Assert-Qs3dV26DotNetRoot {
+    $configured = [Environment]::GetEnvironmentVariable("DOTNET_ROOT", "Process")
+    if ([string]::IsNullOrWhiteSpace($configured)) { return }
+    try { $root = [IO.Path]::GetFullPath($configured.Trim()) }
+    catch { throw "DOTNET_ROOT is set but is not a valid absolute directory." }
+
+    $dotnet = Join-Path $root "dotnet.exe"
+    $fxrRoot = Join-Path $root "host\fxr"
+    $runtimeRoot = Join-Path $root "shared\Microsoft.NETCore.App"
+    if (-not (Test-Path -LiteralPath $root -PathType Container) -or
+        -not (Test-Path -LiteralPath $dotnet -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $fxrRoot -PathType Container) -or
+        -not (Test-Path -LiteralPath $runtimeRoot -PathType Container)) {
+        throw "DOTNET_ROOT is set but does not contain a complete .NET 8 host/runtime."
+    }
+
+    $fxr8 = @(Get-ChildItem -LiteralPath $fxrRoot -Directory -ErrorAction Stop | Where-Object {
+        $_.Name -match '^8\.' -and (Test-Path -LiteralPath (Join-Path $_.FullName "hostfxr.dll") -PathType Leaf)
+    })
+    $runtime8 = @(Get-ChildItem -LiteralPath $runtimeRoot -Directory -ErrorAction Stop | Where-Object {
+        $_.Name -match '^8\.' -and (Test-Path -LiteralPath (Join-Path $_.FullName "coreclr.dll") -PathType Leaf)
+    })
+    if ($fxr8.Count -eq 0 -or $runtime8.Count -eq 0) {
+        throw "DOTNET_ROOT is set but does not contain a complete .NET 8 host/runtime."
+    }
+}
+
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     throw "BricsCAD V26 runtime qualification requires Windows."
 }
 if (-not [Environment]::UserInteractive) {
     throw "BricsCAD V26 runtime qualification requires an interactive Windows session."
 }
+Assert-Qs3dV26DotNetRoot
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($ArtifactDir)) {
