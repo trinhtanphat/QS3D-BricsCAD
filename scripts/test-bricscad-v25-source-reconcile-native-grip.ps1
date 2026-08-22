@@ -51,5 +51,6 @@ Write-Host '  9. Run QS3DSRGRIPP05SYNCCHECK. Semantic/quantities must be 8 m and
 Write-Host ' 10. Run QS3DSRGRIPP05SELECT then production QS3DBUILD3D, then QS3DSRGRIPP05FINAL.'
 Write-Host ' 11. SAVE, close BricsCAD, cold reopen the DWG, NETLOAD the same exact-SHA plugin, run QS3DSRGRIPP05REOPEN.'
 Write-Host ' 12. Record only sanitized QS3D_SOURCE_RECONCILE_NATIVE_GRIP_RUNTIME_V1 markers in issue #3532.'
+Write-Host '     REOPEN proves only current cold state; it must not replay cancel/commit/reconcile/rebuild claims from the prior process.'
 Write-Host ''
 Write-Host 'Do NOT publish LOCAL_PASS from source/build alone. The real manual endpoint grip + ESC/commit behavior is the licensed boundary.'
