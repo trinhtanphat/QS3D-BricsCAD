@@ -12,13 +12,13 @@ namespace QS3D.Core.SmokeTests
             StateIsDeterministic();
             SignedZeroCanonicalizesState();
             ExactLengthBoundariesStayAccepted();
-            InvalidInputsFailClosedWithContractExceptions();
+            InvalidLegacyLengthsFailClosed();
             MalformedUnicodeFailsClosed();
             OwnerAndStateKeysStayUnambiguous();
             OwnerTokenBuilderMatchesCreate();
             StateSensitivityStaysSeparatedFromOwnership();
             ExtremeFiniteElevationIsDeterministic();
-            TokensStayCompactAndHexEncoded();
+            TokensStayCompact();
         }
 
         private static void OwnerIsStableAcrossNameAndElevationChanges()
@@ -83,7 +83,7 @@ namespace QS3D.Core.SmokeTests
             Equal(FloorGeneratedIdentityPlanner.BuildOwnerToken(floorId), identity.OwnerToken);
         }
 
-        private static void InvalidInputsFailClosedWithContractExceptions()
+        private static void InvalidLegacyLengthsFailClosed()
         {
             Throws<ArgumentNullException>(() => FloorGeneratedIdentityPlanner.Create(null));
             Throws<ArgumentException>(() => FloorGeneratedIdentityPlanner.BuildOwnerToken(null));
@@ -153,7 +153,7 @@ namespace QS3D.Core.SmokeTests
             NotEqual(maxA.StateToken, minA.StateToken);
         }
 
-        private static void TokensStayCompactAndHexEncoded()
+        private static void TokensStayCompact()
         {
             var identity = FloorGeneratedIdentityPlanner.Create(
                 new FloorDefinition(new string('F', 64), new string('N', 120), -123.456789d));
