@@ -92,10 +92,6 @@ def main():
         r'qtoXml.Contains("<c r=\"O2\""',
         '"KEEP-ME"',
     ]
-    # The C# source contains a normal opening string quote and escaped quotes
-    # around the XML cell reference: qtoXml.Contains("<c r=\"O2\"", ...).
-    # Normalize only this guard token so source-level escaping is matched exactly.
-    smoke_required[6] = r'qtoXml.Contains("<c r=\"O2\""'.replace(r'Contains(\"', 'Contains("')
     missing_smoke = [token for token in smoke_required if token not in smoke]
     if missing_smoke:
         return fail("review workbook smoke does not cover lifecycle/trace/blank-evidence/atomic refusal", ["missing: " + token for token in missing_smoke])
