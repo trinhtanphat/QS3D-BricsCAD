@@ -190,8 +190,8 @@ namespace QS3D.BricsCAD.V25
                             skipped++;
                             continue;
                         }
-                        var handle = CadHandleService.NormalizeHexHandle(solid.Handle.ToString());
-                        if (string.IsNullOrWhiteSpace(handle) ||
+                        var handle = (CadHandleService.NormalizeHexHandle(solid.Handle.ToString()) ?? string.Empty).Trim();
+                        if (handle.Length == 0 ||
                             !snapshotByHandle.TryGetValue(handle, out var snapshot) ||
                             !semantic.TryGetValue(handle, out var projection))
                         {
