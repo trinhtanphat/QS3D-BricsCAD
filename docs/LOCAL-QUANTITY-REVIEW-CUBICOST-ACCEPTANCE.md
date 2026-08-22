@@ -24,6 +24,28 @@ Remote/static/build/CI success is **not** `LOCAL_PASS`. A local agent records `L
 5. Prepare at least one semantic QS3D element with live native `Solid3d` geometry. A Foundation/raft-like rectangular element is preferred because it makes concrete and four-side formwork evidence easy to inspect.
 6. For the reference arithmetic row, use a deterministic synthetic fixture when available whose expected values are `V = 0.450 m³` and four side faces of `0.300 m²` each, total `1.200 m²`. If the exact fixture is unavailable, record the actual deterministic values and prove internal gross/deduction/net arithmetic instead of fabricating the reference numbers.
 
+## Clean-room BLT foundation reference locked by source regression
+
+The user-supplied `TEST.blt3d` comparison is used only as an external numeric/workflow reference. QS3D does not load or call BLT3D implementation code.
+
+For `Móng Bè-1`, the six child values are:
+
+| Child | Concrete (m³) | Side formwork (m²) |
+| --- | ---: | ---: |
+| #1 | 2.912 | 6.400 |
+| #2 | 3.509 | 7.023 |
+| #3 | 2.664 | 5.840 |
+| #4 | 3.472 | 6.960 |
+| #5 | 2.968 | 6.480 |
+| #6 | 2.460 | 5.680 |
+| Raw total | **17.985** | **38.383** |
+
+The BLT parent presentation rounds those raw totals to `17.99 m³` and `38.4 m²`; child #2 formwork displays as `7.02 m²`. The repository smoke test locks the raw totals and those observed display-rounding reference values so a future arithmetic drift is visible.
+
+For the rectangular `Móng Bè-4` reference, `1.50 × 1.50 × 0.20 = 0.450 m³` and side-only formwork is `4 × 1.50 × 0.20 = 1.200 m²`.
+
+Foundation native BREP explanation has an additional source invariant: preserve the original native BREP enumeration in `SOLID-xx/FACE-yy`, but only vertical perimeter `Side` faces enter foundation formwork evidence. Top and bottom faces are excluded. Elongated rectangular foundations must not relabel their two vertical end faces as non-formwork merely because one plan axis is longer; all four vertical perimeter faces remain `Side` for the Foundation rule `S = perimeter × thickness`.
+
 ## Acceptance matrix
 
 ### Q1 — deterministic Quantity Tree
@@ -32,6 +54,7 @@ Remote/static/build/CI success is **not** `LOCAL_PASS`. A local agent records `L
 - Verify the semantic hierarchy is visibly `Floor -> Type/Category -> Name/Family -> Element`.
 - Select the test element leaf and confirm its displayed quantities match the current project result.
 - Change to a parent Name/Family, Type/Category and Floor node and confirm the descendant scope is deterministic and contains only the intended semantic elements.
+- For the six-child `Móng Bè-1` reference or an equivalent synthetic family, confirm six distinct semantic Element leaves remain six leaves and are not collapsed merely because they share a Family/name pattern.
 
 PASS requires no guessed grouping and no cross-project/DWG row reuse.
 
@@ -60,6 +83,7 @@ For the test element, inspect **THỂ TÍCH • GỘP - TRỪ = CÒN**.
 - Where there is no valid intersection, deduction is zero and `V còn = V gộp`.
 - Where a valid opening/intersection exists, verify the deduction row identifies the actual cause and `V còn = V gộp - deduction`.
 - On the reference fixture, verify `0.450 m³` when that fixture is used.
+- On the six-child clean-room reference, verify the unrounded child sum is `17.985 m³`; any parent presentation rounding must not change the stored arithmetic total.
 
 PASS requires current live geometry; do not accept bounding-box volume or a stale cached value as exact evidence.
 
@@ -68,10 +92,12 @@ PASS requires current live geometry; do not accept bounding-box volume or a stal
 Inspect **VÁN KHUÔN THEO MẶT • GỘP - TRỪ = CÒN**.
 
 - Verify exact stable face rows such as `SOLID-01/FACE-01`, `.../FACE-02`, etc. are shown with face type and gross/net area.
-- Confirm top/bottom/non-applicable faces are excluded according to the current quantity rule and side faces contribute as expected.
+- For Foundation, confirm top and bottom faces do **not** enter `FormworkFaces`; all four vertical perimeter faces do, including elongated rectangles where a generic dominant-axis classifier would otherwise call two vertical faces `End`.
+- Confirm other non-applicable faces are excluded according to the current quantity rule.
 - On the reference rectangular fixture, verify four contributing side faces of `0.300 m²` each and `S còn = 1.200 m²` when that fixture is used.
+- On the six-child clean-room reference, verify the unrounded side-formwork sum is `38.383 m²`; parent display may round to `38.4 m²` but evidence/export totals must retain the underlying quantity.
 
-PASS requires the displayed sum to equal the contributing exact-face evidence after deductions.
+PASS requires the displayed/evidence sum to equal the contributing exact-face evidence after deductions, and Foundation must not accidentally count its top or bottom surface as formwork.
 
 ### Q6 — click exact face -> only that native BREP face
 
@@ -105,6 +131,7 @@ PASS requires exact current-region evidence; no persistent Boolean/face/material
 - With one exact element/detail selected, click **Xuất evidence**.
 - Open the produced workbook using the repository-approved inspection tool when available.
 - Verify exported concrete/formwork explanation IDs, gross/net rows, exact face references and deduction source/target/intersection references correspond to the same explanation currently shown in Quantity Insight.
+- For the Foundation reference, verify excluded top/bottom native faces do not reappear as formwork contribution rows in the evidence workbook.
 
 PASS requires export of the reviewed canonical evidence graph, not an independently recalculated second answer.
 
@@ -162,6 +189,7 @@ Record one table or structured log containing:
 - PASS/FAIL for Q1-Q14, marking truly not-applicable rows explicitly;
 - the synthetic/reference fixture class used, without private path/project identifiers;
 - aggregate quantity values needed to demonstrate arithmetic, without raw customer data;
+- proof that Foundation top/bottom faces were excluded and all four vertical perimeter faces remained eligible for a rectangular/elongated pad;
 - proof that wrong-DWG/stale/provenance cases refused and prior selection was preserved;
 - save/cold-reopen and multi-DWG result;
 - confirmation that no private/customer DWG, raw Handle list, ProjectId, drawing fingerprint, license information, proprietary DLL or unsanitized screenshot/log was committed.
