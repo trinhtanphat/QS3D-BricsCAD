@@ -1,0 +1,62 @@
+<Window x:Class="QS3D.BricsCAD.V25.UI.GeometryExtensionsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QS3D • Geometry Extensions" Width="560" Height="720"
+        WindowStartupLocation="CenterOwner" Background="#17191C">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Grid Background="{StaticResource Bg0Brush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Border Background="{StaticResource Bg1Brush}" Padding="14" BorderThickness="0,0,0,1">
+            <StackPanel>
+                <TextBlock Text="GEOMETRY EXTENSIONS" FontWeight="Bold" FontSize="18"/>
+                <TextBlock Text="Review-gated wall cleanup • opening booleans • generated rebar" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0"/>
+            </StackPanel>
+        </Border>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="14">
+                <TextBlock Text="WALL TOPOLOGY" Style="{StaticResource SectionLabel}"/>
+                <Button Content="Phân tích L / T / X + SnapPlan" Tag="QS3DWALLJUNCTIONS" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                <Button Content="Preview endpoint snap" Tag="QS3DWALLSNAPPREVIEW" Click="OnCommandClick"/>
+                <Button Content="Apply previewed snap" Tag="QS3DWALLSNAPAPPLY" Click="OnCommandClick"/>
+                <TextBlock Text="Apply chỉ dùng plan đã preview và phải qua source/plan fingerprint guards. Không dùng để blind-trim DWG." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,10"/>
+
+                <TextBlock Text="OPENING / DOOR" Style="{StaticResource SectionLabel}"/>
+                <Button Content="Auto match host an toàn" Tag="QS3DAUTOLINKHOSTS" Click="OnCommandClick"/>
+                <Button Content="Khoét host LINE / straight POLYLINE" Tag="QS3DCUTOPENINGS" Click="OnCommandClick"/>
+                <Button Content="Khoét host cong / bulged POLYLINE" Tag="QS3DCUTOPENINGSCURVED" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                <TextBlock Text="Curved cut chuẩn bị cutter + fingerprint trước BoolSubtract; rerun cùng solid/fingerprint là idempotent." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,10"/>
+
+                <TextBlock Text="REBAR 3D" Style="{StaticResource SectionLabel}"/>
+                <Button Content="Cột — thanh dọc" Tag="QS3DREBAR3D" Click="OnCommandClick"/>
+                <Button Content="Cột — đai chữ nhật" Tag="QS3DREBARTIES3D" Click="OnCommandClick"/>
+                <Button Content="Dầm — thanh dọc" Tag="QS3DBEAMREBAR3D" Click="OnCommandClick"/>
+                <Button Content="Dầm — đai chữ nhật" Tag="QS3DREBARSTIRRUP3D" Click="OnCommandClick"/>
+                <Button Content="Sàn — lưới X/Y" Tag="QS3DSLABREBAR3D" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                <Button Content="Vách BTCT — lưới ngang/dọc" Tag="QS3DWALLREBAR3D" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                <Button Content="BBS shape — STRAIGHT / L / U / S" Tag="QS3DREBAR3DSHAPE" Click="OnCommandClick"/>
+
+                <TextBlock Text="REBAR HEALTH" Style="{StaticResource SectionLabel}" Margin="0,12,0,4"/>
+                <Button Content="Health — thanh dọc cột/dầm" Tag="QS3DREBARHEALTH" Click="OnCommandClick"/>
+                <Button Content="Health — BBS shape" Tag="QS3DREBARSHAPEHEALTH" Click="OnCommandClick"/>
+                <Button Content="Health — đai cột" Tag="QS3DREBARTIEHEALTH" Click="OnCommandClick"/>
+                <Button Content="Health — đai dầm" Tag="QS3DREBARSTIRRUPHEALTH" Click="OnCommandClick"/>
+                <Button Content="Health — lưới sàn" Tag="QS3DSLABREBARHEALTH" Click="OnCommandClick"/>
+                <Button Content="Health — lưới vách" Tag="QS3DWALLREBARHEALTH" Click="OnCommandClick"/>
+                <Button Content="Health — tất cả generated rebar" Tag="QS3DREBARHEALTHALL" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+            </StackPanel>
+        </ScrollViewer>
+        <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="10" BorderThickness="0,1,0,0">
+            <TextBlock x:Name="StatusText" Text="Các native geometry path vẫn cần Gate C BricsCAD V25 thật trước release." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+        </Border>
+    </Grid>
+</Window>
