@@ -119,6 +119,45 @@ function Restore-EnvironmentValue {
     else { Set-Item -LiteralPath ("Env:" + $Name) -Value $Value }
 }
 
+function Read-Qs3dDeclaredProductVersion {
+    param([Parameter(Mandatory = $true)][string]$ProjectPath)
+    [xml]$project = Get-Content -LiteralPath $ProjectPath -Raw
+    $values = @(
+        $project.Project.PropertyGroup |
+            ForEach-Object { [string]$_.Version } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            ForEach-Object { $_.Trim() } |
+            Select-Object -Unique
+    )
+    if ($values.Count -ne 1) { throw "LOCAL-004 P01 project Version identity is missing or ambiguous." }
+    return [string]$values[0]
+}
+
+function Assert-Qs3dExactCandidateAssembly {
+    param(
+        [Parameter(Mandatory = $true)][string]$AssemblyPath,
+        [Parameter(Mandatory = $true)][string]$ProjectPath,
+        [Parameter(Mandatory = $true)][string]$GitHead
+    )
+    $declaredVersion = Read-Qs3dDeclaredProductVersion -ProjectPath $ProjectPath
+    $actualVersion = [string](Get-Item -LiteralPath $AssemblyPath).VersionInfo.ProductVersion
+    $legacyRevisionVersion = $declaredVersion + "+" + $GitHead
+    if (-not [string]::Equals($actualVersion, $declaredVersion, [StringComparison]::OrdinalIgnoreCase) -and
+        -not [string]::Equals($actualVersion, $legacyRevisionVersion, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "LOCAL-004 P01 assembly ProductVersion does not match the exact source product contract."
+    }
+
+    $pdbPath = [IO.Path]::ChangeExtension($AssemblyPath, ".pdb")
+    if (-not (Test-Path -LiteralPath $pdbPath -PathType Leaf)) {
+        throw "LOCAL-004 P01 exact-source PDB is missing."
+    }
+    $pdbText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($pdbPath))
+    $sourceLinkIdentity = "https://raw.githubusercontent.com/trinhtanphat/QS3D-BricsCAD/" + $GitHead + "/"
+    if ($pdbText.IndexOf($sourceLinkIdentity, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        throw "LOCAL-004 P01 assembly PDB is not bound to the exact Git candidate SHA."
+    }
+}
+
 function Stop-Qs3dLaunchedProcess {
     param([AllowNull()][Diagnostics.Process]$Process)
     if ($null -eq $Process) { return }
@@ -260,7 +299,9 @@ if (-not [string]::Equals($PluginDll, $expectedPlugin, [StringComparison]::Ordin
 
 $bricscadExe = Join-Path $BricsCadDir "bricscad.exe"
 $coreDll = Join-Path (Split-Path -Parent $PluginDll) "QS3D.Core.dll"
-foreach ($required in @($bricscadExe, $PluginDll, $coreDll, $FixtureDwg)) {
+$pluginProject = Join-Path $repoRoot "src\QS3D.BricsCAD.V25\QS3D.BricsCAD.V25.csproj"
+$coreProject = Join-Path $repoRoot "src\QS3D.Core\QS3D.Core.csproj"
+foreach ($required in @($bricscadExe, $PluginDll, $coreDll, $pluginProject, $coreProject, $FixtureDwg)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw "Required LOCAL-004 P01 input is missing." }
 }
 
@@ -272,13 +313,8 @@ if ($gitHead -notmatch '^[0-9a-f]{40}$') { throw "LOCAL-004 P01 Git candidate SH
 $gitStatus = @(& $git.Source -C $repoRoot status --porcelain=v1 --untracked-files=all 2>$null)
 if ($LASTEXITCODE -ne 0) { throw "Cannot inspect the LOCAL-004 P01 candidate worktree." }
 if ($gitStatus.Count -ne 0) { throw "LOCAL-004 P01 qualification requires a clean exact-SHA worktree." }
-$expectedAssemblyRevision = "+" + $gitHead
-foreach ($assemblyPath in @($PluginDll, $coreDll)) {
-    $productVersion = [string](Get-Item -LiteralPath $assemblyPath).VersionInfo.ProductVersion
-    if (-not $productVersion.EndsWith($expectedAssemblyRevision, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "LOCAL-004 P01 assembly was not built from the exact Git candidate SHA."
-    }
-}
+Assert-Qs3dExactCandidateAssembly -AssemblyPath $PluginDll -ProjectPath $pluginProject -GitHead $gitHead
+Assert-Qs3dExactCandidateAssembly -AssemblyPath $coreDll -ProjectPath $coreProject -GitHead $gitHead
 if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
     throw "Close existing BricsCAD processes before isolated LOCAL-004 P01 qualification."
 }
@@ -436,7 +472,12 @@ $metadata = [ordered]@{
     started_at = $startedAt.ToUniversalTime().ToString("O")
     completed_at = (Get-Date).ToUniversalTime().ToString("O")
     bricscad_file_version = (Get-Item -LiteralPath $bricscadExe).VersionInfo.FileVersion
+    plugin_product_version = [string](Get-Item -LiteralPath $PluginDll).VersionInfo.ProductVersion
     plugin_sha256 = $pluginHash
+    core_sha256 = (Get-FileHash -LiteralPath $coreDll -Algorithm SHA256).Hash.ToUpperInvariant()
+    plugin_pdb_sha256 = (Get-FileHash -LiteralPath ([IO.Path]::ChangeExtension($PluginDll, ".pdb")) -Algorithm SHA256).Hash.ToUpperInvariant()
+    core_pdb_sha256 = (Get-FileHash -LiteralPath ([IO.Path]::ChangeExtension($coreDll, ".pdb")) -Algorithm SHA256).Hash.ToUpperInvariant()
+    exact_source_link_verified = $true
     repository_fixture_sha256 = $fixtureHash
     drawing_persisted_changed = $drawingPersistedChanged
     sidecar_persisted = $sidecarPersisted

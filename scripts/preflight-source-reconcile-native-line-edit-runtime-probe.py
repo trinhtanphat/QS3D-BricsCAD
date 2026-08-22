@@ -130,7 +130,14 @@ required_runner_tokens = (
     "status --porcelain=v1 --untracked-files=all",
     "qualification requires a clean exact-SHA worktree",
     "ProductVersion",
-    "EndsWith($expectedAssemblyRevision",
+    "Read-Qs3dDeclaredProductVersion",
+    "Assert-Qs3dExactCandidateAssembly",
+    '[IO.Path]::ChangeExtension($AssemblyPath, ".pdb")',
+    '$declaredVersion + "+" + $GitHead',
+    "https://raw.githubusercontent.com/trinhtanphat/QS3D-BricsCAD/",
+    "exact_source_link_verified",
+    "plugin_pdb_sha256",
+    "core_pdb_sha256",
     "FixtureDwg must be the repository-generated QS3D sample",
     "ArtifactDir must stay outside the repository",
     "Close existing BricsCAD processes",
@@ -153,6 +160,8 @@ if runner.count('"QS3DSRNATIVEREOPEN"') < 1:
     errors.append("runner must execute the cold-reopen verification command")
 if "Get-Clipboard" in runner or "Set-Clipboard" in runner:
     errors.append("runner must not inspect or mutate the user's clipboard")
+if "EndsWith($expectedAssemblyRevision" in runner or '$expectedAssemblyRevision = "+" + $gitHead' in runner:
+    errors.append("runner must not conflate stable ProductVersion with exact-source provenance")
 for forbidden_marker_key in (
     '"handle=', '"element_id=', '"project_id=', '"drawing_path=',
     '"exception_message=', '"stack_trace=', '"exception_type=',
