@@ -1,0 +1,57 @@
+<Window x:Class="QS3D.BricsCAD.V25.UI.Rebar3DHubWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QS3D • Cốt thép 3D" Height="700" Width="720"
+        WindowStartupLocation="CenterOwner" Background="#17191C">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="Theme.xaml"/></ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Grid Background="{StaticResource Bg0Brush}">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Border Background="{StaticResource Bg1Brush}" Padding="14" BorderThickness="0,0,0,1">
+            <StackPanel>
+                <TextBlock Text="QS3D — CỐT THÉP 3D" FontWeight="Bold" FontSize="18"/>
+                <TextBlock Text="BBS • thanh dọc • đai • lưới sàn/vách/móng • health" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0"/>
+            </StackPanel>
+        </Border>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <Grid Margin="14">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="14"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="CỘT / DẦM" Style="{StaticResource SectionLabel}"/>
+                    <Button Content="Thanh dọc cột 3D" Tag="QS3DREBAR3D" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Đai cột 3D" Tag="QS3DREBARTIES3D" Click="OnCommandClick"/>
+                    <Button Content="Thép dọc dầm 3D" Tag="QS3DBEAMREBAR3D" Click="OnCommandClick"/>
+                    <Button Content="Đai dầm 3D" Tag="QS3DREBARSTIRRUP3D" Click="OnCommandClick"/>
+
+                    <TextBlock Text="SÀN / VÁCH / MÓNG" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
+                    <Button Content="Thiết lập lưới cho selection" Tag="QS3DREBARMESHSETUP" Click="OnCommandClick"/>
+                    <Button Content="Lưới thép sàn X/Y 3D" Tag="QS3DSLABREBAR3D" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Lưới thép vách H/V 3D" Tag="QS3DWALLREBAR3D" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Lưới thép móng X/Y 3D" Tag="QS3DFOUNDATIONREBAR3D" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <TextBlock Text="Sàn và Móng dùng cùng RectangularSlabMeshPlanner; mỗi generated family có metadata/ownership/stale state riêng. Hai phương có thể dùng diameter, count hoặc spacing độc lập." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="BBS SHAPE / BẢNG" Style="{StaticResource SectionLabel}"/>
+                    <Button Content="Cốt thép theo BBS shape 3D" Tag="QS3DREBAR3DSHAPE" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Xem BBS" Tag="QS3DBBSVIEW" Click="OnCommandClick"/>
+                    <Button Content="Xuất BBS Excel" Tag="QS3DBBS" Click="OnCommandClick"/>
+                    <Button Content="Xuất BBS CSV" Tag="QS3DBBSCSV" Click="OnCommandClick"/>
+
+                    <TextBlock Text="HEALTH" Style="{StaticResource SectionLabel}" Margin="0,16,0,4"/>
+                    <Button Content="Health toàn mô hình" Tag="QS3DHEALTHALL" Style="{StaticResource AccentButton}" Click="OnCommandClick"/>
+                    <Button Content="Health toàn bộ cốt thép" Tag="QS3DREBARHEALTHALL" Click="OnCommandClick"/>
+                    <Button Content="Health lưới thép móng" Tag="QS3DFOUNDATIONREBARHEALTH" Click="OnCommandClick"/>
+                    <Button Content="Health đai cột" Tag="QS3DREBARTIEHEALTH" Click="OnCommandClick"/>
+                    <Button Content="Health đai dầm" Tag="QS3DREBARSTIRRUPHEALTH" Click="OnCommandClick"/>
+                    <Button Content="Health BBS shape" Tag="QS3DREBARSHAPEHEALTH" Click="OnCommandClick"/>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+        <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="10" BorderThickness="0,1,0,0">
+            <TextBlock x:Name="StatusText" Text="Chọn cấu kiện semantic/source CAD trước khi chạy lệnh tạo hình học." Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis"/>
+        </Border>
+    </Grid>
+</Window>

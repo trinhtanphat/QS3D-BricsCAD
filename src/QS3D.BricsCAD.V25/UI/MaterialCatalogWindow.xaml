@@ -1,0 +1,78 @@
+<Window x:Class="QS3D.BricsCAD.V25.UI.MaterialCatalogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QS3D • Vật liệu" Width="780" Height="700"
+        WindowStartupLocation="CenterOwner" Background="#17191C">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Grid Background="{StaticResource Bg0Brush}">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Border Background="{StaticResource Bg1Brush}" Padding="15" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="MATERIAL CATALOG" FontSize="19" FontWeight="Bold"/>
+                    <TextBlock Text="Built-in + vật liệu tùy chỉnh • semantic assignment • material usage XLSX" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0"/>
+                </StackPanel>
+                <WrapPanel Grid.Column="1">
+                    <Button Content="Xuất bảng vật liệu" Style="{StaticResource AccentButton}" Click="OnExportClick"/>
+                    <Button Content="Làm mới" Click="OnRefreshClick" Margin="8,0,0,0"/>
+                </WrapPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="14">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="1.1*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="0.9*"/></Grid.ColumnDefinitions>
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <TextBlock Text="DANH MỤC" Style="{StaticResource SectionLabel}"/>
+                <ListView x:Name="MaterialList" Grid.Row="1" SelectionChanged="OnMaterialSelectionChanged">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Tên" Width="190" DisplayMemberBinding="{Binding Name}"/>
+                            <GridViewColumn Header="Đơn vị" Width="70" DisplayMemberBinding="{Binding Unit}"/>
+                            <GridViewColumn Header="Mô tả" Width="190" DisplayMemberBinding="{Binding Description}"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+                <StackPanel Grid.Row="2" Margin="0,10,0,0">
+                    <TextBlock Text="Đang được project tham chiếu" Foreground="{StaticResource MutedBrush}"/>
+                    <TextBlock x:Name="ReferencedText" Text="—" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                </StackPanel>
+            </Grid>
+
+            <StackPanel Grid.Column="2">
+                <TextBlock Text="CUSTOM MATERIAL" Style="{StaticResource SectionLabel}"/>
+                <TextBlock Text="Tên vật liệu" Foreground="{StaticResource MutedBrush}"/>
+                <TextBox x:Name="NameBox" Margin="0,2,0,8"/>
+                <TextBlock Text="Đơn vị" Foreground="{StaticResource MutedBrush}"/>
+                <TextBox x:Name="UnitBox" Margin="0,2,0,8"/>
+                <TextBlock Text="Mô tả" Foreground="{StaticResource MutedBrush}"/>
+                <TextBox x:Name="DescriptionBox" Margin="0,2,0,8" AcceptsReturn="True" Height="70" TextWrapping="Wrap"/>
+                <WrapPanel Margin="0,0,0,16">
+                    <Button Content="Mới" Click="OnNewClick"/>
+                    <Button Content="Lưu custom" Style="{StaticResource AccentButton}" Click="OnSaveClick"/>
+                    <Button Content="Xóa custom" Click="OnDeleteClick"/>
+                </WrapPanel>
+
+                <TextBlock Text="ÁP DỤNG CHO SELECTION" Style="{StaticResource SectionLabel}"/>
+                <TextBlock Text="Thuộc tính đích" Foreground="{StaticResource MutedBrush}"/>
+                <ComboBox x:Name="TargetCombo" SelectedIndex="0" Margin="0,2,0,8">
+                    <ComboBoxItem Content="Vật liệu chính (Material)" Tag="Material"/>
+                    <ComboBoxItem Content="Khung Vách Kính (CurtainFrameMaterial)" Tag="CurtainFrameMaterial"/>
+                </ComboBox>
+                <Button Content="Áp dụng material đang chọn" Style="{StaticResource AccentButton}" Click="OnApplyClick"/>
+                <TextBlock Text="Selection có thể là source CAD hoặc generated QS3D object. Nếu một selected handle bị nhiều semantic element claim, QS3D sẽ từ chối thay vì sửa mơ hồ. Bảng vật liệu kế thừa Family khi Instance chưa override và tách riêng CurtainFrameMaterial." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+            </StackPanel>
+        </Grid>
+
+        <Border Grid.Row="2" Background="{StaticResource Bg1Brush}" Padding="10" BorderThickness="0,1,0,0">
+            <TextBlock x:Name="StatusText" Text="Sẵn sàng" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+        </Border>
+    </Grid>
+</Window>
