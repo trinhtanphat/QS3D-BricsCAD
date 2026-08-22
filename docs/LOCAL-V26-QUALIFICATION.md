@@ -4,14 +4,17 @@ Status: `LOCAL_ONLY` / `DO_NOT_RETRY_REMOTE` until a licensed interactive BricsC
 
 ## Why V26 is a separate gate
 
-BricsCAD V26 hosts managed plugins on .NET 8 instead of the .NET Framework 4.8 lane used by BricsCAD V25. QS3D therefore emits a distinct `QS3D.BricsCAD.V26.dll` from `src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj`, targeting `net8.0-windows` and resolving `BrxMgd.dll` / `TD_Mgd.dll` from the installed V26 directory only.
+BricsCAD V26 hosts managed plugins on .NET 8 instead of the .NET Framework 4.8 lane used by BricsCAD V25. QS3D therefore emits a distinct `QS3D.BricsCAD.V26.dll` from `src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj`, targeting `net8.0-windows` and resolving `BrxMgd.dll`, `TD_Mgd.dll`, and `TD_MgdBrep.dll` from the installed V26 directory only. `TD_MgdBrep.dll` is required because the shared quantity explanation/preview code uses the native BREP API.
 
 The V25 project remains `net48`. Passing source/static checks or the Core smoke suite does **not** prove V26 runtime compatibility.
+
+The V26 project keeps nullable annotations from the linked adapter source while retaining the established shared-source flow-warning context; all other repository warnings-as-errors remain active. It also emits `QS3D.BricsCAD.V26.runtimeconfig.json` with the explicit .NET 8 Windows Desktop framework contract required by the shared WPF/WinForms adapter. Update preferences use the V26-specific registry path, and unsigned direct preview download remains disabled for V26 so the Update Center fails closed to the manual release page while the signed-manifest path remains separate.
 
 ## Prerequisites
 
 - Windows x64 interactive desktop.
 - Licensed BricsCAD V26 x64.
+- The licensed V26 installation must contain the co-located `BrxMgd.dll`, `TD_Mgd.dll`, and `TD_MgdBrep.dll` host assemblies.
 - .NET 8 Windows Desktop Runtime x64 / compatible .NET 8 SDK.
 - Python 3 and .NET SDK available for repository preflights/build.
 - Clean checkout at the exact candidate SHA.
@@ -25,6 +28,8 @@ $env:BRICSCAD_V26_DIR = 'C:\Program Files\Bricsys\BricsCAD V26 en_US'
 ```
 
 If the installed locale/path differs, use that licensed V26 installation directory instead.
+
+Before starting BricsCAD, verify that `dotnet --list-runtimes` reports both `Microsoft.NETCore.App 8.x` and `Microsoft.WindowsDesktop.App 8.x` for x64. A machine with BricsCAD V26 but no discoverable .NET 8 Windows Desktop runtime can enter `NETLOAD` without ever reaching the plugin initializer; that host prerequisite failure is not a plugin runtime PASS.
 
 ## Source/build gate
 
@@ -69,6 +74,7 @@ After the exact V26 Release build passes source/build checks:
 The package must contain at minimum:
 
 - `QS3D.BricsCAD.V26.dll`;
+- `QS3D.BricsCAD.V26.runtimeconfig.json`;
 - `QS3D.Core.dll`;
 - `install-v26-autoload.ps1`;
 - `uninstall-v26-autoload.ps1`;
