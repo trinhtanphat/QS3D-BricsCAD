@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
             ExactGeometryIsSingleDeterministicPair();
             NearGeometryRequiresToleranceAndClassificationMatch();
             SemanticIdentityUsesSourceProvenance();
+            SourceIdentityRejectsRawControlCharacters();
+            SourceIdentityPreservesOrdinarySpaceNormalization();
             ExactAndSemanticEvidenceCanCoexist();
             DifferentElementsAreRejected();
             InputOrderingDoesNotChangePairKey();
@@ -78,6 +80,46 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Shared normalized source identity must produce a semantic duplicate even when geometry differs.");
             if (result.Summary.SemanticIdentityCount != 1)
                 throw new Exception("Semantic duplicate summary count is incorrect.");
+        }
+
+        private static void SourceIdentityRejectsRawControlCharacters()
+        {
+            var element = Element("CTRL", "Architecture", "Door", Box(0d, 0d, 0d, 1d, 0.2d, 2d));
+            var rawValues = new[]
+            {
+                "\tSRC-42",
+                "SRC-42\t",
+                "\rSRC-42",
+                "SRC-42\r",
+                "\nSRC-42",
+                "SRC-42\n"
+            };
+
+            foreach (var rawValue in rawValues)
+            {
+                var rejected = false;
+                try
+                {
+                    _ = new DuplicateCandidate(element, rawValue);
+                }
+                catch (ArgumentException ex) when (string.Equals(ex.ParamName, "sourceId", StringComparison.Ordinal))
+                {
+                    rejected = true;
+                }
+
+                if (!rejected)
+                    throw new Exception("Duplicate source identity must reject raw TAB/CR/LF before trimming.");
+            }
+        }
+
+        private static void SourceIdentityPreservesOrdinarySpaceNormalization()
+        {
+            var element = Element("SPACE", "Architecture", "Door", Box(0d, 0d, 0d, 1d, 0.2d, 2d));
+            var candidate = new DuplicateCandidate(element, "  SRC-42  ");
+            Equal("SRC-42", candidate.SourceId, "Ordinary surrounding spaces must still normalize after raw-control validation.");
+
+            var empty = new DuplicateCandidate(element, "   ");
+            Equal(string.Empty, empty.SourceId, "Whitespace-only source identity must remain empty after normalization.");
         }
 
         private static void ExactAndSemanticEvidenceCanCoexist()
