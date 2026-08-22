@@ -47,7 +47,7 @@ else:
     detach = text[detach_start:] if detach_start >= 0 else ""
     for token in (
         "if (!_attached) return;",
-        "BcadApplication.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed;",
+        "DetachDocumentManagerHandler();",
         "_window.Activated -= OnWindowActivated;",
         "_window.PreviewMouseDown -= OnPreviewMouseDown;",
         "_window.PreviewKeyDown -= OnPreviewKeyDown;",
@@ -57,13 +57,21 @@ else:
         if token not in detach:
             errors.append("modeless Detach lost best-effort handler cleanup contract: " + token)
 
-    # Preserve the existing safety/identity boundaries.
+    helper_start = text.find("private void DetachDocumentManagerHandler()")
+    helper_end = text.find("private void OnWindowClosed", helper_start + 1)
+    helper = text[helper_start:helper_end] if helper_start >= 0 and helper_end > helper_start else ""
+    if "BcadApplication.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed;" not in helper:
+        errors.append("document-manager detach helper must remove the global DocumentToBeDestroyed subscription")
+
+    # Preserve the existing safety/identity boundaries while allowing the safer dispatcher
+    # callback that catches Window.Close failures on the UI thread.
     for token in (
         "Registrations.GetValue(window, key => new Registration(key, document))",
         'throw new InvalidOperationException("A modeless QS3D window cannot be rebound to a different BricsCAD document.")',
         "ReferenceEquals(e.Document, _document)",
         "CloseForProjectChange();",
-        "_window.Dispatcher.BeginInvoke(new Action(_window.Close))",
+        "_window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher))",
+        "private void TryCloseWindowOnDispatcher()",
     ):
         if token not in text:
             errors.append("modeless lifetime atomicity change lost existing safety contract: " + token)
@@ -78,4 +86,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: document-bound modeless lifetime attachment rolls partial subscriptions back through the existing best-effort Detach path, clears failed project affinity, remains retryable, and preserves source-DWG/project fail-closed identity behavior.")
+print("PASS: document-bound modeless lifetime attachment rolls partial subscriptions back through the existing best-effort Detach path, centralizes global handler removal, clears failed project affinity, remains retryable, and preserves source-DWG/project fail-closed identity behavior.")

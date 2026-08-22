@@ -7,10 +7,22 @@ namespace QS3D.Core.Geometry
     {
         public CurtainWallRect(double xM, double zM, double widthM, double heightM)
         {
-            X_M = xM;
-            Z_M = zM;
-            WidthM = widthM;
-            HeightM = heightM;
+            X_M = NonNegativeFinite(xM, nameof(xM));
+            Z_M = NonNegativeFinite(zM, nameof(zM));
+            WidthM = PositiveFinite(widthM, nameof(widthM));
+            HeightM = PositiveFinite(heightM, nameof(heightM));
+
+            var right = X_M + WidthM;
+            if (double.IsNaN(right) || double.IsInfinity(right))
+                throw new OverflowException("Curtain rectangle right extent must remain finite.");
+            if (!(right > X_M))
+                throw new OverflowException("Curtain rectangle width is below the representable coordinate resolution.");
+
+            var top = Z_M + HeightM;
+            if (double.IsNaN(top) || double.IsInfinity(top))
+                throw new OverflowException("Curtain rectangle top extent must remain finite.");
+            if (!(top > Z_M))
+                throw new OverflowException("Curtain rectangle height is below the representable coordinate resolution.");
         }
 
         public double X_M { get; }
@@ -28,6 +40,24 @@ namespace QS3D.Core.Geometry
                     throw new OverflowException("Curtain rectangle area underflowed to zero.");
                 return area == 0d ? 0d : area;
             }
+        }
+
+        private static double NonNegativeFinite(double value, string parameterName)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new ArgumentOutOfRangeException(parameterName, "Curtain rectangle coordinate must be finite.");
+            if (value < 0d)
+                throw new ArgumentOutOfRangeException(parameterName, "Curtain rectangle coordinate must be non-negative.");
+            return value == 0d ? 0d : value;
+        }
+
+        private static double PositiveFinite(double value, string parameterName)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new ArgumentOutOfRangeException(parameterName, "Curtain rectangle dimension must be finite.");
+            if (!(value > 0d))
+                throw new ArgumentOutOfRangeException(parameterName, "Curtain rectangle dimension must be greater than zero.");
+            return value;
         }
     }
 

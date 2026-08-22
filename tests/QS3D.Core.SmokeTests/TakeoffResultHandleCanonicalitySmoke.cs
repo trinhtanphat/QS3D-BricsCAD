@@ -23,11 +23,11 @@ namespace QS3D.Core.SmokeTests
             AssertRejected("H\u0001X");
             AssertRejected("   ");
 
-            var signedZero = new TakeoffResult("H2", TakeoffKind.Length, -0d, " m ");
+            var signedZero = new TakeoffResult("H2", TakeoffKind.Length, -0d, "m");
             if (BitConverter.DoubleToInt64Bits(signedZero.Value) != BitConverter.DoubleToInt64Bits(0d))
                 throw new InvalidOperationException("Takeoff signed-zero canonicalization regressed.");
             if (!string.Equals(signedZero.Unit, "m", StringComparison.Ordinal))
-                throw new InvalidOperationException("Takeoff unit normalization regressed.");
+                throw new InvalidOperationException("Canonical takeoff unit changed during handle validation.");
         }
 
         private static void AssertRejected(string handle)

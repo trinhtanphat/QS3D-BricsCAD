@@ -18,7 +18,7 @@ namespace QS3D.BricsCAD.V25
         private static readonly Dictionary<Document, DocumentBeginCloseEventHandler> BeginCloseHandlers = new Dictionary<Document, DocumentBeginCloseEventHandler>();
         private static readonly Dictionary<Document, bool> PendingReconciliation = new Dictionary<Document, bool>();
         private static readonly Dictionary<Document, FailedProjectReconcile> FailedProjectReconciliations = new Dictionary<Document, FailedProjectReconcile>();
-        private static DispatcherTimer? _lifecycleIdleTimer;
+        private static DispatcherOperation? _lifecycleIdleOperation;
         private static bool _pendingNoDocumentReset;
 
         public static void Start()
@@ -132,7 +132,7 @@ namespace QS3D.BricsCAD.V25
             {
                 PendingReconciliation.Clear();
                 _pendingNoDocumentReset = true;
-                StartLifecycleIdleTimer();
+                ScheduleLifecycleIdleDrain();
                 return;
             }
 
@@ -165,7 +165,7 @@ namespace QS3D.BricsCAD.V25
             else
                 PendingReconciliation.Add(document, refreshUi);
             _pendingNoDocumentReset = false;
-            StartLifecycleIdleTimer();
+            ScheduleLifecycleIdleDrain();
         }
 
         private static void CancelPendingReconcile(Document? document)
@@ -173,41 +173,36 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             PendingReconciliation.Remove(document);
             if (PendingReconciliation.Count == 0 && !_pendingNoDocumentReset)
-                StopLifecycleIdleTimer();
+                CancelLifecycleIdleDrain();
         }
 
-        private static void StartLifecycleIdleTimer()
+        private static void ScheduleLifecycleIdleDrain()
         {
-            if (!_started || _lifecycleIdleTimer != null) return;
-            var timer = new DispatcherTimer(DispatcherPriority.ApplicationIdle)
-            {
-                Interval = TimeSpan.FromMilliseconds(1d)
-            };
-            timer.Tick += OnLifecycleIdle;
-            _lifecycleIdleTimer = timer;
-            timer.Start();
+            if (!_started || _lifecycleIdleOperation != null) return;
+            _lifecycleIdleOperation = Dispatcher.CurrentDispatcher.BeginInvoke(
+                DispatcherPriority.ApplicationIdle,
+                new Action(OnLifecycleIdle));
         }
 
-        private static void StopLifecycleIdleTimer()
+        private static void CancelLifecycleIdleDrain()
         {
-            var timer = _lifecycleIdleTimer;
-            _lifecycleIdleTimer = null;
-            if (timer == null) return;
-            try { timer.Stop(); } catch { }
-            try { timer.Tick -= OnLifecycleIdle; } catch { }
+            var operation = _lifecycleIdleOperation;
+            _lifecycleIdleOperation = null;
+            if (operation == null) return;
+            try { operation.Abort(); } catch { }
         }
 
         private static void StopPendingLifecycleWork()
         {
-            StopLifecycleIdleTimer();
+            CancelLifecycleIdleDrain();
             PendingReconciliation.Clear();
             FailedProjectReconciliations.Clear();
             _pendingNoDocumentReset = false;
         }
 
-        private static void OnLifecycleIdle(object? sender, EventArgs e)
+        private static void OnLifecycleIdle()
         {
-            StopLifecycleIdleTimer();
+            _lifecycleIdleOperation = null;
             if (!_started) return;
 
             var pending = PendingReconciliation.ToArray();
@@ -228,7 +223,7 @@ namespace QS3D.BricsCAD.V25
             }
 
             if (_started && (PendingReconciliation.Count > 0 || _pendingNoDocumentReset))
-                StartLifecycleIdleTimer();
+                ScheduleLifecycleIdleDrain();
         }
 
         private static void ReconcileDocument(Document document, bool refreshUi)
@@ -402,8 +397,6 @@ namespace QS3D.BricsCAD.V25
             {
                 var message = "QS3D project load error: " + ex.Message;
                 RememberStableProjectLoadFailure(document, attemptedRevision, message);
-                try { document.Editor.WriteMessage("\n" + message); }
-                catch { }
                 try { PaletteCoordinator.ResetForUnavailableProject(message); }
                 catch { }
             }
@@ -411,8 +404,6 @@ namespace QS3D.BricsCAD.V25
             {
                 FailedProjectReconciliations.Remove(document);
                 var message = "QS3D project load error: " + ex.Message;
-                try { document.Editor.WriteMessage("\n" + message); }
-                catch { }
                 try { PaletteCoordinator.ResetForUnavailableProject(message); }
                 catch { }
             }

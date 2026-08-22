@@ -52,7 +52,8 @@ lifecycle_destroying = method(lifecycle, "private static void OnDocumentToBeDest
 lifecycle_destroyed = method(lifecycle, "private static void OnDocumentDestroyed", "private static void AttachCriticalServices", "DocumentLifecycleCoordinator.OnDocumentDestroyed")
 lifecycle_critical = method(lifecycle, "private static void AttachCriticalServices", "private static void ScheduleReconcile", "DocumentLifecycleCoordinator.AttachCriticalServices")
 lifecycle_schedule = method(lifecycle, "private static void ScheduleReconcile", "private static void CancelPendingReconcile", "DocumentLifecycleCoordinator.ScheduleReconcile")
-lifecycle_timer = method(lifecycle, "private static void StartLifecycleIdleTimer", "private static void StopLifecycleIdleTimer", "DocumentLifecycleCoordinator.StartLifecycleIdleTimer")
+lifecycle_idle_schedule = method(lifecycle, "private static void ScheduleLifecycleIdleDrain", "private static void CancelLifecycleIdleDrain", "DocumentLifecycleCoordinator.ScheduleLifecycleIdleDrain")
+lifecycle_idle_cancel = method(lifecycle, "private static void CancelLifecycleIdleDrain", "private static void StopPendingLifecycleWork", "DocumentLifecycleCoordinator.CancelLifecycleIdleDrain")
 lifecycle_idle = method(lifecycle, "private static void OnLifecycleIdle", "private static void ReconcileDocument", "DocumentLifecycleCoordinator.OnLifecycleIdle")
 lifecycle_reconcile = method(lifecycle, "private static void ReconcileDocument", "private static void AttachProjectPersistence", "DocumentLifecycleCoordinator.ReconcileDocument")
 workspace_initial = method(workspace, "public WorkspacePanel()", "private void BindViewModel()", "WorkspacePanel initial load")
@@ -115,6 +116,7 @@ if "TryInitializeAll()" in ribbon_document:
     errors.append("RibbonInitializationCoordinator.OnDocumentAvailable must not synchronously reconcile the ribbon inside host document callbacks")
 
 require(lifecycle, "using System.Windows.Threading;", "DocumentLifecycleCoordinator")
+require(lifecycle, "private static DispatcherOperation? _lifecycleIdleOperation;", "DocumentLifecycleCoordinator")
 require(lifecycle_start, "AttachCriticalServices(docs.MdiActiveDocument);", "DocumentLifecycleCoordinator.Start")
 require(lifecycle_start, "ScheduleReconcile(docs.MdiActiveDocument, false);", "DocumentLifecycleCoordinator.Start")
 require(lifecycle_created, "AttachCriticalServices(e.Document);", "DocumentLifecycleCoordinator.OnDocumentCreated")
@@ -134,8 +136,16 @@ if "SelectionSyncCoordinator.Attach(" in lifecycle_critical:
     errors.append("DocumentLifecycleCoordinator.AttachCriticalServices must keep selection/UI work out of critical host-event subscriptions")
 
 require(lifecycle_schedule, "PendingReconciliation", "DocumentLifecycleCoordinator.ScheduleReconcile")
-require(lifecycle_schedule, "StartLifecycleIdleTimer();", "DocumentLifecycleCoordinator.ScheduleReconcile")
-require(lifecycle_timer, "new DispatcherTimer(DispatcherPriority.ApplicationIdle)", "DocumentLifecycleCoordinator.StartLifecycleIdleTimer")
+require(lifecycle_schedule, "ScheduleLifecycleIdleDrain();", "DocumentLifecycleCoordinator.ScheduleReconcile")
+require(lifecycle_idle_schedule, "_lifecycleIdleOperation != null", "DocumentLifecycleCoordinator.ScheduleLifecycleIdleDrain")
+require(lifecycle_idle_schedule, "Dispatcher.CurrentDispatcher.BeginInvoke(", "DocumentLifecycleCoordinator.ScheduleLifecycleIdleDrain")
+require(lifecycle_idle_schedule, "DispatcherPriority.ApplicationIdle", "DocumentLifecycleCoordinator.ScheduleLifecycleIdleDrain")
+require(lifecycle_idle_schedule, "new Action(OnLifecycleIdle)", "DocumentLifecycleCoordinator.ScheduleLifecycleIdleDrain")
+require(lifecycle_idle_cancel, "operation.Abort();", "DocumentLifecycleCoordinator.CancelLifecycleIdleDrain")
+require(lifecycle_idle, "_lifecycleIdleOperation = null;", "DocumentLifecycleCoordinator.OnLifecycleIdle")
+require(lifecycle_idle, "ScheduleLifecycleIdleDrain();", "DocumentLifecycleCoordinator.OnLifecycleIdle")
+if "StartLifecycleIdleTimer" in lifecycle or "new DispatcherTimer(" in lifecycle or "TimeSpan.FromMilliseconds(1d)" in lifecycle:
+    errors.append("DocumentLifecycleCoordinator lifecycle reconciliation must use one-shot ApplicationIdle DispatcherOperation scheduling, not the retired timer cadence")
 for token in (
     "SelectionSyncCoordinator.Attach(document);",
     "EnsureProject(document, refreshUi);",
@@ -182,4 +192,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: V25 NETLOAD keeps critical save/Undo hooks immediate, defers project/selection UI reconciliation and ribbon work to application idle, preserves contained synchronous teardown, makes Workspace/RightPanel initial refresh one-shot, and avoids duplicate first-show full refresh.")
+print("PASS: V25 NETLOAD keeps critical save/Undo hooks immediate, defers project/selection UI reconciliation through a coalesced one-shot ApplicationIdle dispatcher operation, preserves contained synchronous teardown, makes Workspace/RightPanel initial refresh one-shot, and avoids duplicate first-show full refresh.")
