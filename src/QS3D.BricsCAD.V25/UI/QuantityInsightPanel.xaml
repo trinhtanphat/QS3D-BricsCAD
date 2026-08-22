@@ -132,6 +132,12 @@
                                     ToolTip="Xuất ED2 CHI_TIET + TONG_HOP. Nếu đang chọn node cây, node đó trở thành scope Selection an toàn."/>
                             <Button Content="Truy ngược Excel" Click="OnExcelTracebackClick" Style="{StaticResource DenseButton}"
                                     ToolTip="Chọn workbook/dòng CHI_TIET và định vị ngược đúng cấu kiện bằng Element ID + Handle + Drawing Fingerprint; sai provenance sẽ bị từ chối."/>
+                            <Button Content="Dòng Excel đang chọn" Click="OnExcelActiveRowClick" Style="{StaticResource DenseButton}"
+                                    ToolTip="Lấy workbook/sheet/dòng đang chọn trong Excel đã mở và truy ngược dòng QS3D ED2 CHI_TIET sau khi kiểm tra Element ID + Handle + Drawing Fingerprint."/>
+                            <CheckBox x:Name="ExcelFollowCheck" Content="Bám Excel"
+                                      Checked="OnExcelFollowChecked" Unchecked="OnExcelFollowUnchecked"
+                                      VerticalAlignment="Center" Margin="7,0,2,0"
+                                      ToolTip="Bật: khi đổi dòng đang chọn trong Excel ED2 CHI_TIET, QS3D tự định vị đúng cấu kiện. Sai DWG/project/Handle sẽ bị từ chối và không đổi selection."/>
                             <Button Content="Xuất evidence" Click="OnQuantityEvidenceExportClick" Style="{StaticResource DenseButton}"
                                     ToolTip="Xuất đúng Quantity Explanation/evidence đang review ra XLSX, không tính lại khối lượng bằng một engine khác"/>
                             <CheckBox x:Name="AutoRevealCheck" Content="Click = 3D" IsChecked="True"
