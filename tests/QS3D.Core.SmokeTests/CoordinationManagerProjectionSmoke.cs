@@ -84,7 +84,7 @@ namespace QS3D.Core.SmokeTests
             bool aResolved,
             bool bResolved,
             bool stale,
-            string reason = null)
+            string? reason = null)
         {
             return new CoordinationManagerFinding(id, kind, status, severity, floor, categoryA, categoryB, rule, aResolved, bResolved, stale, reason);
         }
