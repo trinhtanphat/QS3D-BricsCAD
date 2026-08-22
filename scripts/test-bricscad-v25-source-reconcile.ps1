@@ -264,15 +264,9 @@ if ($gitHead -notmatch '^[0-9a-f]{40}$') { throw "LOCAL-004 Git candidate SHA is
 $gitStatus = @(& $git.Source -C $repoRoot status --porcelain=v1 --untracked-files=all 2>$null)
 if ($LASTEXITCODE -ne 0) { throw "Cannot inspect the LOCAL-004 candidate worktree." }
 if ($gitStatus.Count -ne 0) { throw "LOCAL-004 qualification requires a clean exact-SHA worktree." }
-$expectedAssemblyRevision = "+" + $gitHead
-foreach ($assemblyPath in @($PluginDll, $coreDll)) {
-    $productVersion = [string](Get-Item -LiteralPath $assemblyPath).VersionInfo.ProductVersion
-    if (-not $productVersion.EndsWith($expectedAssemblyRevision, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "LOCAL-004 assembly was not built from the exact Git candidate SHA."
-    }
-}
-if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
-    throw "Close existing BricsCAD processes before isolated LOCAL-004 qualification."
+Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead
+if (@(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe).Count -gt 0) {
+    throw "Close existing BricsCAD V25 processes before isolated LOCAL-004 qualification."
 }
 
 if (Test-Path -LiteralPath $ArtifactDir) {
@@ -447,7 +441,7 @@ finally {
         Stop-Qs3dLaunchedProcess -Process $processOne
         Stop-Qs3dLaunchedProcess -Process $processTwo
         Stop-Qs3dLateHandoffProcesses -LauncherIds @($launcherOneId, $launcherTwoId) -ExpectedExecutable $bricscadExe
-        if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -ne 0) { throw "LOCAL-004 process cleanup is incomplete." }
+        if (-not (Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30)) { throw "LOCAL-004 V25 process cleanup is incomplete." }
         $processCleanupVerified = $true
         foreach ($scriptPath in @($scriptOnePath, $scriptTwoPath)) { Remove-ExactFile -Path $scriptPath }
         $scriptCleanupVerified = $true

@@ -93,6 +93,14 @@ function Stop-Qs3dLaunchedProcess {
     if (-not $Process.HasExited) { throw "Launched BricsCAD Curtain-opening process did not exit." }
 }
 
+function Remove-Qs3dDrawingLocks {
+    param([Parameter(Mandatory = $true)][string[]]$Paths)
+    foreach ($path in $Paths) {
+        if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force -ErrorAction Stop }
+        if (Test-Path -LiteralPath $path) { throw "Curtain-opening drawing-lock cleanup failed." }
+    }
+}
+
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw "Curtain-opening runtime qualification requires Windows." }
 if (-not [Environment]::UserInteractive) { throw "Curtain-opening runtime qualification requires an interactive Windows session." }
 if (-not $ConfirmDisposableCopy) { throw "Pass -ConfirmDisposableCopy only for a disposable synthetic drawing copy." }
@@ -127,13 +135,15 @@ if ($LASTEXITCODE -ne 0 -or $gitHead -notmatch '^[0-9a-f]{40}$') { throw "Cannot
 $gitStatus = @(& $git.Source -C $repoRoot status --porcelain --untracked-files=normal)
 if ($LASTEXITCODE -ne 0) { throw "Cannot inspect the Git candidate worktree." }
 if ($gitStatus.Count -ne 0) { throw "Curtain-opening runtime qualification requires a clean exact-SHA worktree." }
-if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
-    throw "Close existing BricsCAD processes before starting the isolated Curtain-opening runtime probe."
+Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead
+if (@(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe).Count -gt 0) {
+    throw "Close existing BricsCAD V25 processes before starting the isolated Curtain-opening runtime probe."
 }
 
 $projectSidecar = [IO.Path]::ChangeExtension($DrawingCopy, ".qsdb")
-if ((Test-Path -LiteralPath $projectSidecar) -or (Test-Path -LiteralPath ($projectSidecar + ".bak"))) {
-    throw "The disposable Curtain-opening drawing copy must not have a pre-existing QS3D sidecar."
+$drawingLocks = @([IO.Path]::ChangeExtension($DrawingCopy, ".dwl"), [IO.Path]::ChangeExtension($DrawingCopy, ".dwl2"))
+foreach ($forbiddenInput in @($projectSidecar, ($projectSidecar + ".bak")) + $drawingLocks) {
+    if (Test-Path -LiteralPath $forbiddenInput) { throw "The disposable Curtain-opening drawing copy must not have pre-existing private state." }
 }
 
 if (Test-Path -LiteralPath $ArtifactDir) {
@@ -268,6 +278,8 @@ try {
     }
 
     Stop-Qs3dLaunchedProcess -Process $process
+    Remove-Qs3dDrawingLocks -Paths $drawingLocks
+    if (-not (Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30)) { throw "Curtain-opening V25 process cleanup is incomplete." }
     if (Test-Path -LiteralPath $scriptPath) {
         Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop
     }
@@ -294,6 +306,7 @@ try {
         drawing_copy_sha256_after = $drawingHashAfter
         process_cleanup_verified = $true
         script_cleanup_verified = $true
+        drawing_lock_cleanup_verified = $true
         sidecar_absent_verified = $true
         proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed
         marker = $marker
@@ -308,6 +321,7 @@ try {
 finally {
     try {
         Stop-Qs3dLaunchedProcess -Process $process
+        Remove-Qs3dDrawingLocks -Paths $drawingLocks
         if (Test-Path -LiteralPath $scriptPath) {
             Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop
         }

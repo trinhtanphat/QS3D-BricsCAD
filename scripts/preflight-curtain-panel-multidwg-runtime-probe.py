@@ -97,8 +97,9 @@ if RUNNER.is_file():
         'QS3D_CURTAIN_P12_DWG_B',
         'rev-parse HEAD',
         'status --porcelain=v1 --untracked-files=all',
-        '$expectedAssemblyRevision = "+" + $gitHead',
-        'ProductVersion',
+        'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead',
+        'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
+        'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
         'Start-Process -FilePath $bricscadExe',
         '-WindowStyle Hidden',
         '-WorkingDirectory $ArtifactDir',
@@ -138,7 +139,7 @@ if RUNNER.is_file():
         errors.append("Curtain P12 runner must launch exactly one isolated BricsCAD process")
     if '$sidecar + ".bak", $sidecar + ".lock"' in text:
         errors.append("Curtain P12 runner must parenthesize sidecar suffix paths so PowerShell does not split them into relative tokens")
-    for forbidden in ("Get-Process -Name '*'", "Process.GetProcesses", "SendKeys", "SetForegroundWindow", "git reset", "git clean"):
+    for forbidden in ("Get-Process -Name '*'", 'Get-Process -Name "bricscad"', "$expectedAssemblyRevision", "Process.GetProcesses", "SendKeys", "SetForegroundWindow", "git reset", "git clean"):
         if forbidden in text:
             errors.append("Curtain P12 runner contains a broad/destructive operation: " + forbidden)
 
