@@ -50,10 +50,12 @@ namespace QS3D.Core.Formulas
                     throw new InvalidOperationException("Variable names cannot be blank or whitespace-only.");
 
                 var normalizedName = pair.Key.Trim();
+                if (!string.Equals(pair.Key, normalizedName, StringComparison.Ordinal))
+                    throw new InvalidOperationException($"Variable name '{pair.Key}' must not contain leading or trailing whitespace.");
                 if (!IsValidIdentifier(normalizedName))
                     throw new InvalidOperationException($"Variable name '{normalizedName}' is not a valid expression identifier.");
                 if (normalized.ContainsKey(normalizedName))
-                    throw new InvalidOperationException($"Variable name '{pair.Key}' conflicts with another variable after trimming whitespace and ignoring casing.");
+                    throw new InvalidOperationException($"Variable name '{pair.Key}' conflicts with another variable after ignoring casing.");
                 if (double.IsNaN(pair.Value) || double.IsInfinity(pair.Value))
                     throw new InvalidOperationException($"Variable '{normalizedName}' contains a non-finite value.");
                 normalized.Add(normalizedName, pair.Value);
