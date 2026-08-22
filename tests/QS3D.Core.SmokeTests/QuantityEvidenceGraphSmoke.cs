@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             DeterministicIdentityAndOrdering();
             DeductionProvenance();
             GeometryEvidenceAdapterParity();
+            BltFoundationReferenceArithmetic();
             InvalidEvidenceFailsClosed();
             XlsxCarriesGraphValuesAndEvidenceIds();
             Console.WriteLine("PASS quantity evidence graph/export parity");
@@ -225,6 +226,23 @@ namespace QS3D.Core.SmokeTests
             Equal("O-200", causeExport.TargetReference, "geometry adapter deduction export target");
             Equal("Intersection", causeExport.SelectorKind, "geometry adapter deduction export selector");
             Equal(-0.300m, causeExport.Value, "geometry adapter deduction export value");
+        }
+
+        private static void BltFoundationReferenceArithmetic()
+        {
+            // User-supplied TEST.blt3d / Móng Bè-1 clean-room reference. These values
+            // deliberately lock arithmetic parity only; native BREP face eligibility is
+            // separately guarded in the BricsCAD adapter source preflight.
+            var concrete = new[] { 2.912m, 3.509m, 2.664m, 3.472m, 2.968m, 2.460m };
+            var formwork = new[] { 6.400m, 7.023m, 5.840m, 6.960m, 6.480m, 5.680m };
+            var concreteTotal = concrete.Sum();
+            var formworkTotal = formwork.Sum();
+
+            Equal(17.985m, concreteTotal, "BLT Móng Bè-1 raw concrete total");
+            Equal(38.383m, formworkTotal, "BLT Móng Bè-1 raw side-formwork total");
+            Equal(17.99m, decimal.Round(concreteTotal, 2, MidpointRounding.AwayFromZero), "BLT Móng Bè-1 parent concrete display rounding");
+            Equal(38.4m, decimal.Round(formworkTotal, 1, MidpointRounding.AwayFromZero), "BLT Móng Bè-1 parent formwork display rounding");
+            Equal(7.02m, decimal.Round(formwork[1], 2, MidpointRounding.AwayFromZero), "BLT child formwork display rounding");
         }
 
         private static QuantityFormworkFaceExplanation Face(string faceId, double area)
