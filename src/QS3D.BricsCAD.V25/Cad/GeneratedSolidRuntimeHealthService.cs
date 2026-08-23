@@ -36,6 +36,10 @@ namespace QS3D.BricsCAD.V25.Cad
                 () => GeneratedSemanticElementTableRuntimeHealthService.Inspect(document, project));
             AddProviderSafely(
                 issues,
+                "GeneratedWallJunctionRuntimeHealthService",
+                () => GeneratedWallJunctionRuntimeHealthService.Inspect(document, project));
+            AddProviderSafely(
+                issues,
                 "DoorOpeningNativeTableBuilder",
                 () => DoorOpeningNativeTableBuilder.Inspect(document, project));
             AddProviderSafely(
