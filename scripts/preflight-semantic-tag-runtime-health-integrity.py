@@ -11,12 +11,14 @@ if not SOURCE.is_file():
 else:
     text = SOURCE.read_text(encoding="utf-8")
     required = (
-        '"SEMANTIC_TAG_MTEXT_HANDLE_INVALID"',
-        '"SEMANTIC_TAG_MTEXT_MISSING"',
-        '"SEMANTIC_TAG_MTEXT_TYPE_MISMATCH"',
-        '"SEMANTIC_TAG_MTEXT_OWNERSHIP_MISMATCH"',
+        '"SEMANTIC_TAG_HANDLE_INVALID"',
+        '"SEMANTIC_TAG_MISSING"',
+        '"SEMANTIC_TAG_TYPE_MISMATCH"',
+        '"SEMANTIC_TAG_OWNERSHIP_MISMATCH"',
         "long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value)",
         "OpenMode.ForRead",
+        "entity is MText mtext",
+        "entity is MLeader mleader",
     )
     for token in required:
         if token not in text:
@@ -46,4 +48,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: semantic-tag runtime health surfaces malformed handles while preserving read-only inspection.")
+print("PASS: semantic-tag runtime health surfaces malformed handles and MText/MLeader type/ownership drift while preserving read-only inspection.")
