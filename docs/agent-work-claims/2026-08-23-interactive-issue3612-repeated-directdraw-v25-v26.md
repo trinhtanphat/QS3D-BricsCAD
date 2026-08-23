@@ -10,9 +10,9 @@ Parent issues: #72, #74, #80, #1462
 
 Canonical branch: `agent/interactive-20260823-01a0294a/issue-3612-repeated-directdraw-v25-v26`
 
-Exact qualified source SHA: `2985f13b0f0d680284e915fb81728bbb26a42ffe`
+Exact final integration candidate SHA: `e5725e96eed6dcebb46370c33e6f8a88e2cc2b68`
 
-Refreshed baseline represented by the candidate: `origin/main@74f2f26e175451d22b64831937abe4ff22c2b435`
+Refreshed baseline represented by the candidate: `origin/main@bacfc918982570475d3ab1369310dfbf5119d2a0`
 
 ## Boundary delivered
 
@@ -26,12 +26,12 @@ The V26 runner now fails before artifact creation or host launch unless a matchi
 
 Both repeated-mode runs used the same clean exact source SHA and repository-generated disposable fixture SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`.
 
-- BricsCAD V25.2.10 loaded the exact x64 Release plugin SHA-256 `C94A5ED5C8EA4CC039EE364B1DA021005AD07514F93BA60D091DFC88519C14E6` by `NETLOAD`. Two segments, database-free DrawJig preview, Enter, exact-process physical ESC, planar UCS, document-switch isolation, whole-command native Undo/Redo, QS3D/DWG save, fresh-process cold reopen and drawing/sidecar persistence all passed. V25 DemandLoad isolation/restoration passed with five registrations observed and `LoadCtrls=2` restored.
-- BricsCAD V26.2.07 / CLR 8.0.29 loaded the exact net8.0-windows plugin SHA-256 `5CF8D3BC67D36CFFE6EACEC0013C1E615A21C9A85E17E85A50B3058582A9B2D1`. The same repeated/ESC/UCS/document/Undo/Redo/save/cold-reopen matrix passed with exact candidate identity in every session.
+- BricsCAD V25.2.10 loaded the exact x64 Release plugin SHA-256 `E8CB451012802098D38ECED664E936998045E36376A28A6E2E3FEF0EB772C0EB` by `NETLOAD`. Two segments, database-free DrawJig preview, Enter, exact-process physical ESC, planar UCS, document-switch isolation, whole-command native Undo/Redo, QS3D/DWG save, fresh-process cold reopen and drawing/sidecar persistence all passed. V25 DemandLoad isolation/restoration passed with five registrations observed and `LoadCtrls=2` restored.
+- BricsCAD V26.2.07 / CLR 8.0.29 loaded the exact net8.0-windows plugin SHA-256 `83AE13A31EFE191DAC8A4AC3727325919F07DE59FD9E66BE8A0A04F828E8E779`. The same repeated/ESC/UCS/document/Undo/Redo/save/cold-reopen matrix passed with exact candidate identity in every session.
 - The standalone V26 identity gate passed on that same binary with native runtime major/label/match true, Ribbon ready, Workspace and Right Panel visible, and the Quantity Insight palette intentionally hidden.
 - The enhanced V26 native LINE lifecycle passed on the same SHA/binary: production Direct Draw, native MOVE/ROTATE/top-level STRETCH, source reconcile/rebuild, native Undo/Redo, two-DWG wrong-document refusal/isolation/reactivation/close, save, sidecar persistence and fresh-process cold reopen.
 
-The current-candidate V25 native-edit matrix also passed on the same source SHA and x64 plugin:
+The V25 native-edit P01-P05 matrix was qualified immediately before the final main refresh at exact source SHA `2985f13b0f0d680284e915fb81728bbb26a42ffe` and x64 plugin SHA-256 `C94A5ED5C8EA4CC039EE364B1DA021005AD07514F93BA60D091DFC88519C14E6`. The intervening main-only change was confined to `DocumentBoundWindowLifetime`; the final candidate reran the affected repeated/document/palette/V26 lifecycle gates rather than reclassifying these non-overlapping results:
 
 - P01: LINE MOVE/ROTATE/top-level STRETCH, reconcile/rebuild, save and cold reopen;
 - P02: one closed Slab POLYLINE vertex STRETCH with pre-sync isolation, area/perimeter/quantity reconciliation, invalidation/rebuild, Health and cold reopen;
@@ -43,9 +43,9 @@ The current-candidate V25 native-edit matrix also passed on the same source SHA 
 
 A clean disposable DWG was authored by BricsCAD itself with one 5 m LINE on the recognized `beam` layer. Its SHA-256 remained `6D6B7E7EBE11CB23DDD6021C4040F72D7AD30CC1AA4F93A2D34A1F585B4866DC` throughout the qualification and no sidecar was persisted.
 
-On the exact V25 plugin, production `QS3DB4D` created one Beam semantic element; ED2 export created one `CHI_TIET` row and one `TONG_HOP` row; the workbook row retained drawing fingerprint, Element ID and Handle provenance; Excel Locate resolved and selected exactly one live CAD object through PICKFIRST. Wrong fingerprint, unknown Element ID, stale Handle `0/1` and partial Handle resolution `1/2` were all refused while preserving the prior selection and semantic state. The final generated workbook SHA-256 was `C8F2ADA5A3D05F903B6CC57AED14204C92655BC0A49DA6209A8B44E743A6C696`.
+On the exact final-candidate V25 plugin, production `QS3DB4D` created one Beam semantic element; ED2 export created one `CHI_TIET` row and one `TONG_HOP` row; the workbook row retained drawing fingerprint, Element ID and Handle provenance; Excel Locate resolved and selected exactly one live CAD object through PICKFIRST. Wrong fingerprint, unknown Element ID, stale Handle `0/1` and partial Handle resolution `1/2` were all refused while preserving the prior selection and semantic state. The final same-process bridge workbook SHA-256 was `55B618ED944D60355AF85FCBB3FB94C90807B76514CB0DEBF439E9F04C70927F`.
 
-An ignored local reflection probe then reused the production workbook reader/resolver and real native selection bridge. The visible Workspace received exactly one matching CAD snapshot, displayed `1 chọn`, resolved the selected semantic Instance and Family, and remained bound to plugin SHA-256 `C94A5ED5C8EA4CC039EE364B1DA021005AD07514F93BA60D091DFC88519C14E6`. The private probe, workbook, scripts, screenshots, drawing and raw command logs remain Git-ignored; only this sanitized aggregate is committed.
+An ignored local reflection probe then reused the production workbook reader/resolver and real native selection bridge. The visible Workspace received exactly one matching CAD snapshot, displayed `1 chọn`, resolved the selected semantic Instance and Family, and remained bound to plugin SHA-256 `E8CB451012802098D38ECED664E936998045E36376A28A6E2E3FEF0EB772C0EB`. Temporary V25 DemandLoad isolation restored the installed loader and `LoadCtrls=2`; the drawing hash remained unchanged, no sidecar was created and the exact test-owned process was removed. The private probe, workbook, scripts, screenshots, drawing and raw command logs remain Git-ignored; only this sanitized aggregate is committed.
 
 ## Validation and safety
 

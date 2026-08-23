@@ -128,7 +128,7 @@ Vẽ tùy chỉnh = one-off exception
 
 ## Runtime qualification boundary
 
-Source/static implementation is REMOTE_DONE. The bounded repeated Wall/Beam editor lifecycle is `LOCAL_PASS` at clean source SHA `2985f13b0f0d680284e915fb81728bbb26a42ffe` on BricsCAD V25.2.10 and V26.2.07; the remaining active-Family dispatch, quick/advanced prompt, Auto Host/reference and UI matrix stays inside `LOCAL-008`.
+Source/static implementation is REMOTE_DONE. The bounded repeated Wall/Beam editor lifecycle is `LOCAL_PASS` at clean final candidate SHA `e5725e96eed6dcebb46370c33e6f8a88e2cc2b68` on BricsCAD V25.2.10 and V26.2.07; the remaining active-Family dispatch, quick/advanced prompt, Auto Host/reference and UI matrix stays inside `LOCAL-008`.
 
 Local proof should include:
 
@@ -146,6 +146,6 @@ Local proof should include:
 12. hold the dispatcher between its first read and delegation, then reload/replace the project, mutate the same cached project/Family in place, change active Family, switch Window/opening routing metadata, or change active DWG: it must refuse before invoking a target command;
 13. repeated load/unload of the modeless Workspace does not accumulate duplicate key, double-click, or context-menu handlers.
 
-Production repeated Wall/Beam source is implemented through `QS3DDRAWWALLREPEAT` / `QS3DDRAWBEAMREPEAT`: transient DrawJig preview remains database-free and accepted segments reuse canonical Direct Draw ownership. Exact licensed runs on source SHA `2985f13b0f0d680284e915fb81728bbb26a42ffe` proved two accepted segments, Enter and physical ESC preserving accepted work, planar UCS, active-document switch refusal/isolation, whole-command native/semantic Undo/Redo, save/sidecar persistence and fresh-process cold reopen on both V25 and V26. That bounded P03 evidence does not promote the rest of `LOCAL-008` or parent #74 to complete.
+Production repeated Wall/Beam source is implemented through `QS3DDRAWWALLREPEAT` / `QS3DDRAWBEAMREPEAT`: transient DrawJig preview remains database-free and accepted segments reuse canonical Direct Draw ownership. Exact licensed runs on final candidate SHA `e5725e96eed6dcebb46370c33e6f8a88e2cc2b68` proved two accepted segments, Enter and physical ESC preserving accepted work, planar UCS, active-document switch refusal/isolation, whole-command native/semantic Undo/Redo, save/sidecar persistence and fresh-process cold reopen on both V25 and V26. That bounded P03 evidence does not promote the rest of `LOCAL-008` or parent #74 to complete.
 
 GitHub Actions remain manual-only under `CI_POLICY.md`; this source/docs batch does not authorize workflow dispatch.

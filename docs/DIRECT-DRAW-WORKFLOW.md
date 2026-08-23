@@ -19,7 +19,7 @@ Current implementation direction on `main`:
 - BLT-style wall compatibility flow is deliberately **capture -> edit -> build**, not capture-and-build in one command.
 - Instance inspector exposes source-derived geometry such as `LengthM`, `AreaM2`, `VolumeM3`, `PerimeterM` and source `Layer` as read-only CAD provenance instead of pretending those measurements are independent editable Family dimensions.
 
-Exact licensed evidence is now recorded for the bounded repeated Wall/Beam slice at clean source SHA `2985f13b0f0d680284e915fb81728bbb26a42ffe`: BricsCAD V25.2.10 and V26.2.07 both passed exact-plugin `NETLOAD`, DrawJig preview, repeated segments, Enter/physical ESC, planar UCS, document-switch isolation, whole-command Undo/Redo, save and fresh-process cold reopen. This does not certify the broader quick/advanced prompt, Auto Host/reference, private-DWG or release matrix.
+Exact licensed evidence is now recorded for the bounded repeated Wall/Beam slice at clean final candidate SHA `e5725e96eed6dcebb46370c33e6f8a88e2cc2b68`: BricsCAD V25.2.10 and V26.2.07 both passed exact-plugin `NETLOAD`, DrawJig preview, repeated segments, Enter/physical ESC, planar UCS, document-switch isolation, whole-command Undo/Redo, save and fresh-process cold reopen. This does not certify the broader quick/advanced prompt, Auto Host/reference, private-DWG or release matrix.
 
 ---
 

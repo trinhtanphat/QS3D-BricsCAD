@@ -69,7 +69,7 @@ The gate must fail closed if the configured `bricscad.exe` is not major version 
 
 ### Exact-current native/repeated evidence
 
-Clean source SHA `2985f13b0f0d680284e915fb81728bbb26a42ffe` passed licensed BricsCAD V26.2.07 / CLR 8.0.29 with exact net8.0-windows x64 plugin SHA-256 `5CF8D3BC67D36CFFE6EACEC0013C1E615A21C9A85E17E85A50B3058582A9B2D1`. The generic runtime gate reported the matching native host major/label/runtime plus Ribbon, Workspace and Right Panel readiness; Quantity Insight was intentionally hidden.
+Clean final candidate SHA `e5725e96eed6dcebb46370c33e6f8a88e2cc2b68` passed licensed BricsCAD V26.2.07 / CLR 8.0.29 with exact net8.0-windows x64 plugin SHA-256 `83AE13A31EFE191DAC8A4AC3727325919F07DE59FD9E66BE8A0A04F828E8E779`. The generic runtime gate reported the matching native host major/label/runtime plus Ribbon, Workspace and Right Panel readiness; Quantity Insight was intentionally hidden.
 
 On that same source and binary, the enhanced native LINE matrix passed production Direct Draw, native MOVE/ROTATE/STRETCH, pre-sync generated isolation, production reconcile/rebuild, native Undo/Redo, two-DWG wrong-document refusal/isolation/reactivation/close, DWG/sidecar save and fresh-process cold reopen. The repeated Wall/Beam matrix passed database-free DrawJig preview, two accepted segments, Enter, exact-process physical ESC, planar UCS, document-switch refusal/isolation, whole-command native/semantic Undo/Redo, save and cold reopen. Fixture/process/script/private-state cleanup passed with zero BricsCAD processes. These are bounded #3578/#3612 cells; private-DWG, clean-machine package/signing and release qualification under #1462 remain pending.
 
