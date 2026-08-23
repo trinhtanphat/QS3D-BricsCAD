@@ -9,7 +9,6 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-V25 = ROOT / "src" / "QS3D.BricsCAD.V25"
 
 
 def require_file(relative):
@@ -40,6 +39,7 @@ def check_mleader_lifecycle():
             "GeneratedGeometryService.MarkGenerated",
             "ProjectStateSnapshot.Capture",
             "documentation.semantic-tag.mleader",
+            "BuildBatch",
         ),
     )
 
@@ -67,9 +67,10 @@ def check_mleader_lifecycle():
         commands,
         commands_rel,
         (
-            'CommandMethod("QS3DTAGLEADER")',
-            'CommandMethod("QS3DTAGLEADERBATCH")',
+            'CommandMethod("QS3DTAGLEADER",',
+            'CommandMethod("QS3DTAGLEADERBATCH",',
             "SemanticMLeaderBuilder.Build",
+            "SemanticMLeaderBuilder.BuildBatch",
         ),
     )
 
