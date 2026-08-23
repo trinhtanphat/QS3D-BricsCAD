@@ -13,6 +13,12 @@ namespace QS3D.Core.SmokeTests
             ValidatedFrameCountIsBoundToTraversal();
             EmptyFramesRemainValid();
             OrdinaryFrameMappingRemainsDeterministic();
+            PositiveSegmentMustAdvanceCumulativeStation();
+            InteriorProjectionStationMustRemainRepresentable();
+            RepresentableShortSegmentMustNotBeDroppedByPathScale();
+            FrameOverrunMustNotBeHiddenByPathScaleTolerance();
+            SplitMidpointMustRemainRepresentable();
+            DistantUnrepresentableProjectionMustNotPoisonCloserSegment();
         }
 
         private static void NegativeFrameCountFailsBeforeIndexAccess()
@@ -77,6 +83,144 @@ namespace QS3D.Core.SmokeTests
             Near(0d, piece.CenterY_M, "piece center Y");
             Near(0d, piece.Z_M, "piece elevation");
             Near(1.5d, piece.HeightM, "piece height");
+        }
+
+        private static void PositiveSegmentMustAdvanceCumulativeStation()
+        {
+            var path = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(1e16d, 0d),
+                new Point2(1e16d, 1d),
+                new Point2(1e16d, 2d)
+            };
+
+            try
+            {
+                CurtainPathFramePlanner.Length(path);
+            }
+            catch (OverflowException ex)
+            {
+                if (ex.Message.IndexOf("cumulative length", StringComparison.OrdinalIgnoreCase) < 0 ||
+                    ex.Message.IndexOf("precision", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new Exception("Curtain path station precision collapse should report a deterministic cumulative-length diagnostic.");
+                return;
+            }
+
+            throw new Exception("A positive path segment whose station cannot advance must fail closed instead of publishing a collapsed station interval.");
+        }
+
+        private static void InteriorProjectionStationMustRemainRepresentable()
+        {
+            var path = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(1e16d, 0d),
+                new Point2(1e16d, 2d)
+            };
+
+            try
+            {
+                CurtainPathFramePlanner.ProjectPoint(path, new Point2(1e16d, 0.5d));
+            }
+            catch (OverflowException ex)
+            {
+                if (ex.Message.IndexOf("projection station", StringComparison.OrdinalIgnoreCase) < 0 ||
+                    ex.Message.IndexOf("precision", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new Exception("Interior curtain projection station collapse should report a deterministic station-precision diagnostic.");
+                return;
+            }
+
+            throw new Exception("An interior projection whose station rounds to a segment endpoint must fail closed instead of publishing the wrong station.");
+        }
+
+        private static void RepresentableShortSegmentMustNotBeDroppedByPathScale()
+        {
+            var path = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(1e16d, 0d),
+                new Point2(1e16d, 4d)
+            };
+            var plan = CurtainPathFramePlanner.Plan(
+                path,
+                new[] { new CurtainWallRect(1e16d, 0d, 4d, 1d) });
+
+            if (plan.Pieces.Count != 1)
+                throw new Exception("A representable four-meter path overlap must not be discarded by tolerance scaled from the total path length.");
+            var piece = plan.Pieces[0];
+            if (piece.PathSegmentIndex != 1)
+                throw new Exception("The short representable frame must map to the second path segment.");
+            Near(4d, piece.WidthM, "large-station short piece width");
+            Near(2d, piece.CenterY_M, "large-station short piece center Y");
+        }
+
+        private static void FrameOverrunMustNotBeHiddenByPathScaleTolerance()
+        {
+            var path = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(1e16d, 0d)
+            };
+
+            try
+            {
+                CurtainPathFramePlanner.Plan(
+                    path,
+                    new[] { new CurtainWallRect(1e16d - 100d, 0d, 200d, 1d) });
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("exceeds", StringComparison.OrdinalIgnoreCase) < 0 ||
+                    ex.Message.IndexOf("path length", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new Exception("Large-station frame overrun should report a deterministic host-path bound diagnostic.");
+                return;
+            }
+
+            throw new Exception("A 100-metre frame overrun at a large station must fail closed instead of being hidden by a path-scale tolerance and silently clamped.");
+        }
+
+        private static void SplitMidpointMustRemainRepresentable()
+        {
+            var path = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(1e16d, 0d),
+                new Point2(1e16d, 2d)
+            };
+
+            try
+            {
+                CurtainPathFramePlanner.Plan(
+                    path,
+                    new[] { new CurtainWallRect(1e16d, 0d, 2d, 1d) });
+            }
+            catch (OverflowException ex)
+            {
+                if (ex.Message.IndexOf("split center", StringComparison.OrdinalIgnoreCase) < 0 ||
+                    ex.Message.IndexOf("representable", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new Exception("Unrepresentable curtain split midpoint should report a deterministic station diagnostic.");
+                return;
+            }
+
+            throw new Exception("A path overlap with no representable interior midpoint must fail closed instead of using an endpoint as its center.");
+        }
+
+        private static void DistantUnrepresentableProjectionMustNotPoisonCloserSegment()
+        {
+            var path = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(1e16d, 0d),
+                new Point2(1e16d, 2d),
+                new Point2(1e16d + 100d, 2d)
+            };
+
+            var projection = CurtainPathFramePlanner.ProjectPoint(path, new Point2(1e16d + 10d, 0.5d));
+            if (projection.PathSegmentIndex != 2)
+                throw new Exception("An unrepresentable station on a farther segment must not reject or replace the closer representable projection.");
+            Near(1.5d, projection.DistanceM, "closer projection distance");
+            Near(1e16d + 12d, projection.StationM, "closer projection station");
         }
 
         private static IReadOnlyList<Point2> StraightPath() =>
