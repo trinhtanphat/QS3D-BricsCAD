@@ -61,6 +61,9 @@ if not errors:
         "ProjectRevisionStamp.Capture(project)",
         "BeginExternalTransitionScope(document)",
         "CommitExternalTransition(",
+        "DocumentToBeDeactivated",
+        "checkpointed != accepted",
+        '"DOCUMENT_SWITCH"',
         "EraseRepeatedDirectDrawCad(",
         '"ESC_OR_CANCEL"',
         'undo_scope=WholeCommand',
@@ -74,7 +77,7 @@ if not errors:
     execute = repeated.find("DirectDrawCommands.ExecuteDirect(", drag)
     commit = repeated.find("SourceReconcileUndoCoordinator.CommitExternalTransition(", execute)
     if min(scope, loop, preview, drag, execute, commit) < 0 or not scope < loop < preview < drag < execute < commit:
-        errors.append("repeated command must scope Undo, recapture context, drag transient, commit canonically, then publish one outer transition")
+        errors.append("repeated command must scope Undo, recapture context, drag transient, commit canonically, then publish a whole-command checkpoint")
 
     for token in (
         "internal sealed class DirectDrawProfileStripJig : DrawJig",
@@ -156,6 +159,8 @@ if not errors:
         "SegmentCommittedForRuntimeQualification",
         "SequenceCompletedForRuntimeQualification",
         "Application.DocumentManager.MdiActiveDocument = arm.DocumentB",
+        "Application.DocumentManager.MdiActiveDocument = arm.DocumentA",
+        "arm.RoundTripObserved",
         '"NATIVE_DOCUMENT_SWITCH_REJECTED"',
         "OnSequenceTransitionCommandWillStart",
         "CaptureUndo(Context())",

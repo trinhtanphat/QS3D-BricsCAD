@@ -258,8 +258,9 @@ namespace QS3D.BricsCAD.V25
                 }
                 if (!ReferenceEquals(document, arm.DocumentB) ||
                     !arm.CommandTerminalObserved ||
+                    !arm.RoundTripObserved ||
                     arm.AcceptedSegments != 1 ||
-                    !string.Equals(arm.Termination, "SEGMENT_ERROR", StringComparison.Ordinal))
+                    !string.Equals(arm.Termination, "DOCUMENT_SWITCH", StringComparison.Ordinal))
                     throw new ProbeFailure("DOCUMENT_SWITCH_TERMINATION_REJECTED");
                 if (!ProjectContextCoordinator.TryGetReadOnly(arm.DocumentA, out var projectA))
                     throw new ProbeFailure("SWITCH_FIRST_PROJECT_UNAVAILABLE");
@@ -280,6 +281,7 @@ namespace QS3D.BricsCAD.V25
                     "NONE");
                 document.Editor.WriteMessage(
                     "\n" + Schema + "|phase=document_switch|status=PASS|error_code=NONE");
+                DisarmSwitch(arm);
             }
             catch (Exception ex)
             {
@@ -613,6 +615,13 @@ namespace QS3D.BricsCAD.V25
                 Application.DocumentManager.MdiActiveDocument = arm.DocumentB;
                 if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, arm.DocumentB))
                     throw new ProbeFailure("NATIVE_DOCUMENT_SWITCH_REJECTED");
+                Application.DocumentManager.MdiActiveDocument = arm.DocumentA;
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, arm.DocumentA))
+                    throw new ProbeFailure("NATIVE_DOCUMENT_SWITCH_REJECTED");
+                lock (Sync)
+                {
+                    if (ReferenceEquals(_switchArm, arm)) arm.RoundTripObserved = true;
+                }
             }
             catch
             {
@@ -656,9 +665,27 @@ namespace QS3D.BricsCAD.V25
                 arm.CommandTerminalObserved = true;
             }
             DisarmSwitchSubscriptions(arm);
-            var active = Application.DocumentManager.MdiActiveDocument;
-            if (active == null) return;
-            active.SendStringToExecute("QS3DREPEATVERIFYSWITCH ", true, false, false);
+            try
+            {
+                Application.DocumentManager.MdiActiveDocument = arm.DocumentB;
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, arm.DocumentB))
+                    throw new ProbeFailure("NATIVE_DOCUMENT_SWITCH_REJECTED");
+                arm.DocumentB.SendStringToExecute("QS3DREPEATVERIFYSWITCH ", true, false, false);
+            }
+            catch
+            {
+                try
+                {
+                    WriteEvidenceCore(
+                        arm.Nonce,
+                        arm.EvidenceDirectory,
+                        "document_switch",
+                        "FAIL",
+                        -1,
+                        "NATIVE_DOCUMENT_SWITCH_REJECTED");
+                }
+                catch { }
+            }
         }
 
         private static void DisarmSwitch(SwitchArmState arm)
@@ -1111,6 +1138,7 @@ namespace QS3D.BricsCAD.V25
             public string DocumentBFingerprint { get; }
             public bool Subscribed { get; set; }
             public bool ReadyWritten { get; set; }
+            public bool RoundTripObserved { get; set; }
             public bool CommandTerminalObserved { get; set; }
             public int AcceptedSegments { get; set; }
             public string? Termination { get; set; }

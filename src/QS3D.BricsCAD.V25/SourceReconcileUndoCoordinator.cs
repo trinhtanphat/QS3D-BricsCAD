@@ -12,9 +12,10 @@ namespace QS3D.BricsCAD.V25
     /// <summary>
     /// Bridges tracked in-memory semantic transactions to BricsCAD's native Undo stack.
     /// Source Reconcile writes its revision marker in the same transaction as generated-output
-    /// invalidation. Production repeated Direct Draw owns one command-level marker after its
-    /// accepted segments and suppresses nested builder markers, so native Undo restores the CAD
-    /// group and the observer restores the matching whole-command semantic snapshot.
+    /// invalidation. Production repeated Direct Draw owns a checkpoint after each accepted segment
+    /// while suppressing nested builder markers. Every checkpoint remains in the same native command
+    /// group, so native Undo restores the CAD group and the observer restores the matching original
+    /// or latest whole-command semantic snapshot even across a document-switch suspension.
     /// </summary>
     internal static class SourceReconcileUndoCoordinator
     {

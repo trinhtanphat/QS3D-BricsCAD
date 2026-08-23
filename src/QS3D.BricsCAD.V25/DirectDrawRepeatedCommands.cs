@@ -17,7 +17,8 @@ namespace QS3D.BricsCAD.V25
     /// Production repeated Direct Draw for linear Wall/Beam authoring. DrawJig owns transient
     /// preview only; every accepted segment is committed through DirectDrawCommands.ExecuteDirect
     /// so source, semantic ownership, regeneration, native Solid3d and rollback stay canonical.
-    /// One command-level semantic/native Undo marker covers every accepted segment.
+    /// Per-segment checkpoints stay inside one native command group, so one Undo/Redo covers the
+    /// accepted set while a document-switch suspension cannot strand semantic/native state.
     /// </summary>
     public sealed class DirectDrawRepeatedCommands
     {
@@ -80,6 +81,7 @@ namespace QS3D.BricsCAD.V25
             var commandUcs = editor.CurrentUserCoordinateSystem;
             var initialPreview = DirectDrawProjectPreviewContext.Capture(document);
             RequireExpectedFamily(initialPreview, category, expectedProjectId, expectedFamilyId, label);
+            using var lifecycleGuard = new RepeatedDocumentLifecycleGuard(document);
 
             var firstOptions = new PromptPointOptions(
                 "\n" + label + " - chọn điểm đầu (Enter/ESC để thoát): ")
@@ -107,6 +109,7 @@ namespace QS3D.BricsCAD.V25
             var commandBeforeStamp = default(SourceReconcileUndoCoordinator.ProjectRevisionStamp);
             var projectExistedBeforeCommand = initialPreview.HasProject;
             var accepted = 0;
+            var checkpointed = 0;
             var termination = "UNKNOWN";
             Exception? deferredSegmentError = null;
 
@@ -116,6 +119,11 @@ namespace QS3D.BricsCAD.V25
                 {
                     try
                     {
+                        if (lifecycleGuard.WasDeactivated)
+                        {
+                            termination = "DOCUMENT_SWITCH";
+                            break;
+                        }
                         DirectDrawCommands.RequireRepeatedPromptContextUnchanged(
                             document, commandUnit, commandUcs, label + " / trước preview");
                         var preview = DirectDrawProjectPreviewContext.Capture(document);
@@ -133,6 +141,11 @@ namespace QS3D.BricsCAD.V25
                             commandUcs,
                             "\n" + label + " - chọn điểm tiếp theo (Enter/ESC để kết thúc): ");
                         var drag = editor.Drag(jig);
+                        if (lifecycleGuard.WasDeactivated)
+                        {
+                            termination = "DOCUMENT_SWITCH";
+                            break;
+                        }
                         DirectDrawCommands.RequireRepeatedPromptContextUnchanged(
                             document, commandUnit, commandUcs, label + " / sau preview");
 
@@ -174,13 +187,46 @@ namespace QS3D.BricsCAD.V25
                         committed.Add(result);
                         accepted++;
                         startWcs = endWcs;
+                        if (trackedProject == null || commandBefore == null)
+                            throw new InvalidOperationException(
+                                "Repeated Direct Draw accepted CAD without a command-level semantic snapshot.");
+                        try
+                        {
+                            // Publish a whole-command checkpoint after every accepted segment.
+                            // All checkpoints remain in this one native command group, so Undo/Redo
+                            // still traverses the original before-state and latest accepted state as
+                            // one operation. The latest checkpoint also keeps semantic/native state
+                            // coherent if BricsCAD suspends this document-context command on a DWG switch.
+                            SourceReconcileUndoCoordinator.CommitExternalTransition(
+                                document,
+                                trackedProject,
+                                commandBefore,
+                                commandBeforeStamp);
+                            checkpointed = accepted;
+                        }
+                        catch (Exception transitionError)
+                        {
+                            throw RollbackWholeCommand(
+                                document,
+                                trackedProject,
+                                commandBefore,
+                                projectExistedBeforeCommand,
+                                committed,
+                                transitionError);
+                        }
                         NotifySegmentCommitted(document, accepted);
                         editor.WriteMessage(
                             "\nQS3D " + label + " đã commit segment #" + accepted +
                             ". Chọn endpoint tiếp theo; Enter/ESC kết thúc và giữ các segment đã commit.");
+                        if (lifecycleGuard.WasDeactivated)
+                        {
+                            termination = "DOCUMENT_SWITCH";
+                            break;
+                        }
                     }
                     catch (Exception ex)
                     {
+                        if (ex is RepeatedWholeCommandRollbackException) throw;
                         deferredSegmentError = ex;
                         termination = "SEGMENT_ERROR";
                         break;
@@ -189,27 +235,9 @@ namespace QS3D.BricsCAD.V25
 
                 if (accepted > 0)
                 {
-                    if (trackedProject == null || commandBefore == null)
+                    if (trackedProject == null || commandBefore == null || checkpointed != accepted)
                         throw new InvalidOperationException(
-                            "Repeated Direct Draw accepted CAD without a command-level semantic snapshot.");
-                    try
-                    {
-                        SourceReconcileUndoCoordinator.CommitExternalTransition(
-                            document,
-                            trackedProject,
-                            commandBefore,
-                            commandBeforeStamp);
-                    }
-                    catch (Exception transitionError)
-                    {
-                        throw RollbackWholeCommand(
-                            document,
-                            trackedProject,
-                            commandBefore,
-                            projectExistedBeforeCommand,
-                            committed,
-                            transitionError);
-                    }
+                            "Repeated Direct Draw accepted CAD without a matching command-level Undo checkpoint.");
                 }
             }
 
@@ -221,7 +249,7 @@ namespace QS3D.BricsCAD.V25
                     label + " dừng sau " + accepted + " segment đã commit: " + deferredSegmentError.Message);
         }
 
-        private static InvalidOperationException RollbackWholeCommand(
+        private static RepeatedWholeCommandRollbackException RollbackWholeCommand(
             Document document,
             ProjectState project,
             ProjectStateSnapshot commandBefore,
@@ -250,6 +278,8 @@ namespace QS3D.BricsCAD.V25
 
             try { commandBefore.Restore(project); }
             catch (Exception restoreError) { errors.Add(restoreError); }
+            try { SourceReconcileUndoCoordinator.Forget(document); }
+            catch (Exception historyError) { errors.Add(historyError); }
             if (!projectExistedBeforeCommand)
             {
                 try { ProjectContextCoordinator.Forget(document); }
@@ -258,9 +288,48 @@ namespace QS3D.BricsCAD.V25
             try { document.Editor.SetImpliedSelection(Array.Empty<Teigha.DatabaseServices.ObjectId>()); }
             catch { }
 
-            return new InvalidOperationException(
+            return new RepeatedWholeCommandRollbackException(
                 "Repeated Direct Draw could not register command-level native Undo; all accepted segments were rolled back.",
                 new AggregateException(errors));
+        }
+
+        private sealed class RepeatedDocumentLifecycleGuard : IDisposable
+        {
+            private readonly Document _document;
+            private readonly DocumentCollection _documents;
+            private bool _disposed;
+            private bool _wasDeactivated;
+
+            public RepeatedDocumentLifecycleGuard(Document document)
+            {
+                _document = document ?? throw new ArgumentNullException(nameof(document));
+                _documents = Application.DocumentManager;
+                _documents.DocumentToBeDeactivated += OnDocumentToBeDeactivated;
+            }
+
+            public bool WasDeactivated => _wasDeactivated;
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+                try { _documents.DocumentToBeDeactivated -= OnDocumentToBeDeactivated; }
+                catch { }
+            }
+
+            private void OnDocumentToBeDeactivated(object sender, DocumentCollectionEventArgs args)
+            {
+                if (args != null && EqualityComparer<Document>.Default.Equals(args.Document, _document))
+                    _wasDeactivated = true;
+            }
+        }
+
+        private sealed class RepeatedWholeCommandRollbackException : InvalidOperationException
+        {
+            public RepeatedWholeCommandRollbackException(string message, Exception innerException)
+                : base(message, innerException)
+            {
+            }
         }
 
         private static void RequireExpectedFamily(
