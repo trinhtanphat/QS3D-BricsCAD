@@ -17,7 +17,7 @@ else:
         "!(exception is OutOfMemoryException)",
         "!(exception is StackOverflowException)",
         "!(exception is AccessViolationException)",
-        '"SEMANTIC_TAG_MTEXT_MISSING"',
+        '"SEMANTIC_TAG_MISSING"',
         "OpenMode.ForRead",
     )
     for token in required:
@@ -27,7 +27,7 @@ else:
     filtered_catches = text.count("catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))")
     if filtered_catches < 2:
         errors.append(
-            "semantic tag runtime health must filter both CAD resolution/read catches; found %d"
+            "semantic tag runtime health must filter CAD resolution/read catches; found %d"
             % filtered_catches
         )
 
@@ -41,4 +41,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: semantic tag runtime health preserves recoverable missing-tag diagnostics while fatal runtime exceptions propagate through the native health boundary.")
+print("PASS: semantic tag runtime health preserves recoverable missing-artifact diagnostics while fatal runtime exceptions propagate through the native MText/MLeader health boundary.")
