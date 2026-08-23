@@ -208,6 +208,7 @@ namespace QS3D.BricsCAD.V25.UI
             else
             {
                 CollapseButton("Giao tường");
+                CollapseButton("Junction 3D");
                 CollapseButton("Snap xem");
                 CollapseButton("Snap áp");
                 CollapseButton("Auto Host");
