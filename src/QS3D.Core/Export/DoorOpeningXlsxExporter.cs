@@ -61,6 +61,8 @@ namespace QS3D.Core.Export
         {
             var row = new DoorOpeningScheduleRow
             {
+                ProjectId = source.ProjectId ?? string.Empty,
+                DrawingFingerprint = source.DrawingFingerprint ?? string.Empty,
                 Floor = source.Floor ?? string.Empty,
                 Category = source.Category ?? string.Empty,
                 FamilyName = source.FamilyName ?? string.Empty,
@@ -76,6 +78,7 @@ namespace QS3D.Core.Export
             var label = "worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " ";
             SnapshotJoinedCellValues(source.ElementIds, row.ElementIds, label + "Element IDs");
             SnapshotJoinedCellValues(source.HostIds, row.HostIds, label + "Host IDs");
+            SnapshotJoinedCellValues(source.SourceHandles, row.SourceHandles, label + "Source Handles");
             return row;
         }
 
@@ -107,12 +110,15 @@ namespace QS3D.Core.Export
             {
                 var row = rows[rowIndex];
                 var label = "worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " ";
+                RequireCellTextLength(row.ProjectId, label + "Project ID");
+                RequireCellTextLength(row.DrawingFingerprint, label + "Drawing Fingerprint");
                 RequireCellTextLength(row.Floor, label + "Floor");
                 RequireCellTextLength(row.Category, label + "Category");
                 RequireCellTextLength(row.FamilyName, label + "Family name");
                 RequireCellTextLength(row.Material, label + "Material");
                 RequireJoinedCellTextLength(row.ElementIds, label + "Element IDs");
                 RequireJoinedCellTextLength(row.HostIds, label + "Host IDs");
+                RequireJoinedCellTextLength(row.SourceHandles, label + "Source Handles");
             }
         }
 
@@ -182,16 +188,17 @@ namespace QS3D.Core.Export
             var headers = new[]
             {
                 "Tầng", "Loại", "Family / Loại", "Vật liệu", "Rộng (m)", "Cao (m)",
-                "Cao bậu (m)", "Dày (m)", "SL", "DT mở (m²)", "SL host", "Element IDs", "Host IDs"
+                "Cao bậu (m)", "Dày (m)", "SL", "DT mở (m²)", "SL host", "Element IDs", "Host IDs",
+                "Project ID", "Drawing Fingerprint", "Source Handles"
             };
             var lastRow = Math.Max(1, rows.Count + 1);
-            var range = "A1:M" + lastRow.ToString(CultureInfo.InvariantCulture);
+            var range = "A1:P" + lastRow.ToString(CultureInfo.InvariantCulture);
             var sb = new StringBuilder();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
             sb.Append("<dimension ref=\"").Append(range).Append("\"/>");
             sb.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
-            sb.Append("<cols><col min=\"1\" max=\"4\" width=\"20\" customWidth=\"1\"/><col min=\"5\" max=\"11\" width=\"15\" customWidth=\"1\"/><col min=\"12\" max=\"13\" width=\"36\" customWidth=\"1\"/></cols><sheetData>");
+            sb.Append("<cols><col min=\"1\" max=\"4\" width=\"20\" customWidth=\"1\"/><col min=\"5\" max=\"11\" width=\"15\" customWidth=\"1\"/><col min=\"12\" max=\"16\" width=\"36\" customWidth=\"1\"/></cols><sheetData>");
             sb.Append("<row r=\"1\">");
             for (var c = 0; c < headers.Length; c++) StringCell(sb, CellRef(c, 1), headers[c], 1);
             sb.Append("</row>");
@@ -213,6 +220,9 @@ namespace QS3D.Core.Export
                 NumberCell(sb, CellRef(10, r), row.HostCount);
                 StringCell(sb, CellRef(11, r), string.Join(";", row.ElementIds), 0);
                 StringCell(sb, CellRef(12, r), string.Join(";", row.HostIds), 0);
+                StringCell(sb, CellRef(13, r), row.ProjectId, 0);
+                StringCell(sb, CellRef(14, r), row.DrawingFingerprint, 0);
+                StringCell(sb, CellRef(15, r), string.Join(";", row.SourceHandles), 0);
                 sb.Append("</row>");
             }
             sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");

@@ -53,6 +53,8 @@ for token in (
     'QS3D_CURVED_STRUCTURAL_RUNTIME_V1',
     'RequireAssemblyRevision(typeof(CurvedStructuralRuntimeProbeCommands).Assembly',
     'RequireAssemblyRevision(typeof(ProjectState).Assembly',
+    'ProjectContextCoordinator.GetOrCreate(document)',
+    'ProjectContextCoordinator.Forget(document)',
     'EntitySnapshotReader.ReadHandles',
     'snapshot.LengthDrawingUnits',
     'snapshot.AreaDrawingUnitsSquared',
@@ -129,7 +131,9 @@ for token in (
     'ExpectedSourceSha',
     'git -C $repoRoot rev-parse --verify HEAD',
     'git -C $repoRoot status --porcelain=v1 --untracked-files=all',
-    'ProductVersion',
+    'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $ExpectedSourceSha',
+    'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
+    'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
     'Get-FileHash -LiteralPath $PluginDll -Algorithm SHA256',
     'curved-structural-probe-copy.dwg',
     'QS3D_CURVED_STRUCTURAL_RESULT',
@@ -165,6 +169,20 @@ for forbidden in (
     'plugin_path=',
 ):
     forbid(command.lower(), forbidden, "command marker contract")
+
+for forbidden in ('Get-Process -Name "bricscad"', '$expectedAssemblyRevision'):
+    forbid(runner, forbidden, "PowerShell runner exact-host/source contract")
+
+for forbidden in (
+    'var project = new ProjectState(',
+):
+    forbid(command, forbidden, "canonical project contract")
+
+canonical_get = command.find('ProjectContextCoordinator.GetOrCreate(document)')
+canonical_forget = command.find('ProjectContextCoordinator.Forget(document)', canonical_get)
+pass_marker = command.find('failureStage = "marker"', canonical_get)
+if not (canonical_get >= 0 and canonical_get < canonical_forget < pass_marker):
+    fail("canonical probe project must be forgotten before PASS marker construction")
 
 # This is deliberately a source contract only. It must never manufacture a licensed PASS.
 forbidden_pass_artifacts = (

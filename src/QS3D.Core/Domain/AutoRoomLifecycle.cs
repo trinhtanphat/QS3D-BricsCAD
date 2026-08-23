@@ -300,6 +300,7 @@ namespace QS3D.Core.Domain
             if (familyChanged) changed++;
             if (changed == 0 && metadataSets.Count == 0 && metadataRemoves.Count == 0) return 0;
 
+            metadata.EnsureCanApplyOwned(metadataRemoves, metadataSets.Keys);
             project.Touch();
             foreach (var key in roomRemoves) room.Properties.Remove(key);
             foreach (var property in roomSets) room.Properties[property.Key] = property.Value;

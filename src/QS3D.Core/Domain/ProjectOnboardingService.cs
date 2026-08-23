@@ -246,10 +246,17 @@ namespace QS3D.Core.Domain
             return values;
         }
 
-        private static string ReadExplicitMaterial(IReadOnlyDictionary<ElementCategory, string> materials, ElementCategory category)
+        private static string ReadExplicitMaterial(
+            IReadOnlyDictionary<ElementCategory, string> materials,
+            ElementCategory category)
         {
             if (!materials.TryGetValue(category, out var raw)) return string.Empty;
-            return (raw ?? string.Empty).Trim();
+            var material = raw ?? string.Empty;
+            if (material.Any(char.IsControl))
+                throw new ArgumentException(
+                    "Starter material cannot contain control characters.",
+                    nameof(materials));
+            return material.Trim();
         }
 
         private static void ValidateMaterial(string material, ElementCategory category)
@@ -273,7 +280,9 @@ namespace QS3D.Core.Domain
         {
             if (family == null) return false;
             if (!family.Properties.TryGetValue(MaterialKey, out var raw)) return false;
-            var material = (raw ?? string.Empty).Trim();
+            var material = raw ?? string.Empty;
+            if (material.Any(char.IsControl)) return false;
+            material = material.Trim();
             try
             {
                 ValidateMaterial(material, family.Category);
@@ -297,7 +306,8 @@ namespace QS3D.Core.Domain
 
         private static FloorDefinition? ResolveExistingFloorActivationPlan(ProjectState project)
         {
-            var activeFloorId = (project.ActiveFloorId ?? string.Empty).Trim();
+            var rawActiveFloorId = project.ActiveFloorId ?? string.Empty;
+            var activeFloorId = rawActiveFloorId.Trim();
             if (activeFloorId.Length > 0)
             {
                 var activeFloor = project.Floors.SingleOrDefault(
@@ -305,7 +315,10 @@ namespace QS3D.Core.Domain
                 if (activeFloor == null)
                     throw new InvalidOperationException(
                         "Project active Floor '" + activeFloorId + "' was not found in the current Floor catalog. Repair the active Floor reference before onboarding.");
-                return null;
+
+                return string.Equals(rawActiveFloorId, activeFloor.Id, StringComparison.Ordinal)
+                    ? null
+                    : activeFloor;
             }
 
             if (project.Floors.Count == 0) return null;

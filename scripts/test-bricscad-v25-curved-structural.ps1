@@ -193,15 +193,9 @@ $coreDll = Join-Path (Split-Path -Parent $PluginDll) "QS3D.Core.dll"
 foreach ($required in @($bricscadExe, $PluginDll, $coreDll, $DrawingCopy)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw "Required curved structural runtime input is missing." }
 }
-$expectedAssemblyRevision = "+" + $ExpectedSourceSha
-foreach ($assemblyPath in @($PluginDll, $coreDll)) {
-    $productVersion = [string](Get-Item -LiteralPath $assemblyPath).VersionInfo.ProductVersion
-    if (-not $productVersion.EndsWith($expectedAssemblyRevision, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Assembly was not built from ExpectedSourceSha."
-    }
-}
-if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
-    throw "Close existing BricsCAD processes before starting the isolated curved structural runtime probe."
+Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $ExpectedSourceSha
+if (@(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe).Count -gt 0) {
+    throw "Close existing BricsCAD V25 processes before starting the isolated curved structural runtime probe."
 }
 
 $projectSidecar = [IO.Path]::ChangeExtension($DrawingCopy, ".qsdb")
@@ -335,12 +329,12 @@ try {
 finally {
     Stop-Qs3dCurvedProcess -Process $process
     try {
-        $processCleanupVerified = @(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -eq 0
+        $processCleanupVerified = Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30
         $observedDrawingAttributes = [IO.File]::GetAttributes($DrawingCopy)
         $drawingReadOnlyThroughHostExitVerified = (([int]$observedDrawingAttributes -band [int][IO.FileAttributes]::ReadOnly) -ne 0)
         $drawingHashAfter = (Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()
         $drawingUnwrittenVerified = [string]::Equals($drawingHashBefore, $drawingHashAfter, [StringComparison]::Ordinal)
-        if (-not $processCleanupVerified) { throw "Curved structural runtime left a BricsCAD process after cleanup." }
+        if (-not $processCleanupVerified) { throw "Curved structural runtime left a BricsCAD V25 process after cleanup." }
         if (-not $drawingReadOnlyThroughHostExitVerified) { throw "The disposable curved structural drawing lost its read-only guard." }
         if (-not $drawingUnwrittenVerified) { throw "The disposable curved structural drawing was written despite its read-only guard." }
     }

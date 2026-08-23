@@ -32,8 +32,8 @@ namespace QS3D.Core.Geometry
             var clearance = Positive(input.ClearanceM, nameof(input.ClearanceM));
             var top = Add(Add(bottom, thickness, "slab top"), clearance, "cutter top");
             var cutterBottom = Add(bottom, -clearance, "cutter bottom");
-            var cutterHeight = Positive(Add(thickness, 2d * clearance, "cutter height"), "cutter height");
-            var extrusionZ = Finite(-cutterHeight, "negative-Z extrusion");
+            var extrusionZ = Add(cutterBottom, -top, "negative-Z extrusion");
+            var cutterHeight = Positive(Finite(-extrusionZ, "cutter height"), "cutter height");
             if (!(cutterBottom < bottom))
                 throw new InvalidOperationException("slabOpen cutter must extend below the slab bottom.");
             if (!(extrusionZ < 0d))

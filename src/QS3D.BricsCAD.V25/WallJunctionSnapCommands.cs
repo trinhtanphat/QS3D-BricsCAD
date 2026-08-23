@@ -450,7 +450,10 @@ namespace QS3D.BricsCAD.V25
             var project = ExistingProjectMutationContext.Require(document, operation);
             if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase)
                 || project.ChangeVersion != expectedChangeVersion)
+            {
+                ProjectContextCoordinator.Forget(document);
                 throw new InvalidOperationException(operation + ": QS3D project changed while selecting walls. Run the command again.");
+            }
             return project;
         }
 

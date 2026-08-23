@@ -85,6 +85,15 @@ namespace QS3D.BricsCAD.V25.Cad
 
             EnsureCompleteLiveHandleSets(document, project, targets, rebarOwnership, curtainOwnership, curtainPanelOwnership);
 
+            // Junction output is owned by the complete participating wall set. Any owner change
+            // invalidates the entire WJP1 group in this same CAD transaction before other output
+            // is erased, so no partial multi-owner junction can survive a source reconciliation.
+            GeneratedWallJunctionNativeOwnershipService.PrepareOwnerInvalidation(
+                document,
+                transaction,
+                project,
+                targets);
+
             foreach (var element in targets)
             {
                 GeneratedGeometryService.PrepareReplacement(document, transaction, project, element);

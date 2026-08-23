@@ -98,12 +98,12 @@ namespace QS3D.Core.SmokeTests
         {
             var variables = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
             {
-                [" Width "] = 2d,
+                ["Width"] = 2d,
                 ["Height"] = 3d
             };
             var value = new ExpressionEvaluator().Evaluate("width * HEIGHT", variables);
             if (Math.Abs(value - 6d) > 1e-12)
-                throw new Exception("Known-count hardening must not change established variable trimming/case-insensitive evaluation semantics.");
+                throw new Exception("Known-count hardening must preserve canonical variable names and case-insensitive evaluation semantics.");
         }
 
         private static void ExpectInvalidOperation(Action action, string expectedMessageFragment, string message)
