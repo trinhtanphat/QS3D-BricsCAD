@@ -11,12 +11,14 @@ namespace QS3D.Core.SmokeTests
             var path = Path.Combine(root, "src", "QS3D.BricsCAD.V25", "UI", "DocumentBoundWindowLifetime.cs");
             var source = File.ReadAllText(path);
 
-            Require(source.Contains("private readonly Teigha.DatabaseServices.Database _database;", StringComparison.Ordinal),
-                "Document-bound window lifetime must capture stable BricsCAD Database identity.");
-            Require(source.Contains("_database = document.Database;", StringComparison.Ordinal),
-                "Document-bound window lifetime must capture the Database from the original wrapper.");
-            Require(source.Contains("ReferenceEquals(document.Database, _database)", StringComparison.Ordinal),
-                "Document wrapper matching must compare the stable Database identity.");
+            Require(source.Contains("private readonly IntPtr _databaseIdentity;", StringComparison.Ordinal),
+                "Document-bound window lifetime must capture stable native BricsCAD database identity.");
+            Require(source.Contains("_databaseIdentity = RequireDatabaseIdentity(document);", StringComparison.Ordinal),
+                "Document-bound window lifetime must capture native identity from the original wrapper.");
+            Require(source.Contains("database.UnmanagedObject", StringComparison.Ordinal),
+                "Document wrapper matching must resolve the underlying native database pointer.");
+            Require(source.Contains("identity != IntPtr.Zero && identity == _databaseIdentity", StringComparison.Ordinal),
+                "Document wrapper matching must compare nonzero native database identity.");
             Require(source.Contains("if (!IsSameDocument(document))", StringComparison.Ordinal),
                 "Attach must accept wrapper drift only through stable document identity.");
             Require(source.Contains("_document = document;", StringComparison.Ordinal),
@@ -27,6 +29,8 @@ namespace QS3D.Core.SmokeTests
                 "Attach must not use managed Document reference identity.");
             Require(!source.Contains("ReferenceEquals(e.Document, _document)", StringComparison.Ordinal),
                 "Document destruction must not use managed Document reference identity.");
+            Require(!source.Contains("ReferenceEquals(document.Database", StringComparison.Ordinal),
+                "Database managed-wrapper reference identity must not be used as the lifetime key.");
             Require(!source.Contains("document.Name", StringComparison.Ordinal),
                 "Document-bound lifetime identity must not be path/name based; Save As must retain identity and same-name DWGs must not alias.");
 

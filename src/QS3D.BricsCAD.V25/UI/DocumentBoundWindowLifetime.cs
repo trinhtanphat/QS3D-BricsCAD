@@ -24,7 +24,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             private readonly Window _window;
             private Document _document;
-            private readonly Teigha.DatabaseServices.Database _database;
+            private readonly IntPtr _databaseIdentity;
             private bool _attached;
             private bool _projectAffinityBound;
             private int _invalidated;
@@ -34,7 +34,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 _window = window;
                 _document = document;
-                _database = document.Database;
+                _databaseIdentity = RequireDatabaseIdentity(document);
             }
 
             public void Attach(Document document)
@@ -42,9 +42,9 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!IsSameDocument(document))
                     throw new InvalidOperationException("A modeless QS3D window cannot be rebound to a different BricsCAD document.");
 
-                // BricsCAD may surface a new managed Document wrapper for the same native DWG.
-                // Keep the newest equivalent wrapper for project-affinity reads while retaining
-                // the captured Database instance as the stable lifetime identity.
+                // BricsCAD may surface a new managed Document/Database wrapper for the same
+                // native DWG. Keep the newest equivalent Document wrapper for project-affinity
+                // reads while retaining the native database pointer as the lifetime identity.
                 _document = document;
                 if (_attached) return;
 
@@ -73,7 +73,24 @@ namespace QS3D.BricsCAD.V25.UI
 
             private bool IsSameDocument(Document document)
             {
-                return document != null && ReferenceEquals(document.Database, _database);
+                var identity = GetDatabaseIdentity(document);
+                return identity != IntPtr.Zero && identity == _databaseIdentity;
+            }
+
+            private static IntPtr RequireDatabaseIdentity(Document document)
+            {
+                var identity = GetDatabaseIdentity(document);
+                if (identity == IntPtr.Zero)
+                    throw new InvalidOperationException("A modeless QS3D window requires a live BricsCAD database identity.");
+                return identity;
+            }
+
+            private static IntPtr GetDatabaseIdentity(Document document)
+            {
+                if (document == null) return IntPtr.Zero;
+                var database = document.Database;
+                if (database == null || database.IsDisposed) return IntPtr.Zero;
+                return database.UnmanagedObject;
             }
 
             private void BindProjectAffinityIfPresent()
