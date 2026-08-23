@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             InteriorProjectionStationMustRemainRepresentable();
             RepresentableShortSegmentMustNotBeDroppedByPathScale();
             SplitMidpointMustRemainRepresentable();
+            DistantUnrepresentableProjectionMustNotPoisonCloserSegment();
         }
 
         private static void NegativeFrameCountFailsBeforeIndexAccess()
@@ -177,6 +178,23 @@ namespace QS3D.Core.SmokeTests
             }
 
             throw new Exception("A path overlap with no representable interior midpoint must fail closed instead of using an endpoint as its center.");
+        }
+
+        private static void DistantUnrepresentableProjectionMustNotPoisonCloserSegment()
+        {
+            var path = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(1e16d, 0d),
+                new Point2(1e16d, 2d),
+                new Point2(1e16d + 100d, 2d)
+            };
+
+            var projection = CurtainPathFramePlanner.ProjectPoint(path, new Point2(1e16d + 10d, 0.5d));
+            if (projection.PathSegmentIndex != 2)
+                throw new Exception("An unrepresentable station on a farther segment must not reject or replace the closer representable projection.");
+            Near(1.5d, projection.DistanceM, "closer projection distance");
+            Near(1e16d + 12d, projection.StationM, "closer projection station");
         }
 
         private static IReadOnlyList<Point2> StraightPath() =>
