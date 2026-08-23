@@ -200,7 +200,7 @@ function Require-Qs3dEnhancedFailureMarker {
     $allowedPhases = @(
         "prepare", "native_move", "select_source", "check_move_reconcile", "check_move_build", "native_rotate",
         "check_rotate_reconcile", "check_v26_rotate_build", "prepare_v26_native_stretch", "v26_native_stretch",
-        "check_v26_stretch_reconcile", "check_v26_undo", "check_v26_redo", "select_v26_wrong_dwg_source",
+        "check_v26_stretch_reconcile", "check_v26_undo", "rearm_v26_redo", "check_v26_redo", "select_v26_wrong_dwg_source",
         "check_v26_wrong_dwg_refusal", "activate_v26_drawing_a", "check_v26_drawing_a", "close_v26_drawing_b",
         "final_rebuild", "v26_cold_reopen"
     )
@@ -218,7 +218,10 @@ function Require-Qs3dEnhancedFailureMarker {
         "ENHANCED_MODE_REJECTED", "WRONG_DWG_PROJECT_CREATED", "WRONG_DWG_SOURCE_MISSING",
         "WRONG_DWG_SELECTION_REJECTED", "DOCUMENT_COUNT_REJECTED", "WRONG_DWG_SIDECAR_CREATED",
         "WRONG_DWG_ENTITY_MUTATED", "WRONG_DWG_STATE_MUTATED", "DOCUMENT_ACTIVATION_REJECTED",
-        "WRONG_DWG_CLOSE_REJECTED"
+        "WRONG_DWG_CLOSE_REJECTED", "NATIVE_UNDO_GEOMETRY_REJECTED", "NATIVE_UNDO_SEMANTIC_REJECTED",
+        "NATIVE_UNDO_GENERATED_REJECTED", "NATIVE_REDO_REARM_GEOMETRY_REJECTED",
+        "NATIVE_REDO_REARM_SEMANTIC_REJECTED", "NATIVE_REDO_REARM_GENERATED_REJECTED",
+        "NATIVE_REDO_GEOMETRY_REJECTED", "NATIVE_REDO_SEMANTIC_REJECTED", "NATIVE_REDO_GENERATED_REJECTED"
     )
     if (-not ($allowedCodes -contains [string]$Marker["failure_code"])) { throw "LOCAL-018 P03 failure code is not allowlisted." }
 }
@@ -606,8 +609,11 @@ try {
             "QS3DSRNATIVEROTATE", "QS3DSRNATIVESELECT", "QS3DSYNCSOURCE", "QS3DSRNATIVECHECKROTATE",
             "QS3DSRNATIVESELECT", "QS3DBUILD3D", "QS3DSRNATIVEV26CHECKROTATEBUILD",
             "QS3DSRNATIVEV26STRETCHPREPARE", "_.STRETCH", "_C", "-100,6900", "100,7100", "", "0,0", "0,3000",
-            "QS3DSRNATIVEV26STRETCH", "QS3DSRNATIVESELECT", "QS3DSYNCSOURCE", "QS3DSRNATIVEV26CHECKSTRETCH",
-            "_.U", "QS3DSRNATIVEV26CHECKUNDO", "_.REDO", "QS3DSRNATIVEV26CHECKREDO",
+            "QS3DSRNATIVEV26STRETCH", "_.UNDO", "_Mark",
+            "QS3DSRNATIVESELECT", "QS3DSYNCSOURCE", "QS3DSRNATIVEV26CHECKSTRETCH",
+            "_.UNDO", "_Back", "QS3DSRNATIVEV26CHECKUNDO",
+            "_.UNDO", "_Begin", "QS3DSRNATIVESELECT", "QS3DSYNCSOURCE", "QS3DSRNATIVEV26REARMREDO", "_.UNDO", "_End",
+            "_.U", "_.REDO", "QS3DSRNATIVEV26CHECKREDO",
             "_.OPEN", ('"' + $drawingB + '"'),
             "QS3DSRNATIVEV26SELECTB", "QS3DSYNCSOURCE", "QS3DSRNATIVEV26CHECKB",
             "QS3DSRNATIVEV26ACTIVATEA", "QS3DSRNATIVEV26CHECKA", "QS3DSRNATIVEV26CLOSEB",

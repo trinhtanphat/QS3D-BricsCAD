@@ -252,11 +252,33 @@ namespace QS3D.BricsCAD.V25
                 var state = State(context, "STRETCH_SYNCED_ENHANCED");
                 RequireEnhanced(state);
                 var owner = Owner(context, state);
-                RequireGeometry(context.Document, owner, ExpectedStage.Stretched);
-                RequireSemanticLength(owner, 5d, "V26 native Undo");
-                RequireSameGenerated(context.Document, owner, state.RotateGeneratedHandle, "V26 native Undo");
+                try { RequireGeometry(context.Document, owner, ExpectedStage.Stretched); }
+                catch { throw new ProbeFailure("NATIVE_UNDO_GEOMETRY_REJECTED"); }
+                try { RequireSemanticLength(owner, 5d, "V26 native Undo"); }
+                catch { throw new ProbeFailure("NATIVE_UNDO_SEMANTIC_REJECTED"); }
+                try { RequireSameGenerated(context.Document, owner, state.RotateGeneratedHandle, "V26 native Undo"); }
+                catch { throw new ProbeFailure("NATIVE_UNDO_GENERATED_REJECTED"); }
                 state.NativeUndoVerified = true;
                 state.Phase = "UNDO_VERIFIED";
+            });
+        }
+
+        [CommandMethod("QS3DSRNATIVEV26REARMREDO", CommandFlags.Modal)]
+        public void RearmEnhancedRedo()
+        {
+            Execute("rearm_v26_redo", () =>
+            {
+                var context = Context();
+                var state = State(context, "UNDO_VERIFIED");
+                RequireEnhanced(state);
+                var owner = Owner(context, state);
+                try { RequireGeometry(context.Document, owner, ExpectedStage.Stretched); }
+                catch { throw new ProbeFailure("NATIVE_REDO_REARM_GEOMETRY_REJECTED"); }
+                try { RequireSemanticLength(owner, 8d, "V26 native Redo rearm"); }
+                catch { throw new ProbeFailure("NATIVE_REDO_REARM_SEMANTIC_REJECTED"); }
+                try { RequireNoGenerated(context.Document, owner, state.RotateGeneratedHandle, "V26 native Redo rearm"); }
+                catch { throw new ProbeFailure("NATIVE_REDO_REARM_GENERATED_REJECTED"); }
+                state.Phase = "REDO_ARMED";
             });
         }
 
@@ -266,12 +288,15 @@ namespace QS3D.BricsCAD.V25
             Execute("check_v26_redo", () =>
             {
                 var context = Context();
-                var state = State(context, "UNDO_VERIFIED");
+                var state = State(context, "REDO_ARMED");
                 RequireEnhanced(state);
                 var owner = Owner(context, state);
-                RequireGeometry(context.Document, owner, ExpectedStage.Stretched);
-                RequireSemanticLength(owner, 8d, "V26 native Redo");
-                RequireNoGenerated(context.Document, owner, state.RotateGeneratedHandle, "V26 native Redo");
+                try { RequireGeometry(context.Document, owner, ExpectedStage.Stretched); }
+                catch { throw new ProbeFailure("NATIVE_REDO_GEOMETRY_REJECTED"); }
+                try { RequireSemanticLength(owner, 8d, "V26 native Redo"); }
+                catch { throw new ProbeFailure("NATIVE_REDO_SEMANTIC_REJECTED"); }
+                try { RequireNoGenerated(context.Document, owner, state.RotateGeneratedHandle, "V26 native Redo"); }
+                catch { throw new ProbeFailure("NATIVE_REDO_GENERATED_REJECTED"); }
                 state.NativeRedoVerified = true;
                 state.Phase = "REDO_VERIFIED";
             });
