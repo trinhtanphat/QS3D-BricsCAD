@@ -30,6 +30,7 @@ namespace QS3D.BricsCAD.V25.UI
             private bool _projectAffinityBound;
             private int _invalidated;
             private int _documentCloseStarted;
+            private int _hostQuitStarted;
             private string _projectId = string.Empty;
 
             public Registration(Window window, Document document)
@@ -51,6 +52,8 @@ namespace QS3D.BricsCAD.V25.UI
                     _lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;
                     _lifecycleDocument.CloseAborted += OnDocumentCloseAborted;
                     BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
+                    BcadApplication.BeginQuit += OnApplicationBeginQuit;
+                    BcadApplication.QuitAborted += OnApplicationQuitAborted;
                     _window.Activated += OnWindowActivated;
                     _window.PreviewMouseDown += OnPreviewMouseDown;
                     _window.PreviewKeyDown += OnPreviewKeyDown;
@@ -66,6 +69,7 @@ namespace QS3D.BricsCAD.V25.UI
                     _projectAffinityBound = false;
                     Volatile.Write(ref _invalidated, 0);
                     Volatile.Write(ref _documentCloseStarted, 0);
+                    Volatile.Write(ref _hostQuitStarted, 0);
                     _projectId = string.Empty;
                     throw;
                 }
@@ -232,9 +236,28 @@ namespace QS3D.BricsCAD.V25.UI
                 TryCloseWindow();
             }
 
+            private void OnApplicationBeginQuit(object? sender, EventArgs e)
+            {
+                // BeginQuit is a host-level ownership boundary. Once it fires, BricsCAD owns final
+                // modeless HWND/WPF teardown; QS3D must only fail closed and must not initiate Close().
+                Volatile.Write(ref _hostQuitStarted, 1);
+            }
+
+            private void OnApplicationQuitAborted(object? sender, EventArgs e)
+            {
+                Volatile.Write(ref _hostQuitStarted, 0);
+
+                // If document teardown already invalidated this registration during the attempted
+                // quit, preserve fail-closed semantics but close outside the native quit stack.
+                if (Volatile.Read(ref _documentCloseStarted) != 0 &&
+                    Volatile.Read(ref _invalidated) != 0)
+                    TryCloseWindow(deferOnDispatcher: true);
+            }
+
             private void OnBeginDocumentClose(object sender, DocumentBeginCloseEventArgs e)
             {
-                var deferForFinalDocument = !HasAnotherLiveDocument();
+                var abandonForHostShutdown = Volatile.Read(ref _hostQuitStarted) != 0;
+                var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();
                 lock (_documentAccessGate)
                 {
                     Volatile.Write(ref _documentCloseStarted, 1);
@@ -242,17 +265,19 @@ namespace QS3D.BricsCAD.V25.UI
                 }
 
                 // BeginDocumentClose is the earliest reliable per-document close boundary used by
-                // this coordinator. Normal multi-document close keeps the proven synchronous WPF
-                // behavior; the final/only-document path defers WPF teardown until this callback
-                // unwinds so host shutdown cannot re-enter native document destruction.
+                // this coordinator. During application quit BricsCAD owns modeless HWND teardown;
+                // initiating WPF Close here can collide with native host destruction. For ordinary
+                // document close, keep the proven synchronous-vs-final-document dispatch behavior.
                 DetachDocumentManagerHandler();
+                if (abandonForHostShutdown) return;
                 TryCloseWindow(deferForFinalDocument);
             }
 
             private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
             {
                 if (!MatchesNativeDatabase(e.Document)) return;
-                var deferForFinalDocument = !HasAnotherLiveDocument();
+                var abandonForHostShutdown = Volatile.Read(ref _hostQuitStarted) != 0;
+                var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();
                 lock (_documentAccessGate)
                 {
                     Volatile.Write(ref _documentCloseStarted, 1);
@@ -262,8 +287,9 @@ namespace QS3D.BricsCAD.V25.UI
                 // BricsCAD may surface a different managed Document wrapper for the same native
                 // database during destruction. Match the stable native database identity captured
                 // at bind time so wrapper drift still closes this window, without using mutable paths.
-                // The retained lifecycle wrapper is intentionally not dereferenced here.
+                // If application quit is active, leave HWND/WPF teardown to BricsCAD ownership.
                 DetachDocumentManagerHandler();
+                if (abandonForHostShutdown) return;
                 TryCloseWindow(deferForFinalDocument);
             }
 
@@ -344,6 +370,10 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!_attached) return;
                 DetachDocumentLifecycleHandlersIfSafe();
                 DetachDocumentManagerHandler();
+                try { BcadApplication.BeginQuit -= OnApplicationBeginQuit; }
+                catch { }
+                try { BcadApplication.QuitAborted -= OnApplicationQuitAborted; }
+                catch { }
                 try { _window.Activated -= OnWindowActivated; }
                 catch { }
                 try { _window.PreviewMouseDown -= OnPreviewMouseDown; }
