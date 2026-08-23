@@ -24,6 +24,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             private readonly Window _window;
             private readonly Document _document;
+            private readonly IntPtr _nativeDatabaseIdentity;
             private bool _attached;
             private bool _projectAffinityBound;
             private int _invalidated;
@@ -33,11 +34,12 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 _window = window;
                 _document = document;
+                _nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
             }
 
             public void Attach(Document document)
             {
-                if (!ReferenceEquals(document, _document))
+                if (!MatchesNativeDatabase(document))
                     throw new InvalidOperationException("A modeless QS3D window cannot be rebound to a different BricsCAD document.");
                 if (_attached) return;
 
@@ -61,6 +63,34 @@ namespace QS3D.BricsCAD.V25.UI
                     Volatile.Write(ref _invalidated, 0);
                     _projectId = string.Empty;
                     throw;
+                }
+            }
+
+            private static IntPtr GetNativeDatabaseIdentity(Document document)
+            {
+                var database = document.Database;
+                if (database == null)
+                    throw new InvalidOperationException("A modeless QS3D window requires a BricsCAD document database.");
+
+                var identity = database.UnmanagedObject;
+                if (identity == IntPtr.Zero)
+                    throw new InvalidOperationException("A modeless QS3D window requires a live native BricsCAD database.");
+                return identity;
+            }
+
+            private bool MatchesNativeDatabase(Document document)
+            {
+                if (document == null) return false;
+                try
+                {
+                    var database = document.Database;
+                    return database != null &&
+                           database.UnmanagedObject != IntPtr.Zero &&
+                           database.UnmanagedObject == _nativeDatabaseIdentity;
+                }
+                catch
+                {
+                    return false;
                 }
             }
 
@@ -122,12 +152,12 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
             {
-                if (!ReferenceEquals(e.Document, _document)) return;
+                if (!MatchesNativeDatabase(e.Document)) return;
                 if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
 
-                // The global document manager must not retain a stale modeless window after this
-                // document is gone. Keep the window-local input guards attached until Closed so a
-                // failed close cannot make the stale UI actionable again.
+                // BricsCAD may surface a different managed Document wrapper for the same native
+                // database during destruction. Match the stable native database identity captured
+                // at bind time so wrapper drift still closes this window, without using mutable paths.
                 DetachDocumentManagerHandler();
                 TryCloseWindow();
             }
