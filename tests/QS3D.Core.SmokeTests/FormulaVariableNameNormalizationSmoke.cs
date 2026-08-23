@@ -19,6 +19,16 @@ namespace QS3D.Core.SmokeTests
             Near(1.0, evaluator.Evaluate("width + height", canonical), 1e-12, "canonical variable-name binding");
             Near(0.24, evaluator.Evaluate("WIDTH * Height", canonical), 1e-12, "canonical variable-name multiplication");
 
+            var exactWhitespaceExpression = new string(' ', 4096);
+            Throws<ArgumentException>(
+                () => evaluator.Evaluate(exactWhitespaceExpression),
+                "exact expression-length whitespace remains required-expression rejection");
+
+            var overlongWhitespaceExpression = new string(' ', 4097);
+            Throws<InvalidOperationException>(
+                () => evaluator.Evaluate(overlongWhitespaceExpression),
+                "overlong whitespace expression rejected by length ceiling before blank scan");
+
             foreach (var paddedName in new[] { " Width", "Width ", "\tWidth", "Width\t", "\rWidth", "Width\r", "\nWidth", "Width\n" })
             {
                 var padded = new Dictionary<string, double> { [paddedName] = 0.4 };
