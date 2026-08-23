@@ -10,6 +10,7 @@ namespace QS3D.BricsCAD.V25.Cad
         internal const string OwnershipVersion = "1";
         internal const string ArtifactLayout = "Layout";
         internal const string ArtifactPaperSpace = "PaperSpace";
+        internal const string ArtifactPaperViewport = "PaperViewport";
         internal const string ArtifactViewport = "Viewport";
         internal const string ArtifactTitleBlock = "TitleBlock";
 
@@ -37,7 +38,7 @@ namespace QS3D.BricsCAD.V25.Cad
             if (string.Equals(artifact, ArtifactViewport, StringComparison.Ordinal) && view == null)
                 throw new InvalidOperationException("Semantic sheet viewport ownership requires a view id.");
             if (!string.Equals(artifact, ArtifactViewport, StringComparison.Ordinal) && view != null)
-                throw new InvalidOperationException("Only semantic sheet viewport ownership may carry a view id.");
+                throw new InvalidOperationException("Only semantic sheet viewports may carry a semantic view id.");
 
             EnsureRegApp(database, transaction);
             using (var marker = new ResultBuffer(
@@ -48,6 +49,12 @@ namespace QS3D.BricsCAD.V25.Cad
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, ArtifactPrefix + artifact),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, ViewPrefix + (view ?? string.Empty))))
                 target.XData = marker;
+        }
+
+        public static bool HasMarker(DBObject target)
+        {
+            if (target == null) return false;
+            using (var marker = target.GetXDataForApplication(RegAppName)) return marker != null;
         }
 
         public static bool HasMatching(
@@ -150,6 +157,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var artifact = Required(value, nameof(value));
             if (string.Equals(artifact, ArtifactLayout, StringComparison.Ordinal) ||
                 string.Equals(artifact, ArtifactPaperSpace, StringComparison.Ordinal) ||
+                string.Equals(artifact, ArtifactPaperViewport, StringComparison.Ordinal) ||
                 string.Equals(artifact, ArtifactViewport, StringComparison.Ordinal) ||
                 string.Equals(artifact, ArtifactTitleBlock, StringComparison.Ordinal))
                 return artifact;
