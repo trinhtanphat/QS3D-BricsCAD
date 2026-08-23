@@ -44,14 +44,9 @@ namespace QS3D.BricsCAD.V25.Cad
                         {
                             var handle = handles[i];
                             var entity = transaction.GetObject(ids[i], OpenMode.ForWrite, false) as Entity;
-                            if (entity == null || entity.IsErased)
-                                throw new InvalidOperationException(
-                                    "Generated semantic tag handle " + handle + " is no longer live. Refusing partial destructive remove.");
-                            if (!(entity is MText))
-                                throw new InvalidOperationException(
-                                    "Generated semantic tag handle " + handle + " là live CAD nhưng không phải MText. Refusing destructive remove.");
-                            GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "remove semantic tag " + handle);
-                            entity.Erase();
+                            RequireSupportedSemanticTag(entity, handle, "destructive remove");
+                            GeneratedGeometryService.RequireMatchingOwnership(entity!, project, element, "remove semantic tag " + handle);
+                            entity!.Erase();
                             erased++;
                         }
 
@@ -59,7 +54,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         AuditTrail.ForProject(project).Record(
                             "documentation.semantic-tag.remove",
                             element.Id,
-                            erased.ToString(CultureInfo.InvariantCulture) + " live MText erased; tag ownership metadata cleared");
+                            erased.ToString(CultureInfo.InvariantCulture) + " live semantic tag artifact(s) erased; tag ownership metadata cleared");
                         transaction.Commit();
                         cadCommitted = true;
                     }
@@ -126,16 +121,9 @@ namespace QS3D.BricsCAD.V25.Cad
                 for (var i = 0; i < handles.Count; i++)
                 {
                     var entity = validation.GetObject(ids[i], OpenMode.ForRead, false) as Entity;
-                    if (entity == null || entity.IsErased)
-                        throw new InvalidOperationException(
-                            "Generated semantic tag handle " + handles[i] +
-                            " is missing or erased. Refusing destructive remove before any semantic tag is erased.");
-                    if (!(entity is MText))
-                        throw new InvalidOperationException(
-                            "Generated semantic tag handle " + handles[i] +
-                            " là live CAD nhưng không phải MText. Refusing destructive remove.");
+                    RequireSupportedSemanticTag(entity, handles[i], "validation before destructive remove");
                     GeneratedGeometryService.RequireMatchingOwnership(
-                        entity,
+                        entity!,
                         project,
                         element,
                         "validate semantic tag remove " + handles[i]);
@@ -144,6 +132,16 @@ namespace QS3D.BricsCAD.V25.Cad
             }
 
             return ids;
+        }
+
+        private static void RequireSupportedSemanticTag(Entity? entity, string handle, string operation)
+        {
+            if (entity == null || entity.IsErased)
+                throw new InvalidOperationException(
+                    "Generated semantic tag handle " + handle + " is missing or erased during " + operation + ". Refusing partial destructive remove.");
+            if (!(entity is MText) && !(entity is MLeader))
+                throw new InvalidOperationException(
+                    "Generated semantic tag handle " + handle + " là live CAD nhưng không phải MText/MLeader during " + operation + ". Refusing destructive remove.");
         }
 
         private static void EnsureOwnedBySemanticTag(GeneratedHandleOwnershipIndex ownership, ProjectElement element, string handle)
