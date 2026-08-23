@@ -183,12 +183,36 @@ def check_table_presentation_defaults():
     )
 
 
+def check_v26_linked_source_coverage():
+    project_rel = "src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj"
+    project = require_file(project_rel)
+    require_all(
+        project,
+        project_rel,
+        (
+            "<TargetFramework>net8.0-windows</TargetFramework>",
+            '<Compile Include="..\\QS3D.BricsCAD.V25\\**\\*.cs"',
+            "<Link>%(RecursiveDir)%(Filename)%(Extension)</Link>",
+        ),
+    )
+    for excluded in (
+        "SemanticMLeaderBuilder.cs",
+        "SemanticSheetArtifactService.cs",
+        "SemanticSheetOwnershipService.cs",
+        "SemanticSheetRuntimeHealthService.cs",
+        "SemanticSheetCommands.cs",
+    ):
+        if excluded in project:
+            raise AssertionError(project_rel + " must not exclude LOCAL-006 shared source: " + excluded)
+
+
 if __name__ == "__main__":
     try:
         check_mleader_lifecycle()
         check_sheet_lifecycle()
         check_table_presentation_defaults()
+        check_v26_linked_source_coverage()
     except AssertionError as exc:
         print("ERROR:", exc)
         sys.exit(1)
-    print("PASS: LOCAL-006 native MLeader, sheet and shared Table presentation source contracts are present.")
+    print("PASS: LOCAL-006 native MLeader, sheet, shared Table presentation and V26 linked-source contracts are present.")
