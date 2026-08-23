@@ -91,6 +91,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         GeneratedGeometryService.MarkGenerated(document, transaction, tag, project.ProjectId, element.Id, element.Category);
                         generatedHandle = tag.Handle.ToString();
 
+                        ClearLeaderMetadata(element);
                         element.Properties[GeneratedSemanticTagHealthService.HandlesKey] = generatedHandle;
                         element.Properties[GeneratedSemanticTagHealthService.TemplateKey] = template;
                         element.Properties[GeneratedSemanticTagHealthService.TextKey] = rendered;
@@ -102,7 +103,8 @@ namespace QS3D.BricsCAD.V25.Cad
                         element.Properties[GeneratedSemanticTagHealthService.PositionXKey] = worldPosition.X.ToString("R", CultureInfo.InvariantCulture);
                         element.Properties[GeneratedSemanticTagHealthService.PositionYKey] = worldPosition.Y.ToString("R", CultureInfo.InvariantCulture);
                         element.Properties[GeneratedSemanticTagHealthService.PositionZKey] = worldPosition.Z.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["GeneratedSemanticTagRotationRad"] = rotationRadians.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties[GeneratedSemanticTagHealthService.RotationKey] = rotationRadians.ToString("R", CultureInfo.InvariantCulture);
+                        element.Properties[GeneratedSemanticTagHealthService.ArtifactKindKey] = GeneratedSemanticTagHealthService.MTextArtifactKind;
 
                         AuditTrail.ForProject(project).Record(
                             "documentation.semantic-tag.replace",
@@ -145,7 +147,7 @@ namespace QS3D.BricsCAD.V25.Cad
         public static double StoredRotation(ProjectElement element)
         {
             if (element == null) throw new ArgumentNullException(nameof(element));
-            return RequiredFinite(element, "GeneratedSemanticTagRotationRad");
+            return RequiredFinite(element, GeneratedSemanticTagHealthService.RotationKey);
         }
 
         private static IReadOnlyList<KeyValuePair<string, ObjectId>> ValidatePrevious(
@@ -190,14 +192,8 @@ namespace QS3D.BricsCAD.V25.Cad
                 foreach (var item in result)
                 {
                     var entity = validation.GetObject(item.Value, OpenMode.ForRead, false) as Entity;
-                    if (entity == null || entity.IsErased)
-                        throw new InvalidOperationException(
-                            "Generated semantic tag handle " + item.Key +
-                            " is missing or erased. Refusing destructive replacement before any semantic tag is erased.");
-                    if (!(entity is MText))
-                        throw new InvalidOperationException(
-                            "Generated semantic tag handle " + item.Key + " is live but is not MText. Refusing destructive replacement.");
-                    GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "validate semantic tag replacement " + item.Key);
+                    RequireSupportedSemanticTag(entity, item.Key, "validation before destructive replacement");
+                    GeneratedGeometryService.RequireMatchingOwnership(entity!, project, element, "validate semantic tag replacement " + item.Key);
                 }
                 validation.Commit();
             }
@@ -214,15 +210,28 @@ namespace QS3D.BricsCAD.V25.Cad
             foreach (var item in previous)
             {
                 var entity = transaction.GetObject(item.Value, OpenMode.ForWrite, false) as Entity;
-                if (entity == null || entity.IsErased)
-                    throw new InvalidOperationException(
-                        "Generated semantic tag handle " + item.Key + " is no longer live. Refusing partial destructive replacement.");
-                if (!(entity is MText))
-                    throw new InvalidOperationException(
-                        "Generated semantic tag handle " + item.Key + " is live but is not MText. Refusing destructive replacement.");
-                GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "erase semantic tag " + item.Key);
-                entity.Erase();
+                RequireSupportedSemanticTag(entity, item.Key, "destructive replacement");
+                GeneratedGeometryService.RequireMatchingOwnership(entity!, project, element, "erase semantic tag " + item.Key);
+                entity!.Erase();
             }
+        }
+
+        private static void RequireSupportedSemanticTag(Entity? entity, string handle, string operation)
+        {
+            if (entity == null || entity.IsErased)
+                throw new InvalidOperationException(
+                    "Generated semantic tag handle " + handle + " is missing or erased during " + operation + ". Refusing destructive replacement.");
+            if (!(entity is MText) && !(entity is MLeader))
+                throw new InvalidOperationException(
+                    "Generated semantic tag handle " + handle + " is live but is neither MText nor MLeader during " + operation + ". Refusing destructive replacement.");
+        }
+
+        private static void ClearLeaderMetadata(ProjectElement element)
+        {
+            var keys = element.Properties.Keys
+                .Where(x => x.StartsWith("GeneratedSemanticTagLeader", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            foreach (var key in keys) element.Properties.Remove(key);
         }
 
         private static string RequireSingleSourceHandle(ProjectElement element)
