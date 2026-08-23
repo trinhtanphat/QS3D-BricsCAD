@@ -19,7 +19,7 @@ def main():
         "ConditionalWeakTable<Window, Registration>",
         "Registrations.GetValue(window, key => new Registration(key, document))",
         "registration.Attach(document);",
-        "if (!ReferenceEquals(document, _document))",
+        "if (!IsSameDocument(document))",
         "if (_attached) return;",
         "BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;",
         "BcadApplication.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed;",
