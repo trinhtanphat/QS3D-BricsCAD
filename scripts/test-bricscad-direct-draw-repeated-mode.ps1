@@ -478,6 +478,24 @@ function Wait-ForFilesAndExit {
     throw "Timed out waiting for BricsCAD repeated-mode process cleanup."
 }
 
+function Assert-V26InstalledDesktopRuntime {
+    param([Parameter(Mandatory = $true)][string]$ExpectedRuntimeVersion)
+
+    $programFiles = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)
+    if ([string]::IsNullOrWhiteSpace($programFiles)) {
+        throw "BricsCAD V26 managed bridge requires the system-installed x64 .NET 8 Windows Desktop Runtime; DOTNET_ROOT alone is insufficient."
+    }
+
+    $installedRoot = Join-Path $programFiles "dotnet"
+    $coreVersionRoot = Join-Path $installedRoot ("shared\Microsoft.NETCore.App\" + $ExpectedRuntimeVersion)
+    $desktopVersionRoot = Join-Path $installedRoot ("shared\Microsoft.WindowsDesktop.App\" + $ExpectedRuntimeVersion)
+    if (-not (Test-Path -LiteralPath (Join-Path $coreVersionRoot "coreclr.dll") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $desktopVersionRoot "WindowsBase.dll") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $desktopVersionRoot "System.Windows.Forms.dll") -PathType Leaf)) {
+        throw "BricsCAD V26 managed bridge requires the system-installed .NET 8 Windows Desktop Runtime (x64 $ExpectedRuntimeVersion) under '$installedRoot'; DOTNET_ROOT alone is insufficient."
+    }
+}
+
 function Assert-V26DotNetRuntime {
     param([Parameter(Mandatory = $true)][string]$DotNetExecutable)
 
@@ -489,11 +507,19 @@ function Assert-V26DotNetRuntime {
         $_.Name -match '^8\.' -and (Test-Path -LiteralPath (Join-Path $_.FullName "coreclr.dll") -PathType Leaf)
     })
     $desktop = @(Get-ChildItem -LiteralPath (Join-Path $root "shared\Microsoft.WindowsDesktop.App") -Directory -ErrorAction Stop | Where-Object {
-        $_.Name -match '^8\.' -and (Test-Path -LiteralPath (Join-Path $_.FullName "PresentationFramework.dll") -PathType Leaf)
+        $_.Name -match '^8\.' -and
+        (Test-Path -LiteralPath (Join-Path $_.FullName "PresentationFramework.dll") -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $_.FullName "WindowsBase.dll") -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $_.FullName "System.Windows.Forms.dll") -PathType Leaf)
     })
     if ($fxr.Count -eq 0 -or $core.Count -eq 0 -or $desktop.Count -eq 0) {
         throw "V26 repeated-mode qualification requires a complete .NET 8 WindowsDesktop runtime beside dotnet.exe."
     }
+    $selectedRuntime = $core | Sort-Object { [Version]$_.Name } -Descending | Select-Object -First 1
+    if ($desktop.Name -notcontains $selectedRuntime.Name) {
+        throw "V26 repeated-mode qualification requires matching .NETCore and WindowsDesktop 8.x patch versions beside dotnet.exe."
+    }
+    Assert-V26InstalledDesktopRuntime -ExpectedRuntimeVersion $selectedRuntime.Name
     return $root
 }
 

@@ -29,7 +29,9 @@ $env:BRICSCAD_V26_DIR = 'C:\Program Files\Bricsys\BricsCAD V26 en_US'
 
 If the installed locale/path differs, use that licensed V26 installation directory instead.
 
-If the process overrides `DOTNET_ROOT`, it must name a real .NET 8 host/runtime root containing `dotnet.exe`, an 8.x `host/fxr/hostfxr.dll`, and an 8.x `shared/Microsoft.NETCore.App/coreclr.dll`. The V26 runtime and native Beam runners reject an incomplete or stale override before starting BricsCAD; either unset the override so the licensed host uses its normal runtime resolution or point it to a verified local runtime root.
+Install the Microsoft x64 .NET 8 Windows Desktop Runtime through its Windows installer before qualification. A portable SDK/runtime tree is useful for deterministic builds, but `DOTNET_ROOT` alone is not a substitute for the registered runtime under `C:\Program Files\dotnet`: BricsCAD V26.2.07's managed bridge resolves `WindowsBase.dll` and `System.Windows.Forms.dll` from that installed location while it initializes `BrxMgd.dll`.
+
+If the process overrides `DOTNET_ROOT`, it must name a complete .NET 8 Windows Desktop runtime root containing `dotnet.exe`, an 8.x `host/fxr/hostfxr.dll`, an 8.x `shared/Microsoft.NETCore.App/coreclr.dll`, and matching 8.x Windows Desktop assemblies. The selected portable .NETCore patch must also exist as a matching system-installed Microsoft.NETCore/WindowsDesktop patch. The V26 runtime and repeated Direct Draw runners reject an incomplete, stale or install-mismatched override before artifact creation or BricsCAD launch.
 
 Before starting BricsCAD, verify that `dotnet --list-runtimes` reports both `Microsoft.NETCore.App 8.x` and `Microsoft.WindowsDesktop.App 8.x` for x64. A machine with BricsCAD V26 but no discoverable .NET 8 Windows Desktop runtime can enter `NETLOAD` without ever reaching the plugin initializer; that host prerequisite failure is not a plugin runtime PASS.
 
@@ -95,7 +97,7 @@ Issue `#3576` owns one representative production native-edit cell under `LOCAL-0
   -ConfirmDisposableCopies
 ```
 
-The shared runner must reject a V25/V26 host or plugin-major mismatch. If the process environment sets `DOTNET_ROOT`, it must point to a complete .NET 8 host/runtime containing `dotnet.exe`, an 8.x `hostfxr.dll` and an 8.x `coreclr.dll`; an invalid override must be refused before artifact creation or BricsCAD launch.
+The shared runner must reject a V25/V26 host or plugin-major mismatch. It must also require a system-installed x64 .NET 8 Windows Desktop Runtime containing matching `Microsoft.NETCore.App`/`Microsoft.WindowsDesktop.App` patch directories, `WindowsBase.dll` and `System.Windows.Forms.dll`. If the process environment sets `DOTNET_ROOT`, the override must be complete and match that installed patch; a portable-only, invalid or mismatched override must be refused before artifact creation or BricsCAD launch.
 
 This bounded gate uses the repository-generated disposable fixture and the existing production Slab probe. It drives one real top-level closed-POLYLINE crossing-window `STRETCH`, verifies pre-sync generated isolation, production source reconcile/metric and quantity refresh, generated invalidation/rebuild, scoped Health, save/sidecar persistence and a fresh-process cold reopen. The gate was `PENDING_LOCAL` until the exact evidence below passed; its bounded PASS cannot close the broader #80 or #1462 matrix.
 

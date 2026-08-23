@@ -26,7 +26,7 @@ $env:BRICSCAD_V26_DIR = 'C:\Program Files\Bricsys\BricsCAD V26 en_US'
 
 Use the actual licensed installation path if the locale/path differs. `bricscad.exe` must report file major version 26.
 
-Confirm that `dotnet --list-runtimes` exposes both `Microsoft.NETCore.App 8.x` and `Microsoft.WindowsDesktop.App 8.x` for x64 before `NETLOAD`. The V26 build emits `QS3D.BricsCAD.V26.runtimeconfig.json`; keep it beside the plugin DLL through packaging and installation.
+Install the Microsoft x64 .NET 8 Windows Desktop Runtime, then confirm that the system `dotnet --list-runtimes` exposes matching `Microsoft.NETCore.App 8.x` and `Microsoft.WindowsDesktop.App 8.x` patches before `NETLOAD`. A portable `DOTNET_ROOT` alone is insufficient for the BricsCAD V26 managed bridge; any override must match the system-installed patch. The V26 build emits `QS3D.BricsCAD.V26.runtimeconfig.json`; keep it beside the plugin DLL through packaging and installation.
 
 ## Source/build gate
 
