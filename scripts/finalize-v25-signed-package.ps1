@@ -32,6 +32,15 @@ function Get-CanonicalFullPath {
     catch { throw "$Label path is invalid: $($_.Exception.Message)" }
 }
 
+function Test-PathEqualOrContained {
+    param([string]$Path, [string]$Container)
+
+    $pathFull = (Get-CanonicalFullPath -Path $Path -Label 'candidate').TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $containerFull = (Get-CanonicalFullPath -Path $Container -Label 'container').TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    if ([string]::Equals($pathFull, $containerFull, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    return $pathFull.StartsWith($containerFull + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
+}
+
 function Assert-NoReparseDirectoryChain {
     param([string]$Path, [string]$Label)
 
@@ -74,6 +83,18 @@ function Assert-SafeDirectory {
     return $trimmedFullPath
 }
 
+function Assert-SafeContainedDirectory {
+    param([string]$Path, [string]$RepositoryRoot, [string]$Label)
+
+    $repository = Assert-SafeDirectory -Path $RepositoryRoot -Label 'repository root'
+    $directory = Assert-SafeDirectory -Path $Path -Label $Label
+    if (-not (Test-PathEqualOrContained -Path $directory -Container $repository) -or
+        [string]::Equals($directory, $repository, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Label must stay below the repository root: $directory"
+    }
+    return $directory
+}
+
 function Assert-SafeFile {
     param([string]$Path, [string]$Label)
 
@@ -103,6 +124,18 @@ function Assert-SafeOptionalFileTarget {
         }
     }
     return $fullPath
+}
+
+function Assert-SafeContainedOptionalFileTarget {
+    param([string]$Path, [string]$RepositoryRoot, [string]$Label)
+
+    $repository = Assert-SafeDirectory -Path $RepositoryRoot -Label 'repository root'
+    $target = Get-CanonicalFullPath -Path $Path -Label $Label
+    if (-not (Test-PathEqualOrContained -Path $target -Container $repository) -or
+        [string]::Equals($target, $repository, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Label must stay below the repository root: $target"
+    }
+    return Assert-SafeOptionalFileTarget -Path $target -Label $Label
 }
 
 function Get-SafePackageFiles {
@@ -167,7 +200,8 @@ function Read-ManagedProductVersion {
     }
 }
 
-$packagePath = Assert-SafeDirectory -Path $PackageDirectory -Label 'PackageDirectory'
+$repositoryRoot = Assert-SafeDirectory -Path (Split-Path -Parent $PSScriptRoot) -Label 'repository root'
+$packagePath = Assert-SafeContainedDirectory -Path $PackageDirectory -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'
 $package = $packagePath
 $packageRoot = $packagePath + [IO.Path]::DirectorySeparatorChar
 $zip = Get-CanonicalFullPath -Path $PackageZip -Label 'PackageZip'
@@ -178,7 +212,7 @@ if ([string]::Equals($zip, $packagePath, [StringComparison]::OrdinalIgnoreCase) 
     $zip.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'PackageZip must be outside PackageDirectory so finalization cannot delete or overwrite package payload.'
 }
-$zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'
+$zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'
 $null = @(Get-SafePackageFiles -PackageRoot $package)
 $expectedSigner = Normalize-Thumbprint $ExpectedSignerThumbprint
 $metadataPath = Assert-SafeFile -Path (Join-Path $package 'PACKAGE-METADATA.json') -Label 'PACKAGE-METADATA.json'
@@ -218,6 +252,9 @@ $signedPluginVersion = $managedIdentities['QS3D.BricsCAD.V25.dll'].AssemblyVersi
 
 if (-not $PSCmdlet.ShouldProcess($zip, 'Finalize signed QS3D V25 package and rebuild ZIP')) { return }
 
+$package = Assert-SafeContainedDirectory -Path $package -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'
+$zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'
+$metadataPath = Assert-SafeFile -Path (Join-Path $package 'PACKAGE-METADATA.json') -Label 'PACKAGE-METADATA.json'
 $metadata | Add-Member -NotePropertyName pluginSignatureStatus -NotePropertyValue 'Valid' -Force
 $metadata | Add-Member -NotePropertyName pluginSignerThumbprint -NotePropertyValue $expectedSigner -Force
 $metadata | Add-Member -NotePropertyName signedExecutablePayload -NotePropertyValue @($SignedPayloadNames) -Force
@@ -226,6 +263,7 @@ $metadata | Add-Member -NotePropertyName signedPluginAssemblyVersion -NoteProper
 $metadata | Add-Member -NotePropertyName signedPackageFinalizedUtc -NotePropertyValue ([DateTime]::UtcNow.ToString('o')) -Force
 $metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
 
+$package = Assert-SafeContainedDirectory -Path $package -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'
 $hashManifest = Join-Path $package 'SHA256SUMS.txt'
 if (Test-Path -LiteralPath $hashManifest) {
     $hashManifest = Assert-SafeFile -Path $hashManifest -Label 'SHA256SUMS.txt'
@@ -245,17 +283,23 @@ $hashLines = foreach ($file in Get-SafePackageFiles -PackageRoot $package) {
     "$hash  $relative"
 }
 if (@($hashLines).Count -eq 0) { throw 'Signed package contains no payload files to hash.' }
+$package = Assert-SafeContainedDirectory -Path $package -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'
+$hashManifest = Assert-SafeOptionalFileTarget -Path (Join-Path $package 'SHA256SUMS.txt') -Label 'SHA256SUMS.txt'
 $hashLines | Set-Content -LiteralPath $hashManifest -Encoding ASCII
 
+$zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'
 $zipParent = Split-Path -Parent $zip
 if (-not [string]::IsNullOrWhiteSpace($zipParent)) {
     Assert-NoReparseDirectoryChain -Path $zipParent -Label 'PackageZip parent'
     New-Item -ItemType Directory -Path $zipParent -Force | Out-Null
     Assert-NoReparseDirectoryChain -Path $zipParent -Label 'PackageZip parent'
 }
-$zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'
+$zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
+$package = Assert-SafeContainedDirectory -Path $package -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'
+$zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'
 Compress-Archive -Path (Join-Path $package '*') -DestinationPath $zip -CompressionLevel Optimal
+$zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'
 
 Write-Host "FINALIZED: $zip"
 Write-Host "Signer: $expectedSigner"

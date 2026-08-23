@@ -35,8 +35,8 @@ def main() -> None:
         ("[IO.Path]::GetPathRoot($fullPath)", "filesystem-root identity"),
         ("[string]::Equals($fullPath, $pathRoot, [StringComparison]::OrdinalIgnoreCase)", "canonical filesystem-root comparison"),
         ("must not be a filesystem root", "filesystem-root refusal"),
-        ("Assert-SafeDirectory -Path $PackageDirectory", "package-root validation"),
-        ("Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'", "ZIP validation"),
+        ("Assert-SafeContainedDirectory -Path $PackageDirectory -RepositoryRoot $repositoryRoot", "package-root containment validation"),
+        ("Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'", "ZIP containment validation"),
         ("Assert-SafeFile -Path (Join-Path $package 'PACKAGE-METADATA.json')", "metadata validation"),
         ("Assert-SafeFile -Path (Join-Path $package $name)", "signed payload validation"),
         ("Get-SafePackageFiles -PackageRoot $package", "safe package traversal"),
@@ -64,9 +64,9 @@ def main() -> None:
     )
     require_before(
         v25,
-        "Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'",
+        "Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'",
         "$PSCmdlet.ShouldProcess",
-        "ZIP safety validation must precede mutation gate",
+        "ZIP containment validation must precede mutation gate",
     )
     require_before(
         v25,
@@ -88,9 +88,9 @@ def main() -> None:
     )
     require_before(
         v25,
-        "$zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'",
+        "$zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'",
         "Remove-Item -LiteralPath $zip -Force",
-        "ZIP target validation must precede ZIP removal",
+        "ZIP target containment validation must precede ZIP removal",
     )
 
     if "Get-ChildItem -LiteralPath $package -Recurse -File" in v25:
@@ -104,7 +104,7 @@ def main() -> None:
     ):
         require(v26, token, label)
 
-    print("PASS: signed-package finalizer validates reparse/path/root boundaries before destructive mutation")
+    print("PASS: signed-package finalizer validates reparse/path/root/containment boundaries before destructive mutation")
 
 
 if __name__ == "__main__":
