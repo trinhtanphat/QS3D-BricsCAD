@@ -147,7 +147,12 @@ namespace QS3D.Core.Geometry
             Finite(point.X, "curtain projection point X");
             Finite(point.Y, "curtain projection point Y");
 
-            CurtainPathProjection? best = null;
+            PathSegment? bestSegment = null;
+            Point2 bestPoint = default;
+            var bestRatio = 0d;
+            var bestDistance = 0d;
+            var bestIndex = -1;
+
             for (var index = 0; index < path.Segments.Count; index++)
             {
                 var segment = path.Segments[index];
@@ -159,14 +164,39 @@ namespace QS3D.Core.Geometry
                     Add(segment.Start.X, Multiply(segment.Dx, ratio, "curtain projection X delta"), "curtain projection X"),
                     Add(segment.Start.Y, Multiply(segment.Dy, ratio, "curtain projection Y delta"), "curtain projection Y"));
                 var distance = point.DistanceTo(projected);
-                var station = ProjectionStation(segment, ratio);
-                var candidate = new CurtainPathProjection(station, distance, projected, index);
-                if (best == null || distance < best.DistanceM - Tolerance ||
-                    (Math.Abs(distance - best.DistanceM) <= Tolerance && station < best.StationM))
-                    best = candidate;
+
+                if (bestSegment == null || distance < bestDistance - Tolerance)
+                {
+                    bestSegment = segment;
+                    bestPoint = projected;
+                    bestRatio = ratio;
+                    bestDistance = distance;
+                    bestIndex = index;
+                    continue;
+                }
+
+                if (Math.Abs(distance - bestDistance) <= Tolerance)
+                {
+                    var candidateStation = ProjectionStation(segment, ratio);
+                    var currentStation = ProjectionStation(bestSegment, bestRatio);
+                    if (candidateStation < currentStation)
+                    {
+                        bestSegment = segment;
+                        bestPoint = projected;
+                        bestRatio = ratio;
+                        bestDistance = distance;
+                        bestIndex = index;
+                    }
+                }
             }
 
-            return best ?? throw new InvalidOperationException("Curtain path projection has no valid segment.");
+            if (bestSegment == null)
+                throw new InvalidOperationException("Curtain path projection has no valid segment.");
+            return new CurtainPathProjection(
+                ProjectionStation(bestSegment, bestRatio),
+                bestDistance,
+                bestPoint,
+                bestIndex);
         }
 
         public static double Length(IReadOnlyList<Point2> centerline) => BuildPath(centerline).TotalLengthM;
