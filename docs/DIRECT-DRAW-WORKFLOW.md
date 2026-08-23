@@ -19,7 +19,7 @@ Current implementation direction on `main`:
 - BLT-style wall compatibility flow is deliberately **capture -> edit -> build**, not capture-and-build in one command.
 - Instance inspector exposes source-derived geometry such as `LengthM`, `AreaM2`, `VolumeM3`, `PerimeterM` and source `Layer` as read-only CAD provenance instead of pretending those measurements are independent editable Family dimensions.
 
-Exact licensed evidence is now recorded for the bounded repeated Wall/Beam slice at clean final candidate SHA `e5725e96eed6dcebb46370c33e6f8a88e2cc2b68`: BricsCAD V25.2.10 and V26.2.07 both passed exact-plugin `NETLOAD`, DrawJig preview, repeated segments, Enter/physical ESC, planar UCS, document-switch isolation, whole-command Undo/Redo, save and fresh-process cold reopen. This does not certify the broader quick/advanced prompt, Auto Host/reference, private-DWG or release matrix.
+Exact licensed evidence is now recorded for the bounded repeated Wall/Beam slice at source candidate SHA `9a77d329e90809a2006d8e4dc1bafc995c0a8ca2`: BricsCAD V25.2.10 and V26.2.07 both passed exact-plugin `NETLOAD`, independent two-segment Wall and Beam sequences, eight hosted `DrawJig.WorldDraw` callbacks per Family, Enter/physical ESC, planar UCS, document-switch isolation, whole-command Undo/Redo, save and fresh-process Wall/Beam cold reopen. This does not certify the broader quick/advanced prompt, Auto Host/reference, private-DWG or release matrix.
 
 ---
 
@@ -90,7 +90,7 @@ Future work should continue converging common point acquisition, Family defaults
 
 1. the first editor point is normalized from the current planar UCS into WCS exactly once;
 2. each next endpoint is acquired by a database-free `DrawJig` profile strip;
-3. an accepted segment creates a canonical WCS `LINE`, semantic owner and native `Solid3d` through the existing `DirectDrawCommands.ExecuteDirect` pipeline;
+3. an accepted segment creates a canonical WCS `LINE`, semantic owner and native `Solid3d` through the existing `DirectDrawCommands.ExecuteDirect` pipeline; the project preview captured before the first prompt remains pinned until that checkpoint succeeds, so a project that appears or is replaced mid-prompt is refused before mutation;
 4. the next preview starts at the accepted endpoint;
 5. Enter or ESC removes only the in-progress transient and exits; accepted segments remain;
 6. unit, planar-UCS, Model Space, active-DWG, project and active-Family context are revalidated before each commit;

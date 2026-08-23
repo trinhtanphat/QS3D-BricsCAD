@@ -128,7 +128,7 @@ Vẽ tùy chỉnh = one-off exception
 
 ## Runtime qualification boundary
 
-Source/static implementation is REMOTE_DONE. The bounded repeated Wall/Beam editor lifecycle is `LOCAL_PASS` at clean final candidate SHA `e5725e96eed6dcebb46370c33e6f8a88e2cc2b68` on BricsCAD V25.2.10 and V26.2.07; the remaining active-Family dispatch, quick/advanced prompt, Auto Host/reference and UI matrix stays inside `LOCAL-008`.
+Source/static implementation is REMOTE_DONE. The bounded repeated Wall/Beam editor lifecycle is `LOCAL_PASS` at exact runtime source candidate SHA `9a77d329e90809a2006d8e4dc1bafc995c0a8ca2` on BricsCAD V25.2.10 and V26.2.07, including independent Wall/Beam sequences and positive hosted `DrawJig.WorldDraw` observation; the remaining active-Family dispatch, quick/advanced prompt, Auto Host/reference and UI matrix stays inside `LOCAL-008`.
 
 Local proof should include:
 
