@@ -43,6 +43,9 @@ public static class Qs3dExactEscapeInput
     public static extern bool BringWindowToTop(IntPtr window);
 
     [DllImport("user32.dll")]
+    public static extern void SwitchToThisWindow(IntPtr window, bool altTab);
+
+    [DllImport("user32.dll")]
     public static extern IntPtr SetActiveWindow(IntPtr window);
 
     [DllImport("user32.dll")]
@@ -248,7 +251,8 @@ function Start-ExactCandidateHost {
         [int]$OriginalDemandLoadControls = 0,
         [int]$IsolatedDemandLoadControls = 0,
         [Parameter(Mandatory = $true)][ref]$IsolationCount,
-        [Parameter(Mandatory = $true)][ref]$DemandLoadRestored
+        [Parameter(Mandatory = $true)][ref]$DemandLoadRestored,
+        [switch]$RequiresForegroundInput
     )
     $changed = $false
     try {
@@ -259,8 +263,14 @@ function Start-ExactCandidateHost {
             $DemandLoadRestored.Value = $false
             $IsolationCount.Value = [int]$IsolationCount.Value + 1
         }
-        $process = Start-Process -FilePath $Executable -ArgumentList $Arguments `
-            -WorkingDirectory $WorkingDirectory -PassThru -WindowStyle Hidden
+        if ($RequiresForegroundInput) {
+            $process = Start-Process -FilePath $Executable -ArgumentList $Arguments `
+                -WorkingDirectory $WorkingDirectory -PassThru -WindowStyle Normal
+        }
+        else {
+            $process = Start-Process -FilePath $Executable -ArgumentList $Arguments `
+                -WorkingDirectory $WorkingDirectory -PassThru -WindowStyle Hidden
+        }
         $OwnedProcesses.Add($process)
         return Wait-ForMarkerAndOwnedHost -Path $RuntimeIdentityPath `
             -RuntimeIdentityPath $RuntimeIdentityPath -ExpectedAssembly $PluginDll `
@@ -307,6 +317,7 @@ function Bind-ExactProcessForeground {
     }
 
     $runnerThreadId = [Qs3dExactEscapeInput]::GetCurrentThreadId()
+    $activationShell = New-Object -ComObject WScript.Shell
     $foregroundDeadline = [DateTime]::UtcNow.AddSeconds(10)
     $foregroundMatches = $false
     while (-not $foregroundMatches -and [DateTime]::UtcNow -lt $foregroundDeadline) {
@@ -315,7 +326,9 @@ function Bind-ExactProcessForeground {
             if ($runnerThreadId -ne $windowThreadId) {
                 $attached = [Qs3dExactEscapeInput]::AttachThreadInput($runnerThreadId, $windowThreadId, $true)
             }
+            $activationShell.AppActivate($Process.Id) | Out-Null
             [Qs3dExactEscapeInput]::ShowWindowAsync($window, 9) | Out-Null
+            [Qs3dExactEscapeInput]::SwitchToThisWindow($window, $true)
             [Qs3dExactEscapeInput]::BringWindowToTop($window) | Out-Null
             [Qs3dExactEscapeInput]::SetForegroundWindow($window) | Out-Null
             [Qs3dExactEscapeInput]::SetActiveWindow($window) | Out-Null
@@ -730,7 +743,8 @@ try {
         -DemandLoadRegistryPath $demandLoadRegistryPath `
         -OriginalDemandLoadControls $demandLoadOriginalControls `
         -IsolatedDemandLoadControls $demandLoadIsolatedControls `
-        -IsolationCount ([ref]$demandLoadIsolationCount) -DemandLoadRestored ([ref]$demandLoadRestored)
+        -IsolationCount ([ref]$demandLoadIsolationCount) -DemandLoadRestored ([ref]$demandLoadRestored) `
+        -RequiresForegroundInput
     $escapeProcess = Wait-ForMarkerAndOwnedHost -Path $phasePaths.esc_ready `
         -RuntimeIdentityPath $phasePaths.runtime_esc -ExpectedAssembly $pluginDll `
         -Process $escapeProcess `
