@@ -168,10 +168,25 @@ function Require-OwnedProcessIdentity {
         [Parameter(Mandatory = $true)][Diagnostics.Process]$Process,
         [Parameter(Mandatory = $true)][string]$ExpectedExecutable
     )
-    $Process.Refresh()
-    if ($Process.HasExited) { return }
+    try {
+        $Process.Refresh()
+        if ($Process.HasExited) { return }
+        $actualExecutable = [string]$Process.Path
+    }
+    catch [InvalidOperationException] {
+        return
+    }
+    if ([string]::IsNullOrWhiteSpace($actualExecutable)) {
+        $record = Get-CimInstance Win32_Process -Filter ("ProcessId = " + $Process.Id) `
+            -ErrorAction SilentlyContinue
+        if ($null -eq $record) { return }
+        $actualExecutable = [string]$record.ExecutablePath
+    }
+    if ([string]::IsNullOrWhiteSpace($actualExecutable)) {
+        throw "Runner-owned process executable identity is unavailable while the process is alive."
+    }
     if (-not [string]::Equals(
-        [IO.Path]::GetFullPath($Process.Path),
+        [IO.Path]::GetFullPath($actualExecutable),
         [IO.Path]::GetFullPath($ExpectedExecutable),
         [StringComparison]::OrdinalIgnoreCase)) {
         throw "Runner-owned process is not the requested BricsCAD executable."
