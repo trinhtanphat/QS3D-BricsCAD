@@ -161,8 +161,10 @@ for token in (
     'ArtifactDir must stay outside the repository.',
     'status --porcelain=v1 --untracked-files=all',
     'Curtain P10 qualification requires a clean exact-SHA worktree.',
-    'ProductVersion',
-    'Close existing BricsCAD processes before isolated Curtain P10 qualification.',
+    'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead',
+    'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
+    'Close existing BricsCAD V25 processes before isolated Curtain P10 qualification.',
+    'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
     'QS3D_CURTAIN_P10_RESULT',
     'QS3D_CURTAIN_P10_NONCE',
     'QS3D_CURTAIN_P10_PROGRESS',
@@ -255,7 +257,7 @@ if (
 if '"QS3DCURTAIN3D", "P", ""' in runner:
     errors.append("Curtain P10 runner must not depend on an interactive Previous-selection response after its selection-transparent progress checkpoint")
 
-for forbidden in ("workflow run", "gh run", "customer", "private.dwg\" /P"):
+for forbidden in ("workflow run", "gh run", "customer", "private.dwg\" /P", 'Get-Process -Name "bricscad"', "$expectedAssemblyRevision"):
     if forbidden.lower() in runner.lower():
         errors.append("Curtain P10 runner crosses the local/privacy/Actions boundary: " + forbidden)
 

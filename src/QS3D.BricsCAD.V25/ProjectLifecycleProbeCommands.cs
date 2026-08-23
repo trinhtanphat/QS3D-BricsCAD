@@ -508,10 +508,14 @@ namespace QS3D.BricsCAD.V25
                 if (project.Elements.Count != 0)
                     throw new LifecycleProbeFailure("OVERRIDE_ELEMENTS_CREATED");
                 RequireMetadata(project, DrawingUnitResolutionPolicy.OverrideMetadataKey, LengthUnit.Meter.ToString(), "OVERRIDE_UNIT_MISMATCH");
-                RequireMetadata(project, DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey, LengthUnit.Meter.ToString(), "OVERRIDE_EFFECTIVE_UNIT_MISMATCH");
-                RequireMetadata(project, DrawingUnitResolutionPolicy.BindingSourceMetadataKey, DrawingUnitResolutionSource.ProjectOverride.ToString(), "OVERRIDE_SOURCE_MISMATCH");
-                if (project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.BoundMetadataKey))
+                if (project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.BoundMetadataKey) ||
+                    project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey) ||
+                    project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.BindingSourceMetadataKey))
                     throw new LifecycleProbeFailure("OVERRIDE_BOUND_EMPTY_PROJECT");
+                if (!Cad.CadUnitService.TryGetPolicy(document, out _, out var effectiveResolution) ||
+                    effectiveResolution.Unit != LengthUnit.Meter ||
+                    effectiveResolution.Source != DrawingUnitResolutionSource.ProjectOverride)
+                    throw new LifecycleProbeFailure("OVERRIDE_RESOLUTION_MISMATCH");
                 if (ProjectContextCoordinator.HasPendingChanges(document))
                     throw new LifecycleProbeFailure("OVERRIDE_PENDING");
                 return new[]
@@ -525,7 +529,9 @@ namespace QS3D.BricsCAD.V25
                     "automation_confirmation_consumed=true",
                     "intentional_project_bootstrap=true",
                     "no_pending_project_state=true",
-                    "semantic_elements_not_created=true"
+                    "semantic_elements_not_created=true",
+                    "unbound_binding_evidence_absent=true",
+                    "effective_override_resolved=true"
                 };
             }
 

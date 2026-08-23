@@ -37,6 +37,36 @@ require(
     "using System.Threading;" in source and "private int _invalidated;" in source,
     "Document-bound windows must use an atomic invalidation state shared across host/UI threads.",
 )
+require(
+    "private readonly IntPtr _nativeDatabaseIdentity;" in source
+    and "_nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);" in source,
+    "Document-bound windows must capture the stable native database identity at bind time.",
+)
+require(
+    "ReferenceEquals(e.Document, _document)" not in source
+    and "ReferenceEquals(document, _document)" not in source,
+    "Managed Document wrapper identity must not own modeless lifetime or rebind validation.",
+)
+
+native_identity = method_block(source, "private static IntPtr GetNativeDatabaseIdentity(Document document)")
+require(
+    "var identity = database.UnmanagedObject;" in native_identity
+    and "identity == IntPtr.Zero" in native_identity,
+    "Native document identity must come from a live non-zero database unmanaged pointer.",
+)
+
+native_match = method_block(source, "private bool MatchesNativeDatabase(Document document)")
+require(
+    "database.UnmanagedObject != IntPtr.Zero" in native_match
+    and "database.UnmanagedObject == _nativeDatabaseIdentity" in native_match,
+    "Managed wrapper drift must match the captured native database while a different database is rejected.",
+)
+
+attach = method_block(source, "public void Attach(Document document)")
+require(
+    "if (!MatchesNativeDatabase(document))" in attach,
+    "A modeless window rebind must validate native database identity rather than managed wrapper identity.",
+)
 
 ensure = method_block(source, "private bool EnsureProjectAffinity()")
 require(
@@ -66,6 +96,7 @@ teardown = method_block(
     "private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)",
 )
 for marker in (
+    "if (!MatchesNativeDatabase(e.Document)) return;",
     "Interlocked.Exchange(ref _invalidated, 1) != 0",
     "DetachDocumentManagerHandler();",
     "TryCloseWindow();",
@@ -76,10 +107,11 @@ require(
     "Document teardown must keep window-local input guards attached when close fails.",
 )
 require(
-    teardown.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
+    teardown.index("if (!MatchesNativeDatabase(e.Document)) return;")
+    < teardown.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
     < teardown.index("DetachDocumentManagerHandler();")
     < teardown.index("TryCloseWindow();"),
-    "Document teardown must atomically invalidate, release the global subscription, then best-effort close.",
+    "Document teardown must validate native identity, atomically invalidate, release the global subscription, then best-effort close.",
 )
 
 request_close = method_block(source, "private void TryCloseWindow()")
@@ -112,4 +144,4 @@ require(
     "Successful/actual Window.Closed must remain the authoritative full-detach path.",
 )
 
-print("[OK] Document-bound modeless windows remain atomically fail-closed when project/document close attempts fail.")
+print("[OK] Document-bound modeless windows use native database identity and remain atomically fail-closed across wrapper drift and close failures.")

@@ -43,6 +43,8 @@ Local acceptance:
 
 PASS evidence: exact SHA, BricsCAD build, before/after view identifiers or sanitized viewport measurements, command-result summary, no private screenshot required unless repository policy explicitly permits sanitized UI evidence.
 
+Current local result (2026-08-23): `LOCAL_PASS / BOUNDED_ROW_2` on exact clean pushed runtime candidate `ea85175b4dbc601047d0b6945032836dea4765bd` with BricsCAD V25.2.10. Two consecutive production Beam draws each added one LINE source and one selected owned 3DSOLID; the owners shared the same project and represented distinct elements. View center, size, twist, direction and target were unchanged after both commits. A third draw was cancelled after its first point by exact-PID ESC, returned to an idle command state and added no source or solid; the same viewport measurements remained unchanged. Exact adapter/Core PDB SourceLink, zero-warning V25 Release|x64 build, full Core `ALL PASS`, seven focused guards, dirty-project discard, graceful helper/host exit, byte-identical disposable drawing, no sidecar and zero process residue all passed. This closes only the bounded Sheet row 2 evidence cell; broader LOCAL-008/internal repeated-mode, context-drift, Ribbon and document-switch qualification remains open under #74.
+
 ## Row 3 — Family Manager quick property/template workflow
 
 Remote status: quick workflow source and guards are integrated.

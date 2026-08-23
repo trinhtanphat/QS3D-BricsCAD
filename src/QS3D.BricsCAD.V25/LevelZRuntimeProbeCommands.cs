@@ -70,6 +70,7 @@ namespace QS3D.BricsCAD.V25
             ZRange? observedGlassRange = null;
             ZRange? observedFrameRange = null;
             ZRange? observedPanelRange = null;
+            var hostBuildStage = string.Empty;
             var rebarStage = string.Empty;
             int? observedBeamRebarCount = null;
             int? observedBeamStirrupElementCount = null;
@@ -97,7 +98,7 @@ namespace QS3D.BricsCAD.V25
                 failureCode = "LEVEL_Z_RUNTIME_SOURCE_FAILED";
                 var sources = CreateSources(document);
                 var topOnlyFailClosed = VerifyTopOnlyFailsBeforeMutation(document, sources.TopOnlyWall);
-                var project = CreateProject("level-z-runtime");
+                var project = CreateProject(document);
                 if (!CadUnitService.TryGetNativeLengthUnit(document, out var nativeUnit))
                     throw new InvalidOperationException("Level Z runtime probe requires a supported native drawing unit.");
                 DrawingUnitResolutionPolicy.BindQuantityUnit(
@@ -149,15 +150,20 @@ namespace QS3D.BricsCAD.V25
                 AssignBounded(project, curtainOpening, 0.4d, -0.4d);
 
                 failureCode = "LEVEL_Z_RUNTIME_HOST_BUILD_FAILED";
+                hostBuildStage = "legacy_wall_build";
                 Select(document, sources.LegacyWall.ObjectId);
                 Require(WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.ArchitecturalWall) == 1, "legacy wall build count");
+                hostBuildStage = "bounded_wall_build";
                 Select(document, sources.BoundedWall.ObjectId);
                 Require(WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.ArchitecturalWall) == 1, "bounded wall build count");
+                hostBuildStage = "glass_wall_build";
                 Select(document, sources.GlassWall.ObjectId);
                 Require(WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.GlassWall) == 1, "GlassWall build count");
+                hostBuildStage = "beam_build";
                 Select(document, sources.Beam.ObjectId);
                 Require(StructuralSolidBuilder.BuildSelected(document, project, ElementCategory.Beam) == 1, "Beam build count");
 
+                hostBuildStage = "range_read";
                 var legacyRange = ReadZRange(document, Handles(legacyWall, "GeneratedSolidHandle"), "legacy wall");
                 observedLegacyRange = legacyRange;
                 var boundedRange = ReadZRange(document, Handles(boundedWall, "GeneratedSolidHandle"), "bounded wall");
@@ -299,6 +305,7 @@ namespace QS3D.BricsCAD.V25
                     observedGlassRange,
                     observedFrameRange,
                     observedPanelRange,
+                    hostBuildStage,
                     rebarStage,
                     observedBeamRebarCount,
                     observedBeamStirrupElementCount,
@@ -309,6 +316,21 @@ namespace QS3D.BricsCAD.V25
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
                     "\nQS3D Level Z runtime probe FAIL. See the local qualification marker.");
             }
+        }
+
+        private static ProjectState CreateProject(Document document)
+        {
+            var project = ProjectContextCoordinator.GetOrCreate(document);
+            if (project.Elements.Count != 0 ||
+                project.FindFloor("L0") != null ||
+                project.FindFloor("L1") != null ||
+                project.FindFloor("L2") != null)
+                throw new InvalidOperationException("Level Z runtime probe requires a fresh canonical project.");
+            project.Floors.Add(new FloorDefinition("L0", "Level 0", 0d));
+            project.Floors.Add(new FloorDefinition("L1", "Level 1", 3d));
+            project.Floors.Add(new FloorDefinition("L2", "Level 2", 7d));
+            project.ActiveFloorId = "L0";
+            return project;
         }
 
         private static ProjectState CreateProject(string id)
@@ -497,13 +519,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void RequireAssemblyRevision(Assembly assembly, string sourceSha, string label)
         {
-            var informationalVersion = assembly
-                .GetCustomAttributes(typeof(AssemblyInformationalVersionAttribute), false)
-                .OfType<AssemblyInformationalVersionAttribute>()
-                .Select(x => x.InformationalVersion ?? string.Empty)
-                .FirstOrDefault() ?? string.Empty;
-            if (!informationalVersion.EndsWith("+" + sourceSha, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException(label + " assembly revision does not match exact source SHA.");
+            RuntimeSourceIdentityGuard.RequireExactSourceLink(assembly, sourceSha, label);
         }
 
         private static string RequiredResultPath(string value)
@@ -524,6 +540,7 @@ namespace QS3D.BricsCAD.V25
             ZRange? observedGlassRange,
             ZRange? observedFrameRange,
             ZRange? observedPanelRange,
+            string hostBuildStage,
             string rebarStage,
             int? observedBeamRebarCount,
             int? observedBeamStirrupElementCount,
@@ -551,6 +568,8 @@ namespace QS3D.BricsCAD.V25
                     AddObservedRange(lines, "glass", observedGlassRange);
                     AddObservedRange(lines, "frame", observedFrameRange);
                     AddObservedRange(lines, "panel", observedPanelRange);
+                    if (string.Equals(failureCode, "LEVEL_Z_RUNTIME_HOST_BUILD_FAILED", StringComparison.Ordinal))
+                        lines.Add("host_build_stage=" + RequireHostBuildStage(hostBuildStage));
                     if (string.Equals(failureCode, "LEVEL_Z_RUNTIME_REBAR_FAILED", StringComparison.Ordinal))
                     {
                         lines.Add("rebar_stage=" + RequireRebarStage(rebarStage));
@@ -559,6 +578,10 @@ namespace QS3D.BricsCAD.V25
                         AddObservedCount(lines, "observed_beam_stirrup_count", observedBeamStirrupCount);
                         AddObservedRange(lines, "rebar", observedRebarRange);
                         AddObservedRange(lines, "stirrup", observedStirrupRange);
+                    }
+                    if (string.Equals(failureCode, "LEVEL_Z_RUNTIME_HOST_BUILD_FAILED", StringComparison.Ordinal) ||
+                        string.Equals(failureCode, "LEVEL_Z_RUNTIME_REBAR_FAILED", StringComparison.Ordinal))
+                    {
                         lines.Add("exception_type=" + OneLine(error.GetType().FullName ?? error.GetType().Name));
                         lines.Add("exception_target=" + OneLine(error.TargetSite?.Name ?? string.Empty));
                         lines.Add("exception_hresult=0x" + error.HResult.ToString("X8", CultureInfo.InvariantCulture));
@@ -580,6 +603,21 @@ namespace QS3D.BricsCAD.V25
         {
             if (!value.HasValue) return;
             lines.Add(key + "=" + value.Value.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static string RequireHostBuildStage(string value)
+        {
+            switch (value)
+            {
+                case "legacy_wall_build":
+                case "bounded_wall_build":
+                case "glass_wall_build":
+                case "beam_build":
+                case "range_read":
+                    return value;
+                default:
+                    return "legacy_wall_build";
+            }
         }
 
         private static string RequireRebarStage(string value)

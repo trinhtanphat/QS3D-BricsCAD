@@ -157,13 +157,19 @@ if RUNNER.is_file():
         'Stop-Qs3dLaunchedProcess -Process $process',
         'Stop-Process -Id $Process.Id -Force -ErrorAction Stop',
         'Launched BricsCAD Curtain P05 process did not exit.',
-        'Get-Process -Name "bricscad" -ErrorAction SilentlyContinue',
+        'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead',
+        'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
+        'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
         'Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop',
         'Curtain P05 runtime script cleanup failed.',
         'drawing_copy_sha256_before',
         'drawing_copy_sha256_after',
         'process_cleanup_verified = $true',
         'script_cleanup_verified = $true',
+        'drawing_lock_cleanup_verified = $true',
+        'function Remove-Qs3dDrawingLocks',
+        '$drawingLocks = @([IO.Path]::ChangeExtension($DrawingCopy, ".dwl"), [IO.Path]::ChangeExtension($DrawingCopy, ".dwl2"))',
+        'Remove-Qs3dDrawingLocks -Paths $drawingLocks',
         'sidecar_absent_verified = $true',
         'backup_absent_verified = $true',
         'Read-Qs3dAllowedValue',
@@ -181,6 +187,8 @@ if RUNNER.is_file():
     for token in required:
         if token not in text:
             errors.append("Curtain-panel P05 runner missing contract token: " + token)
+    if text.count('Remove-Qs3dDrawingLocks -Paths $drawingLocks') != 2:
+        errors.append("Curtain-panel P05 runner must clean drawing locks on success and finally paths")
     ordered_commands = (
         '"QS3DCURTAINSTALEBASELINE"', '"QS3DCURTAINSTALEMUTATEGRID"', '"QS3DCURTAINSTALEVERIFYGRID"',
         '"QS3DCURTAINSTALEMUTATEDEPTH"', '"QS3DCURTAINSTALEVERIFYDEPTH"',
@@ -192,7 +200,7 @@ if RUNNER.is_file():
     positions = [text.find(token) for token in ordered_commands]
     if any(position < 0 for position in positions) or positions != sorted(positions):
         errors.append("Curtain-panel P05 runner command state machine is not in canonical order")
-    for forbidden in ("Get-Process -Name '*'", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
+    for forbidden in ("Get-Process -Name '*'", 'Get-Process -Name "bricscad"', "$expectedAssemblyRevision", "Process.GetProcesses", "SendKeys", "SetForegroundWindow"):
         if forbidden in text:
             errors.append("Curtain-panel P05 runner contains broad process/window action: " + forbidden)
     fail_start = text.find('if ($marker.ContainsKey("status")')
@@ -204,8 +212,9 @@ if RUNNER.is_file():
     deferred_failure = text.find("if ($diagnosticFailure)", fail_start)
     drawing_hash_after = text.find("$drawingHashAfter =", fail_start)
     backup_after = text.find("Curtain P05 runtime probe persisted an unexpected sidecar or backup.", fail_start)
-    if deferred_failure < 0 or drawing_hash_after < 0 or backup_after < 0 or deferred_failure < drawing_hash_after or deferred_failure < backup_after:
-        errors.append("Curtain-panel P05 sanitized FAIL must be deferred until process/script/DWG/sidecar/backup cleanup checks finish")
+    lock_cleanup_after = text.find("Remove-Qs3dDrawingLocks -Paths $drawingLocks", fail_start)
+    if min(deferred_failure, drawing_hash_after, backup_after, lock_cleanup_after) < 0 or deferred_failure < drawing_hash_after or deferred_failure < backup_after or deferred_failure < lock_cleanup_after:
+        errors.append("Curtain-panel P05 sanitized FAIL must be deferred until process/script/DWG/lock/sidecar/backup cleanup checks finish")
     stop_start = text.find("function Stop-Qs3dLaunchedProcess")
     stop_end = text.find("if ([Environment]::OSVersion.Platform", stop_start)
     stop_body = text[stop_start:stop_end]

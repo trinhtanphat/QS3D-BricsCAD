@@ -15,7 +15,7 @@ else:
     attach = text[attach_start:bind_start] if attach_start >= 0 and bind_start > attach_start else ""
 
     required_attach = (
-        "if (!ReferenceEquals(document, _document))",
+        "if (!MatchesNativeDatabase(document))",
         "if (_attached) return;",
         "try",
         "BindProjectAffinityIfPresent();",
@@ -64,17 +64,28 @@ else:
         errors.append("document-manager detach helper must remove the global DocumentToBeDestroyed subscription")
 
     # Preserve the existing safety/identity boundaries while allowing the safer dispatcher
-    # callback that catches Window.Close failures on the UI thread.
+    # callback that catches Window.Close failures on the UI thread. Managed Document wrappers may
+    # rotate, so the identity boundary must be the captured live native database pointer.
     for token in (
         "Registrations.GetValue(window, key => new Registration(key, document))",
         'throw new InvalidOperationException("A modeless QS3D window cannot be rebound to a different BricsCAD document.")',
-        "ReferenceEquals(e.Document, _document)",
+        "private readonly IntPtr _nativeDatabaseIdentity;",
+        "_nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
+        "database.UnmanagedObject == _nativeDatabaseIdentity",
+        "if (!MatchesNativeDatabase(e.Document)) return;",
         "CloseForProjectChange();",
         "_window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher))",
         "private void TryCloseWindowOnDispatcher()",
     ):
         if token not in text:
             errors.append("modeless lifetime atomicity change lost existing safety contract: " + token)
+
+    for legacy in (
+        "ReferenceEquals(e.Document, _document)",
+        "ReferenceEquals(document, _document)",
+    ):
+        if legacy in text:
+            errors.append("modeless lifetime atomicity must not depend on managed Document wrapper identity: " + legacy)
 
     if attach.count("_attached = true;") != 2:
         errors.append("Attach must mark successful ownership once and temporarily enable Detach exactly once in rollback")
@@ -86,4 +97,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: document-bound modeless lifetime attachment rolls partial subscriptions back through the existing best-effort Detach path, centralizes global handler removal, clears failed project affinity, remains retryable, and preserves source-DWG/project fail-closed identity behavior.")
+print("PASS: document-bound modeless lifetime attachment rolls partial subscriptions back through the existing best-effort Detach path, centralizes global handler removal, clears failed project affinity, remains retryable, and preserves native source-DWG/project fail-closed identity behavior.")

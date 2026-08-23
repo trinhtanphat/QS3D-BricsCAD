@@ -11,6 +11,7 @@ namespace QS3D.Core.Domain
     {
         private const int MaximumEntries = 10000;
         private const string ProjectBrowserWorkspaceMetadataKey = "QS3D.ProjectBrowser.WorkspaceState";
+        private const string WallJunctionSnapPreviewMetadataPrefix = "WallJunctionSnapPreview";
         private readonly Dictionary<string, string> _items = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private ProjectState? _project;
 
@@ -65,6 +66,25 @@ namespace QS3D.Core.Domain
 
         internal void EnsureCanAddOwned(string key) => EnsureCanSet(key, true);
         internal void EnsureCanSetOwned(string key) => EnsureCanSet(key, false);
+        internal void EnsureCanApplyOwned(IEnumerable<string> removeKeys, IEnumerable<string> setKeys)
+        {
+            if (removeKeys == null) throw new ArgumentNullException(nameof(removeKeys));
+            if (setKeys == null) throw new ArgumentNullException(nameof(setKeys));
+
+            var finalKeys = new HashSet<string>(_items.Keys, StringComparer.OrdinalIgnoreCase);
+            foreach (var key in removeKeys)
+            {
+                if (key == null) throw new ArgumentNullException(nameof(removeKeys), "Owned metadata removal contains a null key.");
+                finalKeys.Remove(key);
+            }
+            foreach (var key in setKeys)
+            {
+                if (key == null) throw new ArgumentNullException(nameof(setKeys), "Owned metadata update contains a null key.");
+                if (finalKeys.Contains(key)) continue;
+                if (finalKeys.Count >= MaximumEntries) throw MetadataCountError();
+                finalKeys.Add(key);
+            }
+        }
         internal void AddOwned(string key, string value) => Set(key, value, true, false);
         internal void SetOwned(string key, string value) => Set(key, value, false, false);
         internal bool RemoveOwned(string key) => Remove(key, false);
@@ -203,7 +223,16 @@ namespace QS3D.Core.Domain
 
         private static bool TracksSemanticDirtyState(string key)
         {
-            return !string.Equals(key, ProjectBrowserWorkspaceMetadataKey, StringComparison.OrdinalIgnoreCase);
+            if (string.Equals(key, ProjectBrowserWorkspaceMetadataKey, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            // Wall Snap preview keys are one workflow-state batch. The command records
+            // one audit revision and performs one final Touch() after publishing the
+            // batch; Apply similarly records one audit revision (or one explicit Touch
+            // for an empty plan). Individual preview-key writes/removes must therefore
+            // not advance ChangeVersion independently or the persisted approval stamp
+            // immediately invalidates itself.
+            return !key.StartsWith(WallJunctionSnapPreviewMetadataPrefix, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void ValidateReserved(IEnumerable<KeyValuePair<string, string>> metadata)

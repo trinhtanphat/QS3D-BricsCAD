@@ -6,8 +6,8 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-function Run([string]$File, [string[]]$Args) {
-    & $File @Args
+function Run([string]$File, [string[]]$ArgumentList) {
+    & $File @ArgumentList
     if ($LASTEXITCODE -ne 0) { throw "$File failed with exit code $LASTEXITCODE" }
 }
 
@@ -51,5 +51,7 @@ Write-Host '  9. Run QS3DSRGRIPP05SYNCCHECK. Semantic/quantities must be 8 m and
 Write-Host ' 10. Run QS3DSRGRIPP05SELECT then production QS3DBUILD3D, then QS3DSRGRIPP05FINAL.'
 Write-Host ' 11. SAVE, close BricsCAD, cold reopen the DWG, NETLOAD the same exact-SHA plugin, run QS3DSRGRIPP05REOPEN.'
 Write-Host ' 12. Record only sanitized QS3D_SOURCE_RECONCILE_NATIVE_GRIP_RUNTIME_V1 markers in issue #3532.'
+Write-Host '     REOPEN proves only current cold state; it must include prior_session_phases_replayed=false and must not replay cancel/commit/reconcile/rebuild claims from the prior process.'
+Write-Host ' 13. A full P05 qualification requires all six sanitized PASS phase markers from the same exact candidate/run: baseline, cancel_check, edit_check, sync_check, final, reopen.'
 Write-Host ''
-Write-Host 'Do NOT publish LOCAL_PASS from source/build alone. The real manual endpoint grip + ESC/commit behavior is the licensed boundary.'
+Write-Host 'Do NOT publish LOCAL_PASS from REOPEN alone or from source/build alone. The real manual endpoint grip + ESC/commit behavior plus the complete six-phase evidence set is the licensed boundary.'

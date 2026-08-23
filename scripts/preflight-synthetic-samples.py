@@ -66,8 +66,33 @@ def validate_qsdb(path: Path) -> None:
     root = ET.parse(path).getroot()
     if root.tag != "qs3d" or root.get("schema") != "3":
         fail("QSDB must have qs3d/schema=3 root")
+    change_version = root.get("changeVersion", "")
+    if not re.fullmatch(r"0|[1-9][0-9]*", change_version):
+        fail("QSDB schema-3 fixture must persist a canonical non-negative changeVersion")
     if root.get("drawingPath") or root.get("drawingFingerprint"):
         fail("public QSDB fixture must adopt drawing path/fingerprint on first open")
+
+    metadata = root.find("metadata")
+    if metadata is None:
+        fail("QSDB is missing metadata")
+    else:
+        values: dict[str, str] = {}
+        for item in metadata.findall("p"):
+            name = item.get("name", "")
+            if name in values:
+                fail(f"QSDB metadata contains duplicate key: {name}")
+            values[name] = item.get("value", "")
+        expected_unit_binding = {
+            "QS3D.DrawingUnitBound.v1": "Meter",
+            "QS3D.DrawingUnit": "Meter",
+            "QS3D.DrawingUnitBindingSource.v1": "NativeInsunits",
+        }
+        for name, expected_value in expected_unit_binding.items():
+            if values.get(name) != expected_value:
+                fail(f"QSDB metre unit binding mismatch for {name}: {values.get(name)!r}")
+        if "QS3D.DrawingUnitOverride.v1" in values:
+            fail("metre DXF fixture must use native INSUNITS binding, not a project unit override")
+
     elements = root.find("elements")
     if elements is None:
         fail("QSDB is missing elements")
