@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             PositiveSegmentMustAdvanceCumulativeStation();
             InteriorProjectionStationMustRemainRepresentable();
             RepresentableShortSegmentMustNotBeDroppedByPathScale();
+            FrameOverrunMustNotBeHiddenByPathScaleTolerance();
             SplitMidpointMustRemainRepresentable();
             DistantUnrepresentableProjectionMustNotPoisonCloserSegment();
         }
@@ -152,6 +153,31 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("The short representable frame must map to the second path segment.");
             Near(4d, piece.WidthM, "large-station short piece width");
             Near(2d, piece.CenterY_M, "large-station short piece center Y");
+        }
+
+        private static void FrameOverrunMustNotBeHiddenByPathScaleTolerance()
+        {
+            var path = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(1e16d, 0d)
+            };
+
+            try
+            {
+                CurtainPathFramePlanner.Plan(
+                    path,
+                    new[] { new CurtainWallRect(1e16d - 100d, 0d, 200d, 1d) });
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("exceeds", StringComparison.OrdinalIgnoreCase) < 0 ||
+                    ex.Message.IndexOf("path length", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new Exception("Large-station frame overrun should report a deterministic host-path bound diagnostic.");
+                return;
+            }
+
+            throw new Exception("A 100-metre frame overrun at a large station must fail closed instead of being hidden by a path-scale tolerance and silently clamped.");
         }
 
         private static void SplitMidpointMustRemainRepresentable()
