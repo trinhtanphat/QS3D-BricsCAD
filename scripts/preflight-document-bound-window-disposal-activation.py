@@ -104,13 +104,22 @@ begin_close = method_block(
     "private void OnBeginDocumentClose(object sender, DocumentBeginCloseEventArgs e)",
 )
 for marker in (
+    "var deferForFinalDocument = !HasAnotherLiveDocument();",
     "lock (_documentAccessGate)",
     "Volatile.Write(ref _documentCloseStarted, 1)",
     "Interlocked.Exchange(ref _invalidated, 1) != 0",
     "DetachDocumentManagerHandler();",
-    "TryCloseWindow();",
+    "TryCloseWindow(deferForFinalDocument);",
 ):
     require(marker in begin_close, f"BeginDocumentClose barrier is missing: {marker}")
+require(
+    begin_close.index("var deferForFinalDocument = !HasAnotherLiveDocument();")
+    < begin_close.index("lock (_documentAccessGate)")
+    < begin_close.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
+    < begin_close.index("DetachDocumentManagerHandler();")
+    < begin_close.index("TryCloseWindow(deferForFinalDocument);"),
+    "BeginDocumentClose must classify teardown, fail closed, detach the global handler, then close using that classification.",
+)
 require(
     "_lifecycleDocument." not in begin_close,
     "BeginDocumentClose must not dereference the retained lifecycle wrapper once close starts.",
@@ -120,15 +129,24 @@ teardown = method_block(
     source,
     "private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)",
 )
+for marker in (
+    "if (!MatchesNativeDatabase(e.Document)) return;",
+    "var deferForFinalDocument = !HasAnotherLiveDocument();",
+    "lock (_documentAccessGate)",
+    "Volatile.Write(ref _documentCloseStarted, 1)",
+    "Interlocked.Exchange(ref _invalidated, 1) != 0",
+    "DetachDocumentManagerHandler();",
+    "TryCloseWindow(deferForFinalDocument);",
+):
+    require(marker in teardown, f"DocumentToBeDestroyed barrier is missing: {marker}")
 require(
-    "if (!MatchesNativeDatabase(e.Document)) return;" in teardown,
-    "DocumentToBeDestroyed must remain the managed-wrapper-drift native identity fallback.",
-)
-require(
-    "lock (_documentAccessGate)" in teardown
-    and "Volatile.Write(ref _documentCloseStarted, 1)" in teardown
-    and "Interlocked.Exchange(ref _invalidated, 1) != 0" in teardown,
-    "DocumentToBeDestroyed must share the same atomic native-access barrier.",
+    teardown.index("if (!MatchesNativeDatabase(e.Document)) return;")
+    < teardown.index("var deferForFinalDocument = !HasAnotherLiveDocument();")
+    < teardown.index("lock (_documentAccessGate)")
+    < teardown.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
+    < teardown.index("DetachDocumentManagerHandler();")
+    < teardown.index("TryCloseWindow(deferForFinalDocument);"),
+    "DocumentToBeDestroyed must validate native identity, classify teardown, fail closed, then close using that classification.",
 )
 require(
     "_lifecycleDocument." not in teardown,
@@ -159,4 +177,4 @@ require(
     "Full detach must release safe lifecycle/global subscriptions without post-disposal dereference.",
 )
 
-print("[OK] Modeless affinity resolves a live wrapper by native database identity and is atomically invalidated before document teardown can expose a disposed wrapper.")
+print("[OK] Modeless affinity resolves a live wrapper by native database identity, invalidates before teardown, and preserves the normal-vs-final close dispatch split.")
