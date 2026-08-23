@@ -170,6 +170,13 @@ if not errors:
         "[ValidateSet(25, 26)]",
         "status --porcelain=v1 --untracked-files=all",
         "Assert-Qs3dExactSourceIdentity",
+        "Require-RuntimeIdentity",
+        '"QS3DRUNTIMEPROBE"',
+        '"assembly"',
+        '"native_runtime_major"',
+        '"native_runtime_matches"',
+        '"BricsCAD loaded a different QS3D assembly before the exact candidate NETLOAD."',
+        '" /SAFEMODE /B "',
         '"NETLOAD"',
         '"QS3DDRAWBEAMREPEAT"',
         '"_.U"',
@@ -186,6 +193,11 @@ if not errors:
         "GetWindowThreadProcessId",
         "foregroundProcessId -eq [uint32]$Process.Id",
         "keybd_event(0x1B",
+        "New-Object System.Collections.Generic.List[Diagnostics.Process]",
+        "-PassThru -WindowStyle Hidden",
+        "Stop-OwnedHosts -Processes @($ownedProcesses)",
+        "Wait-OwnedHostsExited -Processes @($ownedProcesses)",
+        '"Runner-owned process is not the requested BricsCAD executable."',
         "Assert-V26DotNetRuntime",
         'SetEnvironmentVariable("DOTNET_ROOT", $dotNetRoot, "Process")',
         'SetEnvironmentVariable("DOTNET_ROOT_X64", $dotNetRoot, "Process")',
@@ -201,9 +213,17 @@ if not errors:
         "repeat-switch.private.scr",
         "private cleanup target",
         "Repository fixture changed",
+        "exact_loaded_candidate_every_session = $exactRuntimeIdentityPassed",
+        "accepted_segments = $acceptedSegments",
+        "whole_command_undo = $wholeCommandUndoPassed",
+        "save_cold_reopen = $saveColdReopenPassed",
     ):
         require(runner, token, "guarded V25/V26 repeated-mode runner")
-    for forbidden in ("git reset", "git clean", "Get-Process -Name '*'", "Stop-Process -Name"):
+    for forbidden in (
+        "git reset", "git clean", "Get-Process -Name '*'", "Stop-Process -Name",
+        "Get-Qs3dExactBricsCadProcesses -ExpectedExecutable",
+        "Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable",
+    ):
         if forbidden in runner:
             errors.append("repeated-mode runner contains unsafe broad operation: " + forbidden)
 

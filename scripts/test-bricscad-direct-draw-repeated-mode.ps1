@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][ValidateSet(25, 26)][int]$HostMajor,
     [Parameter(Mandatory = $true)][string]$BricsCadDir,
-    [string]$Profile = "Default",
+    [Parameter(Mandatory = $true)][string]$Profile,
     [string]$FixtureDwg = "",
     [string]$ArtifactDir = "",
     [string]$DotNetExe = "",
@@ -99,26 +99,74 @@ function Require-Marker {
     }
 }
 
+function Require-RuntimeIdentity {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExpectedAssembly
+    )
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    $marker = Read-Marker $Path
+    foreach ($key in @("status", "assembly", "native_runtime_major", "native_runtime_matches")) {
+        if (-not $marker.ContainsKey($key)) { throw "Runtime identity marker is missing '$key'." }
+    }
+    if (-not [string]::Equals([string]$marker.status, "PASS", [StringComparison]::OrdinalIgnoreCase)) {
+        throw "The loaded QS3D runtime identity probe did not pass."
+    }
+    if (-not [string]::Equals(
+        [IO.Path]::GetFullPath([string]$marker.assembly),
+        [IO.Path]::GetFullPath($ExpectedAssembly),
+        [StringComparison]::OrdinalIgnoreCase)) {
+        throw "BricsCAD loaded a different QS3D assembly before the exact candidate NETLOAD."
+    }
+    if (-not [string]::Equals([string]$marker.native_runtime_major, [string]$HostMajor, [StringComparison]::Ordinal) -or
+        -not [string]::Equals([string]$marker.native_runtime_matches, "true", [StringComparison]::OrdinalIgnoreCase)) {
+        throw "The loaded candidate does not match the requested BricsCAD host major."
+    }
+    return $true
+}
+
+function Require-OwnedProcessIdentity {
+    param(
+        [Parameter(Mandatory = $true)][Diagnostics.Process]$Process,
+        [Parameter(Mandatory = $true)][string]$ExpectedExecutable
+    )
+    $Process.Refresh()
+    if ($Process.HasExited) { return }
+    if (-not [string]::Equals(
+        [IO.Path]::GetFullPath($Process.Path),
+        [IO.Path]::GetFullPath($ExpectedExecutable),
+        [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Runner-owned process is not the requested BricsCAD executable."
+    }
+}
+
 function Wait-ForMarkerAndOwnedHost {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$RuntimeIdentityPath,
+        [Parameter(Mandatory = $true)][string]$ExpectedAssembly,
+        [Parameter(Mandatory = $true)][Diagnostics.Process]$Process,
         [Parameter(Mandatory = $true)][string]$ExpectedExecutable,
         [Parameter(Mandatory = $true)][DateTime]$Deadline
     )
+    Require-OwnedProcessIdentity -Process $Process -ExpectedExecutable $ExpectedExecutable
+    $identityValidated = $false
     while ([DateTime]::UtcNow -lt $Deadline) {
-        $processes = @(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $ExpectedExecutable)
-        foreach ($process in $processes) {
-            Close-Qs3dProxyInformationDialog -Process $process | Out-Null
-            Close-Qs3dUnsavedProjectChangesDialog -Process $process | Out-Null
+        $Process.Refresh()
+        $alive = -not $Process.HasExited
+        if ($alive) {
+            Close-Qs3dProxyInformationDialog -Process $Process | Out-Null
+            Close-Qs3dUnsavedProjectChangesDialog -Process $Process | Out-Null
         }
-        if (Test-Path -LiteralPath $Path -PathType Leaf) {
-            if ($processes.Count -ne 1) {
-                throw "Repeated-mode ESC ready marker requires exactly one owned BricsCAD process."
-            }
-            return $processes[0]
+        if (-not $identityValidated) {
+            $identityValidated = Require-RuntimeIdentity -Path $RuntimeIdentityPath -ExpectedAssembly $ExpectedAssembly
         }
-        if ($processes.Count -eq 0) {
-            throw "BricsCAD exited before the repeated-mode ESC ready marker."
+        if ($identityValidated -and (Test-Path -LiteralPath $Path -PathType Leaf)) {
+            if (-not $alive) { throw "The runner-owned BricsCAD process exited before physical input." }
+            return $Process
+        }
+        if (-not $alive) {
+            throw "BricsCAD exited before the repeated-mode input-ready marker."
         }
         Start-Sleep -Milliseconds 100
     }
@@ -189,11 +237,19 @@ function Send-ExactProcessCtrlTab {
 }
 
 function Stop-OwnedHosts {
-    param([Parameter(Mandatory = $true)][string]$ExpectedExecutable)
-    foreach ($process in @(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $ExpectedExecutable)) {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][Diagnostics.Process[]]$Processes,
+        [Parameter(Mandatory = $true)][string]$ExpectedExecutable
+    )
+    $expectedPath = [IO.Path]::GetFullPath($ExpectedExecutable)
+    foreach ($process in $Processes) {
         try {
             $process.Refresh()
             if (-not $process.HasExited) {
+                $actualPath = [IO.Path]::GetFullPath($process.Path)
+                if (-not [string]::Equals($actualPath, $expectedPath, [StringComparison]::OrdinalIgnoreCase)) {
+                    throw "Runner-owned process identity changed before cleanup."
+                }
                 Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
                 $process.WaitForExit(10000) | Out-Null
             }
@@ -202,22 +258,49 @@ function Stop-OwnedHosts {
     }
 }
 
+function Wait-OwnedHostsExited {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][Diagnostics.Process[]]$Processes,
+        [ValidateRange(1, 60)][int]$TimeoutSeconds = 15
+    )
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        $alive = @($Processes | Where-Object {
+            try { $_.Refresh(); -not $_.HasExited }
+            catch { $false }
+        })
+        if ($alive.Count -eq 0) { return $true }
+        Start-Sleep -Milliseconds 250
+    } while ([DateTime]::UtcNow -lt $deadline)
+    return $false
+}
+
 function Wait-ForFilesAndExit {
     param(
         [Parameter(Mandatory = $true)][string[]]$Paths,
+        [Parameter(Mandatory = $true)][string]$RuntimeIdentityPath,
+        [Parameter(Mandatory = $true)][string]$ExpectedAssembly,
+        [Parameter(Mandatory = $true)][Diagnostics.Process]$Process,
         [Parameter(Mandatory = $true)][string]$ExpectedExecutable,
         [Parameter(Mandatory = $true)][DateTime]$Deadline
     )
+    Require-OwnedProcessIdentity -Process $Process -ExpectedExecutable $ExpectedExecutable
     $allObserved = $false
+    $identityValidated = $false
     while ([DateTime]::UtcNow -lt $Deadline) {
-        $processes = @(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $ExpectedExecutable)
-        foreach ($process in $processes) {
-            Close-Qs3dProxyInformationDialog -Process $process | Out-Null
-            Close-Qs3dUnsavedProjectChangesDialog -Process $process | Out-Null
+        $Process.Refresh()
+        $alive = -not $Process.HasExited
+        if ($alive) {
+            Close-Qs3dProxyInformationDialog -Process $Process | Out-Null
+            Close-Qs3dUnsavedProjectChangesDialog -Process $Process | Out-Null
         }
-        $allObserved = @($Paths | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) }).Count -eq 0
-        if ($allObserved -and $processes.Count -eq 0) { return }
-        if (-not $allObserved -and $processes.Count -eq 0) {
+        if (-not $identityValidated) {
+            $identityValidated = Require-RuntimeIdentity -Path $RuntimeIdentityPath -ExpectedAssembly $ExpectedAssembly
+        }
+        $allObserved = $identityValidated -and
+            @($Paths | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) }).Count -eq 0
+        if ($allObserved -and -not $alive) { return }
+        if (-not $allObserved -and -not $alive) {
             throw "BricsCAD exited before repeated-mode evidence was complete."
         }
         Start-Sleep -Milliseconds 250
@@ -247,6 +330,9 @@ function Assert-V26DotNetRuntime {
 
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT -or -not [Environment]::UserInteractive) {
     throw "Repeated Direct Draw qualification requires an interactive Windows session."
+}
+if ([string]::IsNullOrWhiteSpace($Profile)) {
+    throw "Repeated Direct Draw qualification requires an initialized nonblank BricsCAD profile."
 }
 
 $BricsCadDir = [IO.Path]::GetFullPath($BricsCadDir)
@@ -311,6 +397,11 @@ $scriptUcs = Require-ContainedPath -Path (Join-Path $runRoot "repeat-planar-ucs.
 $scriptSwitch = Require-ContainedPath -Path (Join-Path $runRoot "repeat-switch.private.scr") -Root $runRoot -Label "document-switch session script"
 $metadataPath = Join-Path $ArtifactDir "repeat-v$HostMajor-metadata.json"
 $phasePaths = [ordered]@{
+    runtime_session1 = Join-Path $runRoot "repeat-runtime-session1.txt"
+    runtime_cold = Join-Path $runRoot "repeat-runtime-cold.txt"
+    runtime_esc = Join-Path $runRoot "repeat-runtime-esc.txt"
+    runtime_planar_ucs = Join-Path $runRoot "repeat-runtime-planar-ucs.txt"
+    runtime_document_switch = Join-Path $runRoot "repeat-runtime-document-switch.txt"
     after = Join-Path $runRoot "repeat-after.txt"
     undo = Join-Path $runRoot "repeat-undo.txt"
     redo = Join-Path $runRoot "repeat-redo.txt"
@@ -338,6 +429,7 @@ else {
 $oldHostDir = [Environment]::GetEnvironmentVariable("BRICSCAD_V$($HostMajor)_DIR", "Process")
 $oldDotNetRoot = [Environment]::GetEnvironmentVariable("DOTNET_ROOT", "Process")
 $oldDotNetRootX64 = [Environment]::GetEnvironmentVariable("DOTNET_ROOT_X64", "Process")
+$oldRuntimeResult = $env:QS3D_RUNTIME_RESULT
 $oldEvidence = $env:QS3D_REPEAT_EVIDENCE_DIR
 $oldDrawing = $env:QS3D_REPEAT_DWG
 $oldNonce = $env:QS3D_REPEAT_NONCE
@@ -350,9 +442,17 @@ $drawingPersisted = $false
 $sidecarPersisted = $false
 $processCleanup = $false
 $privateCleanup = $false
+$acceptedSegments = 0
+$drawJigPreviewPassed = $false
+$enterTerminationPassed = $false
+$wholeCommandUndoPassed = $false
+$wholeCommandRedoPassed = $false
+$saveColdReopenPassed = $false
+$exactRuntimeIdentityPassed = $false
 $physicalEscPassed = $false
 $planarUcsPassed = $false
 $documentSwitchPassed = $false
+$ownedProcesses = New-Object System.Collections.Generic.List[Diagnostics.Process]
 
 try {
     [Environment]::SetEnvironmentVariable("BRICSCAD_V$($HostMajor)_DIR", $BricsCadDir, "Process")
@@ -371,10 +471,12 @@ try {
     $env:QS3D_REPEAT_EVIDENCE_DIR = $runRoot
     $env:QS3D_REPEAT_DWG = $drawing
     $env:QS3D_REPEAT_NONCE = $script:nonce
+    $env:QS3D_RUNTIME_RESULT = $phasePaths.runtime_session1
 
     $sessionOneLines = @(
         "FILEDIA", "0", "CMDECHO", "1", "TILEMODE", "1", "INSUNITS", "4", "UCS", "W",
         "NETLOAD", ('"' + $pluginDll + '"'),
+        "QS3DRUNTIMEPROBE",
         "QS3DDRAWBEAMREPEAT", "0,0", "5000,0", "10000,0", "",
         "QS3DREPEATVERIFYAFTER",
         "_.U", "QS3DREPEATVERIFYUNDO",
@@ -382,13 +484,21 @@ try {
         "QS3DSAVE", "_.QSAVE", "_.QUIT", "_Y"
     )
     [IO.File]::WriteAllLines($scriptOne, $sessionOneLines, [Text.Encoding]::ASCII)
-    $argumentsOne = '"' + $drawing + '" /P "' + $Profile + '" /B "' + $scriptOne + '"'
-    Start-Process -FilePath $bricscadExe -ArgumentList $argumentsOne -WorkingDirectory $runRoot -WindowStyle Hidden | Out-Null
+    $argumentsOne = '"' + $drawing + '" /P "' + $Profile + '" /SAFEMODE /B "' + $scriptOne + '"'
+    $processOne = Start-Process -FilePath $bricscadExe -ArgumentList $argumentsOne -WorkingDirectory $runRoot -PassThru -WindowStyle Hidden
+    $ownedProcesses.Add($processOne)
     Wait-ForFilesAndExit -Paths @($phasePaths.after, $phasePaths.undo, $phasePaths.redo) `
+        -RuntimeIdentityPath $phasePaths.runtime_session1 -ExpectedAssembly $pluginDll `
+        -Process $processOne `
         -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds))
     Require-Marker -Marker (Read-Marker $phasePaths.after) -Phase "after" -ExpectedSegments 2
+    $acceptedSegments = 2
+    $drawJigPreviewPassed = $true
+    $enterTerminationPassed = $true
     Require-Marker -Marker (Read-Marker $phasePaths.undo) -Phase "undo" -ExpectedSegments 0
+    $wholeCommandUndoPassed = $true
     Require-Marker -Marker (Read-Marker $phasePaths.redo) -Phase "redo" -ExpectedSegments 2
+    $wholeCommandRedoPassed = $true
     $drawingPersisted = -not [string]::Equals(
         (Get-FileHash -LiteralPath $drawing -Algorithm SHA256).Hash,
         $fixtureHash,
@@ -399,30 +509,42 @@ try {
 
     $sessionTwoLines = @(
         "FILEDIA", "0", "CMDECHO", "1", "TILEMODE", "1", "INSUNITS", "4", "UCS", "W",
-        "NETLOAD", ('"' + $pluginDll + '"'), "QS3DREPEATVERIFYCOLD", "_.QUIT", "_Y"
+        "NETLOAD", ('"' + $pluginDll + '"'), "QS3DRUNTIMEPROBE",
+        "QS3DREPEATVERIFYCOLD", "_.QUIT", "_Y"
     )
     [IO.File]::WriteAllLines($scriptTwo, $sessionTwoLines, [Text.Encoding]::ASCII)
-    $argumentsTwo = '"' + $drawing + '" /P "' + $Profile + '" /B "' + $scriptTwo + '"'
-    Start-Process -FilePath $bricscadExe -ArgumentList $argumentsTwo -WorkingDirectory $runRoot -WindowStyle Hidden | Out-Null
+    $env:QS3D_RUNTIME_RESULT = $phasePaths.runtime_cold
+    $argumentsTwo = '"' + $drawing + '" /P "' + $Profile + '" /SAFEMODE /B "' + $scriptTwo + '"'
+    $processTwo = Start-Process -FilePath $bricscadExe -ArgumentList $argumentsTwo -WorkingDirectory $runRoot -PassThru -WindowStyle Hidden
+    $ownedProcesses.Add($processTwo)
     Wait-ForFilesAndExit -Paths @($phasePaths.cold_reopen) `
+        -RuntimeIdentityPath $phasePaths.runtime_cold -ExpectedAssembly $pluginDll `
+        -Process $processTwo `
         -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds))
     Require-Marker -Marker (Read-Marker $phasePaths.cold_reopen) -Phase "cold_reopen" -ExpectedSegments 2
+    $saveColdReopenPassed = $true
 
     Copy-Item -LiteralPath $FixtureDwg -Destination $escapeDrawing
     $env:QS3D_REPEAT_DWG = $escapeDrawing
     $escapeSessionLines = @(
         "FILEDIA", "0", "CMDECHO", "1", "TILEMODE", "1", "INSUNITS", "4", "UCS", "W",
-        "NETLOAD", ('"' + $pluginDll + '"'), "QS3DREPEATARMESC"
+        "NETLOAD", ('"' + $pluginDll + '"'), "QS3DRUNTIMEPROBE", "QS3DREPEATARMESC"
     )
     [IO.File]::WriteAllLines($scriptEscape, $escapeSessionLines, [Text.Encoding]::ASCII)
-    $escapeArguments = '"' + $escapeDrawing + '" /P "' + $Profile + '" /B "' + $scriptEscape + '"'
-    Start-Process -FilePath $bricscadExe -ArgumentList $escapeArguments -WorkingDirectory $runRoot -WindowStyle Hidden | Out-Null
+    $env:QS3D_RUNTIME_RESULT = $phasePaths.runtime_esc
+    $escapeArguments = '"' + $escapeDrawing + '" /P "' + $Profile + '" /SAFEMODE /B "' + $scriptEscape + '"'
+    $escapeProcess = Start-Process -FilePath $bricscadExe -ArgumentList $escapeArguments -WorkingDirectory $runRoot -PassThru -WindowStyle Hidden
+    $ownedProcesses.Add($escapeProcess)
     $escapeProcess = Wait-ForMarkerAndOwnedHost -Path $phasePaths.esc_ready `
+        -RuntimeIdentityPath $phasePaths.runtime_esc -ExpectedAssembly $pluginDll `
+        -Process $escapeProcess `
         -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds))
     Require-Marker -Marker (Read-Marker $phasePaths.esc_ready) -Phase "esc_ready" `
         -ExpectedSegments 1 -ExpectedStatus "READY"
     Send-ExactProcessEscape -Process $escapeProcess -ExpectedExecutable $bricscadExe
     Wait-ForFilesAndExit -Paths @($phasePaths.esc) `
+        -RuntimeIdentityPath $phasePaths.runtime_esc -ExpectedAssembly $pluginDll `
+        -Process $escapeProcess `
         -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds))
     Require-Marker -Marker (Read-Marker $phasePaths.esc) -Phase "esc" -ExpectedSegments 1
     $physicalEscPassed = $true
@@ -432,14 +554,18 @@ try {
     $ucsSessionLines = @(
         "FILEDIA", "0", "CMDECHO", "1", "TILEMODE", "1", "INSUNITS", "4",
         "_.UCS", "_Z", "30",
-        "NETLOAD", ('"' + $pluginDll + '"'),
+        "NETLOAD", ('"' + $pluginDll + '"'), "QS3DRUNTIMEPROBE",
         "QS3DDRAWBEAMREPEAT", "0,0", "5000,0", "10000,0", "",
         "_.UCS", "_W", "QS3DREPEATVERIFYUCS", "_.QUIT", "_N"
     )
     [IO.File]::WriteAllLines($scriptUcs, $ucsSessionLines, [Text.Encoding]::ASCII)
-    $ucsArguments = '"' + $ucsDrawing + '" /P "' + $Profile + '" /B "' + $scriptUcs + '"'
-    Start-Process -FilePath $bricscadExe -ArgumentList $ucsArguments -WorkingDirectory $runRoot -WindowStyle Hidden | Out-Null
+    $env:QS3D_RUNTIME_RESULT = $phasePaths.runtime_planar_ucs
+    $ucsArguments = '"' + $ucsDrawing + '" /P "' + $Profile + '" /SAFEMODE /B "' + $scriptUcs + '"'
+    $ucsProcess = Start-Process -FilePath $bricscadExe -ArgumentList $ucsArguments -WorkingDirectory $runRoot -PassThru -WindowStyle Hidden
+    $ownedProcesses.Add($ucsProcess)
     Wait-ForFilesAndExit -Paths @($phasePaths.planar_ucs) `
+        -RuntimeIdentityPath $phasePaths.runtime_planar_ucs -ExpectedAssembly $pluginDll `
+        -Process $ucsProcess `
         -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds))
     Require-Marker -Marker (Read-Marker $phasePaths.planar_ucs) -Phase "planar_ucs" -ExpectedSegments 2
     if (-not [string]::Equals(
@@ -456,18 +582,24 @@ try {
     $env:QS3D_REPEAT_SECOND_DWG = $switchDrawingB
     $switchSessionLines = @(
         "FILEDIA", "0", "CMDECHO", "1", "TILEMODE", "1", "INSUNITS", "4", "UCS", "W",
-        "NETLOAD", ('"' + $pluginDll + '"'),
+        "NETLOAD", ('"' + $pluginDll + '"'), "QS3DRUNTIMEPROBE",
         "_.OPEN", ('"' + $switchDrawingB + '"'), "QS3DREPEATARMSWITCH"
     )
     [IO.File]::WriteAllLines($scriptSwitch, $switchSessionLines, [Text.Encoding]::ASCII)
-    $switchArguments = '"' + $switchDrawingA + '" /P "' + $Profile + '" /B "' + $scriptSwitch + '"'
-    Start-Process -FilePath $bricscadExe -ArgumentList $switchArguments -WorkingDirectory $runRoot -WindowStyle Hidden | Out-Null
+    $env:QS3D_RUNTIME_RESULT = $phasePaths.runtime_document_switch
+    $switchArguments = '"' + $switchDrawingA + '" /P "' + $Profile + '" /SAFEMODE /B "' + $scriptSwitch + '"'
+    $switchProcess = Start-Process -FilePath $bricscadExe -ArgumentList $switchArguments -WorkingDirectory $runRoot -PassThru -WindowStyle Hidden
+    $ownedProcesses.Add($switchProcess)
     $switchProcess = Wait-ForMarkerAndOwnedHost -Path $phasePaths.document_switch_ready `
+        -RuntimeIdentityPath $phasePaths.runtime_document_switch -ExpectedAssembly $pluginDll `
+        -Process $switchProcess `
         -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds))
     Require-Marker -Marker (Read-Marker $phasePaths.document_switch_ready) `
         -Phase "document_switch_ready" -ExpectedSegments 1 -ExpectedStatus "READY"
     Send-ExactProcessCtrlTab -Process $switchProcess -ExpectedExecutable $bricscadExe
     Wait-ForFilesAndExit -Paths @($phasePaths.document_switch) `
+        -RuntimeIdentityPath $phasePaths.runtime_document_switch -ExpectedAssembly $pluginDll `
+        -Process $switchProcess `
         -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds))
     Require-Marker -Marker (Read-Marker $phasePaths.document_switch) `
         -Phase "document_switch" -ExpectedSegments 1
@@ -480,20 +612,23 @@ try {
         }
     }
     $documentSwitchPassed = $true
+    $exactRuntimeIdentityPassed = $true
 }
 catch {
     $qualificationError = $_.Exception
 }
 finally {
     try {
-        Stop-OwnedHosts -ExpectedExecutable $bricscadExe
-        if (-not (Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 15)) {
+        Stop-OwnedHosts -Processes @($ownedProcesses) -ExpectedExecutable $bricscadExe
+        if (-not (Wait-OwnedHostsExited -Processes @($ownedProcesses) -TimeoutSeconds 15)) {
             throw "Repeated-mode BricsCAD process cleanup is incomplete."
         }
         $processCleanup = $true
 
         foreach ($path in @(
             $scriptOne, $scriptTwo, $scriptEscape, $scriptUcs, $scriptSwitch,
+            $phasePaths.runtime_session1, $phasePaths.runtime_cold, $phasePaths.runtime_esc,
+            $phasePaths.runtime_planar_ucs, $phasePaths.runtime_document_switch,
             $phasePaths.after, $phasePaths.undo, $phasePaths.redo, $phasePaths.cold_reopen,
             $phasePaths.esc_ready, $phasePaths.esc,
             $phasePaths.planar_ucs,
@@ -536,6 +671,7 @@ finally {
         [Environment]::SetEnvironmentVariable("BRICSCAD_V$($HostMajor)_DIR", $oldHostDir, "Process")
         [Environment]::SetEnvironmentVariable("DOTNET_ROOT", $oldDotNetRoot, "Process")
         [Environment]::SetEnvironmentVariable("DOTNET_ROOT_X64", $oldDotNetRootX64, "Process")
+        $env:QS3D_RUNTIME_RESULT = $oldRuntimeResult
         $env:QS3D_REPEAT_EVIDENCE_DIR = $oldEvidence
         $env:QS3D_REPEAT_DWG = $oldDrawing
         $env:QS3D_REPEAT_NONCE = $oldNonce
@@ -551,15 +687,16 @@ $metadata = [ordered]@{
     bricscad_file_version = $hostVersion.FileVersion
     plugin_sha256 = if (Test-Path -LiteralPath $pluginDll) { (Get-FileHash -LiteralPath $pluginDll -Algorithm SHA256).Hash.ToUpperInvariant() } else { "MISSING" }
     fixture_sha256 = $fixtureHash
-    accepted_segments = 2
-    drawjig_preview = $true
-    enter_termination = $true
+    accepted_segments = $acceptedSegments
+    exact_loaded_candidate_every_session = $exactRuntimeIdentityPassed
+    drawjig_preview = $drawJigPreviewPassed
+    enter_termination = $enterTerminationPassed
     exact_process_physical_esc_termination = $physicalEscPassed
     supported_planar_ucs = $planarUcsPassed
     exact_process_document_switch_isolation = $documentSwitchPassed
-    whole_command_undo = $true
-    whole_command_redo = $true
-    save_cold_reopen = $true
+    whole_command_undo = $wholeCommandUndoPassed
+    whole_command_redo = $wholeCommandRedoPassed
+    save_cold_reopen = $saveColdReopenPassed
     drawing_persisted = $drawingPersisted
     sidecar_persisted = $sidecarPersisted
     process_cleanup_verified = $processCleanup
