@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             EmptyFramesRemainValid();
             OrdinaryFrameMappingRemainsDeterministic();
             PositiveSegmentMustAdvanceCumulativeStation();
+            InteriorProjectionStationMustRemainRepresentable();
         }
 
         private static void NegativeFrameCountFailsBeforeIndexAccess()
@@ -103,6 +104,30 @@ namespace QS3D.Core.SmokeTests
             }
 
             throw new Exception("A positive path segment whose station cannot advance must fail closed instead of publishing a collapsed station interval.");
+        }
+
+        private static void InteriorProjectionStationMustRemainRepresentable()
+        {
+            var path = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(1e16d, 0d),
+                new Point2(1e16d, 2d)
+            };
+
+            try
+            {
+                CurtainPathFramePlanner.ProjectPoint(path, new Point2(1e16d, 0.5d));
+            }
+            catch (OverflowException ex)
+            {
+                if (ex.Message.IndexOf("projection station", StringComparison.OrdinalIgnoreCase) < 0 ||
+                    ex.Message.IndexOf("precision", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new Exception("Interior curtain projection station collapse should report a deterministic station-precision diagnostic.");
+                return;
+            }
+
+            throw new Exception("An interior projection whose station rounds to a segment endpoint must fail closed instead of publishing the wrong station.");
         }
 
         private static IReadOnlyList<Point2> StraightPath() =>
