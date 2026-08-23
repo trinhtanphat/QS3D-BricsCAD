@@ -2,7 +2,6 @@ using System;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using Teigha.Geometry;
-using Teigha.GraphicsInterface;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -75,7 +74,7 @@ namespace QS3D.BricsCAD.V25
                 while (true)
                 {
                     RequireSameDocument(document);
-                    var jig = new ProfileStripJig(start, widthDrawingUnits, ucsToWcs);
+                    var jig = new DirectDrawProfileStripJig(start, widthDrawingUnits, ucsToWcs);
                     var drag = editor.Drag(jig);
                     RequireSameDocument(document);
 
@@ -131,89 +130,5 @@ namespace QS3D.BricsCAD.V25
                 "|ownership_writes=0");
         }
 
-        private sealed class ProfileStripJig : DrawJig
-        {
-            // The first Editor.GetPoint value is normalized from current UCS to WCS before this jig
-            // is created. JigPrompts.AcquirePoint and JigPromptPointOptions.BasePoint are consumed
-            // in WCS. Snapshot the active UCS once so only profile-offset math is performed in
-            // UCS-local XY; strip corners are transformed back to WCS exactly once for WorldDraw.
-            private readonly Point3d _startWcs;
-            private readonly double _widthDrawingUnits;
-            private readonly Matrix3d _ucsToWcs;
-            private readonly Matrix3d _wcsToUcs;
-            private Point3d _endWcs;
-            private bool _hasSample;
-
-            internal ProfileStripJig(Point3d startWcs, double widthDrawingUnits, Matrix3d ucsToWcs)
-            {
-                _startWcs = startWcs;
-                _endWcs = startWcs;
-                _widthDrawingUnits = widthDrawingUnits;
-                _ucsToWcs = ucsToWcs;
-                _wcsToUcs = ucsToWcs.Inverse();
-                LastPromptStatus = PromptStatus.None;
-            }
-
-            internal Point3d EndPoint => _endWcs;
-            internal PromptStatus LastPromptStatus { get; private set; }
-            internal bool HasUsableEndPoint => _hasSample && _startWcs.DistanceTo(_endWcs) > 1e-9d;
-
-            protected override SamplerStatus Sampler(JigPrompts prompts)
-            {
-                var options = new JigPromptPointOptions("\nNext endpoint (Enter/ESC exits): ")
-                {
-                    BasePoint = _startWcs,
-                    UseBasePoint = true,
-                    UserInputControls =
-                        UserInputControls.Accept3dCoordinates |
-                        UserInputControls.GovernedByOrthoMode |
-                        UserInputControls.GovernedByUCSDetect |
-                        UserInputControls.NullResponseAccepted
-                };
-
-                var result = prompts.AcquirePoint(options);
-                LastPromptStatus = result.Status;
-                if (result.Status != PromptStatus.OK)
-                    return SamplerStatus.Cancel;
-
-                if (_hasSample && result.Value.DistanceTo(_endWcs) <= 1e-9d)
-                    return SamplerStatus.NoChange;
-
-                _endWcs = result.Value;
-                _hasSample = true;
-                return SamplerStatus.OK;
-            }
-
-            protected override bool WorldDraw(WorldDraw worldDraw)
-            {
-                if (!_hasSample || _startWcs.DistanceTo(_endWcs) <= 1e-9d)
-                    return true;
-
-                var localStart = _startWcs.TransformBy(_wcsToUcs);
-                var localEnd = _endWcs.TransformBy(_wcsToUcs);
-                var dx = localEnd.X - localStart.X;
-                var dy = localEnd.Y - localStart.Y;
-                var planLength = Math.Sqrt((dx * dx) + (dy * dy));
-                if (planLength <= 1e-12d)
-                    return true;
-
-                var half = _widthDrawingUnits / 2d;
-                var offset = new Vector3d(-dy / planLength * half, dx / planLength * half, 0d);
-
-                var a = (localStart + offset).TransformBy(_ucsToWcs);
-                var b = (localEnd + offset).TransformBy(_ucsToWcs);
-                var c = (localEnd - offset).TransformBy(_ucsToWcs);
-                var d = (localStart - offset).TransformBy(_ucsToWcs);
-                var centerStart = _startWcs;
-                var centerEnd = _endWcs;
-
-                worldDraw.Geometry.WorldLine(a, b);
-                worldDraw.Geometry.WorldLine(b, c);
-                worldDraw.Geometry.WorldLine(c, d);
-                worldDraw.Geometry.WorldLine(d, a);
-                worldDraw.Geometry.WorldLine(centerStart, centerEnd);
-                return true;
-            }
-        }
     }
 }

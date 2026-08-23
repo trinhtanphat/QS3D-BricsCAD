@@ -10,11 +10,13 @@ using Application = Bricscad.ApplicationServices.Application;
 namespace QS3D.BricsCAD.V25
 {
     /// <summary>
-    /// Bridges Source Reconcile's in-memory semantic transaction to BricsCAD's
-    /// native Undo stack. A small revision marker is written to Model Space in
-    /// the same native transaction as generated-output invalidation. BricsCAD
-    /// therefore restores that marker together with the CAD entities, and the
-    /// command-end observer restores the matching in-session semantic snapshot.
+    /// Bridges tracked in-memory semantic transactions to BricsCAD's native Undo stack.
+    /// Source Reconcile writes its revision marker in the same transaction as generated-output
+    /// invalidation. Production repeated Direct Draw stages one native marker after its first accepted
+    /// segment, then refreshes that revision's semantic after-snapshot after later segments while
+    /// suppressing nested builder markers. The marker remains in one native command group, so native
+    /// Undo restores the CAD group and the observer restores the matching original or latest semantic
+    /// snapshot even across a document-switch suspension.
     /// </summary>
     internal static class SourceReconcileUndoCoordinator
     {
@@ -26,6 +28,34 @@ namespace QS3D.BricsCAD.V25
             new Dictionary<Document, ObserverRegistration>();
         private static readonly Dictionary<Document, DocumentHistory> Histories =
             new Dictionary<Document, DocumentHistory>();
+        [ThreadStatic]
+        private static ExternalTransitionScope? _externalTransitionScope;
+
+        private sealed class ExternalTransitionScope : IDisposable
+        {
+            private readonly ExternalTransitionScope? _previous;
+            private bool _disposed;
+
+            public ExternalTransitionScope(Document document, ExternalTransitionScope? previous)
+            {
+                ScopedDocument = document ?? throw new ArgumentNullException(nameof(document));
+                _previous = previous;
+            }
+
+            public Document ScopedDocument { get; }
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+                if (!ReferenceEquals(_externalTransitionScope, this)) return;
+
+                var previous = _previous;
+                while (previous != null && previous._disposed)
+                    previous = previous._previous;
+                _externalTransitionScope = previous;
+            }
+        }
 
         private sealed class ObserverRegistration
         {
@@ -514,6 +544,7 @@ namespace QS3D.BricsCAD.V25
                     .ToArray();
             }
             foreach (var document in documents) Detach(document);
+            _externalTransitionScope = null;
         }
 
         public static void Forget(Document? document)
@@ -524,6 +555,97 @@ namespace QS3D.BricsCAD.V25
                 Histories.Remove(document);
                 if (ObserverRegistrations.TryGetValue(document, out var registration))
                     registration.PendingCommand = null;
+            }
+        }
+
+        internal static IDisposable BeginExternalTransitionScope(Document document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            var current = _externalTransitionScope;
+            if (current != null && !ReferenceEquals(current.ScopedDocument, document))
+                throw new InvalidOperationException(
+                    "A tracked semantic/native command scope cannot cross BricsCAD documents.");
+            var scope = new ExternalTransitionScope(document, current);
+            _externalTransitionScope = scope;
+            return scope;
+        }
+
+        internal static bool IsExternalTransitionActive(Document document)
+        {
+            if (document == null) return false;
+            var scope = _externalTransitionScope;
+            return scope != null && ReferenceEquals(scope.ScopedDocument, document);
+        }
+
+        internal static void CommitExternalTransition(
+            Document document,
+            ProjectState project,
+            ProjectStateSnapshot beforeSnapshot,
+            ProjectRevisionStamp beforeStamp)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (beforeSnapshot == null) throw new ArgumentNullException(nameof(beforeSnapshot));
+            if (!IsExternalTransitionActive(document))
+                throw new InvalidOperationException(
+                    "The command-level semantic/native Undo transition is not active for this document.");
+
+            var afterSnapshot = ProjectStateSnapshot.Capture(project);
+            PendingTransition? transition = null;
+            try
+            {
+                using (document.LockDocument())
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
+                {
+                    transition = BeginTransition(document, transaction, project, beforeSnapshot, beforeStamp);
+                    transition.StageNativeMarker();
+                    transition.StageAfter(project, afterSnapshot);
+                    transaction.Commit();
+                    transition.ConfirmCommitted();
+                }
+            }
+            finally
+            {
+                transition?.Dispose();
+            }
+        }
+
+        internal static void UpdateExternalTransitionCheckpoint(
+            Document document,
+            ProjectState project)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (!IsExternalTransitionActive(document))
+                throw new InvalidOperationException(
+                    "The command-level semantic/native Undo transition is not active for this document.");
+
+            ProjectContextCoordinator.RequireBackingStoreUnchanged(
+                document,
+                project,
+                "Repeated Direct Draw Undo checkpoint");
+            var nativeRevision = ReadRevision(document);
+            var afterEntry = new HistoryEntry(
+                ProjectStateSnapshot.Capture(project),
+                ProjectRevisionStamp.Capture(project));
+
+            lock (Gate)
+            {
+                if (!Histories.TryGetValue(document, out var history))
+                    throw new InvalidOperationException(
+                        "The command-level semantic/native Undo history is unavailable.");
+                RequireCurrentHistory(document, history, project, nativeRevision);
+                if (!history.Entries.ContainsKey(nativeRevision))
+                    throw new InvalidOperationException(
+                        "The command-level semantic/native Undo revision is unavailable.");
+
+                var updatedEntries = new Dictionary<string, HistoryEntry>(
+                    history.Entries,
+                    StringComparer.Ordinal)
+                {
+                    [nativeRevision] = afterEntry
+                };
+                history.Publish(updatedEntries, nativeRevision);
             }
         }
 

@@ -21,6 +21,10 @@ namespace QS3D.BricsCAD.V25
         [CommandMethod("QS3DDRAWACTIVEADV", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void DrawActiveFamilyAdvanced() => DrawActiveFamilyCore(advanced: true, operation: "QS3DDRAWACTIVEADV");
 
+        [CommandMethod("QS3DDRAWACTIVEREPEAT", CommandFlags.Modal | CommandFlags.UsePickSet)]
+        public void DrawActiveFamilyRepeated() =>
+            DrawActiveFamilyCore(advanced: false, operation: "QS3DDRAWACTIVEREPEAT", repeated: true);
+
         internal static bool SupportsFamily(ProjectFamily family)
         {
             if (family == null) return false;
@@ -43,7 +47,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void DrawActiveFamilyCore(bool advanced, string operation)
+        private static void DrawActiveFamilyCore(bool advanced, string operation, bool repeated = false)
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
@@ -80,8 +84,15 @@ namespace QS3D.BricsCAD.V25
                     expectedSlabOpenRouting,
                     operation);
 
-                using (DirectDrawProjectPreviewContext.BeginDispatchScope(document))
-                    Dispatch(document, dispatchFamily, advanced, operation);
+                if (repeated)
+                {
+                    DispatchRepeated(document, dispatchFamily, expectedProjectId, expectedFamilyId, operation);
+                }
+                else
+                {
+                    using (DirectDrawProjectPreviewContext.BeginDispatchScope(document))
+                        Dispatch(document, dispatchFamily, advanced, operation);
+                }
             }
             catch (Exception ex)
             {
@@ -203,6 +214,29 @@ namespace QS3D.BricsCAD.V25
                 default:
                     throw new InvalidOperationException("Direct Draw support predicate and dispatcher are inconsistent for " + family.Category + ".");
             }
+        }
+
+        private static void DispatchRepeated(
+            Document document,
+            ProjectFamily family,
+            string expectedProjectId,
+            string expectedFamilyId,
+            string operation)
+        {
+            if (family.Category != ElementCategory.ArchitecturalWall &&
+                family.Category != ElementCategory.Beam)
+            {
+                Report(
+                    document,
+                    operation + ": chế độ vẽ liên tục hiện chỉ hỗ trợ Family Tường KT hoặc Dầm. " +
+                    "Dùng Quick/Advanced workflow hiện có cho " + family.Category + ".");
+                return;
+            }
+
+            new DirectDrawRepeatedCommands().DrawActiveFamilyRepeated(
+                family.Category,
+                expectedProjectId,
+                expectedFamilyId);
         }
 
         private static bool IsWindowFamily(ProjectFamily family)

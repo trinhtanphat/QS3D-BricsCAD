@@ -13,12 +13,13 @@ Existing capture workflows such as `LINE/POLYLINE -> QS3DWALL/QS3DBEAM/... -> QS
 Current implementation direction on `main`:
 
 - P0 Direct Draw: `QS3DDRAWWALL`, `QS3DDRAWBEAM`, `QS3DDRAWCOLUMN`, `QS3DDRAWSLAB`.
+- Production repeated linear Direct Draw: `QS3DDRAWWALLREPEAT`, `QS3DDRAWBEAMREPEAT`, and active-Family route `QS3DDRAWACTIVEREPEAT`.
 - P1 Direct Draw: `QS3DDRAWGLASSWALL`, `QS3DDRAWWALLPIER`, `QS3DDRAWSTRUCTWALL`, `QS3DDRAWFOUNDATION`.
 - Host-aware opening authoring: `QS3DDRAWDOOR`, `QS3DDRAWOPENING`; Auto Host is part of authoring, while physical boolean cutting remains explicit through the established cut commands.
 - BLT-style wall compatibility flow is deliberately **capture -> edit -> build**, not capture-and-build in one command.
 - Instance inspector exposes source-derived geometry such as `LengthM`, `AreaM2`, `VolumeM3`, `PerimeterM` and source `Layer` as read-only CAD provenance instead of pretending those measurements are independent editable Family dimensions.
 
-Exact-current-sha compile/NETLOAD/runtime validation still requires a licensed BricsCAD V25 environment. Static implementation status must not be described as runtime-certified.
+Exact licensed evidence is now recorded for the bounded repeated Wall/Beam slice at source candidate SHA `9a77d329e90809a2006d8e4dc1bafc995c0a8ca2`: BricsCAD V25.2.10 and V26.2.07 both passed exact-plugin `NETLOAD`, independent two-segment Wall and Beam sequences, eight hosted `DrawJig.WorldDraw` callbacks per Family, Enter/physical ESC, planar UCS, document-switch isolation, whole-command Undo/Redo, save and fresh-process Wall/Beam cold reopen. This does not certify the broader quick/advanced prompt, Auto Host/reference, private-DWG or release matrix.
 
 ---
 
@@ -82,6 +83,20 @@ This separation is important: the user must have a chance to inspect/change thic
 - `QS3DDRAWDOOR`.
 
 Future work should continue converging common point acquisition, Family defaults, preview, transaction, semantic capture and native generation instead of creating unnecessary independent geometry systems.
+
+### Production repeated linear mode
+
+`QS3DDRAWWALLREPEAT` and `QS3DDRAWBEAMREPEAT` implement the native high-frequency loop for linear Wall/Beam authoring:
+
+1. the first editor point is normalized from the current planar UCS into WCS exactly once;
+2. each next endpoint is acquired by a database-free `DrawJig` profile strip;
+3. an accepted segment creates a canonical WCS `LINE`, semantic owner and native `Solid3d` through the existing `DirectDrawCommands.ExecuteDirect` pipeline; the project preview captured before the first prompt remains pinned until that checkpoint succeeds, so a project that appears or is replaced mid-prompt is refused before mutation;
+4. the next preview starts at the accepted endpoint;
+5. Enter or ESC removes only the in-progress transient and exits; accepted segments remain;
+6. unit, planar-UCS, Model Space, active-DWG, project and active-Family context are revalidated before each commit;
+7. structural builders suppress their nested marker while the repeated command owns one whole-command semantic/native Undo transition, so one native Undo/Redo restores the matching segment set instead of leaving semantic references to removed CAD.
+
+The transient does not append entities, write XData, create/cache a project, capture semantics or generate ownership. A cancellation before the first accepted segment therefore leaves no CAD/project/semantic/native residue. This is a new interaction surface over the canonical pipeline, not a second authoring engine.
 
 ---
 
@@ -276,7 +291,7 @@ For each supported command:
 7. Health All/ownership checks remain clean for a valid object;
 8. existing capture commands continue to work;
 9. deterministic tests/static preflights cover the shared architecture;
-10. exact-current-sha behavior still requires licensed BricsCAD V25 interactive runtime validation before being described as production-ready.
+10. every unqualified row still requires exact-current-sha licensed interactive runtime evidence before being described as production-ready; the recorded #3612 repeated Wall/Beam evidence qualifies only that bounded row.
 
 Runtime validation should include at minimum Wall, Beam, Column and Slab creation, save/reopen, regenerate, selection sync, undo/cancel behavior and representative DWG screenshots. Door/Opening runtime validation additionally needs unique-host, ambiguous-host, no-host and explicit physical-cut scenarios.
 

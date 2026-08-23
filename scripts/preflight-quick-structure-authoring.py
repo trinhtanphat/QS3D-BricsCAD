@@ -63,7 +63,7 @@ if SOURCE.is_file():
         ('[CommandMethod("QS3DDRAWSLAB", CommandFlags.Modal)]', '[CommandMethod("QS3DDRAWSLABADV", CommandFlags.Modal)]', "slab quick"),
         ('[CommandMethod("QS3DDRAWSLABADV", CommandFlags.Modal)]', '[CommandMethod("QS3DDRAWCOLUMN", CommandFlags.Modal)]', "slab advanced"),
         ('[CommandMethod("QS3DDRAWCOLUMN", CommandFlags.Modal)]', '[CommandMethod("QS3DDRAWCOLUMNADV", CommandFlags.Modal)]', "column quick"),
-        ('[CommandMethod("QS3DDRAWCOLUMNADV", CommandFlags.Modal)]', 'private static void ExecuteDirect(', "column advanced"),
+        ('[CommandMethod("QS3DDRAWCOLUMNADV", CommandFlags.Modal)]', 'internal static DirectDrawCommitResult ExecuteDirect(', "column advanced"),
     ]
     slices = {}
     for start_token, end_token, label in markers:

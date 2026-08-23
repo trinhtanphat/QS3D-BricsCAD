@@ -28,6 +28,8 @@ namespace QS3D.BricsCAD.V25.UI
 
             var quick = CreateMenuItem("Vẽ Nhanh (Ctrl+D)", OnQuickDrawClick);
             quick.Tag = "QS3DDRAWACTIVE";
+            var repeated = CreateMenuItem("Vẽ liên tục (Ctrl+Alt+D)", OnRepeatedDrawClick);
+            repeated.Tag = "QS3DDRAWACTIVEREPEAT";
             var advanced = CreateMenuItem("Vẽ tùy chỉnh (Ctrl+Shift+D)", OnAdvancedDrawClick);
             advanced.Tag = "QS3DDRAWACTIVEADV";
 
@@ -39,12 +41,13 @@ namespace QS3D.BricsCAD.V25.UI
             circle.Tag = "QS3DDRAWCIRCLE";
 
             menu.Items.Insert(0, quick);
-            menu.Items.Insert(1, advanced);
-            menu.Items.Insert(2, new Separator());
-            menu.Items.Insert(3, line);
-            menu.Items.Insert(4, rectangle);
-            menu.Items.Insert(5, circle);
-            menu.Items.Insert(6, new Separator());
+            menu.Items.Insert(1, repeated);
+            menu.Items.Insert(2, advanced);
+            menu.Items.Insert(3, new Separator());
+            menu.Items.Insert(4, line);
+            menu.Items.Insert(5, rectangle);
+            menu.Items.Insert(6, circle);
+            menu.Items.Insert(7, new Separator());
         }
 
         private void OnQuickDrawPreviewKeyDown(object sender, KeyEventArgs e)
@@ -81,6 +84,12 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 ExecuteWorkspaceDraw(advanced: true);
                 e.Handled = true;
+                return;
+            }
+            if (modifiers == (ModifierKeys.Control | ModifierKeys.Alt) && e.Key == Key.D)
+            {
+                ExecuteWorkspaceRepeatedDraw();
+                e.Handled = true;
             }
         }
 
@@ -95,6 +104,7 @@ namespace QS3D.BricsCAD.V25.UI
         }
 
         private void OnQuickDrawClick(object sender, RoutedEventArgs e) => ExecuteWorkspaceDraw(advanced: false);
+        private void OnRepeatedDrawClick(object sender, RoutedEventArgs e) => ExecuteWorkspaceRepeatedDraw();
         private void OnAdvancedDrawClick(object sender, RoutedEventArgs e) => ExecuteWorkspaceDraw(advanced: true);
         private void OnBasicLineClick(object sender, RoutedEventArgs e) => ExecuteWorkspaceBasicDraw("QS3DDRAWLINE", "Đường");
         private void OnBasicRectangleClick(object sender, RoutedEventArgs e) => ExecuteWorkspaceBasicDraw("QS3DDRAWRECT", "Chữ nhật");
@@ -134,6 +144,34 @@ namespace QS3D.BricsCAD.V25.UI
                 SetStatus(advanced
                     ? "Không thể bắt đầu Vẽ tùy chỉnh. Hãy thử lại hoặc chọn lại Family / Type."
                     : "Không thể bắt đầu Vẽ Nhanh. Hãy thử lại hoặc chọn lại Family / Type.");
+            }
+        }
+
+        private void ExecuteWorkspaceRepeatedDraw()
+        {
+            try
+            {
+                var family = ResolveWorkspaceDrawFamily();
+                if (family == null)
+                {
+                    if (!IsSlabOpeningWorkspaceRouteSelected())
+                        SetStatus("Chọn một Family / Type trước khi vẽ liên tục.");
+                    return;
+                }
+                if (family.Category != ElementCategory.ArchitecturalWall &&
+                    family.Category != ElementCategory.Beam)
+                {
+                    SetStatus("Vẽ liên tục hiện hỗ trợ Tường KT và Dầm; dùng Vẽ Nhanh/Vẽ tùy chỉnh cho " + family.Category + ".");
+                    return;
+                }
+
+                _viewModel.SetActiveFamily(family);
+                SetStatus("Vẽ liên tục → " + family.Name + " • " + family.Category + " • Enter/ESC để kết thúc");
+                Send("QS3DDRAWACTIVEREPEAT");
+            }
+            catch
+            {
+                SetStatus("Không thể bắt đầu Vẽ liên tục. Hãy thử lại hoặc chọn lại Family / Type.");
             }
         }
 

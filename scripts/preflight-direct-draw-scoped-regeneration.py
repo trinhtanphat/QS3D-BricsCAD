@@ -23,7 +23,7 @@ if not errors:
     window = WINDOW.read_text(encoding="utf-8")
     auto_host = AUTO_HOST.read_text(encoding="utf-8")
     engine = ENGINE.read_text(encoding="utf-8")
-    start = source.find("private static void ExecuteDirect")
+    start = source.find("internal static DirectDrawCommitResult ExecuteDirect")
     end = source.find("private static int BuildSelected", start + 1)
     body = source[start:end] if start >= 0 and end > start else ""
     if not body:
