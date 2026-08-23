@@ -20,21 +20,33 @@ if RUNTIME.is_file():
         "GeneratedSemanticTagHealthService.HandlesKey",
         "StartOpenCloseTransaction()",
         "OpenMode.ForRead",
-        "if (!(entity is MText tag))",
-        "GeneratedGeometryService.HasMatchingOwnership(tag, project, element)",
-        '"SEMANTIC_TAG_MTEXT_MISSING"',
-        '"SEMANTIC_TAG_MTEXT_TYPE_MISMATCH"',
-        '"SEMANTIC_TAG_MTEXT_OWNERSHIP_MISMATCH"',
+        "entity is MText mtext",
+        "entity is MLeader mleader",
+        "GeneratedGeometryService.HasMatchingOwnership(entity, project, element)",
+        '"SEMANTIC_TAG_MISSING"',
+        '"SEMANTIC_TAG_TYPE_MISMATCH"',
+        '"SEMANTIC_TAG_OWNERSHIP_MISMATCH"',
         '"SEMANTIC_TAG_MTEXT_CONTENT_DRIFT"',
         '"SEMANTIC_TAG_MTEXT_HEIGHT_DRIFT"',
         '"SEMANTIC_TAG_MTEXT_POSITION_DRIFT"',
         '"SEMANTIC_TAG_MTEXT_ROTATION_DRIFT"',
         '"SEMANTIC_TAG_MTEXT_NORMAL_DRIFT"',
+        '"SEMANTIC_TAG_MLEADER_CONTENT_MISSING"',
+        '"SEMANTIC_TAG_MLEADER_CONTENT_DRIFT"',
+        '"SEMANTIC_TAG_MLEADER_HEIGHT_DRIFT"',
+        '"SEMANTIC_TAG_MLEADER_TEXT_POSITION_DRIFT"',
+        '"SEMANTIC_TAG_MLEADER_TARGET_DRIFT"',
+        '"SEMANTIC_TAG_MLEADER_GEOMETRY_INVALID"',
         "tag.Contents",
         "tag.TextHeight",
         "tag.Location",
         "tag.Rotation",
         "tag.Normal",
+        "tag.TextLocation",
+        "tag.GetLeaderIndexes()",
+        "tag.GetLeaderLineIndexes(leaderIndex)",
+        "tag.GetFirstVertex(lineIndex)",
+        "tag.GetLastVertex(lineIndex)",
         "transaction.Commit();",
     ):
         if token not in text:
@@ -72,6 +84,7 @@ if COMMAND.is_file():
             errors.append("SemanticTagHealthCommands.cs missing combined persisted/live/PICKFIRST-safe health command contract: " + token)
     for forbidden in (
         "SemanticTagBuilder.Build",
+        "SemanticMLeaderBuilder.Build",
         "SemanticTagRemovalService.Remove",
         ".Erase()",
         "ProjectStateSnapshot",
@@ -100,4 +113,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: live semantic-tag health is read-only, validates native MText/XData/content/placement state, preserves builder/runtime MText encoding parity, uses PICKFIRST-safe locate, is aggregated with existing Grid/generated-solid runtime health and remains directly runnable through QS3DTAGHEALTH.")
+print("PASS: live semantic-tag health is read-only, validates shared native MText/MLeader ownership plus artifact-specific content/placement/leader geometry, preserves MText encoding parity, uses PICKFIRST-safe locate, is aggregated with existing Grid/generated-solid runtime health and remains directly runnable through QS3DTAGHEALTH.")
