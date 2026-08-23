@@ -29,8 +29,9 @@ namespace QS3D.Core.Formulas
 
         private static void ValidateExpression(string expression)
         {
-            if (string.IsNullOrWhiteSpace(expression)) throw new ArgumentException("Expression is required.", nameof(expression));
+            if (expression == null) throw new ArgumentException("Expression is required.", nameof(expression));
             if (expression.Length > MaxExpressionLength) throw new InvalidOperationException("Expression is too long.");
+            if (string.IsNullOrWhiteSpace(expression)) throw new ArgumentException("Expression is required.", nameof(expression));
         }
 
         private static IReadOnlyDictionary<string, double> NormalizeVariables(IReadOnlyDictionary<string, double>? variables)
