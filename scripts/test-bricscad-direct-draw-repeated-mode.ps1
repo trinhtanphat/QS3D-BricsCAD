@@ -140,6 +140,32 @@ function Require-OwnedProcessIdentity {
     }
 }
 
+function Set-Qs3dDemandLoadControls {
+    param(
+        [Parameter(Mandatory = $true)][string]$RegistryPath,
+        [Parameter(Mandatory = $true)][int]$ExpectedCurrent,
+        [Parameter(Mandatory = $true)][int]$NewValue
+    )
+    $current = [int](Get-ItemPropertyValue -LiteralPath $RegistryPath -Name "LoadCtrls" -ErrorAction Stop)
+    if ($current -ne $ExpectedCurrent) {
+        throw "QS3D DemandLoad controls changed concurrently; refusing to overwrite them."
+    }
+    Set-ItemProperty -LiteralPath $RegistryPath -Name "LoadCtrls" -Value $NewValue -ErrorAction Stop
+    $readback = [int](Get-ItemPropertyValue -LiteralPath $RegistryPath -Name "LoadCtrls" -ErrorAction Stop)
+    if ($readback -ne $NewValue) { throw "QS3D DemandLoad control readback did not match the requested guarded value." }
+}
+
+function Restore-Qs3dDemandLoadControls {
+    param(
+        [Parameter(Mandatory = $true)][string]$RegistryPath,
+        [Parameter(Mandatory = $true)][int]$OriginalValue,
+        [Parameter(Mandatory = $true)][int]$IsolatedValue
+    )
+    $current = [int](Get-ItemPropertyValue -LiteralPath $RegistryPath -Name "LoadCtrls" -ErrorAction Stop)
+    if ($current -eq $OriginalValue) { return }
+    Set-Qs3dDemandLoadControls -RegistryPath $RegistryPath -ExpectedCurrent $IsolatedValue -NewValue $OriginalValue
+}
+
 function Wait-ForMarkerAndOwnedHost {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -171,6 +197,47 @@ function Wait-ForMarkerAndOwnedHost {
         Start-Sleep -Milliseconds 100
     }
     throw "Timed out waiting for the repeated-mode ESC ready marker."
+}
+
+function Start-ExactCandidateHost {
+    param(
+        [Parameter(Mandatory = $true)][string]$Executable,
+        [Parameter(Mandatory = $true)][string]$Arguments,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+        [Parameter(Mandatory = $true)][string]$RuntimeIdentityPath,
+        [Parameter(Mandatory = $true)][string]$PluginDll,
+        [Parameter(Mandatory = $true)][DateTime]$Deadline,
+        [Parameter(Mandatory = $true)]$OwnedProcesses,
+        [Parameter(Mandatory = $true)][bool]$IsolateDemandLoad,
+        [string]$DemandLoadRegistryPath = "",
+        [int]$OriginalDemandLoadControls = 0,
+        [int]$IsolatedDemandLoadControls = 0,
+        [Parameter(Mandatory = $true)][ref]$IsolationCount,
+        [Parameter(Mandatory = $true)][ref]$DemandLoadRestored
+    )
+    $changed = $false
+    try {
+        if ($IsolateDemandLoad) {
+            Set-Qs3dDemandLoadControls -RegistryPath $DemandLoadRegistryPath `
+                -ExpectedCurrent $OriginalDemandLoadControls -NewValue $IsolatedDemandLoadControls
+            $changed = $true
+            $DemandLoadRestored.Value = $false
+            $IsolationCount.Value = [int]$IsolationCount.Value + 1
+        }
+        $process = Start-Process -FilePath $Executable -ArgumentList $Arguments `
+            -WorkingDirectory $WorkingDirectory -PassThru -WindowStyle Hidden
+        $OwnedProcesses.Add($process)
+        return Wait-ForMarkerAndOwnedHost -Path $RuntimeIdentityPath `
+            -RuntimeIdentityPath $RuntimeIdentityPath -ExpectedAssembly $PluginDll `
+            -Process $process -ExpectedExecutable $Executable -Deadline $Deadline
+    }
+    finally {
+        if ($changed) {
+            Restore-Qs3dDemandLoadControls -RegistryPath $DemandLoadRegistryPath `
+                -OriginalValue $OriginalDemandLoadControls -IsolatedValue $IsolatedDemandLoadControls
+            $DemandLoadRestored.Value = $true
+        }
+    }
 }
 
 function Bind-ExactProcessForeground {
@@ -426,6 +493,29 @@ else {
     Join-Path $repoRoot "src\QS3D.BricsCAD.V26\bin\x64\Release\net8.0-windows\QS3D.BricsCAD.V26.dll"
 }
 
+$demandLoadRegistryPath =
+    "Registry::HKEY_CURRENT_USER\Software\Bricsys\BricsCAD\V$($HostMajor)x64\en_US\Applications\QS3D"
+$isolateDemandLoad = $false
+$demandLoadOriginalControls = 0
+$demandLoadIsolatedControls = 0
+if (Test-Path -LiteralPath $demandLoadRegistryPath -PathType Container) {
+    $demandLoadOriginalControls =
+        [int](Get-ItemPropertyValue -LiteralPath $demandLoadRegistryPath -Name "LoadCtrls" -ErrorAction Stop)
+    if (($demandLoadOriginalControls -band 2) -ne 0) {
+        $commandsPath = $demandLoadRegistryPath + "\Commands"
+        if (-not (Test-Path -LiteralPath $commandsPath -PathType Container)) {
+            throw "Cannot isolate startup DemandLoad without the installed command-trigger registration."
+        }
+        $runtimeCommand = [string](
+            Get-ItemPropertyValue -LiteralPath $commandsPath -Name "QS3DRUNTIMEPROBE" -ErrorAction Stop)
+        if (-not [string]::Equals($runtimeCommand, "QS3DRUNTIMEPROBE", [StringComparison]::Ordinal)) {
+            throw "Installed command-trigger registration is not canonical."
+        }
+        $demandLoadIsolatedControls = [int](($demandLoadOriginalControls -band (-bnot 2)) -bor 4)
+        $isolateDemandLoad = $true
+    }
+}
+
 $oldHostDir = [Environment]::GetEnvironmentVariable("BRICSCAD_V$($HostMajor)_DIR", "Process")
 $oldDotNetRoot = [Environment]::GetEnvironmentVariable("DOTNET_ROOT", "Process")
 $oldDotNetRootX64 = [Environment]::GetEnvironmentVariable("DOTNET_ROOT_X64", "Process")
@@ -449,6 +539,8 @@ $wholeCommandUndoPassed = $false
 $wholeCommandRedoPassed = $false
 $saveColdReopenPassed = $false
 $exactRuntimeIdentityPassed = $false
+$demandLoadIsolationCount = 0
+$demandLoadRestored = $true
 $physicalEscPassed = $false
 $planarUcsPassed = $false
 $documentSwitchPassed = $false
@@ -484,9 +576,15 @@ try {
         "QS3DSAVE", "_.QSAVE", "_.QUIT", "_Y"
     )
     [IO.File]::WriteAllLines($scriptOne, $sessionOneLines, [Text.Encoding]::ASCII)
-    $argumentsOne = '"' + $drawing + '" /P "' + $Profile + '" /SAFEMODE /B "' + $scriptOne + '"'
-    $processOne = Start-Process -FilePath $bricscadExe -ArgumentList $argumentsOne -WorkingDirectory $runRoot -PassThru -WindowStyle Hidden
-    $ownedProcesses.Add($processOne)
+    $argumentsOne = '"' + $drawing + '" /P "' + $Profile + '" /B "' + $scriptOne + '"'
+    $processOne = Start-ExactCandidateHost -Executable $bricscadExe -Arguments $argumentsOne `
+        -WorkingDirectory $runRoot -RuntimeIdentityPath $phasePaths.runtime_session1 `
+        -PluginDll $pluginDll -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds)) `
+        -OwnedProcesses $ownedProcesses -IsolateDemandLoad $isolateDemandLoad `
+        -DemandLoadRegistryPath $demandLoadRegistryPath `
+        -OriginalDemandLoadControls $demandLoadOriginalControls `
+        -IsolatedDemandLoadControls $demandLoadIsolatedControls `
+        -IsolationCount ([ref]$demandLoadIsolationCount) -DemandLoadRestored ([ref]$demandLoadRestored)
     Wait-ForFilesAndExit -Paths @($phasePaths.after, $phasePaths.undo, $phasePaths.redo) `
         -RuntimeIdentityPath $phasePaths.runtime_session1 -ExpectedAssembly $pluginDll `
         -Process $processOne `
@@ -514,9 +612,15 @@ try {
     )
     [IO.File]::WriteAllLines($scriptTwo, $sessionTwoLines, [Text.Encoding]::ASCII)
     $env:QS3D_RUNTIME_RESULT = $phasePaths.runtime_cold
-    $argumentsTwo = '"' + $drawing + '" /P "' + $Profile + '" /SAFEMODE /B "' + $scriptTwo + '"'
-    $processTwo = Start-Process -FilePath $bricscadExe -ArgumentList $argumentsTwo -WorkingDirectory $runRoot -PassThru -WindowStyle Hidden
-    $ownedProcesses.Add($processTwo)
+    $argumentsTwo = '"' + $drawing + '" /P "' + $Profile + '" /B "' + $scriptTwo + '"'
+    $processTwo = Start-ExactCandidateHost -Executable $bricscadExe -Arguments $argumentsTwo `
+        -WorkingDirectory $runRoot -RuntimeIdentityPath $phasePaths.runtime_cold `
+        -PluginDll $pluginDll -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds)) `
+        -OwnedProcesses $ownedProcesses -IsolateDemandLoad $isolateDemandLoad `
+        -DemandLoadRegistryPath $demandLoadRegistryPath `
+        -OriginalDemandLoadControls $demandLoadOriginalControls `
+        -IsolatedDemandLoadControls $demandLoadIsolatedControls `
+        -IsolationCount ([ref]$demandLoadIsolationCount) -DemandLoadRestored ([ref]$demandLoadRestored)
     Wait-ForFilesAndExit -Paths @($phasePaths.cold_reopen) `
         -RuntimeIdentityPath $phasePaths.runtime_cold -ExpectedAssembly $pluginDll `
         -Process $processTwo `
@@ -532,9 +636,15 @@ try {
     )
     [IO.File]::WriteAllLines($scriptEscape, $escapeSessionLines, [Text.Encoding]::ASCII)
     $env:QS3D_RUNTIME_RESULT = $phasePaths.runtime_esc
-    $escapeArguments = '"' + $escapeDrawing + '" /P "' + $Profile + '" /SAFEMODE /B "' + $scriptEscape + '"'
-    $escapeProcess = Start-Process -FilePath $bricscadExe -ArgumentList $escapeArguments -WorkingDirectory $runRoot -PassThru -WindowStyle Hidden
-    $ownedProcesses.Add($escapeProcess)
+    $escapeArguments = '"' + $escapeDrawing + '" /P "' + $Profile + '" /B "' + $scriptEscape + '"'
+    $escapeProcess = Start-ExactCandidateHost -Executable $bricscadExe -Arguments $escapeArguments `
+        -WorkingDirectory $runRoot -RuntimeIdentityPath $phasePaths.runtime_esc `
+        -PluginDll $pluginDll -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds)) `
+        -OwnedProcesses $ownedProcesses -IsolateDemandLoad $isolateDemandLoad `
+        -DemandLoadRegistryPath $demandLoadRegistryPath `
+        -OriginalDemandLoadControls $demandLoadOriginalControls `
+        -IsolatedDemandLoadControls $demandLoadIsolatedControls `
+        -IsolationCount ([ref]$demandLoadIsolationCount) -DemandLoadRestored ([ref]$demandLoadRestored)
     $escapeProcess = Wait-ForMarkerAndOwnedHost -Path $phasePaths.esc_ready `
         -RuntimeIdentityPath $phasePaths.runtime_esc -ExpectedAssembly $pluginDll `
         -Process $escapeProcess `
@@ -560,9 +670,15 @@ try {
     )
     [IO.File]::WriteAllLines($scriptUcs, $ucsSessionLines, [Text.Encoding]::ASCII)
     $env:QS3D_RUNTIME_RESULT = $phasePaths.runtime_planar_ucs
-    $ucsArguments = '"' + $ucsDrawing + '" /P "' + $Profile + '" /SAFEMODE /B "' + $scriptUcs + '"'
-    $ucsProcess = Start-Process -FilePath $bricscadExe -ArgumentList $ucsArguments -WorkingDirectory $runRoot -PassThru -WindowStyle Hidden
-    $ownedProcesses.Add($ucsProcess)
+    $ucsArguments = '"' + $ucsDrawing + '" /P "' + $Profile + '" /B "' + $scriptUcs + '"'
+    $ucsProcess = Start-ExactCandidateHost -Executable $bricscadExe -Arguments $ucsArguments `
+        -WorkingDirectory $runRoot -RuntimeIdentityPath $phasePaths.runtime_planar_ucs `
+        -PluginDll $pluginDll -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds)) `
+        -OwnedProcesses $ownedProcesses -IsolateDemandLoad $isolateDemandLoad `
+        -DemandLoadRegistryPath $demandLoadRegistryPath `
+        -OriginalDemandLoadControls $demandLoadOriginalControls `
+        -IsolatedDemandLoadControls $demandLoadIsolatedControls `
+        -IsolationCount ([ref]$demandLoadIsolationCount) -DemandLoadRestored ([ref]$demandLoadRestored)
     Wait-ForFilesAndExit -Paths @($phasePaths.planar_ucs) `
         -RuntimeIdentityPath $phasePaths.runtime_planar_ucs -ExpectedAssembly $pluginDll `
         -Process $ucsProcess `
@@ -587,9 +703,15 @@ try {
     )
     [IO.File]::WriteAllLines($scriptSwitch, $switchSessionLines, [Text.Encoding]::ASCII)
     $env:QS3D_RUNTIME_RESULT = $phasePaths.runtime_document_switch
-    $switchArguments = '"' + $switchDrawingA + '" /P "' + $Profile + '" /SAFEMODE /B "' + $scriptSwitch + '"'
-    $switchProcess = Start-Process -FilePath $bricscadExe -ArgumentList $switchArguments -WorkingDirectory $runRoot -PassThru -WindowStyle Hidden
-    $ownedProcesses.Add($switchProcess)
+    $switchArguments = '"' + $switchDrawingA + '" /P "' + $Profile + '" /B "' + $scriptSwitch + '"'
+    $switchProcess = Start-ExactCandidateHost -Executable $bricscadExe -Arguments $switchArguments `
+        -WorkingDirectory $runRoot -RuntimeIdentityPath $phasePaths.runtime_document_switch `
+        -PluginDll $pluginDll -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds)) `
+        -OwnedProcesses $ownedProcesses -IsolateDemandLoad $isolateDemandLoad `
+        -DemandLoadRegistryPath $demandLoadRegistryPath `
+        -OriginalDemandLoadControls $demandLoadOriginalControls `
+        -IsolatedDemandLoadControls $demandLoadIsolatedControls `
+        -IsolationCount ([ref]$demandLoadIsolationCount) -DemandLoadRestored ([ref]$demandLoadRestored)
     $switchProcess = Wait-ForMarkerAndOwnedHost -Path $phasePaths.document_switch_ready `
         -RuntimeIdentityPath $phasePaths.runtime_document_switch -ExpectedAssembly $pluginDll `
         -Process $switchProcess `
@@ -668,6 +790,17 @@ finally {
         $cleanupError = $_.Exception
     }
     finally {
+        try {
+            if ($isolateDemandLoad) {
+                Restore-Qs3dDemandLoadControls -RegistryPath $demandLoadRegistryPath `
+                    -OriginalValue $demandLoadOriginalControls -IsolatedValue $demandLoadIsolatedControls
+                $demandLoadRestored = $true
+            }
+        }
+        catch {
+            $demandLoadRestored = $false
+            if ($null -eq $cleanupError) { $cleanupError = $_.Exception }
+        }
         [Environment]::SetEnvironmentVariable("BRICSCAD_V$($HostMajor)_DIR", $oldHostDir, "Process")
         [Environment]::SetEnvironmentVariable("DOTNET_ROOT", $oldDotNetRoot, "Process")
         [Environment]::SetEnvironmentVariable("DOTNET_ROOT_X64", $oldDotNetRootX64, "Process")
@@ -689,6 +822,8 @@ $metadata = [ordered]@{
     fixture_sha256 = $fixtureHash
     accepted_segments = $acceptedSegments
     exact_loaded_candidate_every_session = $exactRuntimeIdentityPassed
+    startup_demandload_isolation_count = $demandLoadIsolationCount
+    startup_demandload_restored = $demandLoadRestored
     drawjig_preview = $drawJigPreviewPassed
     enter_termination = $enterTerminationPassed
     exact_process_physical_esc_termination = $physicalEscPassed

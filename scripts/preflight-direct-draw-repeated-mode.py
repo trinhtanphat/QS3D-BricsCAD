@@ -176,7 +176,15 @@ if not errors:
         '"native_runtime_major"',
         '"native_runtime_matches"',
         '"BricsCAD loaded a different QS3D assembly before the exact candidate NETLOAD."',
-        '" /SAFEMODE /B "',
+        "Registry::HKEY_CURRENT_USER\\Software\\Bricsys\\BricsCAD",
+        '"LoadCtrls"',
+        '"\\Commands"',
+        "($demandLoadOriginalControls -band 2)",
+        "-band (-bnot 2)) -bor 4",
+        "Set-Qs3dDemandLoadControls",
+        "Restore-Qs3dDemandLoadControls",
+        '"QS3D DemandLoad controls changed concurrently; refusing to overwrite them."',
+        "Start-ExactCandidateHost",
         '"NETLOAD"',
         '"QS3DDRAWBEAMREPEAT"',
         '"_.U"',
@@ -217,12 +225,15 @@ if not errors:
         "accepted_segments = $acceptedSegments",
         "whole_command_undo = $wholeCommandUndoPassed",
         "save_cold_reopen = $saveColdReopenPassed",
+        "startup_demandload_isolation_count = $demandLoadIsolationCount",
+        "startup_demandload_restored = $demandLoadRestored",
     ):
         require(runner, token, "guarded V25/V26 repeated-mode runner")
     for forbidden in (
         "git reset", "git clean", "Get-Process -Name '*'", "Stop-Process -Name",
         "Get-Qs3dExactBricsCadProcesses -ExpectedExecutable",
         "Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable",
+        "Remove-ItemProperty",
     ):
         if forbidden in runner:
             errors.append("repeated-mode runner contains unsafe broad operation: " + forbidden)
