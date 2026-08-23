@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             ValidatedFrameCountIsBoundToTraversal();
             EmptyFramesRemainValid();
             OrdinaryFrameMappingRemainsDeterministic();
+            PositiveSegmentMustAdvanceCumulativeStation();
         }
 
         private static void NegativeFrameCountFailsBeforeIndexAccess()
@@ -77,6 +78,31 @@ namespace QS3D.Core.SmokeTests
             Near(0d, piece.CenterY_M, "piece center Y");
             Near(0d, piece.Z_M, "piece elevation");
             Near(1.5d, piece.HeightM, "piece height");
+        }
+
+        private static void PositiveSegmentMustAdvanceCumulativeStation()
+        {
+            var path = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(1e16d, 0d),
+                new Point2(1e16d, 1d),
+                new Point2(1e16d, 2d)
+            };
+
+            try
+            {
+                CurtainPathFramePlanner.Length(path);
+            }
+            catch (OverflowException ex)
+            {
+                if (ex.Message.IndexOf("cumulative length", StringComparison.OrdinalIgnoreCase) < 0 ||
+                    ex.Message.IndexOf("precision", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new Exception("Curtain path station precision collapse should report a deterministic cumulative-length diagnostic.");
+                return;
+            }
+
+            throw new Exception("A positive path segment whose station cannot advance must fail closed instead of publishing a collapsed station interval.");
         }
 
         private static IReadOnlyList<Point2> StraightPath() =>
