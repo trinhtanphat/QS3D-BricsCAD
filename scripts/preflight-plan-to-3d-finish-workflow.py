@@ -39,6 +39,15 @@ def local_section(local_id):
     end = inbox.find("\n## LOCAL-", start + len(heading))
     return inbox[start:] if end < 0 else inbox[start:end]
 
+
+def evidence_line(section):
+    for line in section.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- Evidence:"):
+            return stripped
+    return ""
+
+
 for token, label in (
     ('CommandMethod("QS3DDRAWWINDOW"', "Window command"),
     ('ElementCategory.WallOpening', "canonical WallOpening category"),
@@ -122,9 +131,12 @@ for token in ('PENDING_LOCAL', 'source review không được coi là `LOCAL_PAS
 
 local_008 = local_section("LOCAL-008")
 local_014 = local_section("LOCAL-014")
-for token in ('Status: OPEN', 'Evidence: PENDING_LOCAL', 'QS3DDRAWWINDOW', 'OpeningUsage=Window', 'Auto Host', 'QS3DCUTSELECTEDOPENINGS', 'Ribbon'):
+for token in ('Status: OPEN', 'QS3DDRAWWINDOW', 'OpeningUsage=Window', 'Auto Host', 'QS3DCUTSELECTEDOPENINGS', 'Ribbon'):
     if token not in local_008:
         errors.append("LOCAL-008 must own Window/finish runtime qualification: " + token)
+local_008_evidence = evidence_line(local_008)
+if 'PENDING_LOCAL' not in local_008_evidence:
+    errors.append("LOCAL-008 evidence must remain overall PENDING_LOCAL until full runtime qualification")
 for token in ('Status: OPEN', 'Evidence: PENDING_LOCAL', 'QS3DCONVERT2D', 'QS3DPLAN2WALLS', 'QS3DCONVERT2DADV', 'PENDING_LOCAL / DO_NOT_RETRY_REMOTE'):
     if token not in local_014:
         errors.append("LOCAL-014 must own Plan-to-3D runtime qualification: " + token)
