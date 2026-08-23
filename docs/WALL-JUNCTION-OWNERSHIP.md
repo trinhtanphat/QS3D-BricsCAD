@@ -119,4 +119,4 @@ Licensed native qualification for this boundary is classified `LOCAL_ONLY`; sour
 
 The V25 `Release|x64` build and nine focused Wall Junction/Health gates passed. Aggregate source preflight passed 989 of 990 discovered gates; its sole failure is the unchanged LOCAL-008 Plan-to-3D evidence row, outside this branch. Raw runtime evidence remains Git-ignored. See `docs/agent-work-claims/2026-08-23-codex-issue3603-wall-junction-physical-p03.md` for the sanitized bounded result.
 
-This closes the physical-output P03 cell only. Parent LOCAL-007 remains open because Wall Snap P02 still awaits the remote #3600/#3601 corrections and an exact-SHA licensed rerun.
+This closes the physical-output P03 cell once PR #3616 is integrated. Wall Snap P02 is now independently `COMPLETED / LOCAL_PASS` through #3599/#3617, so the bounded LOCAL-007 P01/P02/P03 cells are all qualified after this integration. Parent #73 remains open for its broader advanced-geometry scope.
