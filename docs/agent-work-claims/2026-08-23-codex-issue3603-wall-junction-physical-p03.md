@@ -10,9 +10,9 @@ Lane-Key: `issue-local007-p03`
 
 Task branch: `agent/codex/issue3603-v25-wall-junction-physical-p03`
 
-Exact pushed runtime candidate: `42fd555d9bfad695b2d1a4a82b67ac8de1d98f79`
+Exact pushed runtime candidate: `4a546ae7d5fcf2e47f0d2670858fad25abde4e83`
 
-Runtime `origin/main` baseline: `4da9656d80da4ae59c6d8ad7e6ce31974fada07c`
+Runtime `origin/main` baseline: `ddbe528157a29656647ee7da0fcb8b441f512016`
 
 ## Boundary
 
@@ -31,7 +31,7 @@ The runtime used only disposable public-fixture copies plus one independent blan
 
 ## 2026-08-23 exact-SHA licensed result
 
-`LOCAL_PASS / BOUNDED_P03_PHYSICAL` was recorded on the exact clean pushed candidate above with BricsCAD V25.2.10 x64. Plugin/Core ProductVersion was `0.1.0-preview.10081`; SHA-256 values were `0BB7E47049E053D4D79C5E4BCFF623C794120A96C05E53B8E28E02F0D9D4FD38` and `60BAAE187B1DA33BC61E2C38045FAE6BE4588CF39932A19F6DAE24AD91D8ECF6`. PDB SourceLink for both assemblies matched the exact candidate SHA.
+`LOCAL_PASS / BOUNDED_P03_PHYSICAL` was recorded on the exact clean pushed candidate above with BricsCAD V25.2.10 x64. Plugin/Core ProductVersion was `0.1.0-preview.10081`; SHA-256 values were `1541EABCBA6C5445BEF0652F18EE6DB6C790E85E0A0C3FE2756A7DCCA8E6932C` and `7311C5008E78C9FFF9842E12243AB397E845156139D497EDEBBB4110EA080080`. PDB SourceLink for both assemblies matched the exact candidate SHA.
 
 Three isolated BricsCAD sessions exited gracefully with code `0` and returned 61/61 allowlisted PASS markers:
 
