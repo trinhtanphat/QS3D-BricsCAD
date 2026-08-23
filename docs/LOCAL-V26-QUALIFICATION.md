@@ -4,14 +4,17 @@ Status: `LOCAL_ONLY` / `DO_NOT_RETRY_REMOTE` until a licensed interactive BricsC
 
 ## Why V26 is a separate gate
 
-BricsCAD V26 hosts managed plugins on .NET 8 instead of the .NET Framework 4.8 lane used by BricsCAD V25. QS3D therefore emits a distinct `QS3D.BricsCAD.V26.dll` from `src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj`, targeting `net8.0-windows` and resolving `BrxMgd.dll` / `TD_Mgd.dll` from the installed V26 directory only.
+BricsCAD V26 hosts managed plugins on .NET 8 instead of the .NET Framework 4.8 lane used by BricsCAD V25. QS3D therefore emits a distinct `QS3D.BricsCAD.V26.dll` from `src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj`, targeting `net8.0-windows` and resolving `BrxMgd.dll`, `TD_Mgd.dll`, and `TD_MgdBrep.dll` from the installed V26 directory only. `TD_MgdBrep.dll` is required because the shared quantity explanation/preview code uses the native BREP API.
 
 The V25 project remains `net48`. Passing source/static checks or the Core smoke suite does **not** prove V26 runtime compatibility.
+
+The V26 project keeps nullable annotations from the linked adapter source while retaining the established shared-source flow-warning context; all other repository warnings-as-errors remain active. It also emits `QS3D.BricsCAD.V26.runtimeconfig.json` with the explicit .NET 8 Windows Desktop framework contract required by the shared WPF/WinForms adapter. Update preferences use the V26-specific registry path, and unsigned direct preview download remains disabled for V26 so the Update Center fails closed to the manual release page while the signed-manifest path remains separate.
 
 ## Prerequisites
 
 - Windows x64 interactive desktop.
 - Licensed BricsCAD V26 x64.
+- The licensed V26 installation must contain the co-located `BrxMgd.dll`, `TD_Mgd.dll`, and `TD_MgdBrep.dll` host assemblies.
 - .NET 8 Windows Desktop Runtime x64 / compatible .NET 8 SDK.
 - Python 3 and .NET SDK available for repository preflights/build.
 - Clean checkout at the exact candidate SHA.
@@ -25,6 +28,10 @@ $env:BRICSCAD_V26_DIR = 'C:\Program Files\Bricsys\BricsCAD V26 en_US'
 ```
 
 If the installed locale/path differs, use that licensed V26 installation directory instead.
+
+If the process overrides `DOTNET_ROOT`, it must name a real .NET 8 host/runtime root containing `dotnet.exe`, an 8.x `host/fxr/hostfxr.dll`, and an 8.x `shared/Microsoft.NETCore.App/coreclr.dll`. The V26 runtime and native Beam runners reject an incomplete or stale override before starting BricsCAD; either unset the override so the licensed host uses its normal runtime resolution or point it to a verified local runtime root.
+
+Before starting BricsCAD, verify that `dotnet --list-runtimes` reports both `Microsoft.NETCore.App 8.x` and `Microsoft.WindowsDesktop.App 8.x` for x64. A machine with BricsCAD V26 but no discoverable .NET 8 Windows Desktop runtime can enter `NETLOAD` without ever reaching the plugin initializer; that host prerequisite failure is not a plugin runtime PASS.
 
 ## Source/build gate
 
@@ -58,6 +65,42 @@ Run from a dedicated V26 desktop with all existing BricsCAD processes closed:
 
 The gate must fail closed if the configured `bricscad.exe` is not major version 26, if the plugin is not the V26 assembly, if the host is not x64, or if `QS3DRUNTIMEPROBE` does not report Ribbon and palette readiness.
 
+### Bounded native Beam P01
+
+Issue `#3573` owns the first representative V26 native authoring/dependent-output cell. After the exact V26 build and generic runtime gate pass, run the guarded two-process matrix on the repository-generated sample only:
+
+```powershell
+.\scripts\test-bricscad-v26-native-beam-dependent.ps1 `
+  -BricsCadDir $env:BRICSCAD_V26_DIR `
+  -PluginDll .\src\QS3D.BricsCAD.V26\bin\x64\Release\net8.0-windows\QS3D.BricsCAD.V26.dll `
+  -FixtureDwg .\samples\generated\QS3D-Sample.dwg `
+  -Profile '<initialized disposable V26 profile>' `
+  -ArtifactDir '<outside-repository empty artifact directory>' `
+  -ConfirmDisposableCopies
+```
+
+The runner reuses the existing production Beam P03 probe commands compiled into the shared V26 adapter. It must prove production Beam authoring, host/longitudinal/stirrup output, a real native top-level `MOVE`, pre-sync generated isolation, `QS3DSYNCSOURCE`, dependent rebuild, scoped Health, save/sidecar persistence and fresh-process cold reopen. Host major 26, the exact V26 output path, runtimeconfig, declared product version and exact Git SHA in the portable PDB SourceLink record are all fail-closed inputs. Until an exact pushed candidate completes this matrix on licensed V26, report `#3573` as `PENDING_LOCAL`; a V25 result cannot be reused.
+
+### Bounded native Slab P02 gate
+
+Issue `#3576` owns one representative production native-edit cell under `LOCAL-017`. After the exact V26 Release build, run:
+
+```powershell
+.\scripts\test-bricscad-v26-native-polyline-edit.ps1 `
+  -BricsCadDir $env:BRICSCAD_V26_DIR `
+  -PluginDll .\src\QS3D.BricsCAD.V26\bin\x64\Release\net8.0-windows\QS3D.BricsCAD.V26.dll `
+  -FixtureDwg .\samples\generated\QS3D-Sample.dwg `
+  -Profile Default `
+  -ArtifactDir <outside-repository-empty-directory> `
+  -ConfirmDisposableCopies
+```
+
+The shared runner must reject a V25/V26 host or plugin-major mismatch. If the process environment sets `DOTNET_ROOT`, it must point to a complete .NET 8 host/runtime containing `dotnet.exe`, an 8.x `hostfxr.dll` and an 8.x `coreclr.dll`; an invalid override must be refused before artifact creation or BricsCAD launch.
+
+This bounded gate uses the repository-generated disposable fixture and the existing production Slab probe. It drives one real top-level closed-POLYLINE crossing-window `STRETCH`, verifies pre-sync generated isolation, production source reconcile/metric and quantity refresh, generated invalidation/rebuild, scoped Health, save/sidecar persistence and a fresh-process cold reopen. The gate was `PENDING_LOCAL` until the exact evidence below passed; its bounded PASS cannot close the broader #80 or #1462 matrix.
+
+Bounded P02 evidence is `LOCAL_PASS` on clean pushed exact SHA `54b7fce6127208085817f20dd0781b580a18e4bd`. The V26 `Release|x64` build completed with zero warnings/errors; ProductVersion was `0.1.0-preview.10081`, plugin SHA-256 was `BA0A0758BD2440D50455FDD9A36D992EE14869800B1700396CE5580F53E1882D`, and the portable plugin/Core PDB SourceLink records named the exact tested SHA. Licensed BricsCAD V26.2.07 / CLR 8.0.29 passed the generic x64/native-runtime identity control. The two-process P02 run then passed every sanitized production marker, including vertex STRETCH, pre-sync isolation, metric/quantity reconcile, invalidation/rebuild, native bounds, scoped Health, save/sidecar persistence and fresh-process cold reopen. The repository fixture hash remained `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`; drawing, script and private state were restored with zero BricsCAD processes left. This remains a bounded synthetic Slab cell only; the broader native/private-DWG and release matrix is still pending.
+
 ## Package/install gate
 
 After the exact V26 Release build passes source/build checks:
@@ -69,6 +112,7 @@ After the exact V26 Release build passes source/build checks:
 The package must contain at minimum:
 
 - `QS3D.BricsCAD.V26.dll`;
+- `QS3D.BricsCAD.V26.runtimeconfig.json`;
 - `QS3D.Core.dll`;
 - `install-v26-autoload.ps1`;
 - `uninstall-v26-autoload.ps1`;

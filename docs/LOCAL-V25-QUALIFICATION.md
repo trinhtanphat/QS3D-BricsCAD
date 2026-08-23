@@ -219,6 +219,8 @@ Run this scenario only on licensed BricsCAD V25 against the same exact SHA/packa
 8. Reopen A or open a new third drawing and repeat switch/close cycles several times. Verify there are no disposed-document callbacks, stale project selection, duplicate lifetime subscriptions, `eNotOpenForWrite`/disposed-object errors, crash, or visible stale-A data retained by a supposedly closed bound window.
 9. Exit BricsCAD with bound and dynamic hubs open. Shutdown must complete without an unhandled UI/document lifecycle exception.
 
+2026-08-23 P01 diagnostic at exact current baseline `83714ad2b32ffa5731e92f6928cbec3d892e9c8e` is `BLOCKED_SOURCE_FIX`: after opening a third drawing, BricsCAD supplied a replacement managed `Document` wrapper for the same still-open B DWG. Native close of B left its bound Family Manager loaded/visible/hosted because the document-destroy handler compared the wrapper by `ReferenceEquals`. The sanitized licensed verdict was `CLOSE_B / B_FAMILY_REMAINED_OPEN`; remote source issue #3594 owns the correction and local issue #3593 owns the exact-current rerun. This diagnostic does not satisfy step 8 or promote H.1/LOCAL-002.
+
 Record this scenario as **PASS / FAIL / NOT TESTED** in the sanitized local result. Never convert it to PASS from source review alone.
 
 #### H.2 Modeless project-editor rollback and post-commit isolation — **PENDING local V25 runtime proof**

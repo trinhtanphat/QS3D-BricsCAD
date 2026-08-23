@@ -5,6 +5,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Profile,
     [Parameter(Mandatory = $true)][string]$ArtifactDir,
     [Parameter(Mandatory = $true)][switch]$ConfirmDisposableCopies,
+    [ValidateSet(25, 26)][int]$HostMajor = 25,
     [ValidateRange(120, 1800)][int]$StartupTimeoutSeconds = 600
 )
 
@@ -116,6 +117,72 @@ function Restore-EnvironmentValue {
     param([Parameter(Mandatory = $true)][string]$Name, [AllowNull()][string]$Value)
     if ($null -eq $Value) { Remove-Item -LiteralPath ("Env:" + $Name) -ErrorAction SilentlyContinue }
     else { Set-Item -LiteralPath ("Env:" + $Name) -Value $Value }
+}
+
+function Assert-Qs3dV26DotNetRoot {
+    $configured = [Environment]::GetEnvironmentVariable("DOTNET_ROOT", "Process")
+    if ([string]::IsNullOrWhiteSpace($configured)) { return }
+    try { $root = [IO.Path]::GetFullPath($configured.Trim()) }
+    catch { throw "DOTNET_ROOT is set but is not a valid absolute directory." }
+
+    $dotnet = Join-Path $root "dotnet.exe"
+    $fxrRoot = Join-Path $root "host\fxr"
+    $runtimeRoot = Join-Path $root "shared\Microsoft.NETCore.App"
+    if (-not (Test-Path -LiteralPath $root -PathType Container) -or
+        -not (Test-Path -LiteralPath $dotnet -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $fxrRoot -PathType Container) -or
+        -not (Test-Path -LiteralPath $runtimeRoot -PathType Container)) {
+        throw "DOTNET_ROOT is set but does not contain a complete .NET 8 host/runtime."
+    }
+
+    $fxr8 = @(Get-ChildItem -LiteralPath $fxrRoot -Directory -ErrorAction Stop | Where-Object {
+        $_.Name -match '^8\.' -and (Test-Path -LiteralPath (Join-Path $_.FullName "hostfxr.dll") -PathType Leaf)
+    })
+    $runtime8 = @(Get-ChildItem -LiteralPath $runtimeRoot -Directory -ErrorAction Stop | Where-Object {
+        $_.Name -match '^8\.' -and (Test-Path -LiteralPath (Join-Path $_.FullName "coreclr.dll") -PathType Leaf)
+    })
+    if ($fxr8.Count -eq 0 -or $runtime8.Count -eq 0) {
+        throw "DOTNET_ROOT is set but does not contain a complete .NET 8 host/runtime."
+    }
+}
+
+function Read-Qs3dDeclaredProductVersion {
+    param([Parameter(Mandatory = $true)][string]$ProjectPath)
+    [xml]$project = Get-Content -LiteralPath $ProjectPath -Raw
+    $values = @(
+        $project.Project.PropertyGroup |
+            ForEach-Object { [string]$_.Version } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            ForEach-Object { $_.Trim() } |
+            Select-Object -Unique
+    )
+    if ($values.Count -ne 1) { throw "LOCAL-004 P02 project Version identity is missing or ambiguous." }
+    return [string]$values[0]
+}
+
+function Assert-Qs3dExactCandidateAssembly {
+    param(
+        [Parameter(Mandatory = $true)][string]$AssemblyPath,
+        [Parameter(Mandatory = $true)][string]$ProjectPath,
+        [Parameter(Mandatory = $true)][string]$GitHead
+    )
+    $declaredVersion = Read-Qs3dDeclaredProductVersion -ProjectPath $ProjectPath
+    $actualVersion = [string](Get-Item -LiteralPath $AssemblyPath).VersionInfo.ProductVersion
+    $legacyRevisionVersion = $declaredVersion + "+" + $GitHead
+    if (-not [string]::Equals($actualVersion, $declaredVersion, [StringComparison]::OrdinalIgnoreCase) -and
+        -not [string]::Equals($actualVersion, $legacyRevisionVersion, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "LOCAL-004 P02 assembly ProductVersion does not match the exact source product contract."
+    }
+
+    $pdbPath = [IO.Path]::ChangeExtension($AssemblyPath, ".pdb")
+    if (-not (Test-Path -LiteralPath $pdbPath -PathType Leaf)) {
+        throw "LOCAL-004 P02 exact-source PDB is missing."
+    }
+    $pdbText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($pdbPath))
+    $sourceLinkIdentity = "https://raw.githubusercontent.com/trinhtanphat/QS3D-BricsCAD/" + $GitHead + "/"
+    if ($pdbText.IndexOf($sourceLinkIdentity, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        throw "LOCAL-004 P02 assembly PDB is not bound to the exact Git candidate SHA."
+    }
 }
 
 function Stop-Qs3dLaunchedProcess {
@@ -252,15 +319,38 @@ $expectedFixture = [IO.Path]::GetFullPath((Join-Path $repoRoot "samples\generate
 if (-not [string]::Equals($FixtureDwg, $expectedFixture, [StringComparison]::OrdinalIgnoreCase)) {
     throw "FixtureDwg must be the repository-generated QS3D sample."
 }
-$expectedPlugin = [IO.Path]::GetFullPath((Join-Path $repoRoot "src\QS3D.BricsCAD.V25\bin\x64\Release\net48\QS3D.BricsCAD.V25.dll"))
+$pluginProjectRelative = if ($HostMajor -eq 26) {
+    "src\QS3D.BricsCAD.V26\QS3D.BricsCAD.V26.csproj"
+}
+else {
+    "src\QS3D.BricsCAD.V25\QS3D.BricsCAD.V25.csproj"
+}
+$pluginOutputRelative = if ($HostMajor -eq 26) {
+    "src\QS3D.BricsCAD.V26\bin\x64\Release\net8.0-windows\QS3D.BricsCAD.V26.dll"
+}
+else {
+    "src\QS3D.BricsCAD.V25\bin\x64\Release\net48\QS3D.BricsCAD.V25.dll"
+}
+$expectedPlugin = [IO.Path]::GetFullPath((Join-Path $repoRoot $pluginOutputRelative))
 if (-not [string]::Equals($PluginDll, $expectedPlugin, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "PluginDll must be the exact repository x64 Release V25 build output."
+    throw "PluginDll must be the exact repository x64 Release host-major build output."
 }
 
 $bricscadExe = Join-Path $BricsCadDir "bricscad.exe"
 $coreDll = Join-Path (Split-Path -Parent $PluginDll) "QS3D.Core.dll"
-foreach ($required in @($bricscadExe, $PluginDll, $coreDll, $FixtureDwg)) {
+$pluginProject = Join-Path $repoRoot $pluginProjectRelative
+$coreProject = Join-Path $repoRoot "src\QS3D.Core\QS3D.Core.csproj"
+$requiredInputs = @($bricscadExe, $PluginDll, $coreDll, $pluginProject, $coreProject, $FixtureDwg)
+if ($HostMajor -eq 26) {
+    $requiredInputs += [IO.Path]::ChangeExtension($PluginDll, ".runtimeconfig.json")
+    Assert-Qs3dV26DotNetRoot
+}
+foreach ($required in $requiredInputs) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw "Required LOCAL-004 P02 input is missing." }
+}
+$bricscadVersion = (Get-Item -LiteralPath $bricscadExe).VersionInfo
+if ($bricscadVersion.FileMajorPart -ne $HostMajor) {
+    throw "Configured BricsCAD host major does not match the requested LOCAL-004 P02 host major."
 }
 
 $git = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
@@ -271,13 +361,8 @@ if ($gitHead -notmatch '^[0-9a-f]{40}$') { throw "LOCAL-004 P02 Git candidate SH
 $gitStatus = @(& $git.Source -C $repoRoot status --porcelain=v1 --untracked-files=all 2>$null)
 if ($LASTEXITCODE -ne 0) { throw "Cannot inspect the LOCAL-004 P02 candidate worktree." }
 if ($gitStatus.Count -ne 0) { throw "LOCAL-004 P02 qualification requires a clean exact-SHA worktree." }
-$expectedAssemblyRevision = "+" + $gitHead
-foreach ($assemblyPath in @($PluginDll, $coreDll)) {
-    $productVersion = [string](Get-Item -LiteralPath $assemblyPath).VersionInfo.ProductVersion
-    if (-not $productVersion.EndsWith($expectedAssemblyRevision, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "LOCAL-004 P02 assembly was not built from the exact Git candidate SHA."
-    }
-}
+Assert-Qs3dExactCandidateAssembly -AssemblyPath $PluginDll -ProjectPath $pluginProject -GitHead $gitHead
+Assert-Qs3dExactCandidateAssembly -AssemblyPath $coreDll -ProjectPath $coreProject -GitHead $gitHead
 if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
     throw "Close existing BricsCAD processes before isolated LOCAL-004 P02 qualification."
 }
@@ -432,6 +517,8 @@ $metadata = [ordered]@{
     started_at = $startedAt.ToUniversalTime().ToString("O")
     completed_at = (Get-Date).ToUniversalTime().ToString("O")
     bricscad_file_version = (Get-Item -LiteralPath $bricscadExe).VersionInfo.FileVersion
+    bricscad_host_major = $HostMajor
+    plugin_product_version = [string](Get-Item -LiteralPath $PluginDll).VersionInfo.ProductVersion
     plugin_sha256 = $pluginHash
     repository_fixture_sha256 = $fixtureHash
     drawing_persisted_changed = $drawingPersistedChanged
@@ -449,5 +536,5 @@ $metadata | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $metadataPath -En
 
 if ($null -ne $cleanupError) { throw "LOCAL-004 P02 cleanup failed; inspect local console state only." }
 if ($null -ne $qualificationError) { throw $qualificationError }
-Write-Host "QS3D BricsCAD V25 LOCAL-004 P02 native POLYLINE edit runtime PASS"
+Write-Host "QS3D BricsCAD V$HostMajor LOCAL-004 P02 native POLYLINE edit runtime PASS"
 Write-Host "Sanitized marker and metadata written to the requested artifact directory."

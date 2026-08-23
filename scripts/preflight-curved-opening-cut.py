@@ -29,6 +29,11 @@ if planner.is_file():
         "WallFootprintEngine().Build",
         "CutterPolygon",
         "CenterStationM",
+        "AddAdvancing(",
+        "StationAtRatio(",
+        "lost a positive station increment at floating-point precision",
+        "interior station is below the representable station resolution",
+        "width is below the representable station resolution",
     ):
         if needle not in text:
             errors.append("curved opening footprint guard missing: " + needle)
@@ -77,6 +82,9 @@ if smoke.is_file():
         "CornerSpanIncludesIntermediateVertex();",
         "RejectsFarAndAmbiguousBranches();",
         "RejectsOpeningPastHostEnd();",
+        "RejectsCumulativeStationPrecisionCollapse();",
+        "RejectsInteriorProjectionStationPrecisionCollapse();",
+        "RejectsOpeningSpanStationPrecisionCollapse();",
     ):
         if needle not in text:
             errors.append("curved opening regression missing: " + needle)
@@ -99,4 +107,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: curved host opening footprint planning, pre-destructive fingerprint/idempotence guards, Region extrusion, BoolSubtract command wiring and deterministic regressions are present.")
+print("PASS: curved host opening footprint planning, station precision guards, pre-destructive fingerprint/idempotence guards, Region extrusion, BoolSubtract command wiring and deterministic regressions are present.")

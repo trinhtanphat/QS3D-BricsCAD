@@ -14,6 +14,13 @@ UPDATE_CENTER = ROOT / "src" / "QS3D.BricsCAD.V25" / "Updates" / "UpdateCenterWi
 INSTALLER = ROOT / "scripts" / "install-v25-autoload.ps1"
 PACKAGE_V25 = ROOT / "scripts" / "package-v25.ps1"
 PACKAGE_V26 = ROOT / "scripts" / "package-v26.ps1"
+BUILD_PROPS = ROOT / "Directory.Build.props"
+RUNTIME_SOURCE_IDENTITY = ROOT / "src" / "QS3D.BricsCAD.V25" / "RuntimeSourceIdentityGuard.cs"
+EXACT_SOURCE_PROBES = [
+    ROOT / "src" / "QS3D.BricsCAD.V25" / "LevelZRuntimeProbeCommands.cs",
+    ROOT / "src" / "QS3D.BricsCAD.V25" / "LevelZLifecycleRuntimeProbeCommands.cs",
+    ROOT / "src" / "QS3D.BricsCAD.V25" / "CurvedStructuralRuntimeProbeCommands.cs",
+]
 PROJECTS = [
     ROOT / "src" / "QS3D.BricsCAD.V25" / "QS3D.BricsCAD.V25.csproj",
     ROOT / "src" / "QS3D.BricsCAD.V26" / "QS3D.BricsCAD.V26.csproj",
@@ -69,6 +76,29 @@ def main():
                     f"{path} FileVersion must identify preview build {identity['Version']}; "
                     f"expected {expected_file}, got {identity['FileVersion']}"
                 )
+
+    build_props = BUILD_PROPS.read_text(encoding="utf-8")
+    if "<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>" not in build_props:
+        return fail("Directory.Build.props must prevent SDK-added git metadata from changing declared product identity")
+
+    source_identity = RUNTIME_SOURCE_IDENTITY.read_text(encoding="utf-8")
+    required_source_identity_tokens = [
+        'Path.ChangeExtension(assemblyPath, ".pdb")',
+        "File.ReadAllBytes(pdbPath)",
+        "https://raw.githubusercontent.com/trinhtanphat/QS3D-BricsCAD/",
+        "sourceLinkPrefix",
+        "StringComparison.OrdinalIgnoreCase",
+    ]
+    for token in required_source_identity_tokens:
+        if token not in source_identity:
+            return fail(f"runtime exact-source identity lost PDB SourceLink guard: {token}")
+
+    for probe_path in EXACT_SOURCE_PROBES:
+        probe = probe_path.read_text(encoding="utf-8")
+        if "RuntimeSourceIdentityGuard.RequireExactSourceLink(assembly, sourceSha, label);" not in probe:
+            return fail(f"{probe_path} must bind runtime evidence to PDB SourceLink")
+        if 'EndsWith("+" + sourceSha' in probe or "AssemblyInformationalVersionAttribute" in probe:
+            return fail(f"{probe_path} must not overload public ProductVersion with exact-source identity")
 
     runtime = RUNTIME.read_text(encoding="utf-8")
     required_runtime_tokens = [

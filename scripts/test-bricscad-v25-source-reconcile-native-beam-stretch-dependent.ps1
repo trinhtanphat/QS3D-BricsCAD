@@ -67,6 +67,26 @@ function Restore-EnvironmentValue {
     else { Set-Item -LiteralPath ("Env:" + $Name) -Value $Value }
 }
 
+function Read-SingleProjectValue {
+    param([Parameter(Mandatory = $true)][string]$ProjectPath, [Parameter(Mandatory = $true)][string]$Element)
+    try { [xml]$project = Get-Content -LiteralPath $ProjectPath -Raw }
+    catch { throw "Could not read P04 project identity from $ProjectPath." }
+    $values = @($project.Project.PropertyGroup | ForEach-Object {
+        $property = $_.PSObject.Properties[$Element]
+        if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) { ([string]$property.Value).Trim() }
+    } | Select-Object -Unique)
+    if ($values.Count -ne 1) { throw "P04 project must declare exactly one $Element identity: $ProjectPath" }
+    return [string]$values[0]
+}
+
+function Require-PdbSourceLink {
+    param([Parameter(Mandatory = $true)][string]$PdbPath, [Parameter(Mandatory = $true)][string]$ExpectedUrl)
+    $pdbText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($PdbPath))
+    if ($pdbText.IndexOf($ExpectedUrl, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        throw "P04 PDB SourceLink does not bind the binary to the exact clean Git SHA: $PdbPath"
+    }
+}
+
 function Stop-OwnedProcess {
     param([AllowNull()][Diagnostics.Process]$Process)
     if ($null -eq $Process) { return }
@@ -120,6 +140,27 @@ function Wait-Exit {
     throw "Timed out waiting for LOCAL-004 P04 BricsCAD exit."
 }
 
+function Get-ExactBricsCadProcesses {
+    param([Parameter(Mandatory = $true)][string]$ExpectedExe)
+    $matches = @()
+    foreach ($record in @(Get-CimInstance Win32_Process -Filter "Name = 'bricscad.exe'")) {
+        if ([string]::IsNullOrWhiteSpace([string]$record.ExecutablePath)) { continue }
+        if (-not [string]::Equals([IO.Path]::GetFullPath([string]$record.ExecutablePath), $ExpectedExe, [StringComparison]::OrdinalIgnoreCase)) { continue }
+        $process = Get-Process -Id ([int]$record.ProcessId) -ErrorAction SilentlyContinue
+        if ($null -ne $process) { $matches += $process }
+    }
+    return $matches
+}
+
+function Wait-NoExactBricsCadProcesses {
+    param([Parameter(Mandatory = $true)][string]$ExpectedExe, [DateTime]$Deadline)
+    while ((Get-Date) -lt $Deadline) {
+        if (@(Get-ExactBricsCadProcesses -ExpectedExe $ExpectedExe).Count -eq 0) { return }
+        Start-Sleep -Milliseconds 500
+    }
+    throw "P04 process cleanup incomplete."
+}
+
 function Remove-ExactFile {
     param([string]$Path)
     if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Force -ErrorAction Stop }
@@ -135,25 +176,45 @@ $BricsCadDir = [IO.Path]::GetFullPath($BricsCadDir); $PluginDll = [IO.Path]::Get
 $FixtureDwg = [IO.Path]::GetFullPath($FixtureDwg); $ArtifactDir = [IO.Path]::GetFullPath($ArtifactDir)
 if ($ArtifactDir.StartsWith($repoRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw "ArtifactDir must stay outside repository." }
 $expectedFixture = [IO.Path]::GetFullPath((Join-Path $repoRoot "samples\generated\QS3D-Sample.dwg"))
+$pluginProject = [IO.Path]::GetFullPath((Join-Path $repoRoot "src\QS3D.BricsCAD.V25\QS3D.BricsCAD.V25.csproj"))
+$coreProject = [IO.Path]::GetFullPath((Join-Path $repoRoot "src\QS3D.Core\QS3D.Core.csproj"))
 $expectedPlugin = [IO.Path]::GetFullPath((Join-Path $repoRoot "src\QS3D.BricsCAD.V25\bin\x64\Release\net48\QS3D.BricsCAD.V25.dll"))
 if (-not [string]::Equals($FixtureDwg, $expectedFixture, [StringComparison]::OrdinalIgnoreCase)) { throw "FixtureDwg must be repository QS3D sample." }
 if (-not [string]::Equals($PluginDll, $expectedPlugin, [StringComparison]::OrdinalIgnoreCase)) { throw "PluginDll must be exact repository x64 Release output." }
-$bricscadExe = Join-Path $BricsCadDir "bricscad.exe"; $coreDll = Join-Path (Split-Path -Parent $PluginDll) "QS3D.Core.dll"
-foreach ($required in @($bricscadExe,$PluginDll,$coreDll,$FixtureDwg)) { if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw "Required LOCAL-004 P04 input missing." } }
+$bricscadExe = Join-Path $BricsCadDir "bricscad.exe"
+foreach ($required in @($bricscadExe,$FixtureDwg,$pluginProject,$coreProject)) { if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw "Required LOCAL-004 P04 input missing." } }
 
 $git = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
 $headLines = @(& $git.Source -C $repoRoot rev-parse HEAD 2>$null); if ($LASTEXITCODE -ne 0 -or $headLines.Count -ne 1) { throw "Cannot resolve P04 Git SHA." }
 $gitHead = ([string]$headLines[0]).Trim().ToLowerInvariant(); if ($gitHead -notmatch '^[0-9a-f]{40}$') { throw "P04 Git SHA invalid." }
 if (@(& $git.Source -C $repoRoot status --porcelain=v1 --untracked-files=all 2>$null).Count -ne 0) { throw "P04 qualification requires clean worktree." }
-foreach ($assembly in @($PluginDll,$coreDll)) { if (-not ([string](Get-Item $assembly).VersionInfo.ProductVersion).EndsWith("+" + $gitHead, [StringComparison]::OrdinalIgnoreCase)) { throw "P04 assembly exact-SHA mismatch." } }
-if (@(Get-Process -Name bricscad -ErrorAction SilentlyContinue).Count -gt 0) { throw "Close BricsCAD before isolated P04 run." }
+$dotnet = Get-Command dotnet -CommandType Application -ErrorAction Stop | Select-Object -First 1
+& $dotnet.Source build $pluginProject -c Release '-p:Platform=x64' ("-p:BRICSCAD_V25_DIR=" + $BricsCadDir)
+if ($LASTEXITCODE -ne 0) { throw "P04 exact-source V25 Release|x64 build failed with exit code $LASTEXITCODE." }
+if (@(& $git.Source -C $repoRoot status --porcelain=v1 --untracked-files=all 2>$null).Count -ne 0) { throw "P04 build changed tracked source state." }
+
+$coreDll = Join-Path (Split-Path -Parent $PluginDll) "QS3D.Core.dll"
+$pluginPdb = [IO.Path]::ChangeExtension($PluginDll, ".pdb")
+$corePdb = [IO.Path]::ChangeExtension($coreDll, ".pdb")
+foreach ($required in @($PluginDll,$coreDll,$pluginPdb,$corePdb)) { if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw "P04 exact-source build output missing: $required" } }
+$publicProductVersion = Read-SingleProjectValue -ProjectPath $pluginProject -Element "InformationalVersion"
+$coreProductVersion = Read-SingleProjectValue -ProjectPath $coreProject -Element "InformationalVersion"
+if (-not [string]::Equals($publicProductVersion, $coreProductVersion, [StringComparison]::Ordinal)) { throw "P04 plugin/Core public ProductVersion declarations disagree." }
+foreach ($assembly in @($PluginDll,$coreDll)) {
+    $actualProductVersion = ([string](Get-Item -LiteralPath $assembly).VersionInfo.ProductVersion).Trim()
+    if (-not [string]::Equals($actualProductVersion, $publicProductVersion, [StringComparison]::Ordinal)) { throw "P04 assembly public ProductVersion does not match the exact project identity: $assembly" }
+}
+$sourceLinkPrefix = "https://raw.githubusercontent.com/trinhtanphat/QS3D-BricsCAD/" + $gitHead + "/"
+Require-PdbSourceLink -PdbPath $pluginPdb -ExpectedUrl $sourceLinkPrefix
+Require-PdbSourceLink -PdbPath $corePdb -ExpectedUrl $sourceLinkPrefix
+if (@(Get-ExactBricsCadProcesses -ExpectedExe $bricscadExe).Count -gt 0) { throw "Close BricsCAD V25 before isolated P04 run." }
 
 if (Test-Path $ArtifactDir) { if (@(Get-ChildItem $ArtifactDir -Force).Count -ne 0) { throw "ArtifactDir must be empty." } } else { New-Item -ItemType Directory -Path $ArtifactDir | Out-Null }
 $fixtureRoot = Join-Path $ArtifactDir "fixture-copy"; New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
 $drawing = Join-Path $fixtureRoot "source-native-beam-stretch-dependent-copy.dwg"; Copy-Item $FixtureDwg $drawing
 $fixtureHash = (Get-FileHash $FixtureDwg -Algorithm SHA256).Hash.ToUpperInvariant(); if ((Get-FileHash $drawing -Algorithm SHA256).Hash.ToUpperInvariant() -ne $fixtureHash) { throw "P04 fixture copy mismatch." }
 $sidecar = [IO.Path]::ChangeExtension($drawing, ".qsdb")
-$privateFiles = @($sidecar,$sidecar+".bak",$sidecar+".lock",[IO.Path]::ChangeExtension($drawing,".dwl"),[IO.Path]::ChangeExtension($drawing,".dwl2"),[IO.Path]::ChangeExtension($drawing,".bak"))
+$privateFiles = @($sidecar,($sidecar + ".bak"),($sidecar + ".lock"),[IO.Path]::ChangeExtension($drawing,".dwl"),[IO.Path]::ChangeExtension($drawing,".dwl2"),[IO.Path]::ChangeExtension($drawing,".bak"))
 $resultPath = Join-Path $ArtifactDir "source-reconcile-native-beam-stretch-dependent-result.txt"
 $phasePath = Join-Path $ArtifactDir "source-reconcile-native-beam-stretch-dependent-session1.txt"
 $script1 = Join-Path $ArtifactDir "source-reconcile-native-beam-stretch-dependent-session1.private.scr"
@@ -171,13 +232,14 @@ try {
     $env:QS3D_SOURCE_RECONCILE_NATIVE_BEAM_STRETCH_DEPENDENT_NONCE=$nonce
     $env:QS3D_SOURCE_RECONCILE_NATIVE_BEAM_STRETCH_DEPENDENT_DWG=$drawing
     $commands1 = @(
-        "FILEDIA","0","CMDECHO","1","TILEMODE","1","INSUNITS","4","UCS","W","ANGBASE","0","ANGDIR","0",
+        "LOGFILEPATH",$ArtifactDir,"LOGFILEMODE","1","FILEDIA","0","CMDECHO","1","TILEMODE","1","INSUNITS","4","UCS","W","ANGBASE","0","ANGDIR","0",
+        "PICKFIRST","0","PICKADD","1","PICKAUTO","1",
         "NETLOAD",('"'+$PluginDll+'"'),"QS3DDRAWBEAM","0,0","5000,0",
         "QS3DSRBEAMP04PREPARE","QS3DBEAMREBAR3D","QS3DSRBEAMP04SELECT","QS3DBEAMSTIRRUP3D","QS3DSRBEAMP04BASELINE",
-        "QS3DSRBEAMP04SELECT","_.STRETCH","_C","4900,-100","5100,100","","0,0","3000,0","QS3DSRBEAMP04STRETCHCHECK",
+        "QS3DSRBEAMP04SELECT","_.STRETCH","_C","_non","4900,-100","_non","5100,100","","_non","0,0","_non","3000,0","PICKFIRST","1","QS3DSRBEAMP04STRETCHCHECK",
         "QS3DSRBEAMP04SELECT","QS3DSYNCSOURCE","QS3DSRBEAMP04SYNCCHECK",
         "QS3DSRBEAMP04SELECT","QS3DBUILD3D","QS3DSRBEAMP04SELECT","QS3DBEAMREBAR3D","QS3DSRBEAMP04SELECT","QS3DBEAMSTIRRUP3D","QS3DSRBEAMP04FINAL",
-        "QS3DSAVE","_.QSAVE","_.QUIT","_Y")
+        "QS3DSAVE","_.QSAVE","LOGFILEMODE","0","_.QUIT","_Y")
     [IO.File]::WriteAllLines($script1,$commands1,[Text.Encoding]::ASCII)
     $deadline=(Get-Date).AddSeconds($StartupTimeoutSeconds); $p1=Start-Process $bricscadExe -ArgumentList ('"'+$drawing+'" /P "'+$Profile+'" /B "'+$script1+'"') -PassThru -WindowStyle Hidden -WorkingDirectory $ArtifactDir
     Wait-Marker ([ref]$p1) $bricscadExe $phasePath $resultPath $deadline
@@ -187,7 +249,7 @@ try {
     $sidecarPersisted=Test-Path $sidecar -PathType Leaf; if (-not $sidecarPersisted) { throw "P04 sidecar was not persisted." }
     Remove-ExactFile $script1
 
-    $commands2=@("FILEDIA","0","CMDECHO","1","TILEMODE","1","INSUNITS","4","UCS","W","NETLOAD",('"'+$PluginDll+'"'),"QS3DSRBEAMP04REOPEN","_.QUIT","_Y")
+    $commands2=@("LOGFILEPATH",$ArtifactDir,"LOGFILEMODE","1","FILEDIA","0","CMDECHO","1","TILEMODE","1","INSUNITS","4","UCS","W","NETLOAD",('"'+$PluginDll+'"'),"QS3DSRBEAMP04REOPEN","LOGFILEMODE","0","_.QUIT","_Y")
     [IO.File]::WriteAllLines($script2,$commands2,[Text.Encoding]::ASCII)
     $deadline=(Get-Date).AddSeconds($StartupTimeoutSeconds); $p2=Start-Process $bricscadExe -ArgumentList ('"'+$drawing+'" /P "'+$Profile+'" /B "'+$script2+'"') -PassThru -WindowStyle Hidden -WorkingDirectory $ArtifactDir
     Wait-Marker ([ref]$p2) $bricscadExe $resultPath $resultPath $deadline; Wait-Exit $p2 $deadline; Stop-OwnedProcess $p2
@@ -197,7 +259,7 @@ catch { $qualificationError=$_.Exception }
 finally {
     try {
         Stop-OwnedProcess $p1; Stop-OwnedProcess $p2
-        if (@(Get-Process -Name bricscad -ErrorAction SilentlyContinue).Count -ne 0) { throw "P04 process cleanup incomplete." }; $processCleanup=$true
+        Wait-NoExactBricsCadProcesses -ExpectedExe $bricscadExe -Deadline (Get-Date).AddSeconds(15); $processCleanup=$true
         foreach ($path in @($script1,$script2)) { Remove-ExactFile $path }; $scriptCleanup=$true
         foreach ($path in $privateFiles) { Remove-ExactFile $path }; $privateCleanup=$true
         Copy-Item $FixtureDwg $drawing -Force; $drawingRestore=((Get-FileHash $drawing -Algorithm SHA256).Hash.ToUpperInvariant() -eq $fixtureHash); if (-not $drawingRestore) { throw "P04 drawing restore failed." }
@@ -205,7 +267,7 @@ finally {
     } catch { $cleanupError=$_.Exception } finally { foreach ($name in $envNames) { Restore-EnvironmentValue $name $oldEnv[$name] } }
 }
 
-$metadata=[ordered]@{status=$(if($null -eq $qualificationError -and $null -eq $cleanupError){"PASS"}else{"FAIL"});qualification_boundary="LOCAL_004_P04_BEAM_DEPENDENT_STRETCH";git_sha=$gitHead;bricscad_file_version=(Get-Item $bricscadExe).VersionInfo.FileVersion;plugin_sha256=(Get-FileHash $PluginDll -Algorithm SHA256).Hash.ToUpperInvariant();repository_fixture_sha256=$fixtureHash;drawing_persisted_changed=$persisted;sidecar_persisted=$sidecarPersisted;process_cleanup_verified=$processCleanup;script_cleanup_verified=$scriptCleanup;private_state_cleanup_verified=$privateCleanup;drawing_restore_verified=$drawingRestore;phase_marker=$phaseMarker;marker=$finalMarker}
+$metadata=[ordered]@{status=$(if($null -eq $qualificationError -and $null -eq $cleanupError){"PASS"}else{"FAIL"});qualification_boundary="LOCAL_004_P04_BEAM_DEPENDENT_STRETCH";git_sha=$gitHead;public_product_version=$publicProductVersion;exact_source_link_verified=$true;bricscad_file_version=(Get-Item $bricscadExe).VersionInfo.FileVersion;plugin_sha256=(Get-FileHash $PluginDll -Algorithm SHA256).Hash.ToUpperInvariant();core_sha256=(Get-FileHash $coreDll -Algorithm SHA256).Hash.ToUpperInvariant();plugin_pdb_sha256=(Get-FileHash $pluginPdb -Algorithm SHA256).Hash.ToUpperInvariant();core_pdb_sha256=(Get-FileHash $corePdb -Algorithm SHA256).Hash.ToUpperInvariant();repository_fixture_sha256=$fixtureHash;drawing_persisted_changed=$persisted;sidecar_persisted=$sidecarPersisted;process_cleanup_verified=$processCleanup;script_cleanup_verified=$scriptCleanup;private_state_cleanup_verified=$privateCleanup;drawing_restore_verified=$drawingRestore;phase_marker=$phaseMarker;marker=$finalMarker}
 $metadata | ConvertTo-Json -Depth 5 | Set-Content $metadataPath -Encoding UTF8
 if ($null -ne $cleanupError) { throw "LOCAL-004 P04 cleanup failed." }
 if ($null -ne $qualificationError) { throw $qualificationError }

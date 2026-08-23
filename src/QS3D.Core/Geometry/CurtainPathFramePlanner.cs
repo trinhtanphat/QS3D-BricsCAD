@@ -100,7 +100,7 @@ namespace QS3D.Core.Geometry
                     throw new InvalidOperationException("Curtain frame rectangle starts outside the supported path/elevation extent.");
 
                 var end = Add(start, width, "curtain frame end station");
-                var stationTolerance = Math.Max(Tolerance, path.TotalLengthM * 1e-10d);
+                var stationTolerance = StationComparisonTolerance(path.TotalLengthM);
                 if (start > path.TotalLengthM + stationTolerance || end > path.TotalLengthM + stationTolerance)
                     throw new InvalidOperationException("Curtain frame rectangle exceeds the host path length.");
                 start = Math.Max(0d, Math.Min(path.TotalLengthM, start));
@@ -113,7 +113,7 @@ namespace QS3D.Core.Geometry
                     var segment = path.Segments[segmentIndex];
                     var overlapStart = Math.Max(start, segment.StartStationM);
                     var overlapEnd = Math.Min(end, segment.EndStationM);
-                    if (overlapEnd - overlapStart <= stationTolerance) continue;
+                    if (overlapEnd - overlapStart <= Tolerance) continue;
                     if (pieces.Count >= MaxPieces)
                         throw new InvalidOperationException("Curtain path frame mapping requires more than " + MaxPieces + " native pieces.");
 
@@ -147,7 +147,12 @@ namespace QS3D.Core.Geometry
             Finite(point.X, "curtain projection point X");
             Finite(point.Y, "curtain projection point Y");
 
-            CurtainPathProjection? best = null;
+            PathSegment? bestSegment = null;
+            Point2 bestPoint = default;
+            var bestRatio = 0d;
+            var bestDistance = 0d;
+            var bestIndex = -1;
+
             for (var index = 0; index < path.Segments.Count; index++)
             {
                 var segment = path.Segments[index];
@@ -159,17 +164,55 @@ namespace QS3D.Core.Geometry
                     Add(segment.Start.X, Multiply(segment.Dx, ratio, "curtain projection X delta"), "curtain projection X"),
                     Add(segment.Start.Y, Multiply(segment.Dy, ratio, "curtain projection Y delta"), "curtain projection Y"));
                 var distance = point.DistanceTo(projected);
-                var station = Add(segment.StartStationM, Multiply(segment.LengthM, ratio, "curtain projection station delta"), "curtain projection station");
-                var candidate = new CurtainPathProjection(station, distance, projected, index);
-                if (best == null || distance < best.DistanceM - Tolerance ||
-                    (Math.Abs(distance - best.DistanceM) <= Tolerance && station < best.StationM))
-                    best = candidate;
+
+                if (bestSegment == null || distance < bestDistance - Tolerance)
+                {
+                    bestSegment = segment;
+                    bestPoint = projected;
+                    bestRatio = ratio;
+                    bestDistance = distance;
+                    bestIndex = index;
+                    continue;
+                }
+
+                if (Math.Abs(distance - bestDistance) <= Tolerance)
+                {
+                    var candidateStation = ProjectionStation(segment, ratio);
+                    var currentStation = ProjectionStation(bestSegment, bestRatio);
+                    if (candidateStation < currentStation)
+                    {
+                        bestSegment = segment;
+                        bestPoint = projected;
+                        bestRatio = ratio;
+                        bestDistance = distance;
+                        bestIndex = index;
+                    }
+                }
             }
 
-            return best ?? throw new InvalidOperationException("Curtain path projection has no valid segment.");
+            if (bestSegment == null)
+                throw new InvalidOperationException("Curtain path projection has no valid segment.");
+            return new CurtainPathProjection(
+                ProjectionStation(bestSegment, bestRatio),
+                bestDistance,
+                bestPoint,
+                bestIndex);
         }
 
         public static double Length(IReadOnlyList<Point2> centerline) => BuildPath(centerline).TotalLengthM;
+
+        private static double ProjectionStation(PathSegment segment, double ratio)
+        {
+            ratio = Finite(ratio, "curtain projection ratio");
+            if (!(ratio > 0d)) return segment.StartStationM;
+            if (ratio >= 1d) return segment.EndStationM;
+
+            var delta = Multiply(segment.LengthM, ratio, "curtain projection station delta");
+            var station = Add(segment.StartStationM, delta, "curtain projection station");
+            if (!(station > segment.StartStationM) || !(station < segment.EndStationM))
+                throw new OverflowException("Curtain projection station lost an interior offset at floating-point precision.");
+            return station;
+        }
 
         private static double ProjectionRatio(PathSegment segment, double px, double py)
         {
@@ -224,6 +267,8 @@ namespace QS3D.Core.Geometry
                 var length = start.DistanceTo(end);
                 if (!(length > Tolerance)) throw new InvalidOperationException("Curtain host path contains a zero-length segment at index " + index + ".");
                 var endStation = Add(station, length, "curtain path cumulative length");
+                if (!(endStation > station))
+                    throw new OverflowException("Curtain path cumulative length lost a positive segment at floating-point precision.");
                 segments.Add(new PathSegment(start, end, station, endStation, length));
                 station = endStation;
             }
@@ -269,12 +314,28 @@ namespace QS3D.Core.Geometry
             return value;
         }
 
+        private static double StationComparisonTolerance(double station)
+        {
+            station = Finite(station, "curtain station tolerance reference");
+            var magnitude = Math.Abs(station);
+            if (magnitude == 0d) return Tolerance;
+
+            var bits = BitConverter.DoubleToInt64Bits(magnitude);
+            var adjacentBits = magnitude == double.MaxValue ? bits - 1L : bits + 1L;
+            var adjacent = BitConverter.Int64BitsToDouble(adjacentBits);
+            var ulp = Finite(Math.Abs(adjacent - magnitude), "curtain station tolerance ULP");
+            return Math.Max(Tolerance, Multiply(ulp, 4d, "curtain station tolerance ULP allowance"));
+        }
+
         private static double Midpoint(double left, double right, string label)
         {
             left = Finite(left, label + " left");
             right = Finite(right, label + " right");
             var delta = Finite(right - left, label + " delta");
-            return Add(left, delta / 2d, label);
+            var midpoint = Add(left, delta / 2d, label);
+            if (right > left && (!(midpoint > left) || !(midpoint < right)))
+                throw new OverflowException(label + " is not representable inside the station interval.");
+            return midpoint;
         }
 
         private static double Add(double left, double right, string label) => Finite(Finite(left, label + " left") + Finite(right, label + " right"), label);

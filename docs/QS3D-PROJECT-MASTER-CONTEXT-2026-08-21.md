@@ -1,108 +1,89 @@
-# QS3D PROJECT MASTER CONTEXT — CHAT, REQUIREMENTS, IMPLEMENTATION & GITHUB HISTORY
+# QS3D PROJECT MASTER CONTEXT — CHAT, REQUIREMENTS, IMPLEMENTATION, CI & GITHUB HISTORY
 
 **Project:** `trinhtanphat/QS3D-BricsCAD`  
-**Master note date:** 2026-08-21 (UTC+7)  
-**Purpose:** durable handoff / project knowledge base for future ChatGPT or agent sessions  
-**Canonical task for this note:** Issue `#3355`, Lane-Key `issue-3355`  
-**Status of this document:** repository context snapshot; current source and current GitHub state always win over stale historical wording
+**Updated through:** 2026-08-23 (UTC+7)  
+**Purpose:** canonical durable handoff / project knowledge base for future ChatGPT and agent sessions  
+**Refresh task:** Issue `#3583`, Lane-Key `issue-3583`  
+**Authoring baseline:** `main@227653b249e601961dab85bed12c7ce9a746ceb9`  
+**Canonical repo path:** `docs/QS3D-PROJECT-MASTER-CONTEXT-2026-08-21.md`
+
+> This is a summarized project record, not a verbatim transcript and not hidden chain-of-thought. Current source, current governance and live GitHub state always override stale historical snapshots.
 
 ---
 
-## 0. How to use this file
+## 0. How to use this note
 
-This file consolidates the project knowledge accumulated across recent QS3D conversations, especially the 2026-08-20 planning/requirements session and the 2026-08-21 implementation/CI/integration sessions.
+Use this file after a chat/session reset so the next agent does not need to rediscover the project from scratch.
 
-Use it to avoid re-deriving the same requirements and decisions from scratch when a chat context window resets.
+Precedence:
 
-Important precedence:
-
-1. current repository source;
-2. current `AGENTS.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `CI_POLICY.md`, `docs/PRODUCT-BOUNDARY.md` and the other active governance documents;
-3. current GitHub Issues/PRs/branches/checks;
+1. current repository source at current `main`;
+2. current `AGENTS.md`, `docs/AGENT-RUNTIME-CONTRACT.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `CI_POLICY.md`, product/registration/collision/lifecycle policies;
+3. current GitHub Issues, PRs, branches and exact-head CI;
 4. this master context;
-5. older chat wording / older patches / old handoffs.
+5. older chat wording, old branches, old handoffs and stale CI.
 
-This is a **knowledge and handoff document**, not proof of a licensed BricsCAD runtime PASS.
-
----
-
-# 1. Executive project summary
-
-QS3D is being developed as a BIM/QS workflow centered on fast quantity work inside BricsCAD.
-
-The user's recurring product goal is:
-
-> A QS engineer should be able to model or capture building elements, see and inspect the 3D model, calculate quantities, detect problematic geometry/quantity conditions, export to Excel, and trace a quantity/Excel row back to the exact CAD/BIM object with as few manual steps as practical (target: roughly 1–2 clicks for common review actions).
-
-The major capability groups repeatedly requested are:
-
-- project / floor / level / zone / family / type management;
-- authoring or capturing BIM-like structural/architectural elements;
-- native 3D geometry in BricsCAD;
-- object identity and provenance;
-- select / zoom / highlight / isolate / locate;
-- clash / intersection / overlap review;
-- quantity takeoff;
-- explainable quantities and formwork quantities;
-- readable Excel export;
-- reverse trace `Excel → CAD`;
-- Model / Quantity / Excel bidirectional traceability;
-- duplicate / stale / missing quantity detection;
-- save / reopen / recalculate stability;
-- low-click workflow for a QS engineer.
-
-A major theme of the implementation work is **reuse of one semantic/model/quantity truth**, not creation of parallel geometry or quantity engines.
+This note records user-facing facts, conclusions, requirements, decisions, observed diagnostics and repository evidence. It intentionally excludes passwords, activation credentials, private IP addresses, proprietary source/binary contents, private DWGs, unsanitized runtime artifacts and hidden reasoning.
 
 ---
 
-# 2. Current product boundary — authoritative over historical wording
+# 1. Executive product summary
 
-Historical conversation wording mentioned BIM3D, BricsCAD, AutoCAD, BLT3D, “app” / “giống BLT”, and possible standalone behavior.
+QS3D is a BIM/QS workflow hosted inside BricsCAD. The recurring customer goal is:
 
-The current repository decision is more specific.
+> A QS engineer should be able to author/capture building elements, review native 3D, calculate explainable quantities, detect coordination/quantity problems, export a readable Excel workbook and trace a quantity/Excel row back to the exact model object with as few manual steps as practical.
 
-## 2.1 `QS3D-BricsCAD` is a BricsCAD-hosted plugin
+Repeated capability groups:
 
-This repository ships a **Windows x64 BricsCAD plugin**, not a standalone QS3D CAD executable.
+- Project / Floor(Level) / Zone / Family / Type management;
+- semantic BIM-like Elements backed by BricsCAD-native geometry;
+- select / locate / zoom / highlight / isolate;
+- clash / intersection / overlap / duplicate review;
+- quantity takeoff and explainable quantity/formwork;
+- XLSX/CSV/report export;
+- `Excel → CAD` reverse trace;
+- stable Element ID / CAD Handle / drawing provenance;
+- save/reopen/regenerate determinism;
+- fail-closed handling of stale, malformed, ambiguous or unsupported data;
+- low-click QS review workflow.
 
-Host-specific assemblies:
+A recurring architectural rule is **one semantic/model/quantity truth**. Do not create parallel geometry, quantity or identity engines merely to implement a UI/export feature.
 
-- BricsCAD V25: `QS3D.BricsCAD.V25.dll`, `net48`;
-- BricsCAD V26: `QS3D.BricsCAD.V26.dll`, `net8.0-windows`;
-- shared `QS3D.Core`: currently `netstandard2.0`.
+---
 
-BricsCAD owns the native DWG database, editor/document lifecycle, viewport, selection, transactions and native CAD/3D APIs.
+# 2. Product boundary
 
-QS3D contributes commands, Ribbon, palettes / modeless WPF windows, semantic/project data, modeling/capture orchestration, quantity/reporting, recognition, guarded generated geometry workflows and plugin packaging/update logic.
+`QS3D-BricsCAD` is a **Windows x64 BricsCAD-hosted plugin**, not a standalone CAD desktop executable.
 
-## 2.2 Product-family split
+Host assemblies:
+
+- V25: `QS3D.BricsCAD.V25.dll`, `net48`;
+- V26: `QS3D.BricsCAD.V26.dll`, `net8.0-windows`;
+- shared Core: vendor-neutral domain logic.
+
+BricsCAD owns DWG database/editor/document lifecycle, viewport, transactions, native selection and native CAD geometry. QS3D owns commands, Ribbon/palettes, semantic/project data, modeling/capture orchestration, quantity/reporting, recognition, provenance and guarded generated-geometry workflows.
+
+Product-family direction:
 
 ```text
 QS3D-Platform
-vendor-neutral shared/domain layer
+vendor-neutral contracts/domain
         |
-        +-----------------------+
-        |                       |
-QS3D-BricsCAD              QS3D-CAD
-BricsCAD plugin            standalone CAD/BIM/QS product
+        +-------------------------+
+        |                         |
+QS3D-BricsCAD                QS3D-CAD
+BricsCAD plugin              standalone CAD/BIM/QS product
 ```
 
-Therefore:
+Historical AutoCAD wording does not mean this repo currently ships AutoCAD support.
 
-- “BLT-like” in this repo means **clean-room workflow/UX familiarity**, not “copy BLT” and not “ship QS3D.exe”;
-- a future standalone desktop shell belongs to `QS3D-CAD`;
-- shared vendor-neutral domain logic may progressively belong to `QS3D-Platform`;
-- V25 binaries must never be relabeled as V26 binaries.
-
-## 2.3 AutoCAD wording
-
-AutoCAD appeared in the early product exploration, but the current shipping boundary of this repository is BricsCAD V25/V26. Any future AutoCAD support must be treated as a separate explicit requirement/adapter/product decision rather than assumed from old chat text.
+“BLT-like”, “BLT-style”, “giống BLT” or “BLT3D-familiar” means **clean-room workflow/UX familiarity only**. Never copy proprietary BLT/BLT3D source/resources, never commit proprietary binaries as implementation dependencies, and never use activation/licensing workarounds as product logic.
 
 ---
 
-# 3. Requirement-management workflow agreed in the original planning session
+# 3. Requirements workflow agreed with the user
 
-The original planning conversation established a strict analysis workflow so implementation does not outrun the actual business requirement.
+The preferred requirements workflow is:
 
 ```text
 Problem P-xxx
@@ -126,9 +107,7 @@ Code
 Test / Acceptance
 ```
 
-The user is the final approver of important Problem / Requirement / Solution decisions.
-
-Useful status labels:
+Useful labels:
 
 - `[ĐÃ XÁC NHẬN]`
 - `[SUY LUẬN]`
@@ -137,282 +116,167 @@ Useful status labels:
 - `[MÂU THUẪN]`
 - `[RỦI RO]`
 
-Historical rule:
+Requirement traceability:
 
-> Do not silently convert a proposed Requirement or Solution into a final product baseline merely because ChatGPT suggested it.
+```text
+Requirement → Solution → Feature → Task → Test
+```
 
-When a business requirement changes substantially, represent it as a Change Request rather than silently rewriting old requirements.
+Do not silently convert an assistant proposal into an approved product baseline.
 
-A recovery instruction was defined:
+Recovery phrase when implementation drifts away from requirements:
 
-> `STOP implementation. Quay lại Requirement Mode.`
-
-This means: restate what is confirmed, what is inferred, what is still unclear, and what has actually been approved before continuing.
+`STOP implementation. Quay lại Requirement Mode.`
 
 ---
 
-# 4. Original Requirement Map
+# 4. Requirement map
 
 ```text
-QS3D / BIM Quantity System
-│
-├── A. MODEL
-│   ├── Load / author / capture model
-│   ├── Object identification
-│   ├── Properties
-│   └── Object mapping
-│
-├── B. 3D VIEW / REVIEW
-│   ├── Select
-│   ├── Zoom
-│   ├── Highlight
-│   ├── Isolate
-│   ├── Hide
-│   └── Live visualization
-│
-├── C. QUANTITY
-│   ├── Quantity takeoff
-│   ├── Rules
-│   ├── Grouping
-│   ├── Aggregation
-│   ├── Explanation
-│   └── Quantity → model trace
-│
-├── D. CHECK / QA
-│   ├── Clash
-│   ├── Overlap
-│   ├── Duplicate quantity
-│   ├── Missing quantity
-│   └── Highlight error/source
-│
-├── E. EXCEL
-│   ├── Export
-│   ├── Import / read
-│   ├── Sync / provenance
-│   └── Excel → Model
-│
-├── F. QS WORKFLOW
-│   ├── 1–2 click common review actions
-│   ├── Filter
-│   ├── Search
-│   ├── Review
-│   └── Audit trail
-│
-└── G. PLATFORM / HOST
-    ├── BricsCAD V25/V26
-    ├── Shared Core / Platform contracts
-    ├── Performance
-    ├── Persistence
-    └── Runtime qualification
-```
+MODEL
+  → author/capture
+  → identity/properties/mapping
+  → save/reopen/regenerate
 
-Current product-boundary documents determine which repository owns each capability.
+3D REVIEW
+  → select
+  → locate
+  → zoom
+  → highlight
+  → isolate
+
+QUANTITY
+  → engineering rules
+  → grouping
+  → aggregation
+  → explanation
+  → trace to model
+
+CHECK / QA
+  → clash
+  → overlap
+  → duplicate
+  → missing/inconsistent data
+  → highlight source
+
+EXCEL
+  → export
+  → read/import
+  → provenance
+  → integrity validation
+  → Excel → Model
+
+QS WORKFLOW
+  → low-click UX
+  → filter/search
+  → review
+  → audit
+
+PLATFORM / HOST
+  → Core
+  → BricsCAD V25
+  → BricsCAD V26
+  → persistence
+  → performance
+  → runtime qualification
+```
 
 ---
 
-# 5. Main user questions / requests and resulting answers or decisions
+# 5. Main user questions, requests and answers/decisions
 
-This is a summarized Q&A ledger rather than a word-for-word transcript.
+This is a summarized Q&A ledger, not a word-for-word transcript.
 
-## Q1 — “Look at the QS3D-BricsCAD source: does it already meet my BIM3D/QS requirements?”
+## Q1 — Does existing QS3D source already meet BIM3D/QS needs?
 
-### User intent
+**Answer:** the repository already contained major building blocks. The preferred direction is to harden and connect existing semantic, generated-geometry, quantity, export, provenance and review capabilities instead of rewriting from zero.
 
-Evaluate the current repository against model authoring, 3D display, location, clash/intersection, overlap, highlight, Excel, reverse trace to model and optimized QS workflow.
+## Q2 — How should requirements be communicated before coding?
 
-### Answer / decision
+**Answer:** use Problem → Requirement → Solution → Approval. Record user, input, action, output, acceptance, edge cases, dependencies and confirmation state; require traceability to implementation/tests.
 
-The repository already contained substantial building blocks, so the direction is **harden and connect existing capabilities**, not rewrite the system.
+## Q3 — Can QS3D behave like BLT3D without original source?
 
-Current-main truth documented by the active BIM3D-QS program includes:
+**Answer:** yes for independently observed workflow and UX. No copying proprietary source/assets/internal implementation. Preserve QS3D’s own semantic, geometry and quantity engines.
 
-- Project / Zone / Floor(Level) / Family / Type / semantic Element model;
-- Direct Draw and guarded authoring/build paths;
-- native BricsCAD `Solid3d` generation and ownership tracking;
-- quantity/BQ commands and schedules;
-- Excel/XLSX/CSV export paths with provenance in supported flows;
-- locate/highlight/focus/isolate;
-- persistence / regenerate / revision infrastructure.
+## Q4 — Add QS3D Excel menu and Excel → CAD.
 
-The remaining work is mainly workflow completeness, deterministic contracts, customer-facing Excel, explainable quantities/formwork, native modify/edit, broader legacy/interoperability, runtime qualification and UX reduction of manual steps.
-
-## Q2 — “How should I ask ChatGPT so it understands the full requirement before coding?”
-
-### Answer / decision
-
-Use a Problem → Requirement → Solution → Approval process.
-
-For every important requirement capture:
-
-- current problem;
-- target user;
-- input;
-- user action;
-- expected output;
-- acceptance criteria;
-- edge cases;
-- dependencies;
-- confirmed/unclear/proposed state.
-
-A requirement should trace through:
-
-```text
-Requirement
-→ Solution
-→ Feature
-→ Task
-→ Test
-```
-
-Do not accept plans that are only generic “Phase 1 / Phase 2” lists with no traceability.
-
-## Q3 — “Can QS3D be made to behave like the existing BLT3D EXE when the original source is gone?”
-
-### Answer / decision
-
-Yes for **clean-room business workflow and UX parity**, but not by copying proprietary implementation/assets.
-
-Allowed direction:
-
-- infer visible workflow, data contracts and user operations;
-- reimplement behavior independently in QS3D;
-- preserve QS3D's own semantic, geometry and quantity engines;
-- use BLT/BLT3D as a familiarity/reference target.
-
-Do not copy proprietary BLT source/assets, embed proprietary binaries as an implementation dependency, or guess unsupported legacy schemas.
-
-## Q4 — “Add a QS3D menu for Excel export and Excel → CAD.”
-
-### Historical early patch
-
-An early patch changed the quantity tab/menu wording to `QS3D`, renamed the visible export action to `Xuất Excel`, and added `Excel → CAD`.
-
-That early patch still used older command identities such as `QS3DED2` / `QS3DEXCELLOCATE`.
-
-### Current answer / evolution
-
-The later customer Excel workflow moved the visible compact quantity Ribbon to:
+Customer-facing compact Ribbon evolved to:
 
 - `Xuất Excel` → `QS3DEXCEL`;
 - `Excel → CAD` → `QS3DEXCELTRACE`.
 
-Legacy commands remain compatibility surfaces where applicable, but are not the primary customer-facing buttons in the compact workflow.
+Legacy commands such as `QS3DED2` / `QS3DREVDIFF` may remain callable and guarded without cluttering the primary customer Ribbon.
 
-## Q5 — “Export Excel and trace back to the model.”
+## Q5 — Export Excel and trace a row back to the model.
 
-### Answer / implementation direction
-
-This became:
+Agreed customer flow:
 
 ```text
 3D / Quantity
 → Xuất Excel
 → workbook with provenance
-→ select/read workbook trace
+→ TRACE_MODEL
 → Excel → CAD
-→ locate/select/highlight/zoom source object(s)
+→ validate live identity
+→ select / highlight / zoom source object(s)
 ```
 
-The customer workbook projection reuses the existing quantity engine.
+The workbook projection reuses existing quantity truth rather than introducing a second quantity engine.
 
-Workbook contract includes:
+## Q6 — Can a quantity row locate the model in 1–2 clicks?
 
-- `DGKL`;
-- `COP_PHA`;
-- `CHI_TIET`;
-- hidden `TRACE_MODEL`.
+**Answer:** yes. Use Element ID + CAD Handle + drawing fingerprint + integrity evidence, validate against live state, then Select / Zoom / Highlight / Isolate. Grouped rows must retain complete Element-ID ↔ Handle mapping.
 
-Trace provenance includes:
+## Q7 — Fix laggy logs during `NETLOAD`.
 
-- semantic Element ID;
-- canonical CAD Handle;
-- drawing fingerprint;
-- trace key / integrity binding.
+**Answer:** this is a real runtime/performance concern, but chat history alone is not enough to claim a durable fix. Inspect current startup/logging code and validate in the licensed host before closing the runtime concern.
 
-Malformed/tampered identity is rejected instead of guessed.
+## Q8 — Review everything, implement, commit/push, fix CI and merge main.
 
-## Q6 — “Can a quantity row be traced back to the model in one or two clicks?”
-
-### Answer / decision
-
-Yes, this is a core QS UX goal.
-
-```text
-Quantity / Excel row
-→ provenance
-→ CAD Handle / Element ID
-→ live resolution
-→ Select / Zoom / Highlight / Isolate
-```
-
-Grouped quantities must preserve the relationship between every Element ID and its source CAD Handle rather than storing only a lossy aggregate.
-
-## Q7 — “Fix laggy logs when NETLOADing the BricsCAD plugin.”
-
-### Current knowledge
-
-This performance/problem statement was explicitly raised.
-
-It should be treated as a plugin initialization/logging lifecycle defect, but this master note does **not** have sufficient exact current-source evidence to claim a specific final NETLOAD logging fix was landed.
-
-Future sessions must inspect current startup/logging code and Git history before stating that this item is complete.
-
-## Q8 — “Review the full chat, put the work into planning, implement, commit/push, check CI, then merge main.”
-
-### Answer / repository lifecycle decision
+Repository-safe lifecycle:
 
 ```text
 read current main + rules
-→ find/reuse leaf Issue
-→ Lane-Key = issue-N
-→ one canonical agent branch
-→ implementation/docs
+→ collision check
+→ one Issue/Lane-Key
+→ one canonical branch
+→ implement/docs
 → commit + push
 → exact-head branch CI
 → one canonical PR
-→ protected preflight + core on current candidate
-→ strict freshness / mergeability
-→ merge PR to main when authorized/standing same-task rule applies
+→ protected preflight + core
+→ strict freshness + mergeability
+→ expected-head merge
 → refresh main
 ```
 
-No direct contents write to `main`. No stale green CI. No duplicate carrier because a branch is inconvenient/red/behind.
+No direct task write to `main`.
 
-## Q9 — “CI says quantity topbar/ribbon parity preflights fail; fix it.”
+## Q9 — Quantity topbar/ribbon parity preflights fail; fix them.
 
-### Root cause
+Root cause: the new Ribbon correctly used `QS3DEXCEL` / `QS3DEXCELTRACE`, while two older guards still expected `QS3DED2` / `QS3DREVDIFF` as visible buttons.
 
-The new customer Ribbon intentionally used:
+Correct remediation: align visible-button guard expectations with the customer Excel workflow while keeping legacy command registration/behavior compatibility guards separately.
 
-- `Xuất Excel / QS3DEXCEL`;
-- `Excel → CAD / QS3DEXCELTRACE`;
-
-while two legacy preflight guards still expected:
-
-- `Xuất .blte2 / QS3DED2`;
-- `Đối chiếu Cũ/Mới / QS3DREVDIFF`.
-
-### Fix
-
-Updated the two guard scripts to check the current visible customer commands while separately preserving compatibility guards for legacy command registration/behavior.
-
-Important commits:
+Key commits:
 
 - `a34f4813099bb64aaf014f96d20337f9302aab2c`
 - `90870cdb8c5dcf5192006c513102911d95602a0d`
 
-## Q10 — “Continue fixing CI until green.”
+## Q10 — Continue fixing CI until green.
 
-### Important Excel-lane CI defects fixed
+Follow-on Excel-lane defects included:
 
-- nullable exporter fingerprint declaration;
+- nullable exporter fingerprint annotation;
 - nullable ZIP entry lookup;
-- nullable test helper return;
-- V25 scope resolution around explicit “all scope” behavior;
-- Excel text-cell maximum length;
-- oversized `TRACE_MODEL` regression.
+- nullable smoke helper;
+- V25 command scope representation;
+- Excel 32,767-character text-cell limit;
+- oversized `TRACE_MODEL` regression;
+- exact current-head/stale-run handling.
 
-Notable session commits included:
+Recorded commits include:
 
 - `cf4f97a02a3fc925168969ff960da7bbbb3578eb`
 - `48d65f19f76967603ae566b38f8a7597a8c92df1`
@@ -420,59 +284,83 @@ Notable session commits included:
 - `b737713e7603a8f98c463a0f25a3f981dfc98c3d`
 - `ee8fd86dd7cb400eb9e41917900283a0b9146cfb`
 
-## Q11 — “Fix the clash-boundary PR CI and merge.”
+Rule learned: exact current head wins. A cancelled CI run after a newer push is stale evidence, not itself a product failure.
 
-### Root cause
+## Q11 — Fix clash-boundary CI.
 
-A regression smoke used:
+Failure: `input.Reverse().ToArray()` bound to an in-place `Reverse()` returning `void`, causing `CS0023`.
 
-```csharp
-input.Reverse().ToArray()
-```
-
-On the targeted API surface, overload resolution hit an in-place `Reverse()` returning `void`.
-
-### Fix
-
-```csharp
-Enumerable.Reverse(input).ToArray()
-```
+Correct fixture: `Enumerable.Reverse(input).ToArray()`.
 
 Fix commit:
 
-`442c24a50005645303af8e5f458731352da88054`
+- `442c24a50005645303af8e5f458731352da88054`
 
-The later protected run passed deterministic smoke and V25 compile.
+## Q12 — Continue all PRs/issues/branches and merge main.
 
-## Q12 — “Keep going through all PRs/issues/branches.”
+“Continue all” means continue authorized/canonical lifecycle work. It does not justify:
 
-### Answer / governance constraint
+- stealing unrelated active carriers;
+- using stale green CI;
+- creating duplicate semantic lanes;
+- closing LOCAL_ONLY gaps without evidence;
+- direct-writing `main`;
+- force-updating branch protection;
+- fabricating completion.
 
-“Continue all” means continue the lifecycle of **authorized/canonical work**, not blindly mutate or close every open Issue.
+## Q13 — Can the BricsCAD/license-server setup be used for local-only builds/tests?
 
-Never steal another active canonical carrier, merge a LOCAL_ONLY lane from source-only evidence, close an umbrella/product gap merely to reduce the count, merge stale/red/unreviewed PRs, or create replacement PRs only to escape CI.
+**Answer:** an already authorized licensed environment can be used for legitimate local qualification, but activation/licensing material is private environment configuration, not repository source. Never commit credentials, activation secrets, proprietary licensing binaries or bypass logic.
 
-## Q13 — “Create one MD file with all knowledge/questions/answers, commit it to main, and give me the file.”
+User-provided environment note: licensing behavior for one BricsCAD major should not be assumed to qualify another major. V25/V26 qualification remains exact-host/exact-SHA evidence.
 
-### Current task
+## Q14 — What did `BLTFAMILYFIX` prove?
 
-This document is the result.
+A diagnostic showed that an in-memory family dictionary could be initialized without modifying the DLL on disk. Restart removes that RAM-only state.
 
-Canonical tracking:
+This proved a process-local diagnostic fact only. It did **not** fix the proprietary BLT plugin on disk and does not become QS3D implementation truth.
 
-- Issue `#3355`
-- Lane-Key `issue-3355`
-- branch `agent/interactive-20260821-0935-g56sol-context/issue-3355-project-master-context`
+## Q15 — Put all project knowledge/Q&A in one Markdown file and land it on main.
 
-Repo policy has no docs-only direct-main exception, so it must land through a PR with required protected checks.
+The canonical file is this file. Earlier master-context refreshes were #3355/#3357 and #3557/#3558. The current refresh is #3583.
+
+Repo policy has no docs-only direct-main exception, so the file must land through a dedicated branch/PR and protected `preflight + core`.
+
+## Q16 — Can a VPS that exposes only RDP port 33890 still use Git?
+
+General answer: inbound RDP exposure and outbound Git connectivity are different things. Git over HTTPS typically needs outbound TCP 443; SSH-based Git normally needs outbound TCP 22 unless an alternate transport is configured. Having only an inbound RDP port open does not by itself prevent outbound Git.
+
+Do not store the user’s private VPS IP/range in this project note.
+
+## Q17 — A VPS became unreachable after a command + restart. What principle applies?
+
+Treat restart/network/firewall/RDP changes as high-risk operational work. Preserve a recovery path before changing firewall/routing/RDP service settings. Do not infer that a Git-related command caused the outage unless logs/configuration prove it.
+
+## Q18 — Can Windows 11 be installed on an older i5-5200U machine without USB?
+
+User workstation context recorded in chat:
+
+- CPU reported by `wmic`: Intel Core i5-5200U @ 2.20 GHz;
+- machine initially had only `C:` visible;
+- no USB installation media was available;
+- the user considered shrinking `C:`/creating another partition and using installation files locally;
+- later installation progress appeared successful.
+
+General decision: unsupported-hardware Windows 11 installation may require compatibility checks/workarounds and carries update/support risk. Do not treat a screenshot or disk-space number alone as proof that every old file is gone; verify the actual partition/install choice and Windows.old/data state.
+
+## Q19 — After a clean/reinstall, are chipset/drivers needed?
+
+General answer: Windows Update usually supplies many drivers, but check Device Manager and OEM/platform drivers for chipset, graphics, Wi-Fi/LAN, audio and storage where needed. Do not install random driver packs when hardware is already healthy.
+
+## Q20 — Why are Windows power-mode choices such as “Best performance” missing?
+
+This is workstation/OS configuration, not QS3D source. Possible causes include Windows version/build, power-plan policy, legacy hardware/driver support, OEM power management, Modern Standby capability or current plan restrictions. Diagnose from actual `powercfg`/Settings state rather than assuming the UI should always expose the same choices.
 
 ---
 
 # 6. BIM3D-QS customer golden path
 
-The active umbrella program is Issue `#3142`.
-
-The current customer-first product priority is **BIM3D + quantity export**, not 4D/5D expansion.
+Umbrella: Issue `#3142`.
 
 ```text
 Project / Floor / Family
@@ -492,156 +380,63 @@ Tạo mới / Capture
 → tham số chính
 → 3D
 → Khối lượng
-→ Định vị / Diễn giải
+→ Định vị/Diễn giải
 → Xuất Excel
 ```
 
-P0 categories include:
+P0 categories repeatedly identified:
 
-- ArchitecturalWall;
-- Beam;
-- Column;
-- Slab;
-- StructuralWall;
-- Foundation;
-- Door / WallOpening for deductions/traceability.
+- ArchitecturalWall
+- Beam
+- Column
+- Slab
+- StructuralWall
+- Foundation
+- Door / WallOpening
 
-P0 quantity truth includes fields only where meaningful:
+P0 quantity truth should expose meaningful fields such as:
 
 - count;
 - length;
 - gross/net area;
 - gross/net volume;
 - opening/deduction evidence;
-- material/effective material;
+- effective material;
 - Floor/Zone/Family/category;
-- unit conversion;
-- source Handle;
-- semantic Element ID;
-- drawing fingerprint.
+- units;
+- source provenance.
 
-Deferred from this P0 customer milestone:
-
-- 4D scheduling;
-- 5D cost/rates/claims;
-- Primavera/MS Project/ERP;
-- generalized IFC/RVT round-trip completeness;
-- broad AI automation;
-- full MEP/fabrication parity;
-- standalone CAD behavior in this repository.
+4D/5D, ERP/Primavera/MS Project, generalized IFC/RVT completeness, broad AI automation and standalone CAD behavior are not the first BIM3D/QS critical path.
 
 ---
 
-# 7. Customer Excel / reverse-trace implementation knowledge
+# 7. Customer Excel / reverse trace
 
-## 7.1 Canonical customer Excel lane
-
-Historical lane:
+Historical canonical lane:
 
 - Issue `#3296`
 - PR `#3299`
 - branch `agent/chatgpt-gpt56sol/customer-excel-trace-3296`
 
-Key files recorded in that PR:
+Workbook sheets:
 
-- `docs/BIM3D-QS-CUSTOMER-EXCEL-TRACE-PLAN-3296.md`
-- `scripts/preflight-customer-excel-trace.py`
-- `scripts/preflight-quantity-topbar-reference.py`
-- `scripts/preflight-ribbon-quantity-reference-parity.py`
-- `src/QS3D.BricsCAD.V25/CustomerExcelCommands.cs`
-- `src/QS3D.BricsCAD.V25/Ribbon/QuantityReferenceRibbonAugmenter.cs`
-- `src/QS3D.BricsCAD.V25/Services/ExcelLocateResolutionService.cs`
-- `src/QS3D.Core/Export/QsCustomerWorkbookExporter.cs`
-- `src/QS3D.Core/Export/QsCustomerWorkbookTraceReader.cs`
-- focused Core smoke tests.
+- `DGKL`
+- `COP_PHA`
+- `CHI_TIET`
+- hidden `TRACE_MODEL`
 
-## 7.2 Provenance/integrity rules
+Integrity contract:
 
-1. grouped `Count` must match grouped Element IDs;
-2. CAD Handles are validated as canonical unsigned 64-bit identities;
-3. trace key is recomputed/verified;
-4. malformed/tampered trace provenance is rejected;
-5. aggregate/details scope stays coherent;
-6. generated Excel text cells obey the Excel text limit;
-7. grouped Element ID ↔ Handle relationships remain unambiguous.
+1. grouped Count matches grouped Element IDs;
+2. Handles are canonical unsigned 64-bit identity text;
+3. drawing fingerprint binds trace to the intended drawing;
+4. `TRACE_KEY` is recomputed/verified;
+5. malformed/tampered provenance is rejected;
+6. aggregate/detail scope stays coherent;
+7. Excel text cells obey the 32,767-character bound;
+8. grouped Element-ID ↔ Handle mapping stays unambiguous.
 
-The core customer promise is not just “export a spreadsheet”; it is:
-
-```text
-report row
-↔ semantic source
-↔ original/current drawing
-↔ CAD Handle
-↔ model object
-```
-
----
-
-# 8. Explainable quantities and formwork
-
-The user repeatedly identified formwork / quantity completeness as important BLT-like workflow gaps.
-
-Fresh `main` snapshot while creating this note:
-
-`6d7bd0870eabb4d6e42da8184924cdc81a7fb3e9`
-
-Latest verified commit message:
-
-`feat(quantity): add explainable formwork engine (#3350)`
-
-The commit states that the Core formwork calculation contract works over host-measured faces, reuses existing quantity rules/deduction gates, produces deterministic per-face trace and `FormworkM2`, and passed protected `preflight + core` on its exact candidate.
-
-This is important progress toward the earlier formwork gap, but source/Core evidence is still not identical to customer qualification on arbitrary historical/private DWGs.
-
----
-
-# 9. BLT / BLT3D clean-room knowledge
-
-BLT3D matters because the user wants QS3D to feel operationally familiar for modeling, quantity, formwork, Excel, reverse review and efficient QS workflow.
-
-The old source is unavailable, so use independently observable/public behavior and independently understood engineering/data contracts.
-
-Do not copy proprietary source/assets, make the EXE an implementation dependency, or manufacture unsupported category mappings.
-
-Fresh open PR snapshot includes:
-
-- Issue `#3352`
-- PR `#3354`
-- `feat: import legacy BLT3D objects without redraw`
-
-Its stated goal is to open old BLT3D-authored DWGs without redraw and recognize supported legacy structural objects into the existing QS3D semantic/quantity pipeline.
-
-It keeps source objects read-only/non-destructive and treats unsupported/ambiguous legacy schemas as fail-closed.
-
-Full historical schema/category mapping and real proxy behavior still require a real historical BLT3D DWG in licensed BricsCAD.
-
----
-
-# 10. Important CI / bug-fix timeline
-
-This is not a complete Git history.
-
-## 10.1 Earlier integration batch
-
-PR `#3295` was recorded as merged earlier.
-
-Recorded merge SHA:
-
-`db7cc6f15a828d166731cee8011dd5289e948422`
-
-## 10.2 Customer Excel lane — `#3296 / #3299`
-
-Major stages:
-
-- Ribbon/customer workbook implementation;
-- stale legacy parity guards caused preflight failures;
-- guards updated in `a34f4813...` and `90870cdb...`;
-- Core nullable compilation defects fixed;
-- workbook cell-size/tamper/integrity regressions added;
-- V25 command scope behavior fixed;
-- stale/cancelled runs discarded whenever the head changed.
-
-Final protected evidence recorded:
+Protected final evidence:
 
 - run `#32434789970`
 - `preflight = SUCCESS`
@@ -651,144 +446,425 @@ Final protected evidence recorded:
 
 Merge:
 
-`99dc024faafa4becc1a89fa61a894f69fba8aa49`
+- `99dc024faafa4becc1a89fa61a894f69fba8aa49`
 
-Issue `#3296` auto-closed/completed.
+Issue `#3296` closed/completed.
 
-## 10.3 Floating tool bound — `#3303 / #3307`
-
-Recorded protected run:
-
-`#32434196978`
-
-Recorded landed SHA:
-
-`a8dbee08bd8dd0a6241c23cd47e02f485d528a13`
-
-Issue `#3303` closed/completed.
-
-## 10.4 Clash regression boundary — `#3310 / #3312`
-
-Fix commit:
-
-`442c24a50005645303af8e5f458731352da88054`
-
-Final protected evidence:
-
-- run `#32435254406`
-- `preflight = SUCCESS`
-- `core = SUCCESS`
-- deterministic smoke = SUCCESS
-- V25 plugin compile = SUCCESS
-
-Recorded merge:
-
-`c80405e4cd1e0530b16acf1e98d580ef4e76cd0c`
-
-Issue `#3310` closed/completed.
-
-## 10.5 Later remote bug sweep integration — `#3338`
-
-Tracking Issue `#3337`, integration PR `#3338`, branch `integration/20260821-remote-bug-sweep`.
-
-The integration PR accumulated many source-safe fixes including Takeoff handle canonicality, estimating provenance coherence, grouped workbook provenance, audit bounds and other deterministic hardening.
-
-Fresh snapshot when this note was created:
-
-- PR `#3338` is **OPEN**
-- `merged = false`
-- `mergeable = true`
-- displayed head SHA `5667e27b137afdf8d668b9bd6f915e3bd21d2138`
-- displayed base SHA `5446d92dfb1216e4c7f064d7803a15b7dfe30dde`
-
-Current `main` has advanced beyond that base, so old green/failure conclusions must not be reused.
+Important boundary: this hosted CI evidence did not, by itself, prove licensed interactive BricsCAD runtime behavior.
 
 ---
 
-# 11. Current open-PR snapshot at note creation
+# 8. Other major CI/fix outcomes
 
-Current `main`:
+## 8.1 Earlier integration batch
 
-`6d7bd0870eabb4d6e42da8184924cdc81a7fb3e9`
+PR `#3295`, recorded merge:
 
-| PR | Scope | Target | Important note |
-|---|---|---|---|
-| `#3354` | legacy BLT3D objects without redraw | `main` | clean-room adapter; real legacy DWG remains PENDING_LOCAL |
-| `#3353` | XLSX shared-string support in customer trace reader | `main` | trace/provenance checks preserved |
-| `#3346` | repository-professionalism input hardening | `main` | governance/script lane |
-| `#3345` | AuditTrail aggregate text payload bound | `integration/20260821-remote-bug-sweep` | integration leaf |
-| `#3344` | floating interaction-surface state bound | `integration/20260821-remote-bug-sweep` | integration leaf |
-| `#3338` | remote bug-sweep combined integration | `main` | still open; refresh against newer main |
+- `db7cc6f15a828d166731cee8011dd5289e948422`
 
-The existence of these PRs does not imply this documentation lane owns or may rewrite them.
+It integrated many earlier source-safe PRs including #3078, #3235, #3106, #3011, #2966, #3045, #3029, #3012, #3000, #2902, #2929, #2912, #2896, #2878, #2886 and a clean transplant of #2871.
+
+## 8.2 Floating tool work-area bound
+
+- Issue `#3303`
+- PR `#3307`
+- protected run `#32434196978` green
+- landed SHA `a8dbee08bd8dd0a6241c23cd47e02f485d528a13`
+
+## 8.3 Clash regression boundary
+
+- Issue `#3310`
+- PR `#3312`
+- fix `442c24a50005645303af8e5f458731352da88054`
+- protected run `#32435254406` green
+- merge `c80405e4cd1e0530b16acf1e98d580ef4e76cd0c`
+
+## 8.4 Remote bug sweep integration
+
+Tracking Issue `#3337`, PR `#3338`, branch `integration/20260821-remote-bug-sweep`.
+
+The batch assembled source-safe hardening for:
+
+- Takeoff identity;
+- FeatureFlags names;
+- preview-review bounds;
+- Start Center bookkeeping;
+- aggregate-preflight environment hardening;
+- diagnostic/count contracts;
+- curtain/frame bounds;
+- revision identity;
+- workflow scanner hardening;
+- estimating provenance;
+- grouped workbook provenance;
+- audit payload bounds.
+
+Historical nuance: intermediate CI included red source-guard runs. Those are stale diagnostics after landing.
+
+Verified historical landing:
+
+- final integration head `8f490d4581330607e8a8b7c8878b3069870574ab`;
+- merge commit `ab9ef0fe761ce9ea243576b295359c304e5e33b4`.
+
+Do not treat old run `#32437200807` as a current blocker after that merge.
 
 ---
 
-# 12. Important active/open program and product-gap Issues
+# 9. BLT3D debugging context — observed behavior only
 
-- `#3142` — BIM3D-QS customer-first modeling → quantity export MVP. Umbrella only; each concrete child has its own leaf Issue.
-- `#72` — licensed V25 exact-SHA qualification. Remote/static CI cannot substitute for this.
-- `#74` — Direct Draw transient preview / repeated authoring. Product/runtime UX gap.
-- `#73` — advanced/multi-owner wall geometry ownership. Native materialization remains runtime-sensitive.
-- `#84` — broader interoperability/import-export. Substantial semantic work exists but full round-trip/native coverage is incomplete.
+This section records user-visible diagnostics from the BLT3D troubleshooting sessions. It is **not** QS3D source truth and must not be used to copy proprietary implementation.
 
-Do not close these merely because related source code exists.
+## 9.1 Goal
+
+The user’s stated goal was to diagnose/fix BLT3D behavior itself for testing, not to move BLT3D proprietary code into QS3D.
+
+Primary defect discussed:
+
+> Draw a wall with an opening; formwork on the top horizontal face above the opening is missing.
+
+A second recurring symptom was quantity output staying at zero.
+
+## 9.2 Runtime/environment observations
+
+Observed/user-reported items included:
+
+- BricsCAD with .NET runtime `v4.0.30319`;
+- `APPLOAD` used for DLL loading;
+- files/packages referenced during diagnostics included `blt3D.dll`, `blt3D.pdb`, `BltColumnWrapper.dll` and temporary diagnostic/patch DLLs;
+- DLL Unblock was checked during troubleshooting;
+- some load attempts produced “module expected to contain an assembly manifest” or other load/reset-family errors;
+- later wrapper load showed the BLT panel.
+
+No proprietary binary should be committed into QS3D based on these tests.
+
+## 9.3 Wall creation behavior observed
+
+User-reported interaction:
+
+- two points only did not generate the wall;
+- three collinear points such as start → middle → end, then Enter, did generate a wall;
+- shorthand observation: “click click click → Enter” worked.
+
+This is an observed UI behavior, not an architectural requirement unless separately approved.
+
+## 9.4 Property/edit behavior
+
+Commands/settings used:
+
+- `DBLCLKEDIT=1`
+- `PICKFIRST=1`
+- double-click/property-panel testing
+- `B4D`
+- diagnostic commands such as `BLTENTITY`, `BLTHANDLE`, `BLTFAMILY`, `BLTFAMILYFIXSTATUS`, `BLTFAMILYFIX`
+
+## 9.5 Quantity symptom
+
+Repeated user observation:
+
+- generated wall existed;
+- `B4D` returned quantity/formwork values of zero in tested cases.
+
+This remained diagnostic evidence, not a verified final fix.
+
+## 9.6 `BLTENTITY`
+
+Observed diagnostic result included:
+
+- selected entity was a `Solid3d`;
+- non-zero raw volume was reported;
+- clone/explode operations produced Regions;
+- extents were available.
+
+Interpretation: the CAD solid itself existed and had geometric volume; the zero-quantity symptom was therefore not simply “no geometry exists”.
+
+## 9.7 `BLTHANDLE`
+
+Observed at different points:
+
+- one lookup succeeded and returned a valid ObjectId;
+- another diagnostic later reported `link_CShap not found`.
+
+Interpretation: object identity/association or expected metadata/linkage was a plausible failure surface.
+
+## 9.8 `BLTFAMILY` / `BLTFAMILYFIX`
+
+Observed:
+
+- `NameConverter` came from `blt3D` assembly;
+- `s_listSemilerName` was initially `<null>`;
+- `BLTFAMILYFIX` initialized a `Dictionary<String, blt_family>` in RAM;
+- no DLL on disk was modified;
+- restart would roll the in-memory change back.
+
+Interpretation: a missing process-local family dictionary was demonstrated as one runtime condition. It did not prove the complete root cause of all B4D/formwork failures.
+
+## 9.9 Errors observed
+
+Messages seen included variants of:
+
+- `Lỗi cai_danh_sach_family_hien_huu`
+- `Lỗi reset_danh_sach_family_hien_huu`
+- `General modeling failure`
+
+These are historical diagnostic clues only.
+
+## 9.10 Clean-room boundary
+
+Allowed for QS3D:
+
+- learn from observable user workflows;
+- model independent business rules;
+- implement equivalent customer outcomes in QS3D’s own architecture.
+
+Not allowed:
+
+- copy BLT/BLT3D proprietary source;
+- commit proprietary binaries/resources;
+- depend on undocumented proprietary internals;
+- treat a temporary memory patch as a product implementation.
 
 ---
 
-# 13. Repository collaboration rules — condensed operational contract
+# 10. Explainable quantity/formwork and engineering truth
 
-## 13.1 `main` is PR-only
+Formwork/quantity explanation was repeatedly identified as a major BLT-like customer gap.
 
-No direct contents write, direct ref update, force push or equivalent task write to `main`, including docs/Markdown.
+Engineering quantities must come from authoritative semantic/native geometry and unit rules. Do not generate plausible-looking concrete/formwork values from bounding-box guesses when exact evidence is required.
 
-## 13.2 Same-task standing merge lifecycle
+Source/Core tests can prove deterministic contracts, but not arbitrary/private DWG geometry or licensed interactive UX.
 
-For normal owner-requested work, once the current canonical PR is current, fresh, mergeable and required checks are green, the same-task owner session should proactively merge unless the user explicitly opted out.
-
-## 13.3 Required protected checks
-
-- `preflight`
-- `core`
-
-Strict freshness applies. Older green SHA/cancelled/stale runs do not count.
-
-## 13.4 Lane identity
+For openings, deductions and formwork faces, preserve an explainable trace:
 
 ```text
-Issue #N
-Lane-Key: issue-N
-Branch: agent/<unique-owner-token>/issue-N-<scope>
-PR: allocated later
+source element
+→ measured geometry / recognized topology
+→ rule / deduction
+→ quantity component
+→ aggregate row
+→ model trace
 ```
-
-Never guess Issue/PR numbers or reuse an umbrella number as the child implementation identity.
-
-## 13.5 One canonical carrier
-
-One semantic task → one active owner, one canonical branch, one canonical PR.
-
-A red/behind/inconvenient branch is not a reason to create a competing carrier.
-
-## 13.6 Concurrent work
-
-If another canonical owner pushes the same file while a session is editing: do not overwrite; refresh; preserve the winning implementation; continue only under ownership/coordination rules.
-
-## 13.7 Branch and PR CI
-
-`agent/**` and `integration/**` receive automatic branch CI.
-
-PRs receive protected candidate validation.
-
-A known red exact-head branch failure must be investigated on the same carrier.
-
-## 13.8 Multi-agent integration
-
-Use `integration/<batch-id>` where appropriate and validate the combined tree.
 
 ---
 
-# 14. CI evidence classes — do not confuse them
+# 11. Clean-room BLT / legacy rules
+
+Allowed:
+
+- observe user-visible behavior;
+- infer independent business workflows/data contracts;
+- reimplement independently inside QS3D architecture;
+- build clean-room compatibility tests from public/authorized observations.
+
+Forbidden:
+
+- copy proprietary source/resources;
+- commit proprietary binaries;
+- rely on undocumented internals as repository authority;
+- invent unsupported legacy mappings;
+- implement license bypass/activation circumvention.
+
+Historical/private BLT DWG/proxy behavior remains a licensed/private-fixture qualification boundary where applicable.
+
+---
+
+# 12. Windows/workstation context
+
+These are support notes from user conversations, not QS3D product requirements.
+
+## 12.1 Older CPU / Windows 11
+
+User-reported CPU:
+
+`Intel(R) Core(TM) i5-5200U CPU @ 2.20GHz`
+
+This is older than Microsoft’s normal supported Windows 11 CPU list. Installation/upgrade may therefore involve compatibility exceptions and should be treated as unsupported-hardware risk unless Microsoft/OEM support status changes.
+
+## 12.2 No USB / only C: drive
+
+User described:
+
+- no USB installation media;
+- only `C:` visible initially;
+- desire to install using local installation files/partitioning.
+
+Safe principle:
+
+- back up important data;
+- distinguish ISO/media files from actual partitions;
+- do not format/delete the only data partition unless the intended clean-install outcome is explicit;
+- verify actual disk/partition choices before assuming old data is gone.
+
+## 12.3 Driver check after install
+
+Recommended verification:
+
+- run Windows Update;
+- inspect Device Manager for unknown/problem devices;
+- install OEM/platform chipset, graphics, network, audio or storage drivers only when needed;
+- avoid untrusted “driver pack” utilities.
+
+## 12.4 Power mode
+
+Missing “Best performance” UI options can depend on Windows build, power plan, OEM firmware/drivers and platform capability. Use actual `powercfg` output/Settings state to diagnose rather than assuming every machine exposes identical choices.
+
+---
+
+# 13. VPS/network/Git operational context
+
+These notes intentionally omit private IP addresses.
+
+## 13.1 RDP port vs Git connectivity
+
+A VPS exposing an inbound RDP port does not tell whether outbound Git works.
+
+Typical requirements:
+
+- Git HTTPS: outbound TCP 443;
+- Git SSH: outbound TCP 22 unless alternate SSH-over-443 or another approved transport is configured;
+- DNS resolution must work;
+- local firewall/proxy/TLS policy must permit the chosen transport.
+
+## 13.2 Restart/inaccessibility incident
+
+User reported a VPS becoming unreachable after a command and restart.
+
+Operational lesson:
+
+- before firewall/RDP/network changes, preserve an out-of-band recovery path if available;
+- record current rules/configuration;
+- make reversible, narrow changes;
+- validate RDP service/listener/firewall/routing before reboot;
+- do not attribute the outage to a specific prior command without evidence.
+
+## 13.3 Repository boundary
+
+Do not commit:
+
+- private IP inventories;
+- passwords;
+- RDP credentials;
+- VPN/proxy secrets;
+- private SSH keys;
+- cloud credentials.
+
+---
+
+# 14. BricsCAD license/build-server context
+
+User discussed using a server/activation setup so local agents could run BricsCAD-related checks and build local-only branches.
+
+Project rule:
+
+- an already authorized licensed environment can be used for legitimate testing/builds;
+- license server configuration is environment infrastructure, not application source;
+- do not commit secrets, activation files, proprietary licensing binaries or machine-specific credentials;
+- do not implement activation bypass logic;
+- V25/V26 runtime qualification must be performed with the matching host major and exact source SHA.
+
+A clean hosted compile against managed/pinned BricsCAD references is not the same as licensed interactive `NETLOAD`/DemandLoad qualification.
+
+---
+
+# 15. Runtime qualification boundary
+
+Remote/source agents can prove:
+
+- source contracts;
+- deterministic Core tests;
+- preflight guards;
+- build/compile compatibility;
+- package/source integrity.
+
+They cannot honestly infer without execution:
+
+- licensed `NETLOAD`;
+- real DemandLoad startup;
+- Ribbon/WPF/palette interaction;
+- native editor/document lifecycle;
+- Undo/Redo;
+- SaveAs + cold reopen;
+- multi-DWG behavior;
+- DPI/multi-monitor behavior;
+- historical proxy behavior;
+- signing/trust;
+- clean-machine install/update/uninstall;
+- private-DWG/customer acceptance.
+
+Use `LOCAL_ONLY`, `PENDING_LOCAL`, `LOCAL_PASS`, `LOCAL_PARTIAL` precisely.
+
+Managed-reference V25 compile is not licensed interactive runtime PASS.
+
+---
+
+# 16. Current licensed Wall Snap P02 finding
+
+Snapshot at authoring baseline `main@227653b249e601961dab85bed12c7ce9a746ceb9`.
+
+Latest main commit merged sanitized LOCAL-007 P02 evidence through PR `#3602`.
+
+The local P02 qualification issue is:
+
+- `#3599` — `[LOCAL-007 P02] qualify V25 Wall Snap preview/apply lifecycle`
+- state at snapshot: open
+- current classification: `LOCAL_PARTIAL / PENDING_REMOTE`
+
+Two remote source defects were discovered by licensed BricsCAD V25.2.10 execution on exact candidate `b6cd726ef76c5fc0c9c044d5823b341004c912cd`.
+
+## 16.1 Issue #3600 — Preview revision self-invalidation
+
+Observed behavior:
+
+- `QS3DWALLSNAPPREVIEW` produced the intended one-edit plan;
+- project revision advanced more than the existing reserved headroom;
+- persisted preview change-version ended behind final project `ChangeVersion`;
+- unchanged immediate `QS3DWALLSNAPAPPLY` rejected its own fresh Preview as stale.
+
+Required remote fix:
+
+- make Preview metadata publication revision-atomic or account for all bounded mutations;
+- persist preview version equal to final Preview project version;
+- ensure same-project/same-source/same-plan Preview → Apply succeeds;
+- add source-safe regression around the real bound metadata dictionary.
+
+Do not mark LOCAL_PASS until an exact-SHA licensed rerun succeeds.
+
+## 16.2 Issue #3601 — replacement project remains cached after prompt drift
+
+Observed behavior:
+
+- sidecar/project changed while Apply selection was active;
+- Apply correctly failed closed with no CAD/semantic/sidecar mutation;
+- however the replacement project remained in the project cache after refusal.
+
+Required remote fix:
+
+- on ProjectId/ChangeVersion mismatch after final mutation bind, forget newly bound replacement cache;
+- preserve non-creating absent-sidecar behavior;
+- add deterministic source-safe regression asserting no cached replacement remains.
+
+Again, exact-SHA licensed rerun is required afterward.
+
+---
+
+# 17. Repository collaboration / Git lifecycle
+
+Current policy principles:
+
+- `main` is direct-write read-only for normal task work;
+- there is no docs-only direct-main exception;
+- one semantic task uses one canonical Lane-Key/carrier;
+- normal Lane-Key is `issue-N`;
+- if an equivalent active carrier exists: `DUPLICATE_CARRIER / NO MUTATION`;
+- a red current-carrier CI triggers diagnose/fix/push/recheck on the same carrier;
+- branch CI validates an exact branch SHA;
+- protected PR CI validates the current PR candidate;
+- merge requires current `preflight + core`, strict freshness, collision/review cleanliness, mergeability and expected-head match;
+- ordinary docs still receive branch/PR CI;
+- normal owner-task endpoint is `MERGED_MAIN` unless explicitly opted out or truly blocked;
+- `continue all` does not authorize unrelated bulk merges unless the owner explicitly establishes integration scope.
+
+---
+
+# 18. CI evidence classes and concurrency rules
 
 ```text
 edited
@@ -801,209 +877,206 @@ edited
 != licensed runtime PASS
 ```
 
-- branch CI green proves one exact branch SHA;
-- PR CI green proves one current PR candidate;
-- merged main proves landing;
-- cloud/release CI proves release/build/package checks for an exact SHA;
-- licensed runtime PASS requires actual host execution;
-- private-DWG/customer acceptance requires the specified fixtures/scenarios.
+Key concurrency lessons:
+
+- a `409` stale-blob write conflict usually means another canonical owner pushed first;
+- refresh instead of overwriting;
+- a cancelled run after a newer head appears is stale evidence, not a product failure;
+- never use an older green SHA as evidence for a changed head;
+- do not close/recreate a canonical PR merely to make branch-CI timestamps look prettier;
+- exact current candidate wins.
 
 ---
 
-# 15. Runtime qualification boundary
+# 19. Repeated hardening lessons
 
-Remote agents can prove source contracts, deterministic Core tests, static preflights, build correctness, compile compatibility and package/source integrity.
-
-Remote agents cannot honestly prove without execution:
-
-- licensed BricsCAD `NETLOAD`;
-- DemandLoad on a real workstation;
-- real WPF/Ribbon/palette interaction;
-- native editor/command lifecycle;
-- real Undo/Redo;
-- save/reopen on representative/private DWGs;
-- proxy behavior of historical BLT3D objects;
-- DPI/multi-monitor behavior;
-- signing credentials;
-- clean-machine deployment.
-
-Use `PENDING_LOCAL` / `LOCAL_ONLY` where appropriate.
-
----
-
-# 16. Historical early Excel menu patch vs current source
-
-A prior session produced `QS3D-Excel-Menu.patch`.
-
-Historical intent:
-
-- rename quantity tab to `QS3D`;
-- change visible `.blte2` wording to `Xuất Excel`;
-- add `Excel → CAD`.
-
-It is useful as requirement history but is **not current implementation truth**.
-
-Later customer Excel work evolved routing to `QS3DEXCEL` and `QS3DEXCELTRACE`, with older commands retained as compatibility behavior rather than primary customer buttons.
+- reject noncanonical/padded identity instead of silently aliasing;
+- reject raw control characters before Trim can erase them;
+- validate known collection counts against traversal counts;
+- bound collections, strings, packages and input sizes;
+- reject malformed Unicode/XML/package data fail-closed;
+- preserve Element-ID ↔ Handle provenance;
+- distinguish optional empty state from malformed non-empty identity;
+- recompute integrity keys rather than trusting persisted/imported text;
+- avoid silent truncation;
+- preserve exact numeric predicates where binary64 cancellation changes topology;
+- keep Core host-independent;
+- keep native objects inside bounded document/transaction lifetimes;
+- avoid queued command re-entry when it can lose PICKFIRST/document affinity;
+- source/static guards must be backed by deterministic tests where feasible;
+- local runtime findings can reveal defects that static guards miss.
 
 ---
 
-# 17. Quantity / engineering data expectations
+# 20. Strong source capability vs remaining gaps
 
-A sample quantity discussion used fields such as:
+**Strong/substantial:**
 
-- element;
-- type;
-- floor;
-- length;
-- width;
-- height;
-- concrete volume `BT m³`;
-- formwork `VK m²`.
-
-These values must come from authoritative geometry/quantity rules with units and provenance.
-
-Never compute nice-looking rows from bounding-box guesses when exact semantic/native evidence is required.
-
-For historical/proxy/legacy content, lack of authoritative evidence should result in blocked/unsupported/auditable output rather than fabricated BT/VK.
-
----
-
-# 18. Architecture principles inferred from the work
-
-## One semantic truth
-
-Do not create separate parallel models for CAD, quantity, Excel and trace-back. Maintain explicit mappings.
-
-## Provenance is a first-class domain concern
-
-Element ID, CAD Handle, drawing fingerprint, trace key and generated ownership must be canonical, validated and fail-closed.
-
-## Determinism over convenience
-
-Repeated hardening themes:
-
-- reject padded/noncanonical identity;
-- validate collection counts before iteration/order;
-- bound inputs;
-- reject malformed package/XML data;
-- do not normalize semantic IDs into ambiguous aliases;
-- no silent truncation.
-
-## Host isolation
-
-Keep Core/domain logic testable without BricsCAD references. Keep native types behind host adapters.
-
-## Compatibility without UI clutter
-
-Legacy commands can remain callable/guarded while the customer Ribbon presents a simpler modern workflow.
-
----
-
-# 19. What is already strong vs still a gap
-
-## Strong / substantial source capability
-
-- project/floor/zone/family semantic model;
-- multiple Direct Draw/capture/build paths;
-- native Solid3d ownership;
-- quantity/BQ infrastructure;
-- Excel/XLSX/CSV infrastructure;
-- provenance and reverse trace;
+- project/floor/zone/family semantics;
+- author/capture paths;
+- generated ownership;
+- quantity/BQ;
+- XLSX/CSV/reporting;
+- provenance/reverse trace;
 - locate/highlight/isolate;
-- deterministic Core testing;
-- strict CI governance;
-- explainable formwork engine on current main;
+- deterministic Core smoke;
+- CI governance;
+- explainable/formwork source contracts;
 - extensive fail-closed hardening.
 
-## Still active / incomplete / environment-dependent
+**Still active/incomplete/environment-dependent:**
 
-- exact customer runtime qualification on licensed BricsCAD;
-- full historical BLT3D DWG schema/proxy interoperability;
-- repeated/transient Direct Draw UX;
-- rich native modify/edit flow;
-- advanced multi-owner/native geometry;
-- broader interoperability formats/round-trip completeness;
-- some V25/V26 parity/runtime surfaces;
+- full licensed V25/V26 customer qualification;
+- current Wall Snap Preview/Apply defects #3600/#3601;
+- Direct Draw transient/repeated UX;
+- richer native edit lifecycle;
+- advanced multi-owner geometry;
+- broader interoperability;
+- historical BLT proxy/schema coverage;
 - private-DWG acceptance;
-- current open integration/leaf PRs;
-- future AutoCAD support if explicitly required;
-- standalone desktop behavior, which belongs to `QS3D-CAD`.
+- V26 release/runtime parity;
+- selected coordination persistence/relink/product-pilot work.
 
 ---
 
-# 20. Recommended next-session startup checklist
+# 21. Historical GitHub lifecycle outcomes
 
-1. read this document;
-2. read current `AGENTS.md`;
-3. read current `docs/MAIN-WRITE-AUTHORIZATION.md`;
-4. read current `docs/PRODUCT-BOUNDARY.md`;
-5. read current `CI_POLICY.md`;
-6. fetch current `main` and record exact SHA;
-7. search relevant open Issues/PRs;
-8. check Lane-Key ownership;
-9. inspect current source for the feature;
-10. treat old implementation details as history unless current source confirms them;
-11. never create a duplicate carrier;
-12. continue remote-safe work only on the canonical remote lane;
-13. hand off licensed/private-fixture scenarios instead of claiming PASS;
-14. follow full PR/check/freshness lifecycle to `MERGED_MAIN` when same-task policy authorizes it.
+Important historical evidence:
 
----
+## Customer Excel
 
-# 21. Compact master context for a future chat
+- Issue #3296
+- PR #3299
+- protected run #32434789970 green
+- merge `99dc024faafa4becc1a89fa61a894f69fba8aa49`
 
-> Project: `trinhtanphat/QS3D-BricsCAD`.
->
-> QS3D-BricsCAD is a BricsCAD V25/V26 hosted plugin, not a standalone EXE. Standalone belongs to `QS3D-CAD`; vendor-neutral shared/domain work belongs progressively to `QS3D-Platform`.
->
-> Product goal: optimize a BIM3D/QS engineer workflow: author/capture model → native 3D → quantity → explain/locate/highlight → Excel → Excel-to-CAD reverse trace, with deterministic provenance and common review actions around 1–2 clicks.
->
-> Historical BA workflow: Problem P-xxx → Requirement R-xxx → Solution S-xxx → User Approval → Gap Analysis → Architecture → Plan → Task → Code → Test.
->
-> BLT/BLT3D is clean-room workflow/UX reference only.
->
-> Customer Excel uses `QS3DEXCEL` and `QS3DEXCELTRACE` with Element ID + CAD Handle + drawing fingerprint + trace integrity.
->
-> Completed major lane: #3296/#3299 customer workbook + reverse trace; run #32434789970 green; merge `99dc024faafa4becc1a89fa61a894f69fba8aa49`.
->
-> Completed major lane: #3310/#3312 clash-boundary smoke; run #32435254406 green; recorded merge `c80405e4cd1e0530b16acf1e98d580ef4e76cd0c`.
->
-> Current-main snapshot while preparing this note: `6d7bd0870eabb4d6e42da8184924cdc81a7fb3e9`, latest commit adds explainable formwork.
->
-> At note creation #3338, #3344, #3345, #3346, #3353 and #3354 were open; always refresh live state.
->
-> Repo rules: main PR-only; one Issue/Lane-Key/branch/PR per task; new leaf Lane-Key = `issue-N`; automatic branch CI; protected merge requires current `preflight + core` SUCCESS, strict freshness and mergeability; no stale green; no false licensed runtime PASS.
->
-> Runtime qualification remains separate, especially Issue #72.
+## Floating tool bound
+
+- Issue #3303
+- PR #3307
+- run #32434196978 green
+- landed `a8dbee08bd8dd0a6241c23cd47e02f485d528a13`
+
+## Clash boundary regression
+
+- Issue #3310
+- PR #3312
+- run #32435254406 green
+- merge `c80405e4cd1e0530b16acf1e98d580ef4e76cd0c`
+
+## Remote bug sweep
+
+- Issue #3337
+- PR #3338
+- merge `ab9ef0fe761ce9ea243576b295359c304e5e33b4`
+
+## Master context provenance
+
+- Issue #3355 / PR #3357 — initial canonical master-context creation;
+- Issue #3557 / PR #3558 — refresh through 2026-08-22;
+- Issue #3583 — current refresh task for the same canonical file.
+
+Old CI/run/head data in this file is historical evidence only. Refresh GitHub before acting.
 
 ---
 
-# 22. Source / provenance of this master note
+# 22. Current repository snapshot
+
+Snapshot time: 2026-08-23 (UTC+7).
+
+At the moment this refresh lane was registered:
+
+- `main = 227653b249e601961dab85bed12c7ce9a746ceb9`;
+- latest main merge: PR #3602, sanitized LOCAL-007 P02 Wall Snap qualification evidence;
+- open PR search returned `0`;
+- #3599 remained open for local Wall Snap P02 rerun;
+- #3600 remained open for Preview revision accounting;
+- #3601 remained open for replacement-project cache cleanup.
+
+This snapshot is intentionally time-bounded. Concurrent agents may advance `main` immediately after it is written.
+
+---
+
+# 23. Current master-note refresh task
+
+- Issue: `#3583`
+- Lane-Key: `issue-3583`
+- owner/session: `chatgpt-gpt56sol-20260822-master-note1`
+- branch: `agent/chatgpt-gpt56sol-20260822-master-note1/issue-3583-project-knowledge-note`
+- starting baseline: `227653b249e601961dab85bed12c7ce9a746ceb9`
+- file: `docs/QS3D-PROJECT-MASTER-CONTEXT-2026-08-21.md`
+- scope: `ORDINARY_DOCS`
+- production/source changes: none
+- merge path: protected PR only
+- required checks: current `preflight + core`
+- runtime claim: none
+
+This refresh updates the existing canonical repo file rather than creating a competing master document.
+
+---
+
+# 24. Future-session startup checklist
+
+1. Read current `AGENTS.md`.
+2. Read current `docs/AGENT-RUNTIME-CONTRACT.md`.
+3. Read current main-write, CI, product, registration/collision/lifecycle rules.
+4. Resolve current `origin/main` to exact SHA.
+5. Check relevant live Issues/PRs/claims to avoid collision.
+6. Reuse the canonical carrier if the Lane-Key already exists.
+7. Inspect current source; treat this file as context/history.
+8. Fix red CI on the same carrier.
+9. Never use stale green evidence after head/base changes.
+10. Never direct-write or force-update `main`.
+11. Merge same-task PR only after fresh protected gates and expected-head verification.
+12. Do not claim licensed runtime PASS from hosted CI.
+13. Keep private DWGs, network details, activation/license secrets and proprietary artifacts out of Git.
+14. If a local runtime finding creates a source-safe defect, hand it to a remote/source lane and rerun local qualification only on the new exact SHA.
+
+---
+
+# 25. Compact handoff
+
+> QS3D-BricsCAD is a BricsCAD V25/V26 hosted BIM/QS plugin.
+>
+> Customer goal: author/capture → native 3D → quantity → explain/locate/highlight → Excel → Excel-to-CAD reverse trace with deterministic provenance and low-click review.
+>
+> Requirements workflow: Problem → Requirement → Solution → User Approval → Gap → Architecture → Plan → Task → Code → Test.
+>
+> BLT/BLT3D is a clean-room workflow/UX reference only. Historical BLT diagnostics showed real Solid3d geometry, B4D zero-quantity symptoms, identity/family-link issues and a process-local `s_listSemilerName` initialization experiment; none of that authorizes copying proprietary internals.
+>
+> Customer Excel uses `QS3DEXCEL` / `QS3DEXCELTRACE`, `DGKL`, `COP_PHA`, `CHI_TIET`, hidden `TRACE_MODEL`, Element ID + CAD Handle + drawing fingerprint + integrity validation.
+>
+> Excel lane #3296/#3299: run #32434789970 green; merge `99dc024faafa4becc1a89fa61a894f69fba8aa49`.
+>
+> Clash lane #3310/#3312: run #32435254406 green; merge `c80405e4cd1e0530b16acf1e98d580ef4e76cd0c`.
+>
+> Remote bug sweep #3337/#3338: merged at `ab9ef0fe761ce9ea243576b295359c304e5e33b4`.
+>
+> Current refresh baseline: `main@227653b249e601961dab85bed12c7ce9a746ceb9`.
+>
+> Current runtime tail: #3599 `LOCAL_PARTIAL / PENDING_REMOTE`; #3600 and #3601 require remote source fixes followed by exact-SHA licensed rerun.
+>
+> Repo lifecycle: direct-main forbidden; one canonical carrier; exact-head CI; protected current-candidate `preflight + core`; strict freshness; expected-head merge; no stale green; no false runtime PASS.
+
+---
+
+# 26. Provenance and truthfulness
 
 Compiled from:
 
-- prior `QS3D_CHAT_SESSION_CONTEXT_2026-08-20.md`;
-- subsequent QS3D conversations on 2026-08-20 and 2026-08-21;
-- current repository governance/product-boundary documents;
-- active BIM3D-QS program Issue `#3142`;
-- relevant GitHub PR/Issue/CI/commit evidence observed during implementation;
-- fresh `main` and open-PR snapshot taken while creating Issue `#3355`.
+- prior QS3D chat/session context;
+- prior canonical master context under #3355/#3357;
+- refresh #3557/#3558;
+- subsequent 2026-08-21/22/23 user-visible conversations;
+- current repository governance;
+- user-visible GitHub Issue/PR/CI/commit evidence;
+- user-reported BLT3D, Windows and VPS troubleshooting observations.
 
-Do not treat a recorded historical PR/run SHA as proof that the same branch is still current. Refresh GitHub before acting.
+This file intentionally does **not** contain private chain-of-thought.
 
----
+It records conclusions, decisions, observed diagnostics, evidence and user-facing rationale needed for handoff.
 
-# 23. Canonical status of this note task
-
-- Issue: `#3355`
-- Lane-Key: `issue-3355`
-- Owner/session: `interactive-20260821-0935-g56sol-context`
-- Branch: `agent/interactive-20260821-0935-g56sol-context/issue-3355-project-master-context`
-- Intended file: `docs/QS3D-PROJECT-MASTER-CONTEXT-2026-08-21.md`
-- Scope: docs-only master context
-- Main-write method: protected PR only
-- Merge condition: exact-current `preflight + core` SUCCESS + strict freshness + mergeable PR
-- Release impact: ordinary docs-only note; no licensed runtime/release claim
+Do not treat any recorded old PR/run/head SHA as current without refreshing GitHub first.
 
 ---
 

@@ -35,7 +35,7 @@ QS3D.Core  (netstandard2.0, CAD-independent)
 .qsdb
 ```
 
-The V26 project keeps the established `QS3D.BricsCAD.V25` source namespace so linked XAML/classes do not fork. It emits a distinct assembly name and resolves `BrxMgd.dll` / `TD_Mgd.dll` only from `BRICSCAD_V26_DIR`. BricsCAD-owned assemblies are external host references with `Private=false` and are never packaged into QS3D.
+The V26 project keeps the established `QS3D.BricsCAD.V25` source namespace so linked XAML/classes do not fork. It emits a distinct assembly name and resolves `BrxMgd.dll`, `TD_Mgd.dll`, and `TD_MgdBrep.dll` only from `BRICSCAD_V26_DIR`; the BREP assembly is required by the shared exact-face quantity code. BricsCAD-owned assemblies are external host references with `Private=false` and are never packaged into QS3D.
 
 Use `QS3D.sln` for the existing V25-oriented solution and `QS3D.V26.sln` for the isolated V26/Core/SmokeTests build surface. The separate solution prevents a normal V25 solution build from requiring a V26 installation and vice versa.
 

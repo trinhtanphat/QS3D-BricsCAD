@@ -108,6 +108,10 @@ namespace QS3D.BricsCAD.V25
                     if (string.IsNullOrWhiteSpace(issue.ElementId))
                     {
                         var artifactHandles = LocateProjectArtifactHandles(currentProject, issue.Code).ToArray();
+                        if (artifactHandles.Length == 0 && IsWallJunctionNativeIssue(issue.Code))
+                        {
+                            artifactHandles = GeneratedWallJunctionRuntimeHealthService.Handles(document).ToArray();
+                        }
                         if (artifactHandles.Length == 0) return;
                         var artifactCount = CadHandleService.Select(document, artifactHandles);
                         PaletteCoordinator.SetStatus("Health All Locate " + issue.Code + " • " + artifactCount + " CAD object");
@@ -201,6 +205,12 @@ namespace QS3D.BricsCAD.V25
                 .SelectMany(key => SplitPropertyHandles(element, key))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+        }
+
+        private static bool IsWallJunctionNativeIssue(string code)
+        {
+            var normalized = (code ?? string.Empty).ToUpperInvariant();
+            return normalized.StartsWith("WALL_JUNCTION_NATIVE_", StringComparison.Ordinal);
         }
 
         private static IEnumerable<string> OwnerSlotHandles(ProjectElement element)

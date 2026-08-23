@@ -24,6 +24,8 @@ namespace QS3D.Core.Geometry
             var topZ = baseZ + height;
             if (!Finite(topZ))
                 throw new ArgumentOutOfRangeException(nameof(height), "BIM Detail volume represented top must remain finite.");
+            if (!(topZ > baseZ))
+                throw new ArgumentOutOfRangeException(nameof(height), "BIM Detail volume height must produce a positive representable vertical extent.");
 
             FirstX = firstX;
             FirstY = firstY;

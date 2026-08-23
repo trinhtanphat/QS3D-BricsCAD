@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<qs3d schema="3" projectId="qs3d-synthetic-sample-v1" name="QS3D Synthetic Sample" updatedUtc="2026-08-10T00:00:00.0000000Z" drawingPath="" drawingFingerprint="" activeZoneId="zone-a" activeFloorId="floor-0">
+<qs3d schema="3" projectId="qs3d-synthetic-sample-v1" name="QS3D Synthetic Sample" updatedUtc="2026-08-10T00:00:00.0000000Z" changeVersion="0" drawingPath="" drawingFingerprint="" activeZoneId="zone-a" activeFloorId="floor-0">
   <metadata>
     <p name="QS3D.BqVisibleColumns" value="Floor|Category|FamilyName|Count|GrossConcreteM3|NetConcreteM3|FormworkM2|LengthM|ElementIdText|SourceHandleText" />
+    <p name="QS3D.DrawingUnitBound.v1" value="Meter" />
+    <p name="QS3D.DrawingUnit" value="Meter" />
+    <p name="QS3D.DrawingUnitBindingSource.v1" value="NativeInsunits" />
     <p name="QS3D.LayerMapping:QS3D_BEAM" value="Beam" />
     <p name="QS3D.LayerMapping:QS3D_COLUMN" value="Column" />
     <p name="QS3D.LayerMapping:QS3D_DOOR" value="Door" />

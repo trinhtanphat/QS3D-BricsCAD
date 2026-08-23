@@ -96,6 +96,21 @@ function Require-Qs3dLevelFailure {
     )
     $failureCode = [string]$Marker["error_code"]
     if (-not ($allowedCodes -contains $failureCode)) { throw "Level Z marker has an invalid sanitized failure code." }
+    if ($failureCode -eq "LEVEL_Z_RUNTIME_HOST_BUILD_FAILED") {
+        $allowedHostBuildStages = @("legacy_wall_build", "bounded_wall_build", "glass_wall_build", "beam_build", "range_read")
+        if (-not $Marker.ContainsKey("host_build_stage") -or -not ($allowedHostBuildStages -contains [string]$Marker["host_build_stage"])) {
+            throw "Level Z marker has an invalid sanitized host build stage."
+        }
+        foreach ($key in @("exception_type", "exception_target", "exception_hresult")) {
+            if (-not $Marker.ContainsKey($key)) { throw "Level Z marker is missing sanitized exception classification." }
+        }
+        if ([string]$Marker["exception_type"] -notmatch '^[A-Za-z0-9_.+`]+$' -or
+            [string]$Marker["exception_target"] -notmatch '^[A-Za-z0-9_.<>+`]*$' -or
+            [string]$Marker["exception_hresult"] -notmatch '^0x[0-9A-F]{8}$') {
+            throw "Level Z marker contains an invalid sanitized exception classification."
+        }
+        throw "Level Z runtime probe reported sanitized host build failure at stage '$([string]$Marker["host_build_stage"])'."
+    }
     if ($failureCode -ne "LEVEL_Z_RUNTIME_REBAR_FAILED") { throw "Level Z runtime probe reported sanitized failure '$failureCode'." }
 
     $allowedStages = @(
@@ -222,15 +237,9 @@ $coreDll = Join-Path (Split-Path -Parent $PluginDll) "QS3D.Core.dll"
 foreach ($required in @($bricscadExe, $PluginDll, $coreDll, $DrawingCopy)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw "Required Level Z runtime input is missing: $required" }
 }
-$expectedAssemblyRevision = "+" + $ExpectedSourceSha
-foreach ($assemblyPath in @($PluginDll, $coreDll)) {
-    $productVersion = [string](Get-Item -LiteralPath $assemblyPath).VersionInfo.ProductVersion
-    if (-not $productVersion.EndsWith($expectedAssemblyRevision, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Assembly was not built from ExpectedSourceSha: $assemblyPath"
-    }
-}
-if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
-    throw "Close existing BricsCAD processes before starting the isolated Level Z runtime probe."
+Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $ExpectedSourceSha
+if (@(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe).Count -gt 0) {
+    throw "Close existing BricsCAD V25 processes before starting the isolated Level Z runtime probe."
 }
 
 $projectSidecar = [IO.Path]::ChangeExtension($DrawingCopy, ".qsdb")
@@ -257,6 +266,7 @@ $oldNonce = [Environment]::GetEnvironmentVariable("QS3D_LEVEL_Z_NONCE", "Process
 $oldSourceSha = [Environment]::GetEnvironmentVariable("QS3D_LEVEL_Z_SOURCE_SHA", "Process")
 $process = $null
 $proxyInformationDialogsDismissed = 0
+$unsavedProjectChangesDialogsDiscarded = 0
 $gracefulExit = $false
 $processCleanupVerified = $false
 $scriptCleanupVerified = $false
@@ -320,7 +330,16 @@ try {
 
     $process.Refresh()
     if (-not $process.HasExited) {
-        $gracefulExit = $process.WaitForExit($GracefulExitTimeoutSeconds * 1000)
+        $gracefulDeadline = (Get-Date).AddSeconds($GracefulExitTimeoutSeconds)
+        while ((Get-Date) -lt $gracefulDeadline) {
+            if ($unsavedProjectChangesDialogsDiscarded -eq 0) {
+                $unsavedProjectChangesDialogsDiscarded += Close-Qs3dUnsavedProjectChangesDialog -Process $process
+            }
+            if ($process.WaitForExit(250)) {
+                $gracefulExit = $true
+                break
+            }
+        }
     }
     else {
         $gracefulExit = $true
@@ -360,13 +379,13 @@ try {
 finally {
     Stop-Qs3dLevelProcess -Process $process
     try {
-        $processCleanupVerified = @(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -eq 0
+        $processCleanupVerified = Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30
         $observedDrawingAttributes = [IO.File]::GetAttributes($DrawingCopy)
         $drawingReadOnlyThroughHostExitVerified = (([int]$observedDrawingAttributes -band [int][IO.FileAttributes]::ReadOnly) -ne 0)
         $drawingHashAfter = (Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()
         $drawingUnwrittenVerified = [string]::Equals($drawingHashBefore, $drawingHashAfter, [StringComparison]::Ordinal)
 
-        if (-not $processCleanupVerified) { throw "Level Z runtime left a BricsCAD process after cleanup." }
+        if (-not $processCleanupVerified) { throw "Level Z runtime left a BricsCAD V25 process after cleanup." }
         if (-not $drawingReadOnlyThroughHostExitVerified) { throw "The disposable Level Z drawing lost its read-only guard before host exit verification." }
         if (-not $drawingUnwrittenVerified) { throw "The disposable Level Z drawing was written despite its read-only guard." }
     }
@@ -412,6 +431,7 @@ $metadata = [ordered]@{
     drawing_copy_sha256_before = $drawingHashBefore
     drawing_copy_sha256_after = $drawingHashAfter
     proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed
+    unsaved_project_changes_dialogs_discarded = $unsavedProjectChangesDialogsDiscarded
     graceful_exit = $gracefulExit
     graceful_exit_timeout_seconds = $GracefulExitTimeoutSeconds
     process_cleanup_verified = $processCleanupVerified

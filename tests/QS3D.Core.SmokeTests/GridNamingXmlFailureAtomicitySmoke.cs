@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
             InvalidPrefixFailsBeforeAnyMutation();
             InvalidSuffixFailsBeforeAnyMutation();
             ControlCharacterAffixesFailBeforeAnyMutation();
+            RawControlAffixesFailForFormatLabel();
+            OrdinarySpaceAffixesStillNormalize();
             SupplementaryUnicodeRoundTripsThroughGridLabels();
         }
 
@@ -45,7 +47,7 @@ namespace QS3D.Core.SmokeTests
                 prefixTabFirst,
                 prefixTabSecond,
                 new GridNamingOptions { Prefix = "G-\tX", Suffix = "-Y", StartIndex = 1, NumericPadding = 2 },
-                "TAB prefix");
+                "embedded TAB prefix");
 
             var prefixLfProject = CreateProject(out var prefixLfFirst, out var prefixLfSecond);
             AssertInvalidAffixIsAtomic(
@@ -53,7 +55,7 @@ namespace QS3D.Core.SmokeTests
                 prefixLfFirst,
                 prefixLfSecond,
                 new GridNamingOptions { Prefix = "G-\nX", Suffix = "-Y", StartIndex = 1, NumericPadding = 2 },
-                "LF prefix");
+                "embedded LF prefix");
 
             var suffixCrProject = CreateProject(out var suffixCrFirst, out var suffixCrSecond);
             AssertInvalidAffixIsAtomic(
@@ -61,7 +63,63 @@ namespace QS3D.Core.SmokeTests
                 suffixCrFirst,
                 suffixCrSecond,
                 new GridNamingOptions { Prefix = "G-", Suffix = "X\r-Y", StartIndex = 1, NumericPadding = 2 },
-                "CR suffix");
+                "embedded CR suffix");
+
+            var leadingTabPrefixProject = CreateProject(out var leadingTabPrefixFirst, out var leadingTabPrefixSecond);
+            AssertInvalidAffixIsAtomic(
+                leadingTabPrefixProject,
+                leadingTabPrefixFirst,
+                leadingTabPrefixSecond,
+                new GridNamingOptions { Prefix = "\tG-", Suffix = "-Y", StartIndex = 1, NumericPadding = 2 },
+                "leading TAB prefix");
+
+            var trailingLfPrefixProject = CreateProject(out var trailingLfPrefixFirst, out var trailingLfPrefixSecond);
+            AssertInvalidAffixIsAtomic(
+                trailingLfPrefixProject,
+                trailingLfPrefixFirst,
+                trailingLfPrefixSecond,
+                new GridNamingOptions { Prefix = "G-\n", Suffix = "-Y", StartIndex = 1, NumericPadding = 2 },
+                "trailing LF prefix");
+
+            var leadingCrSuffixProject = CreateProject(out var leadingCrSuffixFirst, out var leadingCrSuffixSecond);
+            AssertInvalidAffixIsAtomic(
+                leadingCrSuffixProject,
+                leadingCrSuffixFirst,
+                leadingCrSuffixSecond,
+                new GridNamingOptions { Prefix = "G-", Suffix = "\r-Y", StartIndex = 1, NumericPadding = 2 },
+                "leading CR suffix");
+
+            var trailingTabSuffixProject = CreateProject(out var trailingTabSuffixFirst, out var trailingTabSuffixSecond);
+            AssertInvalidAffixIsAtomic(
+                trailingTabSuffixProject,
+                trailingTabSuffixFirst,
+                trailingTabSuffixSecond,
+                new GridNamingOptions { Prefix = "G-", Suffix = "-Y\t", StartIndex = 1, NumericPadding = 2 },
+                "trailing TAB suffix");
+        }
+
+        private static void RawControlAffixesFailForFormatLabel()
+        {
+            Throws<ArgumentException>(() => GridNamingService.FormatLabel(
+                new GridNamingOptions { Prefix = "\tG-", Suffix = "-Y", NumericPadding = 2 },
+                1));
+            Throws<ArgumentException>(() => GridNamingService.FormatLabel(
+                new GridNamingOptions { Prefix = "G-\n", Suffix = "-Y", NumericPadding = 2 },
+                1));
+            Throws<ArgumentException>(() => GridNamingService.FormatLabel(
+                new GridNamingOptions { Prefix = "G-", Suffix = "\r-Y", NumericPadding = 2 },
+                1));
+            Throws<ArgumentException>(() => GridNamingService.FormatLabel(
+                new GridNamingOptions { Prefix = "G-", Suffix = "-Y\t", NumericPadding = 2 },
+                1));
+        }
+
+        private static void OrdinarySpaceAffixesStillNormalize()
+        {
+            var label = GridNamingService.FormatLabel(
+                new GridNamingOptions { Prefix = "  G-  ", Suffix = "  -Y  ", NumericPadding = 2 },
+                1);
+            Require(label == "G-01-Y", "Ordinary surrounding-space Grid affix normalization changed.");
         }
 
         private static void AssertInvalidAffixIsAtomic(
