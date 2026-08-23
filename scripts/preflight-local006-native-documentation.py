@@ -147,11 +147,34 @@ def check_sheet_lifecycle():
     )
 
 
+def check_table_presentation_defaults():
+    service_rel = "src/QS3D.BricsCAD.V25/Cad/ProjectOwnedNativeTableArtifactService.cs"
+    service = require_file(service_rel)
+    require_all(
+        service,
+        service_rel,
+        (
+            "ApplyPresentationDefaults",
+            "table.TableStyle = database.Tablestyle",
+            "CellAlignment.MiddleCenter",
+            "CellAlignment.MiddleLeft",
+            "TitleRowType",
+            "HeaderRowType",
+            "DataRowType",
+            "table.SetRowHeight(0,",
+            "table.SetRowHeight(1,",
+            "table.SetTextHeight(titleTextHeight, TitleRowType)",
+            "table.SetTextHeight(textHeight, HeaderRowType | DataRowType)",
+        ),
+    )
+
+
 if __name__ == "__main__":
     try:
         check_mleader_lifecycle()
         check_sheet_lifecycle()
+        check_table_presentation_defaults()
     except AssertionError as exc:
         print("ERROR:", exc)
         sys.exit(1)
-    print("PASS: LOCAL-006 native MLeader and sheet source contracts are present.")
+    print("PASS: LOCAL-006 native MLeader, sheet and shared Table presentation source contracts are present.")
