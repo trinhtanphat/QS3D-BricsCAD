@@ -10,8 +10,10 @@ namespace QS3D.Core.SmokeTests
             var root = FindRepositoryRoot();
             var snapPath = Path.Combine(root, "src", "QS3D.BricsCAD.V25", "WallJunctionSnapCommands.cs");
             var mutationPath = Path.Combine(root, "src", "QS3D.BricsCAD.V25", "ExistingProjectMutationContext.cs");
+            var coordinatorPath = Path.Combine(root, "src", "QS3D.BricsCAD.V25", "ProjectContextCoordinator.cs");
             var source = File.ReadAllText(snapPath);
             var mutationSource = File.ReadAllText(mutationPath);
+            var coordinatorSource = File.ReadAllText(coordinatorPath);
 
             const string signature = "private static ProjectState RequireFreshMutationProject";
             var start = source.IndexOf(signature, StringComparison.Ordinal);
@@ -38,6 +40,24 @@ namespace QS3D.Core.SmokeTests
                 "ExistingProjectMutationContext canonical bind behavior must remain intact.");
             Require(mutationSource.Contains("ProjectContextCoordinator.RequireBackingStoreUnchanged", StringComparison.Ordinal),
                 "ExistingProjectMutationContext backing-store freshness guard must remain intact.");
+
+            var tryCachedStart = coordinatorSource.IndexOf("public static bool TryGetCached(Document document, out ProjectState project)", StringComparison.Ordinal);
+            var tryCachedEnd = coordinatorSource.IndexOf("public static void RequireBackingStoreUnchanged", tryCachedStart, StringComparison.Ordinal);
+            Require(tryCachedStart >= 0 && tryCachedEnd > tryCachedStart,
+                "ProjectContextCoordinator.TryGetCached boundary was not found.");
+            var tryCached = coordinatorSource.Substring(tryCachedStart, tryCachedEnd - tryCachedStart);
+            Require(tryCached.Contains("Projects.TryGetValue(document, out project)", StringComparison.Ordinal),
+                "TryGetCached must continue reporting only entries present in the canonical project cache.");
+            Require(tryCached.Contains("return false;", StringComparison.Ordinal),
+                "TryGetCached must return false when the document is absent from the canonical project cache.");
+
+            var forgetStart = coordinatorSource.IndexOf("public static void Forget(Document document)", StringComparison.Ordinal);
+            var forgetEnd = coordinatorSource.IndexOf("public static void ForgetByName", forgetStart, StringComparison.Ordinal);
+            Require(forgetStart >= 0 && forgetEnd > forgetStart,
+                "ProjectContextCoordinator.Forget boundary was not found.");
+            var forgetBody = coordinatorSource.Substring(forgetStart, forgetEnd - forgetStart);
+            Require(forgetBody.Contains("Projects.Remove(document);", StringComparison.Ordinal),
+                "Forget must remove the document from the same canonical cache observed by TryGetCached.");
         }
 
         private static string FindRepositoryRoot()
