@@ -50,6 +50,14 @@ namespace QS3D.Core.SmokeTests
             };
             Near(10.0, evaluator.Evaluate("_x + A1 + a.b + rate", validIdentifiers), 1e-12, "valid identifier grammar and case-insensitive lookup");
 
+            var exactName = new string('a', 4096);
+            var exactNameVariables = new Dictionary<string, double> { [exactName] = 7.0 };
+            Near(7.0, evaluator.Evaluate(exactName, exactNameVariables), 1e-12, "exact variable-name length bound");
+
+            var overlongName = new string('a', 4097);
+            var overlongNameVariables = new Dictionary<string, double> { [overlongName] = 7.0 };
+            Throws<InvalidOperationException>(() => evaluator.Evaluate("1", overlongNameVariables), "variable-name length one over bound");
+
             var exactBound = BuildVariables(4096);
             Near(1.0, evaluator.Evaluate("v0", exactBound), 1e-12, "exact variable-count bound");
 
