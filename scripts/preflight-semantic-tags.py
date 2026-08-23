@@ -24,6 +24,7 @@ renderer_smoke = read("tests/QS3D.Core.SmokeTests/SemanticTagRendererSmoke.cs")
 health = read("src/QS3D.Core/Diagnostics/GeneratedSemanticTagHealthService.cs")
 comprehensive = read("src/QS3D.Core/Diagnostics/ComprehensiveModelHealthService.cs")
 builder = read("src/QS3D.BricsCAD.V25/Cad/SemanticTagBuilder.cs")
+mleader_builder = read("src/QS3D.BricsCAD.V25/Cad/SemanticMLeaderBuilder.cs")
 remove_service = read("src/QS3D.BricsCAD.V25/Cad/SemanticTagRemovalService.cs")
 command = read("src/QS3D.BricsCAD.V25/SemanticTagCommands.cs")
 remove_command = read("src/QS3D.BricsCAD.V25/SemanticTagRemovalCommands.cs")
@@ -68,6 +69,8 @@ for token in [
 for token in [
     'public const string HandlesKey = "GeneratedSemanticTagHandles"',
     'public const string DrawingLocalWcs = "DrawingLocalWcs"',
+    'public const string MTextArtifactKind = "MText"',
+    'public const string MLeaderArtifactKind = "MLeader"',
     "SemanticTagRenderer.Render(project, element, template)",
     '"SEMANTIC_TAG_TEXT_STALE"',
     '"SEMANTIC_TAG_RENDER_INVALID"',
@@ -90,16 +93,18 @@ for token in [
     "ValidatePrevious",
     "CadHandleService.NormalizeHexHandle",
     "OpenMode.ForRead",
-    "Refusing destructive replacement before any semantic tag is erased.",
-    "Refusing partial destructive replacement.",
-    "if (!(entity is MText))",
-    "GeneratedGeometryService.RequireMatchingOwnership(entity, project, element",
+    "RequireSupportedSemanticTag",
+    "validation before destructive replacement",
+    "if (!(entity is MText) && !(entity is MLeader))",
+    "Refusing destructive replacement.",
+    "GeneratedGeometryService.RequireMatchingOwnership(entity!, project, element",
     "GeneratedHandleOwnershipPolicy.CanonicalOwnerSlot(slot)",
     "var tag = new MText",
     "Contents = EncodePlainMText(rendered)",
     "GeneratedGeometryService.MarkGenerated(document, transaction, tag, project.ProjectId, element.Id, element.Category)",
     "element.Properties[GeneratedSemanticTagHealthService.TextKey] = rendered;",
     "element.Properties[GeneratedSemanticTagHealthService.PositionScopeKey] = GeneratedSemanticTagHealthService.DrawingLocalWcs;",
+    "element.Properties[GeneratedSemanticTagHealthService.ArtifactKindKey] = GeneratedSemanticTagHealthService.MTextArtifactKind;",
     '"documentation.semantic-tag.replace"',
     "transaction.Commit();",
     "cadCommitted = true;",
@@ -107,6 +112,18 @@ for token in [
     "EncodePlainMText",
 ]:
     require(builder, token, "native semantic tag builder")
+
+for token in [
+    "new MLeader",
+    "GeneratedSemanticTagHealthService.MLeaderArtifactKind",
+    "GeneratedSemanticTagHealthService.LeaderTargetHandleKey",
+    "GeneratedSemanticTagHealthService.LeaderTextXKey",
+    "GeneratedGeometryService.RequireMatchingOwnership",
+    '"documentation.semantic-tag.mleader.replace"',
+    "ProjectStateSnapshot.Capture(project)",
+    "transaction.Commit();",
+]:
+    require(mleader_builder, token, "native semantic MLeader builder")
 
 render = builder.find("SemanticTagRenderer.Render(project, element, template)")
 validate_previous = builder.find("var previous = ValidatePrevious(document.Database, project, element, ownership);")
@@ -137,6 +154,8 @@ if "Editor.Regen(" in builder or "PaletteCoordinator" in builder:
 for token in [
     '[CommandMethod("QS3DTAG", CommandFlags.Modal | CommandFlags.UsePickSet)]',
     '[CommandMethod("QS3DTAGREFRESH", CommandFlags.Modal | CommandFlags.UsePickSet)]',
+    '[CommandMethod("QS3DTAGLEADER", CommandFlags.Modal | CommandFlags.UsePickSet)]',
+    '[CommandMethod("QS3DTAGLEADERBATCH", CommandFlags.Modal | CommandFlags.UsePickSet)]',
     "GeneratedHandleOwnershipIndex.Build(project)",
     "generated.TryFindOwner(handle",
     "QS3D-generated output",
@@ -148,6 +167,8 @@ for token in [
     "SemanticTagBuilder.StoredWorldPosition(element)",
     "SemanticTagBuilder.StoredRotation(element)",
     "SemanticTagBuilder.Build(document, project, element",
+    "SemanticMLeaderBuilder.Build(document, project, element",
+    "SemanticMLeaderBuilder.BuildBatch(document, project, requests)",
     "document.Editor.Regen();",
     "UI sync warning:",
 ]:
@@ -157,7 +178,8 @@ for token in [
     "GeneratedHandleOwnershipIndex.Build(project)",
     "GeneratedHandleOwnershipPolicy.CanonicalOwnerSlot(slot)",
     "GeneratedGeometryService.RequireMatchingOwnership",
-    "if (!(entity is MText))",
+    "RequireSupportedSemanticTag",
+    "if (!(entity is MText) && !(entity is MLeader))",
     "ProjectStateSnapshot.Capture(project)",
     "var cadCommitted = false;",
     "ParseExpectedHandles",
@@ -165,7 +187,7 @@ for token in [
     "ValidateCompleteLiveTagSet",
     "ids.Count != handles.Count",
     "OpenMode.ForRead",
-    "Refusing destructive remove before any semantic tag is erased.",
+    "Refusing destructive remove.",
     "Refusing partial destructive remove.",
     '"documentation.semantic-tag.remove"',
     "transaction.Commit();",
@@ -218,15 +240,19 @@ for token in [
     require(remove_command, token, "semantic tag remove command")
 
 for token in [
-    "SEMANTIC_TAG_MTEXT_MISSING",
-    "SEMANTIC_TAG_MTEXT_TYPE_MISMATCH",
-    "SEMANTIC_TAG_MTEXT_OWNERSHIP_MISMATCH",
+    "SEMANTIC_TAG_MISSING",
+    "SEMANTIC_TAG_TYPE_MISMATCH",
+    "SEMANTIC_TAG_OWNERSHIP_MISMATCH",
     "SEMANTIC_TAG_MTEXT_CONTENT_DRIFT",
     "SEMANTIC_TAG_MTEXT_HEIGHT_DRIFT",
     "SEMANTIC_TAG_MTEXT_POSITION_DRIFT",
     "SEMANTIC_TAG_MTEXT_ROTATION_DRIFT",
     "SEMANTIC_TAG_MTEXT_NORMAL_DRIFT",
-    "GeneratedGeometryService.HasMatchingOwnership(tag, project, element)",
+    "SEMANTIC_TAG_MLEADER_CONTENT_DRIFT",
+    "SEMANTIC_TAG_MLEADER_HEIGHT_DRIFT",
+    "SEMANTIC_TAG_MLEADER_TEXT_POSITION_DRIFT",
+    "SEMANTIC_TAG_MLEADER_TARGET_DRIFT",
+    "GeneratedGeometryService.HasMatchingOwnership(entity, project, element)",
     "OpenMode.ForRead",
 ]:
     require(runtime_health, token, "semantic tag live runtime health")
@@ -274,4 +300,4 @@ for token in [
 ]:
     require(doc, token, "semantic tag lifecycle docs")
 
-print("[PASS] semantic tag rendering remains bounded/model-linked and native create/refresh/remove/live-health paths preserve complete live-handle prevalidation, audit-owned single revision, guarded ownership, rollback, read-only runtime diagnostics and release wiring; MLeader/sheet/exact-V25 runtime remain explicit gates")
+print("[PASS] semantic tag rendering remains bounded/model-linked and native MText/MLeader create/refresh/remove/live-health paths preserve complete live-handle prevalidation, audit-owned single revision, guarded ownership, rollback, read-only runtime diagnostics and release wiring; licensed exact-V25/V26 runtime evidence remains a local gate")
