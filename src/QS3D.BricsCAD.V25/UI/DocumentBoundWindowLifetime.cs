@@ -121,6 +121,36 @@ namespace QS3D.BricsCAD.V25.UI
                 return false;
             }
 
+            private bool HasAnotherLiveDocument()
+            {
+                try
+                {
+                    foreach (Document candidate in BcadApplication.DocumentManager)
+                    {
+                        if (candidate == null || candidate.IsDisposed) continue;
+                        try
+                        {
+                            var database = candidate.Database;
+                            if (database == null) continue;
+                            var identity = database.UnmanagedObject;
+                            if (identity != IntPtr.Zero && identity != _nativeDatabaseIdentity)
+                                return true;
+                        }
+                        catch
+                        {
+                            // Ignore one unsafe candidate and keep looking. If enumeration cannot
+                            // prove that another live document exists, final-teardown deferral wins.
+                        }
+                    }
+                }
+                catch
+                {
+                    return false;
+                }
+
+                return false;
+            }
+
             private void BindProjectAffinityIfPresent()
             {
                 if (_projectAffinityBound) return;
@@ -204,6 +234,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnBeginDocumentClose(object sender, DocumentBeginCloseEventArgs e)
             {
+                var deferForFinalDocument = !HasAnotherLiveDocument();
                 lock (_documentAccessGate)
                 {
                     Volatile.Write(ref _documentCloseStarted, 1);
@@ -211,15 +242,17 @@ namespace QS3D.BricsCAD.V25.UI
                 }
 
                 // BeginDocumentClose is the earliest reliable per-document close boundary used by
-                // this coordinator. Do not touch the retained lifecycle wrapper after this point;
-                // Window.Closed may run after native teardown has already advanced.
+                // this coordinator. Normal multi-document close keeps the proven synchronous WPF
+                // behavior; the final/only-document path defers WPF teardown until this callback
+                // unwinds so host shutdown cannot re-enter native document destruction.
                 DetachDocumentManagerHandler();
-                TryCloseWindow();
+                TryCloseWindow(deferForFinalDocument);
             }
 
             private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
             {
                 if (!MatchesNativeDatabase(e.Document)) return;
+                var deferForFinalDocument = !HasAnotherLiveDocument();
                 lock (_documentAccessGate)
                 {
                     Volatile.Write(ref _documentCloseStarted, 1);
@@ -231,7 +264,7 @@ namespace QS3D.BricsCAD.V25.UI
                 // at bind time so wrapper drift still closes this window, without using mutable paths.
                 // The retained lifecycle wrapper is intentionally not dereferenced here.
                 DetachDocumentManagerHandler();
-                TryCloseWindow();
+                TryCloseWindow(deferForFinalDocument);
             }
 
             private void OnDocumentCloseAborted(object? sender, EventArgs e)
@@ -243,15 +276,19 @@ namespace QS3D.BricsCAD.V25.UI
                 DetachDocumentLifecycleHandlersAfterAbort();
             }
 
-            private void TryCloseWindow()
+            private void TryCloseWindow(bool deferOnDispatcher = false)
             {
                 try
                 {
                     if (_window.Dispatcher.CheckAccess())
                     {
-                        // Defer even on the dispatcher thread so BricsCAD's document-close callback
-                        // can unwind before WPF/native window teardown begins.
-                        _window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher));
+                        if (deferOnDispatcher)
+                        {
+                            _window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher));
+                            return;
+                        }
+
+                        TryCloseWindowOnDispatcher();
                         return;
                     }
 
