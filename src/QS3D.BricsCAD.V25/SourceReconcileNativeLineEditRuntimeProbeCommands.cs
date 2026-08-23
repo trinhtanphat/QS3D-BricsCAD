@@ -460,6 +460,10 @@ namespace QS3D.BricsCAD.V25
                 active = Application.DocumentManager.MdiActiveDocument;
                 if (active == null || !SamePath(active.Name, context.Document.Name))
                     throw new ProbeFailure("DOCUMENT_ACTIVATION_REJECTED");
+                var reboundProject = ProjectForDocument(active);
+                if (!string.Equals(reboundProject.ProjectId, state.ProjectId, StringComparison.Ordinal))
+                    throw new ProbeFailure("SEQUENCE_CONTEXT_CHANGED");
+                state.Document = active;
                 state.DrawingBClosed = true;
                 state.Phase = "MULTIDWG_CLOSED";
             });
@@ -1118,7 +1122,7 @@ namespace QS3D.BricsCAD.V25
                 InitialGeneratedHandle = initialGeneratedHandle;
                 Enhanced = enhanced;
             }
-            public Document Document { get; }
+            public Document Document { get; set; }
             public string ProjectId { get; }
             public string OwnerId { get; }
             public string SourceHandle { get; }
