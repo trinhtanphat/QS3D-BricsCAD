@@ -80,6 +80,7 @@ namespace QS3D.BricsCAD.V25
             var commandUnit = (object)CadUnitService.GetLengthUnit(document);
             var commandUcs = editor.CurrentUserCoordinateSystem;
             var initialPreview = DirectDrawProjectPreviewContext.Capture(document);
+            var currentPreview = initialPreview;
             RequireExpectedFamily(initialPreview, category, expectedProjectId, expectedFamilyId, label);
             using var lifecycleGuard = new RepeatedDocumentLifecycleGuard(document);
 
@@ -126,7 +127,11 @@ namespace QS3D.BricsCAD.V25
                         }
                         DirectDrawCommands.RequireRepeatedPromptContextUnchanged(
                             document, commandUnit, commandUcs, label + " / trước preview");
-                        var preview = DirectDrawProjectPreviewContext.Capture(document);
+                        // The first segment must resolve against the preview captured before the
+                        // first point prompt. This rejects a project that appears/replaces state
+                        // while that prompt is open. Only a successfully checkpointed segment may
+                        // advance the preview to the new canonical ChangeVersion.
+                        var preview = currentPreview;
                         RequireExpectedFamily(
                             preview, category, expectedProjectId, expectedFamilyId, label);
                         var defaults = RepeatedDefaults.Resolve(preview, category);
@@ -223,6 +228,11 @@ namespace QS3D.BricsCAD.V25
                                 committed,
                                 transitionError);
                         }
+                        currentPreview = DirectDrawProjectPreviewContext.Capture(document);
+                        if (!currentPreview.HasProject ||
+                            !ReferenceEquals(currentPreview.DefaultsProject, trackedProject))
+                            throw new InvalidOperationException(
+                                "Repeated Direct Draw canonical project changed after an accepted segment.");
                         NotifySegmentCommitted(document, accepted);
                         editor.WriteMessage(
                             "\nQS3D " + label + " đã commit segment #" + accepted +

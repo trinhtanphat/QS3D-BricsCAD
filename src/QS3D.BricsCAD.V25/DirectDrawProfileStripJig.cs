@@ -1,3 +1,4 @@
+using System;
 using Bricscad.EditorInput;
 using Teigha.Geometry;
 using Teigha.GraphicsInterface;
@@ -12,6 +13,10 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     internal sealed class DirectDrawProfileStripJig : DrawJig
     {
+        // Optional, read-only qualification hook. It observes the real hosted WorldDraw callback
+        // and is exception-isolated so test evidence cannot own preview behavior.
+        internal static event Action? ProfileRenderedForRuntimeQualification;
+
         private readonly Point3d _startWcs;
         private readonly double _widthDrawingUnits;
         private readonly Matrix3d _ucsToWcs;
@@ -91,7 +96,16 @@ namespace QS3D.BricsCAD.V25
             worldDraw.Geometry.WorldLine(c, d);
             worldDraw.Geometry.WorldLine(d, a);
             worldDraw.Geometry.WorldLine(_startWcs, _endWcs);
+            NotifyProfileRendered();
             return true;
+        }
+
+        private static void NotifyProfileRendered()
+        {
+            var observer = ProfileRenderedForRuntimeQualification;
+            if (observer == null) return;
+            try { observer(); }
+            catch { }
         }
     }
 }

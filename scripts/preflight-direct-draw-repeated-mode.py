@@ -53,6 +53,9 @@ if not errors:
         "DirectDrawProfileStripJig(",
         "editor.Drag(jig)",
         "DirectDrawProjectPreviewContext.Capture(document)",
+        "var currentPreview = initialPreview;",
+        "var preview = currentPreview;",
+        "currentPreview = DirectDrawProjectPreviewContext.Capture(document);",
         "RequireRepeatedPromptContextUnchanged(",
         "RequireExpectedFamily(",
         "DirectDrawCommands.ExecuteDirect(",
@@ -73,12 +76,19 @@ if not errors:
 
     scope = repeated.find("using (SourceReconcileUndoCoordinator.BeginExternalTransitionScope(document))")
     loop = repeated.find("while (true)", scope)
-    preview = repeated.find("DirectDrawProjectPreviewContext.Capture(document)", loop)
+    preview = repeated.find("var preview = currentPreview;", loop)
     drag = repeated.find("editor.Drag(jig)", preview)
     execute = repeated.find("DirectDrawCommands.ExecuteDirect(", drag)
     commit = repeated.find("SourceReconcileUndoCoordinator.CommitExternalTransition(", execute)
     if min(scope, loop, preview, drag, execute, commit) < 0 or not scope < loop < preview < drag < execute < commit:
-        errors.append("repeated command must scope Undo, recapture context, drag transient, commit canonically, then publish a whole-command checkpoint")
+        errors.append("repeated command must scope Undo, reuse the pinned preview, drag transient, commit canonically, then publish a whole-command checkpoint")
+    if "var preview = DirectDrawProjectPreviewContext.Capture(document);" in repeated:
+        errors.append("repeated command must use the initial preview for the first commit so a project appearing during the first prompt is rejected")
+    current_preview = repeated.find("var currentPreview = initialPreview;")
+    stable_preview = repeated.find("var preview = currentPreview;", loop)
+    refresh_preview = repeated.find("currentPreview = DirectDrawProjectPreviewContext.Capture(document);", commit)
+    if min(current_preview, stable_preview, refresh_preview) < 0 or not current_preview < loop < stable_preview < execute < commit < refresh_preview:
+        errors.append("repeated command must pin initial project provenance, then refresh only after a committed segment")
 
     for token in (
         "internal sealed class DirectDrawProfileStripJig : DrawJig",
@@ -87,6 +97,8 @@ if not errors:
         "BasePoint = _startWcs",
         "_wcsToUcs = ucsToWcs.Inverse()",
         "worldDraw.Geometry.WorldLine(_startWcs, _endWcs)",
+        "ProfileRenderedForRuntimeQualification",
+        "NotifyProfileRendered();",
     ):
         require(jig, token, "shared profile jig")
     for forbidden in (
@@ -146,6 +158,7 @@ if not errors:
     for token in (
         'CommandMethod("QS3DREPEATVERIFYAFTER"',
         'CommandMethod("QS3DREPEATARMSEQUENCE"',
+        'CommandMethod("QS3DREPEATARMWALLSEQUENCE"',
         'CommandMethod("QS3DREPEATVERIFYUNDO"',
         'CommandMethod("QS3DREPEATVERIFYREDO"',
         'CommandMethod("QS3DREPEATVERIFYCOLD"',
@@ -157,9 +170,15 @@ if not errors:
         '"QS3DREPEATVERIFYESC "',
         '"QS3DREPEATVERIFYSWITCH "',
         "RequireTwoBeamSegments(",
+        "RequireTwoWallSegments(",
         "RequireOneEscBeamSegment(",
         "SegmentCommittedForRuntimeQualification",
         "SequenceCompletedForRuntimeQualification",
+        "ProfileRenderedForRuntimeQualification += OnProfileRendered",
+        "ProfileRenderedForRuntimeQualification -= OnProfileRendered",
+        "arm.WorldDrawCount",
+        '"WORLD_DRAW_NOT_OBSERVED"',
+        '"drawjig_worlddraw_count="',
         "Application.DocumentManager.MdiActiveDocument = arm.DocumentB",
         "Application.DocumentManager.MdiActiveDocument = arm.DocumentA",
         "arm.RoundTripObserved",
@@ -204,7 +223,11 @@ if not errors:
         "Start-ExactCandidateHost",
         '"NETLOAD"',
         '"QS3DDRAWBEAMREPEAT"',
+        '"QS3DDRAWWALLREPEAT"',
         '"QS3DREPEATARMSEQUENCE"',
+        '"QS3DREPEATARMWALLSEQUENCE"',
+        "repeat-wall-after.txt",
+        "wall_repeated_sequence = $wallRepeatedSequencePassed",
         '"_.U"',
         '"_.REDO"',
         '"QS3DREPEATVERIFYREDO"',

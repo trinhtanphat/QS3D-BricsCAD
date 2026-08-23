@@ -14,12 +14,7 @@
     <FileVersion>0.1.0.10081</FileVersion>
     <InformationalVersion>0.1.0-preview.10081</InformationalVersion>
   </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\QS3D.Core\QS3D.Core.csproj" />
-    <!-- CoordinationManagerWindow consumes the shared domain types directly. WPF's net48
-         temporary compile does not retain this transitive reference through QS3D.Core. -->
-    <ProjectReference Include="..\..\external\QS3D-Platform\src\QS3D.Platform.Domain\QS3D.Platform.Domain.csproj" />
-  </ItemGroup>
+  <ItemGroup><ProjectReference Include="..\QS3D.Core\QS3D.Core.csproj" /></ItemGroup>
   <ItemGroup>
     <Reference Include="BrxMgd"><HintPath>$(BRICSCAD_V25_DIR)\BrxMgd.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="TD_Mgd"><HintPath>$(BRICSCAD_V25_DIR)\TD_Mgd.dll</HintPath><Private>false</Private></Reference>

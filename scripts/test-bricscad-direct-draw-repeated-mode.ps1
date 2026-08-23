@@ -108,7 +108,10 @@ function Require-Marker {
         [Parameter(Mandatory = $true)]$Marker,
         [Parameter(Mandatory = $true)][string]$Phase,
         [Parameter(Mandatory = $true)][int]$ExpectedSegments,
-        [string]$ExpectedStatus = "PASS"
+        [string]$ExpectedStatus = "PASS",
+        [string]$ExpectedCommand = "QS3DDRAWBEAMREPEAT",
+        [string]$ExpectedCategory = "Beam",
+        [switch]$RequireWorldDraw
     )
     $expected = [ordered]@{
         status = $ExpectedStatus
@@ -117,7 +120,8 @@ function Require-Marker {
         nonce = $script:nonce
         host_major = [string]$HostMajor
         adapter = "QS3D.BricsCAD.V$HostMajor"
-        production_command = "QS3DDRAWBEAMREPEAT"
+        production_command = $ExpectedCommand
+        production_category = $ExpectedCategory
         semantic_segments = [string]$ExpectedSegments
         source_type = "LINE"
         native_type = "Solid3d"
@@ -133,6 +137,21 @@ function Require-Marker {
         if (-not [string]::Equals([string]$Marker[$entry.Key], [string]$entry.Value, [StringComparison]::OrdinalIgnoreCase)) {
             Set-MarkerFailureMetadata -Marker $Marker -FallbackPhase $Phase -FallbackCode "MARKER_CONTRACT_REJECTED"
             throw "Repeated-mode $Phase marker '$($entry.Key)' expected '$($entry.Value)' but was '$($Marker[$entry.Key])'."
+        }
+    }
+    if ($RequireWorldDraw) {
+        if (-not $Marker.ContainsKey("drawjig_worlddraw_count")) {
+            Set-MarkerFailureMetadata -Marker $Marker -FallbackPhase $Phase -FallbackCode "WORLD_DRAW_COUNT_MISSING"
+            throw "Repeated-mode $Phase marker is missing 'drawjig_worlddraw_count'."
+        }
+        $worldDrawCount = 0
+        if (-not [int]::TryParse(
+            [string]$Marker["drawjig_worlddraw_count"],
+            [Globalization.NumberStyles]::Integer,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [ref]$worldDrawCount) -or $worldDrawCount -le 0) {
+            Set-MarkerFailureMetadata -Marker $Marker -FallbackPhase $Phase -FallbackCode "WORLD_DRAW_NOT_OBSERVED"
+            throw "Repeated-mode $Phase did not observe a real DrawJig WorldDraw callback."
         }
     }
 }
@@ -618,7 +637,11 @@ $phasePaths = [ordered]@{
     after = Join-Path $runRoot "repeat-after.txt"
     undo = Join-Path $runRoot "repeat-undo.txt"
     redo = Join-Path $runRoot "repeat-redo.txt"
+    wall_after = Join-Path $runRoot "repeat-wall-after.txt"
+    wall_undo = Join-Path $runRoot "repeat-wall-undo.txt"
+    wall_redo = Join-Path $runRoot "repeat-wall-redo.txt"
     cold_reopen = Join-Path $runRoot "repeat-cold-reopen.txt"
+    wall_cold_reopen = Join-Path $runRoot "repeat-wall-cold-reopen.txt"
     esc_ready = Join-Path $runRoot "repeat-esc-ready.txt"
     esc = Join-Path $runRoot "repeat-esc.txt"
     planar_ucs = Join-Path $runRoot "repeat-planar-ucs.txt"
@@ -684,6 +707,9 @@ $processCleanup = $false
 $privateCleanup = $false
 $acceptedSegments = 0
 $drawJigPreviewPassed = $false
+$wallRepeatedSequencePassed = $false
+$wallWorldDrawCount = 0
+$beamWorldDrawCount = 0
 $enterTerminationPassed = $false
 $wholeCommandUndoPassed = $false
 $wholeCommandRedoPassed = $false
@@ -720,6 +746,9 @@ try {
         "FILEDIA", "0", "CMDECHO", "1", "TILEMODE", "1", "INSUNITS", "4", "UCS", "W",
         "NETLOAD", ('"' + $pluginDll + '"'),
         "QS3DRUNTIMEPROBE",
+        "QS3DREPEATARMWALLSEQUENCE",
+        "QS3DDRAWWALLREPEAT", "0,6000", "5000,6000", "10000,6000", "",
+        "_.U", "_.REDO", "QS3DREPEATVERIFYREDO",
         "QS3DREPEATARMSEQUENCE",
         "QS3DDRAWBEAMREPEAT", "0,0", "5000,0", "10000,0", "",
         "_.U", "_.REDO", "QS3DREPEATVERIFYREDO",
@@ -735,13 +764,27 @@ try {
         -OriginalDemandLoadControls $demandLoadOriginalControls `
         -IsolatedDemandLoadControls $demandLoadIsolatedControls `
         -IsolationCount ([ref]$demandLoadIsolationCount) -DemandLoadRestored ([ref]$demandLoadRestored)
-    Wait-ForFilesAndExit -Paths @($phasePaths.after, $phasePaths.undo, $phasePaths.redo) `
+    Wait-ForFilesAndExit -Paths @(
+        $phasePaths.wall_after, $phasePaths.wall_undo, $phasePaths.wall_redo,
+        $phasePaths.after, $phasePaths.undo, $phasePaths.redo) `
         -RuntimeIdentityPath $phasePaths.runtime_session1 -ExpectedAssembly $pluginDll `
         -Process $processOne `
         -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds))
-    Require-Marker -Marker (Read-Marker $phasePaths.after) -Phase "after" -ExpectedSegments 2
-    $acceptedSegments = 2
-    $drawJigPreviewPassed = $true
+    $wallAfterMarker = Read-Marker $phasePaths.wall_after
+    Require-Marker -Marker $wallAfterMarker -Phase "wall_after" -ExpectedSegments 2 `
+        -ExpectedCommand "QS3DDRAWWALLREPEAT" -ExpectedCategory "ArchitecturalWall" -RequireWorldDraw
+    Require-Marker -Marker (Read-Marker $phasePaths.wall_undo) -Phase "wall_undo" -ExpectedSegments 0 `
+        -ExpectedCommand "QS3DDRAWWALLREPEAT" -ExpectedCategory "ArchitecturalWall"
+    Require-Marker -Marker (Read-Marker $phasePaths.wall_redo) -Phase "wall_redo" -ExpectedSegments 2 `
+        -ExpectedCommand "QS3DDRAWWALLREPEAT" -ExpectedCategory "ArchitecturalWall"
+    $wallWorldDrawCount = [int]$wallAfterMarker.drawjig_worlddraw_count
+    $wallRepeatedSequencePassed = $true
+
+    $beamAfterMarker = Read-Marker $phasePaths.after
+    Require-Marker -Marker $beamAfterMarker -Phase "after" -ExpectedSegments 2 -RequireWorldDraw
+    $beamWorldDrawCount = [int]$beamAfterMarker.drawjig_worlddraw_count
+    $acceptedSegments = 4
+    $drawJigPreviewPassed = $wallWorldDrawCount -gt 0 -and $beamWorldDrawCount -gt 0
     $enterTerminationPassed = $true
     Require-Marker -Marker (Read-Marker $phasePaths.undo) -Phase "undo" -ExpectedSegments 0
     $wholeCommandUndoPassed = $true
@@ -759,7 +802,7 @@ try {
     $sessionTwoLines = @(
         "FILEDIA", "0", "CMDECHO", "1", "TILEMODE", "1", "INSUNITS", "4", "UCS", "W",
         "NETLOAD", ('"' + $pluginDll + '"'), "QS3DRUNTIMEPROBE",
-        "QS3DREPEATVERIFYCOLD", "_.QUIT", "_Y"
+        "QS3DREPEATVERIFYCOLD", "QS3DREPEATVERIFYWALLCOLD", "_.QUIT", "_Y"
     )
     [IO.File]::WriteAllLines($scriptTwo, $sessionTwoLines, [Text.Encoding]::ASCII)
     $env:QS3D_RUNTIME_RESULT = $phasePaths.runtime_cold
@@ -772,11 +815,14 @@ try {
         -OriginalDemandLoadControls $demandLoadOriginalControls `
         -IsolatedDemandLoadControls $demandLoadIsolatedControls `
         -IsolationCount ([ref]$demandLoadIsolationCount) -DemandLoadRestored ([ref]$demandLoadRestored)
-    Wait-ForFilesAndExit -Paths @($phasePaths.cold_reopen) `
+    Wait-ForFilesAndExit -Paths @($phasePaths.cold_reopen, $phasePaths.wall_cold_reopen) `
         -RuntimeIdentityPath $phasePaths.runtime_cold -ExpectedAssembly $pluginDll `
         -Process $processTwo `
         -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds))
     Require-Marker -Marker (Read-Marker $phasePaths.cold_reopen) -Phase "cold_reopen" -ExpectedSegments 2
+    Require-Marker -Marker (Read-Marker $phasePaths.wall_cold_reopen) `
+        -Phase "wall_cold_reopen" -ExpectedSegments 2 `
+        -ExpectedCommand "QS3DDRAWWALLREPEAT" -ExpectedCategory "ArchitecturalWall"
     $saveColdReopenPassed = $true
 
     $script:currentPhase = "esc"
@@ -917,6 +963,8 @@ finally {
             $phasePaths.runtime_session1, $phasePaths.runtime_cold, $phasePaths.runtime_esc,
             $phasePaths.runtime_planar_ucs, $phasePaths.runtime_document_switch,
             $phasePaths.after, $phasePaths.undo, $phasePaths.redo, $phasePaths.cold_reopen,
+            $phasePaths.wall_after, $phasePaths.wall_undo, $phasePaths.wall_redo,
+            $phasePaths.wall_cold_reopen,
             $phasePaths.esc_ready, $phasePaths.esc,
             $phasePaths.planar_ucs,
             $phasePaths.document_switch_ready, $phasePaths.document_switch,
@@ -998,6 +1046,9 @@ $metadata = [ordered]@{
     exact_loaded_candidate_every_session = $exactRuntimeIdentityPassed
     startup_demandload_isolation_count = $demandLoadIsolationCount
     startup_demandload_restored = $demandLoadRestored
+    wall_repeated_sequence = $wallRepeatedSequencePassed
+    wall_drawjig_worlddraw_count = $wallWorldDrawCount
+    beam_drawjig_worlddraw_count = $beamWorldDrawCount
     drawjig_preview = $drawJigPreviewPassed
     enter_termination = $enterTerminationPassed
     exact_process_physical_esc_termination = $physicalEscPassed

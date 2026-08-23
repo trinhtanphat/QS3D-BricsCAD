@@ -16,7 +16,8 @@ using Teigha.Runtime;
 namespace QS3D.BricsCAD.V25
 {
     /// <summary>
-    /// Read-only LOCAL-008 P03 verifier for production QS3DDRAWBEAMREPEAT. It never creates,
+    /// Read-only LOCAL-008 P03 verifier for production QS3DDRAWWALLREPEAT and
+    /// QS3DDRAWBEAMREPEAT. It never creates,
     /// edits, captures, rebuilds, saves or selects CAD. The production command and BricsCAD's
     /// native Undo/Redo own every mutation; this probe only checks canonical ownership/geometry
     /// and emits sanitized markers under the runner-owned ignored artifact directory.
@@ -36,10 +37,20 @@ namespace QS3D.BricsCAD.V25
         private static SwitchArmState? _switchArm;
 
         [CommandMethod("QS3DREPEATARMSEQUENCE", CommandFlags.Modal)]
-        public void ArmSequenceQualification()
+        public void ArmSequenceQualification() => ArmSequenceQualification(ElementCategory.Beam);
+
+        [CommandMethod("QS3DREPEATARMWALLSEQUENCE", CommandFlags.Modal)]
+        public void ArmWallSequenceQualification() =>
+            ArmSequenceQualification(ElementCategory.ArchitecturalWall);
+
+        private static void ArmSequenceQualification(ElementCategory category)
         {
             var control = ControlContext();
-            var arm = new SequenceArmState(control.Document, control.Nonce, control.EvidenceDirectory);
+            var arm = new SequenceArmState(
+                control.Document,
+                control.Nonce,
+                control.EvidenceDirectory,
+                category);
             lock (Sync)
             {
                 if (_sequenceArm != null)
@@ -52,6 +63,8 @@ namespace QS3D.BricsCAD.V25
                 DirectDrawRepeatedCommands.SequenceCompletedForRuntimeQualification +=
                     OnSequenceQualificationCompleted;
                 arm.SequenceSubscribed = true;
+                DirectDrawProfileStripJig.ProfileRenderedForRuntimeQualification += OnProfileRendered;
+                arm.ProfileRenderedSubscribed = true;
             }
             catch
             {
@@ -164,11 +177,20 @@ namespace QS3D.BricsCAD.V25
         }
 
         [CommandMethod("QS3DREPEATVERIFYAFTER", CommandFlags.Modal)]
-        public void VerifyAfter() => Execute("after", () => CaptureAfter(Context()));
-
-        private static void CaptureAfter(ProbeContext context)
+        public void VerifyAfter() => Execute("after", () =>
         {
-            var segments = RequireTwoBeamSegments(context.Document, context.Project);
+            var context = Context();
+            var arm = SequenceArm(context);
+            CaptureAfter(context, arm.Category, arm.WorldDrawCount);
+        });
+
+        private static void CaptureAfter(
+            ProbeContext context,
+            ElementCategory category,
+            int worldDrawCount)
+        {
+            if (worldDrawCount <= 0) throw new ProbeFailure("WORLD_DRAW_NOT_OBSERVED");
+            var segments = RequireTwoSegments(context.Document, context.Project, category);
             var undoState = SourceReconcileUndoCoordinator.CaptureSanitizedState(
                 context.Document,
                 context.Project);
@@ -179,9 +201,18 @@ namespace QS3D.BricsCAD.V25
                     context.Nonce,
                     segments.Select(x => x.SourceHandle).ToArray(),
                     segments.Select(x => x.GeneratedHandle).ToArray(),
-                    undoState);
+                    undoState,
+                    category,
+                    worldDrawCount);
             }
-            WriteEvidence(context, "after", "PASS", 2, "NONE");
+            WriteEvidence(
+                context,
+                PhaseFor(category, "after"),
+                "PASS",
+                2,
+                "NONE",
+                category,
+                worldDrawCount);
         }
 
         [CommandMethod("QS3DREPEATVERIFYUNDO", CommandFlags.Modal)]
@@ -190,7 +221,7 @@ namespace QS3D.BricsCAD.V25
         private static void CaptureUndo(ProbeContext context)
         {
             var state = State(context);
-            if (context.Project.Elements.Any(x => x.Category == ElementCategory.Beam))
+            if (context.Project.Elements.Any(x => x.Category == state.Category))
             {
                 var undoState = SourceReconcileUndoCoordinator.CaptureSanitizedState(
                     context.Document,
@@ -202,7 +233,14 @@ namespace QS3D.BricsCAD.V25
             RequireNoLiveHandles(context.Document, state.SourceHandles, "SOURCE_UNDO_REJECTED");
             RequireNoLiveHandles(context.Document, state.GeneratedHandles, "GENERATED_UNDO_REJECTED");
             state.UndoBoundaryObserved = true;
-            WriteEvidence(context, "undo", "PASS", 0, "NONE");
+            WriteEvidence(
+                context,
+                PhaseFor(state.Category, "undo"),
+                "PASS",
+                0,
+                "NONE",
+                state.Category,
+                state.WorldDrawCount);
         }
 
         [CommandMethod("QS3DREPEATVERIFYREDO", CommandFlags.Modal)]
@@ -212,8 +250,15 @@ namespace QS3D.BricsCAD.V25
             var state = State(context);
             if (!state.UndoBoundaryObserved)
                 throw new ProbeFailure("UNDO_BOUNDARY_NOT_OBSERVED");
-            RequireTwoBeamSegments(context.Document, context.Project);
-            WriteEvidence(context, "redo", "PASS", 2, "NONE");
+            RequireTwoSegments(context.Document, context.Project, state.Category);
+            WriteEvidence(
+                context,
+                PhaseFor(state.Category, "redo"),
+                "PASS",
+                2,
+                "NONE",
+                state.Category,
+                state.WorldDrawCount);
         });
 
         [CommandMethod("QS3DREPEATVERIFYCOLD", CommandFlags.Modal)]
@@ -222,6 +267,20 @@ namespace QS3D.BricsCAD.V25
             var context = Context();
             RequireTwoBeamSegments(context.Document, context.Project);
             WriteEvidence(context, "cold_reopen", "PASS", 2, "NONE");
+        });
+
+        [CommandMethod("QS3DREPEATVERIFYWALLCOLD", CommandFlags.Modal)]
+        public void VerifyWallColdReopen() => Execute("wall_cold_reopen", () =>
+        {
+            var context = Context();
+            RequireTwoWallSegments(context.Document, context.Project);
+            WriteEvidence(
+                context,
+                "wall_cold_reopen",
+                "PASS",
+                2,
+                "NONE",
+                ElementCategory.ArchitecturalWall);
         });
 
         [CommandMethod("QS3DREPEATVERIFYUCS", CommandFlags.Modal)]
@@ -233,16 +292,28 @@ namespace QS3D.BricsCAD.V25
         });
 
         [CommandMethod("QS3DREPEATVERIFYESC", CommandFlags.Modal)]
-        public void VerifyEscape() => Execute("esc", () =>
+        public void VerifyEscape()
         {
-            var context = Context();
-            var escape = EscapeResult(context);
-            if (escape.AcceptedSegments != 1 ||
-                !string.Equals(escape.Termination, "ESC_OR_CANCEL", StringComparison.Ordinal))
-                throw new ProbeFailure("ESC_TERMINATION_REJECTED");
-            RequireOneEscBeamSegment(context.Document, context.Project);
-            WriteEvidence(context, "esc", "PASS", 1, "NONE");
-        });
+            EscapeArmState? arm;
+            lock (Sync) arm = _escapeArm;
+            try
+            {
+                Execute("esc", () =>
+                {
+                    var context = Context();
+                    var escape = EscapeResult(context);
+                    if (escape.AcceptedSegments != 1 ||
+                        !string.Equals(escape.Termination, "ESC_OR_CANCEL", StringComparison.Ordinal))
+                        throw new ProbeFailure("ESC_TERMINATION_REJECTED");
+                    RequireOneEscBeamSegment(context.Document, context.Project);
+                    WriteEvidence(context, "esc", "PASS", 1, "NONE");
+                });
+            }
+            finally
+            {
+                if (arm != null) DisarmEscape(arm);
+            }
+        }
 
         [CommandMethod("QS3DREPEATVERIFYSWITCH", CommandFlags.Modal)]
         public void VerifyDocumentSwitch()
@@ -379,6 +450,27 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static SequenceArmState SequenceArm(ProbeContext context)
+        {
+            lock (Sync)
+            {
+                if (_sequenceArm == null ||
+                    !ReferenceEquals(_sequenceArm.Document, context.Document) ||
+                    !string.Equals(_sequenceArm.Nonce, context.Nonce, StringComparison.Ordinal))
+                    throw new ProbeFailure("SEQUENCE_ARM_STATE_REJECTED");
+                return _sequenceArm;
+            }
+        }
+
+        private static void OnProfileRendered()
+        {
+            lock (Sync)
+            {
+                if (_sequenceArm == null || !_sequenceArm.ProfileRenderedSubscribed) return;
+                _sequenceArm.WorldDrawCount = checked(_sequenceArm.WorldDrawCount + 1);
+            }
+        }
+
         private static void OnSequenceQualificationCompleted(
             Document document,
             int acceptedSegments,
@@ -404,7 +496,9 @@ namespace QS3D.BricsCAD.V25
                         arm.EvidenceDirectory,
                         StringComparison.OrdinalIgnoreCase))
                     throw new ProbeFailure("SEQUENCE_ARM_AFFINITY_REJECTED");
-                CaptureAfter(context);
+                if (arm.WorldDrawCount <= 0)
+                    throw new ProbeFailure("WORLD_DRAW_NOT_OBSERVED");
+                CaptureAfter(context, arm.Category, arm.WorldDrawCount);
                 ArmUndoBoundary(arm);
                 transitionArmed = true;
             }
@@ -418,10 +512,12 @@ namespace QS3D.BricsCAD.V25
                     WriteEvidenceCore(
                         arm.Nonce,
                         arm.EvidenceDirectory,
-                        "after",
+                        PhaseFor(arm.Category, "after"),
                         "FAIL",
                         -1,
-                        errorCode);
+                        errorCode,
+                        arm.Category,
+                        arm.WorldDrawCount);
                 }
                 catch { }
             }
@@ -461,10 +557,12 @@ namespace QS3D.BricsCAD.V25
                     WriteEvidenceCore(
                         arm.Nonce,
                         arm.EvidenceDirectory,
-                        "undo",
+                        PhaseFor(arm.Category, "undo"),
                         "FAIL",
                         -1,
-                        errorCode);
+                        errorCode,
+                        arm.Category,
+                        arm.WorldDrawCount);
                 }
                 catch { }
             }
@@ -488,6 +586,11 @@ namespace QS3D.BricsCAD.V25
                 arm.SequenceSubscribed = false;
                 DirectDrawRepeatedCommands.SequenceCompletedForRuntimeQualification -=
                     OnSequenceQualificationCompleted;
+            }
+            if (arm.ProfileRenderedSubscribed)
+            {
+                arm.ProfileRenderedSubscribed = false;
+                DirectDrawProfileStripJig.ProfileRenderedForRuntimeQualification -= OnProfileRendered;
             }
             if (arm.TransitionSubscribed)
             {
@@ -779,6 +882,18 @@ namespace QS3D.BricsCAD.V25
             point.Y.ToString("R", CultureInfo.InvariantCulture) + "," +
             point.Z.ToString("R", CultureInfo.InvariantCulture);
 
+        private static IReadOnlyList<SegmentState> RequireTwoSegments(
+            Document document,
+            ProjectState project,
+            ElementCategory category)
+        {
+            if (category == ElementCategory.Beam)
+                return RequireTwoBeamSegments(document, project);
+            if (category == ElementCategory.ArchitecturalWall)
+                return RequireTwoWallSegments(document, project);
+            throw new ProbeFailure("SEQUENCE_CATEGORY_REJECTED");
+        }
+
         private static IReadOnlyList<SegmentState> RequireTwoBeamSegments(
             Document document,
             ProjectState project)
@@ -797,6 +912,27 @@ namespace QS3D.BricsCAD.V25
             if (segments.Select(x => x.SourceHandle).Distinct(StringComparer.OrdinalIgnoreCase).Count() != 2 ||
                 segments.Select(x => x.GeneratedHandle).Distinct(StringComparer.OrdinalIgnoreCase).Count() != 2)
                 throw new ProbeFailure("OWNERSHIP_ALIAS_REJECTED");
+            return segments;
+        }
+
+        private static IReadOnlyList<SegmentState> RequireTwoWallSegments(
+            Document document,
+            ProjectState project)
+        {
+            var walls = project.Elements
+                .Where(x => x.Category == ElementCategory.ArchitecturalWall)
+                .OrderBy(x => x.Id, StringComparer.Ordinal)
+                .ToList();
+            if (walls.Count != 2) throw new ProbeFailure("WALL_SEMANTIC_SEGMENT_COUNT_REJECTED");
+
+            var segments = walls.Select(x => ReadSegment(document, project, x))
+                .OrderBy(x => x.MinimumXM)
+                .ToList();
+            RequireSegment(segments[0], 0d, 5d, 6d, "WALL_FIRST_SEGMENT_GEOMETRY_REJECTED");
+            RequireSegment(segments[1], 5d, 10d, 6d, "WALL_SECOND_SEGMENT_GEOMETRY_REJECTED");
+            if (segments.Select(x => x.SourceHandle).Distinct(StringComparer.OrdinalIgnoreCase).Count() != 2 ||
+                segments.Select(x => x.GeneratedHandle).Distinct(StringComparer.OrdinalIgnoreCase).Count() != 2)
+                throw new ProbeFailure("WALL_OWNERSHIP_ALIAS_REJECTED");
             return segments;
         }
 
@@ -935,14 +1071,18 @@ namespace QS3D.BricsCAD.V25
             string phase,
             string status,
             int semanticSegments,
-            string errorCode) =>
+            string errorCode,
+            ElementCategory category = ElementCategory.Beam,
+            int worldDrawCount = -1) =>
             WriteEvidenceCore(
                 context.Nonce,
                 context.EvidenceDirectory,
                 phase,
                 status,
                 semanticSegments,
-                errorCode);
+                errorCode,
+                category,
+                worldDrawCount);
 
         private static void WriteEvidenceCore(
             string nonce,
@@ -950,7 +1090,9 @@ namespace QS3D.BricsCAD.V25
             string phase,
             string status,
             int semanticSegments,
-            string errorCode)
+            string errorCode,
+            ElementCategory category = ElementCategory.Beam,
+            int worldDrawCount = -1)
         {
             var fileName = "repeat-" + phase.Replace('_', '-') + ".txt";
             var path = Path.GetFullPath(Path.Combine(evidenceDirectory, fileName));
@@ -974,11 +1116,13 @@ namespace QS3D.BricsCAD.V25
                 "nonce=" + nonce,
                 "host_major=" + hostMajor,
                 "adapter=" + adapter,
-                "production_command=QS3DDRAWBEAMREPEAT",
+                "production_command=" + CommandFor(category),
+                "production_category=" + category,
                 "semantic_segments=" + semanticSegments.ToString(CultureInfo.InvariantCulture),
                 "source_type=LINE",
                 "native_type=Solid3d",
                 "preview_type=DrawJigProfileStrip",
+                "drawjig_worlddraw_count=" + worldDrawCount.ToString(CultureInfo.InvariantCulture),
                 "undo_scope=WholeCommand",
                 "error_code=" + errorCode
             });
@@ -999,6 +1143,16 @@ namespace QS3D.BricsCAD.V25
                 semanticSegments,
                 errorCode);
         }
+
+        private static string CommandFor(ElementCategory category)
+        {
+            if (category == ElementCategory.Beam) return "QS3DDRAWBEAMREPEAT";
+            if (category == ElementCategory.ArchitecturalWall) return "QS3DDRAWWALLREPEAT";
+            throw new ProbeFailure("SEQUENCE_CATEGORY_REJECTED");
+        }
+
+        private static string PhaseFor(ElementCategory category, string phase) =>
+            category == ElementCategory.ArchitecturalWall ? "wall_" + phase : phase;
 
         private sealed class ControlProbeContext
         {
@@ -1070,18 +1224,26 @@ namespace QS3D.BricsCAD.V25
 
         private sealed class SequenceArmState
         {
-            public SequenceArmState(Document document, string nonce, string evidenceDirectory)
+            public SequenceArmState(
+                Document document,
+                string nonce,
+                string evidenceDirectory,
+                ElementCategory category)
             {
                 Document = document;
                 Nonce = nonce;
                 EvidenceDirectory = evidenceDirectory;
+                Category = category;
             }
 
             public Document Document { get; }
             public string Nonce { get; }
             public string EvidenceDirectory { get; }
+            public ElementCategory Category { get; }
             public bool SequenceSubscribed { get; set; }
             public bool TransitionSubscribed { get; set; }
+            public bool ProfileRenderedSubscribed { get; set; }
+            public int WorldDrawCount { get; set; }
         }
 
         private sealed class EscapeArmState
@@ -1151,7 +1313,9 @@ namespace QS3D.BricsCAD.V25
                 string nonce,
                 IReadOnlyList<string> sourceHandles,
                 IReadOnlyList<string> generatedHandles,
-                SourceReconcileUndoCoordinator.SanitizedDiagnosticSnapshot afterCommandUndoState)
+                SourceReconcileUndoCoordinator.SanitizedDiagnosticSnapshot afterCommandUndoState,
+                ElementCategory category,
+                int worldDrawCount)
             {
                 Document = document;
                 Nonce = nonce;
@@ -1159,6 +1323,8 @@ namespace QS3D.BricsCAD.V25
                 GeneratedHandles = generatedHandles;
                 AfterCommandUndoState = afterCommandUndoState ??
                     throw new ArgumentNullException(nameof(afterCommandUndoState));
+                Category = category;
+                WorldDrawCount = worldDrawCount;
             }
 
             public Document Document { get; }
@@ -1166,6 +1332,8 @@ namespace QS3D.BricsCAD.V25
             public IReadOnlyList<string> SourceHandles { get; }
             public IReadOnlyList<string> GeneratedHandles { get; }
             public SourceReconcileUndoCoordinator.SanitizedDiagnosticSnapshot AfterCommandUndoState { get; }
+            public ElementCategory Category { get; }
+            public int WorldDrawCount { get; }
             public bool UndoBoundaryObserved { get; set; }
         }
 
