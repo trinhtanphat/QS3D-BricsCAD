@@ -40,12 +40,32 @@ def local_section(local_id):
     return inbox[start:] if end < 0 else inbox[start:end]
 
 
-def evidence_line(section):
+def evidence_remains_pending(section):
     for line in section.splitlines():
         stripped = line.strip()
-        if stripped.startswith("- Evidence:"):
-            return stripped
-    return ""
+        if not stripped.startswith("- Evidence:"):
+            continue
+        evidence = stripped.split(":", 1)[1].replace("`", "").strip()
+        return evidence == "PENDING_LOCAL" or "overall PENDING_LOCAL" in evidence
+    return False
+
+
+for fixture, expected in (
+    ("- Evidence: PENDING_LOCAL", True),
+    ("- Evidence: P01 / Sheet row 2 `LOCAL_PASS`; overall `PENDING_LOCAL`", True),
+    ("- Evidence: P01 / Sheet row 2 `LOCAL_PASS`", False),
+    ("- Evidence: PASS", False),
+):
+    actual = evidence_remains_pending(fixture)
+    if actual != expected:
+        errors.append(
+            "LOCAL-008 pending-evidence matcher regression: "
+            + fixture
+            + " expected="
+            + str(expected)
+            + " actual="
+            + str(actual)
+        )
 
 
 for token, label in (
@@ -134,9 +154,8 @@ local_014 = local_section("LOCAL-014")
 for token in ('Status: OPEN', 'QS3DDRAWWINDOW', 'OpeningUsage=Window', 'Auto Host', 'QS3DCUTSELECTEDOPENINGS', 'Ribbon'):
     if token not in local_008:
         errors.append("LOCAL-008 must own Window/finish runtime qualification: " + token)
-local_008_evidence = evidence_line(local_008)
-if 'PENDING_LOCAL' not in local_008_evidence:
-    errors.append("LOCAL-008 evidence must remain overall PENDING_LOCAL until full runtime qualification")
+if not evidence_remains_pending(local_008):
+    errors.append("LOCAL-008 must keep Window/finish runtime qualification overall PENDING_LOCAL")
 for token in ('Status: OPEN', 'Evidence: PENDING_LOCAL', 'QS3DCONVERT2D', 'QS3DPLAN2WALLS', 'QS3DCONVERT2DADV', 'PENDING_LOCAL / DO_NOT_RETRY_REMOTE'):
     if token not in local_014:
         errors.append("LOCAL-014 must own Plan-to-3D runtime qualification: " + token)
