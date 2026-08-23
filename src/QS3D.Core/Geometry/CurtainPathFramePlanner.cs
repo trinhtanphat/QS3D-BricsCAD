@@ -224,6 +224,8 @@ namespace QS3D.Core.Geometry
                 var length = start.DistanceTo(end);
                 if (!(length > Tolerance)) throw new InvalidOperationException("Curtain host path contains a zero-length segment at index " + index + ".");
                 var endStation = Add(station, length, "curtain path cumulative length");
+                if (!(endStation > station))
+                    throw new OverflowException("Curtain path cumulative length lost a positive segment at floating-point precision.");
                 segments.Add(new PathSegment(start, end, station, endStation, length));
                 station = endStation;
             }
