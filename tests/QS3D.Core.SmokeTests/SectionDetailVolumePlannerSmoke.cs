@@ -56,6 +56,9 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentOutOfRangeException>(() => new SectionDetailVolumePlan(
                 0d, 0d, double.MaxValue, 1d, 1d, double.MaxValue),
                 "Direct BIM Detail plans must reject represented-top overflow.");
+            Throws<ArgumentOutOfRangeException>(() => new SectionDetailVolumePlan(
+                0d, 0d, 1e16d, 1d, 1d, 1d),
+                "Direct BIM Detail plans must reject a positive height that collapses at the represented base Z.");
         }
 
         private static void DirectConstructionAcceptsCanonicalState()

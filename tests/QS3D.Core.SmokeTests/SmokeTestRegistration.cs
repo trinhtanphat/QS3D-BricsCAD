@@ -82,8 +82,10 @@ namespace QS3D.Core.SmokeTests
             RebarCuttingOptimizerSmoke.Run();
             WallJunctionRegressionSmoke.Run();
             WallJunctionAdjustmentSmoke.Run();
+            WallJunctionSnapPromptDriftSourceGuardSmoke.Run();
             PolylineOpeningCutSmoke.Run();
             OpeningCutPlannerClearancePrecisionSmoke.Run();
+            SlabOpeningCutPlannerSpanPrecisionSmoke.Run();
             SectionDetailVolumePlannerSmoke.Run();
             GeometryOffsetPrecisionSmoke.Run();
             ProjectRebarShapeSmoke.Run();
@@ -191,6 +193,7 @@ namespace QS3D.Core.SmokeTests
             ProjectPersistenceLifecycleSmoke.Run();
             ProjectSidecarRevisionStampSmoke.Run();
             QsdbCanonicalPersistenceSmoke.Run();
+            RepositorySyntheticQsdbSmoke.Run();
             QsdbFamilyCategoryReferenceSmoke.Run();
             QsdbTimestampValidationSmoke.Run();
             QsdbActiveContextReferentialIntegritySmoke.Run();

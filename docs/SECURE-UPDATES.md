@@ -27,7 +27,8 @@ This matters because a signed plugin can still load a modified dependency DLL, a
 7. All signature checks finish before the downloaded installer script is executed.
 8. Installed-version downgrade protection reconciles the installed plugin assembly version with `PACKAGE-METADATA.json` before comparing versions. A mismatched installed DLL/metadata state fails closed instead of silently treating the installation as `0.0.0.0`; same-version repair still requires the explicit switch.
 9. The downloaded manifest/package version is bound to the Authenticode-verified plugin assembly version, preventing metadata-only replay/downgrade substitution.
-10. BricsCAD must be closed before replacement; the installer keeps staging/backup rollback and never lowers `SECURELOAD`.
+10. A one-click update freezes the matching V25/V26 registration's existing `OnStartup` or `OnCommand` mode only after every locale registration points to the running DLL and agrees on one valid `LoadCtrls` value. Missing, stale, malformed, or mixed registration state fails closed; new/manual installs still default to `OnCommand`.
+11. BricsCAD must be closed before replacement; the installer keeps staging/backup rollback and never lowers `SECURELOAD`.
 
 These checks close the supply-chain cases where a compromised package origin combines a legitimate signed plugin with a modified Core DLL or PowerShell script, and prevent damaged/missing local metadata from weakening the downgrade decision while an installed plugin is still present.
 

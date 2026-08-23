@@ -1,0 +1,3 @@
+[submodule "external/QS3D-Platform"]
+	path = external/QS3D-Platform
+	url = https://github.com/trinhtanphat/QS3D-Platform.git

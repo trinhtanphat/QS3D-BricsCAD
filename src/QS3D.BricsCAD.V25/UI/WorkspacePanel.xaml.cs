@@ -430,6 +430,7 @@ namespace QS3D.BricsCAD.V25.UI
             Send("QS3DBUILD3D");
         }
         private void OnWallJunctionsClick(object sender, RoutedEventArgs e) { SetStatus("Phân tích giao tim tường L / T / X trong selection."); Send("QS3DWALLJUNCTIONS"); }
+        private void OnWallJunction3DClick(object sender, RoutedEventArgs e) { SetStatus("Tạo/cập nhật dedicated Wall Junction 3D trong selection."); Send("QS3DWALLJUNCTION3D"); }
         private void OnWallSnapPreviewClick(object sender, RoutedEventArgs e) { SetStatus("Xem trước kế hoạch snap đầu mút tường; chưa sửa CAD."); Send("QS3DWALLSNAPPREVIEW"); }
         private void OnWallSnapApplyClick(object sender, RoutedEventArgs e) { SetStatus("Áp dụng wall snap từ preview còn hợp lệ."); Send("QS3DWALLSNAPAPPLY"); }
         private void OnAutoHostClick(object sender, RoutedEventArgs e) { SetStatus("Tự ghép Cửa/Lỗ đang chọn với wall host an toàn; chưa khoét solid."); Send("QS3DAUTOLINKHOSTS"); }

@@ -24,7 +24,7 @@ def main():
         "private static IReadOnlyList<QuantityReportRow> BuildPreviewRows(ProjectState project, out int regenerated)",
         "ProjectStateSnapshot.CreateDetachedCopy(project)",
         "RegenerateDirty(previewProject)",
-        "ProjectQuantityReportBuilder.Group(previewProject)",
+        "ProjectQuantityReportBuilder.Detail(previewProject)",
         "SameElementIdentity(displayedIds, x)",
         "if (matches.Count != 1)",
         "if (!SameRow(displayedRow, matches[0]))",
@@ -52,11 +52,11 @@ def main():
     preview_method = text.find("private static IReadOnlyList<QuantityReportRow> BuildPreviewRows")
     detached_pos = text.find("ProjectStateSnapshot.CreateDetachedCopy(project)", preview_method)
     regen_pos = text.find("RegenerateDirty(previewProject)", detached_pos)
-    grouped_pos = text.find("ProjectQuantityReportBuilder.Group(previewProject)", regen_pos)
-    if min(preview_method, detached_pos, regen_pos, grouped_pos) < 0 or not (
-        preview_method < detached_pos < regen_pos < grouped_pos
+    detail_pos = text.find("ProjectQuantityReportBuilder.Detail(previewProject)", regen_pos)
+    if min(preview_method, detached_pos, regen_pos, detail_pos) < 0 or not (
+        preview_method < detached_pos < regen_pos < detail_pos
     ):
-        print("ERROR: Quantity Insight preview rows must regenerate detached project state before grouping quantities.")
+        print("ERROR: Quantity Insight preview rows must regenerate detached project state before materializing element-detail quantities.")
         return 1
 
     resolve_method = text.find("private QuantityReportRow ResolveCurrentRow")
@@ -74,6 +74,7 @@ def main():
         "ExistingProjectMutationContext.Require",
         "SourceHandleResolver.Resolve(project, item.ElementIds)",
         "ProjectQuantityReportBuilder.Group(project)",
+        "ProjectQuantityReportBuilder.Detail(project)",
     ]
     found = [token for token in forbidden if token in text]
     if found:
@@ -82,7 +83,7 @@ def main():
             print(" - forbidden:", token)
         return 1
 
-    print("PASS: Quantity Insight preview-regenerates detached state, fails closed across DWG/project changes, and revalidates the current preview row before native CAD selection/zoom.")
+    print("PASS: Quantity Insight preview-regenerates detached state, fails closed across DWG/project changes, and revalidates the current element-detail preview row before native CAD selection/zoom.")
     return 0
 
 

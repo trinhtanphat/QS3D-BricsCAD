@@ -29,8 +29,9 @@ namespace QS3D.Core.Formulas
 
         private static void ValidateExpression(string expression)
         {
-            if (string.IsNullOrWhiteSpace(expression)) throw new ArgumentException("Expression is required.", nameof(expression));
+            if (expression == null) throw new ArgumentException("Expression is required.", nameof(expression));
             if (expression.Length > MaxExpressionLength) throw new InvalidOperationException("Expression is too long.");
+            if (string.IsNullOrWhiteSpace(expression)) throw new ArgumentException("Expression is required.", nameof(expression));
         }
 
         private static IReadOnlyDictionary<string, double> NormalizeVariables(IReadOnlyDictionary<string, double>? variables)
@@ -46,16 +47,22 @@ namespace QS3D.Core.Formulas
                 variableCount++;
                 if (variableCount > MaxVariableCount)
                     throw new InvalidOperationException($"Variable count exceeds the supported maximum of {MaxVariableCount}.");
-                if (string.IsNullOrWhiteSpace(pair.Key))
+
+                var rawName = pair.Key;
+                if (rawName == null)
+                    throw new InvalidOperationException("Variable names cannot be blank or whitespace-only.");
+                if (rawName.Length > MaxExpressionLength)
+                    throw new InvalidOperationException($"Variable name length exceeds the supported maximum of {MaxExpressionLength} characters.");
+                if (string.IsNullOrWhiteSpace(rawName))
                     throw new InvalidOperationException("Variable names cannot be blank or whitespace-only.");
 
-                var normalizedName = pair.Key.Trim();
-                if (!string.Equals(pair.Key, normalizedName, StringComparison.Ordinal))
-                    throw new InvalidOperationException($"Variable name '{pair.Key}' must not contain leading or trailing whitespace.");
+                var normalizedName = rawName.Trim();
+                if (!string.Equals(rawName, normalizedName, StringComparison.Ordinal))
+                    throw new InvalidOperationException($"Variable name '{rawName}' must not contain leading or trailing whitespace.");
                 if (!IsValidIdentifier(normalizedName))
                     throw new InvalidOperationException($"Variable name '{normalizedName}' is not a valid expression identifier.");
                 if (normalized.ContainsKey(normalizedName))
-                    throw new InvalidOperationException($"Variable name '{pair.Key}' conflicts with another variable after ignoring casing.");
+                    throw new InvalidOperationException($"Variable name '{rawName}' conflicts with another variable after ignoring casing.");
                 if (double.IsNaN(pair.Value) || double.IsInfinity(pair.Value))
                     throw new InvalidOperationException($"Variable '{normalizedName}' contains a non-finite value.");
                 normalized.Add(normalizedName, pair.Value);

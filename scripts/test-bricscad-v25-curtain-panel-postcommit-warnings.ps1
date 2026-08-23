@@ -127,8 +127,9 @@ if ($LASTEXITCODE -ne 0 -or $gitHead -notmatch '^[0-9a-f]{40}$') { throw "Cannot
 $gitStatus = @(& $git.Source -C $repoRoot status --porcelain --untracked-files=normal)
 if ($LASTEXITCODE -ne 0) { throw "Cannot inspect the Git candidate worktree." }
 if ($gitStatus.Count -ne 0) { throw "Curtain P09 runtime qualification requires a clean exact-SHA worktree." }
-if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
-    throw "Close existing BricsCAD processes before starting the isolated Curtain P09 runtime probe."
+Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead
+if (@(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe).Count -gt 0) {
+    throw "Close existing BricsCAD V25 processes before starting the isolated Curtain P09 runtime probe."
 }
 
 $projectSidecar = [IO.Path]::ChangeExtension($DrawingCopy, ".qsdb")
@@ -260,7 +261,7 @@ try {
 
     Stop-Qs3dLaunchedProcess -Process $process
     Remove-Qs3dDrawingLocks -Paths $drawingLocks
-    if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -ne 0) { throw "Curtain P09 process cleanup is incomplete." }
+    if (-not (Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30)) { throw "Curtain P09 V25 process cleanup is incomplete." }
     if (Test-Path -LiteralPath $scriptPath) { Remove-Item -LiteralPath $scriptPath -Force -ErrorAction Stop }
     if (Test-Path -LiteralPath $scriptPath) { throw "Curtain P09 runtime script cleanup failed." }
     $drawingHashAfter = (Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()

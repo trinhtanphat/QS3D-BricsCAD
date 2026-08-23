@@ -8,4 +8,7 @@
     <FileVersion>0.1.0.10081</FileVersion>
     <InformationalVersion>0.1.0-preview.10081</InformationalVersion>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\external\QS3D-Platform\src\QS3D.Platform.Parity\QS3D.Platform.Parity.csproj" />
+  </ItemGroup>
 </Project>

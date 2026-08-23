@@ -164,9 +164,9 @@ if RUNNER.is_file():
         'samples\\generated\\QS3D-Sample.dwg',
         'ArtifactDir must stay outside the repository.',
         'LOCAL-004 qualification requires a clean exact-SHA worktree.',
-        'ProductVersion',
-        '$expectedAssemblyRevision = "+" + $gitHead',
-        'Get-Process -Name "bricscad"',
+        'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $gitHead',
+        'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
+        'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
         '$privateFiles.Count -ne 12',
         '($sidecar + ".bak")',
         '($sidecar + ".lock")',
@@ -282,7 +282,7 @@ if RUNNER.is_file():
     for forbidden in ('profile =', 'drawing_path', 'plugin_path', 'artifact_path', 'handle'):
         if forbidden in metadata:
             errors.append("LOCAL-004 metadata contains a private/identity field: " + forbidden)
-    for forbidden in ('Get-Process -Name "*"', 'Process.GetProcesses', 'SendKeys', 'SetForegroundWindow'):
+    for forbidden in ('Get-Process -Name "*"', 'Get-Process -Name "bricscad"', '$expectedAssemblyRevision', 'Process.GetProcesses', 'SendKeys', 'SetForegroundWindow'):
         if forbidden in text:
             errors.append("LOCAL-004 runner contains a broad process/window action: " + forbidden)
 

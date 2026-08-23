@@ -60,7 +60,7 @@ This cloud lane is not licensed local BricsCAD runtime evidence. Native NETLOAD/
 
 - self-hosted Windows x64 runner labeled `bricscad-v26`;
 - .NET 8 SDK + Microsoft Windows Desktop Runtime 8.x;
-- `BRICSCAD_V26_DIR` must resolve a `bricscad.exe` with file major 26 plus V26 `BrxMgd.dll` / `TD_Mgd.dll`;
+- `BRICSCAD_V26_DIR` must resolve a `bricscad.exe` with file major 26 plus the co-located V26 `BrxMgd.dll`, `TD_Mgd.dll`, and `TD_MgdBrep.dll` host references;
 - V26 adapter build from `bin/x64/Release/net8.0-windows`;
 - optional licensed V26 NETLOAD/runtime evidence through `scripts/test-bricscad-v26-runtime.ps1`.
 

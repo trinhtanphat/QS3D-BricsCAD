@@ -44,14 +44,26 @@ if not errors:
     for needle in (
         "DocumentToBeDestroyed += OnDocumentToBeDestroyed",
         "DocumentToBeDestroyed -= OnDocumentToBeDestroyed",
-        "ReferenceEquals(e.Document, _document)",
+        "private readonly IntPtr _nativeDatabaseIdentity;",
+        "_nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
+        "database.UnmanagedObject == _nativeDatabaseIdentity",
+        "if (!MatchesNativeDatabase(document))",
+        "if (!MatchesNativeDatabase(e.Document)) return;",
         "_window.Closed += OnWindowClosed",
         "_window.Closed -= OnWindowClosed",
         "_window.Dispatcher.CheckAccess()",
-        "_window.Dispatcher.BeginInvoke(new Action(_window.Close))",
+        "_window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher))",
+        "private void TryCloseWindowOnDispatcher()",
     ):
         if needle not in text["lifetime"]:
             errors.append("document-bound lifetime coordinator missing: " + needle)
+
+    for legacy in (
+        "ReferenceEquals(e.Document, _document)",
+        "ReferenceEquals(document, _document)",
+    ):
+        if legacy in text["lifetime"]:
+            errors.append("document-bound lifetime must not depend on managed Document wrapper identity: " + legacy)
 
     for key in ("recognition", "revision", "health", "bq", "bbs", "door_schedule", "room_schedule"):
         if "DocumentBoundWindowLifetime.Attach(this, _document);" not in text[key]:
@@ -122,4 +134,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: document-bound review/health/BQ/BBS/schedule/manager windows own one source-DWG lifetime attachment in their constructors; launchers do not duplicate it, while dynamic hubs remain active-document based.")
+print("PASS: document-bound review/health/BQ/BBS/schedule/manager windows own one source-DWG lifetime attachment in their constructors; native database identity tolerates managed-wrapper drift without cross-DWG rebinding, while dynamic hubs remain active-document based.")

@@ -2,6 +2,8 @@
 
 **Owner rule:** normal AI agents/chat sessions treat `origin/main` as read-only. Every task—including source, tests, scripts, workflows, documentation, Markdown, claim/handoff/status and chores—must be done on a dedicated issue/branch/PR. Only an agent/session explicitly authorized by the repository owner as an integration/merge coordinator may change `main`.
 
+**Owner-prompt carrier rule:** one owner prompt/request that asks for one overall outcome is **one task carrier by default**: one task Issue/Lane-Key, one canonical remote branch, and one canonical PR. Multiple implementation steps, acceptance criteria, files, modules, commands, regressions, guards, docs updates, or coherent commits stay inside that same carrier. Do **not** infer an umbrella/roadmap or create leaf Issues/branches merely because one prompt contains several related subtasks.
+
 `docs/MAIN-WRITE-AUTHORIZATION.md` is authoritative for `main` write permission. This file is the canonical work-registration and batch-integration protocol. `docs/AGENT-LANE-LOCK.md` is authoritative for concurrent Lane-Key ownership and canonical-carrier uniqueness. `docs/CHATGPT-SCHEDULE-BOUNDARY.md` is authoritative for the boundary between external ChatGPT account scheduled tasks and repository ownership/lane semantics. `CI_POLICY.md` is authoritative for CI behavior. `docs/GITHUB-MAIN-PROTECTION.md` records the current hard-protection contract.
 
 ## Source of truth for reservations
@@ -31,7 +33,18 @@ A reservation should identify:
 
 ## Canonical Lane-Key / carrier lock
 
-Every concrete task has one stable Lane-Key. For normal issue-backed work use `issue-<number>`. An umbrella audit Issue is not a shared Lane-Key for every discovered implementation; each concrete fix needs its own unique task Issue/Lane-Key.
+Every owner-request task has one stable Lane-Key. For normal issue-backed work use `issue-<number>`.
+
+The **default decomposition boundary is the owner prompt/request**, not each implementation subtask discovered while executing it. If one owner prompt asks for one overall result, keep all related fixes/features/subtasks on the same Issue/Lane-Key/branch/PR even when they touch multiple files, commands, modules, acceptance criteria, tests, guards, docs, or runtime surfaces.
+
+An additional task carrier may be created only when at least one explicit split exception applies:
+
+1. the owner explicitly asks to split the work;
+2. an already-active lane/ownership collision makes the shared carrier unsafe;
+3. a subtask has a genuinely independent release/revert/security/risk boundary that requires isolation;
+4. a hard dependency or CI/release constraint requires isolation.
+
+Before creating an extra Issue/Lane-Key/branch/PR, record the applicable split reason on the current task Issue. If none of the four exceptions applies, continue on the current carrier. An umbrella/roadmap Issue is appropriate only when the owner actually requested or established independently carried work; **do not infer umbrella status merely because one prompt contains multiple related subtasks**.
 
 At any time a Lane-Key may have at most:
 
@@ -87,18 +100,18 @@ The only normal exception is a **minimal collision check** against visible reser
 2. Read `AGENTS.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `CI_POLICY.md`, this file, `docs/AGENT-LANE-LOCK.md`, `docs/CHATGPT-SCHEDULE-BOUNDARY.md` when the session was invoked by or discusses an external schedule, and the Issue/claim/runbook for **this lane**.
 3. Perform only the minimal reservation/collision check needed to verify that this lane is not already owned; do not audit other agents' work.
 4. Determine the stable Lane-Key and verify there is no equivalent ACTIVE owner/canonical carrier. If one exists, stop as `DUPLICATE_CARRIER / NO MUTATION`.
-5. Choose a non-overlapping lane.
-6. Create or update a GitHub Issue to register the lane, unless an existing owner-created issue already uniquely identifies it.
+5. Treat the current owner prompt/request as the lane by default. Do not split it by file, command, module, acceptance criterion, implementation step, or discovered related fix. If an extra carrier is truly required, first verify one of the four split exceptions above and record the reason on the current task Issue.
+6. Create or update one GitHub Issue to register that owner-request lane, unless an existing owner-created issue already uniquely identifies it.
 7. Create a dedicated branch from the latest valid baseline, normally:
 
    ```text
    agent/<agent-id>/<scope>
    ```
 
-   Do not create a second task branch when the Lane-Key already has an active canonical carrier unless explicit supersession was recorded first.
+   Do not create a second task branch when the Lane-Key already has an active canonical carrier unless explicit supersession was recorded first or a documented split exception requires an independently carried task.
 
 8. Put every repository change for the task on that one canonical branch, including docs/Markdown/claims/chores.
-9. Implement only the reserved lane.
+9. Implement only the reserved lane, including all related subtasks that belong to the same owner-request outcome.
 10. Run relevant local/static/unit/smoke validation available to this lane.
 11. Push the task branch. When watched integration-relevant paths changed, the shared branch CI must automatically validate the exact branch SHA.
 12. **Before opening a new PR for watched/integration-relevant work, wait for the exact current branch SHA to reach terminal branch-CI `SUCCESS`.** A PR or draft PR must not be used as the first CI attempt. If the branch run fails, fix it on the branch and obtain a new green run first.
@@ -201,11 +214,13 @@ Canonical CI/governance files are watched by shared branch CI. For those watched
 
 ## Multi-agent integration branch
 
-For a multi-agent owner request, the owner-authorized coordinator should assemble the combined candidate on:
+For a **deliberately split** multi-agent owner request—where the owner explicitly assigned separate lanes or one of the documented split exceptions requires independent carriers—the owner-authorized coordinator should assemble the combined candidate on:
 
 ```text
 integration/<batch-id>
 ```
+
+Do not create a multi-agent batch merely because a single owner prompt contains multiple related subtasks; keep those subtasks on the one owner-prompt carrier by default.
 
 The coordinator exception begins **only after explicit owner authorization**. Only then may that coordinator inspect the exact named participating Issues/PRs/branches required for the authorized batch.
 
@@ -276,9 +291,10 @@ If work expands beyond the registered scope:
 
 1. stop before touching the added implementation surface;
 2. refresh `main` and perform only the minimum collision check for the added scope/Lane-Key;
-3. update the task Issue and branch claim/handoff with the added scope;
-4. if the added scope or equivalent Lane-Key is owned by another agent, do not inspect or take it over; keep it excluded unless the owner explicitly reassigns it;
-5. continue on the same canonical task branch, or explicitly supersede before creating a replacement carrier when genuinely required.
+3. update the current task Issue and branch claim/handoff with the added scope;
+4. if the added scope is related to the same owner-request outcome and is not owned by another active lane, **continue on the same canonical carrier**;
+5. create a separate carrier only when one of the four documented split exceptions applies, and record that reason before creating it;
+6. if the added scope or equivalent Lane-Key is owned by another agent, do not inspect or take it over; keep it excluded unless the owner explicitly reassigns it.
 
 Do not push a claim amendment to `main` merely to reserve the expanded scope.
 

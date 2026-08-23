@@ -199,6 +199,8 @@ namespace QS3D.BricsCAD.V25.Services
                 New("QS3DWALLSNAPAPPLY", "Apply Wall Snap", "Áp đúng preview fingerprint đã duyệt.", "Mô hình", "wall snap apply", 54),
                 New("QS3DCURTAIN", "Curtain Hub", "Mở workflow Vách Kính / Curtain.", "Mô hình", "curtain glass wall", 55),
                 New("QS3DCURTAIN3D", "Curtain 3D", "Build host, frame và panel theo contract hiện tại.", "Mô hình", "curtain frames panels 3d", 56),
+                New("QS3DWALLJUNCTION3D", "Junction 3D", "Tạo/cập nhật dedicated native Solid3d theo ownership group WJP1.", "Mô hình", "wall junction physical 3d l t x multi", 57),
+                New("QS3DWALLJUNCTIONHEALTH", "Junction Health", "Kiểm tra ownership, live output và WJF1 stale state.", "Mô hình", "wall junction health ownership stale", 58),
 
                 New("QS3DRECOGNIZE", "Nhận dạng + Review", "Nhận dạng deterministic và duyệt kết quả.", "Nhận dạng", "recognize recognition review", 60),
                 New("QS3DRECOGNIZEAUTO", "Nhận dạng tự động", "Tự áp dụng kết quả đủ độ tin cậy.", "Nhận dạng", "recognize auto confidence", 61),

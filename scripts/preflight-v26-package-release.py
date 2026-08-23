@@ -110,6 +110,7 @@ for token in (
     "QS3D-BricsCAD-V26",
     "QS3D-BricsCAD-V26.zip",
     "QS3D.BricsCAD.V26.dll",
+    "QS3D.BricsCAD.V26.runtimeconfig.json",
     "BricsCAD V26 x64",
     "framework = 'net8.0-windows'",
     "new-v26-script-from-v25.ps1",
@@ -155,6 +156,7 @@ for token in ("QS3D-BricsCAD-V25.update.json", "QS3D-BricsCAD-V25-Updater"):
 # V26 targets .NET 8 with warnings-as-errors. Keep updater HTTP on HttpClient so
 # obsolete WebRequest/CreateHttp (SYSLIB0014) cannot re-enter this release lane.
 require(build_props, "<TreatWarningsAsErrors>true</TreatWarningsAsErrors>", "Directory.Build.props")
+require(build_props, "<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>", "Directory.Build.props")
 for text, label in (
     (v26_release_client, "V26 release client"),
     (v26_manifest_probe, "V26 manifest probe"),
@@ -198,7 +200,7 @@ for token in ("QS3D-BricsCAD-V25-Update-", "update-v25.ps1"):
 
 for token in ("QS3DUPDATE", "UpdateCenterWindowHost.Show()", "QS3DUPDATE V26 error"):
     require(v26_update_command, token, "V26 update command")
-for token in ("UpdateBootstrapper.Start();", "UpdateBootstrapper.Stop();"):
+for token in ("UpdateBootstrapper.Start();", "TryCleanup(UpdateBootstrapper.Stop);"):
     require(v26_entry, token, "V26 PluginEntry")
 
 for token in (
@@ -206,6 +208,7 @@ for token in (
     "github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE'",
     "runs-on: [self-hosted, windows, x64, bricscad-v26]",
     "BRICSCAD_V26_DIR",
+    "TD_MgdBrep.dll",
     "FileMajorPart -ne 26",
     "Microsoft\\.WindowsDesktop\\.App 8\\.",
     "preflight-bricscad-v26.py",
@@ -251,6 +254,8 @@ for trigger in ("\n  push:", "\n  pull_request:", "\n  schedule:", "\n  workflow
 
 for token in (
     "<TargetFramework>net8.0-windows</TargetFramework>",
+    "<UseWindowsForms>true</UseWindowsForms>",
+    "<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>",
     "<AssemblyName>QS3D.BricsCAD.V26</AssemblyName>",
     "Updates\\SemanticReleaseVersion.cs",
     "Updates\\UpdateBootstrapper.cs",
