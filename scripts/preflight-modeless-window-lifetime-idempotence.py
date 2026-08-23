@@ -19,7 +19,10 @@ def main():
         "ConditionalWeakTable<Window, Registration>",
         "Registrations.GetValue(window, key => new Registration(key, document))",
         "registration.Attach(document);",
-        "if (!ReferenceEquals(document, _document))",
+        "private readonly IntPtr _nativeDatabaseIdentity;",
+        "_nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
+        "database.UnmanagedObject == _nativeDatabaseIdentity",
+        "if (!MatchesNativeDatabase(document))",
         "if (_attached) return;",
         "BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;",
         "BcadApplication.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed;",
@@ -30,10 +33,17 @@ def main():
     if missing:
         return fail("modeless lifetime idempotence invariant is incomplete: " + ", ".join(missing))
 
+    for legacy in (
+        "ReferenceEquals(e.Document, _document)",
+        "ReferenceEquals(document, _document)",
+    ):
+        if legacy in text:
+            return fail("modeless lifetime idempotence must not depend on managed Document wrapper identity: " + legacy)
+
     if "new Registration(window, document).Attach();" in text:
         return fail("Attach still creates an untracked Registration on every call")
 
-    print("PASS: modeless windows use one document lifetime registration per Window instance.")
+    print("PASS: modeless windows use one native-document lifetime registration per Window instance and remain idempotent across managed-wrapper drift.")
     return 0
 
 

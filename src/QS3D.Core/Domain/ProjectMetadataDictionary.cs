@@ -11,6 +11,7 @@ namespace QS3D.Core.Domain
     {
         private const int MaximumEntries = 10000;
         private const string ProjectBrowserWorkspaceMetadataKey = "QS3D.ProjectBrowser.WorkspaceState";
+        private const string WallJunctionSnapPreviewMetadataPrefix = "WallJunctionSnapPreview";
         private readonly Dictionary<string, string> _items = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private ProjectState? _project;
 
@@ -222,7 +223,16 @@ namespace QS3D.Core.Domain
 
         private static bool TracksSemanticDirtyState(string key)
         {
-            return !string.Equals(key, ProjectBrowserWorkspaceMetadataKey, StringComparison.OrdinalIgnoreCase);
+            if (string.Equals(key, ProjectBrowserWorkspaceMetadataKey, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            // Wall Snap preview keys are one workflow-state batch. The command records
+            // one audit revision and performs one final Touch() after publishing the
+            // batch; Apply similarly records one audit revision (or one explicit Touch
+            // for an empty plan). Individual preview-key writes/removes must therefore
+            // not advance ChangeVersion independently or the persisted approval stamp
+            // immediately invalidates itself.
+            return !key.StartsWith(WallJunctionSnapPreviewMetadataPrefix, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void ValidateReserved(IEnumerable<KeyValuePair<string, string>> metadata)
