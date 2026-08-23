@@ -11,6 +11,9 @@ namespace QS3D.Core.SmokeTests
             CornerSpanIncludesIntermediateVertex();
             RejectsFarAndAmbiguousBranches();
             RejectsOpeningPastHostEnd();
+            RejectsCumulativeStationPrecisionCollapse();
+            RejectsInteriorProjectionStationPrecisionCollapse();
+            RejectsOpeningSpanStationPrecisionCollapse();
         }
 
         private static void StraightPathMatchesExpectedSpan()
@@ -81,6 +84,57 @@ namespace QS3D.Core.SmokeTests
                 OpeningPoint = new Point2(0.1, 0),
                 OpeningWidthM = 1d,
                 HostThicknessM = 0.2d
+            }));
+        }
+
+        private static void RejectsCumulativeStationPrecisionCollapse()
+        {
+            Throws<OverflowException>(() => CurvedOpeningFootprintPlanner.Plan(new CurvedOpeningFootprintInput
+            {
+                Centerline = new[]
+                {
+                    new Point2(0d, 0d),
+                    new Point2(1e16d, 0d),
+                    new Point2(1e16d, 1d)
+                },
+                OpeningPoint = new Point2(1e16d, 0.5d),
+                OpeningWidthM = 0.5d,
+                HostThicknessM = 0.2d,
+                MaximumCenterlineOffsetM = 1d
+            }));
+        }
+
+        private static void RejectsInteriorProjectionStationPrecisionCollapse()
+        {
+            Throws<OverflowException>(() => CurvedOpeningFootprintPlanner.Plan(new CurvedOpeningFootprintInput
+            {
+                Centerline = new[]
+                {
+                    new Point2(0d, 0d),
+                    new Point2(1e16d, 0d),
+                    new Point2(1e16d, 2d)
+                },
+                OpeningPoint = new Point2(1e16d, 0.5d),
+                OpeningWidthM = 1d,
+                HostThicknessM = 0.2d,
+                MaximumCenterlineOffsetM = 1d
+            }));
+        }
+
+        private static void RejectsOpeningSpanStationPrecisionCollapse()
+        {
+            Throws<OverflowException>(() => CurvedOpeningFootprintPlanner.Plan(new CurvedOpeningFootprintInput
+            {
+                Centerline = new[]
+                {
+                    new Point2(0d, 0d),
+                    new Point2(1e16d, 0d),
+                    new Point2(1e16d, 4d)
+                },
+                OpeningPoint = new Point2(1e16d, 2d),
+                OpeningWidthM = 1d,
+                HostThicknessM = 0.2d,
+                MaximumCenterlineOffsetM = 1d
             }));
         }
 

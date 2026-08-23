@@ -64,6 +64,20 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
                     var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                    var selectedHandles = new HashSet<string>(
+                        sourceIds.Select(id =>
+                        {
+                            var source = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+                            if (source == null || source.IsErased)
+                                throw new InvalidOperationException("Wall source selection contains a non-live CAD entity.");
+                            return source.Handle.ToString();
+                        }),
+                        StringComparer.OrdinalIgnoreCase);
+                    GeneratedWallJunctionNativeOwnershipService.PrepareOwnerInvalidation(
+                        document,
+                        transaction,
+                        project,
+                        project.Elements.Where(x => x.Category == category && x.SourceHandles.Any(selectedHandles.Contains)));
                     foreach (var id in sourceIds)
                     {
                         var line = transaction.GetObject(id, OpenMode.ForRead, false) as Line;
