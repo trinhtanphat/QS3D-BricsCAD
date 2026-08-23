@@ -225,8 +225,10 @@ namespace QS3D.BricsCAD.V25.UI
                     throw new InvalidOperationException("Không resolve đủ toàn bộ source Handle hiện hành; selection không đổi.");
 
                 _document.Editor.SetImpliedSelection(resolved.ToArray());
-                _document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
-                SetMessage("Đã định vị issue " + issue.IssueId + " bằng " + resolved.Count + " CAD object sau khi revalidate toàn bộ provenance.");
+                var zoomed = global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(_document);
+                SetMessage(zoomed
+                    ? "Đã định vị issue " + issue.IssueId + " bằng " + resolved.Count + " CAD object sau khi revalidate toàn bộ provenance."
+                    : "Đã chọn issue " + issue.IssueId + " bằng " + resolved.Count + " CAD object sau khi revalidate toàn bộ provenance nhưng chưa thể zoom vùng chọn hiện hành.");
             }
             catch (Exception ex)
             {

@@ -40,7 +40,7 @@ def main() -> int:
 
     required_tokens = (
         "$SignedPayloadNames = @(",
-        "$packagePath = Assert-SafeDirectory -Path $PackageDirectory -Label 'PackageDirectory'",
+        "$packagePath = Assert-SafeContainedDirectory -Path $PackageDirectory -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'",
         "$package = $packagePath",
         "$packageRoot = $packagePath + [IO.Path]::DirectorySeparatorChar",
         "[IO.Path]::GetExtension($zip), '.zip', [StringComparison]::OrdinalIgnoreCase",
@@ -132,7 +132,7 @@ def main() -> int:
         actual = output_isolated(package, output)
         require(actual is expected, f"signed finalizer output model mismatch for {label}: expected {expected}, got {actual}")
 
-    package_guard_pos = text.find("$packagePath = Assert-SafeDirectory -Path $PackageDirectory -Label 'PackageDirectory'")
+    package_guard_pos = text.find("$packagePath = Assert-SafeContainedDirectory -Path $PackageDirectory -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'")
     extension_guard_pos = text.find("[IO.Path]::GetExtension($zip), '.zip', [StringComparison]::OrdinalIgnoreCase")
     output_guard_pos = text.find("$zip.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)")
     signature_pos = text.find("Assert-AuthenticodeSigner -Path $path -ExpectedSigner $expectedSigner")
