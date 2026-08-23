@@ -1,17 +1,17 @@
 # Issue #3594 — V25 modeless native document identity
 
-Status: `SOURCE_IN_PROGRESS`
+Status: `SOURCE_READY / PENDING_LOCAL`
 
-Lane-Key: `issue-3594`
+Lane-Key: `issue-h1-document-wrapper-drift-source-fix`
 
 Branch: `agent/web-gpt56sol-20260822-doclife1/issue-3594-native-document-identity`
 
-Base: `main@4da9656d80da4ae59c6d8ad7e6ce31974fada07c`
+Base: `main@4d5ffc5ad3bca0d8de9af0f45178e9eddeaa33b6`
 
 ## Boundary
 
-Fix only the repository-safe V25 modeless lifetime defect reported by LOCAL-002 broad H.1: BricsCAD can raise `DocumentToBeDestroyed` with a different managed `Document` wrapper for the same native DWG. The source correction must use stable native/database identity, reject a genuinely different database, remain independent of mutable filename/path state, and preserve the existing close-once and dynamic modeless guards.
+Fix only the repository-safe V25 modeless lifetime defect reported by LOCAL-002 broad H.1: BricsCAD can raise `DocumentToBeDestroyed` with a different managed `Document` wrapper for the same native DWG. The source correction uses the live native database identity, rejects a genuinely different database, remains independent of mutable filename/path state, and preserves the existing close-once, project-affinity, attach-rollback, and dynamic modeless-hub guards.
 
 ## Validation contract
 
-Repository source/build CI is allowed to run automatically from the branch push. Do not manually dispatch Actions for this lane. Licensed BricsCAD V25 LOCAL-002 H.1 evidence remains `LOCAL_VERIFY_REQUIRED` after the source commit and must be rerun by the local agent on the exact pushed SHA.
+Repository source/build CI may run automatically from branch/PR activity. Do not manually dispatch Actions for this lane. Licensed BricsCAD V25 LOCAL-002 H.1 evidence remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`; issue #3593 must rerun the same A/B/C H.1 P01 cell against the exact merged `main` SHA after this source fix lands. Remote/static/build evidence must not be reported as `LOCAL_PASS`.
