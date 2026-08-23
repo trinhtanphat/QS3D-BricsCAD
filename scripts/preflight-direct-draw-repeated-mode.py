@@ -169,6 +169,9 @@ if not errors:
     for token in (
         "[ValidateSet(25, 26)]",
         "status --porcelain=v1 --untracked-files=all",
+        '"artifacts\\q3612\\" + $gitHead.Substring(0, 12)',
+        "$longestPrivatePath.Length -gt 210",
+        '"Repeated-mode private paths are too long for .NET Framework atomic marker publication; choose a shorter ArtifactDir."',
         "Assert-Qs3dExactSourceIdentity",
         "Require-RuntimeIdentity",
         '"QS3DRUNTIMEPROBE"',

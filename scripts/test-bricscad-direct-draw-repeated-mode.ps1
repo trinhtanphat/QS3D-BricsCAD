@@ -413,12 +413,12 @@ if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -ne 0) {
     throw "Close every BricsCAD process before the dedicated repeated-mode run."
 }
 
+$gitCommonDir = (& git -C $repoRoot rev-parse --path-format=absolute --git-common-dir).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gitCommonDir)) {
+    throw "Cannot resolve the shared Git directory for qualification tooling/artifacts."
+}
+$mainWorktreeRoot = Split-Path -Parent ([IO.Path]::GetFullPath($gitCommonDir))
 if ([string]::IsNullOrWhiteSpace($DotNetExe)) {
-    $gitCommonDir = (& git -C $repoRoot rev-parse --path-format=absolute --git-common-dir).Trim()
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gitCommonDir)) {
-        throw "Cannot resolve the shared Git directory for dotnet discovery."
-    }
-    $mainWorktreeRoot = Split-Path -Parent ([IO.Path]::GetFullPath($gitCommonDir))
     $DotNetExe = Join-Path $mainWorktreeRoot "artifacts\tooling\dotnet\dotnet.exe"
 }
 $DotNetExe = [IO.Path]::GetFullPath($DotNetExe)
@@ -440,9 +440,15 @@ if ($LASTEXITCODE -ne 0) { throw "git status failed." }
 if ($dirty.Count -ne 0) { throw "Repeated-mode qualification requires a clean committed worktree." }
 
 if ([string]::IsNullOrWhiteSpace($ArtifactDir)) {
-    $ArtifactDir = Join-Path $repoRoot "artifacts\local-direct-draw-repeat\$gitHead-v$HostMajor"
+    $ArtifactDir = Join-Path $mainWorktreeRoot `
+        ("artifacts\q3612\" + $gitHead.Substring(0, 12) + "-v" + $HostMajor)
 }
 $ArtifactDir = [IO.Path]::GetFullPath($ArtifactDir)
+$longestPrivatePath = Join-Path $ArtifactDir `
+    ("private-" + ("0" * 32) + "\repeat-runtime-document-switch.txt")
+if ($longestPrivatePath.Length -gt 210) {
+    throw "Repeated-mode private paths are too long for .NET Framework atomic marker publication; choose a shorter ArtifactDir."
+}
 New-Item -ItemType Directory -Force -Path $ArtifactDir | Out-Null
 $script:nonce = [Guid]::NewGuid().ToString("N")
 $runRoot = Require-ContainedPath -Path (Join-Path $ArtifactDir ("private-" + $script:nonce)) -Root $ArtifactDir -Label "run root"
