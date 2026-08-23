@@ -248,9 +248,14 @@ namespace QS3D.BricsCAD.V25.UI
                 try
                 {
                     if (_window.Dispatcher.CheckAccess())
-                        TryCloseWindowOnDispatcher();
-                    else
+                    {
+                        // Defer even on the dispatcher thread so BricsCAD's document-close callback
+                        // can unwind before WPF/native window teardown begins.
                         _window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher));
+                        return;
+                    }
+
+                    _window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher));
                 }
                 catch
                 {
