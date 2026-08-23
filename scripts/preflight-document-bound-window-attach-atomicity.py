@@ -15,7 +15,7 @@ else:
     attach = text[attach_start:bind_start] if attach_start >= 0 and bind_start > attach_start else ""
 
     required_attach = (
-        "if (!ReferenceEquals(document, _document))",
+        "if (!IsSameDocument(document))",
         "if (_attached) return;",
         "try",
         "BindProjectAffinityIfPresent();",
@@ -68,7 +68,7 @@ else:
     for token in (
         "Registrations.GetValue(window, key => new Registration(key, document))",
         'throw new InvalidOperationException("A modeless QS3D window cannot be rebound to a different BricsCAD document.")',
-        "ReferenceEquals(e.Document, _document)",
+        "IsSameDocument(e.Document)",
         "CloseForProjectChange();",
         "_window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher))",
         "private void TryCloseWindowOnDispatcher()",
