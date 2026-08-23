@@ -3,7 +3,8 @@
 **Owner boundary:** LOCAL_ONLY / licensed BricsCAD runtime  
 **Source-ready baseline:** PR #3643 / `main@b3212c11ba1dfed04f4a7e1f1e0fd8670e3561a5`  
 **Parent trackers:** #77, #72  
-**Handoff reconciliation:** #3646
+**Handoff reconciliation:** #3646  
+**Lane-Key:** issue-3646
 
 This runbook qualifies the native documentation source that is already implemented. It does **not** authorize a local worker to reimplement semantic tags, Tables, MLeader, Sheet/Layout/PaperSpace/Viewport or title-block source. A deterministic product defect found here is recorded as sanitized evidence and handed to a separate remote/source lane.
 
