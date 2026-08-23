@@ -331,6 +331,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 try
                 {
+                    if (Volatile.Read(ref _hostQuitStarted) != 0) return;
                     _window.Close();
                 }
                 catch

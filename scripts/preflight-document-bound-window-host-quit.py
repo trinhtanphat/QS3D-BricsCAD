@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Guard V25 modeless windows against explicit WPF close during BricsCAD host shutdown."""
 
+# Lane-Key: issue-3621 — keep this regression on the canonical source carrier.
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -82,6 +83,20 @@ require(
     "Host-shutdown state must suppress explicit WPF close, not merely change its dispatch timing.",
 )
 
+# A close request may have been queued before BeginQuit and execute after BeginQuit. The final
+# dispatcher callback is therefore the last authoritative barrier before WPF detaches its HWND.
+close_on_dispatcher = method_block(source, "private void TryCloseWindowOnDispatcher()")
+for marker in (
+    "if (Volatile.Read(ref _hostQuitStarted) != 0) return;",
+    "_window.Close();",
+):
+    require(marker in close_on_dispatcher, f"Dispatcher close owner is missing host-quit race guard: {marker}")
+require(
+    close_on_dispatcher.index("if (Volatile.Read(ref _hostQuitStarted) != 0) return;")
+    < close_on_dispatcher.index("_window.Close();"),
+    "An already-queued dispatcher close must re-check host quit before initiating WPF Window.Close.",
+)
+
 detach = method_block(source, "private void Detach()")
 for marker in (
     "BcadApplication.BeginQuit -= OnApplicationBeginQuit;",
@@ -89,4 +104,4 @@ for marker in (
 ):
     require(marker in detach, f"Normal detach must release the host lifecycle subscription: {marker}")
 
-print("[OK] BricsCAD BeginQuit owns final host teardown: QS3D invalidates document state but does not explicitly close WPF windows until a quit-abort recovery path is safe.")
+print("[OK] BricsCAD BeginQuit owns final host teardown, including already-queued dispatcher closes: QS3D invalidates document state but never initiates WPF Window.Close after host quit starts.")
