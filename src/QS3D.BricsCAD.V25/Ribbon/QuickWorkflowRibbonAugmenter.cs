@@ -51,6 +51,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
         private static readonly ButtonSpec[] AuthorButtons =
         {
             new ButtonSpec("QS3D_AUTHOR_DRAW_ACTIVE", "Vẽ Nhanh", "QS3DDRAWACTIVE"),
+            new ButtonSpec("QS3D_AUTHOR_DRAW_ACTIVE_REPEAT", "Vẽ Liên tục", "QS3DDRAWACTIVEREPEAT"),
             new ButtonSpec("QS3D_AUTHOR_CREATE_SIMILAR", "Vẽ Tương Tự", "QS3DCREATESIMILAR"),
             new ButtonSpec("QS3D_AUTHOR_PLAN2WALLS", "2D → Tường 3D", "QS3DCONVERT2D"),
             new ButtonSpec("QS3D_AUTHOR_WINDOW", "Vẽ Cửa Sổ", "QS3DDRAWWINDOW"),

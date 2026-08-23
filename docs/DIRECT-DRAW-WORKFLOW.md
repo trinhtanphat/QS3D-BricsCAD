@@ -13,6 +13,7 @@ Existing capture workflows such as `LINE/POLYLINE -> QS3DWALL/QS3DBEAM/... -> QS
 Current implementation direction on `main`:
 
 - P0 Direct Draw: `QS3DDRAWWALL`, `QS3DDRAWBEAM`, `QS3DDRAWCOLUMN`, `QS3DDRAWSLAB`.
+- Production repeated linear Direct Draw: `QS3DDRAWWALLREPEAT`, `QS3DDRAWBEAMREPEAT`, and active-Family route `QS3DDRAWACTIVEREPEAT`.
 - P1 Direct Draw: `QS3DDRAWGLASSWALL`, `QS3DDRAWWALLPIER`, `QS3DDRAWSTRUCTWALL`, `QS3DDRAWFOUNDATION`.
 - Host-aware opening authoring: `QS3DDRAWDOOR`, `QS3DDRAWOPENING`; Auto Host is part of authoring, while physical boolean cutting remains explicit through the established cut commands.
 - BLT-style wall compatibility flow is deliberately **capture -> edit -> build**, not capture-and-build in one command.
@@ -82,6 +83,20 @@ This separation is important: the user must have a chance to inspect/change thic
 - `QS3DDRAWDOOR`.
 
 Future work should continue converging common point acquisition, Family defaults, preview, transaction, semantic capture and native generation instead of creating unnecessary independent geometry systems.
+
+### Production repeated linear mode
+
+`QS3DDRAWWALLREPEAT` and `QS3DDRAWBEAMREPEAT` implement the native high-frequency loop for linear Wall/Beam authoring:
+
+1. the first editor point is normalized from the current planar UCS into WCS exactly once;
+2. each next endpoint is acquired by a database-free `DrawJig` profile strip;
+3. an accepted segment creates a canonical WCS `LINE`, semantic owner and native `Solid3d` through the existing `DirectDrawCommands.ExecuteDirect` pipeline;
+4. the next preview starts at the accepted endpoint;
+5. Enter or ESC removes only the in-progress transient and exits; accepted segments remain;
+6. unit, planar-UCS, Model Space, active-DWG, project and active-Family context are revalidated before each commit;
+7. structural builders suppress their nested marker while the repeated command owns one whole-command semantic/native Undo transition, so one native Undo/Redo restores the matching segment set instead of leaving semantic references to removed CAD.
+
+The transient does not append entities, write XData, create/cache a project, capture semantics or generate ownership. A cancellation before the first accepted segment therefore leaves no CAD/project/semantic/native residue. This is a new interaction surface over the canonical pipeline, not a second authoring engine.
 
 ---
 

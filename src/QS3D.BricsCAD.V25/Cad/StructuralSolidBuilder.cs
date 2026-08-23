@@ -81,7 +81,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         var element = matches[0];
                         if (!processedElements.Add(element.Id)) throw new InvalidOperationException(category + " element " + element.Id + " có nhiều source đang được chọn. Tách/capture từng source thành element riêng trước khi Vẽ 3D.");
 
-                        if (undoTransition == null)
+                        if (undoTransition == null && !SourceReconcileUndoCoordinator.IsExternalTransitionActive(document))
                         {
                             undoTransition = SourceReconcileUndoCoordinator.BeginTransition(
                                 document,
@@ -180,9 +180,12 @@ namespace QS3D.BricsCAD.V25.Cad
                     {
                         project.Touch();
                         var afterSnapshot = ProjectStateSnapshot.Capture(project);
-                        if (undoTransition == null)
-                            throw new InvalidOperationException("Structural semantic Undo transition was not initialized for pending generated geometry.");
-                        undoTransition.StageAfter(project, afterSnapshot);
+                        if (!SourceReconcileUndoCoordinator.IsExternalTransitionActive(document))
+                        {
+                            if (undoTransition == null)
+                                throw new InvalidOperationException("Structural semantic Undo transition was not initialized for pending generated geometry.");
+                            undoTransition.StageAfter(project, afterSnapshot);
+                        }
                     }
                     transaction.Commit();
                     undoTransition?.ConfirmCommitted();

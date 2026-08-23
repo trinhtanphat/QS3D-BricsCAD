@@ -4,27 +4,23 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBE = ROOT / "src" / "QS3D.BricsCAD.V25" / "DirectDrawJigRuntimeProbeCommands.cs"
+JIG = ROOT / "src" / "QS3D.BricsCAD.V25" / "DirectDrawProfileStripJig.cs"
 RUNNER = ROOT / "scripts" / "test-bricscad-v25-direct-draw-jig-lifecycle.ps1"
 
 errors = []
-for path in (PROBE, RUNNER):
+for path in (PROBE, JIG, RUNNER):
     if not path.is_file():
         errors.append(f"missing LOCAL-008 P02 source-prep file: {path.relative_to(ROOT)}")
 
 if not errors:
     probe = PROBE.read_text(encoding="utf-8")
+    jig = JIG.read_text(encoding="utf-8")
     runner = RUNNER.read_text(encoding="utf-8")
 
     required_probe = (
         'CommandMethod("QS3DPROBEDIRECTDRAWJIG"',
-        'private sealed class ProfileStripJig : DrawJig',
         'editor.Drag(jig)',
-        'prompts.AcquirePoint(options)',
-        'SamplerStatus.Cancel',
-        'SamplerStatus.NoChange',
-        'SamplerStatus.OK',
-        'UserInputControls.NullResponseAccepted',
-        'worldDraw.Geometry.WorldLine',
+        'new DirectDrawProfileStripJig(start, widthDrawingUnits, ucsToWcs)',
         'RequireSameDocument(document)',
         'MinimumQualifiedSegments = 3',
         'acceptedSegments >= MinimumQualifiedSegments',
@@ -36,20 +32,31 @@ if not errors:
         'coordinate_model=EDITOR_UCS_TO_JIG_WCS_UCS_PLANE',
         'var ucsToWcs = editor.CurrentUserCoordinateSystem;',
         'var start = first.Value.TransformBy(ucsToWcs);',
+        'persistent_writes=0',
+        'ownership_writes=0',
+        'QS3D_DIRECT_DRAW_JIG_RUNTIME_V1',
+    )
+    required_jig = (
+        'internal sealed class DirectDrawProfileStripJig : DrawJig',
+        'prompts.AcquirePoint(options)',
+        'SamplerStatus.Cancel',
+        'SamplerStatus.NoChange',
+        'SamplerStatus.OK',
+        'UserInputControls.NullResponseAccepted',
+        'worldDraw.Geometry.WorldLine',
         'BasePoint = _startWcs',
         '_endWcs = result.Value;',
         '_wcsToUcs = ucsToWcs.Inverse();',
         'var localStart = _startWcs.TransformBy(_wcsToUcs);',
         'var localEnd = _endWcs.TransformBy(_wcsToUcs);',
-        'var centerStart = _startWcs;',
-        'var centerEnd = _endWcs;',
-        'persistent_writes=0',
-        'ownership_writes=0',
-        'QS3D_DIRECT_DRAW_JIG_RUNTIME_V1',
+        'worldDraw.Geometry.WorldLine(_startWcs, _endWcs);',
     )
     for token in required_probe:
         if token not in probe:
             errors.append(f"LOCAL-008 P02 probe missing contract token: {token}")
+    for token in required_jig:
+        if token not in jig:
+            errors.append(f"shared Direct Draw profile jig missing contract token: {token}")
 
     forbidden_probe = (
         'StartTransaction(', 'OpenMode.ForWrite', 'AppendEntity(', '.Erase(',
@@ -64,13 +71,14 @@ if not errors:
         '_start.TransformBy(_ucs)',
         '_end.TransformBy(_ucs)',
     )
+    probe_and_jig = probe + "\n" + jig
     for token in forbidden_probe:
-        if token in probe:
+        if token in probe_and_jig:
             errors.append(f"LOCAL-008 P02 probe must stay database/ownership free and preserve Editor-UCS -> Jig-WCS coordinate boundaries: {token}")
 
     if probe.count('CommandMethod("QS3DPROBEDIRECTDRAWJIG"') != 1:
         errors.append("QS3DPROBEDIRECTDRAWJIG must be registered exactly once")
-    if probe.count('worldDraw.Geometry.WorldLine') < 5:
+    if jig.count('worldDraw.Geometry.WorldLine') < 5:
         errors.append("profile strip probe must draw four profile edges plus a center line")
 
     required_runner = (

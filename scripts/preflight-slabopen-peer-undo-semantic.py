@@ -40,7 +40,7 @@ def main() -> int:
         )
         lazy_pos = require(
             builder,
-            "if (undoTransition == null)",
+            "if (undoTransition == null && !SourceReconcileUndoCoordinator.IsExternalTransitionActive(document))",
             "structural rebuild",
         )
         begin_pos = require(
@@ -77,6 +77,11 @@ def main() -> int:
             builder,
             "undoTransition.StageAfter(project, afterSnapshot);",
             "structural rebuild",
+        )
+        require(
+            builder,
+            "if (!SourceReconcileUndoCoordinator.IsExternalTransitionActive(document))",
+            "external command-level Undo ownership",
         )
         commit_pos = require(
             builder,

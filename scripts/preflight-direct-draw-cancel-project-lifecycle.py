@@ -49,7 +49,7 @@ for name, names in commands.items():
 
 # P0/P1 entrypoints may read defaults from an existing project, but must not
 # create/cache a project until their private execution helper begins.
-for name, helper in (("p0", "private static void ExecuteDirect"), ("p1", "private static void Execute(")):
+for name, helper in (("p0", "internal static DirectDrawCommitResult ExecuteDirect"), ("p1", "private static void Execute(")):
     text = sources[name]
     require(text, preview_capture, name)
     require(text, preview_resolve, name)
