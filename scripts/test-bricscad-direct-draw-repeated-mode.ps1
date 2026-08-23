@@ -33,6 +33,21 @@ public static class Qs3dExactEscapeInput
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
 
+    [DllImport("kernel32.dll")]
+    public static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    public static extern bool AttachThreadInput(uint attachThread, uint attachToThread, bool attach);
+
+    [DllImport("user32.dll")]
+    public static extern bool BringWindowToTop(IntPtr window);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr SetActiveWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr SetFocus(IntPtr window);
+
     [DllImport("user32.dll")]
     public static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
 }
@@ -285,11 +300,32 @@ function Bind-ExactProcessForeground {
     }
     if ($window -eq [IntPtr]::Zero) { throw "Owned BricsCAD did not expose an exact main window for ESC input." }
 
-    [Qs3dExactEscapeInput]::ShowWindowAsync($window, 9) | Out-Null
+    $windowProcessId = [uint32]0
+    $windowThreadId = [Qs3dExactEscapeInput]::GetWindowThreadProcessId($window, [ref]$windowProcessId)
+    if ($windowThreadId -eq 0 -or $windowProcessId -ne [uint32]$Process.Id) {
+        throw "Exact BricsCAD main window did not belong to the guarded process."
+    }
+
+    $runnerThreadId = [Qs3dExactEscapeInput]::GetCurrentThreadId()
     $foregroundDeadline = [DateTime]::UtcNow.AddSeconds(10)
     $foregroundMatches = $false
     while (-not $foregroundMatches -and [DateTime]::UtcNow -lt $foregroundDeadline) {
-        [Qs3dExactEscapeInput]::SetForegroundWindow($window) | Out-Null
+        $attached = $false
+        try {
+            if ($runnerThreadId -ne $windowThreadId) {
+                $attached = [Qs3dExactEscapeInput]::AttachThreadInput($runnerThreadId, $windowThreadId, $true)
+            }
+            [Qs3dExactEscapeInput]::ShowWindowAsync($window, 9) | Out-Null
+            [Qs3dExactEscapeInput]::BringWindowToTop($window) | Out-Null
+            [Qs3dExactEscapeInput]::SetForegroundWindow($window) | Out-Null
+            [Qs3dExactEscapeInput]::SetActiveWindow($window) | Out-Null
+            [Qs3dExactEscapeInput]::SetFocus($window) | Out-Null
+        }
+        finally {
+            if ($attached) {
+                [Qs3dExactEscapeInput]::AttachThreadInput($runnerThreadId, $windowThreadId, $false) | Out-Null
+            }
+        }
         Start-Sleep -Milliseconds 50
         $foreground = [Qs3dExactEscapeInput]::GetForegroundWindow()
         $foregroundProcessId = [uint32]0
