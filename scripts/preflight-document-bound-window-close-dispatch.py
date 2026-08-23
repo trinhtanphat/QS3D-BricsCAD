@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard modeless window close dispatch against BricsCAD document-teardown reentrancy."""
+"""Guard normal document close vs final-host modeless teardown dispatch."""
 
 from pathlib import Path
 
@@ -32,34 +32,55 @@ def method_block(source: str, signature: str) -> str:
 
 
 source = SOURCE.read_text(encoding="utf-8")
-close = method_block(source, "private void TryCloseWindow()")
 
+other_document = method_block(source, "private bool HasAnotherLiveDocument()")
+require(
+    "foreach (Document candidate in BcadApplication.DocumentManager)" in other_document,
+    "Final-teardown classification must enumerate the live BricsCAD document manager.",
+)
+require(
+    "candidate == null || candidate.IsDisposed" in other_document,
+    "Final-teardown classification must reject disposed managed document wrappers.",
+)
+require(
+    "identity != IntPtr.Zero && identity != _nativeDatabaseIdentity" in other_document,
+    "Another live document must be distinguished by stable native database identity.",
+)
+require(
+    "return false;" in other_document,
+    "Ambiguous/unsafe document enumeration must fail closed to final-teardown deferral.",
+)
+
+close = method_block(source, "private void TryCloseWindow(bool deferOnDispatcher = false)")
 require(
     "_window.Dispatcher.CheckAccess()" in close,
-    "Modeless close dispatch must keep the dispatcher-affinity guard used by the lifetime contract.",
+    "Modeless close dispatch must keep the dispatcher-affinity guard.",
+)
+require(
+    "if (deferOnDispatcher)" in close,
+    "Dispatcher-thread close must have an explicit final-teardown deferral branch.",
 )
 require(
     close.count("_window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher));") == 2,
-    "Both UI-thread and cross-thread close paths must queue the WPF close asynchronously.",
+    "Final-teardown UI-thread close and all cross-thread closes must queue through Dispatcher.BeginInvoke.",
 )
 require(
-    "TryCloseWindowOnDispatcher();" not in close,
-    "Document teardown must never call Window.Close synchronously through TryCloseWindowOnDispatcher.",
+    "TryCloseWindowOnDispatcher();" in close,
+    "Normal UI-thread document close must retain the proven synchronous close path.",
+)
+require(
+    close.index("if (deferOnDispatcher)") < close.index("TryCloseWindowOnDispatcher();"),
+    "Final-document deferral must be evaluated before the synchronous normal-close path.",
 )
 require(
     "_window.Close();" not in close,
-    "Document teardown must not close the WPF window directly on the BricsCAD event stack.",
-)
-require(
-    close.index("_window.Dispatcher.CheckAccess()")
-    < close.index("_window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher));"),
-    "Dispatcher access must be classified before the queued close path is chosen.",
+    "TryCloseWindow must not directly own WPF Window.Close.",
 )
 
 close_on_dispatcher = method_block(source, "private void TryCloseWindowOnDispatcher()")
 require(
     "_window.Close();" in close_on_dispatcher,
-    "The queued dispatcher callback must remain the single WPF close owner.",
+    "The dispatcher close helper must remain the single WPF Window.Close owner.",
 )
 
 for signature in (
@@ -68,17 +89,27 @@ for signature in (
 ):
     teardown = method_block(source, signature)
     require(
-        "Interlocked.Exchange(ref _invalidated, 1) != 0" in teardown,
-        f"{signature} must invalidate before scheduling WPF close.",
+        "var deferForFinalDocument = !HasAnotherLiveDocument();" in teardown,
+        f"{signature} must classify normal multi-document vs final-document teardown.",
     )
     require(
-        "TryCloseWindow();" in teardown,
-        f"{signature} must route close through the deferred dispatcher path.",
+        "Interlocked.Exchange(ref _invalidated, 1) != 0" in teardown,
+        f"{signature} must invalidate before closing the bound window.",
+    )
+    require(
+        "TryCloseWindow(deferForFinalDocument);" in teardown,
+        f"{signature} must pass the final-document classification to the close dispatcher.",
     )
     require(
         teardown.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
-        < teardown.index("TryCloseWindow();"),
-        f"{signature} must fail closed before any deferred WPF teardown is queued.",
+        < teardown.index("TryCloseWindow(deferForFinalDocument);"),
+        f"{signature} must fail closed before any synchronous or deferred WPF teardown.",
     )
 
-print("[OK] Document-bound modeless close invalidates synchronously but always defers WPF Close until the BricsCAD document-teardown callback unwinds.")
+project_change = method_block(source, "private void CloseForProjectChange()")
+require(
+    "TryCloseWindow();" in project_change,
+    "Non-document project-affinity close must retain the normal synchronous dispatcher path.",
+)
+
+print("[OK] Normal multi-document close stays synchronous on the dispatcher, while final/only-document teardown defers WPF Close outside the native close callback.")
