@@ -454,9 +454,11 @@ namespace QS3D.BricsCAD.V25
                 var documentB = FindDocument(drawingB);
                 documentB.CloseAndDiscard();
                 if (TryFindDocument(drawingB, out _)) throw new ProbeFailure("WRONG_DWG_CLOSE_REJECTED");
-                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, context.Document))
+                var active = Application.DocumentManager.MdiActiveDocument;
+                if (active == null || !SamePath(active.Name, context.Document.Name))
                     Application.DocumentManager.MdiActiveDocument = context.Document;
-                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, context.Document))
+                active = Application.DocumentManager.MdiActiveDocument;
+                if (active == null || !SamePath(active.Name, context.Document.Name))
                     throw new ProbeFailure("DOCUMENT_ACTIVATION_REJECTED");
                 state.DrawingBClosed = true;
                 state.Phase = "MULTIDWG_CLOSED";
