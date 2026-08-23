@@ -111,8 +111,22 @@ def check_sheet_lifecycle():
             "AttributeReference",
             "Refresh",
             "Remove",
+            "ProjectStateSnapshot.Capture(project)",
+            '"documentation.semantic-sheet.remove"',
+            "manager.DeleteLayout(normalizedLayoutName)",
+            "rollback.Restore(project)",
         ),
     )
+    if ".TryAdd(" in service:
+        raise AssertionError(service_rel + " must remain net48-compatible and not depend on Dictionary.TryAdd")
+    remove_start = service.find("public static void Remove(")
+    remove_end = service.find("public static string LayoutNameFor(", remove_start)
+    remove = service[remove_start:remove_end]
+    audit = remove.find('"documentation.semantic-sheet.remove"')
+    delete = remove.find("manager.DeleteLayout(normalizedLayoutName)")
+    rollback = remove.find("rollback.Restore(project)", delete)
+    if min(audit, delete, rollback) < 0 or not audit < delete < rollback:
+        raise AssertionError(service_rel + " must audit before layout deletion and retain project rollback on pre-delete failure")
 
     health_rel = "src/QS3D.BricsCAD.V25/Cad/SemanticSheetRuntimeHealthService.cs"
     health = require_file(health_rel)
