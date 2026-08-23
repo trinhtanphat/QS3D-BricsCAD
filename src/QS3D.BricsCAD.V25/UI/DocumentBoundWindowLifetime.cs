@@ -23,18 +23,19 @@ namespace QS3D.BricsCAD.V25.UI
         private sealed class Registration
         {
             private readonly Window _window;
-            private readonly Document _document;
+            private readonly Document _lifecycleDocument;
             private readonly IntPtr _nativeDatabaseIdentity;
             private readonly object _documentAccessGate = new object();
             private bool _attached;
             private bool _projectAffinityBound;
             private int _invalidated;
+            private int _documentCloseStarted;
             private string _projectId = string.Empty;
 
             public Registration(Window window, Document document)
             {
                 _window = window;
-                _document = document;
+                _lifecycleDocument = document;
                 _nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
             }
 
@@ -47,7 +48,8 @@ namespace QS3D.BricsCAD.V25.UI
                 try
                 {
                     BindProjectAffinityIfPresent();
-                    _document.CloseWillStart += OnDocumentCloseWillStart;
+                    _lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;
+                    _lifecycleDocument.CloseAborted += OnDocumentCloseAborted;
                     BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
                     _window.Activated += OnWindowActivated;
                     _window.PreviewMouseDown += OnPreviewMouseDown;
@@ -63,6 +65,7 @@ namespace QS3D.BricsCAD.V25.UI
                     Detach();
                     _projectAffinityBound = false;
                     Volatile.Write(ref _invalidated, 0);
+                    Volatile.Write(ref _documentCloseStarted, 0);
                     _projectId = string.Empty;
                     throw;
                 }
@@ -96,10 +99,39 @@ namespace QS3D.BricsCAD.V25.UI
                 }
             }
 
+            private bool TryResolveLiveDocument(out Document document)
+            {
+                document = null!;
+                try
+                {
+                    foreach (Document candidate in BcadApplication.DocumentManager)
+                    {
+                        if (candidate == null || candidate.IsDisposed) continue;
+                        if (!MatchesNativeDatabase(candidate)) continue;
+                        document = candidate;
+                        return true;
+                    }
+                }
+                catch
+                {
+                    document = null!;
+                    return false;
+                }
+
+                return false;
+            }
+
             private void BindProjectAffinityIfPresent()
             {
                 if (_projectAffinityBound) return;
-                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project)) return;
+                if (!TryResolveLiveDocument(out var document)) return;
+                BindProjectAffinityIfPresent(document);
+            }
+
+            private void BindProjectAffinityIfPresent(Document document)
+            {
+                if (_projectAffinityBound) return;
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project)) return;
                 _projectId = project.ProjectId ?? string.Empty;
                 _projectAffinityBound = true;
             }
@@ -109,28 +141,34 @@ namespace QS3D.BricsCAD.V25.UI
                 var closeForProjectChange = false;
                 lock (_documentAccessGate)
                 {
-                    // CloseWillStart and DocumentToBeDestroyed take the same gate before setting
-                    // this flag. Once either callback begins, no new Document.Name/Database access
-                    // can enter ProjectContextCoordinator through the retained managed wrapper.
+                    // BeginDocumentClose and DocumentToBeDestroyed take this same gate before
+                    // invalidation. The WPF path resolves a currently live managed wrapper from
+                    // DocumentManager and never dereferences the wrapper retained for event lifetime.
                     if (Volatile.Read(ref _invalidated) != 0) return false;
-
-                    try
+                    if (!TryResolveLiveDocument(out var document))
                     {
-                        if (!_projectAffinityBound)
-                        {
-                            BindProjectAffinityIfPresent();
-                            return true;
-                        }
-
-                        if (ProjectContextCoordinator.TryGetReadOnly(_document, out var project) &&
-                            string.Equals(project.ProjectId ?? string.Empty, _projectId, StringComparison.OrdinalIgnoreCase))
-                            return true;
-
                         closeForProjectChange = true;
                     }
-                    catch
+                    else
                     {
-                        closeForProjectChange = true;
+                        try
+                        {
+                            if (!_projectAffinityBound)
+                            {
+                                BindProjectAffinityIfPresent(document);
+                                return true;
+                            }
+
+                            if (ProjectContextCoordinator.TryGetReadOnly(document, out var project) &&
+                                string.Equals(project.ProjectId ?? string.Empty, _projectId, StringComparison.OrdinalIgnoreCase))
+                                return true;
+
+                            closeForProjectChange = true;
+                        }
+                        catch
+                        {
+                            closeForProjectChange = true;
+                        }
                     }
                 }
 
@@ -156,7 +194,7 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
                 }
-                DetachDocumentCloseHandler();
+                DetachDocumentLifecycleHandlersIfSafe();
                 DetachDocumentManagerHandler();
 
                 const string message = "QS3D project của cửa sổ modeless này đã thay đổi hoặc không còn được nạp. Cửa sổ đã đóng để tránh thao tác lên semantic state khác; hãy mở lại cửa sổ trong project hiện hành.";
@@ -164,17 +202,17 @@ namespace QS3D.BricsCAD.V25.UI
                 TryCloseWindow();
             }
 
-            private void OnDocumentCloseWillStart(object? sender, EventArgs e)
+            private void OnBeginDocumentClose(object sender, DocumentBeginCloseEventArgs e)
             {
-                // This per-document event is intentionally earlier than native destruction. Holding
-                // the same gate as EnsureProjectAffinity creates a hard ordering boundary: either a
-                // current affinity read finishes while the document is still live, or invalidation
-                // wins and later WPF activation/input callbacks never dereference the managed wrapper.
                 lock (_documentAccessGate)
                 {
+                    Volatile.Write(ref _documentCloseStarted, 1);
                     if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
                 }
-                DetachDocumentCloseHandler();
+
+                // BeginDocumentClose is the earliest reliable per-document close boundary used by
+                // this coordinator. Do not touch the retained lifecycle wrapper after this point;
+                // Window.Closed may run after native teardown has already advanced.
                 DetachDocumentManagerHandler();
                 TryCloseWindow();
             }
@@ -184,17 +222,25 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!MatchesNativeDatabase(e.Document)) return;
                 lock (_documentAccessGate)
                 {
+                    Volatile.Write(ref _documentCloseStarted, 1);
                     if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
                 }
 
                 // BricsCAD may surface a different managed Document wrapper for the same native
                 // database during destruction. Match the stable native database identity captured
                 // at bind time so wrapper drift still closes this window, without using mutable paths.
-                // CloseWillStart is the early disposal barrier; this global event remains a native-
-                // identity fallback for managed-wrapper drift and unusual host teardown ordering.
-                DetachDocumentCloseHandler();
+                // The retained lifecycle wrapper is intentionally not dereferenced here.
                 DetachDocumentManagerHandler();
                 TryCloseWindow();
+            }
+
+            private void OnDocumentCloseAborted(object? sender, EventArgs e)
+            {
+                // A vetoed/aborted close leaves the document live. The modeless window remains
+                // fail-closed (or already closed), but this callback can safely release the
+                // per-document lifecycle subscriptions that were intentionally preserved while
+                // native teardown was in progress.
+                DetachDocumentLifecycleHandlersAfterAbort();
             }
 
             private void TryCloseWindow()
@@ -232,9 +278,20 @@ namespace QS3D.BricsCAD.V25.UI
                 catch { }
             }
 
-            private void DetachDocumentCloseHandler()
+            private void DetachDocumentLifecycleHandlersIfSafe()
             {
-                try { _document.CloseWillStart -= OnDocumentCloseWillStart; }
+                if (Volatile.Read(ref _documentCloseStarted) != 0) return;
+                try { _lifecycleDocument.BeginDocumentClose -= OnBeginDocumentClose; }
+                catch { }
+                try { _lifecycleDocument.CloseAborted -= OnDocumentCloseAborted; }
+                catch { }
+            }
+
+            private void DetachDocumentLifecycleHandlersAfterAbort()
+            {
+                try { _lifecycleDocument.BeginDocumentClose -= OnBeginDocumentClose; }
+                catch { }
+                try { _lifecycleDocument.CloseAborted -= OnDocumentCloseAborted; }
                 catch { }
             }
 
@@ -243,7 +300,7 @@ namespace QS3D.BricsCAD.V25.UI
             private void Detach()
             {
                 if (!_attached) return;
-                DetachDocumentCloseHandler();
+                DetachDocumentLifecycleHandlersIfSafe();
                 DetachDocumentManagerHandler();
                 try { _window.Activated -= OnWindowActivated; }
                 catch { }
