@@ -28,7 +28,7 @@ checks = {
         "class CurtainPathFramePiece", "class CurtainPathFramePlan", "class CurtainPathProjection",
         "CurtainPathFramePlan Plan", "CurtainPathProjection ProjectPoint", "MaxPathPoints = 8192",
         "MaxPieces = 20000", "PathSegmentIndex", "StationStartM", "StationEndM",
-        "distance < bestDistance - Tolerance", "candidateStation < currentStation",
+        "distance < best.DistanceM - Tolerance", "station < best.StationM",
     ],
     "reader": [
         "ReadOpenWcsXy", "polyline.Closed", "var normal = polyline.Normal",
