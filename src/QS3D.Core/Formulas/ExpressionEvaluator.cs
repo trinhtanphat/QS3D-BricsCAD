@@ -46,6 +46,8 @@ namespace QS3D.Core.Formulas
                 variableCount++;
                 if (variableCount > MaxVariableCount)
                     throw new InvalidOperationException($"Variable count exceeds the supported maximum of {MaxVariableCount}.");
+                if (pair.Key != null && pair.Key.Length > MaxExpressionLength)
+                    throw new InvalidOperationException($"Variable name length exceeds the supported maximum of {MaxExpressionLength} characters.");
                 if (string.IsNullOrWhiteSpace(pair.Key))
                     throw new InvalidOperationException("Variable names cannot be blank or whitespace-only.");
 
