@@ -197,11 +197,20 @@ namespace QS3D.BricsCAD.V25
                             // still traverses the original before-state and latest accepted state as
                             // one operation. The latest checkpoint also keeps semantic/native state
                             // coherent if BricsCAD suspends this document-context command on a DWG switch.
-                            SourceReconcileUndoCoordinator.CommitExternalTransition(
-                                document,
-                                trackedProject,
-                                commandBefore,
-                                commandBeforeStamp);
+                            if (checkpointed == 0)
+                            {
+                                SourceReconcileUndoCoordinator.CommitExternalTransition(
+                                    document,
+                                    trackedProject,
+                                    commandBefore,
+                                    commandBeforeStamp);
+                            }
+                            else
+                            {
+                                SourceReconcileUndoCoordinator.UpdateExternalTransitionCheckpoint(
+                                    document,
+                                    trackedProject);
+                            }
                             checkpointed = accepted;
                         }
                         catch (Exception transitionError)

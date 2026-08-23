@@ -12,10 +12,11 @@ namespace QS3D.BricsCAD.V25
     /// <summary>
     /// Bridges tracked in-memory semantic transactions to BricsCAD's native Undo stack.
     /// Source Reconcile writes its revision marker in the same transaction as generated-output
-    /// invalidation. Production repeated Direct Draw owns a checkpoint after each accepted segment
-    /// while suppressing nested builder markers. Every checkpoint remains in the same native command
-    /// group, so native Undo restores the CAD group and the observer restores the matching original
-    /// or latest whole-command semantic snapshot even across a document-switch suspension.
+    /// invalidation. Production repeated Direct Draw stages one native marker after its first accepted
+    /// segment, then refreshes that revision's semantic after-snapshot after later segments while
+    /// suppressing nested builder markers. The marker remains in one native command group, so native
+    /// Undo restores the CAD group and the observer restores the matching original or latest semantic
+    /// snapshot even across a document-switch suspension.
     /// </summary>
     internal static class SourceReconcileUndoCoordinator
     {
@@ -606,6 +607,45 @@ namespace QS3D.BricsCAD.V25
             finally
             {
                 transition?.Dispose();
+            }
+        }
+
+        internal static void UpdateExternalTransitionCheckpoint(
+            Document document,
+            ProjectState project)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (!IsExternalTransitionActive(document))
+                throw new InvalidOperationException(
+                    "The command-level semantic/native Undo transition is not active for this document.");
+
+            ProjectContextCoordinator.RequireBackingStoreUnchanged(
+                document,
+                project,
+                "Repeated Direct Draw Undo checkpoint");
+            var nativeRevision = ReadRevision(document);
+            var afterEntry = new HistoryEntry(
+                ProjectStateSnapshot.Capture(project),
+                ProjectRevisionStamp.Capture(project));
+
+            lock (Gate)
+            {
+                if (!Histories.TryGetValue(document, out var history))
+                    throw new InvalidOperationException(
+                        "The command-level semantic/native Undo history is unavailable.");
+                RequireCurrentHistory(document, history, project, nativeRevision);
+                if (!history.Entries.ContainsKey(nativeRevision))
+                    throw new InvalidOperationException(
+                        "The command-level semantic/native Undo revision is unavailable.");
+
+                var updatedEntries = new Dictionary<string, HistoryEntry>(
+                    history.Entries,
+                    StringComparer.Ordinal)
+                {
+                    [nativeRevision] = afterEntry
+                };
+                history.Publish(updatedEntries, nativeRevision);
             }
         }
 
