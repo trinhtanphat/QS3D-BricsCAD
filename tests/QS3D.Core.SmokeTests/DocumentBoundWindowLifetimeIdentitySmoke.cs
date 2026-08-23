@@ -9,7 +9,9 @@ namespace QS3D.Core.SmokeTests
         {
             var root = FindRepositoryRoot();
             var path = Path.Combine(root, "src", "QS3D.BricsCAD.V25", "UI", "DocumentBoundWindowLifetime.cs");
-            var source = File.ReadAllText(path);
+            var source = File.ReadAllText(path)
+                .Replace("\r\n", "\n")
+                .Replace("\r", "\n");
 
             Require(source.Contains("private readonly IntPtr _databaseIdentity;", StringComparison.Ordinal),
                 "Document-bound window lifetime must capture stable native BricsCAD database identity.");
