@@ -55,4 +55,4 @@ Three isolated BricsCAD sessions exited gracefully with code `0` and returned 61
 
 ## Remaining scope
 
-Issue #3603 closes this bounded physical-output P03 cell after its task-branch PR is integrated. Parent #73 and overall LOCAL-007 remain open: Wall Snap P02 is still `LOCAL_PARTIAL / PENDING_REMOTE` until #3600 and #3601 land and the successful Apply/invalidation/replacement-no-cache matrix is rerun on an exact pushed SHA.
+Issue #3603 closes this bounded physical-output P03 cell after its task-branch PR is integrated. Wall Snap P02 is now independently `COMPLETED / LOCAL_PASS` through #3599/#3617. After this PR integrates, LOCAL-007's bounded P01 analysis, P02 Wall Snap and P03 physical-output cells are all locally qualified. Parent #73 remains open only for its broader advanced-geometry scope and must not be inferred complete from these bounded cells.
