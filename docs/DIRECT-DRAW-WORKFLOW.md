@@ -19,7 +19,7 @@ Current implementation direction on `main`:
 - BLT-style wall compatibility flow is deliberately **capture -> edit -> build**, not capture-and-build in one command.
 - Instance inspector exposes source-derived geometry such as `LengthM`, `AreaM2`, `VolumeM3`, `PerimeterM` and source `Layer` as read-only CAD provenance instead of pretending those measurements are independent editable Family dimensions.
 
-Exact-current-sha compile/NETLOAD/runtime validation still requires a licensed BricsCAD V25 environment. Static implementation status must not be described as runtime-certified.
+Exact licensed evidence is now recorded for the bounded repeated Wall/Beam slice at clean source SHA `2985f13b0f0d680284e915fb81728bbb26a42ffe`: BricsCAD V25.2.10 and V26.2.07 both passed exact-plugin `NETLOAD`, DrawJig preview, repeated segments, Enter/physical ESC, planar UCS, document-switch isolation, whole-command Undo/Redo, save and fresh-process cold reopen. This does not certify the broader quick/advanced prompt, Auto Host/reference, private-DWG or release matrix.
 
 ---
 
@@ -291,7 +291,7 @@ For each supported command:
 7. Health All/ownership checks remain clean for a valid object;
 8. existing capture commands continue to work;
 9. deterministic tests/static preflights cover the shared architecture;
-10. exact-current-sha behavior still requires licensed BricsCAD V25 interactive runtime validation before being described as production-ready.
+10. every unqualified row still requires exact-current-sha licensed interactive runtime evidence before being described as production-ready; the recorded #3612 repeated Wall/Beam evidence qualifies only that bounded row.
 
 Runtime validation should include at minimum Wall, Beam, Column and Slab creation, save/reopen, regenerate, selection sync, undo/cancel behavior and representative DWG screenshots. Door/Opening runtime validation additionally needs unique-host, ambiguous-host, no-host and explicit physical-cut scenarios.
 
