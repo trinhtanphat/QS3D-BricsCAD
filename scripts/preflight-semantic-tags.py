@@ -168,7 +168,7 @@ for token in [
     "SemanticTagBuilder.StoredRotation(element)",
     "SemanticTagBuilder.Build(document, project, element",
     "SemanticMLeaderBuilder.Build(document, project, element",
-    "SemanticMLeaderBuilder.BuildBatch(document, project, items)",
+    "SemanticMLeaderBuilder.BuildBatch(document, project,",
     "document.Editor.Regen();",
     "UI sync warning:",
 ]:
