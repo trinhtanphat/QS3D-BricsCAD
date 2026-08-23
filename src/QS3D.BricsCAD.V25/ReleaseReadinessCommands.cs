@@ -100,6 +100,14 @@ namespace QS3D.BricsCAD.V25
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
             if (string.IsNullOrWhiteSpace(issue.ElementId))
             {
+                if ((issue.Code ?? string.Empty).StartsWith("WALL_JUNCTION_NATIVE_", StringComparison.OrdinalIgnoreCase))
+                {
+                    var junctionHandles = GeneratedWallJunctionRuntimeHealthService.Handles(document);
+                    var junctionCount = CadHandleService.Select(document, junctionHandles);
+                    PaletteCoordinator.SetStatus("Release Check Định vị " + issue.Code + " • " + junctionCount + " CAD object(s)");
+                    if (junctionCount > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
+                    return;
+                }
                 if (!(issue.Code ?? string.Empty).StartsWith("CUSTOM_SCHEDULE_TABLE_", StringComparison.OrdinalIgnoreCase)) return;
                 var artifactHandles = SemanticScheduleNativeTableBuilder.PersistedHandles(currentProject);
                 if (artifactHandles.Count == 0) return;
