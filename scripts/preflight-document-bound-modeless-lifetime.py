@@ -44,7 +44,7 @@ if not errors:
     for needle in (
         "DocumentToBeDestroyed += OnDocumentToBeDestroyed",
         "DocumentToBeDestroyed -= OnDocumentToBeDestroyed",
-        "ReferenceEquals(e.Document, _document)",
+        "IsSameDocument(e.Document)",
         "_window.Closed += OnWindowClosed",
         "_window.Closed -= OnWindowClosed",
         "_window.Dispatcher.CheckAccess()",
