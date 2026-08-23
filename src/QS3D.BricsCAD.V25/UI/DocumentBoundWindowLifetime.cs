@@ -25,6 +25,7 @@ namespace QS3D.BricsCAD.V25.UI
             private readonly Window _window;
             private readonly Document _document;
             private readonly IntPtr _nativeDatabaseIdentity;
+            private readonly object _documentAccessGate = new object();
             private bool _attached;
             private bool _projectAffinityBound;
             private int _invalidated;
@@ -46,6 +47,7 @@ namespace QS3D.BricsCAD.V25.UI
                 try
                 {
                     BindProjectAffinityIfPresent();
+                    _document.CloseWillStart += OnDocumentCloseWillStart;
                     BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
                     _window.Activated += OnWindowActivated;
                     _window.PreviewMouseDown += OnPreviewMouseDown;
@@ -104,28 +106,36 @@ namespace QS3D.BricsCAD.V25.UI
 
             private bool EnsureProjectAffinity()
             {
-                if (Volatile.Read(ref _invalidated) != 0) return false;
-
-                try
+                var closeForProjectChange = false;
+                lock (_documentAccessGate)
                 {
-                    if (!_projectAffinityBound)
+                    // CloseWillStart and DocumentToBeDestroyed take the same gate before setting
+                    // this flag. Once either callback begins, no new Document.Name/Database access
+                    // can enter ProjectContextCoordinator through the retained managed wrapper.
+                    if (Volatile.Read(ref _invalidated) != 0) return false;
+
+                    try
                     {
-                        BindProjectAffinityIfPresent();
-                        return true;
+                        if (!_projectAffinityBound)
+                        {
+                            BindProjectAffinityIfPresent();
+                            return true;
+                        }
+
+                        if (ProjectContextCoordinator.TryGetReadOnly(_document, out var project) &&
+                            string.Equals(project.ProjectId ?? string.Empty, _projectId, StringComparison.OrdinalIgnoreCase))
+                            return true;
+
+                        closeForProjectChange = true;
                     }
-
-                    if (ProjectContextCoordinator.TryGetReadOnly(_document, out var project) &&
-                        string.Equals(project.ProjectId ?? string.Empty, _projectId, StringComparison.OrdinalIgnoreCase))
-                        return true;
-
-                    CloseForProjectChange();
-                    return false;
+                    catch
+                    {
+                        closeForProjectChange = true;
+                    }
                 }
-                catch
-                {
-                    CloseForProjectChange();
-                    return false;
-                }
+
+                if (closeForProjectChange) CloseForProjectChange();
+                return false;
             }
 
             private void OnWindowActivated(object? sender, EventArgs e) => EnsureProjectAffinity();
@@ -142,7 +152,11 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void CloseForProjectChange()
             {
-                if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
+                lock (_documentAccessGate)
+                {
+                    if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
+                }
+                DetachDocumentCloseHandler();
                 DetachDocumentManagerHandler();
 
                 const string message = "QS3D project của cửa sổ modeless này đã thay đổi hoặc không còn được nạp. Cửa sổ đã đóng để tránh thao tác lên semantic state khác; hãy mở lại cửa sổ trong project hiện hành.";
@@ -150,14 +164,35 @@ namespace QS3D.BricsCAD.V25.UI
                 TryCloseWindow();
             }
 
+            private void OnDocumentCloseWillStart(object? sender, EventArgs e)
+            {
+                // This per-document event is intentionally earlier than native destruction. Holding
+                // the same gate as EnsureProjectAffinity creates a hard ordering boundary: either a
+                // current affinity read finishes while the document is still live, or invalidation
+                // wins and later WPF activation/input callbacks never dereference the managed wrapper.
+                lock (_documentAccessGate)
+                {
+                    if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
+                }
+                DetachDocumentCloseHandler();
+                DetachDocumentManagerHandler();
+                TryCloseWindow();
+            }
+
             private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
             {
                 if (!MatchesNativeDatabase(e.Document)) return;
-                if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
+                lock (_documentAccessGate)
+                {
+                    if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
+                }
 
                 // BricsCAD may surface a different managed Document wrapper for the same native
                 // database during destruction. Match the stable native database identity captured
                 // at bind time so wrapper drift still closes this window, without using mutable paths.
+                // CloseWillStart is the early disposal barrier; this global event remains a native-
+                // identity fallback for managed-wrapper drift and unusual host teardown ordering.
+                DetachDocumentCloseHandler();
                 DetachDocumentManagerHandler();
                 TryCloseWindow();
             }
@@ -197,11 +232,18 @@ namespace QS3D.BricsCAD.V25.UI
                 catch { }
             }
 
+            private void DetachDocumentCloseHandler()
+            {
+                try { _document.CloseWillStart -= OnDocumentCloseWillStart; }
+                catch { }
+            }
+
             private void OnWindowClosed(object? sender, EventArgs e) => Detach();
 
             private void Detach()
             {
                 if (!_attached) return;
+                DetachDocumentCloseHandler();
                 DetachDocumentManagerHandler();
                 try { _window.Activated -= OnWindowActivated; }
                 catch { }
