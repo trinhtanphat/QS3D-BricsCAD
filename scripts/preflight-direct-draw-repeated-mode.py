@@ -140,6 +140,7 @@ if not errors:
 
     for token in (
         'CommandMethod("QS3DREPEATVERIFYAFTER"',
+        'CommandMethod("QS3DREPEATARMSEQUENCE"',
         'CommandMethod("QS3DREPEATVERIFYUNDO"',
         'CommandMethod("QS3DREPEATVERIFYREDO"',
         'CommandMethod("QS3DREPEATVERIFYCOLD"',
@@ -148,14 +149,20 @@ if not errors:
         'CommandMethod("QS3DREPEATVERIFYUCS"',
         'CommandMethod("QS3DREPEATARMSWITCH"',
         'CommandMethod("QS3DREPEATVERIFYSWITCH"',
-        '"QS3DREPEATVERIFYESC _.QUIT _N "',
-        '"QS3DREPEATVERIFYSWITCH _.QUIT _N "',
+        '"QS3DREPEATVERIFYESC "',
+        '"QS3DREPEATVERIFYSWITCH "',
         "RequireTwoBeamSegments(",
         "RequireOneEscBeamSegment(",
         "SegmentCommittedForRuntimeQualification",
         "SequenceCompletedForRuntimeQualification",
+        "Application.DocumentManager.MdiActiveDocument = arm.DocumentB",
+        '"NATIVE_DOCUMENT_SWITCH_REJECTED"',
+        "OnSequenceTransitionCommandWillStart",
+        "CaptureUndo(Context())",
         "CadHandleService.GetLiveSolidHandles",
         "ProjectContextCoordinator.TryGetReadOnly",
+        "SourceReconcileUndoCoordinator.CaptureSanitizedState",
+        "undoState.CompareMarkerTo(state.AfterCommandUndoState)",
         "QS3D_DIRECT_DRAW_REPEAT_RUNTIME_V1",
     ):
         require(probe, token, "read-only runtime verifier")
@@ -190,17 +197,16 @@ if not errors:
         "Start-ExactCandidateHost",
         '"NETLOAD"',
         '"QS3DDRAWBEAMREPEAT"',
+        '"QS3DREPEATARMSEQUENCE"',
         '"_.U"',
         '"_.REDO"',
-        '"QS3DREPEATVERIFYAFTER"',
-        '"QS3DREPEATVERIFYUNDO"',
         '"QS3DREPEATVERIFYREDO"',
         '"QS3DREPEATVERIFYCOLD"',
         '"QS3DREPEATARMESC"',
         '"QS3DREPEATVERIFYUCS"',
         '"QS3DREPEATARMSWITCH"',
         "Send-ExactProcessEscape",
-        "Send-ExactProcessCtrlTab",
+        "native_document_switch_isolation = $documentSwitchPassed",
         "GetWindowThreadProcessId",
         "foregroundProcessId -eq [uint32]$Process.Id",
         "keybd_event(0x1B",
@@ -208,6 +214,10 @@ if not errors:
         "-PassThru -WindowStyle Hidden",
         "Stop-OwnedHosts -Processes @($ownedProcesses)",
         "Wait-OwnedHostsExited -Processes @($ownedProcesses)",
+        "$Process.CloseMainWindow()",
+        "-RequestCloseAfterEvidence",
+        "-CancelActiveCommandBeforeClose",
+        "-TerminateOwnedProcessAfterEvidence",
         '"Runner-owned process is not the requested BricsCAD executable."',
         "Assert-V26DotNetRuntime",
         'SetEnvironmentVariable("DOTNET_ROOT", $dotNetRoot, "Process")',
@@ -224,14 +234,35 @@ if not errors:
         "repeat-switch.private.scr",
         "private cleanup target",
         "Repository fixture changed",
+        "Repeated-mode planar-UCS probe unexpectedly persisted a semantic sidecar.",
         "exact_loaded_candidate_every_session = $exactRuntimeIdentityPassed",
         "accepted_segments = $acceptedSegments",
         "whole_command_undo = $wholeCommandUndoPassed",
         "save_cold_reopen = $saveColdReopenPassed",
         "startup_demandload_isolation_count = $demandLoadIsolationCount",
         "startup_demandload_restored = $demandLoadRestored",
+        "failure_phase = $script:failurePhase",
+        "failure_code = $script:failureCode",
+        "qualification_error_class = if ($null -ne $qualificationError)",
+        "cleanup_error_class = if ($null -ne $cleanupError)",
+        "owned_process_terminations_after_complete_evidence = $script:ownedEvidenceTerminationCount",
+        '$script:currentPhase = "esc"',
+        '"RUNNER_" + $_.Exception.GetType().Name.ToUpperInvariant()',
     ):
         require(runner, token, "guarded V25/V26 repeated-mode runner")
+    armed = runner.find('"QS3DREPEATARMSEQUENCE"')
+    authored = runner.find('"QS3DDRAWBEAMREPEAT"', armed)
+    native_undo = runner.find('"_.U"', authored)
+    native_redo = runner.find('"_.REDO"', native_undo)
+    verify_redo = runner.find('"QS3DREPEATVERIFYREDO"', native_redo)
+    verify_after = runner.find('"QS3DREPEATVERIFYAFTER"', authored)
+    verify_undo = runner.find('"QS3DREPEATVERIFYUNDO"', native_undo)
+    if min(armed, authored, native_undo, native_redo, verify_redo) < 0 or not armed < authored < native_undo < native_redo < verify_redo:
+        errors.append("runner must arm before production authoring and keep native Undo/Redo adjacent")
+    if verify_after >= 0 and verify_after < native_undo:
+        errors.append("runner must not insert a verifier command between production authoring and native Undo")
+    if verify_undo >= 0 and verify_undo < native_redo:
+        errors.append("runner must not insert a verifier command between native Undo and Redo")
     for forbidden in (
         "git reset", "git clean", "Get-Process -Name '*'", "Stop-Process -Name",
         "Get-Qs3dExactBricsCadProcesses -ExpectedExecutable",

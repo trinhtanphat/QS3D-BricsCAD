@@ -69,6 +69,22 @@ function Read-Marker {
     return $result
 }
 
+function Set-MarkerFailureMetadata {
+    param(
+        [Parameter(Mandatory = $true)]$Marker,
+        [Parameter(Mandatory = $true)][string]$FallbackPhase,
+        [Parameter(Mandatory = $true)][string]$FallbackCode
+    )
+    $phase = if ($Marker.ContainsKey("phase")) { [string]$Marker["phase"] } else { $FallbackPhase }
+    $code = if ($Marker.ContainsKey("error_code")) { [string]$Marker["error_code"] } else { $FallbackCode }
+    if ($phase -notmatch '^[a-z0-9_]{1,64}$') { $phase = "marker_phase_rejected" }
+    if ($code -notmatch '^[A-Z0-9_]{1,96}$' -or [string]::Equals($code, "NONE", [StringComparison]::Ordinal)) {
+        $code = $FallbackCode
+    }
+    $script:failurePhase = $phase
+    $script:failureCode = $code
+}
+
 function Require-Marker {
     param(
         [Parameter(Mandatory = $true)]$Marker,
@@ -92,8 +108,12 @@ function Require-Marker {
         error_code = "NONE"
     }
     foreach ($entry in $expected.GetEnumerator()) {
-        if (-not $Marker.ContainsKey($entry.Key)) { throw "Repeated-mode $Phase marker is missing '$($entry.Key)'." }
+        if (-not $Marker.ContainsKey($entry.Key)) {
+            Set-MarkerFailureMetadata -Marker $Marker -FallbackPhase $Phase -FallbackCode "MARKER_KEY_MISSING"
+            throw "Repeated-mode $Phase marker is missing '$($entry.Key)'."
+        }
         if (-not [string]::Equals([string]$Marker[$entry.Key], [string]$entry.Value, [StringComparison]::OrdinalIgnoreCase)) {
+            Set-MarkerFailureMetadata -Marker $Marker -FallbackPhase $Phase -FallbackCode "MARKER_CONTRACT_REJECTED"
             throw "Repeated-mode $Phase marker '$($entry.Key)' expected '$($entry.Value)' but was '$($Marker[$entry.Key])'."
         }
     }
@@ -290,19 +310,6 @@ function Send-ExactProcessEscape {
     [Qs3dExactEscapeInput]::keybd_event(0x1B, 0, 2, [UIntPtr]::Zero)
 }
 
-function Send-ExactProcessCtrlTab {
-    param(
-        [Parameter(Mandatory = $true)][Diagnostics.Process]$Process,
-        [Parameter(Mandatory = $true)][string]$ExpectedExecutable
-    )
-    Bind-ExactProcessForeground -Process $Process -ExpectedExecutable $ExpectedExecutable
-
-    [Qs3dExactEscapeInput]::keybd_event(0x11, 0, 0, [UIntPtr]::Zero)
-    [Qs3dExactEscapeInput]::keybd_event(0x09, 0, 0, [UIntPtr]::Zero)
-    [Qs3dExactEscapeInput]::keybd_event(0x09, 0, 2, [UIntPtr]::Zero)
-    [Qs3dExactEscapeInput]::keybd_event(0x11, 0, 2, [UIntPtr]::Zero)
-}
-
 function Stop-OwnedHosts {
     param(
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][Diagnostics.Process[]]$Processes,
@@ -349,11 +356,16 @@ function Wait-ForFilesAndExit {
         [Parameter(Mandatory = $true)][string]$ExpectedAssembly,
         [Parameter(Mandatory = $true)][Diagnostics.Process]$Process,
         [Parameter(Mandatory = $true)][string]$ExpectedExecutable,
-        [Parameter(Mandatory = $true)][DateTime]$Deadline
+        [Parameter(Mandatory = $true)][DateTime]$Deadline,
+        [switch]$RequestCloseAfterEvidence,
+        [switch]$CancelActiveCommandBeforeClose,
+        [switch]$TerminateOwnedProcessAfterEvidence
     )
     Require-OwnedProcessIdentity -Process $Process -ExpectedExecutable $ExpectedExecutable
     $allObserved = $false
     $identityValidated = $false
+    $closeRequested = $false
+    $evidenceObservedAt = [DateTime]::MinValue
     while ([DateTime]::UtcNow -lt $Deadline) {
         $Process.Refresh()
         $alive = -not $Process.HasExited
@@ -366,6 +378,32 @@ function Wait-ForFilesAndExit {
         }
         $allObserved = $identityValidated -and
             @($Paths | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) }).Count -eq 0
+        if ($allObserved -and $evidenceObservedAt -eq [DateTime]::MinValue) {
+            $evidenceObservedAt = [DateTime]::UtcNow
+        }
+        if ($allObserved -and $alive -and $RequestCloseAfterEvidence -and -not $closeRequested) {
+            Require-OwnedProcessIdentity -Process $Process -ExpectedExecutable $ExpectedExecutable
+            if ($CancelActiveCommandBeforeClose) {
+                Send-ExactProcessEscape -Process $Process -ExpectedExecutable $ExpectedExecutable
+                Start-Sleep -Milliseconds 250
+            }
+            $Process.CloseMainWindow() | Out-Null
+            $closeRequested = $true
+        }
+        if ($allObserved -and $alive -and $TerminateOwnedProcessAfterEvidence -and
+            $evidenceObservedAt -ne [DateTime]::MinValue -and
+            [DateTime]::UtcNow -ge $evidenceObservedAt.AddSeconds(10)) {
+            Require-OwnedProcessIdentity -Process $Process -ExpectedExecutable $ExpectedExecutable
+            $Process.Refresh()
+            if (-not $Process.HasExited) {
+                Stop-Process -Id $Process.Id -Force -ErrorAction Stop
+                if (-not $Process.WaitForExit(10000)) {
+                    throw "Exact runner-owned BricsCAD process did not terminate after complete evidence."
+                }
+                $script:ownedEvidenceTerminationCount++
+            }
+            return
+        }
         if ($allObserved -and -not $alive) { return }
         if (-not $allObserved -and -not $alive) {
             throw "BricsCAD exited before repeated-mode evidence was complete."
@@ -532,6 +570,10 @@ $oldNonce = $env:QS3D_REPEAT_NONCE
 $oldSecondDrawing = $env:QS3D_REPEAT_SECOND_DWG
 $qualificationError = $null
 $cleanupError = $null
+$script:failurePhase = "NONE"
+$script:failureCode = "NONE"
+$script:currentPhase = "setup"
+$script:ownedEvidenceTerminationCount = 0
 $fixtureHash = (Get-FileHash -LiteralPath $FixtureDwg -Algorithm SHA256).Hash.ToUpperInvariant()
 $startedAt = [DateTime]::UtcNow
 $drawingPersisted = $false
@@ -571,14 +613,14 @@ try {
     $env:QS3D_REPEAT_NONCE = $script:nonce
     $env:QS3D_RUNTIME_RESULT = $phasePaths.runtime_session1
 
+    $script:currentPhase = "author_undo_redo_save"
     $sessionOneLines = @(
         "FILEDIA", "0", "CMDECHO", "1", "TILEMODE", "1", "INSUNITS", "4", "UCS", "W",
         "NETLOAD", ('"' + $pluginDll + '"'),
         "QS3DRUNTIMEPROBE",
+        "QS3DREPEATARMSEQUENCE",
         "QS3DDRAWBEAMREPEAT", "0,0", "5000,0", "10000,0", "",
-        "QS3DREPEATVERIFYAFTER",
-        "_.U", "QS3DREPEATVERIFYUNDO",
-        "_.REDO", "QS3DREPEATVERIFYREDO",
+        "_.U", "_.REDO", "QS3DREPEATVERIFYREDO",
         "QS3DSAVE", "_.QSAVE", "_.QUIT", "_Y"
     )
     [IO.File]::WriteAllLines($scriptOne, $sessionOneLines, [Text.Encoding]::ASCII)
@@ -611,6 +653,7 @@ try {
     $sidecarPersisted = Test-Path -LiteralPath $sidecar -PathType Leaf
     if (-not $sidecarPersisted) { throw "Repeated-mode semantic sidecar was not persisted." }
 
+    $script:currentPhase = "cold_reopen"
     $sessionTwoLines = @(
         "FILEDIA", "0", "CMDECHO", "1", "TILEMODE", "1", "INSUNITS", "4", "UCS", "W",
         "NETLOAD", ('"' + $pluginDll + '"'), "QS3DRUNTIMEPROBE",
@@ -634,6 +677,7 @@ try {
     Require-Marker -Marker (Read-Marker $phasePaths.cold_reopen) -Phase "cold_reopen" -ExpectedSegments 2
     $saveColdReopenPassed = $true
 
+    $script:currentPhase = "esc"
     Copy-Item -LiteralPath $FixtureDwg -Destination $escapeDrawing
     $env:QS3D_REPEAT_DWG = $escapeDrawing
     $escapeSessionLines = @(
@@ -661,10 +705,12 @@ try {
     Wait-ForFilesAndExit -Paths @($phasePaths.esc) `
         -RuntimeIdentityPath $phasePaths.runtime_esc -ExpectedAssembly $pluginDll `
         -Process $escapeProcess `
-        -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds))
+        -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds)) `
+        -RequestCloseAfterEvidence -CancelActiveCommandBeforeClose -TerminateOwnedProcessAfterEvidence
     Require-Marker -Marker (Read-Marker $phasePaths.esc) -Phase "esc" -ExpectedSegments 1
     $physicalEscPassed = $true
 
+    $script:currentPhase = "planar_ucs"
     Copy-Item -LiteralPath $FixtureDwg -Destination $ucsDrawing
     $env:QS3D_REPEAT_DWG = $ucsDrawing
     $ucsSessionLines = @(
@@ -672,7 +718,7 @@ try {
         "_.UCS", "_Z", "30",
         "NETLOAD", ('"' + $pluginDll + '"'), "QS3DRUNTIMEPROBE",
         "QS3DDRAWBEAMREPEAT", "0,0", "5000,0", "10000,0", "",
-        "_.UCS", "_W", "QS3DREPEATVERIFYUCS", "_.QUIT", "_N"
+        "_.UCS", "_W", "QS3DREPEATVERIFYUCS"
     )
     [IO.File]::WriteAllLines($scriptUcs, $ucsSessionLines, [Text.Encoding]::ASCII)
     $env:QS3D_RUNTIME_RESULT = $phasePaths.runtime_planar_ucs
@@ -688,7 +734,8 @@ try {
     Wait-ForFilesAndExit -Paths @($phasePaths.planar_ucs) `
         -RuntimeIdentityPath $phasePaths.runtime_planar_ucs -ExpectedAssembly $pluginDll `
         -Process $ucsProcess `
-        -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds))
+        -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds)) `
+        -TerminateOwnedProcessAfterEvidence
     Require-Marker -Marker (Read-Marker $phasePaths.planar_ucs) -Phase "planar_ucs" -ExpectedSegments 2
     if (-not [string]::Equals(
         (Get-FileHash -LiteralPath $ucsDrawing -Algorithm SHA256).Hash,
@@ -696,8 +743,12 @@ try {
         [StringComparison]::OrdinalIgnoreCase)) {
         throw "Repeated-mode planar-UCS disposable drawing bytes changed."
     }
+    if (Test-Path -LiteralPath $ucsSidecar -PathType Leaf) {
+        throw "Repeated-mode planar-UCS probe unexpectedly persisted a semantic sidecar."
+    }
     $planarUcsPassed = $true
 
+    $script:currentPhase = "document_switch"
     Copy-Item -LiteralPath $FixtureDwg -Destination $switchDrawingA
     Copy-Item -LiteralPath $FixtureDwg -Destination $switchDrawingB
     $env:QS3D_REPEAT_DWG = $switchDrawingA
@@ -724,11 +775,11 @@ try {
         -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds))
     Require-Marker -Marker (Read-Marker $phasePaths.document_switch_ready) `
         -Phase "document_switch_ready" -ExpectedSegments 1 -ExpectedStatus "READY"
-    Send-ExactProcessCtrlTab -Process $switchProcess -ExpectedExecutable $bricscadExe
     Wait-ForFilesAndExit -Paths @($phasePaths.document_switch) `
         -RuntimeIdentityPath $phasePaths.runtime_document_switch -ExpectedAssembly $pluginDll `
         -Process $switchProcess `
-        -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds))
+        -ExpectedExecutable $bricscadExe -Deadline ([DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds)) `
+        -TerminateOwnedProcessAfterEvidence
     Require-Marker -Marker (Read-Marker $phasePaths.document_switch) `
         -Phase "document_switch" -ExpectedSegments 1
     foreach ($switchDrawing in @($switchDrawingA, $switchDrawingB)) {
@@ -741,9 +792,14 @@ try {
     }
     $documentSwitchPassed = $true
     $exactRuntimeIdentityPassed = $true
+    $script:currentPhase = "complete"
 }
 catch {
     $qualificationError = $_.Exception
+    if ([string]::Equals($script:failurePhase, "NONE", [StringComparison]::Ordinal)) {
+        $script:failurePhase = $script:currentPhase
+        $script:failureCode = "RUNNER_" + $_.Exception.GetType().Name.ToUpperInvariant()
+    }
 }
 finally {
     try {
@@ -783,7 +839,16 @@ finally {
         if (@(Get-ChildItem -LiteralPath $runRoot -Force).Count -ne 0) {
             throw "Repeated-mode private run root retained files."
         }
-        Remove-Item -LiteralPath $runRoot -Force
+        $cleanupDeadline = [DateTime]::UtcNow.AddSeconds(5)
+        while (Test-Path -LiteralPath $runRoot -PathType Container) {
+            try {
+                Remove-Item -LiteralPath $runRoot -Force -ErrorAction Stop
+            }
+            catch {
+                if ([DateTime]::UtcNow -ge $cleanupDeadline) { throw }
+                Start-Sleep -Milliseconds 100
+            }
+        }
         $privateCleanup = -not (Test-Path -LiteralPath $runRoot)
         if (-not [string]::Equals(
             (Get-FileHash -LiteralPath $FixtureDwg -Algorithm SHA256).Hash,
@@ -834,7 +899,7 @@ $metadata = [ordered]@{
     enter_termination = $enterTerminationPassed
     exact_process_physical_esc_termination = $physicalEscPassed
     supported_planar_ucs = $planarUcsPassed
-    exact_process_document_switch_isolation = $documentSwitchPassed
+    native_document_switch_isolation = $documentSwitchPassed
     whole_command_undo = $wholeCommandUndoPassed
     whole_command_redo = $wholeCommandRedoPassed
     save_cold_reopen = $saveColdReopenPassed
@@ -842,8 +907,13 @@ $metadata = [ordered]@{
     sidecar_persisted = $sidecarPersisted
     process_cleanup_verified = $processCleanup
     private_cleanup_verified = $privateCleanup
+    owned_process_terminations_after_complete_evidence = $script:ownedEvidenceTerminationCount
     started_at = $startedAt.ToString("O")
     completed_at = [DateTime]::UtcNow.ToString("O")
+    failure_phase = $script:failurePhase
+    failure_code = $script:failureCode
+    qualification_error_class = if ($null -ne $qualificationError) { $qualificationError.GetType().Name } else { "NONE" }
+    cleanup_error_class = if ($null -ne $cleanupError) { $cleanupError.GetType().Name } else { "NONE" }
     error_class = if ($null -ne $qualificationError) { $qualificationError.GetType().Name } elseif ($null -ne $cleanupError) { $cleanupError.GetType().Name } else { "NONE" }
 }
 $metadata | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $metadataPath -Encoding UTF8

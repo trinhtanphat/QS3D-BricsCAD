@@ -31,8 +31,34 @@ namespace QS3D.BricsCAD.V25
         private const double ToleranceM = 1e-8d;
         private static readonly object Sync = new object();
         private static SequenceState? _state;
+        private static SequenceArmState? _sequenceArm;
         private static EscapeArmState? _escapeArm;
         private static SwitchArmState? _switchArm;
+
+        [CommandMethod("QS3DREPEATARMSEQUENCE", CommandFlags.Modal)]
+        public void ArmSequenceQualification()
+        {
+            var control = ControlContext();
+            var arm = new SequenceArmState(control.Document, control.Nonce, control.EvidenceDirectory);
+            lock (Sync)
+            {
+                if (_sequenceArm != null)
+                    throw new ProbeFailure("SEQUENCE_ARM_ALREADY_ACTIVE");
+                _sequenceArm = arm;
+            }
+
+            try
+            {
+                DirectDrawRepeatedCommands.SequenceCompletedForRuntimeQualification +=
+                    OnSequenceQualificationCompleted;
+                arm.SequenceSubscribed = true;
+            }
+            catch
+            {
+                DisarmSequence(arm);
+                throw;
+            }
+        }
 
         [CommandMethod("QS3DREPEATARMESC", CommandFlags.Modal)]
         public void ArmEscapeQualification()
@@ -138,38 +164,54 @@ namespace QS3D.BricsCAD.V25
         }
 
         [CommandMethod("QS3DREPEATVERIFYAFTER", CommandFlags.Modal)]
-        public void VerifyAfter() => Execute("after", () =>
+        public void VerifyAfter() => Execute("after", () => CaptureAfter(Context()));
+
+        private static void CaptureAfter(ProbeContext context)
         {
-            var context = Context();
             var segments = RequireTwoBeamSegments(context.Document, context.Project);
+            var undoState = SourceReconcileUndoCoordinator.CaptureSanitizedState(
+                context.Document,
+                context.Project);
             lock (Sync)
             {
                 _state = new SequenceState(
                     context.Document,
                     context.Nonce,
                     segments.Select(x => x.SourceHandle).ToArray(),
-                    segments.Select(x => x.GeneratedHandle).ToArray());
+                    segments.Select(x => x.GeneratedHandle).ToArray(),
+                    undoState);
             }
             WriteEvidence(context, "after", "PASS", 2, "NONE");
-        });
+        }
 
         [CommandMethod("QS3DREPEATVERIFYUNDO", CommandFlags.Modal)]
-        public void VerifyUndo() => Execute("undo", () =>
+        public void VerifyUndo() => Execute("undo", () => CaptureUndo(Context()));
+
+        private static void CaptureUndo(ProbeContext context)
         {
-            var context = Context();
             var state = State(context);
             if (context.Project.Elements.Any(x => x.Category == ElementCategory.Beam))
-                throw new ProbeFailure("SEMANTIC_UNDO_REJECTED");
+            {
+                var undoState = SourceReconcileUndoCoordinator.CaptureSanitizedState(
+                    context.Document,
+                    context.Project);
+                throw new ProbeFailure(
+                    "SEMANTIC_UNDO_REJECTED_" + undoState.HistoryState + "_" +
+                    undoState.CompareMarkerTo(state.AfterCommandUndoState));
+            }
             RequireNoLiveHandles(context.Document, state.SourceHandles, "SOURCE_UNDO_REJECTED");
             RequireNoLiveHandles(context.Document, state.GeneratedHandles, "GENERATED_UNDO_REJECTED");
+            state.UndoBoundaryObserved = true;
             WriteEvidence(context, "undo", "PASS", 0, "NONE");
-        });
+        }
 
         [CommandMethod("QS3DREPEATVERIFYREDO", CommandFlags.Modal)]
         public void VerifyRedo() => Execute("redo", () =>
         {
             var context = Context();
-            State(context);
+            var state = State(context);
+            if (!state.UndoBoundaryObserved)
+                throw new ProbeFailure("UNDO_BOUNDARY_NOT_OBSERVED");
             RequireTwoBeamSegments(context.Document, context.Project);
             WriteEvidence(context, "redo", "PASS", 2, "NONE");
         });
@@ -335,6 +377,127 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static void OnSequenceQualificationCompleted(
+            Document document,
+            int acceptedSegments,
+            string termination)
+        {
+            SequenceArmState? arm;
+            lock (Sync)
+            {
+                arm = _sequenceArm;
+                if (arm == null || !ReferenceEquals(arm.Document, document)) return;
+            }
+
+            var transitionArmed = false;
+            try
+            {
+                if (acceptedSegments != 2 ||
+                    !string.Equals(termination, "ENTER", StringComparison.Ordinal))
+                    throw new ProbeFailure("SEQUENCE_COMPLETION_REJECTED");
+                var context = Context();
+                if (!string.Equals(context.Nonce, arm.Nonce, StringComparison.Ordinal) ||
+                    !string.Equals(
+                        context.EvidenceDirectory,
+                        arm.EvidenceDirectory,
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new ProbeFailure("SEQUENCE_ARM_AFFINITY_REJECTED");
+                CaptureAfter(context);
+                ArmUndoBoundary(arm);
+                transitionArmed = true;
+            }
+            catch (Exception ex)
+            {
+                var errorCode = ex is ProbeFailure failure
+                    ? failure.Code
+                    : "UNEXPECTED_" + ex.GetType().Name.ToUpperInvariant();
+                try
+                {
+                    WriteEvidenceCore(
+                        arm.Nonce,
+                        arm.EvidenceDirectory,
+                        "after",
+                        "FAIL",
+                        -1,
+                        errorCode);
+                }
+                catch { }
+            }
+            finally { if (!transitionArmed) DisarmSequence(arm); }
+        }
+
+        private static void ArmUndoBoundary(SequenceArmState arm)
+        {
+            if (arm.SequenceSubscribed)
+            {
+                arm.SequenceSubscribed = false;
+                DirectDrawRepeatedCommands.SequenceCompletedForRuntimeQualification -=
+                    OnSequenceQualificationCompleted;
+            }
+            arm.Document.CommandWillStart += OnSequenceTransitionCommandWillStart;
+            arm.TransitionSubscribed = true;
+        }
+
+        private static void OnSequenceTransitionCommandWillStart(object sender, CommandEventArgs args)
+        {
+            if (!IsNativeRedoCommand(args?.GlobalCommandName)) return;
+
+            SequenceArmState? arm;
+            lock (Sync) arm = _sequenceArm;
+            if (arm == null) return;
+            try
+            {
+                CaptureUndo(Context());
+            }
+            catch (Exception ex)
+            {
+                var errorCode = ex is ProbeFailure failure
+                    ? failure.Code
+                    : "UNEXPECTED_" + ex.GetType().Name.ToUpperInvariant();
+                try
+                {
+                    WriteEvidenceCore(
+                        arm.Nonce,
+                        arm.EvidenceDirectory,
+                        "undo",
+                        "FAIL",
+                        -1,
+                        errorCode);
+                }
+                catch { }
+            }
+            finally
+            {
+                DisarmSequence(arm);
+            }
+        }
+
+        private static bool IsNativeRedoCommand(string? commandName)
+        {
+            var normalized = (commandName ?? string.Empty).Trim().TrimStart('_', '.');
+            return string.Equals(normalized, "REDO", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalized, "MREDO", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void DisarmSequence(SequenceArmState arm)
+        {
+            if (arm.SequenceSubscribed)
+            {
+                arm.SequenceSubscribed = false;
+                DirectDrawRepeatedCommands.SequenceCompletedForRuntimeQualification -=
+                    OnSequenceQualificationCompleted;
+            }
+            if (arm.TransitionSubscribed)
+            {
+                arm.TransitionSubscribed = false;
+                arm.Document.CommandWillStart -= OnSequenceTransitionCommandWillStart;
+            }
+            lock (Sync)
+            {
+                if (ReferenceEquals(_sequenceArm, arm)) _sequenceArm = null;
+            }
+        }
+
         private static EscapeResultState EscapeResult(ProbeContext context)
         {
             lock (Sync)
@@ -395,7 +558,7 @@ namespace QS3D.BricsCAD.V25
                 arm.CommandTerminalObserved = true;
             }
             DisarmEscapeSubscriptions(arm);
-            arm.Document.SendStringToExecute("QS3DREPEATVERIFYESC _.QUIT _N ", true, false, false);
+            arm.Document.SendStringToExecute("QS3DREPEATVERIFYESC ", true, false, false);
         }
 
         private static bool IsRepeatedBeamCommand(string? commandName)
@@ -445,6 +608,26 @@ namespace QS3D.BricsCAD.V25
                 "READY",
                 1,
                 "NONE");
+            try
+            {
+                Application.DocumentManager.MdiActiveDocument = arm.DocumentB;
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, arm.DocumentB))
+                    throw new ProbeFailure("NATIVE_DOCUMENT_SWITCH_REJECTED");
+            }
+            catch
+            {
+                try
+                {
+                    WriteEvidenceCore(
+                        arm.Nonce,
+                        arm.EvidenceDirectory,
+                        "document_switch",
+                        "FAIL",
+                        -1,
+                        "NATIVE_DOCUMENT_SWITCH_REJECTED");
+                }
+                catch { }
+            }
         }
 
         private static void OnSwitchSequenceCompleted(
@@ -475,7 +658,7 @@ namespace QS3D.BricsCAD.V25
             DisarmSwitchSubscriptions(arm);
             var active = Application.DocumentManager.MdiActiveDocument;
             if (active == null) return;
-            active.SendStringToExecute("QS3DREPEATVERIFYSWITCH _.QUIT _N ", true, false, false);
+            active.SendStringToExecute("QS3DREPEATVERIFYSWITCH ", true, false, false);
         }
 
         private static void DisarmSwitch(SwitchArmState arm)
@@ -858,6 +1041,22 @@ namespace QS3D.BricsCAD.V25
             public double MaximumYM { get; }
         }
 
+        private sealed class SequenceArmState
+        {
+            public SequenceArmState(Document document, string nonce, string evidenceDirectory)
+            {
+                Document = document;
+                Nonce = nonce;
+                EvidenceDirectory = evidenceDirectory;
+            }
+
+            public Document Document { get; }
+            public string Nonce { get; }
+            public string EvidenceDirectory { get; }
+            public bool SequenceSubscribed { get; set; }
+            public bool TransitionSubscribed { get; set; }
+        }
+
         private sealed class EscapeArmState
         {
             public EscapeArmState(Document document, string nonce, string evidenceDirectory)
@@ -923,18 +1122,23 @@ namespace QS3D.BricsCAD.V25
                 Document document,
                 string nonce,
                 IReadOnlyList<string> sourceHandles,
-                IReadOnlyList<string> generatedHandles)
+                IReadOnlyList<string> generatedHandles,
+                SourceReconcileUndoCoordinator.SanitizedDiagnosticSnapshot afterCommandUndoState)
             {
                 Document = document;
                 Nonce = nonce;
                 SourceHandles = sourceHandles;
                 GeneratedHandles = generatedHandles;
+                AfterCommandUndoState = afterCommandUndoState ??
+                    throw new ArgumentNullException(nameof(afterCommandUndoState));
             }
 
             public Document Document { get; }
             public string Nonce { get; }
             public IReadOnlyList<string> SourceHandles { get; }
             public IReadOnlyList<string> GeneratedHandles { get; }
+            public SourceReconcileUndoCoordinator.SanitizedDiagnosticSnapshot AfterCommandUndoState { get; }
+            public bool UndoBoundaryObserved { get; set; }
         }
 
         private sealed class ProbeFailure : InvalidOperationException
