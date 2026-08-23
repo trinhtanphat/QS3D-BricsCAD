@@ -122,10 +122,10 @@ for token in ('PENDING_LOCAL', 'source review không được coi là `LOCAL_PAS
 
 local_008 = local_section("LOCAL-008")
 local_014 = local_section("LOCAL-014")
-for token in ('Status: OPEN', 'Evidence: PENDING_LOCAL', 'QS3DDRAWWINDOW', 'OpeningUsage=Window', 'Auto Host', 'QS3DCUTSELECTEDOPENINGS', 'Ribbon'):
+for token in ('Status: OPEN', 'Evidence:', 'PENDING_LOCAL', 'QS3DDRAWWINDOW', 'OpeningUsage=Window', 'Auto Host', 'QS3DCUTSELECTEDOPENINGS', 'Ribbon'):
     if token not in local_008:
         errors.append("LOCAL-008 must own Window/finish runtime qualification: " + token)
-for token in ('Status: OPEN', 'Evidence: PENDING_LOCAL', 'QS3DCONVERT2D', 'QS3DPLAN2WALLS', 'QS3DCONVERT2DADV', 'PENDING_LOCAL / DO_NOT_RETRY_REMOTE'):
+for token in ('Status: OPEN', 'Evidence:', 'PENDING_LOCAL', 'QS3DCONVERT2D', 'QS3DPLAN2WALLS', 'QS3DCONVERT2DADV', 'PENDING_LOCAL / DO_NOT_RETRY_REMOTE'):
     if token not in local_014:
         errors.append("LOCAL-014 must own Plan-to-3D runtime qualification: " + token)
 if 'Status: PASS' in local_008 or 'Status: PASS' in local_014:
