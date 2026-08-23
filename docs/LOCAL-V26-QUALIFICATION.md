@@ -29,7 +29,9 @@ $env:BRICSCAD_V26_DIR = 'C:\Program Files\Bricsys\BricsCAD V26 en_US'
 
 If the installed locale/path differs, use that licensed V26 installation directory instead.
 
-If the process overrides `DOTNET_ROOT`, it must name a real .NET 8 host/runtime root containing `dotnet.exe`, an 8.x `host/fxr/hostfxr.dll`, and an 8.x `shared/Microsoft.NETCore.App/coreclr.dll`. The V26 runtime and native Beam runners reject an incomplete or stale override before starting BricsCAD; either unset the override so the licensed host uses its normal runtime resolution or point it to a verified local runtime root.
+Install the Microsoft x64 .NET 8 Windows Desktop Runtime through its Windows installer before qualification. A portable SDK/runtime tree is useful for deterministic builds, but `DOTNET_ROOT` alone is not a substitute for the registered runtime under `C:\Program Files\dotnet`: BricsCAD V26.2.07's managed bridge resolves `WindowsBase.dll` and `System.Windows.Forms.dll` from that installed location while it initializes `BrxMgd.dll`.
+
+If the process overrides `DOTNET_ROOT`, it must name a complete .NET 8 Windows Desktop runtime root containing `dotnet.exe`, an 8.x `host/fxr/hostfxr.dll`, an 8.x `shared/Microsoft.NETCore.App/coreclr.dll`, and matching 8.x Windows Desktop assemblies. The selected portable .NETCore patch must also exist as a matching system-installed Microsoft.NETCore/WindowsDesktop patch. The V26 runtime and repeated Direct Draw runners reject an incomplete, stale or install-mismatched override before artifact creation or BricsCAD launch.
 
 Before starting BricsCAD, verify that `dotnet --list-runtimes` reports both `Microsoft.NETCore.App 8.x` and `Microsoft.WindowsDesktop.App 8.x` for x64. A machine with BricsCAD V26 but no discoverable .NET 8 Windows Desktop runtime can enter `NETLOAD` without ever reaching the plugin initializer; that host prerequisite failure is not a plugin runtime PASS.
 
@@ -65,6 +67,12 @@ Run from a dedicated V26 desktop with all existing BricsCAD processes closed:
 
 The gate must fail closed if the configured `bricscad.exe` is not major version 26, if the plugin is not the V26 assembly, if the host is not x64, or if `QS3DRUNTIMEPROBE` does not report Ribbon and palette readiness.
 
+### Exact-current native/repeated evidence
+
+Exact repeated-mode source candidate SHA `9a77d329e90809a2006d8e4dc1bafc995c0a8ca2` passed licensed BricsCAD V26.2.07 with exact net8.0-windows x64 plugin SHA-256 `F063EC199DD50A25FBF619D54D9F8492B94065E3C7E5E4AF0454B54252BD3AFC`. Independent two-segment Wall and Beam sequences each observed eight hosted `DrawJig.WorldDraw` callbacks. The generic identity gate remains recorded on the immediately preceding candidate `e5725e96eed6dcebb46370c33e6f8a88e2cc2b68`, BricsCAD V26.2.07 / CLR 8.0.29 and plugin SHA-256 `83AE13A31EFE191DAC8A4AC3727325919F07DE59FD9E66BE8A0A04F828E8E779`; it reported the matching native host major/label/runtime plus Ribbon, Workspace and Right Panel readiness, with Quantity Insight intentionally hidden.
+
+On predecessor candidate `e5725e96eed6dcebb46370c33e6f8a88e2cc2b68`, the enhanced native LINE matrix passed production Direct Draw, native MOVE/ROTATE/STRETCH, pre-sync generated isolation, production reconcile/rebuild, native Undo/Redo, two-DWG wrong-document refusal/isolation/reactivation/close, DWG/sidecar save and fresh-process cold reopen. On current repeated-mode candidate `9a77d329e90809a2006d8e4dc1bafc995c0a8ca2`, the Wall/Beam matrix passed database-free DrawJig preview with positive hosted `WorldDraw` observation, four accepted segments total, Enter, exact-process physical ESC, planar UCS, document-switch refusal/isolation, whole-command native/semantic Undo/Redo, save and fresh-process Wall/Beam cold reopen. Fixture/process/script/private-state cleanup passed with zero BricsCAD processes. These are bounded #3578/#3612 cells; private-DWG, clean-machine package/signing and release qualification under #1462 remain pending.
+
 ### Bounded native Beam P01
 
 Issue `#3573` owns the first representative V26 native authoring/dependent-output cell. After the exact V26 build and generic runtime gate pass, run the guarded two-process matrix on the repository-generated sample only:
@@ -95,7 +103,7 @@ Issue `#3576` owns one representative production native-edit cell under `LOCAL-0
   -ConfirmDisposableCopies
 ```
 
-The shared runner must reject a V25/V26 host or plugin-major mismatch. If the process environment sets `DOTNET_ROOT`, it must point to a complete .NET 8 host/runtime containing `dotnet.exe`, an 8.x `hostfxr.dll` and an 8.x `coreclr.dll`; an invalid override must be refused before artifact creation or BricsCAD launch.
+The shared runner must reject a V25/V26 host or plugin-major mismatch. It must also require a system-installed x64 .NET 8 Windows Desktop Runtime containing matching `Microsoft.NETCore.App`/`Microsoft.WindowsDesktop.App` patch directories, `WindowsBase.dll` and `System.Windows.Forms.dll`. If the process environment sets `DOTNET_ROOT`, the override must be complete and match that installed patch; a portable-only, invalid or mismatched override must be refused before artifact creation or BricsCAD launch.
 
 This bounded gate uses the repository-generated disposable fixture and the existing production Slab probe. It drives one real top-level closed-POLYLINE crossing-window `STRETCH`, verifies pre-sync generated isolation, production source reconcile/metric and quantity refresh, generated invalidation/rebuild, scoped Health, save/sidecar persistence and a fresh-process cold reopen. The gate was `PENDING_LOCAL` until the exact evidence below passed; its bounded PASS cannot close the broader #80 or #1462 matrix.
 

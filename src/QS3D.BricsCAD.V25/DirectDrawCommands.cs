@@ -16,6 +16,26 @@ using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
 {
+    internal sealed class DirectDrawCommitResult
+    {
+        internal DirectDrawCommitResult(
+            ProjectState project,
+            ProjectElement element,
+            ObjectId sourceId,
+            IReadOnlyList<string> generatedHandles)
+        {
+            Project = project ?? throw new ArgumentNullException(nameof(project));
+            Element = element ?? throw new ArgumentNullException(nameof(element));
+            SourceId = sourceId;
+            GeneratedHandles = generatedHandles ?? throw new ArgumentNullException(nameof(generatedHandles));
+        }
+
+        internal ProjectState Project { get; }
+        internal ProjectElement Element { get; }
+        internal ObjectId SourceId { get; }
+        internal IReadOnlyList<string> GeneratedHandles { get; }
+    }
+
     /// <summary>
     /// BLT-style direct authoring entry points. These commands create real source CAD in the
     /// active BricsCAD DWG, capture it into the existing semantic model, then reuse the existing
@@ -324,12 +344,13 @@ namespace QS3D.BricsCAD.V25
             });
         }
 
-        private static void ExecuteDirect(
+        internal static DirectDrawCommitResult ExecuteDirect(
             Document document,
             ElementCategory category,
             Func<ObjectId> createSource,
             Action<ProjectElement>? configureElement = null,
-            DirectDrawProjectPreviewContext? projectPreview = null)
+            DirectDrawProjectPreviewContext? projectPreview = null,
+            Action<ProjectState>? beforeMutation = null)
         {
             var operation = "Direct Draw " + category;
             EnsureActive(document, operation);
@@ -339,6 +360,12 @@ namespace QS3D.BricsCAD.V25
             var project = projectPreview != null
                 ? projectPreview.ResolveForMutation(document, operation)
                 : ProjectContextCoordinator.GetOrCreate(document);
+            try { beforeMutation?.Invoke(project); }
+            catch
+            {
+                if (!projectExistedBeforeAuthoring) ProjectContextCoordinator.Forget(document);
+                throw;
+            }
             var rollback = ProjectStateSnapshot.Capture(project);
             var sourceId = ObjectId.Null;
             var sourceHandle = string.Empty;
@@ -410,7 +437,15 @@ namespace QS3D.BricsCAD.V25
                 throw;
             }
 
+            var committedHandles = GeneratedHandleOwnershipPolicy
+                .EnumerateOwnerHandles(createdElement!)
+                .Select(x => x.Key)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
             FinalizeUi(document, createdElement!, sourceId, solids, regenerated);
+            return new DirectDrawCommitResult(project, createdElement!, sourceId, committedHandles);
         }
 
         private static int BuildSelected(Document document, ProjectState project, ElementCategory category)
@@ -496,7 +531,17 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static ObjectId CreateLine(Document document, Point3d start, Point3d end)
+        private static ObjectId CreateLine(Document document, Point3d start, Point3d end) =>
+            CreateLineCore(document, start, end, transformFromUcs: true);
+
+        internal static ObjectId CreateLineWcs(Document document, Point3d startWcs, Point3d endWcs) =>
+            CreateLineCore(document, startWcs, endWcs, transformFromUcs: false);
+
+        private static ObjectId CreateLineCore(
+            Document document,
+            Point3d start,
+            Point3d end,
+            bool transformFromUcs)
         {
             ValidatePlanView(document, new[] { start, end }, "LINE");
             if (start.DistanceTo(end) <= 1e-9d) throw new InvalidOperationException("LINE Direct Draw quá ngắn.");
@@ -507,7 +552,8 @@ namespace QS3D.BricsCAD.V25
                 var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
                 var line = new Line(start, end);
                 line.SetDatabaseDefaults(document.Database);
-                line.TransformBy(document.Editor.CurrentUserCoordinateSystem);
+                if (transformFromUcs)
+                    line.TransformBy(document.Editor.CurrentUserCoordinateSystem);
                 var id = modelSpace.AppendEntity(line);
                 transaction.AddNewlyCreatedDBObject(line, true);
                 transaction.Commit();
@@ -596,7 +642,7 @@ namespace QS3D.BricsCAD.V25
             return value;
         }
 
-        private static double FamilyNumber(ProjectState project, ElementCategory category, string key, double fallback)
+        internal static double FamilyNumber(ProjectState project, ElementCategory category, string key, double fallback)
         {
             var value = FamilyFiniteNumber(project, category, key, fallback);
             if (!(value > 0d))
@@ -604,7 +650,7 @@ namespace QS3D.BricsCAD.V25
             return value;
         }
 
-        private static double FamilyFiniteNumber(ProjectState project, ElementCategory category, string key, double fallback)
+        internal static double FamilyFiniteNumber(ProjectState project, ElementCategory category, string key, double fallback)
         {
             var family = PreferredFamily(project, category);
             if (family == null || !family.Properties.TryGetValue(key, out var raw)) return fallback;
@@ -663,6 +709,23 @@ namespace QS3D.BricsCAD.V25
             if (Math.Abs(x) > UcsAxisTolerance || Math.Abs(y) > UcsAxisTolerance || Math.Abs(z - 1d) > UcsAxisTolerance)
                 throw new InvalidOperationException("Direct Draw P0 hiện chỉ hỗ trợ UCS có mặt phẳng XY song song WCS XY (có thể xoay/di chuyển trong mặt phẳng). UCS nghiêng/3D chưa được hỗ trợ.");
         }
+
+        internal static void RequireRepeatedPromptContextUnchanged(
+            Document document,
+            object promptUnit,
+            Matrix3d promptUcs,
+            string operation) =>
+            RequirePromptContextUnchanged(document, promptUnit, promptUcs, operation);
+
+        internal static void RequireRepeatedModelSpace(Document document) => RequireModelSpace(document);
+
+        internal static void EraseRepeatedDirectDrawCad(
+            Document document,
+            ProjectState project,
+            ProjectElement createdElement,
+            ObjectId sourceId,
+            IEnumerable<string> generatedHandles) =>
+            EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles);
 
         private static void EraseDirectDrawCad(Document document, ProjectState project, ProjectElement? createdElement, ObjectId sourceId, IEnumerable<string> generatedHandles)
         {

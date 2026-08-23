@@ -88,6 +88,9 @@ namespace QS3D.BricsCAD.V25.Cad
         private const int MaxColumns = 32;
         private const int MaxCellLength = 4096;
         private const int MaxDetailedCellIssues = 32;
+        private const int DataRowType = 1;
+        private const int TitleRowType = 2;
+        private const int HeaderRowType = 4;
 
         public static string Build(
             Document document,
@@ -147,6 +150,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         }
                     }
 
+                    ApplyPresentationDefaults(document.Database, table, textHeight, rowHeight);
                     table.GenerateLayout();
                     modelSpace.AppendEntity(table);
                     transaction.AddNewlyCreatedDBObject(table, true);
@@ -313,6 +317,25 @@ namespace QS3D.BricsCAD.V25.Cad
                 transaction.Commit();
             }
             return issues.AsReadOnly();
+        }
+
+        private static void ApplyPresentationDefaults(Database database, Table table, double textHeight, double rowHeight)
+        {
+            if (database == null) throw new ArgumentNullException(nameof(database));
+            if (table == null) throw new ArgumentNullException(nameof(table));
+            textHeight = PositiveDrawing(textHeight, "table text height");
+            rowHeight = PositiveDrawing(rowHeight, "table row height");
+
+            // Keep the active DWG's table style, while applying conservative per-row-type
+            // presentation overrides. Cell text and schedule semantics remain unchanged.
+            table.TableStyle = database.Tablestyle;
+            table.SetAlignment(CellAlignment.MiddleCenter, TitleRowType | HeaderRowType);
+            table.SetAlignment(CellAlignment.MiddleLeft, DataRowType);
+            var titleTextHeight = PositiveDrawing(textHeight * 1.20d, "table title text height");
+            table.SetTextHeight(titleTextHeight, TitleRowType);
+            table.SetTextHeight(textHeight, HeaderRowType | DataRowType);
+            table.SetRowHeight(0, PositiveDrawing(rowHeight * 1.35d, "table title row height"));
+            table.SetRowHeight(1, PositiveDrawing(rowHeight * 1.15d, "table header row height"));
         }
 
         private static void InspectShape(Table table, NativeDocumentationTableSnapshot expected, ProjectOwnedNativeTableDefinition definition, ICollection<ModelHealthIssue> issues)

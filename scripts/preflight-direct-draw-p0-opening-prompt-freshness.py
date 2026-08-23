@@ -36,7 +36,7 @@ else:
     text = P0.read_text(encoding="utf-8")
     for method, next_method, command in (
         ("public void DrawColumn()", "[CommandMethod(\"QS3DDRAWCOLUMNADV\"", "QS3DDRAWCOLUMN"),
-        ("public void DrawColumnAdvanced()", "private static void ExecuteDirect(", "QS3DDRAWCOLUMNADV"),
+        ("public void DrawColumnAdvanced()", "internal static DirectDrawCommitResult ExecuteDirect(", "QS3DDRAWCOLUMNADV"),
     ):
         body = section(text, method, next_method)
         if not body:
