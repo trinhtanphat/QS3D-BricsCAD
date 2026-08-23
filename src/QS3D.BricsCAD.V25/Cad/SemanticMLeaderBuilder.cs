@@ -105,7 +105,6 @@ namespace QS3D.BricsCAD.V25.Cad
                         leader.MText = mtext;
                         leader.TextHeight = item.TextHeightDrawing;
                         leader.TextLocation = item.TextPoint;
-                        leader.Normal = Vector3d.ZAxis;
                         try { leader.LayerId = source.LayerId; } catch { }
 
                         var leaderIndex = leader.AddLeader();
