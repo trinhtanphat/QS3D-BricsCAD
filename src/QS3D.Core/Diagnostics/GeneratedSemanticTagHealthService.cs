@@ -21,6 +21,16 @@ namespace QS3D.Core.Diagnostics
         public const string PositionYKey = "GeneratedSemanticTagPositionY";
         public const string PositionZKey = "GeneratedSemanticTagPositionZ";
         public const string RotationKey = "GeneratedSemanticTagRotationRad";
+        public const string ArtifactKindKey = "GeneratedSemanticTagArtifactKind";
+        public const string MTextArtifactKind = "MText";
+        public const string MLeaderArtifactKind = "MLeader";
+        public const string LeaderTargetHandleKey = "GeneratedSemanticTagLeaderTargetHandle";
+        public const string LeaderTargetXKey = "GeneratedSemanticTagLeaderTargetX";
+        public const string LeaderTargetYKey = "GeneratedSemanticTagLeaderTargetY";
+        public const string LeaderTargetZKey = "GeneratedSemanticTagLeaderTargetZ";
+        public const string LeaderTextXKey = "GeneratedSemanticTagLeaderTextX";
+        public const string LeaderTextYKey = "GeneratedSemanticTagLeaderTextY";
+        public const string LeaderTextZKey = "GeneratedSemanticTagLeaderTextZ";
         public const string OwnershipVersion = "1";
         public const string DrawingLocalWcs = "DrawingLocalWcs";
 
@@ -75,9 +85,62 @@ namespace QS3D.Core.Diagnostics
                 ValidateFiniteCanonical(element, PositionYKey, "SEMANTIC_TAG_POSITION_INVALID", "SEMANTIC_TAG_POSITION_NON_CANONICAL", issues);
                 ValidateFiniteCanonical(element, PositionZKey, "SEMANTIC_TAG_POSITION_INVALID", "SEMANTIC_TAG_POSITION_NON_CANONICAL", issues);
                 ValidateRotation(element, issues);
+                ValidateArtifactMetadata(element, issues);
             }
 
             return issues.AsReadOnly();
+        }
+
+        private static void ValidateArtifactMetadata(ProjectElement element, ICollection<ModelHealthIssue> issues)
+        {
+            var rawKind = element.Properties.TryGetValue(ArtifactKindKey, out var storedKind) ? storedKind ?? string.Empty : string.Empty;
+            var kind = rawKind.Trim();
+            // Tags created before LOCAL-006 did not persist an artifact kind; they are authoritative legacy MText.
+            if (kind.Length == 0) return;
+            if (!string.Equals(rawKind, kind, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue("SEMANTIC_TAG_ARTIFACT_KIND_NON_CANONICAL", HealthSeverity.Error, ArtifactKindKey + " không được có khoảng trắng đầu/cuối.", element.Id));
+
+            if (string.Equals(kind, MTextArtifactKind, StringComparison.Ordinal))
+            {
+                foreach (var key in LeaderMetadataKeys())
+                    if (element.Properties.ContainsKey(key))
+                        issues.Add(new ModelHealthIssue("SEMANTIC_TAG_MTEXT_LEADER_METADATA_STALE", HealthSeverity.Error, "MText semantic tag không được giữ metadata MLeader: " + key + ".", element.Id));
+                return;
+            }
+
+            if (!string.Equals(kind, MLeaderArtifactKind, StringComparison.Ordinal))
+            {
+                issues.Add(new ModelHealthIssue("SEMANTIC_TAG_ARTIFACT_KIND_INVALID", HealthSeverity.Error, "Semantic tag artifact kind không được hỗ trợ: " + kind + ".", element.Id));
+                return;
+            }
+
+            var targetHandle = Property(element, LeaderTargetHandleKey);
+            if (targetHandle.Length == 0 || !long.TryParse(targetHandle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+            {
+                issues.Add(new ModelHealthIssue("SEMANTIC_TAG_MLEADER_TARGET_HANDLE_INVALID", HealthSeverity.Error, LeaderTargetHandleKey + " phải là authoritative source Handle hexadecimal.", element.Id));
+            }
+            else if (!element.SourceHandles.Any(source => string.Equals(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(source), GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(targetHandle), StringComparison.OrdinalIgnoreCase)))
+            {
+                issues.Add(new ModelHealthIssue("SEMANTIC_TAG_MLEADER_TARGET_HANDLE_MISMATCH", HealthSeverity.Error, "MLeader target handle không còn thuộc SourceHandles authoritative của semantic element.", element.Id));
+            }
+
+            ValidateFiniteCanonical(element, LeaderTargetXKey, "SEMANTIC_TAG_MLEADER_TARGET_INVALID", "SEMANTIC_TAG_MLEADER_TARGET_NON_CANONICAL", issues);
+            ValidateFiniteCanonical(element, LeaderTargetYKey, "SEMANTIC_TAG_MLEADER_TARGET_INVALID", "SEMANTIC_TAG_MLEADER_TARGET_NON_CANONICAL", issues);
+            ValidateFiniteCanonical(element, LeaderTargetZKey, "SEMANTIC_TAG_MLEADER_TARGET_INVALID", "SEMANTIC_TAG_MLEADER_TARGET_NON_CANONICAL", issues);
+            ValidateFiniteCanonical(element, LeaderTextXKey, "SEMANTIC_TAG_MLEADER_TEXT_POSITION_INVALID", "SEMANTIC_TAG_MLEADER_TEXT_POSITION_NON_CANONICAL", issues);
+            ValidateFiniteCanonical(element, LeaderTextYKey, "SEMANTIC_TAG_MLEADER_TEXT_POSITION_INVALID", "SEMANTIC_TAG_MLEADER_TEXT_POSITION_NON_CANONICAL", issues);
+            ValidateFiniteCanonical(element, LeaderTextZKey, "SEMANTIC_TAG_MLEADER_TEXT_POSITION_INVALID", "SEMANTIC_TAG_MLEADER_TEXT_POSITION_NON_CANONICAL", issues);
+        }
+
+        private static IEnumerable<string> LeaderMetadataKeys()
+        {
+            yield return LeaderTargetHandleKey;
+            yield return LeaderTargetXKey;
+            yield return LeaderTargetYKey;
+            yield return LeaderTargetZKey;
+            yield return LeaderTextXKey;
+            yield return LeaderTextYKey;
+            yield return LeaderTextZKey;
         }
 
         private static HashSet<string> ParseHandles(ProjectElement element, string raw, ICollection<ModelHealthIssue> issues)
