@@ -113,7 +113,7 @@ namespace QS3D.Core.Geometry
                     var segment = path.Segments[segmentIndex];
                     var overlapStart = Math.Max(start, segment.StartStationM);
                     var overlapEnd = Math.Min(end, segment.EndStationM);
-                    if (overlapEnd - overlapStart <= stationTolerance) continue;
+                    if (overlapEnd - overlapStart <= Tolerance) continue;
                     if (pieces.Count >= MaxPieces)
                         throw new InvalidOperationException("Curtain path frame mapping requires more than " + MaxPieces + " native pieces.");
 
@@ -289,7 +289,10 @@ namespace QS3D.Core.Geometry
             left = Finite(left, label + " left");
             right = Finite(right, label + " right");
             var delta = Finite(right - left, label + " delta");
-            return Add(left, delta / 2d, label);
+            var midpoint = Add(left, delta / 2d, label);
+            if (right > left && (!(midpoint > left) || !(midpoint < right)))
+                throw new OverflowException(label + " is not representable inside the station interval.");
+            return midpoint;
         }
 
         private static double Add(double left, double right, string label) => Finite(Finite(left, label + " left") + Finite(right, label + " right"), label);
