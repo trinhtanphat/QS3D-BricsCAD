@@ -100,7 +100,7 @@ namespace QS3D.Core.Geometry
                     throw new InvalidOperationException("Curtain frame rectangle starts outside the supported path/elevation extent.");
 
                 var end = Add(start, width, "curtain frame end station");
-                var stationTolerance = Math.Max(Tolerance, path.TotalLengthM * 1e-10d);
+                var stationTolerance = StationComparisonTolerance(path.TotalLengthM);
                 if (start > path.TotalLengthM + stationTolerance || end > path.TotalLengthM + stationTolerance)
                     throw new InvalidOperationException("Curtain frame rectangle exceeds the host path length.");
                 start = Math.Max(0d, Math.Min(path.TotalLengthM, start));
@@ -312,6 +312,19 @@ namespace QS3D.Core.Geometry
             value = Finite(value, label);
             if (!(value > 0d)) throw new InvalidOperationException(label + " must be greater than zero.");
             return value;
+        }
+
+        private static double StationComparisonTolerance(double station)
+        {
+            station = Finite(station, "curtain station tolerance reference");
+            var magnitude = Math.Abs(station);
+            if (magnitude == 0d) return Tolerance;
+
+            var bits = BitConverter.DoubleToInt64Bits(magnitude);
+            var adjacentBits = magnitude == double.MaxValue ? bits - 1L : bits + 1L;
+            var adjacent = BitConverter.Int64BitsToDouble(adjacentBits);
+            var ulp = Finite(Math.Abs(adjacent - magnitude), "curtain station tolerance ULP");
+            return Math.Max(Tolerance, Multiply(ulp, 4d, "curtain station tolerance ULP allowance"));
         }
 
         private static double Midpoint(double left, double right, string label)
