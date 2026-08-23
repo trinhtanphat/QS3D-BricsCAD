@@ -336,10 +336,19 @@ function Bind-ExactProcessForeground {
     $foregroundDeadline = [DateTime]::UtcNow.AddSeconds(10)
     $foregroundMatches = $false
     while (-not $foregroundMatches -and [DateTime]::UtcNow -lt $foregroundDeadline) {
-        $attached = $false
+        $foregroundBefore = [Qs3dExactEscapeInput]::GetForegroundWindow()
+        $foregroundBeforeProcessId = [uint32]0
+        $foregroundThreadId = [Qs3dExactEscapeInput]::GetWindowThreadProcessId(
+            $foregroundBefore,
+            [ref]$foregroundBeforeProcessId)
+        $attachedForeground = $false
+        $attachedTarget = $false
         try {
-            if ($runnerThreadId -ne $windowThreadId) {
-                $attached = [Qs3dExactEscapeInput]::AttachThreadInput($runnerThreadId, $windowThreadId, $true)
+            if ($foregroundThreadId -ne 0 -and $runnerThreadId -ne $foregroundThreadId) {
+                $attachedForeground = [Qs3dExactEscapeInput]::AttachThreadInput($runnerThreadId, $foregroundThreadId, $true)
+            }
+            if ($runnerThreadId -ne $windowThreadId -and $foregroundThreadId -ne $windowThreadId) {
+                $attachedTarget = [Qs3dExactEscapeInput]::AttachThreadInput($runnerThreadId, $windowThreadId, $true)
             }
             $activationShell.AppActivate($Process.Id) | Out-Null
             [Qs3dExactEscapeInput]::ShowWindowAsync($window, 9) | Out-Null
@@ -350,8 +359,11 @@ function Bind-ExactProcessForeground {
             [Qs3dExactEscapeInput]::SetFocus($window) | Out-Null
         }
         finally {
-            if ($attached) {
+            if ($attachedTarget) {
                 [Qs3dExactEscapeInput]::AttachThreadInput($runnerThreadId, $windowThreadId, $false) | Out-Null
+            }
+            if ($attachedForeground) {
+                [Qs3dExactEscapeInput]::AttachThreadInput($runnerThreadId, $foregroundThreadId, $false) | Out-Null
             }
         }
         Start-Sleep -Milliseconds 50
