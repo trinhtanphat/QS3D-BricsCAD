@@ -47,21 +47,52 @@ namespace QS3D.BricsCAD.V25.Cad
             if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
                 throw new InvalidOperationException("Semantic sheet remove yêu cầu DWG đích vẫn là MdiActiveDocument.");
 
-            using (document.LockDocument())
+            var rollback = ProjectStateSnapshot.Capture(project);
+            var auditCommitted = false;
+            try
             {
-                var layoutId = RequireLayoutId(document.Database, normalizedLayoutName);
-                ValidateOwnedLayoutForRemove(document.Database, layoutId, project.ProjectId, normalizedSheetId);
+                using (document.LockDocument())
+                {
+                    var layoutId = RequireLayoutId(document.Database, normalizedLayoutName);
+                    ValidateOwnedLayoutForRemove(document.Database, layoutId, project.ProjectId, normalizedSheetId);
 
-                var manager = LayoutManager.Current;
-                if (string.Equals(manager.CurrentLayout, normalizedLayoutName, StringComparison.OrdinalIgnoreCase))
-                    manager.CurrentLayout = "Model";
-                manager.DeleteLayout(normalizedLayoutName);
+                    AuditTrail.ForProject(project).Record(
+                        "documentation.semantic-sheet.remove",
+                        normalizedSheetId,
+                        "layout=" + normalizedLayoutName);
+                    auditCommitted = true;
+
+                    var manager = LayoutManager.Current;
+                    if (string.Equals(manager.CurrentLayout, normalizedLayoutName, StringComparison.OrdinalIgnoreCase))
+                        manager.CurrentLayout = "Model";
+                    manager.DeleteLayout(normalizedLayoutName);
+                }
             }
+            catch (Exception operationError)
+            {
+                var layoutStillExists = true;
+                try
+                {
+                    using (document.LockDocument())
+                        layoutStillExists = !TryGetLayoutId(document.Database, normalizedLayoutName).IsNull;
+                }
+                catch
+                {
+                    layoutStillExists = !auditCommitted;
+                }
 
-            AuditTrail.ForProject(project).Record(
-                "documentation.semantic-sheet.remove",
-                normalizedSheetId,
-                "layout=" + normalizedLayoutName);
+                if (layoutStillExists)
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "Semantic sheet remove failed before layout deletion and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
+                    }
+                }
+                throw;
+            }
         }
 
         public static string LayoutNameFor(SemanticSheetPlan sheet)
@@ -362,8 +393,9 @@ namespace QS3D.BricsCAD.V25.Cad
             foreach (var element in project.Elements)
             {
                 if (element == null) throw new InvalidOperationException("Project contains a null semantic element.");
-                if (!result.TryAdd(element.Id, element))
+                if (result.ContainsKey(element.Id))
                     throw new InvalidOperationException("Project contains duplicate semantic element id during sheet materialization: " + element.Id + ".");
+                result.Add(element.Id, element);
             }
             return result;
         }
@@ -439,8 +471,9 @@ namespace QS3D.BricsCAD.V25.Cad
                     if (result.Count >= MaxViews)
                         throw new InvalidOperationException("Native semantic sheet materialization supports at most " + MaxViews + " available views per operation.");
                     var view = enumerator.Current ?? throw new InvalidOperationException("Available semantic view cannot be null.");
-                    if (!result.TryAdd(view.Id, view))
+                    if (result.ContainsKey(view.Id))
                         throw new InvalidOperationException("Available semantic views contain duplicate id: " + view.Id + ".");
+                    result.Add(view.Id, view);
                 }
             }
             return result;
