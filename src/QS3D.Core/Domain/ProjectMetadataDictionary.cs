@@ -11,6 +11,15 @@ namespace QS3D.Core.Domain
     {
         private const int MaximumEntries = 10000;
         private const string ProjectBrowserWorkspaceMetadataKey = "QS3D.ProjectBrowser.WorkspaceState";
+        private static readonly HashSet<string> ExplicitRevisionMetadataKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "WallJunctionSnapPreviewPlanHash",
+            "WallJunctionSnapPreviewSourceFingerprint",
+            "WallJunctionSnapPreviewCount",
+            "WallJunctionSnapPreviewUtc",
+            "WallJunctionSnapPreviewProjectId",
+            "WallJunctionSnapPreviewChangeVersion"
+        };
         private readonly Dictionary<string, string> _items = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private ProjectState? _project;
 
@@ -222,7 +231,11 @@ namespace QS3D.Core.Domain
 
         private static bool TracksSemanticDirtyState(string key)
         {
-            return !string.Equals(key, ProjectBrowserWorkspaceMetadataKey, StringComparison.OrdinalIgnoreCase);
+            // Wall Snap preview metadata is transient command state whose revision is published
+            // explicitly by WallJunctionSnapCommands. Treating every individual preview key as a
+            // semantic mutation makes the preview invalidate itself before Apply can consume it.
+            return !string.Equals(key, ProjectBrowserWorkspaceMetadataKey, StringComparison.OrdinalIgnoreCase) &&
+                   !ExplicitRevisionMetadataKeys.Contains(key);
         }
 
         private static void ValidateReserved(IEnumerable<KeyValuePair<string, string>> metadata)

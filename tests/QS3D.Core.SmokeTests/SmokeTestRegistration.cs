@@ -165,6 +165,7 @@ namespace QS3D.Core.SmokeTests
             ProjectStateSnapshotFamilyIdentitySmoke.Run();
             ProjectPersistenceCheckpointSmoke.Run();
             ProjectMetadataBoundSmoke.Run();
+            WallJunctionSnapMetadataRevisionSmoke.Run();
             ProjectZoneAssignmentBoundSmoke.Run();
             ProjectFamilyAssignmentBoundSmoke.Run();
             ProjectElementCategoryIntegritySmoke.Run();
