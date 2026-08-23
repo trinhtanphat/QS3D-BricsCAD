@@ -14,6 +14,8 @@ Lane-Key: `issue-3593`
 
 Qualification branch: `agent/codex/issue3593-v25-modeless-h1-p03-rerun`
 
+Sanitized handoff carrier: PR #3641
+
 Latest attempted licensed runtime baseline: `de802b6cb523831453dd5f6e2c550c9e7f856ffc`
 
 Current exact licensed rerun target: `PENDING_NEXT_MERGED_SOURCE_SHA`
