@@ -190,13 +190,17 @@ namespace QS3D.BricsCAD.V25.Cad
             var x = CadGeometryGuard.Finite(CadGeometryGuard.ToDrawingUnits(document, plan.JunctionPoint.X, plan.OwnerToken + "/X"), plan.OwnerToken + "/drawing X");
             var y = CadGeometryGuard.Finite(CadGeometryGuard.ToDrawingUnits(document, plan.JunctionPoint.Y, plan.OwnerToken + "/Y"), plan.OwnerToken + "/drawing Y");
             var bottom = CadGeometryGuard.Finite(CadGeometryGuard.ToDrawingUnits(document, plan.BottomM, plan.OwnerToken + "/bottom"), plan.OwnerToken + "/drawing bottom");
+            // BricsCAD CreateFrustum centers the body about Z=0. Translate its center to the
+            // midpoint of the shared vertical range; translating to Bottom alone would place
+            // half of the dedicated core below the ownership range recorded in WJF1/XData.
+            var center = CadGeometryGuard.Add(bottom, height / 2d, plan.OwnerToken + "/drawing center");
 
             var solid = new Solid3d();
             try
             {
                 solid.SetDatabaseDefaults(document.Database);
                 solid.CreateFrustum(height, radius, radius, radius);
-                solid.TransformBy(Matrix3d.Displacement(new Vector3d(x, y, bottom)));
+                solid.TransformBy(Matrix3d.Displacement(new Vector3d(x, y, center)));
                 if (!layerId.IsNull && layerId.IsValid) solid.LayerId = layerId;
                 var completed = solid;
                 solid = null!;

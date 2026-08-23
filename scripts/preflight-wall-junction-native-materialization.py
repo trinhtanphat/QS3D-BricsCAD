@@ -93,6 +93,8 @@ require(
     "CreateFrustum(height, radius, radius, radius)",
     "plan.MinThicknessM / 2d",
     "plan.TopM - plan.BottomM",
+    "height / 2d",
+    "new Vector3d(x, y, center)",
     "GeneratedWallJunctionNativeOwnershipService.MarkGenerated(document, transaction, solid, plan)",
     "ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, \"Wall Junction 3D\")",
     "transaction.Commit();",
