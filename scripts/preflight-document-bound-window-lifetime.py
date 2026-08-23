@@ -97,9 +97,10 @@ teardown = method_block(
 )
 for marker in (
     "if (!MatchesNativeDatabase(e.Document)) return;",
+    "var deferForFinalDocument = !HasAnotherLiveDocument();",
     "Interlocked.Exchange(ref _invalidated, 1) != 0",
     "DetachDocumentManagerHandler();",
-    "TryCloseWindow();",
+    "TryCloseWindow(deferForFinalDocument);",
 ):
     require(marker in teardown, f"Document teardown must retain lifecycle marker: {marker}")
 require(
@@ -108,16 +109,33 @@ require(
 )
 require(
     teardown.index("if (!MatchesNativeDatabase(e.Document)) return;")
+    < teardown.index("var deferForFinalDocument = !HasAnotherLiveDocument();")
     < teardown.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
     < teardown.index("DetachDocumentManagerHandler();")
-    < teardown.index("TryCloseWindow();"),
-    "Document teardown must validate native identity, atomically invalidate, release the global subscription, then best-effort close.",
+    < teardown.index("TryCloseWindow(deferForFinalDocument);"),
+    "Document teardown must validate native identity, classify normal-vs-final teardown, atomically invalidate, release the global subscription, then close with that classification.",
 )
 
-request_close = method_block(source, "private void TryCloseWindow()")
+request_close = method_block(source, "private void TryCloseWindow(bool deferOnDispatcher = false)")
 require(
-    "new Action(TryCloseWindowOnDispatcher)" in request_close,
-    "Cross-thread close must dispatch through the guarded close callback.",
+    "_window.Dispatcher.CheckAccess()" in request_close,
+    "Close dispatch must classify dispatcher affinity before choosing synchronous or queued close.",
+)
+require(
+    "if (deferOnDispatcher)" in request_close,
+    "Final/only-document teardown must have an explicit dispatcher deferral branch.",
+)
+require(
+    request_close.count("_window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher));") == 2,
+    "Final-teardown UI-thread close and every cross-thread close must queue through the guarded callback.",
+)
+require(
+    "TryCloseWindowOnDispatcher();" in request_close,
+    "Normal dispatcher-thread close must retain the proven synchronous callback path.",
+)
+require(
+    request_close.index("if (deferOnDispatcher)") < request_close.index("TryCloseWindowOnDispatcher();"),
+    "Final-document deferral must be considered before the normal synchronous close path.",
 )
 require(
     "_window.Close();" not in request_close,
@@ -144,4 +162,4 @@ require(
     "Successful/actual Window.Closed must remain the authoritative full-detach path.",
 )
 
-print("[OK] Document-bound modeless windows use native database identity and remain atomically fail-closed across wrapper drift and close failures.")
+print("[OK] Document-bound modeless windows use native database identity, remain atomically fail-closed, and split normal synchronous close from final-host deferral.")
