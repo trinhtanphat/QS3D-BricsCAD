@@ -35,23 +35,45 @@ source = SOURCE.read_text(encoding="utf-8")
 
 require(
     "private readonly object _documentAccessGate = new object();" in source,
-    "Document-bound modeless lifetime must serialize retained Document access against teardown.",
+    "Document-bound modeless lifetime must serialize live Document access against teardown.",
+)
+require(
+    "private readonly Document _document;" not in source,
+    "WPF modeless affinity must not retain the managed Document wrapper used by the old crash path.",
+)
+require(
+    "private readonly Document _lifecycleDocument;" in source,
+    "A lifecycle-only wrapper is required solely for per-document close event ownership.",
 )
 
 attach = method_block(source, "public void Attach(Document document)")
 for marker in (
     "BindProjectAffinityIfPresent();",
-    "_document.CloseWillStart += OnDocumentCloseWillStart;",
+    "_lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;",
+    "_lifecycleDocument.CloseAborted += OnDocumentCloseAborted;",
     "BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;",
     "_window.Activated += OnWindowActivated;",
 ):
     require(marker in attach, f"Attach is missing disposal-safe lifecycle marker: {marker}")
 require(
     attach.index("BindProjectAffinityIfPresent();")
-    < attach.index("_document.CloseWillStart += OnDocumentCloseWillStart;")
+    < attach.index("_lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;")
     < attach.index("BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;")
     < attach.index("_window.Activated += OnWindowActivated;"),
-    "The early document-close barrier must be installed before WPF activation can be observed.",
+    "The per-document close barrier must be installed before WPF activation can be observed.",
+)
+
+resolve = method_block(source, "private bool TryResolveLiveDocument(out Document document)")
+for marker in (
+    "foreach (Document candidate in BcadApplication.DocumentManager)",
+    "candidate.IsDisposed",
+    "MatchesNativeDatabase(candidate)",
+    "document = candidate;",
+):
+    require(marker in resolve, f"Live managed-wrapper resolution is missing: {marker}")
+require(
+    "_lifecycleDocument" not in resolve,
+    "Live document resolution must not dereference the retained lifecycle wrapper.",
 )
 
 ensure = method_block(source, "private bool EnsureProjectAffinity()")
@@ -59,36 +81,39 @@ require(
     "lock (_documentAccessGate)" in ensure,
     "Project-affinity reads must run under the document access gate.",
 )
-require(
-    "Volatile.Read(ref _invalidated) != 0" in ensure,
-    "Project-affinity reads must reject an already invalidated window before native access.",
-)
-require(
-    "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)" in ensure,
-    "The guarded affinity path must continue using the canonical project coordinator.",
-)
+for marker in (
+    "Volatile.Read(ref _invalidated) != 0",
+    "TryResolveLiveDocument(out var document)",
+    "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+):
+    require(marker in ensure, f"Disposal-safe affinity path is missing: {marker}")
 require(
     ensure.index("lock (_documentAccessGate)")
     < ensure.index("Volatile.Read(ref _invalidated) != 0")
-    < ensure.index("ProjectContextCoordinator.TryGetReadOnly(_document, out var project)"),
-    "Invalidation must be observed under the gate before any retained Document project access.",
+    < ensure.index("TryResolveLiveDocument(out var document)")
+    < ensure.index("ProjectContextCoordinator.TryGetReadOnly(document, out var project)"),
+    "Invalidation and live-wrapper resolution must precede all project reads under the gate.",
+)
+require(
+    "ProjectContextCoordinator.TryGetReadOnly(_lifecycleDocument" not in source,
+    "The lifecycle-only wrapper must never enter project/path affinity code.",
 )
 
-close_start = method_block(source, "private void OnDocumentCloseWillStart(object? sender, EventArgs e)")
+begin_close = method_block(
+    source,
+    "private void OnBeginDocumentClose(object sender, DocumentBeginCloseEventArgs e)",
+)
 for marker in (
     "lock (_documentAccessGate)",
+    "Volatile.Write(ref _documentCloseStarted, 1)",
     "Interlocked.Exchange(ref _invalidated, 1) != 0",
-    "DetachDocumentCloseHandler();",
     "DetachDocumentManagerHandler();",
     "TryCloseWindow();",
 ):
-    require(marker in close_start, f"CloseWillStart disposal barrier is missing: {marker}")
+    require(marker in begin_close, f"BeginDocumentClose barrier is missing: {marker}")
 require(
-    close_start.index("lock (_documentAccessGate)")
-    < close_start.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
-    < close_start.index("DetachDocumentCloseHandler();")
-    < close_start.index("TryCloseWindow();"),
-    "CloseWillStart must atomically invalidate under the access gate before handler release/close.",
+    "_lifecycleDocument." not in begin_close,
+    "BeginDocumentClose must not dereference the retained lifecycle wrapper once close starts.",
 )
 
 teardown = method_block(
@@ -101,27 +126,37 @@ require(
 )
 require(
     "lock (_documentAccessGate)" in teardown
+    and "Volatile.Write(ref _documentCloseStarted, 1)" in teardown
     and "Interlocked.Exchange(ref _invalidated, 1) != 0" in teardown,
     "DocumentToBeDestroyed must share the same atomic native-access barrier.",
 )
-
-close_detach = method_block(source, "private void DetachDocumentCloseHandler()")
 require(
-    "_document.CloseWillStart -= OnDocumentCloseWillStart;" in close_detach,
-    "The per-document early-close subscription must be removed best-effort.",
+    "_lifecycleDocument." not in teardown,
+    "Native destruction fallback must never touch the retained lifecycle wrapper.",
+)
+
+safe_detach = method_block(source, "private void DetachDocumentLifecycleHandlersIfSafe()")
+require(
+    "Volatile.Read(ref _documentCloseStarted) != 0" in safe_detach,
+    "Window.Closed after native close starts must skip lifecycle-wrapper event removal.",
+)
+for marker in (
+    "_lifecycleDocument.BeginDocumentClose -= OnBeginDocumentClose;",
+    "_lifecycleDocument.CloseAborted -= OnDocumentCloseAborted;",
+):
+    require(marker in safe_detach, f"Normal live-document detach is missing: {marker}")
+
+abort = method_block(source, "private void OnDocumentCloseAborted(object? sender, EventArgs e)")
+require(
+    "DetachDocumentLifecycleHandlersAfterAbort();" in abort,
+    "An aborted close must release lifecycle subscriptions while the document is live again.",
 )
 
 detach = method_block(source, "private void Detach()")
 require(
-    "DetachDocumentCloseHandler();" in detach and "DetachDocumentManagerHandler();" in detach,
-    "Full detach must release both early per-document and native-identity fallback subscriptions.",
+    "DetachDocumentLifecycleHandlersIfSafe();" in detach
+    and "DetachDocumentManagerHandler();" in detach,
+    "Full detach must release safe lifecycle/global subscriptions without post-disposal dereference.",
 )
 
-bind = method_block(source, "private void BindProjectAffinityIfPresent()")
-require(
-    source.count("ProjectContextCoordinator.TryGetReadOnly(_document, out var project)") == 2
-    and "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)" in bind,
-    "Retained Document project reads must remain limited to initial binding and the synchronized affinity path.",
-)
-
-print("[OK] Document-bound modeless activation is serialized behind CloseWillStart/DocumentToBeDestroyed invalidation before retained Document project access.")
+print("[OK] Modeless affinity resolves a live wrapper by native database identity and is atomically invalidated before document teardown can expose a disposed wrapper.")
