@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
             OrdinaryFrameMappingRemainsDeterministic();
             PositiveSegmentMustAdvanceCumulativeStation();
             InteriorProjectionStationMustRemainRepresentable();
+            RepresentableShortSegmentMustNotBeDroppedByPathScale();
+            SplitMidpointMustRemainRepresentable();
         }
 
         private static void NegativeFrameCountFailsBeforeIndexAccess()
@@ -128,6 +130,53 @@ namespace QS3D.Core.SmokeTests
             }
 
             throw new Exception("An interior projection whose station rounds to a segment endpoint must fail closed instead of publishing the wrong station.");
+        }
+
+        private static void RepresentableShortSegmentMustNotBeDroppedByPathScale()
+        {
+            var path = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(1e16d, 0d),
+                new Point2(1e16d, 4d)
+            };
+            var plan = CurtainPathFramePlanner.Plan(
+                path,
+                new[] { new CurtainWallRect(1e16d, 0d, 4d, 1d) });
+
+            if (plan.Pieces.Count != 1)
+                throw new Exception("A representable four-meter path overlap must not be discarded by tolerance scaled from the total path length.");
+            var piece = plan.Pieces[0];
+            if (piece.PathSegmentIndex != 1)
+                throw new Exception("The short representable frame must map to the second path segment.");
+            Near(4d, piece.WidthM, "large-station short piece width");
+            Near(2d, piece.CenterY_M, "large-station short piece center Y");
+        }
+
+        private static void SplitMidpointMustRemainRepresentable()
+        {
+            var path = new[]
+            {
+                new Point2(0d, 0d),
+                new Point2(1e16d, 0d),
+                new Point2(1e16d, 2d)
+            };
+
+            try
+            {
+                CurtainPathFramePlanner.Plan(
+                    path,
+                    new[] { new CurtainWallRect(1e16d, 0d, 2d, 1d) });
+            }
+            catch (OverflowException ex)
+            {
+                if (ex.Message.IndexOf("split center", StringComparison.OrdinalIgnoreCase) < 0 ||
+                    ex.Message.IndexOf("representable", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new Exception("Unrepresentable curtain split midpoint should report a deterministic station diagnostic.");
+                return;
+            }
+
+            throw new Exception("A path overlap with no representable interior midpoint must fail closed instead of using an endpoint as its center.");
         }
 
         private static IReadOnlyList<Point2> StraightPath() =>
