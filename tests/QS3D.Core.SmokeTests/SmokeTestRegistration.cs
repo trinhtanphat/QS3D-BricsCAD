@@ -59,6 +59,7 @@ namespace QS3D.Core.SmokeTests
             BbsRegressionSmoke.Run();
             RebarCsvStrictUtf8Smoke.Run();
             WorkflowSafetySmoke.Run();
+            DocumentBoundWindowLifetimeIdentitySmoke.Run();
             CompletionRegressionSmoke.Run();
             SemanticOverflowSmoke.Run();
             FormulaFiniteSafetySmoke.Run();

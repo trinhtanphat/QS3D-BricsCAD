@@ -23,7 +23,8 @@ namespace QS3D.BricsCAD.V25.UI
         private sealed class Registration
         {
             private readonly Window _window;
-            private readonly Document _document;
+            private Document _document;
+            private readonly Teigha.DatabaseServices.Database _database;
             private bool _attached;
             private bool _projectAffinityBound;
             private int _invalidated;
@@ -33,12 +34,18 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 _window = window;
                 _document = document;
+                _database = document.Database;
             }
 
             public void Attach(Document document)
             {
-                if (!ReferenceEquals(document, _document))
+                if (!IsSameDocument(document))
                     throw new InvalidOperationException("A modeless QS3D window cannot be rebound to a different BricsCAD document.");
+
+                // BricsCAD may surface a new managed Document wrapper for the same native DWG.
+                // Keep the newest equivalent wrapper for project-affinity reads while retaining
+                // the captured Database instance as the stable lifetime identity.
+                _document = document;
                 if (_attached) return;
 
                 try
@@ -62,6 +69,11 @@ namespace QS3D.BricsCAD.V25.UI
                     _projectId = string.Empty;
                     throw;
                 }
+            }
+
+            private bool IsSameDocument(Document document)
+            {
+                return document != null && ReferenceEquals(document.Database, _database);
             }
 
             private void BindProjectAffinityIfPresent()
@@ -122,7 +134,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
             {
-                if (!ReferenceEquals(e.Document, _document)) return;
+                if (!IsSameDocument(e.Document)) return;
                 if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
 
                 // The global document manager must not retain a stale modeless window after this
