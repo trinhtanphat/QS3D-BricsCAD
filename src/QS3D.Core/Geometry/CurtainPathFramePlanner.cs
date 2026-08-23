@@ -159,7 +159,7 @@ namespace QS3D.Core.Geometry
                     Add(segment.Start.X, Multiply(segment.Dx, ratio, "curtain projection X delta"), "curtain projection X"),
                     Add(segment.Start.Y, Multiply(segment.Dy, ratio, "curtain projection Y delta"), "curtain projection Y"));
                 var distance = point.DistanceTo(projected);
-                var station = Add(segment.StartStationM, Multiply(segment.LengthM, ratio, "curtain projection station delta"), "curtain projection station");
+                var station = ProjectionStation(segment, ratio);
                 var candidate = new CurtainPathProjection(station, distance, projected, index);
                 if (best == null || distance < best.DistanceM - Tolerance ||
                     (Math.Abs(distance - best.DistanceM) <= Tolerance && station < best.StationM))
@@ -170,6 +170,19 @@ namespace QS3D.Core.Geometry
         }
 
         public static double Length(IReadOnlyList<Point2> centerline) => BuildPath(centerline).TotalLengthM;
+
+        private static double ProjectionStation(PathSegment segment, double ratio)
+        {
+            ratio = Finite(ratio, "curtain projection ratio");
+            if (!(ratio > 0d)) return segment.StartStationM;
+            if (ratio >= 1d) return segment.EndStationM;
+
+            var delta = Multiply(segment.LengthM, ratio, "curtain projection station delta");
+            var station = Add(segment.StartStationM, delta, "curtain projection station");
+            if (!(station > segment.StartStationM) || !(station < segment.EndStationM))
+                throw new OverflowException("Curtain projection station lost an interior offset at floating-point precision.");
+            return station;
+        }
 
         private static double ProjectionRatio(PathSegment segment, double px, double py)
         {
