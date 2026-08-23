@@ -22,19 +22,27 @@ namespace QS3D.Core.SmokeTests
             Require(end > start, "Wall Snap fresh mutation helper boundary was not found.");
             var helper = source.Substring(start, end - start);
 
+            var bind = helper.IndexOf("ExistingProjectMutationContext.Require(document, operation)", StringComparison.Ordinal);
             var projectMismatch = helper.IndexOf("!string.Equals(project.ProjectId, expectedProjectId", StringComparison.Ordinal);
             var versionMismatch = helper.IndexOf("project.ChangeVersion != expectedChangeVersion", StringComparison.Ordinal);
             var forget = helper.IndexOf("ProjectContextCoordinator.Forget(document);", StringComparison.Ordinal);
             var refusal = helper.IndexOf("throw new InvalidOperationException", StringComparison.Ordinal);
+            var success = helper.LastIndexOf("return project;", StringComparison.Ordinal);
 
+            Require(bind >= 0 && bind < projectMismatch,
+                "Wall Snap must keep the existing canonical mutation binding boundary before prompt-drift comparison.");
             Require(projectMismatch >= 0 && versionMismatch >= 0,
                 "Wall Snap must continue comparing both ProjectId and ChangeVersion after interactive selection.");
             Require(forget > versionMismatch,
                 "Wall Snap prompt-drift refusal must forget the canonical cache after detecting the final bind mismatch.");
             Require(refusal > forget,
                 "Wall Snap must forget a newly bound replacement project before returning the prompt-drift refusal.");
-            Require(helper.Contains("ExistingProjectMutationContext.Require(document, operation)", StringComparison.Ordinal),
-                "Wall Snap must keep the existing canonical mutation binding boundary.");
+            Require(success > refusal,
+                "Wall Snap success path must remain outside the prompt-drift refusal block.");
+            Require(helper.IndexOf("ProjectContextCoordinator.Forget(document);", forget + 1, StringComparison.Ordinal) < 0,
+                "Wall Snap prompt-drift helper should invalidate the canonical cache exactly once per mismatch refusal.");
+            Require(helper.IndexOf("ExistingProjectMutationContext.Require(document, operation)", bind + 1, StringComparison.Ordinal) < 0,
+                "Wall Snap must not rebind a replacement project after forgetting it and before returning the refusal.");
 
             Require(mutationSource.Contains("ProjectContextCoordinator.GetOrCreate(document)", StringComparison.Ordinal),
                 "ExistingProjectMutationContext canonical bind behavior must remain intact.");
@@ -58,6 +66,8 @@ namespace QS3D.Core.SmokeTests
             var forgetBody = coordinatorSource.Substring(forgetStart, forgetEnd - forgetStart);
             Require(forgetBody.Contains("Projects.Remove(document);", StringComparison.Ordinal),
                 "Forget must remove the document from the same canonical cache observed by TryGetCached.");
+            Require(!forgetBody.Contains("GetOrCreate", StringComparison.Ordinal),
+                "Forget must remain non-creating while invalidating prompt-drift cache state.");
         }
 
         private static string FindRepositoryRoot()
