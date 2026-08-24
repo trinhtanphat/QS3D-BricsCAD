@@ -84,12 +84,11 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                if (!ProjectContextCoordinator.TryGetReadOnly(document, out _))
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                 {
                     TryWriteMessage(document, "\nQS3D Grid intersections: chưa có project sidecar để kiểm tra.");
                     return;
                 }
-                var project = ProjectContextCoordinator.GetOrCreate(document);
                 var issues = Cad.GridIntersectionMarkerService.Inspect(document, project);
                 var status = issues.Count == 0
                     ? "Grid intersections: native marker health OK."
@@ -109,12 +108,12 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                if (!ProjectContextCoordinator.TryGetReadOnly(document, out _))
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
                 {
                     TryWriteMessage(document, "\nQS3D Grid intersections: chưa có project sidecar. Capture Grid và lưu project trước.");
                     return;
                 }
-                var project = ProjectContextCoordinator.GetOrCreate(document);
+
                 IReadOnlyCollection<string>? targets = null;
                 if (selectedOnly)
                 {
@@ -125,7 +124,7 @@ namespace QS3D.BricsCAD.V25
                         return;
                     }
                     var handles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
-                    var selected = project.Elements
+                    var selected = previewProject.Elements
                         .Where(x => x.Category == ElementCategory.Grid && x.SourceHandles.Any(handles.Contains))
                         .Select(x => x.Id)
                         .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -137,6 +136,11 @@ namespace QS3D.BricsCAD.V25
                     }
                     targets = selected;
                 }
+
+                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!string.Equals(project.ProjectId, previewProject.ProjectId, StringComparison.Ordinal) ||
+                    project.ChangeVersion != previewProject.ChangeVersion)
+                    throw new InvalidOperationException("Grid intersection project changed after preview/selection; rerun the command.");
 
                 var count = Cad.GridIntersectionMarkerService.Refresh(document, project, targets);
                 var status = "Grid intersections: đã materialize " + count + " pair-owned marker(s)" + (selectedOnly ? " cho selection." : ".");
