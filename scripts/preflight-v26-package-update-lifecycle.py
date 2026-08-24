@@ -56,7 +56,9 @@ def main() -> int:
         raise AssertionError("runner must refuse package mutation while BricsCAD is running")
     if not re.search(r"Get-FileHash.+SHA256", runner):
         raise AssertionError("runner must verify installed payload hashes")
-    if runner.count("Get-TreeDigest $installDir") < 5:
+    # One snapshot plus three post-condition comparisons: rejected downgrade,
+    # forced transactional rollback, and same-version WhatIf/cancel.
+    if runner.count("Get-TreeDigest $installDir") < 4:
         raise AssertionError("runner must compare upgraded payload across downgrade, forced rollback, and cancel paths")
     if runner.count("Get-DemandLoadDigest") < 3:
         raise AssertionError("runner must compare DemandLoad registration before and after forced transactional failure")
