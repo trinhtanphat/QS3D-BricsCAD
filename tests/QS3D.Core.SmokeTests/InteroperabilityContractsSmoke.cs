@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             AmbiguousIfcEvidenceBlocksAdmission();
             UnresolvedQuantityUnitBlocksAdmission();
             DuplicateSourceIdentityBlocksAdmission();
+            AdditionalDiagnosticsBoundIsEnforced();
             FactSetOrderingIsDeterministic();
         }
 
@@ -261,6 +262,32 @@ namespace QS3D.Core.SmokeTests
             True(admission.Diagnostics.Any(x =>
                 x.Code == "DUPLICATE_SOURCE_IDENTITY" &&
                 x.Severity == InteroperabilityDiagnosticSeverity.Blocking));
+        }
+
+        private static void AdditionalDiagnosticsBoundIsEnforced()
+        {
+            var provenance = IfcProvenance("batch-additional-diagnostic-bound");
+            var factSet = InteroperabilityFactSet.Create(
+                provenance,
+                Array.Empty<InteroperabilityElementRecord>());
+            var diagnostic = new InteroperabilityLossDiagnostic(
+                "TEST_ADDITIONAL_DIAGNOSTIC",
+                InteroperabilityDiagnosticSeverity.Info,
+                "Synthetic interoperability diagnostic.");
+
+            var accepted = InteroperabilityAdmission.Evaluate(
+                factSet,
+                Enumerable.Repeat(
+                    diagnostic,
+                    InteroperabilityAdmission.MaxAdditionalDiagnostics));
+            Equal(InteroperabilityAdmission.MaxAdditionalDiagnostics, accepted.Diagnostics.Count);
+
+            Throws<InvalidOperationException>(() =>
+                InteroperabilityAdmission.Evaluate(
+                    factSet,
+                    Enumerable.Repeat(
+                        diagnostic,
+                        InteroperabilityAdmission.MaxAdditionalDiagnostics + 1)));
         }
 
         private static void FactSetOrderingIsDeterministic()
