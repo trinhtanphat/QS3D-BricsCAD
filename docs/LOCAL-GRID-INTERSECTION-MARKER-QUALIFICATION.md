@@ -3,8 +3,8 @@
 ## Status
 
 - Repository source carrier: Issue #3771 (`Lane-Key: issue-3771`).
-- Source-ready candidate: `1311f6db80524b5d63e2ccc7cbd691255845b761` or a later descendant containing the same source tree after documentation-only handoff updates.
-- Remote/source status: `SOURCE_READY` once the exact candidate passes repository CI.
+- Exact source candidate: `4b9863dd88fdd379170e085e4a497a1dde3453e5` or a later descendant whose only additional changes are this handoff/qualification documentation.
+- Remote/source status: `SOURCE_READY` only after the exact current candidate passes repository CI.
 - Licensed runtime status: `PENDING_LOCAL`. Hosted/static CI is not BricsCAD runtime evidence.
 
 ## Purpose
@@ -31,13 +31,15 @@ Use simple semantic Grid sources backed by live native LINE/ARC entities. Includ
 4. Verify the marker records one canonical `GIP1:` pair token and one canonical `GIX1:` owner token for occurrence `0`, plus both canonical Grid IDs and finite invariant coordinates.
 5. Repeat refresh without changing geometry. The owned set must be replaced deterministically with no duplicate live owner token and no unmarked/foreign object deletion.
 
-### P02 — selected-pair scope
+### P02 — selected-pair scope and pre-bind cancellation
 
 1. Add a third Grid so drawing A has at least two independent Grid pairs.
 2. Change geometry for one selected Grid only.
 3. Run `QS3DGRIDINTERSECTIONSSEL` using that Grid.
 4. Verify only marker pairs touching the selected Grid are eligible for replacement; unrelated Grid-pair markers remain untouched.
-5. Cancel/empty/invalid selection must return without project/native marker mutation.
+5. Cancel/empty/invalid selection must return before canonical mutation binding/cache creation and without native marker mutation.
+6. Replace/reload the project between the detached selection preview and canonical bind; the command must reject ProjectId/ChangeVersion drift and require rerun.
+7. `QS3DGRIDINTERSECTIONHEALTH` must remain read-only and must not canonical-bind/cache a project solely to inspect marker health.
 
 ### P03 — fail-closed ownership corruption
 
@@ -78,8 +80,8 @@ Repeat the bounded positive create/refresh, one corruption refusal, selected-sco
 - Pair ownership is deterministic and compact (`GIP1:`/`GIX1:`), independent of Grid input order.
 - Marker replacement is exact-set and transactionally fail-closed: unsafe/corrupt/foreign/stale ownership never causes partial erase or partial append.
 - Generated QS3D output is never accepted as an authoritative Grid source.
-- Selected refresh touches only pairs containing selected canonical Grid IDs.
-- Health detects missing, stale-geometry, stale-owner and ownership-invalid states without silently mutating them.
+- Selected refresh touches only pairs containing selected canonical Grid IDs and does not bind/cache on cancel/invalid selection.
+- Health is read-only and detects missing, stale-geometry, stale-owner and ownership-invalid states without silently mutating them.
 - Undo/Redo, save/cold-reopen and active-document switching preserve project/document affinity.
 - No cross-DWG mutation and no foreign/unmarked entity deletion occurs.
 
@@ -97,6 +99,7 @@ Record:
 - aggregate Grid/pair/marker counts, never raw Handle lists;
 - P01-P06 pass/fail booleans and a bounded failure code/stage when applicable;
 - proof of compact `GIP1:`/`GIX1:` ownership consistency without publishing private Grid IDs;
+- cancel/pre-bind and project-drift refusal result;
 - before/after object-count and position summaries for replacement and corruption-refusal cells;
 - Undo/Redo and save/cold-reopen outcomes;
 - drawing A/B isolation result;
