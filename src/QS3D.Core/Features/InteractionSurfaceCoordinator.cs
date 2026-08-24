@@ -5,14 +5,27 @@ using System.Linq;
 
 namespace QS3D.Core.Features
 {
+    internal static class InteractionSurfaceKeyPolicy
+    {
+        public static string RequireCanonical(string value, string paramName, string description)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException(description + " cannot be blank.", paramName);
+
+            if (!StringComparer.Ordinal.Equals(value, value.Trim()))
+                throw new ArgumentException(description + " must not contain leading or trailing whitespace.", paramName);
+
+            return value;
+        }
+    }
+
     public sealed class InteractionSurfaceBinding : IEquatable<InteractionSurfaceBinding>
     {
         public InteractionSurfaceBinding(FeatureId featureId, InteractionSurface surface, string contentKey, string? contextKey = null)
         {
-            if (string.IsNullOrWhiteSpace(contentKey)) throw new ArgumentException("Surface content key cannot be blank.", nameof(contentKey));
             FeatureId = featureId;
             Surface = surface;
-            ContentKey = contentKey.Trim();
+            ContentKey = InteractionSurfaceKeyPolicy.RequireCanonical(contentKey, nameof(contentKey), "Surface content key");
             ContextKey = NormalizeOptional(contextKey);
         }
 
@@ -48,7 +61,7 @@ namespace QS3D.Core.Features
         {
             if (value == null) return null;
             if (string.IsNullOrWhiteSpace(value)) return null;
-            return value.Trim();
+            return InteractionSurfaceKeyPolicy.RequireCanonical(value, nameof(value), "Surface context key");
         }
     }
 
@@ -187,15 +200,18 @@ namespace QS3D.Core.Features
                 case InteractionSurface.ModalSheet:
                 case InteractionSurface.RecipeChooser:
                     if (_modal == null) return false;
-                    if (contentKey != null && !StringComparer.Ordinal.Equals(_modal.ContentKey, contentKey)) return false;
+                    if (contentKey != null)
+                    {
+                        var canonicalContentKey = InteractionSurfaceKeyPolicy.RequireCanonical(contentKey, nameof(contentKey), "Surface content key");
+                        if (!StringComparer.Ordinal.Equals(_modal.ContentKey, canonicalContentKey)) return false;
+                    }
                     _modal = null;
                     return true;
                 case InteractionSurface.FloatingTool:
                     if (contentKey == null)
                         throw new ArgumentException("Floating tool close requires its semantic content key.", nameof(contentKey));
-                    if (string.IsNullOrWhiteSpace(contentKey))
-                        throw new ArgumentException("Floating tool close requires its semantic content key.", nameof(contentKey));
-                    return _floatingTools.Remove(contentKey.Trim());
+                    var floatingContentKey = InteractionSurfaceKeyPolicy.RequireCanonical(contentKey, nameof(contentKey), "Floating tool content key");
+                    return _floatingTools.Remove(floatingContentKey);
                 default:
                     return false;
             }
