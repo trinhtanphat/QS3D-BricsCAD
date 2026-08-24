@@ -6,6 +6,7 @@
 - Queue parent: `#72`
 - Tested source SHA: `ba6e1c7508086beb8ac5db9a4a78d2c43fc09492`
 - Evidence branch: `agent/codex/issue83-3715fix-v25-local-qualification`
+- Supersedes failure-evidence PR `#3717`, closed without merge with its remote branch retained
 - Date: 2026-08-24
 
 ## Exact runtime identity
