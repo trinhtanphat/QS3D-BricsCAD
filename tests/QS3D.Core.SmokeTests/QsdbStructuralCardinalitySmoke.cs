@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             OversizedTopLevelZonesAreRejected();
             OversizedNestedHandlesAreRejected();
             ExactNestedHandleBoundaryLoads();
+            OversizedInMemorySaveIsRejectedBeforeMutation();
         }
 
         private static void OversizedTopLevelZonesAreRejected()
@@ -56,6 +57,45 @@ namespace QS3D.Core.SmokeTests
             finally
             {
                 Delete(path);
+            }
+        }
+
+        private static void OversizedInMemorySaveIsRejectedBeforeMutation()
+        {
+            var project = new ProjectState("save-cardinality-smoke", "Save cardinality smoke");
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            for (var index = 0; index <= MaxNestedEntries; index++)
+                element.SourceHandles.Add("H" + index);
+            project.Elements.Add(element);
+
+            var beforeSchema = project.SchemaVersion;
+            var beforeUpdated = project.UpdatedUtc;
+            var beforeVersion = project.ChangeVersion;
+            var path = TempPath();
+            try
+            {
+                var rejected = false;
+                try
+                {
+                    new QsdbProjectStore().Save(project, path);
+                }
+                catch (InvalidDataException ex)
+                {
+                    rejected = ex.Message.IndexOf("element E1 handles", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                               ex.Message.IndexOf(MaxNestedEntries.ToString(), StringComparison.Ordinal) >= 0;
+                }
+
+                Require(rejected, "QSDB save accepted oversized in-memory nested cardinality.");
+                Require(project.SchemaVersion == beforeSchema && project.UpdatedUtc == beforeUpdated && project.ChangeVersion == beforeVersion,
+                    "Rejected QSDB cardinality save mutated project persistence state.");
+                Require(!File.Exists(path) && !File.Exists(path + ".bak"),
+                    "Rejected QSDB cardinality save published project or backup bytes.");
+            }
+            finally
+            {
+                Delete(path);
+                Delete(path + ".bak");
+                Delete(path + ".tmp");
             }
         }
 
