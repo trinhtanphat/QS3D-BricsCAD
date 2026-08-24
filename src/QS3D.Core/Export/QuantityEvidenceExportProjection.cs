@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using QS3D.Core.Reporting;
 
 namespace QS3D.Core.Export
@@ -28,6 +30,7 @@ namespace QS3D.Core.Export
         public string SelectorKey { get; set; } = string.Empty;
         public string SourceReference { get; set; } = string.Empty;
         public string TargetReference { get; set; } = string.Empty;
+        public string Operands { get; set; } = string.Empty;
     }
 
     public static class QuantityEvidenceExportProjection
@@ -77,7 +80,8 @@ namespace QS3D.Core.Export
                         : string.Empty,
                     TargetReference = selector.Kind == QuantityEvidenceSelectorKind.Intersection
                         ? selector.TargetEntityKey ?? string.Empty
-                        : string.Empty
+                        : string.Empty,
+                    Operands = FormatOperands(contribution.Operands)
                 });
             }
 
@@ -128,6 +132,14 @@ namespace QS3D.Core.Export
             foreach (var explanation in ordered)
                 rows.AddRange(Create(explanation));
             return rows;
+        }
+
+        private static string FormatOperands(IReadOnlyList<QuantityEvidenceOperand> operands)
+        {
+            if (operands == null || operands.Count == 0) return string.Empty;
+            return string.Join("; ", operands.Select(operand =>
+                operand.Key + "=" + operand.Value.ToString("G29", CultureInfo.InvariantCulture) +
+                (string.IsNullOrWhiteSpace(operand.Unit) ? string.Empty : " " + operand.Unit)));
         }
     }
 }

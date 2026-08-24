@@ -3,23 +3,34 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "DocumentBoundWindowLifetime.cs"
+UI = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI"
+SOURCE = UI / "DocumentBoundWindowLifetime.cs"
+NATIVE_SOURCE = UI / "DocumentBoundNativeLifecycleCoordinator.cs"
 errors = []
 
 if not SOURCE.is_file():
     errors.append("missing DocumentBoundWindowLifetime.cs")
-else:
+if not NATIVE_SOURCE.is_file():
+    errors.append("missing DocumentBoundNativeLifecycleCoordinator.cs")
+
+if not errors:
     text = SOURCE.read_text(encoding="utf-8")
+    native = NATIVE_SOURCE.read_text(encoding="utf-8")
     attach_start = text.find("public void Attach(Document document)")
-    bind_start = text.find("private void BindProjectAffinityIfPresent()", attach_start + 1)
+    bind_start = text.find("private static IntPtr GetNativeDatabaseIdentity", attach_start + 1)
     attach = text[attach_start:bind_start] if attach_start >= 0 and bind_start > attach_start else ""
 
     required_attach = (
-        "if (!ReferenceEquals(document, _document))",
+        "if (!MatchesNativeDatabase(document))",
         "if (_attached) return;",
         "try",
+        "ModelessHostQuiescenceCoordinator.EnsureInitialized();",
         "BindProjectAffinityIfPresent();",
-        "BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;",
+        "_nativeLifecycleSubscription = DocumentBoundNativeLifecycleCoordinator.Register(",
+        "OnBeginDocumentClose,",
+        "OnDocumentCloseAborted,",
+        "OnDocumentToBeDestroyed);",
+        "ModelessHostQuiescenceCoordinator.QuiescenceAborted += OnHostQuiescenceAborted;",
         "_window.Activated += OnWindowActivated;",
         "_window.PreviewMouseDown += OnPreviewMouseDown;",
         "_window.PreviewKeyDown += OnPreviewKeyDown;",
@@ -36,18 +47,28 @@ else:
     for token in required_attach:
         pos = attach.find(token, cursor)
         if pos < 0:
-            errors.append("modeless Attach missing ordered failure-rollback contract: " + token)
+            errors.append("modeless Attach missing ordered H3 failure-rollback contract: " + token)
             break
         cursor = pos + len(token)
 
     if "catch\n                {\n                    throw;" in attach:
-        errors.append("modeless Attach must clean partial event ownership before rethrow")
+        errors.append("modeless Attach must clean partial managed/native ownership before rethrow")
+
+    for forbidden in (
+        "BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;",
+        "_lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;",
+        "_lifecycleDocument.CloseAborted += OnDocumentCloseAborted;",
+    ):
+        if forbidden in attach:
+            errors.append("modeless Attach must not directly own native lifecycle reactors: " + forbidden)
 
     detach_start = text.find("private void Detach()")
     detach = text[detach_start:] if detach_start >= 0 else ""
     for token in (
         "if (!_attached) return;",
-        "DetachDocumentManagerHandler();",
+        "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;",
+        "DetachDocumentLifecycleHandlersIfSafe();",
+        "ModelessHostQuiescenceCoordinator.QuiescenceAborted -= OnHostQuiescenceAborted;",
         "_window.Activated -= OnWindowActivated;",
         "_window.PreviewMouseDown -= OnPreviewMouseDown;",
         "_window.PreviewKeyDown -= OnPreviewKeyDown;",
@@ -55,26 +76,59 @@ else:
         "_attached = false;",
     ):
         if token not in detach:
-            errors.append("modeless Detach lost best-effort handler cleanup contract: " + token)
+            errors.append("modeless Detach lost best-effort H3 cleanup contract: " + token)
 
-    helper_start = text.find("private void DetachDocumentManagerHandler()")
+    helper_start = text.find("private void DetachNativeLifecycleSubscription()")
     helper_end = text.find("private void OnWindowClosed", helper_start + 1)
     helper = text[helper_start:helper_end] if helper_start >= 0 and helper_end > helper_start else ""
-    if "BcadApplication.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed;" not in helper:
-        errors.append("document-manager detach helper must remove the global DocumentToBeDestroyed subscription")
+    for token in (
+        "Interlocked.Exchange(ref _nativeLifecycleSubscription, null)",
+        "if (subscription == null) return;",
+        "subscription.Dispose();",
+    ):
+        if token not in helper:
+            errors.append("managed native-lifecycle detach helper missing token: " + token)
 
-    # Preserve the existing safety/identity boundaries while allowing the safer dispatcher
-    # callback that catches Window.Close failures on the UI thread.
+    safe_start = text.find("private void DetachDocumentLifecycleHandlersIfSafe()")
+    safe_end = text.find("private void DetachDocumentLifecycleHandlersAfterAbort()", safe_start + 1)
+    safe = text[safe_start:safe_end] if safe_start >= 0 and safe_end > safe_start else ""
+    for token in (
+        "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;",
+        "if (Volatile.Read(ref _documentCloseStarted) != 0) return;",
+        "DetachNativeLifecycleSubscription();",
+    ):
+        if token not in safe:
+            errors.append("safe lifecycle detach boundary missing token: " + token)
+
     for token in (
         "Registrations.GetValue(window, key => new Registration(key, document))",
         'throw new InvalidOperationException("A modeless QS3D window cannot be rebound to a different BricsCAD document.")',
-        "ReferenceEquals(e.Document, _document)",
+        "private readonly IntPtr _nativeDatabaseIdentity;",
+        "_nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
+        "database.UnmanagedObject == _nativeDatabaseIdentity",
+        "if (!MatchesNativeDatabase(e.Document)) return;",
         "CloseForProjectChange();",
         "_window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher))",
         "private void TryCloseWindowOnDispatcher()",
     ):
         if token not in text:
             errors.append("modeless lifetime atomicity change lost existing safety contract: " + token)
+
+    for legacy in (
+        "ReferenceEquals(e.Document, _document)",
+        "ReferenceEquals(document, _document)",
+    ):
+        if legacy in text:
+            errors.append("modeless lifetime atomicity must not depend on managed Document wrapper identity: " + legacy)
+
+    for token in (
+        "BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;",
+        "lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;",
+        "lifecycleDocument.CloseAborted += OnDocumentCloseAborted;",
+        "new WeakReference<Callbacks>(callbacks)",
+    ):
+        if token not in native:
+            errors.append("shared H3 native coordinator missing atomic ownership token: " + token)
 
     if attach.count("_attached = true;") != 2:
         errors.append("Attach must mark successful ownership once and temporarily enable Detach exactly once in rollback")
@@ -86,4 +140,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: document-bound modeless lifetime attachment rolls partial subscriptions back through the existing best-effort Detach path, centralizes global handler removal, clears failed project affinity, remains retryable, and preserves source-DWG/project fail-closed identity behavior.")
+print("PASS: document-bound modeless attachment rolls partial H3 managed/native subscriptions back through Detach, keeps native reactor ownership centralized and weak, remains retryable, and preserves source-DWG/project fail-closed identity behavior.")

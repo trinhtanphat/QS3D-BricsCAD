@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
+using QS3D.BricsCAD.V25.Reporting;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Model;
@@ -29,6 +30,8 @@ namespace QS3D.BricsCAD.V25.Services
             {
                 var count = 0;
                 foreach (var snapshot in snapshots) if (CaptureSnapshotCore(document, project, snapshot, category)) count++;
+                if (count > 0 && StructuralWallConcreteContactService.IsConcreteContactCategory(category))
+                    RefreshStructuralWallConcreteContacts(document, project);
                 return count;
             }
             catch (Exception operationError)
@@ -48,7 +51,10 @@ namespace QS3D.BricsCAD.V25.Services
             var rollback = ProjectStateSnapshot.Capture(project);
             try
             {
-                return CaptureSnapshotCore(document, project, snapshot, category);
+                var captured = CaptureSnapshotCore(document, project, snapshot, category);
+                if (captured && StructuralWallConcreteContactService.IsConcreteContactCategory(category))
+                    RefreshStructuralWallConcreteContacts(document, project);
+                return captured;
             }
             catch (Exception operationError)
             {
@@ -245,6 +251,36 @@ namespace QS3D.BricsCAD.V25.Services
                 if (active != null && active.Category == category) return active;
             }
             return project.Families.FirstOrDefault(x => x.Category == category) ?? CreateFamily(project, category);
+        }
+
+        private static void RefreshStructuralWallConcreteContacts(Document document, ProjectState project)
+        {
+            var changed = false;
+            foreach (var wall in project.Elements.Where(x => x.Category == ElementCategory.StructuralWall).ToList())
+            {
+                if (!StructuralWallConcreteContactService.TryMeasureM2(document, project, wall, out var contactAreaM2))
+                {
+                    wall.Properties.Remove("ConcreteContactAreaM2");
+                    wall.MarkDirty(ElementDirtyFlags.Quantity);
+                    Regenerate(project, wall);
+                    MeasuredSolidQuantityPolicy.Apply(wall);
+                    changed = true;
+                    continue;
+                }
+
+                var encoded = contactAreaM2.ToString("R", CultureInfo.InvariantCulture);
+                if (wall.Properties.TryGetValue("ConcreteContactAreaM2", out var current) &&
+                    string.Equals(current, encoded, StringComparison.Ordinal))
+                    continue;
+
+                wall.Properties["ConcreteContactAreaM2"] = encoded;
+                wall.MarkDirty(ElementDirtyFlags.Quantity);
+                Regenerate(project, wall);
+                MeasuredSolidQuantityPolicy.Apply(wall);
+                changed = true;
+            }
+
+            if (changed) project.Touch();
         }
 
         private static void Regenerate(ProjectState project, ProjectElement element)

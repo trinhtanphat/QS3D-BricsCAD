@@ -1,9 +1,10 @@
 # LOCAL-004 P04 Beam STRETCH dependent redistribution
 
-Status: SOURCE_READY / PENDING_LOCAL
+Status: COMPLETED / LOCAL_PASS
 Lane-Key: issue-3383
 Parent: #80 / LOCAL-004
-Canonical PR: #3387
+Carrier issue: #3383 (CLOSED)
+Canonical PR: #3387 (MERGED)
 Canonical branch: `agent/gpt56sol/issue-3383-beam-stretch-dependent-p04`
 Baseline main: `afff082096998fa404f08a5e29bcfd9fbc3830dd`
 
@@ -34,9 +35,9 @@ Source candidate `d91c49a85823e9a36fbae0f2e5bd4ec160344f76` passed automatic wor
 
 This evidence proves source/static/compile readiness only. It is not licensed runtime evidence.
 
-## Local execution handoff
+## Licensed local execution
 
-After #3387 lands, synchronize a clean checkout to the exact landed `main` SHA and build the x64 Release V25 plugin from that exact SHA. Then run:
+The merged runner was executed from the clean exact source SHA recorded below with the x64 Release V25 plugin:
 
 ```powershell
 pwsh -File .\scripts\test-bricscad-v25-source-reconcile-native-beam-stretch-dependent.ps1 `
@@ -64,4 +65,6 @@ A qualifying final marker must have:
 - `stirrup_count_class=NINE_AT_D8_1000`
 - `error_code=NONE`
 
-Only that exact landed-SHA licensed V25 execution may promote P04 to `LOCAL_PASS`. Until then P04 remains `SOURCE_READY / PENDING_LOCAL`; #80 remains open for grip/jig/manual ESC, POLYLINE topology transitions and remaining category/dependent matrices.
+Exact licensed evidence is `LOCAL_PASS` on source SHA `2985f13b0f0d680284e915fb81728bbb26a42ffe`, BricsCAD V25.2.10 and exact x64 plugin SHA-256 `C94A5ED5C8EA4CC039EE364B1DA021005AD07514F93BA60D091DFC88519C14E6`. The real crossing-window `STRETCH` changed the authoritative Beam LINE from 5 m to 8 m while semantic and generated state remained at 5 m before sync. Production reconcile invalidated the old host/four longitudinal bars/six stirrups; the explicit rebuild produced a disjoint 8 m host, four longitudinal replacements and nine `D8@1000` stirrups. Save, sidecar persistence, fresh-process cold reopen, drawing restoration and zero-process cleanup all passed with `error_code=NONE`.
+
+This closes #3383/P04 only. Parent #80 remains open for the broader topology/category/dependent and failure/multi-DWG matrix.

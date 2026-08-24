@@ -19,7 +19,7 @@ namespace QS3D.Core.Export
     /// </summary>
     public sealed class CoordinationClashExportRow
     {
-        private CoordinationClashExportRow(
+        internal CoordinationClashExportRow(
             string clashId,
             string type,
             string severity,

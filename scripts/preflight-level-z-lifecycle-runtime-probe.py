@@ -102,8 +102,10 @@ if RUNNER.is_file():
         'status --porcelain=v1 --untracked-files=all',
         'ExpectedSourceSha does not match the worktree HEAD.',
         'Level lifecycle qualification requires a clean committed worktree.',
-        'Level lifecycle assembly was not built from ExpectedSourceSha.',
-        'Close all BricsCAD processes before isolated Level lifecycle qualification.',
+        'Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $ExpectedSourceSha',
+        'Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe',
+        'Close all BricsCAD V25 processes before isolated Level lifecycle qualification.',
+        'Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30',
         '. $windowInteropPath',
         'Close-Qs3dProxyInformationDialog -Process $Process',
         'Start-Process -FilePath $bricscadExe',
@@ -187,6 +189,8 @@ if RUNNER.is_file():
         errors.append("Level lifecycle runner must validate cold reopen before ownership-scoped rebuild")
     for forbidden in (
         "Get-Process -Name '*'",
+        'Get-Process -Name "bricscad"',
+        "$expectedAssemblyRevision",
         "Process.GetProcesses",
         "SendKeys",
         "SetForegroundWindow",

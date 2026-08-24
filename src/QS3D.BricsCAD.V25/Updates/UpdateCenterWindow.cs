@@ -22,7 +22,7 @@ namespace QS3D.BricsCAD.V25.Updates
         private readonly Button _releaseButton;
         private UpdateCheckResult? _result;
         private bool _coordinatorAttached;
-        private bool _previewDownloading;
+        private bool _previewDownloading = false;
         private string? _downloadedPackagePath;
         private string? _downloadedReleaseTag;
 
@@ -168,7 +168,11 @@ namespace QS3D.BricsCAD.V25.Updates
 
             var checking = result.State == UpdateState.Checking;
             var hasManualRelease = result.State == UpdateState.ManualInstallRequired && result.Release?.PageUri != null;
+#if BRICSCAD_V26
+            var hasPreviewDownload = false;
+#else
             var hasPreviewDownload = result.State == UpdateState.ManualInstallRequired && result.Release?.HasVerifiedPreviewPackage == true;
+#endif
             var hasDownloadedPreview = hasPreviewDownload
                                        && _downloadedPackagePath != null
                                        && string.Equals(_downloadedReleaseTag, releaseTag, StringComparison.Ordinal)
@@ -222,6 +226,7 @@ namespace QS3D.BricsCAD.V25.Updates
             var current = _result;
             if (current?.State == UpdateState.ManualInstallRequired && current.Release != null)
             {
+#if !BRICSCAD_V26
                 if (_downloadedPackagePath != null
                     && string.Equals(_downloadedReleaseTag, current.Release.Tag, StringComparison.Ordinal)
                     && File.Exists(_downloadedPackagePath))
@@ -235,6 +240,7 @@ namespace QS3D.BricsCAD.V25.Updates
                     await DownloadPreviewAsync(current.Release);
                     return;
                 }
+#endif
 
                 if (current.Release.PageUri != null)
                 {
@@ -246,6 +252,7 @@ namespace QS3D.BricsCAD.V25.Updates
             await ScheduleUpdateAsync();
         }
 
+#if !BRICSCAD_V26
         private async System.Threading.Tasks.Task DownloadPreviewAsync(UpdateReleaseInfo release)
         {
             if (_previewDownloading) return;
@@ -277,6 +284,7 @@ namespace QS3D.BricsCAD.V25.Updates
                     MessageBoxImage.Warning);
             }
         }
+#endif
 
         private async System.Threading.Tasks.Task ScheduleUpdateAsync()
         {

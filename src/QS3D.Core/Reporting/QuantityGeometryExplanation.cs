@@ -53,12 +53,22 @@ namespace QS3D.Core.Reporting
 
     public sealed class QuantityFormworkFaceExplanation
     {
+        public const string BrepRectangleExtentsMeasurementKind = "brep-rectangle-extents-v1";
+
         public string FaceId { get; set; } = string.Empty;
         public string FaceType { get; set; } = "Other";
         public double GrossArea { get; set; }
         public double DeductionArea { get; set; }
         public double NetArea { get; set; }
+        public string MeasurementKind { get; set; } = string.Empty;
+        public double MeasurementLength { get; set; }
+        public double MeasurementHeight { get; set; }
         public IReadOnlyList<QuantityGeometryDeduction> Deductions { get; set; } = Array.Empty<QuantityGeometryDeduction>();
+
+        public bool HasMeasurementTrace =>
+            string.Equals(MeasurementKind, BrepRectangleExtentsMeasurementKind, StringComparison.Ordinal) &&
+            MeasurementLength > 0d &&
+            MeasurementHeight > 0d;
     }
 
     public sealed class QuantityGeometryExplanation
@@ -98,10 +108,34 @@ namespace QS3D.Core.Reporting
                 NonNegativeFinite(face.GrossArea, face.FaceId + "/GrossArea");
                 NonNegativeFinite(face.DeductionArea, face.FaceId + "/DeductionArea");
                 NonNegativeFinite(face.NetArea, face.FaceId + "/NetArea");
+                NonNegativeFinite(face.MeasurementLength, face.FaceId + "/MeasurementLength");
+                NonNegativeFinite(face.MeasurementHeight, face.FaceId + "/MeasurementHeight");
                 if (face.DeductionArea > face.GrossArea + tolerances.Area)
                     throw new InvalidOperationException(face.FaceId + " deduction area exceeds gross face area.");
                 if (Math.Abs(face.NetArea - Math.Max(0d, face.GrossArea - face.DeductionArea)) > tolerances.Area)
                     throw new InvalidOperationException(face.FaceId + " net area is not gross area minus deduction area.");
+
+                var hasKind = !string.IsNullOrWhiteSpace(face.MeasurementKind);
+                var hasLength = face.MeasurementLength > 0d;
+                var hasHeight = face.MeasurementHeight > 0d;
+                if (hasKind != hasLength || hasKind != hasHeight)
+                    throw new InvalidOperationException(face.FaceId + " measurement trace must provide kind, length and height together.");
+                if (hasKind && !string.Equals(
+                        face.MeasurementKind,
+                        QuantityFormworkFaceExplanation.BrepRectangleExtentsMeasurementKind,
+                        StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(face.FaceId + " measurement trace kind is not supported.");
+                }
+                if (face.HasMeasurementTrace)
+                {
+                    var measuredArea = face.MeasurementLength * face.MeasurementHeight;
+                    if (double.IsNaN(measuredArea) || double.IsInfinity(measuredArea))
+                        throw new InvalidOperationException(face.FaceId + " measurement trace area must be finite.");
+                    var measurementAreaTolerance = Math.Max(tolerances.Area, Math.Abs(face.GrossArea) * 1e-8d);
+                    if (Math.Abs(measuredArea - face.GrossArea) > measurementAreaTolerance)
+                        throw new InvalidOperationException(face.FaceId + " measurement trace does not reconcile with exact BREP gross area.");
+                }
             }
 
             _ = SumFormworkArea(faces, x => x.GrossArea, nameof(GrossFormworkArea));

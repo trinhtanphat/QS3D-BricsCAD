@@ -342,17 +342,104 @@ namespace QS3D.BricsCAD.V25
 #if BRICSCAD_V26
             return true;
 #else
-            return Major(typeof(Brep).Assembly) == ExpectedRuntimeMajor;
+            return NativeAssemblyMajorMatches(
+                typeof(Brep).Assembly,
+                ExpectedRuntimeMajor,
+                allowFileVersionFallback: true);
 #endif
         }
+
+        internal static bool CurrentNativeRuntimeMatches() =>
+            NativeRuntimeAssembliesMatch(typeof(Application).Assembly, typeof(Database).Assembly);
+
+        internal static int CurrentNativeRuntimeMajor => ExpectedRuntimeMajor;
+
+        internal static string CurrentNativeRuntimeLabel => ExpectedRuntimeLabel;
+
+        internal static string CurrentNativeBrepIdentity() => NativeBrepVersion();
 
         private static string NativeBrepVersion()
         {
 #if BRICSCAD_V26
             return "not-required";
 #else
-            return VersionText(typeof(Brep).Assembly);
+            var assembly = typeof(Brep).Assembly;
+            var identity = ReadNativeFileIdentity(assembly);
+            return "assembly " + VersionText(assembly) +
+                   "; file " + EmptyAsUnknown(identity.FileVersion) +
+                   "; product " + EmptyAsUnknown(identity.ProductVersion);
 #endif
+        }
+
+        private static bool NativeAssemblyMajorMatches(
+            Assembly assembly,
+            int expectedMajor,
+            bool allowFileVersionFallback)
+        {
+            var assemblyMajor = Major(assembly);
+            if (assemblyMajor > 0)
+                return assemblyMajor == expectedMajor;
+            if (!allowFileVersionFallback)
+                return false;
+
+            var identity = ReadNativeFileIdentity(assembly);
+            var hasFileVersion = !string.IsNullOrWhiteSpace(identity.FileVersion);
+            var hasProductVersion = !string.IsNullOrWhiteSpace(identity.ProductVersion);
+            if (!hasFileVersion && !hasProductVersion)
+                return false;
+
+            int fileMajor;
+            if (hasFileVersion &&
+                (!TryPositiveMajor(identity.FileVersion, out fileMajor) || fileMajor != expectedMajor))
+            {
+                return false;
+            }
+
+            int productMajor;
+            if (hasProductVersion &&
+                (!TryPositiveMajor(identity.ProductVersion, out productMajor) || productMajor != expectedMajor))
+            {
+                return false;
+            }
+
+            return string.IsNullOrWhiteSpace(identity.Error);
+        }
+
+        private static DiskIdentity ReadNativeFileIdentity(Assembly assembly)
+        {
+            try
+            {
+                var path = assembly.Location ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                    return new DiskIdentity();
+
+                var versionInfo = FileVersionInfo.GetVersionInfo(path);
+                return new DiskIdentity
+                {
+                    Exists = true,
+                    ProductVersion = versionInfo.ProductVersion ?? string.Empty,
+                    FileVersion = versionInfo.FileVersion ?? string.Empty
+                };
+            }
+            catch (Exception ex)
+            {
+                return new DiskIdentity { Error = ex.Message };
+            }
+        }
+
+        private static bool TryPositiveMajor(string value, out int major)
+        {
+            major = -1;
+            Version version;
+            if (!Version.TryParse((value ?? string.Empty).Trim(), out version) ||
+                version == null ||
+                version.Major <= 0)
+            {
+                return false;
+            }
+
+            major = version.Major;
+            return true;
         }
 
         private static int Major(Assembly assembly) => assembly.GetName().Version?.Major ?? -1;

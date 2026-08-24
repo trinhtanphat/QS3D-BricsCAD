@@ -36,14 +36,14 @@ namespace QS3D.Core.Coordination
         private static string NormalizeOptionalIdentity(string? value, string parameterName)
         {
             if (value == null) return string.Empty;
-            var normalized = value.Trim();
-            if (normalized.Length == 0) return string.Empty;
-            for (var index = 0; index < normalized.Length; index++)
+            for (var index = 0; index < value.Length; index++)
             {
-                if (char.IsControl(normalized[index]))
+                if (char.IsControl(value[index]))
                     throw new ArgumentException("Duplicate source identity must not contain control characters.", parameterName);
             }
-            return normalized;
+
+            var normalized = value.Trim();
+            return normalized.Length == 0 ? string.Empty : normalized;
         }
     }
 

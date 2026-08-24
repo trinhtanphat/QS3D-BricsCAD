@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
@@ -13,6 +14,7 @@ namespace QS3D.BricsCAD.V25
     public sealed class SemanticTagCommands
     {
         private const double UcsAxisTolerance = 1e-9d;
+        private const int MaxBatchSources = 256;
 
         [CommandMethod("QS3DTAG", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void PlaceSemanticTag()
@@ -49,6 +51,93 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        [CommandMethod("QS3DTAGLEADER", CommandFlags.Modal | CommandFlags.UsePickSet)]
+        public void PlaceSemanticMLeader()
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) return;
+            try
+            {
+                var sourceHandle = AcquireSourceHandle(document, "\nChọn authoritative CAD source của semantic element cần MLeader: ");
+                if (sourceHandle == null) return;
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
+                    throw new InvalidOperationException("Semantic MLeader yêu cầu QS3D project hiện hữu; lệnh không tạo project mới.");
+                var previewElement = ResolveSourceElement(previewProject, sourceHandle);
+                var expectedProjectId = previewProject.ProjectId;
+                var expectedElementId = previewElement.Id;
+
+                var placement = PromptLeaderPlacement(document);
+                if (placement == null) return;
+
+                var project = ExistingProjectMutationContext.Require(document, "Semantic MLeader");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("QS3D project đã thay đổi trong lúc đặt Semantic MLeader. Hãy chạy lại lệnh.");
+                var element = ResolveSourceElement(project, sourceHandle);
+                if (!string.Equals(element.Id, expectedElementId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Semantic source đã đổi owner trong lúc đặt MLeader. Hãy chạy lại lệnh.");
+
+                var handle = SemanticMLeaderBuilder.Build(document, project, element, placement.Value.TargetPoint, placement.Value.TextPoint);
+                FinalizeUi(document, "Semantic Tag: đã tạo/cập nhật MLeader " + handle + " cho " + element.Id + ".");
+            }
+            catch (Exception ex)
+            {
+                Report(document, "QS3DTAGLEADER lỗi: " + ex.Message);
+            }
+        }
+
+        [CommandMethod("QS3DTAGLEADERBATCH", CommandFlags.Modal | CommandFlags.UsePickSet)]
+        public void PlaceSemanticMLeaderBatch()
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) return;
+            try
+            {
+                RequireSupportedUcs(document);
+                var handles = AcquireSourceHandles(document);
+                if (handles.Count == 0) return;
+                if (handles.Count > MaxBatchSources)
+                    throw new InvalidOperationException("Semantic MLeader batch supports at most " + MaxBatchSources + " selected source objects.");
+
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
+                    throw new InvalidOperationException("Semantic MLeader batch yêu cầu QS3D project hiện hữu; lệnh không tạo project mới.");
+                var expectedProjectId = previewProject.ProjectId;
+                var expectedElementIds = handles.Select(handle => ResolveSourceElement(previewProject, handle).Id).ToArray();
+                if (expectedElementIds.Distinct(StringComparer.OrdinalIgnoreCase).Count() != expectedElementIds.Length)
+                    throw new InvalidOperationException("Semantic MLeader batch selection chứa nhiều CAD source cùng map về một semantic element; P0 yêu cầu one authoritative source/element.");
+
+                var project = ExistingProjectMutationContext.Require(document, "Semantic MLeader batch");
+                if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("QS3D project đã thay đổi trong lúc chuẩn bị Semantic MLeader batch. Hãy chạy lại lệnh.");
+
+                var offset = CadGeometryGuard.Positive(
+                    CadGeometryGuard.ToDrawingUnits(document, 0.35d, "semantic MLeader batch offset"),
+                    "semantic MLeader batch offset drawing");
+                var items = new List<SemanticMLeaderBatchItem>(handles.Count);
+                for (var i = 0; i < handles.Count; i++)
+                {
+                    var element = ResolveSourceElement(project, handles[i]);
+                    if (!string.Equals(element.Id, expectedElementIds[i], StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Semantic source ownership changed while preparing batch for handle " + handles[i] + ".");
+                    var target = SemanticMLeaderBuilder.ReadSourceAnchor(document, handles[i]);
+                    var column = i % 4;
+                    var row = i / 4;
+                    var text = new Point3d(
+                        target.X + offset * (1.5d + column * 0.25d),
+                        target.Y + offset * (0.75d + row * 0.35d),
+                        target.Z);
+                    items.Add(new SemanticMLeaderBatchItem(element, target, text));
+                }
+
+                if (!ConfirmBatchReplacement(document, project, items)) return;
+                var generated = SemanticMLeaderBuilder.BuildBatch(document, project, items);
+                FinalizeUi(document, "Semantic Tag: batch đã tạo/cập nhật " + generated.Count + " MLeader artifact(s) atomically.");
+            }
+            catch (Exception ex)
+            {
+                Report(document, "QS3DTAGLEADERBATCH lỗi: " + ex.Message);
+            }
+        }
+
         [CommandMethod("QS3DTAGREFRESH", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void RefreshSemanticTag()
         {
@@ -62,7 +151,19 @@ namespace QS3D.BricsCAD.V25
                 var project = ExistingProjectMutationContext.Require(document, "Semantic Tag refresh");
                 var element = ResolveSourceElement(project, sourceHandle);
                 if (!element.Properties.TryGetValue(GeneratedSemanticTagHealthService.HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw))
-                    throw new InvalidOperationException("Element " + element.Id + " chưa có generated semantic tag. Dùng QS3DTAG để đặt tag trước.");
+                    throw new InvalidOperationException("Element " + element.Id + " chưa có generated semantic tag. Dùng QS3DTAG/QS3DTAGLEADER để đặt tag trước.");
+
+                var kind = Property(element, GeneratedSemanticTagHealthService.ArtifactKindKey);
+                if (string.Equals(kind, GeneratedSemanticTagHealthService.MLeaderArtifactKind, StringComparison.Ordinal))
+                {
+                    var target = SemanticMLeaderBuilder.StoredTargetWorldPosition(element);
+                    var text = SemanticMLeaderBuilder.StoredTextWorldPosition(element);
+                    var leaderHandle = SemanticMLeaderBuilder.Build(document, project, element, target, text);
+                    FinalizeUi(document, "Semantic Tag: đã refresh MLeader " + leaderHandle + " cho " + element.Id + " từ associative metadata.");
+                    return;
+                }
+                if (kind.Length > 0 && !string.Equals(kind, GeneratedSemanticTagHealthService.MTextArtifactKind, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Unsupported GeneratedSemanticTagArtifactKind: " + kind + ".");
 
                 var position = SemanticTagBuilder.StoredWorldPosition(element);
                 var rotation = SemanticTagBuilder.StoredRotation(element);
@@ -72,6 +173,33 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex)
             {
                 Report(document, "QS3DTAGREFRESH lỗi: " + ex.Message);
+            }
+        }
+
+        [CommandMethod("QS3DTAGLEADERREFRESH", CommandFlags.Modal | CommandFlags.UsePickSet)]
+        public void RefreshSemanticMLeader()
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) return;
+            try
+            {
+                var sourceHandle = AcquireSourceHandle(document, "\nChọn authoritative CAD source của semantic MLeader cần refresh: ");
+                if (sourceHandle == null) return;
+                var project = ExistingProjectMutationContext.Require(document, "Semantic MLeader refresh");
+                var element = ResolveSourceElement(project, sourceHandle);
+                if (!string.Equals(Property(element, GeneratedSemanticTagHealthService.ArtifactKindKey), GeneratedSemanticTagHealthService.MLeaderArtifactKind, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Element " + element.Id + " chưa có source-ready semantic MLeader metadata.");
+                var handle = SemanticMLeaderBuilder.Build(
+                    document,
+                    project,
+                    element,
+                    SemanticMLeaderBuilder.StoredTargetWorldPosition(element),
+                    SemanticMLeaderBuilder.StoredTextWorldPosition(element));
+                FinalizeUi(document, "Semantic Tag: đã refresh MLeader " + handle + " cho " + element.Id + ".");
+            }
+            catch (Exception ex)
+            {
+                Report(document, "QS3DTAGLEADERREFRESH lỗi: " + ex.Message);
             }
         }
 
@@ -89,6 +217,34 @@ namespace QS3D.BricsCAD.V25
             }
 
             return PromptEntityHandle(document, message);
+        }
+
+        private static IReadOnlyList<string> AcquireSourceHandles(Document document)
+        {
+            var implied = EntitySnapshotReader.ReadCurrentSelection(document);
+            IEnumerable<string> rawHandles;
+            if (implied.Count > 0)
+            {
+                rawHandles = implied.Select(x => x.Handle ?? string.Empty);
+            }
+            else
+            {
+                var selection = document.Editor.GetSelection();
+                if (selection.Status != PromptStatus.OK || selection.Value == null) return Array.Empty<string>();
+                rawHandles = selection.Value.GetObjectIds().Select(x => x.Handle.ToString());
+            }
+
+            var handles = rawHandles
+                .Select(x => (x ?? string.Empty).Trim())
+                .Where(x => x.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x, StringComparer.Ordinal)
+                .Take(MaxBatchSources + 1)
+                .ToArray();
+            if (handles.Length > MaxBatchSources)
+                throw new InvalidOperationException("Semantic MLeader batch selection exceeds " + MaxBatchSources + " unique source handles.");
+            return handles;
         }
 
         private static string? PromptEntityHandle(Document document, string message)
@@ -133,6 +289,35 @@ namespace QS3D.BricsCAD.V25
             return new TagPlacement(world, rotation);
         }
 
+        private static LeaderPlacement? PromptLeaderPlacement(Document document)
+        {
+            RequireSupportedUcs(document);
+            var targetResult = document.Editor.GetPoint("\nChọn điểm mũi tên MLeader trên authoritative source: ");
+            if (targetResult.Status != PromptStatus.OK) return null;
+            var target = targetResult.Value.TransformBy(document.Editor.CurrentUserCoordinateSystem);
+
+            var options = new PromptPointOptions("\nChọn vị trí text MLeader: ") { BasePoint = targetResult.Value, UseBasePoint = true };
+            var textResult = document.Editor.GetPoint(options);
+            if (textResult.Status != PromptStatus.OK) return null;
+            var text = textResult.Value.TransformBy(document.Editor.CurrentUserCoordinateSystem);
+            return new LeaderPlacement(target, text);
+        }
+
+        private static bool ConfirmBatchReplacement(Document document, ProjectState project, IReadOnlyList<SemanticMLeaderBatchItem> items)
+        {
+            var replacements = items.Count(x => x.Element.Properties.TryGetValue(GeneratedSemanticTagHealthService.HandlesKey, out var raw) && !string.IsNullOrWhiteSpace(raw));
+            if (replacements == 0) return true;
+            var options = new PromptKeywordOptions("\nBatch sẽ replace " + replacements + " generated semantic tag(s) sau khi validate ownership. Tiếp tục?")
+            {
+                AllowNone = false
+            };
+            options.Keywords.Add("Yes");
+            options.Keywords.Add("No");
+            options.Keywords.Default = "No";
+            var result = document.Editor.GetKeywords(options);
+            return result.Status == PromptStatus.OK && string.Equals(result.StringResult, "Yes", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static void RequireSupportedUcs(Document document)
         {
             var coordinateSystem = document.Editor.CurrentUserCoordinateSystem.CoordinateSystem3d;
@@ -146,6 +331,9 @@ namespace QS3D.BricsCAD.V25
             if (Math.Abs(x) > UcsAxisTolerance || Math.Abs(y) > UcsAxisTolerance || Math.Abs(z - 1d) > UcsAxisTolerance)
                 throw new InvalidOperationException("Semantic Tag P0 chỉ hỗ trợ UCS có mặt phẳng XY song song WCS XY. UCS nghiêng/3D chưa được hỗ trợ.");
         }
+
+        private static string Property(ProjectElement element, string key) =>
+            element.Properties.TryGetValue(key, out var raw) ? (raw ?? string.Empty).Trim() : string.Empty;
 
         private static void FinalizeUi(Document document, string message)
         {
@@ -183,6 +371,18 @@ namespace QS3D.BricsCAD.V25
 
             public Point3d Position { get; }
             public double RotationRadians { get; }
+        }
+
+        private readonly struct LeaderPlacement
+        {
+            public LeaderPlacement(Point3d targetPoint, Point3d textPoint)
+            {
+                TargetPoint = targetPoint;
+                TextPoint = textPoint;
+            }
+
+            public Point3d TargetPoint { get; }
+            public Point3d TextPoint { get; }
         }
     }
 }

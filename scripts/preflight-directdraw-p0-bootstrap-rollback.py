@@ -35,7 +35,7 @@ def main():
     text = SOURCE.read_text(encoding="utf-8")
     execute = method_slice(
         text,
-        "private static void ExecuteDirect(",
+        "internal static DirectDrawCommitResult ExecuteDirect(",
         "private static int BuildSelected(")
 
     require_order(

@@ -61,13 +61,19 @@ def main():
 
     require(runtime, "#if !BRICSCAD_V26\nusing Teigha.BoundaryRepresentation;\n#endif", "V25-only BREP compile guard", failures)
     require(runtime, "var expectedRuntime = NativeRuntimeAssembliesMatch(brxAssembly, tdAssembly);", "complete native runtime verdict", failures)
-    require(runtime, "return Major(typeof(Brep).Assembly) == ExpectedRuntimeMajor;", "BREP runtime-major check", failures)
-    require(runtime, "return VersionText(typeof(Brep).Assembly);", "BREP version diagnostics", failures)
+    require(runtime, "return NativeAssemblyMajorMatches(", "BREP runtime-major helper", failures)
+    require(runtime, "allowFileVersionFallback: true", "BREP file-version fallback opt-in", failures)
+    require(runtime, "if (assemblyMajor > 0)", "BREP assembly-major precedence", failures)
+    require(runtime, "return assemblyMajor == expectedMajor;", "BREP nonzero assembly-major strictness", failures)
+    require(runtime, "TryPositiveMajor(identity.FileVersion", "BREP file-version major check", failures)
+    require(runtime, "TryPositiveMajor(identity.ProductVersion", "BREP product-version major check", failures)
+    require(runtime, '"assembly " + VersionText(assembly)', "BREP assembly diagnostics", failures)
+    require(runtime, '"; file " + EmptyAsUnknown(identity.FileVersion)', "BREP file diagnostics", failures)
     require(runtime, "TD_MgdBrep version:", "BREP runtime output", failures)
     require(runtime, "complete native dependency set", "runtime PASS contract", failures)
     require(v26_project, "<DefineConstants>$(DefineConstants);BRICSCAD_V26</DefineConstants>", "V26 shared-source compile symbol", failures)
-    if "<Reference Include=\"TD_MgdBrep\"" in v26_project:
-        failures.append("V26 project unexpectedly acquired a V25-only TD_MgdBrep compile reference")
+    require(v26_project, '<Reference Include="TD_MgdBrep">', "V26 BREP host reference", failures)
+    require(v26_project, "$(BRICSCAD_V26_DIR)\\TD_MgdBrep.dll", "V26 BREP host path", failures)
 
     if failures:
         print("V25 host lifecycle/native readiness preflight FAILED")
@@ -75,7 +81,7 @@ def main():
             print(" -", failure)
         return 1
 
-    print("PASS: V25 host lifecycle teardown is contained and native runtime readiness includes guarded BREP identity.")
+    print("PASS: V25 host lifecycle teardown is contained, native runtime readiness includes guarded BREP identity, and shared V26 quantity code resolves the V26 BREP host assembly.")
     return 0
 
 

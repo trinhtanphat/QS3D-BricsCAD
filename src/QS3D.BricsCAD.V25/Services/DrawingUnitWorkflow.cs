@@ -15,6 +15,7 @@ namespace QS3D.BricsCAD.V25.Services
             var readOnlyExportPreparation = string.Equals(operation, "QS3DED2", StringComparison.OrdinalIgnoreCase);
             var readOnlyBqPreparation = string.Equals(operation, "QS3DBQ", StringComparison.OrdinalIgnoreCase);
             var readOnlyQuantityPreparation = readOnlyExportPreparation || readOnlyBqPreparation;
+            var readOnlyReviewPreparation = string.Equals(operation, "QS3DREVIEWEXPORT", StringComparison.OrdinalIgnoreCase);
 
             if (readOnlyBqPreparation && !ProjectContextCoordinator.TryGetReadOnly(document, out _))
             {
@@ -24,13 +25,22 @@ namespace QS3D.BricsCAD.V25.Services
 
             if (CadUnitService.TryGetPolicy(document, out _, out var resolution))
             {
-                // ED2 preparation must remain mutation-free until the user confirms an export path.
+                // ED2 and Review preparation must remain mutation-free. The Review command
+                // additionally rechecks the existing project after the user chooses a path.
                 // BQ is different: it already requires an existing QS3D project, so a compatible
                 // legacy effective-unit assumption can be migrated to the canonical quantity binding
                 // without creating a project, prompting for a unit, or changing live INSUNITS.
+                if (readOnlyReviewPreparation)
+                    return true;
                 if (!readOnlyExportPreparation)
                     PersistLegacyBindingIfNeeded(document, resolution);
                 return true;
+            }
+
+            if (readOnlyReviewPreparation)
+            {
+                document.Editor.WriteMessage("\nQS3DREVIEWEXPORT: drawing unit is undefined/unsupported. Run QS3DUNITS first; Review export preparation does not create or persist project/unit state.");
+                return false;
             }
 
             if (readOnlyQuantityPreparation)

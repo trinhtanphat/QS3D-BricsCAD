@@ -1,19 +1,20 @@
 # QS3D Direct Draw — Active Family Quick / Advanced Draw
 
-Updated: 2026-08-11 (UTC+7)
+Updated: 2026-08-23 (UTC+7)
 
 ## Goal
 
 Reduce command-switching overhead after the modeler has already chosen the working **Family / Type**.
 
-QS3D now exposes two stable entry points:
+QS3D now exposes three stable entry points:
 
 ```text
 QS3DDRAWACTIVE      = normal Quick path
 QS3DDRAWACTIVEADV   = one-off Advanced/custom path
+QS3DDRAWACTIVEREPEAT = production repeated Wall/Beam path
 ```
 
-The Quick Workflow Ribbon keeps **Vẽ Nhanh** as the primary action. Advanced stays secondary so the Ribbon is not filled with duplicate buttons.
+The Quick Workflow Ribbon keeps **Vẽ Nhanh** as the primary action and exposes **Vẽ Liên tục** for the high-frequency Wall/Beam path. Advanced stays secondary.
 
 The expected high-frequency loop becomes:
 
@@ -29,14 +30,15 @@ This is complementary to the existing per-category commands. It does not remove 
 
 ## Workspace gestures
 
-The Family / Type list exposes both stable entry points without forcing the modeler to move back to the Ribbon:
+The Family / Type list exposes all three stable entry points without forcing the modeler to move back to the Ribbon:
 
 - **double-click a Family / Type** → make that row authoritative as the active Family and launch `QS3DDRAWACTIVE`;
 - **Ctrl+D** while the Workspace has keyboard focus → launch Quick for the selected Family;
+- **Ctrl+Alt+D** → launch production repeated DrawJig authoring for a selected ArchitecturalWall/Beam Family;
 - **Ctrl+Shift+D** → launch the matching Advanced/custom path for the selected Family;
-- Family context menu → **Vẽ Nhanh (Ctrl+D)** or **Vẽ tùy chỉnh (Ctrl+Shift+D)**.
+- Family context menu → **Vẽ Nhanh (Ctrl+D)**, **Vẽ liên tục (Ctrl+Alt+D)**, or **Vẽ tùy chỉnh (Ctrl+Shift+D)**.
 
-These gestures reuse the same `WorkspaceViewModel.SetActiveFamily(...)` write already used by other Workspace authoring actions, then send one of the two active-family dispatcher commands. They do not duplicate per-category dispatch rules inside the Workspace.
+These gestures reuse the same `WorkspaceViewModel.SetActiveFamily(...)` write already used by other Workspace authoring actions, then send one of the three active-family dispatcher commands. They do not duplicate per-category dispatch rules inside the Workspace.
 
 The interaction intent is:
 
@@ -51,20 +53,20 @@ instead of repeatedly moving between the Family palette and different Ribbon/com
 
 ## Dispatch contract
 
-Both active-family commands read the existing active Family through `ProjectFamilyActivationService` and delegate to the already-guarded Direct Draw command for that category:
+All active-family commands read the existing active Family through `ProjectFamilyActivationService` and delegate to the already-guarded Direct Draw command for that category:
 
-| Active Family category | `QS3DDRAWACTIVE` | `QS3DDRAWACTIVEADV` |
-|---|---|---|
-| ArchitecturalWall | Quick Wall | `QS3DDRAWWALLADV` behavior |
-| Beam | Quick Beam | `QS3DDRAWBEAMADV` behavior |
-| Column | Quick Column | `QS3DDRAWCOLUMNADV` behavior |
-| Slab | Quick Slab | `QS3DDRAWSLABADV` behavior |
-| GlassWall | Quick GlassWall | `QS3DDRAWGLASSWALLADV` behavior |
-| WallPier | Quick WallPier | `QS3DDRAWWALLPIERADV` behavior |
-| StructuralWall | Quick StructuralWall | `QS3DDRAWSTRUCTWALLADV` behavior |
-| Foundation | Quick Foundation | `QS3DDRAWFOUNDATIONADV` behavior |
-| Door | Quick Door | `QS3DDRAWDOORADV` behavior |
-| WallOpening | Quick WallOpening / Window | `QS3DDRAWOPENINGADV` / `QS3DDRAWWINDOWADV` behavior |
+| Active Family category | `QS3DDRAWACTIVE` | `QS3DDRAWACTIVEADV` | `QS3DDRAWACTIVEREPEAT` |
+|---|---|---|---|
+| ArchitecturalWall | Quick Wall | `QS3DDRAWWALLADV` behavior | `QS3DDRAWWALLREPEAT` behavior |
+| Beam | Quick Beam | `QS3DDRAWBEAMADV` behavior | `QS3DDRAWBEAMREPEAT` behavior |
+| Column | Quick Column | `QS3DDRAWCOLUMNADV` behavior | fail closed |
+| Slab | Quick Slab | `QS3DDRAWSLABADV` behavior | fail closed |
+| GlassWall | Quick GlassWall | `QS3DDRAWGLASSWALLADV` behavior | fail closed |
+| WallPier | Quick WallPier | `QS3DDRAWWALLPIERADV` behavior | fail closed |
+| StructuralWall | Quick StructuralWall | `QS3DDRAWSTRUCTWALLADV` behavior | fail closed |
+| Foundation | Quick Foundation | `QS3DDRAWFOUNDATIONADV` behavior | fail closed |
+| Door | Quick Door | `QS3DDRAWDOORADV` behavior | fail closed |
+| WallOpening | Quick WallOpening / Window | `QS3DDRAWOPENINGADV` / `QS3DDRAWWINDOWADV` behavior | fail closed |
 
 For `WallOpening`, Window remains the canonical WallOpening semantic category. Both dispatchers resolve Window deterministically as follows:
 
@@ -80,7 +82,7 @@ The dispatcher is intentionally read-only, but a cold-cache `TryGetReadOnly(...)
 
 Immediately after the first read, the dispatcher freezes the routing inputs as **immutable scalar values**: `ProjectId`, `ChangeVersion`, active Family ID, category, and the WallOpening-vs-Window routing bit. This is important even when the first read returns the canonical cached `ProjectState`: later semantic edits mutate that same object in place, so keeping a `ProjectState`/`ProjectFamily` reference as the supposed “before” snapshot would let both sides observe the new value and could hide a real change.
 
-Immediately before delegation, `QS3DDRAWACTIVE` and `QS3DDRAWACTIVEADV` re-read the project through the non-creating path and fail closed unless all frozen routing inputs are still authoritative:
+Immediately before delegation, all three active-family entry points re-read the project through the non-creating path and fail closed unless all frozen routing inputs are still authoritative:
 
 - the same DWG remains active;
 - the same `ProjectId` is visible;
@@ -89,7 +91,7 @@ Immediately before delegation, `QS3DDRAWACTIVE` and `QS3DDRAWACTIVEADV` re-read 
 - the Family category is unchanged;
 - for canonical `WallOpening`, the Window-vs-opening routing signal is unchanged.
 
-Only the revalidated live Family snapshot is passed to the category switch. If any check fails, no target Direct Draw command is invoked; the user is told to refresh/re-run instead of dispatching from stale Family state.
+Only the revalidated live Family snapshot is passed to the category switch. Repeated Wall/Beam authoring additionally revalidates the same project and active Family ID before every DrawJig segment, while recapturing the current `ChangeVersion` after each successful segment. If any check fails, no next segment is committed.
 
 This is a **dispatch freshness** guard only. It does not replace the target command's own project/source/UCS/unit/ownership/rollback checks.
 
@@ -113,19 +115,20 @@ The Workspace gesture layer intentionally calls the existing canonical `SetActiv
 
 The active-family dispatcher contains no source geometry builder, no semantic capture implementation, no regeneration engine and no native builder. It only selects the already-supported Quick or Advanced method from the current active Family category.
 
-The Workspace gesture layer likewise contains no category switch. It only sets the selected Family active and sends `QS3DDRAWACTIVE` or `QS3DDRAWACTIVEADV`.
+The Workspace gesture layer likewise contains no geometry/ownership implementation. It only sets the selected Family active and sends `QS3DDRAWACTIVE`, `QS3DDRAWACTIVEADV`, or `QS3DDRAWACTIVEREPEAT`; the repeated command itself refuses unsupported categories.
 
 This keeps the product direction simple:
 
 ```text
 Family / Type = what you are drawing
 Vẽ Nhanh = normal object
+Vẽ Liên tục = successive Wall/Beam segments with DrawJig preview
 Vẽ tùy chỉnh = one-off exception
 ```
 
 ## Runtime qualification boundary
 
-Source/static implementation is REMOTE_DONE. Exact BricsCAD V25 interaction remains part of the existing `LOCAL-008` Direct Draw qualification boundary.
+Source/static implementation is REMOTE_DONE. The bounded repeated Wall/Beam editor lifecycle is `LOCAL_PASS` at exact runtime source candidate SHA `9a77d329e90809a2006d8e4dc1bafc995c0a8ca2` on BricsCAD V25.2.10 and V26.2.07, including independent Wall/Beam sequences and positive hosted `DrawJig.WorldDraw` observation; the remaining active-Family dispatch, quick/advanced prompt, Auto Host/reference and UI matrix stays inside `LOCAL-008`.
 
 Local proof should include:
 
@@ -143,6 +146,6 @@ Local proof should include:
 12. hold the dispatcher between its first read and delegation, then reload/replace the project, mutate the same cached project/Family in place, change active Family, switch Window/opening routing metadata, or change active DWG: it must refuse before invoking a target command;
 13. repeated load/unload of the modeless Workspace does not accumulate duplicate key, double-click, or context-menu handlers.
 
-Transient DrawJig preview, true continuous/repeated authoring and native editor lifecycle remain LOCAL_ONLY under `LOCAL-008`; these dispatchers/gestures do not claim those runtime behaviors are complete.
+Production repeated Wall/Beam source is implemented through `QS3DDRAWWALLREPEAT` / `QS3DDRAWBEAMREPEAT`: transient DrawJig preview remains database-free and accepted segments reuse canonical Direct Draw ownership. Exact licensed runs on runtime source candidate SHA `9a77d329e90809a2006d8e4dc1bafc995c0a8ca2` independently accepted two Wall and two Beam segments, with eight hosted `DrawJig.WorldDraw` callbacks observed per Family. Enter and physical ESC preserved accepted work; planar UCS, active-document switch refusal/isolation, whole-command native/semantic Undo/Redo, save/sidecar persistence and fresh-process Wall/Beam cold reopen passed on both V25 and V26. That bounded P03 evidence does not promote the rest of `LOCAL-008` or parent #74 to complete.
 
 GitHub Actions remain manual-only under `CI_POLICY.md`; this source/docs batch does not authorize workflow dispatch.

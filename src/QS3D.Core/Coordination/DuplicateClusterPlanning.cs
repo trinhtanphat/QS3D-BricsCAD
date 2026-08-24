@@ -181,18 +181,19 @@ namespace QS3D.Core.Coordination
 
         private static string Required(string value, string parameterName)
         {
-            var normalized = (value ?? string.Empty).Trim();
+            var raw = value ?? string.Empty;
+            RejectControlCharacters(raw, parameterName);
+            var normalized = raw.Trim();
             if (normalized.Length == 0) throw new ArgumentException("Value is required.", parameterName);
-            RejectControlCharacters(normalized, parameterName);
             return normalized;
         }
 
         private static string Optional(string? value, string parameterName)
         {
             if (value == null) return string.Empty;
+            RejectControlCharacters(value, parameterName);
             var normalized = value.Trim();
             if (normalized.Length == 0) return string.Empty;
-            RejectControlCharacters(normalized, parameterName);
             return normalized;
         }
 
@@ -372,10 +373,9 @@ namespace QS3D.Core.Coordination
         private static string NormalizePreferred(string? value)
         {
             if (value == null) return string.Empty;
-            var normalized = value.Trim();
-            if (normalized.Any(char.IsControl))
+            if (value.Any(char.IsControl))
                 throw new ArgumentException("Preferred representative contains control characters.", nameof(value));
-            return normalized;
+            return value.Trim();
         }
 
         private static DuplicateRemediationPlan Blocked(

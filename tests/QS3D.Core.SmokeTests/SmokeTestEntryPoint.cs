@@ -13,12 +13,20 @@ namespace QS3D.Core.SmokeTests
                 AddCreateStateMachineSmoke.Run();
                 FeatureNavigationRegistrySmoke.Run();
                 WorkspaceModalPrimitivesSmoke.Run();
+                PolygonScanlineOrientationSmoke.Run();
+                PolygonSourceLoopRegionAssemblerSmoke.Run();
                 BltLegacyAdapterSmoke.Run();
                 QuantityEvidenceGraphSmoke.Run();
                 QsCustomerWorkbookDgklLayoutSmoke.Run();
                 CoordinationIssuePersistenceSmoke.Run();
                 CoordinationIssueExcelLifecycleSmoke.Run();
                 CoordinationIssueExcelWorkbookSmoke.Run();
+                CoordinationDirtyBatchAtomicitySmoke.Run();
+                WallJunctionSnapPreviewRevisionSmoke.Run();
+                ProjectElementKeyControlSmoke.Run();
+                ProjectMeasurementWorkItemMappingIdentitySmoke.Run();
+                WallFormworkContactSmoke.Run();
+                CommercialSubtractionPrecisionSmoke.Run();
 
                 var legacyMain = typeof(Program).GetMethod(
                     "Main",

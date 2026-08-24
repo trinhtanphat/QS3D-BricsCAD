@@ -37,12 +37,95 @@ function Require-Qs3dMarkerValue {
     }
 }
 
+function Assert-Qs3dV26InstalledDesktopRuntime {
+    param([AllowNull()][string]$ExpectedRuntimeVersion)
+
+    $programFiles = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)
+    if ([string]::IsNullOrWhiteSpace($programFiles)) {
+        throw "BricsCAD V26 managed bridge requires the system-installed x64 .NET 8 Windows Desktop Runtime; DOTNET_ROOT alone is insufficient."
+    }
+
+    $installedRoot = Join-Path $programFiles "dotnet"
+    $coreRoot = Join-Path $installedRoot "shared\Microsoft.NETCore.App"
+    $desktopRoot = Join-Path $installedRoot "shared\Microsoft.WindowsDesktop.App"
+    $installedCore8 = @()
+    $installedDesktop8 = @()
+    if (Test-Path -LiteralPath $coreRoot -PathType Container) {
+        $installedCore8 = @(Get-ChildItem -LiteralPath $coreRoot -Directory -ErrorAction Stop | Where-Object {
+            $_.Name -match '^8\.' -and (Test-Path -LiteralPath (Join-Path $_.FullName "coreclr.dll") -PathType Leaf)
+        })
+    }
+    if (Test-Path -LiteralPath $desktopRoot -PathType Container) {
+        $installedDesktop8 = @(Get-ChildItem -LiteralPath $desktopRoot -Directory -ErrorAction Stop | Where-Object {
+            $_.Name -match '^8\.' -and
+            (Test-Path -LiteralPath (Join-Path $_.FullName "WindowsBase.dll") -PathType Leaf) -and
+            (Test-Path -LiteralPath (Join-Path $_.FullName "System.Windows.Forms.dll") -PathType Leaf)
+        })
+    }
+
+    $matchingVersions = @($installedCore8 | Where-Object {
+        $coreVersion = $_.Name
+        $installedDesktop8.Name -contains $coreVersion
+    })
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedRuntimeVersion)) {
+        $matchingVersions = @($matchingVersions | Where-Object { $_.Name -eq $ExpectedRuntimeVersion })
+    }
+    if ($matchingVersions.Count -eq 0) {
+        $expectedLabel = if ([string]::IsNullOrWhiteSpace($ExpectedRuntimeVersion)) { "an x64 8.x patch" } else { "x64 $ExpectedRuntimeVersion" }
+        throw "BricsCAD V26 managed bridge requires the system-installed .NET 8 Windows Desktop Runtime ($expectedLabel) under '$installedRoot'; DOTNET_ROOT alone is insufficient."
+    }
+}
+
+function Assert-Qs3dV26DotNetRoot {
+    $configured = [Environment]::GetEnvironmentVariable("DOTNET_ROOT", "Process")
+    if ([string]::IsNullOrWhiteSpace($configured)) {
+        Assert-Qs3dV26InstalledDesktopRuntime
+        return
+    }
+    try { $root = [IO.Path]::GetFullPath($configured.Trim()) }
+    catch { throw "DOTNET_ROOT is set but is not a valid absolute directory." }
+
+    $dotnet = Join-Path $root "dotnet.exe"
+    $fxrRoot = Join-Path $root "host\fxr"
+    $runtimeRoot = Join-Path $root "shared\Microsoft.NETCore.App"
+    $desktopRoot = Join-Path $root "shared\Microsoft.WindowsDesktop.App"
+    if (-not (Test-Path -LiteralPath $root -PathType Container) -or
+        -not (Test-Path -LiteralPath $dotnet -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $fxrRoot -PathType Container) -or
+        -not (Test-Path -LiteralPath $runtimeRoot -PathType Container) -or
+        -not (Test-Path -LiteralPath $desktopRoot -PathType Container)) {
+        throw "DOTNET_ROOT is set but does not contain a complete .NET 8 WindowsDesktop host/runtime."
+    }
+
+    $fxr8 = @(Get-ChildItem -LiteralPath $fxrRoot -Directory -ErrorAction Stop | Where-Object {
+        $_.Name -match '^8\.' -and (Test-Path -LiteralPath (Join-Path $_.FullName "hostfxr.dll") -PathType Leaf)
+    })
+    $runtime8 = @(Get-ChildItem -LiteralPath $runtimeRoot -Directory -ErrorAction Stop | Where-Object {
+        $_.Name -match '^8\.' -and (Test-Path -LiteralPath (Join-Path $_.FullName "coreclr.dll") -PathType Leaf)
+    })
+    $desktop8 = @(Get-ChildItem -LiteralPath $desktopRoot -Directory -ErrorAction Stop | Where-Object {
+        $_.Name -match '^8\.' -and
+        (Test-Path -LiteralPath (Join-Path $_.FullName "WindowsBase.dll") -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $_.FullName "System.Windows.Forms.dll") -PathType Leaf)
+    })
+    if ($fxr8.Count -eq 0 -or $runtime8.Count -eq 0 -or $desktop8.Count -eq 0) {
+        throw "DOTNET_ROOT is set but does not contain a complete .NET 8 WindowsDesktop host/runtime."
+    }
+
+    $selectedRuntime = $runtime8 | Sort-Object { [Version]$_.Name } -Descending | Select-Object -First 1
+    if ($desktop8.Name -notcontains $selectedRuntime.Name) {
+        throw "DOTNET_ROOT is set but its latest .NETCore and WindowsDesktop 8.x patch versions do not match."
+    }
+    Assert-Qs3dV26InstalledDesktopRuntime -ExpectedRuntimeVersion $selectedRuntime.Name
+}
+
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     throw "BricsCAD V26 runtime qualification requires Windows."
 }
 if (-not [Environment]::UserInteractive) {
     throw "BricsCAD V26 runtime qualification requires an interactive Windows session."
 }
+Assert-Qs3dV26DotNetRoot
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($ArtifactDir)) {
@@ -122,6 +205,9 @@ try {
     Require-Qs3dMarkerValue -Marker $marker -Key "command" -Expected "QS3DRUNTIMEPROBE"
     Require-Qs3dMarkerValue -Marker $marker -Key "process" -Expected "bricscad"
     Require-Qs3dMarkerValue -Marker $marker -Key "is_64bit" -Expected "true"
+    Require-Qs3dMarkerValue -Marker $marker -Key "native_runtime_major" -Expected "26"
+    Require-Qs3dMarkerValue -Marker $marker -Key "native_runtime_label" -Expected "V26"
+    Require-Qs3dMarkerValue -Marker $marker -Key "native_runtime_matches" -Expected "true"
     Require-Qs3dMarkerValue -Marker $marker -Key "ribbon_ready" -Expected "true"
     Require-Qs3dMarkerValue -Marker $marker -Key "palette_visible" -Expected "true"
     Require-Qs3dMarkerValue -Marker $marker -Key "workspace_palette_visible" -Expected "true"
@@ -142,6 +228,9 @@ try {
         completed_at = [DateTime]::UtcNow.ToString("O")
         plugin_sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $PluginDll).Hash
         load_mode = if ($DemandLoadOnly) { "DemandLoad" } else { "NETLOAD" }
+        native_runtime_major = 26
+        native_runtime_label = "V26"
+        native_runtime_matches = $true
         ribbon_ready = $true
         palette_visible = $true
         workspace_palette_visible = $true

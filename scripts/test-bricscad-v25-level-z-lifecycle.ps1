@@ -199,15 +199,9 @@ $gitStatus = @(& $git.Source -C $repoRoot status --porcelain=v1 --untracked-file
 $gitStatusExitCode = $LASTEXITCODE
 if ($gitStatusExitCode -ne 0) { throw "Cannot inspect the Level lifecycle worktree." }
 if ($gitStatus.Count -ne 0) { throw "Level lifecycle qualification requires a clean committed worktree." }
-$expectedAssemblyRevision = "+" + $ExpectedSourceSha
-foreach ($assemblyPath in @($PluginDll, $coreDll)) {
-    $productVersion = [string](Get-Item -LiteralPath $assemblyPath).VersionInfo.ProductVersion
-    if (-not $productVersion.EndsWith($expectedAssemblyRevision, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Level lifecycle assembly was not built from ExpectedSourceSha."
-    }
-}
-if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
-    throw "Close all BricsCAD processes before isolated Level lifecycle qualification."
+Assert-Qs3dExactSourceIdentity -RepoRoot $repoRoot -PluginDll $PluginDll -ExpectedSourceSha $ExpectedSourceSha
+if (@(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe).Count -gt 0) {
+    throw "Close all BricsCAD V25 processes before isolated Level lifecycle qualification."
 }
 
 $projectSidecar = [IO.Path]::ChangeExtension($DrawingCopy, ".qsdb")
@@ -490,8 +484,8 @@ finally {
             catch { if ($null -eq $cleanupError) { $cleanupError = $_ } }
         }
         try {
-            if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
-                throw "Level lifecycle cleanup left a BricsCAD process."
+            if (-not (Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30)) {
+                throw "Level lifecycle cleanup left a BricsCAD V25 process."
             }
             $processCleanupVerified = $true
         }

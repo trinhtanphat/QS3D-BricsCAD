@@ -331,8 +331,16 @@ namespace QS3D.Core.Diagnostics
         private static void ValidateDependencies(DiagnosticIdentityIndex identity, ProjectElement element, ICollection<ModelHealthIssue> issues)
         {
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var dependencyId in element.DependsOn.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()))
+            foreach (var rawDependencyId in element.DependsOn.Where(x => !string.IsNullOrWhiteSpace(x)))
             {
+                var dependencyId = rawDependencyId.Trim();
+                if (!string.Equals(rawDependencyId, dependencyId, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue(
+                        "DEPENDENCY_REFERENCE_NON_CANONICAL",
+                        HealthSeverity.Error,
+                        "DependsOn phải dùng semantic ID canonical, không có khoảng trắng đầu/cuối: " + dependencyId + ".",
+                        element.Id));
+
                 if (!seen.Add(dependencyId))
                 {
                     issues.Add(new ModelHealthIssue("DUPLICATE_DEPENDENCY", HealthSeverity.Warning, "Quan hệ phụ thuộc bị lặp: " + dependencyId, element.Id));

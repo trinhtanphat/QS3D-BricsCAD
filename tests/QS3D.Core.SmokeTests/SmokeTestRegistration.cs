@@ -36,7 +36,9 @@ namespace QS3D.Core.SmokeTests
             XlsxHandleReaderCoordinateSmoke.Run();
             XlsxExporterRowBoundSmoke.Run();
             QuantityExportEvidenceSmoke.Run();
+            QuantityMeasurementTraceSmoke.Run();
             CustomerWorkbookTraceSmoke.Run();
+            QsWorkbookTemplateEngineSmoke.Run();
             P0UnifiedExportAcceptanceSmoke.Run();
             QuantityReportRevisionReviewSmoke.Run();
             QuantityRevisionProjectIdentitySmoke.Run();
@@ -82,6 +84,7 @@ namespace QS3D.Core.SmokeTests
             RebarCuttingOptimizerSmoke.Run();
             WallJunctionRegressionSmoke.Run();
             WallJunctionAdjustmentSmoke.Run();
+            WallJunctionSnapPromptDriftSourceGuardSmoke.Run();
             PolylineOpeningCutSmoke.Run();
             OpeningCutPlannerClearancePrecisionSmoke.Run();
             SlabOpeningCutPlannerSpanPrecisionSmoke.Run();
@@ -100,6 +103,7 @@ namespace QS3D.Core.SmokeTests
             CurtainPathFrameKnownCountContractSmoke.Run();
             CurtainFrameOpeningHealthSmoke.Run();
             BomReleaseGuardSmoke.Run();
+            BomNegativeQuantityReleaseGuardSmoke.Run();
             HealthSummaryReadinessSmoke.Run();
             DependencyHealthMissingTargetSmoke.Run();
             DependencyHealthBlankTargetSmoke.Run();
@@ -192,6 +196,8 @@ namespace QS3D.Core.SmokeTests
             ProjectPersistenceLifecycleSmoke.Run();
             ProjectSidecarRevisionStampSmoke.Run();
             QsdbCanonicalPersistenceSmoke.Run();
+            QsdbCanonicalLoadIdentitySmoke.Run();
+            RepositorySyntheticQsdbSmoke.Run();
             QsdbFamilyCategoryReferenceSmoke.Run();
             QsdbTimestampValidationSmoke.Run();
             QsdbActiveContextReferentialIntegritySmoke.Run();

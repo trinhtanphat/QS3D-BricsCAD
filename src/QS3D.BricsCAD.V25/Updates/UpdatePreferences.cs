@@ -5,7 +5,11 @@ namespace QS3D.BricsCAD.V25.Updates
 {
     internal static class UpdatePreferences
     {
+#if BRICSCAD_V26
+        private const string RegistryPath = @"Software\QS3D\BricsCAD-V26\Updates";
+#else
         private const string RegistryPath = @"Software\QS3D\BricsCAD-V25\Updates";
+#endif
         private const string InstallOnExitValue = "InstallOnExit";
 
         internal static bool InstallOnExit => ReadBoolean(InstallOnExitValue, false);

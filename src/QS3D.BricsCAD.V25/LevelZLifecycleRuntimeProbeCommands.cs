@@ -547,13 +547,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void RequireAssemblyRevision(Assembly assembly, string sourceSha, string label)
         {
-            var version = assembly
-                .GetCustomAttributes(typeof(AssemblyInformationalVersionAttribute), false)
-                .OfType<AssemblyInformationalVersionAttribute>()
-                .Select(attribute => attribute.InformationalVersion ?? string.Empty)
-                .FirstOrDefault() ?? string.Empty;
-            if (!version.EndsWith("+" + sourceSha, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException(label + " assembly revision does not match the source SHA.");
+            RuntimeSourceIdentityGuard.RequireExactSourceLink(assembly, sourceSha, label);
         }
 
         private static string RequiredPath(string? value, string fileName)

@@ -191,18 +191,31 @@ namespace QS3D.Core.Interoperability
             PropertyNamespace = InteroperabilityContract.RequireToken(propertyNamespace, nameof(propertyNamespace));
             SetName = InteroperabilityContract.RequireToken(setName, nameof(setName));
             Name = InteroperabilityContract.RequireToken(name, nameof(name));
-            Value = InteroperabilityContract.RequireToken(value, nameof(value));
+            var canonicalValue = InteroperabilityContract.RequireToken(value, nameof(value));
             ValueKind = InteroperabilityContract.RequireDefined(valueKind, nameof(valueKind));
             Unit = InteroperabilityContract.OptionalToken(unit, nameof(unit));
             IsMeasured = isMeasured;
 
+            if (IsMeasured && ValueKind != InteroperabilityPropertyValueKind.Number)
+                throw new ArgumentException(
+                    "Measured interoperability property must use Number value kind.",
+                    nameof(isMeasured));
+
             if (ValueKind == InteroperabilityPropertyValueKind.Number)
             {
-                if (!double.TryParse(Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var numeric) ||
+                if (!double.TryParse(canonicalValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var numeric) ||
                     double.IsNaN(numeric) ||
                     double.IsInfinity(numeric))
                     throw new ArgumentException("Numeric interoperability property must contain a finite invariant number.", nameof(value));
             }
+            else if (ValueKind == InteroperabilityPropertyValueKind.Boolean)
+            {
+                if (!bool.TryParse(canonicalValue, out var booleanValue))
+                    throw new ArgumentException("Boolean interoperability property must contain true or false.", nameof(value));
+                canonicalValue = booleanValue ? "true" : "false";
+            }
+
+            Value = canonicalValue;
         }
 
         public string PropertyNamespace { get; }
@@ -545,6 +558,8 @@ namespace QS3D.Core.Interoperability
 
     public static class InteroperabilityAdmission
     {
+        public const int MaxAdditionalDiagnostics = 10000;
+
         public static InteroperabilityAdmissionResult Evaluate(
             InteroperabilityFactSet factSet,
             IEnumerable<InteroperabilityLossDiagnostic>? additionalDiagnostics = null)
@@ -553,8 +568,13 @@ namespace QS3D.Core.Interoperability
             var diagnostics = new List<InteroperabilityLossDiagnostic>();
             if (additionalDiagnostics != null)
             {
+                var additionalCount = 0;
                 foreach (var diagnostic in additionalDiagnostics)
                 {
+                    additionalCount++;
+                    if (additionalCount > MaxAdditionalDiagnostics)
+                        throw new InvalidOperationException(
+                            "Interoperability admission cannot exceed " + MaxAdditionalDiagnostics + " additional diagnostics.");
                     if (diagnostic == null)
                         throw new ArgumentException("Diagnostic collection cannot contain null entries.", nameof(additionalDiagnostics));
                     diagnostics.Add(diagnostic);

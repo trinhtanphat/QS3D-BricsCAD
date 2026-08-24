@@ -10,10 +10,13 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             DrawingSourceIdentityRequiresFingerprint();
+            BooleanPropertyValuesAreStrictAndCanonical();
+            MeasuredPropertiesRequireNumericValueKind();
             IfcNormalizationPreservesIdentityAndQuantityOrigin();
             AmbiguousIfcEvidenceBlocksAdmission();
             UnresolvedQuantityUnitBlocksAdmission();
             DuplicateSourceIdentityBlocksAdmission();
+            AdditionalDiagnosticsBoundIsEnforced();
             FactSetOrderingIsDeterministic();
         }
 
@@ -43,6 +46,109 @@ namespace QS3D.Core.SmokeTests
             Equal("AB12", identity.DwgHandle);
             True(identity.Qs3dElementId == null);
             True(!identity.CanClaimTargetNativeOwnership);
+        }
+
+        private static void BooleanPropertyValuesAreStrictAndCanonical()
+        {
+            var truthy = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Flags",
+                "Enabled",
+                "TRUE",
+                InteroperabilityPropertyValueKind.Boolean);
+            var falsey = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Flags",
+                "Visible",
+                "False",
+                InteroperabilityPropertyValueKind.Boolean);
+
+            Equal("true", truthy.Value);
+            Equal("false", falsey.Value);
+
+            Throws<ArgumentException>(() => new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Flags",
+                "InvalidWord",
+                "banana",
+                InteroperabilityPropertyValueKind.Boolean));
+            Throws<ArgumentException>(() => new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Flags",
+                "InvalidNumeric",
+                "1",
+                InteroperabilityPropertyValueKind.Boolean));
+
+            var text = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Controls",
+                "Text",
+                "banana",
+                InteroperabilityPropertyValueKind.Text);
+            var number = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Controls",
+                "Number",
+                "1.25",
+                InteroperabilityPropertyValueKind.Number);
+
+            Equal("banana", text.Value);
+            Equal("1.25", number.Value);
+            Throws<ArgumentException>(() => new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Controls",
+                "InvalidNumber",
+                "NaN",
+                InteroperabilityPropertyValueKind.Number));
+        }
+
+        private static void MeasuredPropertiesRequireNumericValueKind()
+        {
+            Throws<ArgumentException>(() => new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Measured",
+                "TextKind",
+                "12.5",
+                InteroperabilityPropertyValueKind.Text,
+                unit: "m",
+                isMeasured: true));
+            Throws<ArgumentException>(() => new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Measured",
+                "BooleanKind",
+                "true",
+                InteroperabilityPropertyValueKind.Boolean,
+                unit: "m",
+                isMeasured: true));
+
+            var measuredNumber = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Measured",
+                "NumericKind",
+                "12.5",
+                InteroperabilityPropertyValueKind.Number,
+                unit: "m",
+                isMeasured: true);
+            True(measuredNumber.IsMeasured);
+            Equal(InteroperabilityPropertyValueKind.Number, measuredNumber.ValueKind);
+            Equal("m", measuredNumber.Unit);
+
+            var nonMeasuredText = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "MeasuredControls",
+                "Text",
+                "12.5",
+                InteroperabilityPropertyValueKind.Text);
+            var nonMeasuredBoolean = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "MeasuredControls",
+                "Boolean",
+                "TRUE",
+                InteroperabilityPropertyValueKind.Boolean);
+            True(!nonMeasuredText.IsMeasured);
+            True(!nonMeasuredBoolean.IsMeasured);
+            Equal("12.5", nonMeasuredText.Value);
+            Equal("true", nonMeasuredBoolean.Value);
         }
 
         private static void IfcNormalizationPreservesIdentityAndQuantityOrigin()
@@ -206,6 +312,32 @@ namespace QS3D.Core.SmokeTests
             True(admission.Diagnostics.Any(x =>
                 x.Code == "DUPLICATE_SOURCE_IDENTITY" &&
                 x.Severity == InteroperabilityDiagnosticSeverity.Blocking));
+        }
+
+        private static void AdditionalDiagnosticsBoundIsEnforced()
+        {
+            var provenance = IfcProvenance("batch-additional-diagnostic-bound");
+            var factSet = InteroperabilityFactSet.Create(
+                provenance,
+                Array.Empty<InteroperabilityElementRecord>());
+            var diagnostic = new InteroperabilityLossDiagnostic(
+                "TEST_ADDITIONAL_DIAGNOSTIC",
+                InteroperabilityDiagnosticSeverity.Info,
+                "Synthetic interoperability diagnostic.");
+
+            var accepted = InteroperabilityAdmission.Evaluate(
+                factSet,
+                Enumerable.Repeat(
+                    diagnostic,
+                    InteroperabilityAdmission.MaxAdditionalDiagnostics));
+            Equal(InteroperabilityAdmission.MaxAdditionalDiagnostics, accepted.Diagnostics.Count);
+
+            Throws<InvalidOperationException>(() =>
+                InteroperabilityAdmission.Evaluate(
+                    factSet,
+                    Enumerable.Repeat(
+                        diagnostic,
+                        InteroperabilityAdmission.MaxAdditionalDiagnostics + 1)));
         }
 
         private static void FactSetOrderingIsDeterministic()

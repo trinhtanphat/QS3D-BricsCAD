@@ -24,9 +24,10 @@ namespace QS3D.Core.Coordination
 
         private static string Required(string value, string parameterName)
         {
-            var normalized = (value ?? string.Empty).Trim();
+            var raw = value ?? string.Empty;
+            if (raw.Any(char.IsControl)) throw new ArgumentException("Control characters are not allowed.", parameterName);
+            var normalized = raw.Trim();
             if (normalized.Length == 0) throw new ArgumentException("Value is required.", parameterName);
-            if (normalized.Any(char.IsControl)) throw new ArgumentException("Control characters are not allowed.", parameterName);
             return normalized;
         }
     }

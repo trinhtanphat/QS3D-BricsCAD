@@ -257,8 +257,11 @@
                             <Border Style="{StaticResource WorkspaceToolbarBand}">
                                 <WrapPanel>
                                     <Button Content="Giao tường" Click="OnWallJunctionsClick"
+                                             Style="{StaticResource DenseButton}"
+                                             ToolTip="Phân tích giao tim tường L / T / X trong selection"/>
+                                    <Button Content="Junction 3D" Click="OnWallJunction3DClick"
                                             Style="{StaticResource DenseButton}"
-                                            ToolTip="Phân tích giao tim tường L / T / X trong selection"/>
+                                            ToolTip="Tạo/cập nhật dedicated Solid3d junction theo ownership WJP1; không union wall host"/>
                                     <Button Content="Snap xem" Click="OnWallSnapPreviewClick"
                                             Style="{StaticResource DenseButton}"
                                             ToolTip="Xem trước kế hoạch làm sạch đầu mút tim tường; chưa sửa CAD"/>

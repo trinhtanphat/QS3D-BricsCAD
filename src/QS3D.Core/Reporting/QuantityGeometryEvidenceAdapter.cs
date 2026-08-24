@@ -120,13 +120,15 @@ namespace QS3D.Core.Reporting
                 var faceGross = Quantize(face.GrossArea, faceId + "/GrossArea");
                 if (faceGross > 0m)
                 {
+                    var operands = BuildFaceMeasurementOperands(face, faceId);
                     contributions.Add(QuantityContribution.Create(
                         "formwork.face." + faceId,
                         faceId + " • " + NormalizeLabel(face.FaceType, "Other"),
                         QuantityEvidenceOperation.Add,
-                        "BREP exact face gross area",
+                        face.HasMeasurementTrace ? "BREP validated face length × height" : "BREP exact face gross area",
                         faceGross,
-                        QuantityEvidenceSelector.ForFaceKey(elementId, faceId)));
+                        QuantityEvidenceSelector.ForFaceKey(elementId, faceId),
+                        operands));
                 }
 
                 foreach (var deduction in OrderedFaceDeductions(face.Deductions))
@@ -164,6 +166,18 @@ namespace QS3D.Core.Reporting
                 net,
                 contributions,
                 adjustments);
+        }
+
+        private static IReadOnlyList<QuantityEvidenceOperand> BuildFaceMeasurementOperands(
+            QuantityFormworkFaceExplanation face,
+            string faceId)
+        {
+            if (!face.HasMeasurementTrace) return Array.Empty<QuantityEvidenceOperand>();
+            return new[]
+            {
+                new QuantityEvidenceOperand("length", Quantize(face.MeasurementLength, faceId + "/MeasurementLength"), "m"),
+                new QuantityEvidenceOperand("height", Quantize(face.MeasurementHeight, faceId + "/MeasurementHeight"), "m")
+            };
         }
 
         private static IReadOnlyList<QuantityAdjustment> BuildAggregateAdjustment(
