@@ -77,6 +77,15 @@ for marker in (
 
 ensure = method_block(source, "private bool EnsureProjectAffinity()")
 require(
+    "if (Volatile.Read(ref _hostQuitStarted) != 0) return false;" in ensure,
+    "Project-affinity checks must fail closed before touching BricsCAD documents once host quit starts.",
+)
+require(
+    ensure.index("if (Volatile.Read(ref _hostQuitStarted) != 0) return false;")
+    < ensure.index("lock (_documentAccessGate)"),
+    "The host-quit barrier must run before DocumentManager/project affinity access.",
+)
+require(
     "Volatile.Read(ref _invalidated) != 0" in ensure,
     "Project-affinity checks must observe all later invalidation across host/UI threads.",
 )
@@ -104,8 +113,8 @@ for marker in (
     "var abandonForHostShutdown = Volatile.Read(ref _hostQuitStarted) != 0;",
     "var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();",
     "Interlocked.Exchange(ref _invalidated, 1) != 0",
-    "DetachDocumentManagerHandler();",
     "if (abandonForHostShutdown) return;",
+    "DetachDocumentManagerHandler();",
     "TryCloseWindow(deferForFinalDocument);",
 ):
     require(marker in teardown, f"Document teardown must retain lifecycle marker: {marker}")
@@ -118,10 +127,10 @@ require(
     < teardown.index("var abandonForHostShutdown = Volatile.Read(ref _hostQuitStarted) != 0;")
     < teardown.index("var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();")
     < teardown.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
-    < teardown.index("DetachDocumentManagerHandler();")
     < teardown.index("if (abandonForHostShutdown) return;")
+    < teardown.index("DetachDocumentManagerHandler();")
     < teardown.index("TryCloseWindow(deferForFinalDocument);"),
-    "Document teardown must validate native identity, classify host quit, atomically invalidate, release the global subscription, then suppress WPF close during application quit or use ordinary document-close dispatch.",
+    "Document teardown must validate native identity, classify host quit, atomically invalidate, leave native subscriptions untouched during host shutdown, then use ordinary document-close cleanup/dispatch only outside host quit.",
 )
 
 request_close = method_block(source, "private void TryCloseWindow(bool deferOnDispatcher = false)")
@@ -131,7 +140,7 @@ require(
 )
 require(
     "if (deferOnDispatcher)" in request_close,
-    "Final/only-document teardown and quit-abort recovery must retain an explicit dispatcher deferral branch.",
+    "Final/only-document teardown must retain an explicit dispatcher deferral branch.",
 )
 require(
     request_close.count("_window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher));") == 2,
@@ -159,13 +168,29 @@ require(
 begin_quit = method_block(source, "private void OnApplicationBeginQuit(object? sender, EventArgs e)")
 require(
     "Volatile.Write(ref _hostQuitStarted, 1);" in begin_quit,
-    "BeginQuit must establish host ownership before document teardown can initiate WPF destruction.",
+    "BeginQuit must establish host ownership before document teardown can initiate WPF/native subscription destruction.",
 )
 quit_aborted = method_block(source, "private void OnApplicationQuitAborted(object? sender, EventArgs e)")
 require(
     "Volatile.Write(ref _hostQuitStarted, 0);" in quit_aborted
-    and "TryCloseWindow(deferOnDispatcher: true);" in quit_aborted,
-    "QuitAborted must clear host ownership and safely close an already-invalidated stale window later on the dispatcher.",
+    and "TryRecoverAfterQuitAbort();" in quit_aborted,
+    "QuitAborted must clear host ownership and defer stale-registration recovery outside the native callback.",
+)
+require(
+    "TryCloseWindow(" not in quit_aborted,
+    "QuitAborted must not schedule WPF close directly from the native lifecycle callback.",
+)
+
+recover = method_block(source, "private void TryRecoverAfterQuitAbort()")
+for marker in (
+    "_window.Dispatcher.BeginInvoke",
+    "Detach();",
+    "TryCloseWindowOnDispatcher();",
+):
+    require(marker in recover, f"Quit-abort recovery must retain deferred cleanup marker: {marker}")
+require(
+    recover.index("Detach();") < recover.index("TryCloseWindowOnDispatcher();"),
+    "Quit-abort recovery must release native subscriptions outside the callback before closing the stale window.",
 )
 
 mouse = method_block(source, "private void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)")
@@ -178,15 +203,30 @@ for name, snippet in (("mouse", mouse), ("keyboard", keyboard)):
 
 closed = method_block(source, "private void OnWindowClosed(object? sender, EventArgs e)")
 require(
-    "Detach();" in closed,
-    "Successful/actual Window.Closed must remain the authoritative full-detach path.",
+    "if (Volatile.Read(ref _hostQuitStarted) != 0) return;" in closed
+    and "Detach();" in closed,
+    "Window.Closed must preserve full detach for ordinary closes but leave BricsCAD subscriptions untouched during host quit.",
+)
+require(
+    closed.index("if (Volatile.Read(ref _hostQuitStarted) != 0) return;") < closed.index("Detach();"),
+    "Window.Closed must cross the host-quit barrier before full detach.",
 )
 
 detach = method_block(source, "private void Detach()")
+require(
+    "if (Volatile.Read(ref _hostQuitStarted) != 0) return;" in detach,
+    "Shared detach must not mutate BricsCAD lifecycle subscriptions during host quit.",
+)
 for marker in (
     "BcadApplication.BeginQuit -= OnApplicationBeginQuit;",
     "BcadApplication.QuitAborted -= OnApplicationQuitAborted;",
 ):
     require(marker in detach, f"Ordinary detach must release host lifecycle subscription: {marker}")
+require(
+    detach.index("if (Volatile.Read(ref _hostQuitStarted) != 0) return;")
+    < detach.index("DetachDocumentManagerHandler();")
+    < detach.index("BcadApplication.BeginQuit -= OnApplicationBeginQuit;"),
+    "Host quit must block native unsubscription before the shared detach path reaches BricsCAD lifecycle handlers.",
+)
 
-print("[OK] Document-bound modeless windows use native database identity, remain atomically fail-closed, and let BricsCAD own WPF teardown during application quit.")
+print("[OK] Document-bound modeless windows use native database identity, remain atomically fail-closed, and leave WPF/native reactor teardown to BricsCAD during application quit.")

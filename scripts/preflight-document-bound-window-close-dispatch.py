@@ -90,8 +90,8 @@ for signature in (
         "var abandonForHostShutdown = Volatile.Read(ref _hostQuitStarted) != 0;",
         "var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();",
         "Interlocked.Exchange(ref _invalidated, 1) != 0",
-        "DetachDocumentManagerHandler();",
         "if (abandonForHostShutdown) return;",
+        "DetachDocumentManagerHandler();",
         "TryCloseWindow(deferForFinalDocument);",
     ):
         require(marker in teardown, f"{signature} must retain close-dispatch marker: {marker}")
@@ -99,10 +99,10 @@ for signature in (
         teardown.index("var abandonForHostShutdown = Volatile.Read(ref _hostQuitStarted) != 0;")
         < teardown.index("var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();")
         < teardown.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
-        < teardown.index("DetachDocumentManagerHandler();")
         < teardown.index("if (abandonForHostShutdown) return;")
+        < teardown.index("DetachDocumentManagerHandler();")
         < teardown.index("TryCloseWindow(deferForFinalDocument);"),
-        f"{signature} must classify host quit first, fail closed, release the global handler, then suppress explicit WPF close or use the ordinary document-close dispatcher.",
+        f"{signature} must classify host quit first, fail closed, leave native subscriptions untouched during host shutdown, then use ordinary document-close cleanup/dispatch only outside host quit.",
     )
 
 project_change = method_block(source, "private void CloseForProjectChange()")
@@ -111,4 +111,4 @@ require(
     "Non-document project-affinity close must retain the normal synchronous dispatcher path.",
 )
 
-print("[OK] Normal document close keeps the proven dispatcher behavior, while BricsCAD application quit owns final modeless HWND/WPF teardown without an explicit QS3D Window.Close.")
+print("[OK] Normal document close keeps the proven dispatcher behavior, while BricsCAD application quit owns final modeless HWND/WPF and native-reactor teardown without QS3D unsubscription.")
