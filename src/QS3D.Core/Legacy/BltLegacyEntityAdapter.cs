@@ -276,7 +276,30 @@ namespace QS3D.Core.Legacy
             {
                 var normalizedAlias = Compact(Normalize(alias));
                 if (normalizedAlias.Length < 3) continue;
+                if (normalizedAlias.Length <= 4)
+                {
+                    if (HasStandaloneToken(normalizedText, normalizedAlias) ||
+                        compact.StartsWith("blt" + normalizedAlias, StringComparison.Ordinal))
+                        return true;
+                    continue;
+                }
                 if (compact.Contains(normalizedAlias)) return true;
+            }
+            return false;
+        }
+
+        private static bool HasStandaloneToken(string normalizedText, string alias)
+        {
+            var start = 0;
+            while (start <= normalizedText.Length - alias.Length)
+            {
+                var index = normalizedText.IndexOf(alias, start, StringComparison.Ordinal);
+                if (index < 0) return false;
+                var beforeBoundary = index == 0 || !char.IsLetterOrDigit(normalizedText[index - 1]);
+                var after = index + alias.Length;
+                var afterBoundary = after == normalizedText.Length || !char.IsLetterOrDigit(normalizedText[after]);
+                if (beforeBoundary && afterBoundary) return true;
+                start = index + 1;
             }
             return false;
         }
@@ -335,7 +358,21 @@ namespace QS3D.Core.Legacy
                 var comma = text.Replace(',', '.');
                 if (!double.TryParse(comma, NumberStyles.Float, CultureInfo.InvariantCulture, out value)) return false;
             }
-            return !double.IsNaN(value) && !double.IsInfinity(value) && value >= 0d;
+            return !double.IsNaN(value) &&
+                   !double.IsInfinity(value) &&
+                   value >= 0d &&
+                   !(value == 0d && HasNonZeroSignificand(text));
+        }
+
+        private static bool HasNonZeroSignificand(string text)
+        {
+            for (var i = 0; i < text.Length; i++)
+            {
+                var character = text[i];
+                if (character == 'e' || character == 'E') break;
+                if (character >= '1' && character <= '9') return true;
+            }
+            return false;
         }
 
         private static void SetCanonical(IDictionary<string, string> metadata, string key, string value)

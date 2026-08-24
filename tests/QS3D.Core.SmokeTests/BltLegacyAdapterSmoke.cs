@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
         {
             ExactProxySolidCanImport();
             EmbeddedLegacyQuantitiesArePreserved();
+            AdapterMetricUnderflowDoesNotBecomeExactEvidence();
+            CategoryAliasesRequireBoundaries();
             AmbiguousCategoryFailsClosed();
             GenericProxyIsNotClaimedAsBlt();
             LegacyEvidenceSurvivesMeasuredQuantityPass();
@@ -52,6 +54,62 @@ namespace QS3D.Core.SmokeTests
             Require(candidate.FloorHint == "T2", "Floor hint was not preserved.");
             Require(candidate.FamilyHint == "D300x500", "Family hint was not preserved.");
             Require(candidate.CanImport, "Explicit BLT ConcreteM3 must allow material-volume Proxy capture even when host geometry is unavailable.");
+        }
+
+        private static void AdapterMetricUnderflowDoesNotBecomeExactEvidence()
+        {
+            var underflow = new EntitySnapshot("B21", "ProxyEntity", "LEGACY");
+            underflow.Metadata["LegacyProbe.XData.000.Value"] =
+                "BLT3D; Category=Beam; ConcreteM3=1e-5000";
+
+            var rejected = BltLegacyEntityAdapter.Adapt(underflow);
+            Require(rejected.Category == ElementCategory.Beam, "Underflow control lost its Beam category evidence.");
+            Require(!rejected.LegacyConcreteM3.HasValue, "Adapter underflow must not become legacy concrete zero.");
+            Require(rejected.EvidenceMode != BltLegacyEvidenceMode.ExactLegacyQuantity, "Adapter underflow must not upgrade evidence to ExactLegacyQuantity.");
+            Require(!underflow.Metadata.ContainsKey(BltLegacyMetadataKeys.ConcreteM3), "Adapter underflow must not write canonical concrete zero metadata.");
+
+            var exactZero = new EntitySnapshot("B22", "ProxyEntity", "LEGACY");
+            exactZero.Metadata["LegacyProbe.XData.000.Value"] =
+                "BLT3D; Category=Beam; ConcreteM3=0; FormworkM2=0,0e-5000";
+
+            var accepted = BltLegacyEntityAdapter.Adapt(exactZero);
+            Require(accepted.LegacyConcreteM3.HasValue && accepted.LegacyConcreteM3.Value.Equals(0d), "Exact-zero concrete must remain parseable.");
+            Require(accepted.LegacyFormworkM2.HasValue && accepted.LegacyFormworkM2.Value.Equals(0d), "Comma-compatible exact-zero formwork must remain parseable.");
+            Require(accepted.EvidenceMode == BltLegacyEvidenceMode.ExactLegacyQuantity, "Exact-zero explicit quantities must remain exact legacy evidence.");
+            Require(exactZero.Metadata[BltLegacyMetadataKeys.ConcreteM3] == "0", "Exact-zero concrete canonicalization changed.");
+            Require(exactZero.Metadata[BltLegacyMetadataKeys.FormworkM2] == "0", "Exact-zero formwork canonicalization changed.");
+        }
+
+        private static void CategoryAliasesRequireBoundaries()
+        {
+            var incidental = new EntitySnapshot("B23", "ProxyEntity", "LEGACY");
+            incidental.Metadata["LegacyProbe.XData.000.Value"] =
+                "BLT3D; Category=Column; ConcreteM3=1; Note=damage; Material=sand; Label=cotton; Detail=sunbeam; Memo=slabbed";
+
+            var candidate = BltLegacyEntityAdapter.Adapt(incidental);
+            Require(candidate.Category == ElementCategory.Column, "Incidental short-alias substrings created a false category.");
+            Require(candidate.EvidenceMode == BltLegacyEvidenceMode.ExactLegacyQuantity, "Incidental metadata words changed exact legacy quantity evidence.");
+            Require(candidate.Reason.IndexOf("more than one", StringComparison.OrdinalIgnoreCase) < 0, "Incidental words created false category ambiguity.");
+
+            var vietnameseBeam = new EntitySnapshot("B24", "ProxyEntity", "LEGACY");
+            vietnameseBeam.Metadata["LegacyProbe.XData.000.Value"] =
+                "BLT3D; Category=Dầm; ConcreteM3=1";
+            Require(BltLegacyEntityAdapter.Adapt(vietnameseBeam).Category == ElementCategory.Beam,
+                "Standalone Vietnamese Beam alias must remain recognized.");
+
+            var vietnameseSlab = new EntitySnapshot("B25", "ProxyEntity", "LEGACY");
+            vietnameseSlab.Metadata["LegacyProbe.XData.000.Value"] =
+                "BLT3D; Category=Sàn; ConcreteM3=1";
+            Require(BltLegacyEntityAdapter.Adapt(vietnameseSlab).Category == ElementCategory.Slab,
+                "Standalone Vietnamese Slab alias must remain recognized.");
+
+            var prefixed = new EntitySnapshot("B26", "BLTDamProxy", "LEGACY")
+            {
+                VolumeDrawingUnitsCubed = 1d
+            };
+            prefixed.Metadata[BltLegacyMetadataKeys.ProbeMetricEvidence] = BltLegacyEvidenceMode.ExactGeometry.ToString();
+            Require(BltLegacyEntityAdapter.Adapt(prefixed).Category == ElementCategory.Beam,
+                "Explicit BLT-prefixed concatenated short alias must remain recognized.");
         }
 
         private static void AmbiguousCategoryFailsClosed()
