@@ -1,12 +1,14 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using QS3D.Core.Geometry;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class CurvedOpeningCenterlineSnapshotSmoke
     {
+        [ModuleInitializer]
         public static void Run()
         {
             RejectsGrowingCardinalityDuringSnapshot();
@@ -16,30 +18,19 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectsGrowingCardinalityDuringSnapshot()
         {
-            var source = new DriftingPointList(
-                new[] { new Point2(0d, 0d), new Point2(5d, 0d), new Point2(6d, 0d) },
-                initialCount: 2,
-                finalCount: 3);
+            var source = new DriftingPointList(new[] { new Point2(0d, 0d), new Point2(5d, 0d), new Point2(6d, 0d) }, 2, 3);
             Throws<InvalidOperationException>(() => Plan(source));
         }
 
         private static void RejectsShrinkingCardinalityDuringSnapshot()
         {
-            var source = new DriftingPointList(
-                new[] { new Point2(0d, 0d), new Point2(5d, 0d), new Point2(6d, 0d) },
-                initialCount: 3,
-                finalCount: 2);
+            var source = new DriftingPointList(new[] { new Point2(0d, 0d), new Point2(5d, 0d), new Point2(6d, 0d) }, 3, 2);
             Throws<InvalidOperationException>(() => Plan(source));
         }
 
         private static void ReadsEachPointExactlyOnce()
         {
-            var source = new SingleReadPointList(new[]
-            {
-                new Point2(0d, 0d),
-                new Point2(2d, 0d),
-                new Point2(4d, 0d)
-            });
+            var source = new SingleReadPointList(new[] { new Point2(0d, 0d), new Point2(2d, 0d), new Point2(4d, 0d) });
             var plan = Plan(source);
             Near(4d, plan.HostCenterlineLengthM, 1e-12d);
             for (var i = 0; i < source.ReadCounts.Length; i++)
