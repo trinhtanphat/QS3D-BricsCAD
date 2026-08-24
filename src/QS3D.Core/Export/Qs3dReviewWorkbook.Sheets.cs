@@ -153,7 +153,7 @@ namespace QS3D.Core.Export
                     life == null ? string.Empty : life.Status.ToString(),
                     r.LeftElementId, r.LeftHandle, r.RightElementId, r.RightHandle,
                     model, r.RuleId);
-                Qs3dReviewXlsx.Text(x, Qs3dReviewXlsx.Cell(16, er), r.MatchKindsText, Qs3dReviewXlsx.WrappedStyle);
+                Qs3dReviewXlsx.Text(x, Qs3dReviewXlsx.Cell(16, er), DuplicateEvidence(r), Qs3dReviewXlsx.WrappedStyle);
                 Qs3dReviewXlsx.OptionalNumber(x, Qs3dReviewXlsx.Cell(17, er), geo?.DistanceMm);
                 Qs3dReviewXlsx.OptionalNumber(x, Qs3dReviewXlsx.Cell(18, er), geo?.RotationDeltaDegrees);
                 Qs3dReviewXlsx.OptionalNumber(x, Qs3dReviewXlsx.Cell(19, er), geo?.ConfidencePercent);
@@ -307,6 +307,9 @@ namespace QS3D.Core.Export
 
         private static string Join(IEnumerable<string> values) =>
             string.Join(";", values.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ThenBy(v => v, StringComparer.Ordinal));
+
+        private static string DuplicateEvidence(CoordinationDuplicateExportRow row) =>
+            row.MatchKinds == DuplicateMatchKind.None ? "ReviewOnly" : row.MatchKindsText;
 
         private static string Name(QuantityReportRow row) => string.IsNullOrWhiteSpace(row.ElementName) ? row.FamilyName : row.ElementName;
         private static string Display(string elementId, string handle) => string.IsNullOrWhiteSpace(elementId) ? handle : elementId;

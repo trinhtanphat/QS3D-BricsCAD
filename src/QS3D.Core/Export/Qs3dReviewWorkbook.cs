@@ -104,14 +104,15 @@ namespace QS3D.Core.Export
 
     public sealed class Qs3dReviewTrace
     {
-        internal Qs3dReviewTrace(Qs3dReviewTraceKind kind, string sheetName, int rowNumber, string drawingFingerprint, string modelRevision, string traceKey, IReadOnlyList<string> elementIds, IReadOnlyList<string> handles)
+        internal Qs3dReviewTrace(Qs3dReviewTraceKind kind, string sheetName, int rowNumber, string itemId, string drawingFingerprint, string modelRevision, string traceKey, IReadOnlyList<string> elementIds, IReadOnlyList<string> handles)
         {
-            Kind = kind; SheetName = sheetName; RowNumber = rowNumber; DrawingFingerprint = drawingFingerprint;
+            Kind = kind; SheetName = sheetName; RowNumber = rowNumber; ItemId = itemId; DrawingFingerprint = drawingFingerprint;
             ModelRevision = modelRevision; TraceKey = traceKey; ElementIds = elementIds; Handles = handles;
         }
         public Qs3dReviewTraceKind Kind { get; }
         public string SheetName { get; }
         public int RowNumber { get; }
+        public string ItemId { get; }
         public string DrawingFingerprint { get; }
         public string ModelRevision { get; }
         public string TraceKey { get; }
