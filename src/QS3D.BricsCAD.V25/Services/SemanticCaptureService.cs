@@ -260,7 +260,7 @@ namespace QS3D.BricsCAD.V25.Services
             {
                 if (!StructuralWallConcreteContactService.TryMeasureM2(document, project, wall, out var contactAreaM2))
                 {
-                    if (!wall.Properties.Remove("ConcreteContactAreaM2")) continue;
+                    wall.Properties.Remove("ConcreteContactAreaM2");
                     wall.MarkDirty(ElementDirtyFlags.Quantity);
                     Regenerate(project, wall);
                     MeasuredSolidQuantityPolicy.Apply(wall);
