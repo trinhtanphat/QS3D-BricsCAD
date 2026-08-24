@@ -10,10 +10,11 @@ RUNNER = ROOT / "scripts" / "run-local-v25-wall-contact-3681.ps1"
 RUNNER_NAME = RUNNER.name
 PROJECT = ROOT / "tests" / "QS3D.BricsCAD.V25.LocalQualification" / "QS3D.BricsCAD.V25.LocalQualification.csproj"
 HARNESS = ROOT / "tests" / "QS3D.BricsCAD.V25.LocalQualification" / "WallContact3681QualificationCommands.cs"
+GATE = ROOT / "tests" / "QS3D.BricsCAD.V25.LocalQualification" / "WallContact3681SourceFixGateCommands.cs"
 PRODUCTION = ROOT / "src" / "QS3D.BricsCAD.V25" / "Reporting" / "StructuralWallConcreteContactService.cs"
 INDEX = ROOT / "docs" / "LOCAL-SOURCE-READY-INDEX-2026-08-24.md"
 DISPATCH = ROOT / "docs" / "LOCAL-DISPATCH-READY-2026-08-24.md"
-SOURCE_FIX_SHA = "cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb"
+SOURCE_FIX_SHA = "4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0"
 CARRIER = "agent/chatgpt-gpt56sol/issue-3680-local-dispatch-refresh"
 
 
@@ -37,12 +38,13 @@ def contains_forbidden(text: str, forbidden: str) -> bool:
     return forbidden.lower() in text.lower()
 
 
-for path in (RUNNER, PROJECT, HARNESS, PRODUCTION, INDEX, DISPATCH):
+for path in (RUNNER, PROJECT, HARNESS, GATE, PRODUCTION, INDEX, DISPATCH):
     if not path.is_file():
         fail("missing committed pull/run surface: " + str(path.relative_to(ROOT)))
 
 runner = RUNNER.read_text(encoding="utf-8")
 harness = HARNESS.read_text(encoding="utf-8")
+gate = GATE.read_text(encoding="utf-8")
 project = PROJECT.read_text(encoding="utf-8")
 production = PRODUCTION.read_text(encoding="utf-8")
 index = INDEX.read_text(encoding="utf-8")
@@ -57,6 +59,10 @@ require_tokens(
         "working tree must be clean",
         "run-local-v25-qualification.ps1",
         "QS3D.BricsCAD.V25.LocalQualification.csproj",
+        "QS3D3681SOURCEFIXGATE",
+        "source-fix-gate",
+        'Require-Case $gate "touching_one_end"',
+        'Require-Case $gate "penetration_005m"',
         "QS3D3681GEOMETRY",
         "QS3D3681PERSIST",
         "QS3D3681REOPEN",
@@ -66,7 +72,27 @@ require_tokens(
         "LOCAL_PASS",
         "LOCAL_FAIL",
         "NO_RESULT",
-        "gross=2.6688 deduction=0.3200 net=2.3488",
+        "touching=0.1600 penetration=0.1600 gross=2.6688 deduction=0.3200 net=2.3488",
+    ),
+)
+
+require_tokens(
+    gate,
+    "source-fix gate harness",
+    (
+        'CommandMethod("QS3D3681SOURCEFIXGATE")',
+        'case.touching_one_end',
+        'case.penetration_005m',
+        'RunMeasureCase(document, -100d, 100d)',
+        'RunMeasureCase(document, -100d, 150d)',
+        'touching.PositiveVolumeCutCount != 0',
+        'touching.ContactProbeCutCount < 1',
+        'penetration.PositiveVolumeCutCount < 1',
+        'ExpectedOneEndM2 = 0.1600d',
+        'ExpectedOneEndNetM2 = 2.5088d',
+        'StructuralWallConcreteContactService',
+        'TryMeasureM2',
+        'FailedNativeCutCount',
     ),
 )
 
@@ -96,10 +122,9 @@ require_tokens(
     ),
 )
 
-# The local harness must call the production measurement/lifecycle surfaces; it must not
-# duplicate the host-specific BREP unwrap implementation. Lock that implementation token
-# in production instead. Implied-selection UI is intentionally not part of this lane's
-# contact/read-only/persistence contract and must not be required by this source guard.
+# Both local harnesses call the production measurement/lifecycle surfaces; neither may
+# duplicate the host-specific BREP unwrap/modeler algorithm. Lock the final #3729 modeler
+# floor in production, while the local gate proves the two licensed acceptance controls.
 require_tokens(
     production,
     "production V25 contact service",
@@ -107,6 +132,8 @@ require_tokens(
         "StructuralWallConcreteContactService",
         "ExternalBoundedSurface",
         "TryMeasureM2",
+        "var contactProbeDistanceCad = Math.Max(distanceCad, 1e-5d / lengthToMeter);",
+        "TryOffset(contactProbe, contactProbeDistanceCad)",
     ),
 )
 
@@ -127,7 +154,10 @@ require_tokens(
     (
         CARRIER,
         SOURCE_FIX_SHA,
+        "#3729",
         "scripts/run-local-v25-wall-contact-3681.ps1",
+        "touching-only",
+        "0.05 m penetration",
         "LOCAL_RUN_ONLY",
     ),
 )
@@ -139,6 +169,9 @@ require_tokens(
         f"Required source-fix ancestor: `{SOURCE_FIX_SHA}`",
         f"Runnable carrier: `{CARRIER}`",
         RUNNER_NAME,
+        "#3729",
+        "touching-only",
+        "0.05 m penetration",
         "LOCAL_PASS",
         "LOCAL_FAIL",
         "NO_RESULT",
@@ -152,7 +185,7 @@ for forbidden in (
     "paste this",
     "edit production source",
 ):
-    if contains_forbidden(runner, forbidden) or contains_forbidden(harness, forbidden):
+    if contains_forbidden(runner, forbidden) or contains_forbidden(harness, forbidden) or contains_forbidden(gate, forbidden):
         fail("local lane still delegates implementation work: " + forbidden)
 
-print("PASS #3681 committed one-command licensed V25 runner/harness")
+print("PASS #3681 committed one-command licensed V25 runner with #3729 touching/penetration fail-fast gate")
