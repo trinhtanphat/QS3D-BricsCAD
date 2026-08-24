@@ -335,7 +335,21 @@ namespace QS3D.Core.Legacy
                 var comma = text.Replace(',', '.');
                 if (!double.TryParse(comma, NumberStyles.Float, CultureInfo.InvariantCulture, out value)) return false;
             }
-            return !double.IsNaN(value) && !double.IsInfinity(value) && value >= 0d;
+            return !double.IsNaN(value) &&
+                   !double.IsInfinity(value) &&
+                   value >= 0d &&
+                   !(value == 0d && HasNonZeroSignificand(text));
+        }
+
+        private static bool HasNonZeroSignificand(string text)
+        {
+            for (var i = 0; i < text.Length; i++)
+            {
+                var character = text[i];
+                if (character == 'e' || character == 'E') break;
+                if (character >= '1' && character <= '9') return true;
+            }
+            return false;
         }
 
         private static void SetCanonical(IDictionary<string, string> metadata, string key, string value)
