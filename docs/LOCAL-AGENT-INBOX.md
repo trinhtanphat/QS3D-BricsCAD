@@ -334,7 +334,8 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 ## LOCAL-014 — Plan-to-3D preview-to-commit and batch compensation
 
 - Priority: P1
-- Status: OPEN (`P03` bounded `LOCAL_PASS`; broader matrix pending)
+- Status: OPEN
+- Cell status: `P03` bounded `LOCAL_PASS`; broader matrix pending
 - Area: `QS3DCONVERT2D` / `QS3DPLAN2WALLS` quick path, `QS3DCONVERT2DADV`, immediate native wall creation
 - Source-side status: REMOTE_DONE in the current working source for the quick/no-prompt and advanced-prompt split, canonical project identity, drawing-unit and source eligibility/identity checks, deterministic same-ObjectId LINE/open-POLYLINE geometry fingerprints, per-created-element semantic regeneration and ownership-scoped batch compensation. Interactive proof remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`; static source review is not `LOCAL_PASS`.
 - Why local: Exact Model Space/UCS state, live ObjectId/source geometry changes while advanced prompts are open, native Solid3d ownership, editor selection, unrelated dirty semantic state and ownership-scoped rollback require licensed BricsCAD V25.
