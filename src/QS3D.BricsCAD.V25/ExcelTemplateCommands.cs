@@ -226,14 +226,12 @@ namespace QS3D.BricsCAD.V25
             if (!string.Equals(Path.GetExtension(fullPath), ".json", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Template mapping must use .json.");
 
-            var info = new FileInfo(fullPath);
-            if (info.Length <= 0 || info.Length > MaxMappingBytes)
-                throw new InvalidDataException("Template mapping JSON must be between 1 byte and 64 KiB.");
-
             CustomMappingContract? contract;
             var serializer = new DataContractJsonSerializer(typeof(CustomMappingContract));
             using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
+                if (stream.Length <= 0 || stream.Length > MaxMappingBytes)
+                    throw new InvalidDataException("Template mapping JSON must be between 1 byte and 64 KiB.");
                 contract = serializer.ReadObject(stream) as CustomMappingContract;
             }
             if (contract == null) throw new InvalidDataException("Template mapping JSON is empty or invalid.");
