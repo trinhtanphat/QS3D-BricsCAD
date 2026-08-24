@@ -120,6 +120,30 @@ namespace QS3D.Core.SmokeTests
             };
             Throws<InvalidOperationException>(() => QuantityGeometryEvidenceAdapter.Create(partial));
 
+            var unsupported = new QuantityGeometryExplanation
+            {
+                ElementId = "F-004",
+                GeometryFingerprint = "fp-unsupported-measurement-trace",
+                GrossVolume = 1d,
+                DeductionVolume = 0d,
+                NetVolume = 1d,
+                FormworkFaces = new[]
+                {
+                    new QuantityFormworkFaceExplanation
+                    {
+                        FaceId = "SOLID-01/FACE-02",
+                        FaceType = "Side",
+                        GrossArea = 0.300d,
+                        NetArea = 0.300d,
+                        MeasurementKind = "unknown",
+                        MeasurementLength = 1.50d,
+                        MeasurementHeight = 0.20d
+                    }
+                }
+            };
+            Throws<InvalidOperationException>(() => unsupported.Validate(new QuantityGeometryTolerances()));
+            Throws<InvalidOperationException>(() => QuantityGeometryEvidenceAdapter.Create(unsupported));
+
             Console.WriteLine("PASS quantity exact-face measurement trace/evidence/XLSX parity");
         }
 
