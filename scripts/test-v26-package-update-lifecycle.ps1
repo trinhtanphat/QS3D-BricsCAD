@@ -21,7 +21,7 @@ $artifactFull = [IO.Path]::GetFullPath($ArtifactDir)
 $sentinel = Join-Path $qualificationRoot ('unrelated-' + [Guid]::NewGuid().ToString('N') + '.txt')
 $sentinelValue = [Guid]::NewGuid().ToString('N')
 $originalV26Dir = $env:BRICSCAD_V26_DIR
-$result = [ordered]@{ schema=1; status='FAIL'; sourceSha=''; hostMajor=0; baselineVersion=''; upgradedVersion=''; baselineInstalled=$false; upgradeSucceeded=$false; upgradedPayloadValid=$false; rollbackRejected=$false; rollbackPreservedState=$false; cancelPreservedState=$false; unrelatedSentinelPreserved=$false; cleanupComplete=$false }
+$result = [ordered]@{ schema=2; status='FAIL'; sourceSha=''; hostMajor=0; baselineVersion=''; upgradedVersion=''; baselineInstalled=$false; upgradeSucceeded=$false; upgradedPayloadValid=$false; downgradeRejected=$false; downgradePreservedState=$false; transactionalFailureRejected=$false; transactionalPayloadRolledBack=$false; transactionalRegistryRolledBack=$false; cancelPreservedState=$false; unrelatedSentinelPreserved=$false; cleanupComplete=$false }
 
 function Assert-Leaf([string]$Path,[string]$Label) { if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "$Label was not found." } }
 function Assert-Inside([string]$Candidate,[string]$Parent,[string]$Label) {
@@ -53,6 +53,15 @@ function Get-TreeDigest([string]$Directory) {
         $relative=$full.Substring($base.Length).Replace([IO.Path]::DirectorySeparatorChar,'/').Replace([IO.Path]::AltDirectorySeparatorChar,'/')
         $lines.Add($relative+'='+(Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash.ToUpperInvariant())
     }
+    $sha=[Security.Cryptography.SHA256]::Create(); try{return ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(($lines -join "`n"))))).Replace('-','')}finally{$sha.Dispose()}
+}
+function Get-DemandLoadDigest {
+    $appKey="HKCU:\Software\Bricsys\BricsCAD\$VersionKey\$LanguageKey\Applications\QS3D"
+    if(-not (Test-Path -LiteralPath $appKey)){return 'MISSING'}
+    $lines=[Collections.Generic.List[string]]::new(); $key=Get-Item -LiteralPath $appKey
+    try { foreach($name in @($key.GetValueNames()|Sort-Object)){ $lines.Add("app:$name=$($key.GetValue($name,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames))") } } finally { $key.Close() }
+    $commandsKey=Join-Path $appKey 'Commands'
+    if(Test-Path -LiteralPath $commandsKey){$key=Get-Item -LiteralPath $commandsKey; try{foreach($name in @($key.GetValueNames()|Sort-Object)){$lines.Add("cmd:$name=$($key.GetValue($name))")}}finally{$key.Close()}}
     $sha=[Security.Cryptography.SHA256]::Create(); try{return ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(($lines -join "`n"))))).Replace('-','')}finally{$sha.Dispose()}
 }
 function Read-Version {
@@ -91,12 +100,31 @@ try {
     & (Join-Path $installDir 'update-v26.ps1') -ManifestUri $UpgradeManifestUri -ExpectedSignerThumbprint $ExpectedSignerThumbprint -InstallDirectory $installDir -VersionKeys @($VersionKey) -LanguageKeys @($LanguageKey) -LoadMode OnCommand -Confirm:$false
     if($LASTEXITCODE -ne 0){throw 'Signed V26 upgrade failed.'}; Assert-Payload; $result.upgradedVersion=Read-Version
     if([string]::Equals($result.baselineVersion,$result.upgradedVersion,[StringComparison]::Ordinal)){throw 'Upgrade did not change installed productVersion.'}
-    $result.upgradeSucceeded=$true; $result.upgradedPayloadValid=$true; $upgradedDigest=Get-TreeDigest $installDir
+    $result.upgradeSucceeded=$true; $result.upgradedPayloadValid=$true; $upgradedDigest=Get-TreeDigest $installDir; $upgradedRegistryDigest=Get-DemandLoadDigest
 
-    $rollbackFailed=$false
-    try { & (Join-Path $installDir 'update-v26.ps1') -ManifestUri $RollbackManifestUri -ExpectedSignerThumbprint $ExpectedSignerThumbprint -InstallDirectory $installDir -VersionKeys @($VersionKey) -LanguageKeys @($LanguageKey) -LoadMode OnCommand -Confirm:$false; if($LASTEXITCODE -ne 0){$rollbackFailed=$true} } catch { $rollbackFailed=$true }
-    $result.rollbackRejected=$rollbackFailed; if(-not $rollbackFailed){throw 'Rollback/downgrade manifest was not rejected.'}
-    $result.rollbackPreservedState=[string]::Equals($upgradedDigest,(Get-TreeDigest $installDir),[StringComparison]::Ordinal); if(-not $result.rollbackPreservedState){throw 'Rejected rollback changed installed payload.'}
+    $downgradeFailed=$false
+    try { & (Join-Path $installDir 'update-v26.ps1') -ManifestUri $RollbackManifestUri -ExpectedSignerThumbprint $ExpectedSignerThumbprint -InstallDirectory $installDir -VersionKeys @($VersionKey) -LanguageKeys @($LanguageKey) -LoadMode OnCommand -Confirm:$false; if($LASTEXITCODE -ne 0){$downgradeFailed=$true} } catch { $downgradeFailed=$true }
+    $result.downgradeRejected=$downgradeFailed; if(-not $downgradeFailed){throw 'Rollback/downgrade manifest was not rejected.'}
+    $result.downgradePreservedState=[string]::Equals($upgradedDigest,(Get-TreeDigest $installDir),[StringComparison]::Ordinal); if(-not $result.downgradePreservedState){throw 'Rejected downgrade changed installed payload.'}
+
+    # Deterministically force the real installer catch/rollback path after the staged baseline
+    # payload has replaced the upgraded directory. Command shadowing is scoped to this process;
+    # no production installer/updater bypass or qualification switch is added to shipped code.
+    $transactionFailed=$false
+    function global:New-ItemProperty { throw 'QS3D qualification injected registry-write failure.' }
+    try {
+        try {
+            & (Join-Path $packageDir 'install-v26-autoload.ps1') -PackageDirectory $packageDir -InstallDirectory $installDir -VersionKeys @($VersionKey) -LanguageKeys @($LanguageKey) -LoadMode OnCommand -Force -Confirm:$false
+        }
+        catch { $transactionFailed=$true }
+    }
+    finally { Remove-Item -LiteralPath Function:\global:New-ItemProperty -Force -ErrorAction SilentlyContinue }
+    $result.transactionalFailureRejected=$transactionFailed; if(-not $transactionFailed){throw 'Qualification fault did not force installer failure.'}
+    Assert-Payload
+    $result.transactionalPayloadRolledBack=[string]::Equals($upgradedDigest,(Get-TreeDigest $installDir),[StringComparison]::Ordinal)
+    $result.transactionalRegistryRolledBack=[string]::Equals($upgradedRegistryDigest,(Get-DemandLoadDigest),[StringComparison]::Ordinal)
+    if(-not $result.transactionalPayloadRolledBack -or -not $result.transactionalRegistryRolledBack){throw 'Installer transaction did not restore upgraded payload and DemandLoad registration.'}
+    if(-not [string]::Equals($result.upgradedVersion,(Read-Version),[StringComparison]::Ordinal)){throw 'Installer rollback did not restore upgraded productVersion.'}
 
     & (Join-Path $installDir 'update-v26.ps1') -ManifestUri $UpgradeManifestUri -ExpectedSignerThumbprint $ExpectedSignerThumbprint -InstallDirectory $installDir -VersionKeys @($VersionKey) -LanguageKeys @($LanguageKey) -LoadMode OnCommand -AllowSameVersion -WhatIf
     $result.cancelPreservedState=[string]::Equals($upgradedDigest,(Get-TreeDigest $installDir),[StringComparison]::Ordinal); if(-not $result.cancelPreservedState){throw 'WhatIf/cancel path changed installed payload.'}
@@ -104,6 +132,7 @@ try {
     if(-not $result.unrelatedSentinelPreserved){throw 'Update lifecycle changed unrelated sentinel state.'}; $result.status='PASS'
 }
 finally {
+    Remove-Item -LiteralPath Function:\global:New-ItemProperty -Force -ErrorAction SilentlyContinue
     $env:BRICSCAD_V26_DIR=$originalV26Dir
     if(Test-Path -LiteralPath (Join-Path $installDir 'uninstall-v26-autoload.ps1')) { & (Join-Path $installDir 'uninstall-v26-autoload.ps1') -InstallDirectory $installDir -VersionKeys @($VersionKey) -LanguageKeys @($LanguageKey) -Confirm:$false -ErrorAction SilentlyContinue }
     Remove-Item -LiteralPath $sentinel -Force -ErrorAction SilentlyContinue
