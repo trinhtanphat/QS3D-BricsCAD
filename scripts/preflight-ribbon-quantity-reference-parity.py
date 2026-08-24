@@ -14,6 +14,7 @@ INSIGHT_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/QuantityInsightCommands.cs"
 REVIEW_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
 CUSTOMER_EXCEL_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/CustomerExcelCommands.cs"
 CAD_TO_EXCEL_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/CadToExcelCommands.cs"
+TEMPLATE_EXCEL_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/ExcelTemplateCommands.cs"
 errors = []
 
 for path in (
@@ -28,6 +29,7 @@ for path in (
     REVIEW_COMMANDS,
     CUSTOMER_EXCEL_COMMANDS,
     CAD_TO_EXCEL_COMMANDS,
+    TEMPLATE_EXCEL_COMMANDS,
 ):
     if not path.is_file():
         errors.append("missing quantity Ribbon parity source: " + str(path.relative_to(ROOT)))
@@ -36,6 +38,7 @@ button_specs = (
     ("QS3D_QTY_BLT_SETTINGS", "Cài đặt\\ntính toán", "QS3DQUANTITYSETTINGS", "QuantitySettings"),
     ("QS3D_QTY_BLT_CALCULATE", "Tính khối lượng\\n(Engine2)", "QS3DQUANTITYENGINE2", "QuantityCalculate"),
     ("QS3D_QTY_BLT_EXPORT", "Xuất\\nExcel", "QS3DEXCEL", "QuantityExport"),
+    ("QS3D_QTY_BLT_TEMPLATE_EXPORT", "Xuất theo\\nmẫu", "QS3DEXCELTEMPLATE", "QuantityExport"),
     ("QS3D_QTY_BLT_VIEW", "Xem khối\\nlượng", "QS3DBQ", "QuantityView"),
     ("QS3D_QTY_BLT_EXPLAIN", "Diễn\\ngiải", "QS3DQUANTITYINSIGHT", "QuantityExplain"),
     ("QS3D_QTY_BLT_COMPARE", "Excel →\\nCAD", "QS3DEXCELTRACE", "QuantityCompare"),
@@ -101,11 +104,11 @@ if AUGMENTER.is_file():
         "QS3DQUANTITYENGINE2": 1,
         "QS3DREGEN": 0,
         "QS3DEXCEL": 1,
+        "QS3DEXCELTEMPLATE": 1,
         "QS3DBQ": 1,
         "QS3DQUANTITYINSIGHT": 1,
         "QS3DEXCELTRACE": 1,
         "QS3DCADTOEXCEL": 1,
-        # Legacy ED2/revision commands stay registered but are no longer visible in this compact customer Ribbon.
         "QS3DED2": 0,
         "QS3DREVDIFF": 0,
     }
@@ -163,9 +166,6 @@ if PLUGIN.is_file():
         if needle not in text:
             errors.append("PluginEntry missing coordinated Quantity reference lifecycle hook: " + needle)
 
-# Pin the real behavior behind every visible customer quantity action. Registered command names
-# alone are not enough; this catches accidental aliases while allowing legacy ED2/revision commands
-# to remain available outside the compact customer Ribbon.
 behavior_contracts = (
     (
         SETTINGS_COMMANDS,
@@ -200,6 +200,19 @@ behavior_contracts = (
             "ProjectQuantityReportBuilder.Group(preview",
             "EnsureHandlesAreLive(document, details)",
             "QsCustomerWorkbookExporter.Export(dialog.FileName, details, summary);",
+        ),
+    ),
+    (
+        TEMPLATE_EXCEL_COMMANDS,
+        "Xuất theo mẫu",
+        (
+            '[CommandMethod("QS3DEXCELTEMPLATE", CommandFlags.UsePickSet)]',
+            'DrawingUnitWorkflow.EnsureResolved(document, "QS3DEXCELTEMPLATE")',
+            "ProjectStateSnapshot.CreateDetachedCopy(currentProject)",
+            "ProjectQuantityReportBuilder.Detail(preview",
+            "ProjectQuantityReportBuilder.Group(preview",
+            "EnsureHandlesAreLive(document, rows)",
+            "QsWorkbookTemplateExporter.Export(",
         ),
     ),
     (
@@ -253,7 +266,6 @@ for path, action_name, needles in behavior_contracts:
         if needle not in text:
             errors.append(f"{action_name} behavior contract missing: {needle}")
 
-# The customer Ribbon replacement must not delete the established compatibility commands.
 legacy_compatibility_contracts = (
     (
         CORE_COMMANDS,
@@ -313,7 +325,7 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: QS3D_QTY is reconciled to the two-panel customer quantity workflow with seven large icon buttons, "
-    "deterministic removal of legacy QS3D quantity panels, registered QS3DEXCEL/QS3DEXCELTRACE/QS3DCADTOEXCEL routing, "
+    "PASS: QS3D_QTY is reconciled to the two-panel customer quantity workflow with eight large icon buttons, "
+    "deterministic removal of legacy QS3D quantity panels, registered QS3DEXCEL/QS3DEXCELTEMPLATE/QS3DEXCELTRACE/QS3DCADTOEXCEL routing, "
     "preserved ED2/revision compatibility commands, coordinated initialization, and contained teardown."
 )

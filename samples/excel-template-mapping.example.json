@@ -1,0 +1,22 @@
+{
+  "worksheet": "CHI_TIET",
+  "firstDataRow": 2,
+  "reservedDataRows": 5000,
+  "mappings": [
+    { "field": "Index", "column": "A" },
+    { "field": "Floor", "column": "B" },
+    { "field": "Zone", "column": "C" },
+    { "field": "Category", "column": "D" },
+    { "field": "FamilyName", "column": "E" },
+    { "field": "ElementName", "column": "F" },
+    { "field": "Material", "column": "G" },
+    { "field": "Count", "column": "H" },
+    { "field": "NetConcreteM3", "column": "I" },
+    { "field": "FormworkM2", "column": "J" },
+    { "field": "LengthM", "column": "K" },
+    { "field": "ElementIds", "column": "L" },
+    { "field": "SourceHandles", "column": "M" },
+    { "field": "DrawingFingerprint", "column": "N" },
+    { "field": "TraceKey", "column": "O" }
+  ]
+}

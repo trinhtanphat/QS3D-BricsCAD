@@ -73,6 +73,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 "QS3DEXCEL",
                 RibbonIconKind.QuantityExport),
             new ButtonSpec(
+                "QS3D_QTY_BLT_TEMPLATE_EXPORT",
+                "Xuất theo\nmẫu",
+                "QS3DEXCELTEMPLATE",
+                RibbonIconKind.QuantityExport),
+            new ButtonSpec(
                 "QS3D_QTY_BLT_VIEW",
                 "Xem khối\nlượng",
                 "QS3DBQ",
@@ -107,8 +112,6 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 var quantityTab = tabs == null ? null : FindById(tabs, TabId);
                 if (quantityTab == null) return false;
 
-                // Preserve the stable internal tab id used by bootstrap/retry logic, but present
-                // the customer-facing quantity workspace under the concise QS3D caption.
                 SetProperty(quantityTab, "Title", "QS3D");
 
                 var panels = GetProperty(quantityTab, "Panels");
@@ -262,7 +265,6 @@ namespace QS3D.BricsCAD.V25.Ribbon
             }
             catch
             {
-                // Host versions may expose a different size enum. Images/text still render.
             }
         }
 
