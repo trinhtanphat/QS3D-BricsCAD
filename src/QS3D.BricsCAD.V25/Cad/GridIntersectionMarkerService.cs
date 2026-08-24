@@ -22,13 +22,12 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private sealed class NativeGrid
         {
-            public NativeGrid(ProjectElement element, GridReferenceCurve curve, ObjectId ownerId, ObjectId sourceId, string elevationLayer, double elevation)
+            public NativeGrid(ProjectElement element, GridReferenceCurve curve, ObjectId ownerId, ObjectId sourceId, double elevation)
             {
                 Element = element;
                 Curve = curve;
                 OwnerId = ownerId;
                 SourceId = sourceId;
-                ElevationLayer = elevationLayer;
                 Elevation = elevation;
             }
 
@@ -36,7 +35,6 @@ namespace QS3D.BricsCAD.V25.Cad
             public GridReferenceCurve Curve { get; }
             public ObjectId OwnerId { get; }
             public ObjectId SourceId { get; }
-            public string ElevationLayer { get; }
             public double Elevation { get; }
         }
 
@@ -76,6 +74,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
             var targetIds = NormalizeTargets(targetGridIds);
             var rollback = ProjectStateSnapshot.Capture(project);
+            var materializedCount = 0;
             try
             {
                 using (document.LockDocument())
@@ -90,6 +89,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     }
 
                     var desired = PlanMarkers(grids, targetIds);
+                    materializedCount = desired.Count;
                     var records = ReadPairRecords(project, targetIds);
                     var existing = ReadExistingMarkers(document.Database, transaction, project.ProjectId, targetIds);
                     ValidateExistingAgainstRecords(records, existing);
@@ -152,7 +152,7 @@ namespace QS3D.BricsCAD.V25.Cad
             }
 
             try { document.Editor.Regen(); } catch { }
-            return PlanMarkersForCount(project, document, targetIds);
+            return materializedCount;
         }
 
         public static IReadOnlyList<string> Inspect(Document document, ProjectState project)
@@ -205,24 +205,6 @@ namespace QS3D.BricsCAD.V25.Cad
                 issues.Add("MARKER_HEALTH_BLOCKED: " + ex.Message);
             }
             return issues.AsReadOnly();
-        }
-
-        private static int PlanMarkersForCount(ProjectState project, Document document, HashSet<string>? targetIds)
-        {
-            try
-            {
-                using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
-                {
-                    var grids = ReadNativeGrids(document.Database, transaction, project);
-                    var count = PlanMarkers(grids, targetIds).Count;
-                    transaction.Commit();
-                    return count;
-                }
-            }
-            catch
-            {
-                return 0;
-            }
         }
 
         private static HashSet<string>? NormalizeTargets(IReadOnlyCollection<string>? targets)
@@ -278,7 +260,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 if (Math.Abs(line.StartPoint.Z - line.EndPoint.Z) > GeometryTolerance)
                     throw new InvalidOperationException("Grid LINE must lie on one WCS-XY elevation: " + element.Id + ".");
                 var curve = GridReferenceCurve.Line(element.Id, new Point2(line.StartPoint.X, line.StartPoint.Y), new Point2(line.EndPoint.X, line.EndPoint.Y));
-                return new NativeGrid(element, curve, entity.OwnerId, id, entity.Layer ?? string.Empty, line.StartPoint.Z);
+                return new NativeGrid(element, curve, entity.OwnerId, id, line.StartPoint.Z);
             }
 
             if (entity is Arc arc)
@@ -291,7 +273,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 var sweep = arc.EndAngle - arc.StartAngle;
                 while (sweep <= 0d) sweep += Math.PI * 2d;
                 var curve = GridReferenceCurve.Arc(element.Id, new Point2(arc.Center.X, arc.Center.Y), arc.Radius, arc.StartAngle, sweep);
-                return new NativeGrid(element, curve, entity.OwnerId, id, entity.Layer ?? string.Empty, arc.Center.Z);
+                return new NativeGrid(element, curve, entity.OwnerId, id, arc.Center.Z);
             }
 
             throw new InvalidOperationException("Grid intersection markers support LINE/ARC native sources only; got " + entity.GetType().Name + " for " + element.Id + ".");
