@@ -191,18 +191,26 @@ namespace QS3D.Core.Interoperability
             PropertyNamespace = InteroperabilityContract.RequireToken(propertyNamespace, nameof(propertyNamespace));
             SetName = InteroperabilityContract.RequireToken(setName, nameof(setName));
             Name = InteroperabilityContract.RequireToken(name, nameof(name));
-            Value = InteroperabilityContract.RequireToken(value, nameof(value));
+            var canonicalValue = InteroperabilityContract.RequireToken(value, nameof(value));
             ValueKind = InteroperabilityContract.RequireDefined(valueKind, nameof(valueKind));
             Unit = InteroperabilityContract.OptionalToken(unit, nameof(unit));
             IsMeasured = isMeasured;
 
             if (ValueKind == InteroperabilityPropertyValueKind.Number)
             {
-                if (!double.TryParse(Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var numeric) ||
+                if (!double.TryParse(canonicalValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var numeric) ||
                     double.IsNaN(numeric) ||
                     double.IsInfinity(numeric))
                     throw new ArgumentException("Numeric interoperability property must contain a finite invariant number.", nameof(value));
             }
+            else if (ValueKind == InteroperabilityPropertyValueKind.Boolean)
+            {
+                if (!bool.TryParse(canonicalValue, out var booleanValue))
+                    throw new ArgumentException("Boolean interoperability property must contain true or false.", nameof(value));
+                canonicalValue = booleanValue ? "true" : "false";
+            }
+
+            Value = canonicalValue;
         }
 
         public string PropertyNamespace { get; }
