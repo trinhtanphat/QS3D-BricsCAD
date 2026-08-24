@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             QuantityRuleTokenXmlPersistabilitySmoke.Run();
             QuantityReportFamilyCategorySmoke.Run();
             MaterialUsageFamilyCategorySmoke.Run();
+            MaterialUsageXlsxProvenanceSmoke.Run();
             DoorOpeningFamilyCategorySmoke.Run();
             RoomFinishFamilyCategorySmoke.Run();
             CurtainWallScheduleFamilyCategorySmoke.Run();
