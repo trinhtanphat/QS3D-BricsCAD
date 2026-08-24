@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             AmbiguousCategoryFailsClosed();
             GenericProxyIsNotClaimedAsBlt();
             LegacyEvidenceSurvivesMeasuredQuantityPass();
+            LegacyQuantityUnderflowFailsClosed();
             MalformedLegacyEvidenceDoesNotPartiallyApply();
             MalformedLegacyEvidenceDoesNotPartiallyApplyMeasuredPass();
         }
@@ -104,6 +105,31 @@ namespace QS3D.Core.SmokeTests
             MeasuredSolidQuantityPolicy.Apply(pendingFormwork);
             Require(!pendingFormwork.Quantities.ContainsKey("FormworkM2"), "Unqualified legacy formwork must remain absent after regeneration policy.");
             Require(pendingFormwork.Properties["CAD.BLT.FormworkStatus"] == "PENDING_EXACT_EVIDENCE", "Pending formwork status was not preserved.");
+        }
+
+        private static void LegacyQuantityUnderflowFailsClosed()
+        {
+            var concreteUnderflow = new ProjectElement("BLT-U1", ElementCategory.Beam);
+            concreteUnderflow.Properties["CAD.BLT.SourceSystem"] = "BLT3D";
+            concreteUnderflow.Properties["CAD.BLT.LegacyConcreteM3"] = "1e-5000";
+            ExpectInvalidOperation(() => BltLegacyQuantityEvidencePolicy.Apply(concreteUnderflow),
+                "Legacy concrete underflow must fail closed instead of becoming zero.");
+
+            var formworkUnderflow = new ProjectElement("BLT-U2", ElementCategory.Column);
+            formworkUnderflow.Properties["CAD.BLT.SourceSystem"] = "BLT3D";
+            formworkUnderflow.Properties["CAD.BLT.LegacyConcreteM3"] = "0";
+            formworkUnderflow.Properties["CAD.BLT.LegacyFormworkM2"] = "1e-5000";
+            ExpectInvalidOperation(() => BltLegacyQuantityEvidencePolicy.Apply(formworkUnderflow),
+                "Legacy formwork underflow must fail closed instead of becoming zero.");
+
+            var exactZero = new ProjectElement("BLT-U3", ElementCategory.Beam);
+            exactZero.Properties["CAD.BLT.SourceSystem"] = "BLT3D";
+            exactZero.Properties["CAD.BLT.LegacyConcreteM3"] = "0";
+            exactZero.Properties["CAD.BLT.LegacyFormworkM2"] = "0e-5000";
+            Require(BltLegacyQuantityEvidencePolicy.Apply(exactZero), "Exact zero legacy evidence should remain valid.");
+            Require(exactZero.Quantities["GrossVolumeM3"].Equals(0d), "Exact zero concrete was not preserved.");
+            Require(exactZero.Quantities["FormworkM2"].Equals(0d), "Exact zero formwork was not preserved.");
+            Require(exactZero.Properties["CAD.BLT.FormworkStatus"] == "ExactLegacyQuantity", "Exact zero formwork status was not preserved.");
         }
 
         private static void MalformedLegacyEvidenceDoesNotPartiallyApply()
