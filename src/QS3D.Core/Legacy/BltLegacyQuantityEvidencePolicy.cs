@@ -17,25 +17,60 @@ namespace QS3D.Core.Legacy
         private const string LegacyFormworkProperty = "CAD.BLT.LegacyFormworkM2";
         private const string FormworkStatusProperty = "CAD.BLT.FormworkStatus";
 
+        internal readonly struct PreparedEvidence
+        {
+            public PreparedEvidence(bool isLegacy, bool hasConcrete, double concrete, bool hasFormwork, double formwork)
+            {
+                IsLegacy = isLegacy;
+                HasConcrete = hasConcrete;
+                Concrete = concrete;
+                HasFormwork = hasFormwork;
+                Formwork = formwork;
+            }
+
+            public bool IsLegacy { get; }
+            public bool HasConcrete { get; }
+            public double Concrete { get; }
+            public bool HasFormwork { get; }
+            public double Formwork { get; }
+        }
+
         public static bool Apply(ProjectElement element)
+        {
+            return ApplyPrepared(element, Prepare(element));
+        }
+
+        internal static PreparedEvidence Prepare(ProjectElement element)
         {
             if (element == null) throw new ArgumentNullException(nameof(element));
             if (!element.Properties.TryGetValue(SourceSystemProperty, out var source) ||
                 !string.Equals((source ?? string.Empty).Trim(), "BLT3D", StringComparison.OrdinalIgnoreCase))
-                return false;
+                return default;
+
+            // Parse every applicable legacy field before any quantity/property write.
+            // A malformed later field must never leave earlier legacy evidence applied.
+            var hasConcrete = TryRead(element, LegacyConcreteProperty, out var concrete);
+            var hasFormwork = TryRead(element, LegacyFormworkProperty, out var formwork);
+            return new PreparedEvidence(true, hasConcrete, concrete, hasFormwork, formwork);
+        }
+
+        internal static bool ApplyPrepared(ProjectElement element, PreparedEvidence evidence)
+        {
+            if (element == null) throw new ArgumentNullException(nameof(element));
+            if (!evidence.IsLegacy) return false;
 
             var changed = false;
-            if (TryRead(element, LegacyConcreteProperty, out var concrete))
+            if (evidence.HasConcrete)
             {
-                changed |= Set(element, "MeasuredSolidVolumeM3", concrete);
-                changed |= Set(element, "GrossVolumeM3", concrete);
-                changed |= Set(element, "NetVolumeM3", concrete);
+                changed |= Set(element, "MeasuredSolidVolumeM3", evidence.Concrete);
+                changed |= Set(element, "GrossVolumeM3", evidence.Concrete);
+                changed |= Set(element, "NetVolumeM3", evidence.Concrete);
                 changed |= Set(element, "DeductionM3", 0d);
             }
 
-            if (TryRead(element, LegacyFormworkProperty, out var formwork))
+            if (evidence.HasFormwork)
             {
-                changed |= Set(element, "FormworkM2", formwork);
+                changed |= Set(element, "FormworkM2", evidence.Formwork);
                 if (!element.Properties.TryGetValue(FormworkStatusProperty, out var current) ||
                     !string.Equals(current, "ExactLegacyQuantity", StringComparison.Ordinal))
                 {

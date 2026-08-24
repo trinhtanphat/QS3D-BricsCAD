@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
             AmbiguousCategoryFailsClosed();
             GenericProxyIsNotClaimedAsBlt();
             LegacyEvidenceSurvivesMeasuredQuantityPass();
+            MalformedLegacyEvidenceDoesNotPartiallyApply();
+            MalformedLegacyEvidenceDoesNotPartiallyApplyMeasuredPass();
         }
 
         private static void ExactProxySolidCanImport()
@@ -102,6 +104,70 @@ namespace QS3D.Core.SmokeTests
             MeasuredSolidQuantityPolicy.Apply(pendingFormwork);
             Require(!pendingFormwork.Quantities.ContainsKey("FormworkM2"), "Unqualified legacy formwork must remain absent after regeneration policy.");
             Require(pendingFormwork.Properties["CAD.BLT.FormworkStatus"] == "PENDING_EXACT_EVIDENCE", "Pending formwork status was not preserved.");
+        }
+
+        private static void MalformedLegacyEvidenceDoesNotPartiallyApply()
+        {
+            var element = new ProjectElement("BLT-C", ElementCategory.Beam);
+            element.Properties["CAD.BLT.SourceSystem"] = "BLT3D";
+            element.Properties["CAD.BLT.LegacyConcreteM3"] = "1.25";
+            element.Properties["CAD.BLT.LegacyFormworkM2"] = "invalid";
+            element.Properties["CAD.BLT.FormworkStatus"] = "ExistingStatus";
+            element.SetQuantity("MeasuredSolidVolumeM3", 7d);
+            element.SetQuantity("GrossVolumeM3", 8d);
+            element.SetQuantity("NetVolumeM3", 9d);
+            element.SetQuantity("DeductionM3", 0.5d);
+            element.SetQuantity("FormworkM2", 11d);
+
+            ExpectInvalidOperation(() => BltLegacyQuantityEvidencePolicy.Apply(element),
+                "Malformed legacy formwork must fail closed.");
+            Require(element.Quantities["MeasuredSolidVolumeM3"].Equals(7d), "Failed legacy apply changed measured volume.");
+            Require(element.Quantities["GrossVolumeM3"].Equals(8d), "Failed legacy apply changed gross volume.");
+            Require(element.Quantities["NetVolumeM3"].Equals(9d), "Failed legacy apply changed net volume.");
+            Require(element.Quantities["DeductionM3"].Equals(0.5d), "Failed legacy apply changed deduction.");
+            Require(element.Quantities["FormworkM2"].Equals(11d), "Failed legacy apply changed formwork.");
+            Require(element.Properties["CAD.BLT.FormworkStatus"] == "ExistingStatus", "Failed legacy apply changed formwork status.");
+        }
+
+        private static void MalformedLegacyEvidenceDoesNotPartiallyApplyMeasuredPass()
+        {
+            var element = new ProjectElement("BLT-D", ElementCategory.Column);
+            element.Properties["CAD.BLT.SourceSystem"] = "BLT3D";
+            element.Properties["CAD.BLT.LegacyConcreteM3"] = "1.25";
+            element.Properties["CAD.BLT.LegacyFormworkM2"] = "invalid";
+            element.Properties["CAD.BLT.FormworkStatus"] = "ExistingStatus";
+            element.Properties[MeasuredSolidQuantityPolicy.SurfaceAreaProperty] = "20";
+            element.Properties[MeasuredSolidQuantityPolicy.VolumeProperty] = "99";
+            element.SetQuantity("MeasuredSurfaceAreaM2", 4d);
+            element.SetQuantity("MeasuredSolidVolumeM3", 5d);
+            element.SetQuantity("GrossVolumeM3", 6d);
+            element.SetQuantity("NetVolumeM3", 7d);
+            element.SetQuantity("DeductionM3", 0.25d);
+            element.SetQuantity("FormworkM2", 8d);
+
+            ExpectInvalidOperation(() => MeasuredSolidQuantityPolicy.Apply(element),
+                "Malformed legacy evidence must abort the measured pass before mutation.");
+            Require(element.Quantities["MeasuredSurfaceAreaM2"].Equals(4d), "Failed measured pass changed measured surface area.");
+            Require(element.Quantities["MeasuredSolidVolumeM3"].Equals(5d), "Failed measured pass changed measured volume.");
+            Require(element.Quantities["GrossVolumeM3"].Equals(6d), "Failed measured pass changed gross volume.");
+            Require(element.Quantities["NetVolumeM3"].Equals(7d), "Failed measured pass changed net volume.");
+            Require(element.Quantities["DeductionM3"].Equals(0.25d), "Failed measured pass changed deduction.");
+            Require(element.Quantities["FormworkM2"].Equals(8d), "Failed measured pass changed formwork.");
+            Require(element.Properties["CAD.BLT.FormworkStatus"] == "ExistingStatus", "Failed measured pass changed formwork status.");
+        }
+
+        private static void ExpectInvalidOperation(Action action, string message)
+        {
+            try
+            {
+                action();
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException("BLT legacy adapter smoke failed: " + message);
         }
 
         private static void Require(bool condition, string message)
