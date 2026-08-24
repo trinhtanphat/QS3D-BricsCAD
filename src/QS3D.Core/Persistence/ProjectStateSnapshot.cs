@@ -8,7 +8,8 @@ namespace QS3D.Core.Persistence
 {
     public sealed class ProjectStateSnapshot
     {
-        private const int MaximumSnapshotEntries = 10000;
+        private const int MaximumSnapshotTopLevelEntries = 100000;
+        private const int MaximumSnapshotNestedEntries = 10000;
         private readonly ProjectState _snapshot;
         private readonly ProjectState _capturedProject;
         private readonly IReadOnlyDictionary<string, ZoneDefinition> _capturedZones;
@@ -239,13 +240,13 @@ namespace QS3D.Core.Persistence
 
         private static void ValidateCollectionEntries(ProjectState source)
         {
-            RequireSupportedCount(source.Metadata.Count, "metadata");
-            RequireSupportedCount(source.Zones.Count, "zones");
-            RequireSupportedCount(source.Floors.Count, "floors");
-            RequireSupportedCount(source.Families.Count, "families");
-            RequireSupportedCount(source.Elements.Count, "elements");
-            RequireSupportedCount(source.QuantityRules.Count, "quantity rules");
-            RequireSupportedCount(source.AuditEvents.Count, "audit events");
+            RequireSupportedCount(source.Metadata.Count, "metadata", MaximumSnapshotNestedEntries);
+            RequireSupportedCount(source.Zones.Count, "zones", MaximumSnapshotTopLevelEntries);
+            RequireSupportedCount(source.Floors.Count, "floors", MaximumSnapshotTopLevelEntries);
+            RequireSupportedCount(source.Families.Count, "families", MaximumSnapshotTopLevelEntries);
+            RequireSupportedCount(source.Elements.Count, "elements", MaximumSnapshotTopLevelEntries);
+            RequireSupportedCount(source.QuantityRules.Count, "quantity rules", MaximumSnapshotTopLevelEntries);
+            RequireSupportedCount(source.AuditEvents.Count, "audit events", MaximumSnapshotTopLevelEntries);
 
             RequireNoNullEntries(source.Zones, "zone");
             RequireNoNullEntries(source.Floors, "floor");
@@ -261,22 +262,22 @@ namespace QS3D.Core.Persistence
             RequireUniqueIds(source.QuantityRules, x => x.Id, "quantity rule");
 
             foreach (var family in source.Families)
-                RequireSupportedCount(family.Properties.Count, "family " + family.Id + " properties");
+                RequireSupportedCount(family.Properties.Count, "family " + family.Id + " properties", MaximumSnapshotNestedEntries);
 
             foreach (var element in source.Elements)
             {
-                RequireSupportedCount(element.SourceHandles.Count, "element " + element.Id + " source handles");
-                RequireSupportedCount(element.DependsOn.Count, "element " + element.Id + " dependencies");
-                RequireSupportedCount(element.Properties.Count, "element " + element.Id + " properties");
-                RequireSupportedCount(element.Quantities.Count, "element " + element.Id + " quantities");
+                RequireSupportedCount(element.SourceHandles.Count, "element " + element.Id + " source handles", MaximumSnapshotNestedEntries);
+                RequireSupportedCount(element.DependsOn.Count, "element " + element.Id + " dependencies", MaximumSnapshotNestedEntries);
+                RequireSupportedCount(element.Properties.Count, "element " + element.Id + " properties", MaximumSnapshotNestedEntries);
+                RequireSupportedCount(element.Quantities.Count, "element " + element.Id + " quantities", MaximumSnapshotNestedEntries);
             }
         }
 
-        private static void RequireSupportedCount(int count, string label)
+        private static void RequireSupportedCount(int count, string label, int maximum)
         {
-            if (count <= MaximumSnapshotEntries) return;
+            if (count <= maximum) return;
             throw new InvalidOperationException(
-                "Cannot snapshot a project whose " + label + " contains more than " + MaximumSnapshotEntries + " entries.");
+                "Cannot snapshot a project whose " + label + " contains more than " + maximum + " entries.");
         }
 
         private static void RequireNoNullEntries<T>(IEnumerable<T> values, string label) where T : class
