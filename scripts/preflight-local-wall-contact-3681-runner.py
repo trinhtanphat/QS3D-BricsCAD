@@ -6,6 +6,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "scripts" / "run-local-v25-wall-contact-3681.ps1"
+RUNNER_NAME = RUNNER.name
 PROJECT = ROOT / "tests" / "QS3D.BricsCAD.V25.LocalQualification" / "QS3D.BricsCAD.V25.LocalQualification.csproj"
 HARNESS = ROOT / "tests" / "QS3D.BricsCAD.V25.LocalQualification" / "WallContact3681QualificationCommands.cs"
 PRODUCTION = ROOT / "src" / "QS3D.BricsCAD.V25" / "Reporting" / "StructuralWallConcreteContactService.cs"
@@ -127,7 +128,7 @@ require_tokens(
         "Status: `LOCAL_READY / PULL_RUN_ONLY`",
         f"Required source-fix ancestor: `{SOURCE_FIX_SHA}`",
         f"Runnable carrier: `{CARRIER}`",
-        "scripts/run-local-v25-wall-contact-3681.ps1",
+        RUNNER_NAME,
         "LOCAL_PASS",
         "LOCAL_FAIL",
         "NO_RESULT",
