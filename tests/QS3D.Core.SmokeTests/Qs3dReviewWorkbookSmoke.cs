@@ -20,6 +20,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             SixSheetWorkbookRoundTripsAllTraceKinds();
+            CanonicalIssuesProjectWithoutReRunningDetectors();
             CanonicalLifecyclePairMismatchFailsClosed();
             MixedDrawingFailsBeforeReplacingExistingWorkbook();
         }
@@ -66,6 +67,11 @@ namespace QS3D.Core.SmokeTests
                 var qtoTrace = Qs3dReviewWorkbookTraceReader.Read(path, Qs3dReviewWorkbookExporter.QuantitySheet, 2);
                 var clashTrace = Qs3dReviewWorkbookTraceReader.Read(path, Qs3dReviewWorkbookExporter.ClashSheet, 2);
                 var duplicateTrace = Qs3dReviewWorkbookTraceReader.Read(path, Qs3dReviewWorkbookExporter.DuplicateSheet, 2);
+                Qs3dReviewTraceValidator.ValidateIdentity(qtoTrace, "drawing-fp", "REV-2026-08-22-01");
+                Throws<InvalidDataException>(() => Qs3dReviewTraceValidator.ValidateIdentity(
+                    qtoTrace, "other-drawing-fp", "REV-2026-08-22-01"));
+                Throws<InvalidDataException>(() => Qs3dReviewTraceValidator.ValidateIdentity(
+                    qtoTrace, "drawing-fp", "REV-2026-08-22-02"));
                 Equal(Qs3dReviewTraceKind.Quantity, qtoTrace.Kind, "QTO trace kind");
                 Equal("EL-QTO-01", qtoTrace.ElementIds.Single(), "QTO semantic id");
                 Equal("00A", qtoTrace.Handles.Single(), "QTO current handle");
@@ -112,6 +118,53 @@ namespace QS3D.Core.SmokeTests
             {
                 TryDelete(path);
             }
+        }
+
+        private static void CanonicalIssuesProjectWithoutReRunningDetectors()
+        {
+            var project = new ProjectState("REVIEW-PROJECT", "Review projection")
+            {
+                DrawingFingerprint = "review-drawing-fp"
+            };
+            project.Floors.Add(new FloorDefinition("L01", "Level 01", 0d));
+            project.Elements.Add(Element("PIPE-01", ElementCategory.CustomQuantity, "A1"));
+            project.Elements.Add(Element("BEAM-01", ElementCategory.Beam, "B2"));
+            project.Elements.Add(Element("BEAM-02", ElementCategory.Beam, "C3"));
+
+            var created = new DateTime(2026, 8, 24, 1, 2, 3, DateTimeKind.Utc);
+            var drawingId = new DrawingId(Guid.Parse("e8ee83d0-2855-4e50-a647-545f280f75d1"));
+            var clash = new CoordinationIssue(
+                "ISSUE-CLASH-01", CoordinationIssueKind.ExactHardClash, CoordinationIssueSeverity.Critical,
+                "Pipe intersects beam", "PIPE-01", "BEAM-01",
+                new CadReference(drawingId, new CadHandle("A1")), new CadReference(drawingId, new CadHandle("B2")),
+                "MEP/Structure", "Pipe/Beam", "Supply", "L01", 0d, created, "QS Lead");
+            var duplicate = new CoordinationIssue(
+                "ISSUE-DUPLICATE-01", CoordinationIssueKind.Review, CoordinationIssueSeverity.High,
+                "Duplicate beams", "BEAM-01", "BEAM-02",
+                new CadReference(drawingId, new CadHandle("B2")), new CadReference(drawingId, new CadHandle("C3")),
+                "Structure", "Beam/Beam", "Structure", "L01", 0d, created.AddMinutes(1), "QS Lead");
+            CoordinationIssuePersistence.Save(project, new[] { clash, duplicate }, 7L);
+            var snapshot = CoordinationIssuePersistence.Load(project)
+                ?? throw new InvalidOperationException("Qs3dReviewWorkbookSmoke: coordination snapshot was not restored.");
+
+            var projection = Qs3dReviewIssueProjection.Build(project, snapshot);
+            Equal(1, projection.Clashes.Count, "canonical clash projection count");
+            Equal(1, projection.Duplicates.Count, "canonical duplicate projection count");
+            Equal("ISSUE-CLASH-01", projection.Clashes.Single().ClashId, "canonical clash issue id");
+            Equal("ISSUE-DUPLICATE-01", projection.Duplicates.Single().DuplicateId, "canonical duplicate issue id");
+            Equal(DuplicateMatchKind.SemanticIdentity, projection.Duplicates.Single().MatchKinds, "conservative duplicate evidence");
+            Equal(2, projection.LifecycleByFindingId.Count, "canonical lifecycle projection count");
+        }
+
+        private static ProjectElement Element(string id, ElementCategory category, string handle)
+        {
+            var element = new ProjectElement(id, category)
+            {
+                FloorId = "L01",
+                DrawingFingerprint = "review-drawing-fp"
+            };
+            element.SourceHandles.Add(handle);
+            return element;
         }
 
         private static void CanonicalLifecyclePairMismatchFailsClosed()

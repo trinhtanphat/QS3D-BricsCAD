@@ -92,6 +92,70 @@ namespace QS3D.BricsCAD.V25.Services
                 "Customer Excel " + trace.WorksheetName);
         }
 
+        public static ExcelLocateResolution ResolveReviewTrace(
+            Document document,
+            ProjectState project,
+            Qs3dReviewTrace trace,
+            string currentModelRevision)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (trace == null) throw new ArgumentNullException(nameof(trace));
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException("QS3D Review Model Locate requires the reviewed DWG to remain active.");
+
+            Qs3dReviewTraceValidator.ValidateIdentity(trace, project.DrawingFingerprint, currentModelRevision);
+            if (trace.Kind == Qs3dReviewTraceKind.Quantity)
+            {
+                if (trace.ElementIds.Count != 1)
+                    throw new ExcelLocateResolutionException(
+                        ExcelLocateFailureCode.UnknownElementId,
+                        "02_CHI_TIET_QTO Model Locate requires exactly one QS3D Element ID.");
+                RequireElement(project, trace.ElementIds[0]);
+                var canonicalProjectHandles = CanonicalHandles(
+                    SourceHandleResolver.Resolve(project, trace.ElementIds),
+                    "QS3D project");
+                var canonicalTraceHandles = CanonicalHandles(trace.Handles, "QS3D Review workbook");
+                if (canonicalProjectHandles.Count == 0 ||
+                    !canonicalTraceHandles.SequenceEqual(canonicalProjectHandles, StringComparer.OrdinalIgnoreCase))
+                    throw new ExcelLocateResolutionException(
+                        ExcelLocateFailureCode.ProvenanceMismatch,
+                        "02_CHI_TIET_QTO Element ID to CAD Handle provenance does not match the active QS3D project.");
+                return ResolveAll(document, canonicalTraceHandles, "02_CHI_TIET_QTO");
+            }
+
+            if (trace.Kind != Qs3dReviewTraceKind.Clash && trace.Kind != Qs3dReviewTraceKind.Duplicate)
+                throw new ArgumentOutOfRangeException(nameof(trace), "Unsupported QS3D Review trace kind.");
+            if (trace.ElementIds.Count != 2 || trace.Handles.Count != 2)
+                throw new ExcelLocateResolutionException(
+                    ExcelLocateFailureCode.ProvenanceMismatch,
+                    trace.SheetName + " Model Locate requires exactly two semantic elements and two CAD Handles.");
+
+            var pairHandles = new List<string>(2);
+            for (var index = 0; index < 2; index++)
+            {
+                var elementId = (trace.ElementIds[index] ?? string.Empty).Trim();
+                RequireElement(project, elementId);
+                var traceHandle = CadHandleService.NormalizeHexHandle(trace.Handles[index])
+                    ?? throw new ExcelLocateResolutionException(
+                        ExcelLocateFailureCode.ProvenanceMismatch,
+                        trace.SheetName + " contains an invalid CAD Handle.");
+                var memberHandles = CanonicalHandles(
+                    SourceHandleResolver.Resolve(project, new[] { elementId }),
+                    "QS3D project");
+                if (!memberHandles.Contains(traceHandle, StringComparer.OrdinalIgnoreCase))
+                    throw new ExcelLocateResolutionException(
+                        ExcelLocateFailureCode.ProvenanceMismatch,
+                        trace.SheetName + " CAD Handle does not belong to its paired semantic element.");
+                pairHandles.Add(traceHandle);
+            }
+            if (pairHandles.Distinct(StringComparer.OrdinalIgnoreCase).Count() != 2)
+                throw new ExcelLocateResolutionException(
+                    ExcelLocateFailureCode.ProvenanceMismatch,
+                    trace.SheetName + " Model Locate requires two distinct CAD Handles.");
+            return ResolveAll(document, pairHandles.AsReadOnly(), trace.SheetName);
+        }
+
         internal static ExcelLocateResolution ResolveModernRow(
             Document document,
             ProjectState project,
@@ -157,6 +221,31 @@ namespace QS3D.BricsCAD.V25.Services
                     ExcelLocateFailureCode.PartialResolution,
                     "Excel Locate could not resolve every CAD Handle. Selection was not changed; repair stale or missing provenance first.");
             return new ExcelLocateResolution(projectHandles, resolved);
+        }
+
+        private static void RequireElement(ProjectState project, string elementId)
+        {
+            if (string.IsNullOrWhiteSpace(elementId) || project.FindElement(elementId.Trim()) == null)
+                throw new ExcelLocateResolutionException(
+                    ExcelLocateFailureCode.UnknownElementId,
+                    "QS3D Review workbook references an unknown QS3D Element ID: " + (elementId ?? string.Empty) + ".");
+        }
+
+        private static ExcelLocateResolution ResolveAll(
+            Document document,
+            IReadOnlyList<string> canonicalHandles,
+            string label)
+        {
+            var resolved = CadHandleService.Resolve(document, canonicalHandles);
+            if (resolved.Count == 0)
+                throw new ExcelLocateResolutionException(
+                    ExcelLocateFailureCode.NoLiveHandles,
+                    label + " Model Locate could not resolve any CAD Handle. Selection was not changed; repair stale or missing provenance first.");
+            if (resolved.Count != canonicalHandles.Count)
+                throw new ExcelLocateResolutionException(
+                    ExcelLocateFailureCode.PartialResolution,
+                    label + " Model Locate could not resolve every CAD Handle. Selection was not changed; repair stale or missing provenance first.");
+            return new ExcelLocateResolution(canonicalHandles, resolved);
         }
 
         private static IReadOnlyList<string> CanonicalHandles(IEnumerable<string> values, string label)
