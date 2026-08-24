@@ -71,6 +71,7 @@ namespace QS3D.Core.SmokeTests
                 var row = ValidRow();
                 row.ProjectId = "PROJECT<&";
                 row.DrawingFingerprint = "DRAWING-001";
+                row.SourceHandles.Clear();
                 row.SourceHandles.Add("H<&1");
                 row.SourceHandles.Add("H2");
 
