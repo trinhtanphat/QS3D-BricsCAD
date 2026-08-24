@@ -129,6 +129,25 @@ No production source, tracked test or tracked runner was changed by this local
 lane. The bounded verdict is now `LOCAL_PASS`; raw scripts, markers, DWG/QSDB and
 machine paths remain ignored.
 
+## PR carrier and CI receipt
+
+The sanitized PASS receipt was committed as
+`e05022073fbcc47551223f73237f7865aaee986f`, then the task branch merged
+current `origin/main@443dfe93ca471541604787508ba039049ccb9f41` at carrier
+`ccab0ce2d91caece5c338180ce75e13a98d562db`. Relative to that current main, the
+carrier changes only `docs/LOCAL-AGENT-INBOX.md`,
+`docs/LOCAL-SOURCE-READY-INDEX-2026-08-24.md` and this claim. The exact tested
+`849339a0f7c5f1ef9659320117c5134f53740d11` remains an ancestor.
+
+All seven focused local/source/Undo/product-boundary/CI-policy preflights and
+`git diff --check origin/main...HEAD` passed on the refreshed carrier. Push CI
+for `ccab0ce2d91caece5c338180ce75e13a98d562db` passed. Its simultaneous PR-event
+preflight evaluated the earlier failure-oriented PR body and failed only because
+that body lacked `Lane-Key: issue-3779`; the PR body now carries the required
+Leaf Issue, parent Issues, lane key, exact tested SHA and carrier fields. This
+tracked receipt creates the normal synchronize event for the corrected body; no
+workflow was manually dispatched, rerun or cancelled.
+
 ## Non-overlap
 
 - Do not rerun or relabel LOCAL-004 P01-P05, LOCAL-002 Curtain stale/rebuild P05, LOCAL-017/018, #1744, #3613 or H.1 P07.
