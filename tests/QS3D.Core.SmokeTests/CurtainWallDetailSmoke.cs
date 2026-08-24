@@ -12,6 +12,9 @@ namespace QS3D.Core.SmokeTests
             NativeDetailCapRejectsHugeGrid();
             PublicRectRejectsInvalidGeometry();
             PublicRectPreservesCanonicalGeometry();
+            FrameFingerprintPreservesStableDigest();
+            PanelFingerprintPreservesStableDigest();
+            FingerprintsStillRejectInvalidSnapshots();
         }
 
         private static CurtainWallLayoutInput Standard() => new CurtainWallLayoutInput
@@ -99,9 +102,92 @@ namespace QS3D.Core.SmokeTests
             Near(12d, rect.AreaM2);
         }
 
+        private static void FrameFingerprintPreservesStableDigest()
+        {
+            var digest = CurtainWallFrameFingerprint.Compute(new CurtainWallFrameFingerprintInput
+            {
+                LengthM = 5d,
+                HeightM = 3d,
+                BottomOffsetM = 0.25d,
+                MaxPanelWidthM = 1.2d,
+                MaxPanelHeightM = 1.5d,
+                PerimeterFrameWidthM = 0.05d,
+                MullionWidthM = 0.04d,
+                TransomWidthM = 0.03d,
+                FrameDepthM = 0.12d
+            });
+
+            Equal("fc4adc60f49495179c4d63efc8c716de431e36e0da63befddb9bc8bfc2232735", digest);
+        }
+
+        private static void PanelFingerprintPreservesStableDigest()
+        {
+            var digest = CurtainWallPanelFingerprint.Compute(new CurtainWallPanelFingerprintInput
+            {
+                SourceLengthM = 5d,
+                HeightM = 3d,
+                BottomOffsetM = 0.25d,
+                PanelDepthM = 0.12d,
+                SourceKind = "Line",
+                PathSegmentCount = 0,
+                Pieces = new[]
+                {
+                    new CurtainWallPanelPiece
+                    {
+                        SourcePanelIndex = 0,
+                        X_M = 0d,
+                        Z_M = 0.25d,
+                        WidthM = 1d,
+                        HeightM = 1d
+                    }
+                }
+            });
+
+            Equal("66b33d87ab85ad08bbe90be45ada4948ac7a76b3cac0ab98a89de8eb09f3f49c", digest);
+        }
+
+        private static void FingerprintsStillRejectInvalidSnapshots()
+        {
+            Throws<ArgumentOutOfRangeException>(() => CurtainWallFrameFingerprint.Compute(new CurtainWallFrameFingerprintInput
+            {
+                LengthM = double.NaN,
+                HeightM = 3d,
+                BottomOffsetM = 0d,
+                MaxPanelWidthM = 1d,
+                MaxPanelHeightM = 1d,
+                FrameDepthM = 0.1d
+            }));
+
+            Throws<OverflowException>(() => CurtainWallPanelFingerprint.Compute(new CurtainWallPanelFingerprintInput
+            {
+                SourceLengthM = 5d,
+                HeightM = 3d,
+                BottomOffsetM = 0d,
+                PanelDepthM = 0.1d,
+                SourceKind = "Line",
+                Pieces = new[]
+                {
+                    new CurtainWallPanelPiece
+                    {
+                        SourcePanelIndex = 0,
+                        X_M = double.MaxValue,
+                        Z_M = 0d,
+                        WidthM = double.Epsilon,
+                        HeightM = 1d
+                    }
+                }
+            }));
+        }
+
         private static void Equal(int expected, int actual)
         {
             if (expected != actual) throw new Exception("Expected " + expected + ", got " + actual + ".");
+        }
+
+        private static void Equal(string expected, string actual)
+        {
+            if (!string.Equals(expected, actual, StringComparison.Ordinal))
+                throw new Exception("Expected " + expected + ", got " + actual + ".");
         }
 
         private static void Near(double expected, double actual, double tolerance = 1e-10d)
