@@ -12,8 +12,10 @@ namespace QS3D.Core.SmokeTests
             DisconnectedOutersProduceStableRegions();
             HoleIsAssignedToContainingOuter();
             SelectionOrderDoesNotChangeRegionIdentity();
+            DuplicateSourceIdsFailClosed();
             DeeperNestingFailsClosed();
             TouchingLoopsFailClosed();
+            CrossingLoopsFailClosed();
         }
 
         private static void DisconnectedOutersProduceStableRegions()
@@ -70,6 +72,15 @@ namespace QS3D.Core.SmokeTests
             Equal("BB20", forward.Regions[1].RegionId);
         }
 
+        private static void DuplicateSourceIdsFailClosed()
+        {
+            Throws<ArgumentException>(() => PolygonSourceLoopRegionAssembler.Assemble(new[]
+            {
+                Loop("ab12", Square(0, 0, 10, 10)),
+                Loop(" AB12 ", Square(20, 0, 30, 10))
+            }));
+        }
+
         private static void DeeperNestingFailsClosed()
         {
             Throws<ArgumentException>(() => PolygonSourceLoopRegionAssembler.Assemble(new[]
@@ -86,6 +97,15 @@ namespace QS3D.Core.SmokeTests
             {
                 Loop("A", Square(0, 0, 10, 10)),
                 Loop("B", Square(10, 2, 14, 6))
+            }));
+        }
+
+        private static void CrossingLoopsFailClosed()
+        {
+            Throws<ArgumentException>(() => PolygonSourceLoopRegionAssembler.Assemble(new[]
+            {
+                Loop("A", Square(0, 0, 10, 10)),
+                Loop("B", Square(8, 2, 14, 6))
             }));
         }
 
