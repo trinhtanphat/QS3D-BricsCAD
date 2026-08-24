@@ -453,17 +453,12 @@ internal static class QuantityEvidenceCollectionSnapshot
         }
 
         var knownCount = ReadKnownCount(source, label);
-        if (knownCount.HasValue && knownCount.Value > MaximumItems)
-        {
-            throw new InvalidOperationException(label + " supports at most " + MaximumItems.ToString(CultureInfo.InvariantCulture) + " items.");
-        }
-
         var snapshot = knownCount.HasValue ? new List<T>(knownCount.Value) : new List<T>();
         foreach (var item in source)
         {
             if (snapshot.Count >= MaximumItems)
             {
-                throw new InvalidOperationException(label + " supports at most " + MaximumItems.ToString(CultureInfo.InvariantCulture) + " items.");
+                throw CapacityError(label);
             }
 
             if (item is null)
@@ -484,33 +479,52 @@ internal static class QuantityEvidenceCollectionSnapshot
 
     private static int? ReadKnownCount<T>(IEnumerable<T> source, string label)
     {
-        int? knownCount = null;
+        var counts = new List<int>(3);
         if (source is ICollection<T> genericCollection)
         {
-            AddKnownCount(ref knownCount, genericCollection.Count, label);
+            counts.Add(genericCollection.Count);
         }
         if (source is IReadOnlyCollection<T> readOnlyCollection)
         {
-            AddKnownCount(ref knownCount, readOnlyCollection.Count, label);
+            counts.Add(readOnlyCollection.Count);
         }
         if (source is ICollection collection)
         {
-            AddKnownCount(ref knownCount, collection.Count, label);
+            counts.Add(collection.Count);
+        }
+
+        for (var index = 0; index < counts.Count; index++)
+        {
+            if (counts[index] < 0)
+            {
+                throw new InvalidOperationException(label + " reported a negative known count.");
+            }
+            if (counts[index] > MaximumItems)
+            {
+                throw CapacityError(label);
+            }
+        }
+
+        if (counts.Count == 0)
+        {
+            return null;
+        }
+
+        var knownCount = counts[0];
+        for (var index = 1; index < counts.Count; index++)
+        {
+            if (counts[index] != knownCount)
+            {
+                throw new InvalidOperationException(label + " reported conflicting known counts.");
+            }
         }
         return knownCount;
     }
 
-    private static void AddKnownCount(ref int? knownCount, int candidate, string label)
+    private static InvalidOperationException CapacityError(string label)
     {
-        if (candidate < 0)
-        {
-            throw new InvalidOperationException(label + " reported a negative known count.");
-        }
-        if (knownCount.HasValue && knownCount.Value != candidate)
-        {
-            throw new InvalidOperationException(label + " reported conflicting known counts.");
-        }
-        knownCount = candidate;
+        return new InvalidOperationException(
+            label + " supports at most " + MaximumItems.ToString(CultureInfo.InvariantCulture) + " items.");
     }
 }
 
