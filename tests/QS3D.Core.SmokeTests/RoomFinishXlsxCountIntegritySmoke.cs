@@ -148,7 +148,7 @@ namespace QS3D.Core.SmokeTests
                 var row = ValidRow();
                 mutate(row);
 
-                Exception observed = null;
+                Exception? observed = null;
                 try
                 {
                     RoomFinishXlsxExporter.Export(destination, new[] { row });
