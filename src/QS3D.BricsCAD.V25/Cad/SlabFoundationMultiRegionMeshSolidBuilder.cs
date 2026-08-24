@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.Core.Audit;
@@ -113,7 +111,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     EnsureCommonElevation(sources, element.Id);
                     var assembly = PolygonSourceLoopRegionAssembler.Assemble(
                         sources.Select(source => new PolygonSourceLoop2(source.Read.SourceHandle, source.Read.Loop)));
-                    var topologyFingerprint = ComputeTopologyFingerprint(assembly, sources);
+                    var topologyFingerprint = MultiRegionTopologyFingerprint.Compute(assembly, sources);
 
                     var family = project.FindFamily(element.FamilyId);
                     var xGroup = ParseDirection(element, family, configuration.XNotationKey, configuration.NotationFallsBackToFamily);
@@ -330,46 +328,6 @@ namespace QS3D.BricsCAD.V25.Cad
                 throw new InvalidOperationException(
                     element.Id + " has persisted multi-region metadata but its aggregate generated-handle slot " +
                     configuration.HandlesKey + " is missing. Refusing replacement before any CAD write.");
-        }
-
-        private static string ComputeTopologyFingerprint(PolygonSourceRegionAssembly2 assembly, IReadOnlyList<SourceLoop> sources)
-        {
-            if (assembly == null) throw new ArgumentNullException(nameof(assembly));
-            if (sources == null) throw new ArgumentNullException(nameof(sources));
-            var fingerprintByHandle = sources.ToDictionary(
-                source => CanonicalHandle(source.Read.SourceHandle, "multi-region source fingerprint handle"),
-                source => source.Read.Fingerprint,
-                StringComparer.OrdinalIgnoreCase);
-            var canonical = new StringBuilder();
-            foreach (var region in assembly.Regions.OrderBy(x => x.RegionId, StringComparer.Ordinal))
-            {
-                if (canonical.Length > 0) canonical.Append(';');
-                canonical.Append("R=").Append(CanonicalHandle(region.RegionId, "multi-region RegionId"));
-                AppendSourceFingerprint(canonical, "O", region.OuterSourceId, fingerprintByHandle);
-                foreach (var hole in region.HoleSourceIds
-                    .Select(handle => CanonicalHandle(handle, "multi-region hole source handle"))
-                    .OrderBy(x => x, StringComparer.Ordinal))
-                    AppendSourceFingerprint(canonical, "H", hole, fingerprintByHandle);
-            }
-
-            using (var sha = SHA256.Create())
-            {
-                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(canonical.ToString()));
-                return BitConverter.ToString(hash).Replace("-", string.Empty);
-            }
-        }
-
-        private static void AppendSourceFingerprint(
-            StringBuilder target,
-            string role,
-            string sourceHandle,
-            IReadOnlyDictionary<string, string> fingerprintByHandle)
-        {
-            var handle = CanonicalHandle(sourceHandle, "multi-region topology source handle");
-            string fingerprint;
-            if (!fingerprintByHandle.TryGetValue(handle, out fingerprint) || string.IsNullOrWhiteSpace(fingerprint))
-                throw new InvalidOperationException("Multi-region topology source " + sourceHandle + " has no deterministic geometry fingerprint.");
-            target.Append('|').Append(role).Append('=').Append(handle).Append(':').Append(fingerprint);
         }
 
         private static IReadOnlyList<string> ValidateCompletePreviousOwnership(
