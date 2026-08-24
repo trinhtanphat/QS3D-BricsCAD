@@ -121,8 +121,31 @@ namespace QS3D.Core.Services
             var grossVolume = QuantityMath.Multiply(grossArea, thickness, element.Id + "/structural wall gross volume");
             var deduction = QuantityMath.Multiply(openingArea, thickness, element.Id + "/structural wall deduction");
             var netVolume = QuantityMath.Multiply(netArea, thickness, element.Id + "/structural wall net volume");
-            var broadFaceFormwork = QuantityMath.Multiply(2d, netArea, element.Id + "/structural wall broad-face formwork");
-            var formwork = QuantityMath.Add(broadFaceFormwork, linkedOpeningRevealFormwork, element.Id + "/structural wall formwork");
+
+            // Wall formwork is the two broad vertical faces plus both exposed vertical end faces.
+            // Top and bottom remain excluded. ConcreteContactAreaM2 is the host-measured actual
+            // union area of concrete-contact regions, so partial contacts are supported and
+            // overlapping neighbours are never double-counted before Core applies the deduction.
+            var broadGrossFormwork = QuantityMath.Multiply(2d, grossArea, element.Id + "/structural wall gross broad-face formwork");
+            var oneEndFormwork = QuantityMath.Multiply(thickness, height, element.Id + "/structural wall one end-face formwork");
+            var endFormwork = QuantityMath.Multiply(2d, oneEndFormwork, element.Id + "/structural wall end-face formwork");
+            var grossFormwork = QuantityMath.Add(broadGrossFormwork, endFormwork, element.Id + "/structural wall gross formwork");
+
+            var broadNetFormwork = QuantityMath.Multiply(2d, netArea, element.Id + "/structural wall net broad-face formwork");
+            var formworkAfterOpeningDeduction = QuantityMath.Add(broadNetFormwork, endFormwork, element.Id + "/structural wall formwork after opening deduction");
+            var formworkAfterOpeningAndReveal = QuantityMath.Add(formworkAfterOpeningDeduction, linkedOpeningRevealFormwork, element.Id + "/structural wall formwork after opening/reveal");
+            var openingRevealAdjustment = QuantityMath.SubtractFloorZero(grossFormwork, formworkAfterOpeningAndReveal, element.Id + "/structural wall opening/reveal adjustment");
+
+            var requestedConcreteContact = QuantityMath.Positive(SemanticNumber.Get(element, "ConcreteContactAreaM2"));
+            var concreteContact = QuantityMath.Clamp(
+                requestedConcreteContact,
+                0d,
+                formworkAfterOpeningAndReveal,
+                element.Id + "/structural wall concrete-contact deduction");
+            var formwork = QuantityMath.SubtractFloorZero(
+                formworkAfterOpeningAndReveal,
+                concreteContact,
+                element.Id + "/structural wall formwork");
 
             element.SetQuantity("LengthM", length);
             element.SetQuantity("HeightM", height);
@@ -132,6 +155,9 @@ namespace QS3D.Core.Services
             element.SetQuantity("GrossVolumeM3", grossVolume);
             element.SetQuantity("DeductionM3", deduction);
             element.SetQuantity("NetVolumeM3", netVolume);
+            element.SetQuantity("GrossFormworkM2", grossFormwork);
+            element.SetQuantity("ConcreteContactDeductionM2", concreteContact);
+            element.SetQuantity("OpeningRevealFormworkAdjustmentM2", openingRevealAdjustment);
             element.SetQuantity("FormworkM2", formwork);
         }
 
