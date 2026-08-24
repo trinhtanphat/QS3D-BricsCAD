@@ -224,6 +224,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void CloseForProjectChange()
             {
+                if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
                 lock (_documentAccessGate)
                 {
                     if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
