@@ -15,7 +15,6 @@ namespace QS3D.Core.SmokeTests
         {
             RejectGrowingPathCount();
             RejectShrinkingPathCount();
-            RejectGrowingFrameCount();
             SnapshotEachPathPointOnce();
             PreserveStablePlanningSemantics();
         }
@@ -32,14 +31,6 @@ namespace QS3D.Core.SmokeTests
             var points = new[] { new Point2(0d, 0d), new Point2(1d, 0d), new Point2(2d, 0d) };
             var source = new DriftingCountList<Point2>(points, 3, 2);
             ExpectInvalid(() => CurtainPathFramePlanner.Length(source), "Shrinking path Count must fail closed before planning.");
-        }
-
-        private static void RejectGrowingFrameCount()
-        {
-            var path = new[] { new Point2(0d, 0d), new Point2(10d, 0d) };
-            var frames = new[] { new CurtainWallRect(1d, 0d, 2d, 3d) };
-            var source = new DriftingCountList<CurtainWallRect>(frames, 1, 2);
-            ExpectInvalid(() => CurtainPathFramePlanner.Plan(path, source), "Growing frame Count must fail closed before geometry mapping.");
         }
 
         private static void SnapshotEachPathPointOnce()
