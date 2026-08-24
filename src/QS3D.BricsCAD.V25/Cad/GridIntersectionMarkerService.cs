@@ -5,6 +5,7 @@ using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
+using QS3D.Core.Persistence;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
 
@@ -21,13 +22,13 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private sealed class NativeGrid
         {
-            public NativeGrid(ProjectElement element, GridReferenceCurve curve, ObjectId ownerId, ObjectId sourceId, string layer, double elevation)
+            public NativeGrid(ProjectElement element, GridReferenceCurve curve, ObjectId ownerId, ObjectId sourceId, string elevationLayer, double elevation)
             {
                 Element = element;
                 Curve = curve;
                 OwnerId = ownerId;
                 SourceId = sourceId;
-                Layer = layer;
+                ElevationLayer = elevationLayer;
                 Elevation = elevation;
             }
 
@@ -35,7 +36,7 @@ namespace QS3D.BricsCAD.V25.Cad
             public GridReferenceCurve Curve { get; }
             public ObjectId OwnerId { get; }
             public ObjectId SourceId { get; }
-            public string Layer { get; }
+            public string ElevationLayer { get; }
             public double Elevation { get; }
         }
 
@@ -74,39 +75,84 @@ namespace QS3D.BricsCAD.V25.Cad
             ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, "Grid intersection marker refresh");
 
             var targetIds = NormalizeTargets(targetGridIds);
-            using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            var rollback = ProjectStateSnapshot.Capture(project);
+            try
             {
-                var grids = ReadNativeGrids(document.Database, transaction, project);
-                if (targetIds != null)
+                using (document.LockDocument())
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    foreach (var target in targetIds)
-                        if (!grids.ContainsKey(target))
-                            throw new InvalidOperationException("Grid intersection refresh target is not a live canonical Grid: " + target + ".");
+                    var grids = ReadNativeGrids(document.Database, transaction, project);
+                    if (targetIds != null)
+                    {
+                        foreach (var target in targetIds)
+                            if (!grids.ContainsKey(target))
+                                throw new InvalidOperationException("Grid intersection refresh target is not a live canonical Grid: " + target + ".");
+                    }
+
+                    var desired = PlanMarkers(grids, targetIds);
+                    var records = ReadPairRecords(project, targetIds);
+                    var existing = ReadExistingMarkers(document.Database, transaction, project.ProjectId, targetIds);
+                    ValidateExistingAgainstRecords(records, existing);
+                    ValidateDesiredOwners(desired);
+
+                    foreach (var marker in existing.Values)
+                    {
+                        var entity = transaction.GetObject(marker.Id, OpenMode.ForWrite, false) as Entity;
+                        if (entity == null || entity.IsErased)
+                            throw new InvalidOperationException("Grid intersection marker changed after preflight: " + marker.Handle + ".");
+                        RequireMatchingMarker(entity, marker, project.ProjectId);
+                        entity.Erase();
+                    }
+
+                    foreach (var record in records.Values)
+                        project.Metadata.Remove(GridIntersectionMarkerRecordCodec.MetadataKey(record.PairToken));
+
+                    EnsureRegApp(document.Database, transaction);
+                    var radius = CadGeometryGuard.ToDrawingUnits(document, MarkerRadiusM, "Grid intersection marker radius");
+                    var createdByPair = new Dictionary<string, List<GridIntersectionMarkerRecordEntry>>(StringComparer.Ordinal);
+                    foreach (var plan in desired)
+                    {
+                        var entry = AddMarker(document, transaction, project, grids, plan, radius);
+                        if (!createdByPair.TryGetValue(plan.PairToken, out var entries))
+                        {
+                            entries = new List<GridIntersectionMarkerRecordEntry>(2);
+                            createdByPair.Add(plan.PairToken, entries);
+                        }
+                        entries.Add(entry);
+                    }
+
+                    foreach (var pair in desired.GroupBy(x => x.PairToken, StringComparer.Ordinal))
+                    {
+                        var first = pair.First();
+                        if (!createdByPair.TryGetValue(pair.Key, out var entries))
+                            throw new InvalidOperationException("Grid intersection marker record creation lost pair entries: " + pair.Key + ".");
+                        var record = new GridIntersectionPairRecord(
+                            first.FirstElementId,
+                            first.SecondElementId,
+                            pair.Key,
+                            entries);
+                        project.Metadata[GridIntersectionMarkerRecordCodec.MetadataKey(pair.Key)] =
+                            GridIntersectionMarkerRecordCodec.Encode(record);
+                    }
+
+                    project.Touch();
+                    transaction.Commit();
                 }
-
-                var desired = PlanMarkers(grids, targetIds);
-                var existing = ReadExistingMarkers(document.Database, transaction, project.ProjectId, targetIds);
-                ValidateExistingAgainstDesired(existing, desired);
-
-                foreach (var marker in existing.Values)
-                {
-                    var entity = transaction.GetObject(marker.Id, OpenMode.ForWrite, false) as Entity;
-                    if (entity == null || entity.IsErased)
-                        throw new InvalidOperationException("Grid intersection marker changed after preflight: " + marker.Handle + ".");
-                    RequireMatchingMarker(entity, marker, project.ProjectId);
-                    entity.Erase();
-                }
-
-                EnsureRegApp(document.Database, transaction);
-                var radius = CadGeometryGuard.ToDrawingUnits(document, MarkerRadiusM, "Grid intersection marker radius");
-                foreach (var plan in desired)
-                    AddMarker(document, transaction, project, grids, plan, radius);
-
-                transaction.Commit();
-                try { document.Editor.Regen(); } catch { }
-                return desired.Count;
             }
+            catch (Exception operationError)
+            {
+                try { rollback.Restore(project); }
+                catch (Exception restoreError)
+                {
+                    throw new InvalidOperationException(
+                        "Grid intersection marker refresh failed and semantic rollback also failed.",
+                        new AggregateException(operationError, restoreError));
+                }
+                throw;
+            }
+
+            try { document.Editor.Regen(); } catch { }
+            return PlanMarkersForCount(project, document, targetIds);
         }
 
         public static IReadOnlyList<string> Inspect(Document document, ProjectState project)
@@ -121,8 +167,13 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     var grids = ReadNativeGrids(document.Database, transaction, project);
                     var desired = PlanMarkers(grids, null);
+                    Dictionary<string, GridIntersectionPairRecord> records;
                     Dictionary<string, MarkerRecord> existing;
-                    try { existing = ReadExistingMarkers(document.Database, transaction, project.ProjectId, null); }
+                    try
+                    {
+                        records = ReadPairRecords(project, null);
+                        existing = ReadExistingMarkers(document.Database, transaction, project.ProjectId, null);
+                    }
                     catch (Exception ex)
                     {
                         issues.Add("MARKER_OWNERSHIP_INVALID: " + ex.Message);
@@ -130,6 +181,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         return issues.AsReadOnly();
                     }
 
+                    CollectRecordHealth(records, existing, issues);
                     var desiredByOwner = desired.ToDictionary(x => x.OwnerToken, StringComparer.Ordinal);
                     foreach (var plan in desired)
                     {
@@ -153,6 +205,24 @@ namespace QS3D.BricsCAD.V25.Cad
                 issues.Add("MARKER_HEALTH_BLOCKED: " + ex.Message);
             }
             return issues.AsReadOnly();
+        }
+
+        private static int PlanMarkersForCount(ProjectState project, Document document, HashSet<string>? targetIds)
+        {
+            try
+            {
+                using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+                {
+                    var grids = ReadNativeGrids(document.Database, transaction, project);
+                    var count = PlanMarkers(grids, targetIds).Count;
+                    transaction.Commit();
+                    return count;
+                }
+            }
+            catch
+            {
+                return 0;
+            }
         }
 
         private static HashSet<string>? NormalizeTargets(IReadOnlyCollection<string>? targets)
@@ -249,6 +319,26 @@ namespace QS3D.BricsCAD.V25.Cad
             return result.AsReadOnly();
         }
 
+        private static Dictionary<string, GridIntersectionPairRecord> ReadPairRecords(ProjectState project, HashSet<string>? targetIds)
+        {
+            var result = new Dictionary<string, GridIntersectionPairRecord>(StringComparer.Ordinal);
+            var scanned = 0;
+            foreach (var item in project.Metadata)
+            {
+                if (!GridIntersectionMarkerRecordCodec.IsMetadataKey(item.Key)) continue;
+                if (scanned++ >= MaxMarkers)
+                    throw new InvalidOperationException("Grid intersection pair-record metadata exceeds " + MaxMarkers + " entries.");
+                GridIntersectionPairRecord record;
+                try { record = GridIntersectionMarkerRecordCodec.Decode(item.Key, item.Value); }
+                catch (Exception ex) { throw new InvalidOperationException("Malformed Grid intersection pair record: " + item.Key + ".", ex); }
+                if (targetIds != null && !targetIds.Contains(record.FirstElementId) && !targetIds.Contains(record.SecondElementId)) continue;
+                if (result.ContainsKey(record.PairToken))
+                    throw new InvalidOperationException("Duplicate Grid intersection pair record: " + record.PairToken + ".");
+                result.Add(record.PairToken, record);
+            }
+            return result;
+        }
+
         private static Dictionary<string, MarkerRecord> ReadExistingMarkers(
             Database database,
             Transaction transaction,
@@ -310,17 +400,82 @@ namespace QS3D.BricsCAD.V25.Cad
             return new MarkerRecord(entity.ObjectId, entity.Handle.ToString(), projectId, ownerToken, pairToken, first, second, occurrence, new Point3d(x, y, z));
         }
 
-        private static void ValidateExistingAgainstDesired(
-            IReadOnlyDictionary<string, MarkerRecord> existing,
-            IReadOnlyList<GridIntersectionMarkerPlan> desired)
+        private static void ValidateExistingAgainstRecords(
+            IReadOnlyDictionary<string, GridIntersectionPairRecord> records,
+            IReadOnlyDictionary<string, MarkerRecord> existing)
         {
-            var desiredOwners = new HashSet<string>(StringComparer.Ordinal);
+            var expectedOwners = new Dictionary<string, GridIntersectionMarkerRecordEntry>(StringComparer.Ordinal);
+            foreach (var pair in records.Values)
+            {
+                foreach (var entry in pair.Entries)
+                {
+                    if (expectedOwners.ContainsKey(entry.OwnerToken))
+                        throw new InvalidOperationException("Duplicate pair-record owner token: " + entry.OwnerToken + ".");
+                    expectedOwners.Add(entry.OwnerToken, entry);
+                    if (!existing.TryGetValue(entry.OwnerToken, out var marker))
+                        throw new InvalidOperationException("Recorded Grid intersection marker is missing: " + entry.OwnerToken + "/" + entry.Handle + ".");
+                    if (!string.Equals(marker.Handle, entry.Handle, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Grid intersection marker handle no longer matches persisted pair record: " + entry.OwnerToken + ".");
+                    if (!string.Equals(marker.PairToken, pair.PairToken, StringComparison.Ordinal) ||
+                        !string.Equals(marker.FirstGridId, pair.FirstElementId, StringComparison.Ordinal) ||
+                        !string.Equals(marker.SecondGridId, pair.SecondElementId, StringComparison.Ordinal) ||
+                        marker.Occurrence != entry.Occurrence)
+                        throw new InvalidOperationException("Grid intersection marker XData no longer matches persisted pair record: " + entry.OwnerToken + ".");
+                    if (Distance2d(marker.Point, entry.Point) > GeometryTolerance || Math.Abs(marker.Point.Z - entry.Elevation) > GeometryTolerance)
+                        throw new InvalidOperationException("Grid intersection marker position no longer matches persisted pair record: " + entry.OwnerToken + ".");
+                }
+            }
+
+            foreach (var marker in existing.Values)
+                if (!expectedOwners.ContainsKey(marker.OwnerToken))
+                    throw new InvalidOperationException("Live Grid intersection marker has no persisted pair record: " + marker.OwnerToken + ".");
+        }
+
+        private static void ValidateDesiredOwners(IReadOnlyList<GridIntersectionMarkerPlan> desired)
+        {
+            var owners = new HashSet<string>(StringComparer.Ordinal);
             foreach (var plan in desired)
-                if (!desiredOwners.Add(plan.OwnerToken))
+                if (!owners.Add(plan.OwnerToken))
                     throw new InvalidOperationException("Duplicate desired Grid intersection owner token: " + plan.OwnerToken + ".");
         }
 
-        private static void AddMarker(
+        private static void CollectRecordHealth(
+            IReadOnlyDictionary<string, GridIntersectionPairRecord> records,
+            IReadOnlyDictionary<string, MarkerRecord> existing,
+            ICollection<string> issues)
+        {
+            var expectedOwners = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var pair in records.Values)
+            {
+                foreach (var entry in pair.Entries)
+                {
+                    if (!expectedOwners.Add(entry.OwnerToken))
+                    {
+                        issues.Add("MARKER_RECORD_DUPLICATE_OWNER: " + entry.OwnerToken);
+                        continue;
+                    }
+                    if (!existing.TryGetValue(entry.OwnerToken, out var marker))
+                    {
+                        issues.Add("MARKER_RECORDED_ENTITY_MISSING: " + entry.OwnerToken);
+                        continue;
+                    }
+                    if (!string.Equals(marker.Handle, entry.Handle, StringComparison.OrdinalIgnoreCase))
+                        issues.Add("MARKER_RECORD_HANDLE_MISMATCH: " + entry.OwnerToken);
+                    if (!string.Equals(marker.PairToken, pair.PairToken, StringComparison.Ordinal) ||
+                        !string.Equals(marker.FirstGridId, pair.FirstElementId, StringComparison.Ordinal) ||
+                        !string.Equals(marker.SecondGridId, pair.SecondElementId, StringComparison.Ordinal) ||
+                        marker.Occurrence != entry.Occurrence)
+                        issues.Add("MARKER_RECORD_OWNER_MISMATCH: " + entry.OwnerToken);
+                    if (Distance2d(marker.Point, entry.Point) > GeometryTolerance || Math.Abs(marker.Point.Z - entry.Elevation) > GeometryTolerance)
+                        issues.Add("MARKER_RECORD_POSITION_MISMATCH: " + entry.OwnerToken);
+                }
+            }
+            foreach (var marker in existing.Values)
+                if (!expectedOwners.Contains(marker.OwnerToken))
+                    issues.Add("MARKER_UNINDEXED: " + marker.OwnerToken);
+        }
+
+        private static GridIntersectionMarkerRecordEntry AddMarker(
             Document document,
             Transaction transaction,
             ProjectState project,
@@ -347,6 +502,12 @@ namespace QS3D.BricsCAD.V25.Cad
             owner.AppendEntity(circle);
             transaction.AddNewlyCreatedDBObject(circle, true);
             Mark(circle, project.ProjectId, plan, point);
+            return new GridIntersectionMarkerRecordEntry(
+                plan.Occurrence,
+                plan.OwnerToken,
+                circle.Handle.ToString(),
+                plan.Point,
+                elevation);
         }
 
         private static double PairElevation(IReadOnlyDictionary<string, NativeGrid> grids, GridIntersectionMarkerPlan plan)
