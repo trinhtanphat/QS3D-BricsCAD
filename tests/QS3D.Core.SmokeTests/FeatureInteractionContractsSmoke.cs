@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             InvalidProfilesFailClosed();
             WorkspaceInteractionSafetyContractsSmoke.Run();
             InteractionSurfaceCoordinatorSmoke.Run();
+            InteractionSurfaceKeyCanonicalitySmoke.Run();
             InspectorHostLayoutSmoke.Run();
             FloatingToolWindowPolicySmoke.Run();
             RoomInteractionProfileSmoke.Run();
