@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <AssemblyName>QS3D.BricsCAD.V25.LocalQualification</AssemblyName>
+    <RootNamespace>QS3D.BricsCAD.V25.LocalQualification</RootNamespace>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\QS3D.Core\QS3D.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="BrxMgd"><HintPath>$(BRICSCAD_V25_DIR)\BrxMgd.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TD_Mgd"><HintPath>$(BRICSCAD_V25_DIR)\TD_Mgd.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TD_MgdBrep"><HintPath>$(BRICSCAD_V25_DIR)\TD_MgdBrep.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+  <Target Name="ValidateBricsCadReferences" BeforeTargets="ResolveReferences">
+    <Error Condition="'$(BRICSCAD_V25_DIR)' == ''" Text="BRICSCAD_V25_DIR is not set." />
+    <Error Condition="!Exists('$(BRICSCAD_V25_DIR)\BrxMgd.dll')" Text="BrxMgd.dll not found under BRICSCAD_V25_DIR." />
+    <Error Condition="!Exists('$(BRICSCAD_V25_DIR)\TD_Mgd.dll')" Text="TD_Mgd.dll not found under BRICSCAD_V25_DIR." />
+    <Error Condition="!Exists('$(BRICSCAD_V25_DIR)\TD_MgdBrep.dll')" Text="TD_MgdBrep.dll not found under BRICSCAD_V25_DIR." />
+  </Target>
+</Project>
