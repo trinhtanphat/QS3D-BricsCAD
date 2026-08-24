@@ -41,6 +41,7 @@ namespace QS3D.BricsCAD.V25
             object? item = null;
             Delegate? clickHandler = null;
             Delegate? popupHandler = null;
+            var nativeRegistrationAdded = false;
             try
             {
                 extension = Activator.CreateInstance(extensionType)
@@ -56,12 +57,8 @@ namespace QS3D.BricsCAD.V25
 
                 popupHandler = AttachEvent(extension, "Popup", nameof(OnMenuPopup), required: false);
 
-                var addMethod = FindApplicationMethod(
-                    "AddObjectContextMenuExtension",
-                    runtimeClass.GetType(),
-                    extensionType)
-                    ?? throw new InvalidOperationException("BricsCAD AddObjectContextMenuExtension API is unavailable.");
-                addMethod.Invoke(null, new object[] { runtimeClass, extension });
+                AddObjectContextMenuExtension(runtimeClass, extension);
+                nativeRegistrationAdded = true;
 
                 _entityRuntimeClass = runtimeClass;
                 _extension = extension;
@@ -72,6 +69,19 @@ namespace QS3D.BricsCAD.V25
             }
             catch
             {
+                // Start is transactional. If BricsCAD accepted the native extension but a later
+                // initialization step failed, remove that exact extension before releasing managed
+                // delegates so a retry cannot leave or stack an orphan QS3D context-menu surface.
+                if (ReferenceEquals(_extension, extension))
+                {
+                    _entityRuntimeClass = null;
+                    _extension = null;
+                    _menuItem = null;
+                    _clickHandler = null;
+                    _popupHandler = null;
+                }
+                if (nativeRegistrationAdded)
+                    TryRemoveObjectContextMenuExtension(runtimeClass, extension);
                 TryDetachEvent(extension, "Popup", popupHandler);
                 TryDetachEvent(item, "Click", clickHandler);
                 throw;
@@ -92,20 +102,7 @@ namespace QS3D.BricsCAD.V25
             _popupHandler = null;
 
             if (runtimeClass != null && extension != null)
-            {
-                try
-                {
-                    var removeMethod = FindApplicationMethod(
-                        "RemoveObjectContextMenuExtension",
-                        runtimeClass.GetType(),
-                        extension.GetType());
-                    removeMethod?.Invoke(null, new object[] { runtimeClass, extension });
-                }
-                catch
-                {
-                    // BricsCAD may already be tearing down its native menus.
-                }
-            }
+                TryRemoveObjectContextMenuExtension(runtimeClass, extension);
 
             TryDetachEvent(extension, "Popup", popupHandler);
             TryDetachEvent(item, "Click", clickHandler);
@@ -205,6 +202,27 @@ namespace QS3D.BricsCAD.V25
                 target.GetType().GetEvent(eventName, BindingFlags.Instance | BindingFlags.Public)?.RemoveEventHandler(target, handler);
             }
             catch { }
+        }
+
+        private static void AddObjectContextMenuExtension(RXClass runtimeClass, object extension)
+        {
+            var addMethod = FindApplicationMethod("AddObjectContextMenuExtension", runtimeClass.GetType(), extension.GetType())
+                ?? throw new InvalidOperationException("BricsCAD AddObjectContextMenuExtension API is unavailable.");
+            addMethod.Invoke(null, new object[] { runtimeClass, extension });
+        }
+
+        private static void TryRemoveObjectContextMenuExtension(RXClass runtimeClass, object extension)
+        {
+            try
+            {
+                var removeMethod = FindApplicationMethod("RemoveObjectContextMenuExtension", runtimeClass.GetType(), extension.GetType());
+                removeMethod?.Invoke(null, new object[] { runtimeClass, extension });
+            }
+            catch
+            {
+                // BricsCAD may already be tearing down its native menus. State ownership is cleared
+                // before this best-effort call, so repeated Stop remains idempotent and fail closed.
+            }
         }
 
         private static MethodInfo? FindApplicationMethod(string name, Type firstType, Type secondType)
