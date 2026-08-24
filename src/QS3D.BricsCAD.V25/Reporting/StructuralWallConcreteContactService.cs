@@ -34,6 +34,13 @@ namespace QS3D.BricsCAD.V25.Reporting
             public int PositiveVolumeCutCount { get; internal set; }
             public int ContactProbeCutCount { get; internal set; }
             public int FailedNativeCutCount { get; internal set; }
+            public int DirectIntersectionFailureCount { get; internal set; }
+            public int ContactProbeOffsetFailureCount { get; internal set; }
+            public int ContactProbeIntersectionFailureCount { get; internal set; }
+            public int ContactProbeEmptyRegionCount { get; internal set; }
+            public int ContactProbeFaceReadFailureCount { get; internal set; }
+            public int ContactProbeNoEligibleFaceCount { get; internal set; }
+            public int ContactProbeSubtractFailureCount { get; internal set; }
             public double GrossVerticalAreaM2 { get; internal set; }
             public double ResidualVerticalAreaM2 { get; internal set; }
             public double DeductionM2 { get; internal set; }
@@ -161,6 +168,7 @@ namespace QS3D.BricsCAD.V25.Reporting
                             using (var overlap = TryIntersection(residual, candidate, out var intersectionFailed))
                             {
                                 directIntersectionFailed = intersectionFailed;
+                                if (intersectionFailed) diagnostics.DirectIntersectionFailureCount++;
                                 if (!intersectionFailed && overlap != null && SafeVolumeCad(overlap) > volumeCadTolerance)
                                 {
                                     var overlapContactAreaCad = ReadEligibleOriginalFaceArea(
@@ -194,6 +202,7 @@ namespace QS3D.BricsCAD.V25.Reporting
                             {
                                 if (!TryOffset(contactProbe, distanceCad))
                                 {
+                                    diagnostics.ContactProbeOffsetFailureCount++;
                                     diagnostics.FailedNativeCutCount++;
                                     continue;
                                 }
@@ -202,11 +211,13 @@ namespace QS3D.BricsCAD.V25.Reporting
                                 {
                                     if (contactIntersectionFailed)
                                     {
+                                        diagnostics.ContactProbeIntersectionFailureCount++;
                                         diagnostics.FailedNativeCutCount++;
                                         continue;
                                     }
                                     if (contact == null || SafeVolumeCad(contact) <= volumeCadTolerance)
                                     {
+                                        diagnostics.ContactProbeEmptyRegionCount++;
                                         if (directIntersectionFailed) diagnostics.FailedNativeCutCount++;
                                         continue;
                                     }
@@ -219,17 +230,20 @@ namespace QS3D.BricsCAD.V25.Reporting
                                         out var probeFaceReadFailed);
                                     if (probeFaceReadFailed)
                                     {
+                                        diagnostics.ContactProbeFaceReadFailureCount++;
                                         diagnostics.FailedNativeCutCount++;
                                         continue;
                                     }
                                     if (probeContactAreaCad <= areaCadTolerance)
                                     {
+                                        diagnostics.ContactProbeNoEligibleFaceCount++;
                                         if (directIntersectionFailed) diagnostics.FailedNativeCutCount++;
                                         continue;
                                     }
 
                                     if (!TrySubtract(residual, contact))
                                     {
+                                        diagnostics.ContactProbeSubtractFailureCount++;
                                         diagnostics.FailedNativeCutCount++;
                                         continue;
                                     }
