@@ -267,6 +267,7 @@ namespace QS3D.BricsCAD.V25.Services
                 wall.Properties["ConcreteContactAreaM2"] = encoded;
                 wall.MarkDirty(ElementDirtyFlags.Quantity);
                 Regenerate(project, wall);
+                MeasuredSolidQuantityPolicy.Apply(wall);
                 changed = true;
             }
 
