@@ -53,6 +53,8 @@ namespace QS3D.Core.Reporting
 
     public sealed class QuantityFormworkFaceExplanation
     {
+        public const string BrepRectangleExtentsMeasurementKind = "brep-rectangle-extents-v1";
+
         public string FaceId { get; set; } = string.Empty;
         public string FaceType { get; set; } = "Other";
         public double GrossArea { get; set; }
@@ -64,7 +66,7 @@ namespace QS3D.Core.Reporting
         public IReadOnlyList<QuantityGeometryDeduction> Deductions { get; set; } = Array.Empty<QuantityGeometryDeduction>();
 
         public bool HasMeasurementTrace =>
-            !string.IsNullOrWhiteSpace(MeasurementKind) &&
+            string.Equals(MeasurementKind, BrepRectangleExtentsMeasurementKind, StringComparison.Ordinal) &&
             MeasurementLength > 0d &&
             MeasurementHeight > 0d;
     }
@@ -118,6 +120,13 @@ namespace QS3D.Core.Reporting
                 var hasHeight = face.MeasurementHeight > 0d;
                 if (hasKind != hasLength || hasKind != hasHeight)
                     throw new InvalidOperationException(face.FaceId + " measurement trace must provide kind, length and height together.");
+                if (hasKind && !string.Equals(
+                        face.MeasurementKind,
+                        QuantityFormworkFaceExplanation.BrepRectangleExtentsMeasurementKind,
+                        StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(face.FaceId + " measurement trace kind is not supported.");
+                }
                 if (face.HasMeasurementTrace)
                 {
                     var measuredArea = face.MeasurementLength * face.MeasurementHeight;
