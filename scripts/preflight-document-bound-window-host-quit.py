@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard V25 modeless windows against WPF/native-reactor teardown during BricsCAD host shutdown."""
+"""Guard V25 modeless windows with an early, non-reentrant BricsCAD host-quit barrier."""
 
 # Lane-Key: issue-3621 — keep this regression on the canonical source carrier.
 from pathlib import Path
@@ -39,16 +39,30 @@ require(
 
 attach = method_block(source, "public void Attach(Document document)")
 for marker in (
-    "BcadApplication.BeginQuit += OnApplicationBeginQuit;",
+    "BcadApplication.QuitWillStart += OnApplicationQuitWillStart;",
     "BcadApplication.QuitAborted += OnApplicationQuitAborted;",
 ):
     require(marker in attach, f"Attach must subscribe the host lifecycle barrier: {marker}")
-
-begin_quit = method_block(source, "private void OnApplicationBeginQuit(object? sender, EventArgs e)")
 require(
-    "Volatile.Write(ref _hostQuitStarted, 1);" in begin_quit,
-    "BeginQuit must atomically mark host shutdown before document destruction can trigger WPF teardown.",
+    "BcadApplication.BeginQuit +=" not in attach,
+    "The final-host barrier must be armed at QuitWillStart, not the later BeginQuit callback.",
 )
+
+quit_will_start = method_block(source, "private void OnApplicationQuitWillStart(object? sender, EventArgs e)")
+require(
+    "Volatile.Write(ref _hostQuitStarted, 1);" in quit_will_start,
+    "QuitWillStart must atomically mark host shutdown before document destruction can trigger WPF teardown.",
+)
+for forbidden in (
+    "_window.Close()",
+    "TryCloseWindow(",
+    "DetachDocumentManagerHandler(",
+    "DetachDocumentLifecycleHandlers",
+):
+    require(
+        forbidden not in quit_will_start,
+        f"QuitWillStart is a state-only barrier and must not perform reentrant WPF/native teardown: {forbidden}",
+    )
 
 ensure_affinity = method_block(source, "private bool EnsureProjectAffinity()")
 require(
@@ -117,7 +131,7 @@ require(
     "Host-shutdown state must suppress explicit WPF close, not merely change its dispatch timing.",
 )
 
-# A close request may have been queued before BeginQuit and execute after BeginQuit. The final
+# A close request may have been queued before QuitWillStart and execute after QuitWillStart. The final
 # dispatcher callback is therefore the last authoritative barrier before WPF detaches its HWND.
 close_on_dispatcher = method_block(source, "private void TryCloseWindowOnDispatcher()")
 for marker in (
@@ -152,15 +166,15 @@ require(
     "The shared detach owner must fail closed instead of mutating BricsCAD subscriptions during host quit.",
 )
 for marker in (
-    "BcadApplication.BeginQuit -= OnApplicationBeginQuit;",
+    "BcadApplication.QuitWillStart -= OnApplicationQuitWillStart;",
     "BcadApplication.QuitAborted -= OnApplicationQuitAborted;",
 ):
     require(marker in detach, f"Normal detach must release the host lifecycle subscription: {marker}")
 require(
     detach.index("if (Volatile.Read(ref _hostQuitStarted) != 0) return;")
     < detach.index("DetachDocumentManagerHandler();")
-    < detach.index("BcadApplication.BeginQuit -= OnApplicationBeginQuit;"),
-    "No BricsCAD lifecycle handler may be removed by shared detach after BeginQuit has started.",
+    < detach.index("BcadApplication.QuitWillStart -= OnApplicationQuitWillStart;"),
+    "No BricsCAD lifecycle handler may be removed by shared detach after QuitWillStart has started.",
 )
 
-print("[OK] BricsCAD BeginQuit owns final native/WPF teardown: QS3D blocks modeless document access, Window.Close, and native lifecycle unsubscription until normal exit or dispatcher-deferred QuitAborted recovery.")
+print("[OK] BricsCAD QuitWillStart arms the final native/WPF barrier before document teardown: QS3D blocks modeless document access, Window.Close, and native lifecycle unsubscription until normal exit or dispatcher-deferred QuitAborted recovery.")
