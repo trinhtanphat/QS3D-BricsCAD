@@ -33,6 +33,10 @@ required_commands = [
     'CommandMethod("QS3DGRIDINTERSECTIONS")',
     'CommandMethod("QS3DGRIDINTERSECTIONSSEL"',
     'CommandMethod("QS3DGRIDINTERSECTIONHEALTH")',
+    "TryGetReadOnly(document, out var previewProject)",
+    "project.ChangeVersion != previewProject.ChangeVersion",
+    'throw new InvalidOperationException("Grid intersection project changed after preview/selection; rerun the command.")',
+    "GridIntersectionMarkerService.Inspect(document, project)",
 ]
 required_identity = [
     'PairTokenPrefix = "GIP1:"',
@@ -62,6 +66,16 @@ if "CanonicalizePair(" in planner or "IsOwnerForPair(" in service:
     missing.append("marker lifecycle references undeclared identity helper")
 if "GridIntersectionMarkerService.RegAppName" not in guard:
     missing.append("generated-source-guard:intersection RegApp")
+
+selected_marker = "if (selectedOnly)"
+bind_marker = "var project = ProjectContextCoordinator.GetOrCreate(document);"
+if selected_marker not in commands or bind_marker not in commands or commands.index(selected_marker) > commands.index(bind_marker):
+    missing.append("commands:selected preview/cancel must complete before canonical mutation binding")
+health_start = commands.find("public void InspectIntersectionMarkers()")
+refresh_start = commands.find("private static void RefreshIntersectionMarkers(bool selectedOnly)")
+if health_start < 0 or refresh_start < 0 or "GetOrCreate(document)" in commands[health_start:refresh_start]:
+    missing.append("commands:health inspection must remain read-only/non-creating")
+
 if missing:
     print("Grid intersection marker lifecycle guard FAILED:")
     for item in missing:
