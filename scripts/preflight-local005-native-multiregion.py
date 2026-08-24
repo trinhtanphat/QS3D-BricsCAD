@@ -23,6 +23,28 @@ REQUIRED_FILES = {
         "MaxSourceVertices",
         "MaxTessellatedVertices",
     ),
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedRebarRegionOwnershipService.cs": (
+        "GeneratedRebarRegionOwnershipService",
+        "QS3D_REBAR_REGION",
+        "GeneratedOwnershipIdentityToken.Project",
+        "GeneratedOwnershipIdentityToken.Element",
+        "GeneratedHandleOwnershipPolicy.CanonicalOwnerSlot",
+        "regionId",
+        "MarkGenerated",
+        "HasMatchingOwnership",
+        "RequireMatchingOwnership",
+    ),
+    "src/QS3D.BricsCAD.V25/Cad/MultiRegionRebarManifest.cs": (
+        "MultiRegionRebarManifest",
+        "SourceManifestEntry",
+        "GeneratedManifestEntry",
+        "SerializeSources",
+        "ParseSources",
+        "SerializeGenerated",
+        "ParseGenerated",
+        "MaxRegions",
+        "MaxHandlesPerRegion",
+    ),
 }
 
 
@@ -44,7 +66,7 @@ def main():
             print(" -", item)
         return 1
 
-    print("PASS: LOCAL-005 Core assembler and native closed-loop reader contract are present.")
+    print("PASS: LOCAL-005 Core assembler, native loop reader, region ownership, and bounded manifests are present.")
     return 0
 
 
