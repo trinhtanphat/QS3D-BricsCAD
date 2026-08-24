@@ -178,8 +178,9 @@ namespace QS3D.BricsCAD.V25.Cad
             var result = new Dictionary<string, NativeGrid>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in semantic)
             {
-                if (!result.TryAdd(element.Id, ReadNativeGrid(database, transaction, element)))
+                if (result.ContainsKey(element.Id))
                     throw new InvalidOperationException("Project contains duplicate semantic Grid id: " + element.Id + ".");
+                result.Add(element.Id, ReadNativeGrid(database, transaction, element));
             }
             return result;
         }
@@ -273,8 +274,9 @@ namespace QS3D.BricsCAD.V25.Cad
                         if (!string.Equals(record.ProjectId, projectId, StringComparison.Ordinal))
                             throw new InvalidOperationException("Foreign Grid intersection marker project ownership detected at handle " + record.Handle + ".");
                         if (targetIds != null && !targetIds.Contains(record.FirstGridId) && !targetIds.Contains(record.SecondGridId)) continue;
-                        if (!result.TryAdd(record.OwnerToken, record))
+                        if (result.ContainsKey(record.OwnerToken))
                             throw new InvalidOperationException("Duplicate live Grid intersection owner token: " + record.OwnerToken + ".");
+                        result.Add(record.OwnerToken, record);
                     }
                 }
             }
@@ -316,11 +318,6 @@ namespace QS3D.BricsCAD.V25.Cad
             foreach (var plan in desired)
                 if (!desiredOwners.Add(plan.OwnerToken))
                     throw new InvalidOperationException("Duplicate desired Grid intersection owner token: " + plan.OwnerToken + ".");
-            foreach (var marker in existing.Values)
-            {
-                if (!GridIntersectionIdentityPlanner.IsOwnerForPair(marker.OwnerToken, marker.FirstGridId, marker.SecondGridId))
-                    throw new InvalidOperationException("Existing Grid intersection marker is not pair-owned: " + marker.Handle + ".");
-            }
         }
 
         private static void AddMarker(
