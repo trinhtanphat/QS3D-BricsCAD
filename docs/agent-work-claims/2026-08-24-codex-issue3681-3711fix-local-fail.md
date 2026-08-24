@@ -44,7 +44,14 @@ Two separate fresh BricsCAD processes returned the identical production `QS3DWAL
 | residual/net area | `2.6688000000000054 m2` | `2.5088 m2` |
 | contact deduction | `0 m2` | `0.1600 m2` |
 
-PR #3716 defers the preliminary zero-volume direct-intersection failure to the positive-offset touching probe, but the licensed native offset/intersection/original-face/subtract chain still does not resolve this fixture. The aggregate runtime diagnostic does not identify which native probe stage remains unresolved. Source issue #3711 was reopened for a bounded stage diagnostic and correction; genuinely unresolved or ambiguous native paths must remain fail closed.
+PR #3716 defers a preliminary zero-volume direct-intersection failure to the positive-offset touching probe, but the licensed chain still does not resolve this fixture. A Git-ignored transient-clone stage probe then invoked the same production private stages with exact plugin/Core PDB SourceLink checks:
+
+- the preliminary direct intersection did not throw or report failure; it returned a native result with volume 0;
+- the production probe distance was `1e-6` CAD units, and `OffsetBody(1e-6)` failed before contact intersection, original-face read or subtraction could run;
+- at `1e-5` CAD units (10x), native offset, intersection, original-face read and subtraction all succeeded; contact volume was approximately `1.6000000005e-6` CAD3 and eligible original-face area was `0.15999999999999093 m2`;
+- 100x, 1000x and 10000x diagnostic offsets also completed the same chain and retained the same eligible original-face area.
+
+This isolates a V25 native modeler-distance floor rather than the previously hypothesized preliminary BoolIntersect exception for this fixture. Source issue #3711 was reopened for a unit-aware/modeler-stable native probe distance that preserves the tighter original-plane identity test, partial-contact/union/top-bottom rules, the passing penetration control and fail-closed behavior for genuinely unresolved native stages. The private diagnostic probe and raw stage markers remain Git-ignored.
 
 ## Penetration regression remains correct
 
