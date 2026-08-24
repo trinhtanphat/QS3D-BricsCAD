@@ -8,10 +8,15 @@ namespace QS3D.Core.Domain
     {
         public static string CanonicalId(string roomId, ElementCategory category)
         {
-            var normalizedRoomId = (roomId ?? string.Empty).Trim();
+            var rawRoomId = roomId ?? string.Empty;
+            var normalizedRoomId = rawRoomId.Trim();
             if (normalizedRoomId.Length == 0) throw new ArgumentException("Room id is required.", nameof(roomId));
+            if (!string.Equals(rawRoomId, normalizedRoomId, StringComparison.Ordinal))
+                throw new ArgumentException("Room id must be canonical without surrounding whitespace.", nameof(roomId));
+            if (rawRoomId.Any(char.IsControl))
+                throw new ArgumentException("Room id cannot contain control characters.", nameof(roomId));
             EnsureFinishCategory(category);
-            return normalizedRoomId + "-" + category;
+            return rawRoomId + "-" + category;
         }
 
         public static ProjectElement? FindExisting(ProjectState project, ProjectElement room, ElementCategory category)
@@ -85,9 +90,11 @@ namespace QS3D.Core.Domain
             {
                 if (element == null)
                     throw new InvalidOperationException("Project contains a null semantic element entry.");
-                var elementId = (element.Id ?? string.Empty).Trim();
-                if (elementId.Length == 0)
+                var elementId = element.Id ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(elementId))
                     throw new InvalidOperationException("Project contains an element with a blank semantic id.");
+                if (!string.Equals(elementId, elementId.Trim(), StringComparison.Ordinal) || elementId.Any(char.IsControl))
+                    throw new InvalidOperationException("Project contains an element with a non-canonical semantic id.");
                 if (elements.ContainsKey(elementId))
                     throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId);
                 elements.Add(elementId, element);

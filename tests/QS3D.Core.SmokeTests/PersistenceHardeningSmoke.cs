@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -23,9 +24,58 @@ namespace QS3D.Core.SmokeTests
             DuplicateIdRejected();
             InvalidNumericRejected();
             DirtyStateRoundtrip();
+            CheckpointCaptureRejectsRevisionDrift();
+            CheckpointCaptureStableControl();
             StableIdQuantityGrouping();
             ExportHeadersAndWorksheetUx();
             HealthRecoveryStates();
+        }
+
+        private static void CheckpointCaptureRejectsRevisionDrift()
+        {
+            var project = NewProject("checkpoint-drift", "Checkpoint drift");
+            var first = new ProjectElement("E1", ElementCategory.ArchitecturalWall);
+            var second = new ProjectElement("E2", ElementCategory.ArchitecturalWall);
+            project.Elements.Add(first);
+            project.Elements.Add(second);
+            project.Zones.Add(new ZoneDefinition("z2", "Vùng-2"));
+
+            var rejected = false;
+            try
+            {
+                ProjectPersistenceCheckpoint.Capture(project, MutatingCheckpointIds(project));
+            }
+            catch (InvalidOperationException ex)
+            {
+                rejected = ex.Message.IndexOf("project revision is changing", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            Require(rejected, "Persistence checkpoint accepted element state captured across a project revision change.");
+        }
+
+        private static IEnumerable<string> MutatingCheckpointIds(ProjectState project)
+        {
+            yield return "E1";
+            project.ActiveZoneId = "z2";
+            yield return "E2";
+        }
+
+        private static void CheckpointCaptureStableControl()
+        {
+            var project = NewProject("checkpoint-stable", "Checkpoint stable");
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall);
+            project.Elements.Add(element);
+            var checkpoint = ProjectPersistenceCheckpoint.Capture(project, new[] { "E1" });
+
+            Require(checkpoint.Matches(project), "Stable persistence checkpoint did not match its unchanged project revision.");
+            var expectedVersion = checkpoint.ProjectChangeVersion;
+            var expectedUpdatedUtc = checkpoint.ProjectUpdatedUtc;
+            element.SetProperty("LengthM", "5");
+            Require(!checkpoint.Matches(project), "Persistence checkpoint ignored changed element persistence state.");
+            checkpoint.Restore(project);
+            Require(checkpoint.Matches(project), "Persistence checkpoint did not restore its captured persistence state.");
+            Require(project.ChangeVersion == expectedVersion && project.UpdatedUtc == expectedUpdatedUtc,
+                "Persistence checkpoint did not restore the captured project persistence revision.");
         }
 
         private static void RecoverySavePreservesValidatedBackup()
