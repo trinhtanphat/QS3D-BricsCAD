@@ -10,6 +10,7 @@ using Teigha.DatabaseServices;
 using Teigha.Geometry;
 using Teigha.Runtime;
 using Application = Bricscad.ApplicationServices.Application;
+using Exception = System.Exception;
 
 namespace QS3D.BricsCAD.V25.LocalQualification
 {
@@ -56,8 +57,6 @@ namespace QS3D.BricsCAD.V25.LocalQualification
             RequireMillimeterDrawing(document);
             var result = NewResult();
 
-            // Mandatory cell 1: exact zero-volume end-face touching. This must exercise the
-            // production positive-offset contact probe and must no longer fail at OffsetBody.
             var touching = RunMeasureCase(document, -100d, 100d);
             RequireCommon("touching_one_end", touching);
             if (touching.PositiveVolumeCutCount != 0)
@@ -72,10 +71,6 @@ namespace QS3D.BricsCAD.V25.LocalQualification
             result["touching.contact_cuts"] = touching.ContactProbeCutCount.ToString(CultureInfo.InvariantCulture);
             result["touching.failed_native"] = touching.FailedNativeCutCount.ToString(CultureInfo.InvariantCulture);
 
-            // Mandatory cell 2: the already-proven 0.05 m penetration regression. The neighbor
-            // starts 100 mm outside the wall and extends 150 mm, leaving exactly 50 mm overlap.
-            // It must continue to use the positive-volume path while original-face authority
-            // prevents penetration side strips from inflating the 0.1600 m2 deduction.
             var penetration = RunMeasureCase(document, -100d, 150d);
             RequireCommon("penetration_005m", penetration);
             if (penetration.PositiveVolumeCutCount < 1)
