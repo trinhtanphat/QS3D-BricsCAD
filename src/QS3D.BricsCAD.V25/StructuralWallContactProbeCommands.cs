@@ -58,6 +58,13 @@ namespace QS3D.BricsCAD.V25
                     "volume_cuts=" + diagnostics.PositiveVolumeCutCount.ToString(CultureInfo.InvariantCulture),
                     "contact_cuts=" + diagnostics.ContactProbeCutCount.ToString(CultureInfo.InvariantCulture),
                     "failed_native=" + diagnostics.FailedNativeCutCount.ToString(CultureInfo.InvariantCulture),
+                    "direct_fail=" + diagnostics.DirectIntersectionFailureCount.ToString(CultureInfo.InvariantCulture),
+                    "probe_offset_fail=" + diagnostics.ContactProbeOffsetFailureCount.ToString(CultureInfo.InvariantCulture),
+                    "probe_intersect_fail=" + diagnostics.ContactProbeIntersectionFailureCount.ToString(CultureInfo.InvariantCulture),
+                    "probe_empty=" + diagnostics.ContactProbeEmptyRegionCount.ToString(CultureInfo.InvariantCulture),
+                    "probe_face_fail=" + diagnostics.ContactProbeFaceReadFailureCount.ToString(CultureInfo.InvariantCulture),
+                    "probe_no_face=" + diagnostics.ContactProbeNoEligibleFaceCount.ToString(CultureInfo.InvariantCulture),
+                    "probe_subtract_fail=" + diagnostics.ContactProbeSubtractFailureCount.ToString(CultureInfo.InvariantCulture),
                     "gross_m2=" + diagnostics.GrossVerticalAreaM2.ToString("R", CultureInfo.InvariantCulture),
                     "residual_m2=" + diagnostics.ResidualVerticalAreaM2.ToString("R", CultureInfo.InvariantCulture),
                     "deduction_m2=" + deductionM2.ToString("R", CultureInfo.InvariantCulture)
