@@ -334,10 +334,6 @@ finally {
     foreach ($path in @($scratchDwg, $scratchQsdb, ($scratchQsdb + ".bak"))) {
         Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
     }
-    $owned = @(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue | Where-Object { $_.StartTime.ToUniversalTime() -ge $startedUtc.AddSeconds(-2) })
-    foreach ($process in $owned) {
-        try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch { }
-    }
 }
 
 if ($overall -eq "LOCAL_PASS") { exit 0 }
