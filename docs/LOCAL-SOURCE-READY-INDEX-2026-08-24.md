@@ -21,10 +21,18 @@ These carriers are source-ready and form the first executable queue from `docs/L
 | Priority | Issue | Exact carrier | Exact runtime-source SHA | Local action |
 | --- | --- | --- | --- | --- |
 | P0 | #1744 | `agent/control01/slabopen-undo-semantic-1744` | `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31` | fetch, checkout, build, run only |
-| P0 | #3681 | `agent/chatgpt-gpt56sol/issue-3687-structwall-brep-contact-fix` | `cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb` | fetch, checkout, build, rerun only |
+| P0 | #3681 | `agent/chatgpt-gpt56sol/issue-3680-local-dispatch-refresh` | exact validated runner SHA published on #3681; must contain `cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb` | fetch exact SHA, run `scripts/run-local-v25-wall-contact-3681.ps1` only |
 | P1 | #3613 | `agent/qs3d-uix-worker-b/issue-3613-coordination-locate-zoom` | `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31` | fetch, checkout, build, run only |
 
-For #3681, `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31` is historical failing runtime evidence only. Source defect #3687 was corrected by PR #3692; the licensed rerun must use the exact source-ready SHA `cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb`. Do not rerun the obsolete #3681 binary.
+For #3681, `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31` is historical failing runtime evidence only. Source defect #3687 was corrected by PR #3692 at source-fix SHA `cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb`. The final runnable carrier is this coordination branch after the committed #3681 harness/runner lands and protected branch CI is green; the exact immutable carrier SHA is published on #3681 and #72. Local agents do not check out the old source-fix branch directly and do not write test code.
+
+The #3681 local action is deliberately one command after the exact checkout:
+
+```powershell
+.\scripts\run-local-v25-wall-contact-3681.ps1
+```
+
+That runner performs the repository-safe preflights/build, builds its committed local-only x64/net48 BricsCAD harness, executes the licensed V25 full/partial/union/top-bottom/stale/capture-refresh/two-end cases, runs a second fresh process for isolation, persists a scratch DWG/QSDB and cold-reopens it, checks the BLT `2.6688 - 0.3200 = 2.3488 m²` control, records plugin/Core identity and removes test-owned scratch state. `Undo/Redo` is reported as not applicable to the contact measurement itself only after the harness proves that measurement is read-only; no manual geometry authoring or source patch is delegated to the local agent.
 
 Do not rerun the obsolete #3593 P06 binary. The later #3593 P07 result and closed #3621 source lane are authoritative for that H.1 correction.
 
@@ -60,20 +68,17 @@ For a pinned carrier, local agents use the exact branch and SHA, never an approx
 
 ```powershell
 git fetch origin
-git checkout <exact-carrier-branch>
-git reset --hard <exact-runtime-source-sha>
+git checkout --detach <exact-runtime-carrier-sha>
 git status --short
 ```
 
-The worktree must be clean before qualification. For the general V25 baseline:
+The worktree must be clean before qualification. For #3681 no separate build/manual fixture procedure is required; run exactly:
 
 ```powershell
-.\scripts\run-local-v25-qualification.ps1 `
-  -BricsCadDir "C:\Program Files\Bricsys\BricsCAD V25 en_US" `
-  -Profile "QS3D-V25-TEST"
+.\scripts\run-local-v25-wall-contact-3681.ps1
 ```
 
-Feature-specific LOCAL rows then follow their linked committed runner/runbook. V26 rows follow `docs/LOCAL-V26-QUALIFICATION.md` and must use the matching V26 `net8.0-windows` plugin, not a relabeled V25 binary.
+The runner auto-detects a standard BricsCAD V25 installation; `-BricsCadDir` is only an environment override when V25 is installed elsewhere. Other V25 rows may use the general `scripts/run-local-v25-qualification.ps1`. V26 rows follow `docs/LOCAL-V26-QUALIFICATION.md` and must use the matching V26 `net8.0-windows` plugin, not a relabeled V25 binary.
 
 ## Fail/return routing
 
@@ -83,7 +88,7 @@ A local result is one of:
 - `FAIL`: reproducible product/runtime failure with sanitized stage/code and enough bounded evidence for a new/existing remote source lane;
 - `NO_RESULT`: environment/license/host-start/operator-session/fixture blocker; no product failure inferred.
 
-A `FAIL` never authorizes local002/local003 to absorb normal source-safe production work. The source correction is implemented and pushed remotely, then the same local matrix is rerun against the new exact SHA.
+A `FAIL` never authorizes local002/local003 or #3681 to absorb normal source-safe production work. The source correction is implemented and pushed remotely, then the same local matrix is rerun against the new exact SHA.
 
 ## Repository/privacy boundary
 
