@@ -96,6 +96,18 @@ REQUIRED_FILES = {
         "GeneratedMultiRegionRebarRuntimeHealthService",
         "TryGetReadOnly",
     ),
+    "src/QS3D.BricsCAD.V25/Cad/SlabMeshSolidBuilder.cs": (
+        'RectangleFootprintMode = "RectangleLocalXY"',
+        'PolygonFootprintMode = "PolygonGlobalXY"',
+        "RectangularSlabMeshPlanner.Plan",
+        "PolygonalSlabMeshPlanner.Plan",
+    ),
+    "src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs": (
+        'RectangleFootprintMode = "RectangleLocalXY"',
+        'PolygonFootprintMode = "PolygonGlobalXY"',
+        "RectangularSlabMeshPlanner.Plan",
+        "PolygonalSlabMeshPlanner.Plan",
+    ),
 }
 
 V26_PROJECT = "src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj"
@@ -144,7 +156,7 @@ def main():
             print(" -", item)
         return 1
 
-    print("PASS: LOCAL-005 Core assembler, native loop reader, ownership/manifests, atomic materializer, read-only Health, commands, and V26 linked-source contract are present.")
+    print("PASS: LOCAL-005 Core assembler, native loop reader, ownership/manifests, atomic materializer, read-only Health, commands, legacy rectangle/single-polygon compatibility, and V26 linked-source contract are present.")
     return 0
 
 
