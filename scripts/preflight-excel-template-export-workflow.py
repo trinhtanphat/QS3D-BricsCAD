@@ -49,18 +49,22 @@ doc = read(DOC)
 
 for needle in (
     '[CommandMethod("QS3DEXCELTEMPLATE", CommandFlags.UsePickSet)]',
+    'var reviewedProjectId = project.Id;',
+    'var reviewedVersion = project.ChangeVersion;',
     '"Selection Floor Zone All"',
     '"Detail Group"',
     '"Default Custom"',
     'Filter = "Excel Workbook (*.xlsx)|*.xlsx"',
     'Filter = "QS3D Template Mapping (*.json)|*.json"',
     'ValidateOutputPath(templateDialog.FileName, outputDialog.FileName);',
+    'promptProject.ChangeVersion != reviewedVersion',
     'DrawingUnitWorkflow.EnsureResolved(document, "QS3DEXCELTEMPLATE")',
-    'currentProject.ChangeVersion != project.ChangeVersion',
+    'var exportVersion = currentProject.ChangeVersion;',
     'ProjectStateSnapshot.CreateDetachedCopy(currentProject)',
     'ProjectQuantityReportBuilder.Detail(preview',
     'ProjectQuantityReportBuilder.Group(preview',
     'EnsureHandlesAreLive(document, rows);',
+    'finalProject.ChangeVersion != exportVersion',
     'QsWorkbookTemplateExporter.Export(',
     'new DataContractJsonSerializer(typeof(CustomMappingContract))',
     'MaxMappingBytes = 64 * 1024',
@@ -77,12 +81,15 @@ require_order(
     command,
     (
         'ValidateOutputPath(templateDialog.FileName, outputDialog.FileName);',
+        'promptProject.ChangeVersion != reviewedVersion',
         'DrawingUnitWorkflow.EnsureResolved(document, "QS3DEXCELTEMPLATE")',
+        'var exportVersion = currentProject.ChangeVersion;',
         'ProjectStateSnapshot.CreateDetachedCopy(currentProject)',
         'EnsureHandlesAreLive(document, rows);',
+        'finalProject.ChangeVersion != exportVersion',
         'QsWorkbookTemplateExporter.Export(',
     ),
-    "prompt/validation -> unit bind -> detached quantity -> live provenance -> atomic exporter",
+    "validated prompts -> prompt freshness -> unit bind -> detached quantity -> live provenance -> final freshness -> atomic exporter",
 )
 
 for forbidden in (
@@ -165,5 +172,5 @@ if failures:
     print("FAILED with", len(failures), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DEXCELTEMPLATE uses canonical detached Detail/Group rows, bounded Default/Custom mapping, complete live-Handle validation, atomic Core XLSX rewrite, Quantity Insight/Ribbon exposure and V25/V26 shared-source parity.")
+print("PASS: QS3DEXCELTEMPLATE uses canonical detached Detail/Group rows, bounded Default/Custom mapping, prompt/final freshness gates, complete live-Handle validation, atomic Core XLSX rewrite, Quantity Insight/Ribbon exposure and V25/V26 shared-source parity.")
 print("NOTE: interactive dialogs and licensed BricsCAD template-rendering qualification remain LOCAL_ONLY under #72.")
