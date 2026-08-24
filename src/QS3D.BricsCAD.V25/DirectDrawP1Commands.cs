@@ -118,8 +118,7 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWWALLPIER", () =>
             {
                 RequireModelSpace(document);
-                // WallPier stays LINE-only so QS3DBUILD3D reaches the specialized profile builder.
-                var points = AcquireFixedPath(document, "Trụ Tường nhanh", 2);
+                var points = AcquirePath(document, "Trụ Tường nhanh", 2, false);
                 if (points == null) return;
 
                 var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
@@ -138,7 +137,7 @@ namespace QS3D.BricsCAD.V25
                 Execute(
                     document,
                     ElementCategory.WallPier,
-                    () => CreateLine(document, points[0], points[1]),
+                    () => points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false),
                     element =>
                     {
                         element.SetProperty("ThicknessM", thicknessM.ToString("R", CultureInfo.InvariantCulture));
@@ -159,8 +158,7 @@ namespace QS3D.BricsCAD.V25
                 RequireModelSpace(document);
                 var promptUnit = CadUnitService.GetLengthUnit(document);
                 var promptUcs = document.Editor.CurrentUserCoordinateSystem;
-                // Advanced WallPier keeps the same specialized two-point LINE geometry contract.
-                var points = AcquireFixedPath(document, "Trụ Tường", 2);
+                var points = AcquirePath(document, "Trụ Tường", 2, false);
                 if (points == null) return;
 
                 var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
@@ -186,7 +184,7 @@ namespace QS3D.BricsCAD.V25
                 Execute(
                     document,
                     ElementCategory.WallPier,
-                    () => CreateLine(document, points[0], points[1]),
+                    () => points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false),
                     element =>
                     {
                         element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
