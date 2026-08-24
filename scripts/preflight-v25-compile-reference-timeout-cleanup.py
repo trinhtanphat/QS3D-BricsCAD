@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import re
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "acquire-v25-compile-references.ps1"
@@ -51,31 +50,25 @@ def main():
     if "try { $process.Kill() } catch { }" in source:
         return fail("legacy direct-root-only timeout kill must not return")
 
-    helper_match = re.search(
-        r"function\s+Stop-OwnedProcessTree\s*\{(?P<body>.*?)\n\}",
-        source,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    if not helper_match:
+    helper_start = source.find("function Stop-OwnedProcessTree")
+    helper_end = source.find("\n$msi =", helper_start)
+    if helper_start < 0 or helper_end < helper_start:
         return fail("cannot isolate Stop-OwnedProcessTree helper")
-    helper = helper_match.group("body")
-    if "if ($Process.HasExited)" in helper and re.search(
+    helper = source[helper_start:helper_end]
+    if re.search(
         r"if\s*\(\$Process\.HasExited\)\s*\{\s*return\s*\}", helper, flags=re.IGNORECASE | re.DOTALL
     ):
         return fail("timeout cleanup must not silently skip a raced root exit because descendants become unverifiable")
 
-    timeout_match = re.search(
-        r"\$exited\s*=\s*\$process\.WaitForExit\(900000\).*?if\s*\(-not\s+\$exited\)\s*\{(?P<body>.*?)\n\s*\}",
-        source,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    if not timeout_match:
-        return fail("cannot isolate MSI timeout branch")
-    timeout_body = timeout_match.group("body")
-    cleanup_index = timeout_body.find("Stop-OwnedProcessTree")
-    terminal_throw_index = timeout_body.rfind("throw ")
-    if cleanup_index < 0 or terminal_throw_index < cleanup_index:
-        return fail("timeout branch must attempt owned-tree cleanup before terminal failure")
+    timeout_start = source.find("$exited = $process.WaitForExit(900000)")
+    cleanup_index = source.find("Stop-OwnedProcessTree -Process $process -CleanupTimeoutMs 10000", timeout_start)
+    cleanup_failure_index = source.find("owned process-tree cleanup failed", cleanup_index)
+    terminal_timeout_index = source.find("owned process tree terminated", cleanup_index)
+    exit_code_index = source.find("$process.ExitCode -notin @(0, 3010)", timeout_start)
+    if min(timeout_start, cleanup_index, cleanup_failure_index, terminal_timeout_index, exit_code_index) < 0:
+        return fail("cannot establish ordered MSI timeout/cleanup/exit-code contract")
+    if not timeout_start < cleanup_index < cleanup_failure_index < terminal_timeout_index < exit_code_index:
+        return fail("owned-tree cleanup and fail-closed diagnostics must precede normal exit-code handling")
 
     print("PASS: V25 compile-reference MSI timeout cleanup is bounded, PID-scoped, descendant-aware, and fail-closed.")
     return 0
