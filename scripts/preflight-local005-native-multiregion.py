@@ -65,7 +65,7 @@ REQUIRED_FILES = {
         "MultiRegionRebarManifest.SerializeGenerated",
         "MultiRegionSourceManifest",
         "MultiRegionGeneratedManifest",
-        "MultiRegionTopologyFingerprint",
+        "MultiRegionTopologyFingerprint.Compute",
         "GeneratedSlabMeshCount",
         "GeneratedFoundationMeshCount",
         "EnsureAggregateMetadataConsistency",
