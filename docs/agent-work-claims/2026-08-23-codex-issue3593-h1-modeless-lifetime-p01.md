@@ -1,6 +1,6 @@
 # LOCAL-002 H.1 P01 — bound/dynamic modeless lifetime qualification
 
-Status: `BLOCKED_SOURCE_FIX`
+Status: `LOCAL_PASS`
 
 Parent: #72 / LOCAL-002
 
@@ -12,11 +12,11 @@ Final-document/ordinary-close source-fix issue: #3621
 
 Lane-Key: `issue-3593`
 
-Qualification branch: `agent/codex/issue3593-v25-modeless-h1-p06-rerun`
+Qualification branch: `agent/codex/issue3593-v25-modeless-h1-p07-rerun`
 
-Latest attempted licensed runtime baseline: `ec4384eb6a12ff6763dfdd19d4e4b84747ab60f3`
+Latest attempted licensed runtime baseline: `fec0b81cf4b6949d07652d6d7241167d2627e870`
 
-Current exact licensed rerun target: `PENDING_NEXT_MERGED_SOURCE_SHA`
+Current exact licensed rerun target: `COMPLETED_P07_LOCAL_PASS`
 
 ## Boundary
 
@@ -80,21 +80,34 @@ Final-host acceptance still failed. The exact host HWND matched, one ordinary cl
 
 The public fixture and protected user drawing stayed byte-identical, the installed DemandLoad loader path/bytes and `LoadCtrls=2` were restored, exact cleanup left zero BricsCAD processes, and the tracked worktree stayed clean. Raw dump/report/runtime files remain ignored. #3593 and #3621 remain open; the local lane changed no production source and used no manual Actions operation.
 
+## 2026-08-24 post-#3658 centralized native-lifecycle licensed p07 rerun
+
+PR #3658 centralized native document lifecycle ownership in `DocumentBoundNativeLifecycleCoordinator`. Exact source head `4fc992c585e531f6fb3f0dbb3b5a86c7222523f3` merged as exact `main@fec0b81cf4b6949d07652d6d7241167d2627e870`; protected run `32689850036` passed `preflight` and `core`. The p07 qualification carrier, its upstream and freshly fetched `origin/main` were all identical to that SHA with zero ahead/behind before launch.
+
+Nineteen focused lifetime/dispatch/quiescence/native-reactor/result-contract guards passed. The V25 Release x64 and private-helper builds each completed with `0 warnings / 0 errors`; Core deterministic smoke returned `ALL PASS`; plugin/Core PDB SourceLink matched the exact candidate. Exact candidate SHA-256 values were plugin `EBD23D41322F51DBB75A99E829DF7F95176BEF7B0090F6076B2E8A5EDEA67F16` and Core `E677F700577D8A14FC48F5F3751959A80159C62D497A5ED2C53B5F0A75451ED2`.
+
+The first launch produced `NO_RESULT / HARNESS_FAILURE`, not a product verdict: the ignored post-run audit treated a valid zero-row Windows Event Log query as an exception. The bounded private harness condition was corrected so zero rows remain count `0`, verified red/green, and retried once on the same source/binary identity. No production source or tracked test changed.
+
+The licensed BricsCAD V25.2.10 retry passed the complete functional marker: A 13/13 and B 2/2 windows closed/detached exactly once; managed-wrapper drift matched by stable native database identity without path identity; C Family/BBS windows and both active-document-dynamic hubs stayed alive; project isolation, repeat cycle and final one-document count passed.
+
+Final-host acceptance also passed. The exact host matched, one ordinary close was requested, one disposable save dialog was discarded, and BricsCAD exited `0` with `graceful_exit=true`. The exact run and delayed post-run audit found zero BricsCAD Application Error, WER, Application Hang, `.NET Runtime` and AccessViolation evidence. Cleanup left zero BricsCAD/helper processes. The public fixture and protected user drawing stayed byte-identical; the installed DemandLoad loader path/bytes and `LoadCtrls=2` were preserved; private state was restored; the tracked tree stayed clean; raw evidence remained ignored.
+
+The allowlisted p07 manifest passed `scripts/validate-local002-h1-result.py` against the exact SHA and routed `PASS` to `LOCAL_PASS_ELIGIBLE`. This is licensed bounded `LOCAL_PASS` for the #3593 H.1 A/B/C lifetime plus final-host cell. It does not qualify representative bound-window actions, the broader H.1/H.2 matrices or overall LOCAL-002 parity.
+
 ## Validation and safety
 
 - Current licensed V25 Release x64 build: `0 warnings / 0 errors`.
-- Current unchanged private licensed probe build: `0 warnings / 0 errors`.
-- The post-#3654 licensed attempt passed all sixteen focused lifetime/dispatch/global-quiescence/race guards and the complete A/B/C marker before failing final-host crash acceptance.
+- Current private licensed probe build: `0 warnings / 0 errors`.
+- The post-#3658 licensed attempt passed all nineteen focused guards, exact SourceLink identity, the complete A/B/C marker and final-host acceptance.
 - Current `QS3D.Core.SmokeTests` Release build/execution: `0 warnings / 0 errors`, `ALL PASS`.
 - The public fixture remained byte-identical at SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`.
 - The user's drawing, installed loader bytes/path and `LoadCtrls=2` were preserved; no `SECURELOAD` or `TRUSTEDPATHS` setting changed.
-- Fail-closed cleanup ended with zero BricsCAD processes and a clean tracked worktree.
-- Post-#3654 licensed evidence is `BLOCKED_SOURCE_FIX`, not `LOCAL_PASS`.
+- Fail-closed cleanup ended with zero BricsCAD/helper processes and a clean tracked worktree; raw evidence remained ignored.
+- The fail-closed result-contract preflight passed, and the exact-SHA sanitized p07 manifest routed to `LOCAL_PASS_ELIGIBLE`.
+- Post-#3658 licensed evidence is bounded `LOCAL_PASS` for #3593.
 
-## Next exact handoff
+## Closeout
 
-Remote/source owner #3621 must reassess the final host native/WPF teardown architecture using the p06 `ucrtbase.dll / c0000409` outcome and the still-unchanged normalized reactor/WPF frames. Do not rerun the unchanged p06 binary. After a new correction merges, rerun the unchanged bounded #3593 licensed BricsCAD V25.2.10 A/B/C + final-host qualification on a fresh canonical branch whose HEAD exactly matches freshly fetched `origin/main`.
+#3593 may close as completed after publishing the allowlisted `LOCAL_PASS` summary. The H.3 source acceptance in #3621 is satisfied by the same exact-SHA licensed result and may close if no independent residual defect remains. No production source was edited locally, no manual Actions operation was used, and this normal local session does not merge its documentation branch to `main`.
 
-A qualifying result must first close all 13 A-bound windows exactly once, preserve the #3594 B wrapper-drift/native-identity behavior, keep C-bound windows and Domain/Rebar dynamic hubs correct, then complete the final exact-host shutdown with exit code `0`, zero exact-PID Application Error events, no retained-Document `get_Name` AccessViolation, zero BricsCAD residue and all drawing/loader/private-state safety checks passing.
-
-Only actual licensed evidence may change this claim to `LOCAL_PASS`. Until then, broad H.1 and overall LOCAL-002 remain `PENDING_LOCAL`.
+Historical p01-p06 failures remain diagnostic provenance and must not be rerun or reinterpreted. Representative bound-window action coverage, broader H.1/H.2 matrices and overall LOCAL-002 remain `PENDING_LOCAL`.
