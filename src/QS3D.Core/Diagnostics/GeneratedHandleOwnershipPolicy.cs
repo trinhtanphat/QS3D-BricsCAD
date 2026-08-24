@@ -118,6 +118,43 @@ namespace QS3D.Core.Diagnostics
             return owner != null;
         }
 
+        public static IReadOnlyList<string> ValidateAllBeforeErase(
+            ProjectState project,
+            ProjectElement expectedOwner,
+            string expectedPropertyKey,
+            IEnumerable<string> handles,
+            Action<string> nativeOwnershipValidator)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (expectedOwner == null) throw new ArgumentNullException(nameof(expectedOwner));
+            if (handles == null) throw new ArgumentNullException(nameof(handles));
+            if (nativeOwnershipValidator == null) throw new ArgumentNullException(nameof(nativeOwnershipValidator));
+            if (string.IsNullOrWhiteSpace(expectedPropertyKey)) throw new ArgumentException("Generated owner slot is required.", nameof(expectedPropertyKey));
+
+            var normalized = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var rawHandle in handles)
+            {
+                var handle = NormalizeHandleIdentity(rawHandle);
+                if (handle.Length == 0) throw new InvalidOperationException("Generated handle set contains a blank handle.");
+                if (!seen.Add(handle)) throw new InvalidOperationException("Generated handle set contains duplicate handle " + handle + ".");
+                normalized.Add(handle);
+            }
+
+            normalized.Sort(StringComparer.OrdinalIgnoreCase);
+            foreach (var handle in normalized)
+            {
+                ProjectElement? actualOwner;
+                string actualPropertyKey;
+                if (!TryFindOwner(project, handle, out actualOwner, out actualPropertyKey) || actualOwner == null)
+                    throw new InvalidOperationException("Refusing destructive replacement because generated CAD handle " + handle + " has no semantic owner.");
+                if (!ReferenceEquals(actualOwner, expectedOwner) || !AreSameLogicalOwnerSlots(actualPropertyKey, expectedPropertyKey))
+                    throw new InvalidOperationException("Refusing destructive replacement because generated CAD handle " + handle + " is owned by " + actualOwner.Id + "/" + actualPropertyKey + " instead of " + expectedOwner.Id + "/" + expectedPropertyKey + ".");
+                nativeOwnershipValidator(handle);
+            }
+            return normalized.AsReadOnly();
+        }
+
         private static void EnsureValidElementSet(ProjectState project)
         {
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
