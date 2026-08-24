@@ -84,7 +84,7 @@ namespace QS3D.Core.SmokeTests
         private static void SnapshotRejectsOversizedTopLevelState()
         {
             var project = new ProjectState("snapshot-top-level-bound", "Snapshot top-level bound");
-            for (var index = 0; index <= 10000; index++)
+            for (var index = 0; index <= 100000; index++)
                 project.Zones.Add(new ZoneDefinition("Z" + index, "Zone " + index));
 
             var captureRejected = false;
@@ -92,16 +92,16 @@ namespace QS3D.Core.SmokeTests
             catch (InvalidOperationException ex)
             {
                 captureRejected = ex.Message.IndexOf("zones", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                                  ex.Message.IndexOf("10000", StringComparison.Ordinal) >= 0;
+                                  ex.Message.IndexOf("100000", StringComparison.Ordinal) >= 0;
             }
-            Require(captureRejected, "ProjectStateSnapshot.Capture accepted more than 10,000 top-level zones.");
+            Require(captureRejected, "ProjectStateSnapshot.Capture accepted more than 100,000 top-level zones.");
 
             var detachedRejected = false;
             try { ProjectStateSnapshot.CreateDetachedCopy(project); }
             catch (InvalidOperationException ex)
             {
                 detachedRejected = ex.Message.IndexOf("zones", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                                   ex.Message.IndexOf("10000", StringComparison.Ordinal) >= 0;
+                                   ex.Message.IndexOf("100000", StringComparison.Ordinal) >= 0;
             }
             Require(detachedRejected, "ProjectStateSnapshot.CreateDetachedCopy bypassed the top-level snapshot bound.");
         }
