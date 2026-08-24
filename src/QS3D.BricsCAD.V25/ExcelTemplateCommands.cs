@@ -7,6 +7,7 @@ using System.Runtime.Serialization.Json;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using Microsoft.Win32;
+using QS3D.BricsCAD.V25.Services;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
 using QS3D.Core.Model;
@@ -34,7 +35,7 @@ namespace QS3D.BricsCAD.V25
                 if (project.Elements.Count == 0)
                     throw new InvalidOperationException("Xuất theo mẫu chưa có semantic element để xuất.");
 
-                var reviewedProjectId = project.Id;
+                var reviewedProjectId = project.ProjectId;
                 var reviewedVersion = project.ChangeVersion;
                 var implied = Cad.EntitySnapshotReader.ReadImpliedSelection(document);
                 var defaultScope = implied.Count > 0 ? "Selection" : "All";
@@ -105,7 +106,7 @@ namespace QS3D.BricsCAD.V25
                 if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
                     throw new InvalidOperationException("Active DWG đã thay đổi trong lúc chọn template/mapping/output. Hãy chạy lại lệnh.");
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var promptProject)
-                    || !string.Equals(promptProject.Id, reviewedProjectId, StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(promptProject.ProjectId, reviewedProjectId, StringComparison.OrdinalIgnoreCase)
                     || promptProject.ChangeVersion != reviewedVersion)
                     throw new InvalidOperationException("Project đã thay đổi trong lúc chọn template/mapping/output. Hãy chạy lại lệnh.");
 
@@ -116,7 +117,7 @@ namespace QS3D.BricsCAD.V25
                 if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
                     throw new InvalidOperationException("Active DWG đã thay đổi sau khi xác nhận unit policy. Hãy chạy lại lệnh.");
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)
-                    || !string.Equals(currentProject.Id, reviewedProjectId, StringComparison.OrdinalIgnoreCase))
+                    || !string.Equals(currentProject.ProjectId, reviewedProjectId, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Project đã bị thay thế sau khi xác nhận unit policy. Hãy chạy lại lệnh.");
                 var exportVersion = currentProject.ChangeVersion;
 
@@ -151,7 +152,7 @@ namespace QS3D.BricsCAD.V25
                 if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
                     throw new InvalidOperationException("Active DWG đã thay đổi trước khi ghi output. Hãy chạy lại lệnh.");
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var finalProject)
-                    || !string.Equals(finalProject.Id, reviewedProjectId, StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(finalProject.ProjectId, reviewedProjectId, StringComparison.OrdinalIgnoreCase)
                     || finalProject.ChangeVersion != exportVersion)
                     throw new InvalidOperationException("Project đã thay đổi trong lúc dựng quantity rows; output chưa được thay thế.");
 
@@ -243,12 +244,16 @@ namespace QS3D.BricsCAD.V25
             var mappings = new List<QsWorkbookTemplateMapping>(contract.Mappings.Count);
             foreach (var item in contract.Mappings)
             {
-                if (item == null || string.IsNullOrWhiteSpace(item.Field) || string.IsNullOrWhiteSpace(item.Column))
+                if (item == null)
+                    throw new InvalidDataException("Each template mapping requires field and column.");
+                var fieldName = item.Field ?? string.Empty;
+                var columnName = item.Column ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(fieldName) || string.IsNullOrWhiteSpace(columnName))
                     throw new InvalidDataException("Each template mapping requires field and column.");
                 QsWorkbookTemplateField field;
-                if (!Enum.TryParse(item.Field.Trim(), true, out field) || !Enum.IsDefined(typeof(QsWorkbookTemplateField), field))
-                    throw new InvalidDataException("Unknown template field: " + item.Field + ".");
-                mappings.Add(new QsWorkbookTemplateMapping(field, item.Column));
+                if (!Enum.TryParse(fieldName.Trim(), true, out field) || !Enum.IsDefined(typeof(QsWorkbookTemplateField), field))
+                    throw new InvalidDataException("Unknown template field: " + fieldName + ".");
+                mappings.Add(new QsWorkbookTemplateMapping(field, columnName));
             }
 
             return new QsWorkbookTemplateDefinition(
