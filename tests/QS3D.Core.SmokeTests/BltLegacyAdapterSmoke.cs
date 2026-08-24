@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             ExactProxySolidCanImport();
             EmbeddedLegacyQuantitiesArePreserved();
+            AdapterMetricUnderflowDoesNotBecomeExactEvidence();
             AmbiguousCategoryFailsClosed();
             GenericProxyIsNotClaimedAsBlt();
             LegacyEvidenceSurvivesMeasuredQuantityPass();
@@ -52,6 +53,30 @@ namespace QS3D.Core.SmokeTests
             Require(candidate.FloorHint == "T2", "Floor hint was not preserved.");
             Require(candidate.FamilyHint == "D300x500", "Family hint was not preserved.");
             Require(candidate.CanImport, "Explicit BLT ConcreteM3 must allow material-volume Proxy capture even when host geometry is unavailable.");
+        }
+
+        private static void AdapterMetricUnderflowDoesNotBecomeExactEvidence()
+        {
+            var underflow = new EntitySnapshot("B21", "ProxyEntity", "LEGACY");
+            underflow.Metadata["LegacyProbe.XData.000.Value"] =
+                "BLT3D; Category=Beam; ConcreteM3=1e-5000";
+
+            var rejected = BltLegacyEntityAdapter.Adapt(underflow);
+            Require(rejected.Category == ElementCategory.Beam, "Underflow control lost its Beam category evidence.");
+            Require(!rejected.LegacyConcreteM3.HasValue, "Adapter underflow must not become legacy concrete zero.");
+            Require(rejected.EvidenceMode != BltLegacyEvidenceMode.ExactLegacyQuantity, "Adapter underflow must not upgrade evidence to ExactLegacyQuantity.");
+            Require(!underflow.Metadata.ContainsKey(BltLegacyMetadataKeys.ConcreteM3), "Adapter underflow must not write canonical concrete zero metadata.");
+
+            var exactZero = new EntitySnapshot("B22", "ProxyEntity", "LEGACY");
+            exactZero.Metadata["LegacyProbe.XData.000.Value"] =
+                "BLT3D; Category=Beam; ConcreteM3=0; FormworkM2=0,0e-5000";
+
+            var accepted = BltLegacyEntityAdapter.Adapt(exactZero);
+            Require(accepted.LegacyConcreteM3.HasValue && accepted.LegacyConcreteM3.Value.Equals(0d), "Exact-zero concrete must remain parseable.");
+            Require(accepted.LegacyFormworkM2.HasValue && accepted.LegacyFormworkM2.Value.Equals(0d), "Comma-compatible exact-zero formwork must remain parseable.");
+            Require(accepted.EvidenceMode == BltLegacyEvidenceMode.ExactLegacyQuantity, "Exact-zero explicit quantities must remain exact legacy evidence.");
+            Require(exactZero.Metadata[BltLegacyMetadataKeys.ConcreteM3] == "0", "Exact-zero concrete canonicalization changed.");
+            Require(exactZero.Metadata[BltLegacyMetadataKeys.FormworkM2] == "0", "Exact-zero formwork canonicalization changed.");
         }
 
         private static void AmbiguousCategoryFailsClosed()
