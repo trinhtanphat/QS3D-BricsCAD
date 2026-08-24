@@ -130,6 +130,8 @@
                                     ToolTip="Chọn và zoom các đối tượng CAD của dòng khối lượng đang chọn"/>
                             <Button Content="Xuất Excel" Click="OnExcelExportClick" Style="{StaticResource AccentButton}"
                                     ToolTip="Xuất ED2 CHI_TIET + TONG_HOP. Nếu đang chọn node cây, node đó trở thành scope Selection an toàn."/>
+                            <Button Content="Xuất theo mẫu Excel" Click="OnExcelTemplateExportClick" Style="{StaticResource AccentButton}"
+                                    ToolTip="Xuất quantity canonical vào file mẫu XLSX công ty/người dùng bằng mapping Default hoặc JSON tùy chỉnh; giữ nguyên nội dung template ngoài vùng mapped."/>
                             <Button Content="Truy ngược Excel" Click="OnExcelTracebackClick" Style="{StaticResource DenseButton}"
                                     ToolTip="Chọn workbook/dòng CHI_TIET và định vị ngược đúng cấu kiện bằng Element ID + Handle + Drawing Fingerprint; sai provenance sẽ bị từ chối."/>
                             <Button Content="CAD → Excel" Click="OnCadToExcelClick" Style="{StaticResource DenseButton}"
