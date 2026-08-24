@@ -13,9 +13,12 @@ $ErrorActionPreference = 'Stop'
 $generator = Join-Path $PSScriptRoot 'new-v26-script-from-v25.ps1'
 if (-not (Test-Path -LiteralPath $generator -PathType Leaf)) { throw "V26 script transformer was not found: $generator" }
 
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-v26-finalizer-' + [Guid]::NewGuid().ToString('N'))
-$tempScript = Join-Path $tempRoot 'finalize-v26-signed-package.generated.ps1'
-New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+# The generated finalizer inherits the V25 containment contract, which derives the
+# repository root from the generated script's PSScriptRoot. Keep the transient
+# generated script in this canonical scripts directory so its parent remains the
+# real repository root; generating under the process temp root would rebase the
+# containment boundary to %TEMP% and reject legitimate repo-local dist outputs.
+$tempScript = Join-Path $PSScriptRoot ('.finalize-v26-signed-package.generated.' + [Guid]::NewGuid().ToString('N') + '.ps1')
 try {
     & $generator -SourceScript 'finalize-v25-signed-package.ps1' -OutputPath $tempScript
     if (-not $?) { throw 'Could not generate the V26 signed-package finalizer.' }
@@ -33,5 +36,5 @@ try {
     if (-not $?) { throw 'V26 signed-package finalization failed.' }
 }
 finally {
-    if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
+    if (Test-Path -LiteralPath $tempScript) { Remove-Item -LiteralPath $tempScript -Force -ErrorAction SilentlyContinue }
 }
