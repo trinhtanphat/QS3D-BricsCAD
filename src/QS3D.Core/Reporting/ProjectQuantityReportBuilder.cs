@@ -189,8 +189,8 @@ namespace QS3D.Core.Reporting
             ProjectState project,
             long expectedVersion,
             IReadOnlyList<ProjectElement> elements,
-            IReadOnlyList<ProjectFloor> floors,
-            IReadOnlyList<ProjectZone> zones,
+            IReadOnlyList<FloorDefinition> floors,
+            IReadOnlyList<ZoneDefinition> zones,
             IReadOnlyList<ProjectFamily> families,
             string drawingFingerprint)
         {
