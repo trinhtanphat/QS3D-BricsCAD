@@ -161,14 +161,21 @@ namespace QS3D.BricsCAD.V25.Reporting
 
         private static IReadOnlyList<string> ResolveLiveSolidHandles(Document document, ProjectElement element)
         {
-            var generated = GeneratedHandleOwnershipPolicy
-                .EnumerateLogicalOwnerHandles(element)
-                .Where(x => GeneratedHandleOwnershipPolicy.AreSameLogicalOwnerSlots(x.Value, GeneratedHostSolidOwnerSlot))
-                .Select(x => x.Key)
-                .ToList();
-            var liveGenerated = CadHandleService.GetLiveSolidHandles(document, generated);
-            if (liveGenerated.Count > 0)
-                return liveGenerated.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+            // A generated host can remain physically live after semantic/source edits while
+            // its stale marker says it no longer represents current geometry. Never publish
+            // contact deductions from that old BREP. A direct Solid3d source remains a valid
+            // fallback because the source object itself is authoritative.
+            if (!element.IsGeneratedSolidStale())
+            {
+                var generated = GeneratedHandleOwnershipPolicy
+                    .EnumerateLogicalOwnerHandles(element)
+                    .Where(x => GeneratedHandleOwnershipPolicy.AreSameLogicalOwnerSlots(x.Value, GeneratedHostSolidOwnerSlot))
+                    .Select(x => x.Key)
+                    .ToList();
+                var liveGenerated = CadHandleService.GetLiveSolidHandles(document, generated);
+                if (liveGenerated.Count > 0)
+                    return liveGenerated.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+            }
 
             var liveSources = CadHandleService.GetLiveSolidHandles(document, element.SourceHandles);
             return liveSources.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
