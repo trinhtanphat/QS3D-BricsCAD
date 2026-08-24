@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guard V25 modeless windows with an early, non-reentrant BricsCAD host-quit barrier."""
 
-# Lane-Key: issue-3621 — keep this regression on the canonical source carrier.
+# Lane-Key: issue-3621 — keep this H.2 regression on the canonical source carrier.
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
