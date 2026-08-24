@@ -49,10 +49,13 @@ namespace QS3D.Core.Export
     {
         public QsWorkbookTemplateMapping(QsWorkbookTemplateField field, string column)
         {
+            if (string.IsNullOrWhiteSpace(column))
+                throw new ArgumentException("Excel column is required.", nameof(column));
+            if (column.Any(char.IsControl))
+                throw new ArgumentException("Excel column cannot contain control characters.", nameof(column));
+
             Field = field;
-            Column = string.IsNullOrWhiteSpace(column)
-                ? throw new ArgumentException("Excel column is required.", nameof(column))
-                : column.Trim().ToUpperInvariant();
+            Column = column.Trim().ToUpperInvariant();
         }
 
         public QsWorkbookTemplateField Field { get; }
@@ -67,9 +70,10 @@ namespace QS3D.Core.Export
             IEnumerable<QsWorkbookTemplateMapping> mappings,
             int reservedDataRows = 1)
         {
-            WorksheetName = string.IsNullOrWhiteSpace(worksheetName)
-                ? throw new ArgumentException("Worksheet name is required.", nameof(worksheetName))
-                : worksheetName.Trim();
+            if (string.IsNullOrWhiteSpace(worksheetName))
+                throw new ArgumentException("Worksheet name is required.", nameof(worksheetName));
+            if (worksheetName.Any(char.IsControl))
+                throw new ArgumentException("Worksheet name cannot contain control characters.", nameof(worksheetName));
             if (firstDataRow < 1 || firstDataRow > QsWorkbookTemplateExporter.MaxExcelRows)
                 throw new ArgumentOutOfRangeException(nameof(firstDataRow));
             if (reservedDataRows < 1 || reservedDataRows > QsWorkbookTemplateExporter.MaxExcelRows - firstDataRow + 1)
@@ -91,7 +95,7 @@ namespace QS3D.Core.Export
                     throw new ArgumentException("An Excel column can only be mapped once: " + mapping.Column + ".", nameof(mappings));
             }
 
-            WorksheetName = WorksheetName;
+            WorksheetName = worksheetName.Trim();
             FirstDataRow = firstDataRow;
             ReservedDataRows = reservedDataRows;
             Mappings = snapshot.AsReadOnly();
@@ -177,6 +181,7 @@ namespace QS3D.Core.Export
         internal static int ParseColumn(string column)
         {
             if (string.IsNullOrWhiteSpace(column)) throw new ArgumentException("Excel column is required.", nameof(column));
+            if (column.Any(char.IsControl)) throw new ArgumentException("Excel column cannot contain control characters.", nameof(column));
             var text = column.Trim().ToUpperInvariant();
             var value = 0;
             foreach (var c in text)
@@ -220,7 +225,7 @@ namespace QS3D.Core.Export
         private static List<QuantityReportRow> SnapshotRows(IReadOnlyList<QuantityReportRow> rows)
         {
             var result = new List<QuantityReportRow>(rows.Count);
-            string fingerprint = null;
+            string? fingerprint = null;
             for (var index = 0; index < rows.Count; index++)
             {
                 var row = rows[index] ?? throw new InvalidDataException("Template export contains a null quantity row.");
@@ -510,9 +515,10 @@ namespace QS3D.Core.Export
             }
 
             cell.SetAttributeValue("t", "inlineStr");
-            var text = new XElement(SpreadsheetNs + "t", value.TextValue ?? string.Empty);
-            if (!string.IsNullOrEmpty(value.TextValue) &&
-                (char.IsWhiteSpace(value.TextValue[0]) || char.IsWhiteSpace(value.TextValue[value.TextValue.Length - 1])))
+            var textValue = value.TextValue ?? string.Empty;
+            var text = new XElement(SpreadsheetNs + "t", textValue);
+            if (textValue.Length > 0 &&
+                (char.IsWhiteSpace(textValue[0]) || char.IsWhiteSpace(textValue[textValue.Length - 1])))
                 text.SetAttributeValue(XNamespace.Xml + "space", "preserve");
             cell.Add(new XElement(SpreadsheetNs + "is", text));
         }
@@ -643,9 +649,8 @@ namespace QS3D.Core.Export
         internal static string Required(string value, string label)
         {
             if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException(label + " is required.");
-            var trimmed = value.Trim();
-            if (trimmed.Any(char.IsControl)) throw new InvalidDataException(label + " contains a control character.");
-            return trimmed;
+            if (value.Any(char.IsControl)) throw new InvalidDataException(label + " contains a control character.");
+            return value.Trim();
         }
 
         internal static List<string> CanonicalTokens(IEnumerable<string> values, string label, bool handles)
@@ -687,7 +692,7 @@ namespace QS3D.Core.Export
         private struct CellValue
         {
             internal CellValueKind Kind;
-            internal string TextValue;
+            internal string? TextValue;
             internal double NumberValue;
 
             internal static CellValue Blank() { return new CellValue { Kind = CellValueKind.Blank }; }
