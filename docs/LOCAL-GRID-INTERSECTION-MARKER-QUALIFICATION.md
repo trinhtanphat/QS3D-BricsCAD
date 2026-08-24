@@ -3,7 +3,7 @@
 ## Status
 
 - Repository source carrier: Issue #3771 (`Lane-Key: issue-3771`).
-- Exact source candidate: `4b9863dd88fdd379170e085e4a497a1dde3453e5` or a later descendant whose only additional changes are this handoff/qualification documentation.
+- Exact source/guard candidate: `707ba4f2991e6ab47a81d9de80a32c19e55fca79`; a later descendant is acceptable only when its additional changes are handoff documentation and repository-required reconciliation that preserves this source/guard tree.
 - Remote/source status: `SOURCE_READY` only after the exact current candidate passes repository CI.
 - Licensed runtime status: `PENDING_LOCAL`. Hosted/static CI is not BricsCAD runtime evidence.
 
