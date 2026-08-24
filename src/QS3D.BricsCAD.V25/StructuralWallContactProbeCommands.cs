@@ -6,6 +6,7 @@ using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.Reporting;
+using QS3D.BricsCAD.V25.Services;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
 using Teigha.Runtime;
