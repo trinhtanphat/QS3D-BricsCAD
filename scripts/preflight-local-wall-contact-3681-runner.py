@@ -80,7 +80,6 @@ require_tokens(
         "TryMeasureM2",
         "SemanticCaptureService",
         "RefreshStructuralWallConcreteContacts",
-        "SetImpliedSelection",
         "ProjectContextCoordinator",
         "GetOrCreate",
         "Save",
@@ -89,7 +88,8 @@ require_tokens(
 
 # The local harness must call the production measurement/lifecycle surfaces; it must not
 # duplicate the host-specific BREP unwrap implementation. Lock that implementation token
-# in production instead.
+# in production instead. Implied-selection UI is intentionally not part of this lane's
+# contact/read-only/persistence contract and must not be required by this source guard.
 require_tokens(
     production,
     "production V25 contact service",
