@@ -67,23 +67,33 @@ if "CanonicalizePair(" in planner or "IsOwnerForPair(" in service:
 if "GridIntersectionMarkerService.RegAppName" not in guard:
     missing.append("generated-source-guard:intersection RegApp")
 
-selected_marker = "if (selectedOnly)"
-bind_marker = "var project = ProjectContextCoordinator.GetOrCreate(document);"
-freshness_marker = "project.ChangeVersion != previewProject.ChangeVersion"
-freshness_message = "Grid intersection project changed after preview/selection; rerun the command."
-refresh_marker = "GridIntersectionMarkerService.Refresh"
-if selected_marker not in commands or bind_marker not in commands or commands.index(selected_marker) > commands.index(bind_marker):
-    missing.append("commands:selected preview/cancel must complete before canonical mutation binding")
-elif freshness_marker not in commands or commands.index(bind_marker) > commands.index(freshness_marker):
-    missing.append("commands:project freshness check must follow canonical mutation binding")
-elif freshness_message not in commands or commands.index(freshness_marker) > commands.index(freshness_message):
-    missing.append("commands:project freshness failure must remain fail-closed")
-elif refresh_marker not in commands or commands.index(freshness_message) > commands.index(refresh_marker):
-    missing.append("commands:project freshness check must precede native marker refresh")
 health_start = commands.find("public void InspectIntersectionMarkers()")
 refresh_start = commands.find("private static void RefreshIntersectionMarkers(bool selectedOnly)")
+next_method = commands.find("private static string ResolveActiveGridSubtype", refresh_start)
 if health_start < 0 or refresh_start < 0 or "GetOrCreate(document)" in commands[health_start:refresh_start]:
     missing.append("commands:health inspection must remain read-only/non-creating")
+if refresh_start < 0:
+    missing.append("commands:missing RefreshIntersectionMarkers method")
+else:
+    refresh_body = commands[refresh_start:next_method if next_method >= 0 else len(commands)]
+    selected_marker = "if (selectedOnly)"
+    bind_marker = "var project = ProjectContextCoordinator.GetOrCreate(document);"
+    freshness_marker = "project.ChangeVersion != previewProject.ChangeVersion"
+    freshness_message = "Grid intersection project changed after preview/selection; rerun the command."
+    refresh_marker = "GridIntersectionMarkerService.Refresh"
+    selected_at = refresh_body.find(selected_marker)
+    bind_at = refresh_body.find(bind_marker)
+    freshness_at = refresh_body.find(freshness_marker)
+    message_at = refresh_body.find(freshness_message)
+    native_refresh_at = refresh_body.find(refresh_marker)
+    if selected_at < 0 or bind_at < 0 or selected_at > bind_at:
+        missing.append("commands:selected preview/cancel must complete before canonical mutation binding")
+    elif freshness_at < 0 or bind_at > freshness_at:
+        missing.append("commands:project freshness check must follow canonical mutation binding")
+    elif message_at < 0 or freshness_at > message_at:
+        missing.append("commands:project freshness failure must remain fail-closed")
+    elif native_refresh_at < 0 or message_at > native_refresh_at:
+        missing.append("commands:project freshness check must precede native marker refresh")
 
 if missing:
     print("Grid intersection marker lifecycle guard FAILED:")
