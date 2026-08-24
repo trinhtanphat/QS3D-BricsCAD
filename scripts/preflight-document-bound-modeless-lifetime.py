@@ -8,6 +8,7 @@ errors = []
 
 files = {
     "lifetime": UI / "DocumentBoundWindowLifetime.cs",
+    "native": UI / "DocumentBoundNativeLifecycleCoordinator.cs",
     "recognition": UI / "RecognitionWindow.xaml.cs",
     "revision": UI / "RevisionWindow.xaml.cs",
     "health": UI / "ModelHealthWindow.xaml.cs",
@@ -42,13 +43,14 @@ if not errors:
     text = {key: path.read_text(encoding="utf-8") for key, path in files.items()}
 
     for needle in (
-        "DocumentToBeDestroyed += OnDocumentToBeDestroyed",
-        "DocumentToBeDestroyed -= OnDocumentToBeDestroyed",
         "private readonly IntPtr _nativeDatabaseIdentity;",
         "_nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
         "database.UnmanagedObject == _nativeDatabaseIdentity",
         "if (!MatchesNativeDatabase(document))",
         "if (!MatchesNativeDatabase(e.Document)) return;",
+        "private IDisposable? _nativeLifecycleSubscription;",
+        "_nativeLifecycleSubscription = DocumentBoundNativeLifecycleCoordinator.Register(",
+        "DetachNativeLifecycleSubscription();",
         "_window.Closed += OnWindowClosed",
         "_window.Closed -= OnWindowClosed",
         "_window.Dispatcher.CheckAccess()",
@@ -64,6 +66,32 @@ if not errors:
     ):
         if legacy in text["lifetime"]:
             errors.append("document-bound lifetime must not depend on managed Document wrapper identity: " + legacy)
+
+    for forbidden in (
+        "BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;",
+        "BcadApplication.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed;",
+        "_lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;",
+        "_lifecycleDocument.CloseAborted += OnDocumentCloseAborted;",
+    ):
+        if forbidden in text["lifetime"]:
+            errors.append("per-window lifetime must not directly own native lifecycle reactor: " + forbidden)
+
+    for needle in (
+        "private static readonly Dictionary<IntPtr, Entry> Entries",
+        "BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;",
+        "lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;",
+        "lifecycleDocument.CloseAborted += OnDocumentCloseAborted;",
+        "lifecycleDocument.BeginDocumentClose -= OnBeginDocumentClose;",
+        "lifecycleDocument.CloseAborted -= OnDocumentCloseAborted;",
+        "new WeakReference<Callbacks>(callbacks)",
+        "return new Subscription(entry, callbacks);",
+        "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;",
+    ):
+        if needle not in text["native"]:
+            errors.append("shared native lifecycle coordinator missing: " + needle)
+
+    if text["native"].count("BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;") != 1:
+        errors.append("shared native lifecycle coordinator must expose one global DocumentToBeDestroyed subscription site")
 
     for key in ("recognition", "revision", "health", "bq", "bbs", "door_schedule", "room_schedule"):
         if "DocumentBoundWindowLifetime.Attach(this, _document);" not in text[key]:
@@ -112,8 +140,6 @@ if not errors:
         if "DocumentBoundWindowLifetime.Attach(this, _document);" not in window_source:
             errors.append(window_key + " must own its source-DWG lifetime attachment in the window constructor")
 
-    # These command hubs are intentionally active-document dynamic. Binding either hub to the
-    # document that happened to be active when the hub opened would break intended multi-DWG UX.
     dynamic_hubs = {
         "domain_hub": "DomainHub",
         "rebar_hub": "Rebar3DHub",
@@ -134,4 +160,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: document-bound review/health/BQ/BBS/schedule/manager windows own one source-DWG lifetime attachment in their constructors; native database identity tolerates managed-wrapper drift without cross-DWG rebinding, while dynamic hubs remain active-document based.")
+print("PASS: document-bound review/health/BQ/BBS/schedule/manager windows keep one source-DWG registration; per-window code owns only managed H3 subscription tokens, native reactors are centralized with weak callbacks by native database identity, and dynamic hubs remain active-document based.")

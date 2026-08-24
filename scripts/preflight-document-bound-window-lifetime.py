@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Guard modeless QS3D windows against stale project/document interaction."""
+"""Guard modeless QS3D windows against stale project/document interaction and native reactor rooting."""
 
-# Lane-Key: issue-3621 — H.2 centralizes host quit state in ModelessHostQuiescenceCoordinator.
+# Lane-Key: issue-3621 — H.3 centralizes native document lifecycle ownership while
+# preserving stable native identity, fail-closed input guards, and host quiescence.
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "DocumentBoundWindowLifetime.cs"
-COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "ModelessHostQuiescenceCoordinator.cs"
+HOST_COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "ModelessHostQuiescenceCoordinator.cs"
+NATIVE_COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "DocumentBoundNativeLifecycleCoordinator.cs"
 
 
 def require(condition: bool, message: str) -> None:
@@ -31,10 +33,13 @@ def method_block(source: str, signature: str) -> str:
     raise AssertionError(f"{signature} body is unterminated.")
 
 
-require(COORDINATOR.exists(),
+require(HOST_COORDINATOR.exists(),
         "Document-bound lifetime requires the plugin-global modeless host quiescence coordinator.")
+require(NATIVE_COORDINATOR.exists(),
+        "Document-bound lifetime requires the shared native document lifecycle coordinator.")
 source = SOURCE.read_text(encoding="utf-8")
-coordinator = COORDINATOR.read_text(encoding="utf-8")
+host = HOST_COORDINATOR.read_text(encoding="utf-8")
+native = NATIVE_COORDINATOR.read_text(encoding="utf-8")
 barrier = "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;"
 
 require("using System.Threading;" in source and "private int _invalidated;" in source,
@@ -47,22 +52,35 @@ require(
     "Document-bound windows must capture the stable native database identity at bind time.",
 )
 require(
+    "private IDisposable? _nativeLifecycleSubscription;" in source,
+    "Each window must own one managed subscription token rather than BricsCAD reactor delegates.",
+)
+require(
     "ReferenceEquals(e.Document, _document)" not in source
     and "ReferenceEquals(document, _document)" not in source,
     "Managed Document wrapper identity must not own modeless lifetime or rebind validation.",
 )
+
+# No per-window BricsCAD application/document reactor ownership remains.
 for marker in (
-    "BcadApplication.BeginQuit +=",
-    "BcadApplication.BeginQuit -=",
-    "BcadApplication.QuitWillStart +=",
-    "BcadApplication.QuitWillStart -=",
-    "BcadApplication.QuitAborted +=",
-    "BcadApplication.QuitAborted -=",
+    "BcadApplication.BeginQuit +=", "BcadApplication.BeginQuit -=",
+    "BcadApplication.QuitWillStart +=", "BcadApplication.QuitWillStart -=",
+    "BcadApplication.QuitAborted +=", "BcadApplication.QuitAborted -=",
+    "_lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;",
+    "_lifecycleDocument.CloseAborted += OnDocumentCloseAborted;",
+    "BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;",
+    "_lifecycleDocument.BeginDocumentClose -= OnBeginDocumentClose;",
+    "_lifecycleDocument.CloseAborted -= OnDocumentCloseAborted;",
+    "BcadApplication.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed;",
 ):
-    require(marker not in source,
-            f"Per-window lifetime must not own native application quit subscriptions: {marker}")
-require("internal static bool IsQuiescing => Volatile.Read(ref _isQuiescing) != 0;" in coordinator,
+    require(marker not in source, f"Per-window lifetime must not own native lifecycle callback: {marker}")
+
+require("internal static bool IsQuiescing => Volatile.Read(ref _isQuiescing) != 0;" in host,
         "Global host quiescence must expose an atomic read barrier.")
+require("private static readonly Dictionary<IntPtr, Entry> Entries" in native,
+        "Shared document lifecycle ownership must be keyed by stable native database identity.")
+require("List<WeakReference<Callbacks>>" in native,
+        "Native lifecycle entries must not strongly root per-window WPF callback bundles.")
 
 native_identity = method_block(source, "private static IntPtr GetNativeDatabaseIdentity(Document document)")
 require(
@@ -82,9 +100,13 @@ require("if (!MatchesNativeDatabase(document))" in attach,
         "A modeless window rebind must validate native database identity rather than managed wrapper identity.")
 for marker in (
     "ModelessHostQuiescenceCoordinator.EnsureInitialized();",
+    "_nativeLifecycleSubscription = DocumentBoundNativeLifecycleCoordinator.Register(",
+    "OnBeginDocumentClose,",
+    "OnDocumentCloseAborted,",
+    "OnDocumentToBeDestroyed);",
     "ModelessHostQuiescenceCoordinator.QuiescenceAborted += OnHostQuiescenceAborted;",
 ):
-    require(marker in attach, f"Managed host lifecycle marker is missing: {marker}")
+    require(marker in attach, f"Managed lifecycle wiring is missing: {marker}")
 
 ensure = method_block(source, "private bool EnsureProjectAffinity()")
 require("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return false;" in ensure,
@@ -100,7 +122,7 @@ require("Volatile.Read(ref _invalidated) != 0" in ensure,
 project_change = method_block(source, "private void CloseForProjectChange()")
 for marker in (
     "Interlocked.Exchange(ref _invalidated, 1) != 0",
-    "DetachDocumentManagerHandler();",
+    "DetachDocumentLifecycleHandlersIfSafe();",
     "TryCloseWindow();",
 ):
     require(marker in project_change, f"Project-change invalidation must retain lifecycle marker: {marker}")
@@ -113,26 +135,20 @@ teardown = method_block(source, "private void OnDocumentToBeDestroyed(object sen
 for marker in (
     barrier,
     "if (!MatchesNativeDatabase(e.Document)) return;",
-    "var abandonForHostShutdown = ModelessHostQuiescenceCoordinator.IsQuiescing;",
-    "var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();",
+    "var deferForFinalDocument = !HasAnotherLiveDocument();",
     "Interlocked.Exchange(ref _invalidated, 1) != 0",
-    "if (abandonForHostShutdown) return;",
-    "DetachDocumentManagerHandler();",
     "TryCloseWindow(deferForFinalDocument);",
 ):
     require(marker in teardown, f"Document teardown must retain lifecycle marker: {marker}")
-require("Detach();" not in teardown,
-        "Document teardown must keep window-local input guards attached when explicit close is suppressed or fails.")
+require("Detach();" not in teardown and "DetachNativeLifecycleSubscription" not in teardown,
+        "Document teardown must keep input guards attached and leave native ownership to the shared coordinator.")
 require(
     teardown.index(barrier)
     < teardown.index("if (!MatchesNativeDatabase(e.Document)) return;")
-    < teardown.index("var abandonForHostShutdown = ModelessHostQuiescenceCoordinator.IsQuiescing;")
-    < teardown.index("var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();")
+    < teardown.index("var deferForFinalDocument = !HasAnotherLiveDocument();")
     < teardown.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
-    < teardown.index("if (abandonForHostShutdown) return;")
-    < teardown.index("DetachDocumentManagerHandler();")
     < teardown.index("TryCloseWindow(deferForFinalDocument);"),
-    "Document teardown must cross global quiescence before native access, invalidate atomically, and use ordinary close cleanup only outside host quit.",
+    "Document teardown must cross quiescence before native access, invalidate atomically, then request ordinary close.",
 )
 
 request_close = method_block(source, "private void TryCloseWindow(bool deferOnDispatcher = false)")
@@ -169,14 +185,28 @@ recover = method_block(source, "private void TryRecoverAfterQuitAbort()")
 for marker in (
     "_window.Dispatcher.BeginInvoke",
     barrier,
+    "DetachDocumentLifecycleHandlersAfterAbort();",
     "Detach();",
     "TryCloseWindowOnDispatcher();",
 ):
     require(marker in recover, f"Quit-abort recovery must retain deferred cleanup marker: {marker}")
 require(
-    recover.index(barrier) < recover.index("Detach();") < recover.index("TryCloseWindowOnDispatcher();"),
-    "Deferred recovery must re-check quiescence, release managed/native document handlers, then close the stale window.",
+    recover.index(barrier)
+    < recover.index("DetachDocumentLifecycleHandlersAfterAbort();")
+    < recover.index("Detach();")
+    < recover.index("TryCloseWindowOnDispatcher();"),
+    "Deferred recovery must re-check quiescence, release managed native subscription, detach, then close.",
 )
+
+detach_subscription = method_block(source, "private void DetachNativeLifecycleSubscription()")
+for marker in (
+    "Interlocked.Exchange(ref _nativeLifecycleSubscription, null)",
+    "subscription.Dispose();",
+):
+    require(marker in detach_subscription, f"Managed native subscription release is missing: {marker}")
+for forbidden in ("BeginDocumentClose -=", "CloseAborted -=", "DocumentToBeDestroyed -="):
+    require(forbidden not in detach_subscription,
+            f"Per-window managed release must not unsubscribe BricsCAD native callbacks directly: {forbidden}")
 
 mouse = method_block(source, "private void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)")
 keyboard = method_block(source, "private void OnPreviewKeyDown(object sender, KeyEventArgs e)")
@@ -186,19 +216,20 @@ for name, snippet in (("mouse", mouse), ("keyboard", keyboard)):
 
 closed = method_block(source, "private void OnWindowClosed(object? sender, EventArgs e)")
 require(barrier in closed and "Detach();" in closed,
-        "Window.Closed must preserve full detach for ordinary closes but leave subscriptions untouched during host quit.")
+        "Window.Closed must preserve full detach for ordinary closes but leave ownership untouched during host quit.")
 require(closed.index(barrier) < closed.index("Detach();"),
         "Window.Closed must cross the global host-quiescence barrier before full detach.")
 
 detach = method_block(source, "private void Detach()")
 require(barrier in detach,
-        "Shared detach must not mutate BricsCAD lifecycle subscriptions during host quit.")
+        "Shared detach must not mutate lifecycle ownership during host quit.")
 require("ModelessHostQuiescenceCoordinator.QuiescenceAborted -= OnHostQuiescenceAborted;" in detach,
         "Ordinary detach must release the managed host-abort notification.")
 require(
-    detach.index(barrier) < detach.index("DetachDocumentManagerHandler();")
+    detach.index(barrier)
+    < detach.index("DetachDocumentLifecycleHandlersIfSafe();")
     < detach.index("ModelessHostQuiescenceCoordinator.QuiescenceAborted -= OnHostQuiescenceAborted;"),
-    "Host quit must block document/native unsubscription before shared detach reaches managed cleanup.",
+    "Host quit must block managed native-subscription release before shared detach reaches managed cleanup.",
 )
 
-print("[OK] Document-bound modeless windows use native database identity, remain atomically fail-closed, and consume one plugin-global host-quiescence owner during application quit.")
+print("[OK] Document-bound modeless windows use stable native identity, remain atomically fail-closed, and consume shared native lifecycle subscriptions that do not root WPF windows from BricsCAD reactors.")
