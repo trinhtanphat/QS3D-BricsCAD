@@ -6,8 +6,7 @@ RUNNER = ROOT / "scripts" / "test-v26-package-install-lifecycle.ps1"
 PACKAGE = ROOT / "scripts" / "package-v26.ps1"
 GENERATOR = ROOT / "scripts" / "new-v26-script-from-v25.ps1"
 V26_PROJECT = ROOT / "src" / "QS3D.BricsCAD.V26" / "QS3D.BricsCAD.V26.csproj"
-V26_DOC = ROOT / "docs" / "LOCAL-V26-QUALIFICATION.md"
-INBOX = ROOT / "docs" / "LOCAL-AGENT-INBOX.md"
+RUNBOOK = ROOT / "docs" / "LOCAL-V26-PACKAGE-INSTALL-LIFECYCLE.md"
 
 errors: list[str] = []
 
@@ -66,19 +65,24 @@ require(V26_PROJECT, [
     "<TargetFramework>net8.0-windows</TargetFramework>",
     "<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>",
 ])
-require(V26_DOC, ["V26 clean-machine package install/uninstall", "test-v26-package-install-lifecycle.ps1"])
-require(INBOX, ["V26 clean-machine package install/uninstall", "PENDING_LOCAL"])
+require(RUNBOOK, [
+    "PENDING_LOCAL",
+    "test-v26-package-install-lifecycle.ps1",
+    "QS3D.BricsCAD.V26.runtimeconfig.json",
+    "unrelated V25",
+    "LOCAL_PASS",
+])
 
 runner_text = RUNNER.read_text(encoding="utf-8") if RUNNER.is_file() else ""
 for forbidden in ("Start-Process bricscad", "NETLOAD", "LOCAL_PASS", "private DWG", "$IsWindows"):
     if forbidden in runner_text:
         errors.append(f"runner must not claim/perform licensed runtime boundary or require PowerShell 7-only host detection: {forbidden}")
 
-# This runner validates the exact generated V26 package and installation state. It
-# must not silently weaken the production installer/uninstaller or fabricate local
-# runtime evidence merely to make the source gate green.
-if "-Force" in runner_text:
-    errors.append("qualification runner must not bypass installer/uninstaller ownership guards with -Force")
+# The canonical calls intentionally omit the installer's/uninstaller's ownership-bypass
+# switch. Remove-Item -Force is cleanup only and is not a package-identity bypass.
+for forbidden_call in ("$installer -Force", "$uninstaller -Force"):
+    if forbidden_call in runner_text:
+        errors.append(f"qualification runner must not bypass package ownership guards: {forbidden_call}")
 
 if errors:
     print("V26 package install lifecycle preflight: FAIL")
