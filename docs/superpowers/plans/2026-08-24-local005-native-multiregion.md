@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- No direct writes to `main`; use canonical branch `agent/chatgpt/local005-multiregion-20260824` and Lane-Key `issue-3647`.
+- No direct writes to `main`; use canonical branch `agent/chatgpt/local005-multiregion-20260824` and exact PR metadata `Lane-Key: issue-3647` (without Markdown quoting around the value).
 - Reuse `PolygonalSlabMultiRegionMeshPlanner`; do not introduce another reinforcement planning engine.
 - Destructive reconciliation must validate complete ownership first and fail closed on partial, stale, duplicate, reused, or mixed ownership.
 - One CAD transaction plus `ProjectStateSnapshot` per semantic element replacement; no partial source or generated-region commit.
@@ -135,7 +135,7 @@
 - Consumes: canonical branch head and protected `main`.
 - Produces: merged source child #3647; parent #83 updated to source-ready/PENDING_LOCAL.
 
-- [ ] Open PR with `Closes #3647`, `Advances #83`, and Lane-Key `issue-3647`.
+- [ ] Open PR with `Closes #3647`, `Advances #83`, and exact metadata line `Lane-Key: issue-3647`.
 - [ ] Require exact-head branch/PR `preflight` and `core` SUCCESS, including Core smoke and BricsCAD V25 plugin build.
 - [ ] If `main` advances, merge/sync `main` into the canonical branch without force-push and rerun exact-head CI.
 - [ ] Recheck PR comments/review threads and mergeability immediately before merge.
