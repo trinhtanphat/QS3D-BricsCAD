@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.Core.Audit;
@@ -29,7 +31,7 @@ namespace QS3D.BricsCAD.V25.Cad
     /// </summary>
     internal static class SlabFoundationMultiRegionMeshSolidBuilder
     {
-        internal const int MaxGeneratedBars = 12000;
+        internal const int MaxBarsPerBatch = 12000;
         internal const string RegionOwnershipMarker = "QS3D_REBAR_REGION";
         private const double MaximumSagittaM = .002d;
         private const double ElevationToleranceDrawing = 1e-8d;
@@ -38,7 +40,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private const string FoundationHandlesKey = "GeneratedFoundationMeshHandles";
         private const string GeneratedManifestSuffix = "MultiRegionGeneratedManifest";
         private const string SourceManifestSuffix = "MultiRegionSourceManifest";
-        private const string SourceFingerprintSuffix = "MultiRegionSourceFingerprint";
+        private const string TopologyFingerprintSuffix = "MultiRegionTopologyFingerprint";
         private const string ModeSuffix = "MultiRegionMode";
         private const string Mode = "PolygonMultiRegionGlobalXY";
 
@@ -51,6 +53,7 @@ namespace QS3D.BricsCAD.V25.Cad
             public string CoverKey { get; set; } = string.Empty;
             public string FacesKey { get; set; } = string.Empty;
             public string XClosestKey { get; set; } = string.Empty;
+            public bool NotationFallsBackToFamily { get; set; }
             public double DefaultCoverM { get; set; }
             public double DefaultThicknessM { get; set; }
             public string AuditAction { get; set; } = string.Empty;
@@ -94,24 +97,9 @@ namespace QS3D.BricsCAD.V25.Cad
                 .ToList();
             if (selectedHandles.Any(x => x.Length == 0) || selectedHandles.Distinct(StringComparer.OrdinalIgnoreCase).Count() != selectedHandles.Count)
                 throw new InvalidOperationException("Multi-region source selection contains a blank or duplicate CAD handle.");
+            var selectedHandleSet = new HashSet<string>(selectedHandles, StringComparer.OrdinalIgnoreCase);
 
-            var claimers = project.Elements
-                .Where(element => element.SourceHandles.Any(source => selectedHandles.Contains(
-                    GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(source),
-                    StringComparer.OrdinalIgnoreCase)))
-                .ToList();
-            if (claimers.Count != 1)
-                throw new InvalidOperationException("Multi-region source selection must resolve to exactly one semantic QS3D owner before any CAD write.");
-            var element = claimers[0];
-            if (element.Category != category)
-                throw new InvalidOperationException("Selected source belongs to " + element.Category + ", not requested " + category + ".");
-            foreach (var handle in selectedHandles)
-            {
-                if (!element.SourceHandles.Any(source => string.Equals(
-                    GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(source), handle, StringComparison.OrdinalIgnoreCase)))
-                    throw new InvalidOperationException("Selected multi-region source " + handle + " is not owned by semantic element " + element.Id + ".");
-            }
-
+            var element = ResolveTargetElement(project, category, selectedHandleSet);
             var rollback = ProjectStateSnapshot.Capture(project);
             var cadCommitted = false;
             try
@@ -123,10 +111,11 @@ namespace QS3D.BricsCAD.V25.Cad
                     EnsureCommonElevation(sources, element.Id);
                     var assembly = PolygonSourceLoopRegionAssembler.Assemble(
                         sources.Select(source => new PolygonSourceLoop2(source.Read.SourceHandle, source.Read.Loop)));
+                    var topologyFingerprint = ComputeTopologyFingerprint(assembly, sources);
 
                     var family = project.FindFamily(element.FamilyId);
-                    var xGroup = ParseDirection(element, configuration.XNotationKey);
-                    var yGroup = ParseDirection(element, configuration.YNotationKey);
+                    var xGroup = ParseDirection(element, family, configuration.XNotationKey, configuration.NotationFallsBackToFamily);
+                    var yGroup = ParseDirection(element, family, configuration.YNotationKey, configuration.NotationFallsBackToFamily);
                     var verticalPlacement = CadElementVerticalPlacement.Resolve(
                         document,
                         project,
@@ -141,12 +130,12 @@ namespace QS3D.BricsCAD.V25.Cad
                         configuration.CoverKey,
                         CadGeometryGuard.Number(element, family, "RebarCoverM", configuration.DefaultCoverM));
                     if (coverM < 0d) throw new InvalidOperationException(element.Id + "/" + configuration.CoverKey + " must be >= 0.");
-                    var faces = ReadElementText(element, configuration.FacesKey, "Bottom");
+                    var faces = ReadText(element, family, configuration.FacesKey, "Bottom");
                     var includeBottom = string.Equals(faces, "Bottom", StringComparison.OrdinalIgnoreCase) || string.Equals(faces, "Both", StringComparison.OrdinalIgnoreCase);
                     var includeTop = string.Equals(faces, "Top", StringComparison.OrdinalIgnoreCase) || string.Equals(faces, "Both", StringComparison.OrdinalIgnoreCase);
                     if (!includeBottom && !includeTop)
                         throw new InvalidOperationException(element.Id + "/" + configuration.FacesKey + " must be Bottom, Top or Both.");
-                    var xClosest = ReadElementBoolean(element, configuration.XClosestKey, true);
+                    var xClosest = ReadBoolean(element, family, configuration.XClosestKey, true);
 
                     // This is deliberately the one and only multi-region planning call.
                     var layout = PolygonalSlabMultiRegionMeshPlanner.Plan(new PolygonalSlabMultiRegionMeshInput
@@ -169,8 +158,8 @@ namespace QS3D.BricsCAD.V25.Cad
                         IncludeTop = includeTop,
                         XClosestToFace = xClosest
                     });
-                    if (layout.TotalBarCount > MaxGeneratedBars)
-                        throw new InvalidOperationException("Multi-region reinforcement exceeds native cap " + MaxGeneratedBars + " generated bars; no CAD objects were erased.");
+                    if (layout.TotalBarCount > MaxBarsPerBatch)
+                        throw new InvalidOperationException("Multi-region reinforcement exceeds native cap " + MaxBarsPerBatch + " generated bars; no CAD objects were erased.");
 
                     var previous = ValidateCompletePreviousOwnership(
                         document,
@@ -247,9 +236,7 @@ namespace QS3D.BricsCAD.V25.Cad
                             .Select(x => new GeneratedManifestEntry(x.Key, x.Value.AsReadOnly())));
                     element.Properties[configuration.PropertyPrefix + SourceManifestSuffix] = MultiRegionRebarManifest.SerializeSources(
                         assembly.Regions.Select(region => new SourceManifestEntry(region.RegionId, region.OuterSourceId, region.HoleSourceIds)));
-                    element.Properties[configuration.PropertyPrefix + SourceFingerprintSuffix] = string.Join(";", sources
-                        .OrderBy(x => x.Read.SourceHandle, StringComparer.OrdinalIgnoreCase)
-                        .Select(x => GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x.Read.SourceHandle) + "=" + x.Read.Fingerprint));
+                    element.Properties[configuration.PropertyPrefix + TopologyFingerprintSuffix] = topologyFingerprint;
                     element.Properties[configuration.PropertyPrefix + ModeSuffix] = Mode;
                     element.Properties[configuration.PropertyPrefix + "MultiRegionCount"] = assembly.Regions.Count.ToString(CultureInfo.InvariantCulture);
                     element.Properties[configuration.PropertyPrefix + "MultiRegionBarCount"] = allHandles.Count.ToString(CultureInfo.InvariantCulture);
@@ -277,6 +264,84 @@ namespace QS3D.BricsCAD.V25.Cad
                 }
                 throw;
             }
+        }
+
+        private static ProjectElement ResolveTargetElement(ProjectState project, ElementCategory category, ISet<string> selectedHandles)
+        {
+            var candidates = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var candidate in project.Elements)
+            {
+                var semanticAnchor = candidate.SourceHandles.Any(source => selectedHandles.Contains(
+                    GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(source)));
+                if (semanticAnchor || PreviousSourceManifestContainsAny(candidate, selectedHandles))
+                    candidates[candidate.Id] = candidate;
+            }
+
+            if (candidates.Count != 1)
+                throw new InvalidOperationException("Multi-region source selection must resolve to exactly one semantic QS3D owner from current source ownership or its previous source manifest before any CAD write.");
+            var element = candidates.Values.Single();
+            if (element.Category != category)
+                throw new InvalidOperationException("Selected source belongs to " + element.Category + ", not requested " + category + ".");
+            return element;
+        }
+
+        private static bool PreviousSourceManifestContainsAny(ProjectElement element, ISet<string> selectedHandles)
+        {
+            string prefix;
+            if (element.Category == ElementCategory.Slab) prefix = "GeneratedSlabMesh";
+            else if (element.Category == ElementCategory.Foundation) prefix = "GeneratedFoundationMesh";
+            else return false;
+
+            string raw;
+            if (!element.Properties.TryGetValue(prefix + SourceManifestSuffix, out raw) || string.IsNullOrWhiteSpace(raw)) return false;
+            if (!selectedHandles.Any(handle => raw.IndexOf(handle, StringComparison.OrdinalIgnoreCase) >= 0)) return false;
+
+            foreach (var entry in MultiRegionRebarManifest.ParseSources(raw))
+            {
+                if (selectedHandles.Contains(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(entry.OuterSourceHandle))) return true;
+                if (entry.HoleSourceHandles.Any(handle => selectedHandles.Contains(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle)))) return true;
+            }
+            return false;
+        }
+
+        private static string ComputeTopologyFingerprint(PolygonSourceRegionAssembly2 assembly, IReadOnlyList<SourceLoop> sources)
+        {
+            if (assembly == null) throw new ArgumentNullException(nameof(assembly));
+            if (sources == null) throw new ArgumentNullException(nameof(sources));
+            var fingerprintByHandle = sources.ToDictionary(
+                source => GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(source.Read.SourceHandle),
+                source => source.Read.Fingerprint,
+                StringComparer.OrdinalIgnoreCase);
+            var canonical = new StringBuilder();
+            foreach (var region in assembly.Regions.OrderBy(x => x.RegionId, StringComparer.Ordinal))
+            {
+                if (canonical.Length > 0) canonical.Append(';');
+                canonical.Append("R=").Append(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(region.RegionId));
+                AppendSourceFingerprint(canonical, "O", region.OuterSourceId, fingerprintByHandle);
+                foreach (var hole in region.HoleSourceIds
+                    .Select(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity)
+                    .OrderBy(x => x, StringComparer.Ordinal))
+                    AppendSourceFingerprint(canonical, "H", hole, fingerprintByHandle);
+            }
+
+            using (var sha = SHA256.Create())
+            {
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(canonical.ToString()));
+                return BitConverter.ToString(hash).Replace("-", string.Empty);
+            }
+        }
+
+        private static void AppendSourceFingerprint(
+            StringBuilder target,
+            string role,
+            string sourceHandle,
+            IReadOnlyDictionary<string, string> fingerprintByHandle)
+        {
+            var handle = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(sourceHandle);
+            string fingerprint;
+            if (handle.Length == 0 || !fingerprintByHandle.TryGetValue(handle, out fingerprint) || string.IsNullOrWhiteSpace(fingerprint))
+                throw new InvalidOperationException("Multi-region topology source " + sourceHandle + " has no deterministic geometry fingerprint.");
+            target.Append('|').Append(role).Append('=').Append(handle).Append(':').Append(fingerprint);
         }
 
         private static IReadOnlyList<string> ValidateCompletePreviousOwnership(
@@ -363,11 +428,16 @@ namespace QS3D.BricsCAD.V25.Cad
             }
         }
 
-        private static RebarGroup ParseDirection(ProjectElement element, string key)
+        private static RebarGroup ParseDirection(ProjectElement element, ProjectFamily? family, string key, bool useFamilyFallback)
         {
             string notation;
-            if (!element.Properties.TryGetValue(key, out notation) || string.IsNullOrWhiteSpace(notation))
+            if (element.Properties.TryGetValue(key, out notation) && !string.IsNullOrWhiteSpace(notation))
+                notation = notation.Trim();
+            else if (useFamilyFallback && family != null && family.Properties.TryGetValue(key, out notation) && !string.IsNullOrWhiteSpace(notation))
+                notation = notation.Trim();
+            else
                 throw new InvalidOperationException(element.Id + " is missing " + key + ".");
+
             var groups = RebarNotationParser.Parse(notation);
             if (groups.Count != 1) throw new InvalidOperationException(element.Id + "/" + key + " supports exactly one rebar group.");
             var group = groups[0];
@@ -376,17 +446,22 @@ namespace QS3D.BricsCAD.V25.Cad
             return group;
         }
 
-        private static string ReadElementText(ProjectElement element, string key, string fallback)
+        private static string ReadText(ProjectElement element, ProjectFamily? family, string key, string fallback)
         {
             string value;
-            return element.Properties.TryGetValue(key, out value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : fallback;
+            if (element.Properties.TryGetValue(key, out value) && !string.IsNullOrWhiteSpace(value)) return value.Trim();
+            if (family != null && family.Properties.TryGetValue(key, out value) && !string.IsNullOrWhiteSpace(value)) return value.Trim();
+            return fallback;
         }
 
-        private static bool ReadElementBoolean(ProjectElement element, string key, bool fallback)
+        private static bool ReadBoolean(ProjectElement element, ProjectFamily? family, string key, bool fallback)
         {
-            string raw;
+            var raw = ReadText(element, family, key, fallback ? "true" : "false");
             bool value;
-            return element.Properties.TryGetValue(key, out raw) && bool.TryParse(raw, out value) ? value : fallback;
+            if (bool.TryParse(raw, out value)) return value;
+            if (raw == "1") return true;
+            if (raw == "0") return false;
+            throw new InvalidOperationException(element.Id + "/" + key + " must be true/false or 1/0.");
         }
 
         private static Solid3d CreateCylinder(Document document, Point3d start, Vector3d direction, double length, double radius, string label)
@@ -429,6 +504,7 @@ namespace QS3D.BricsCAD.V25.Cad
             CoverKey = "RebarSlabCoverM",
             FacesKey = "RebarSlabFaces",
             XClosestKey = "RebarSlabXClosestToFace",
+            NotationFallsBackToFamily = false,
             DefaultCoverM = .02d,
             DefaultThicknessM = .12d,
             AuditAction = "geometry.rebar.slab.mesh.multiregion"
@@ -443,6 +519,7 @@ namespace QS3D.BricsCAD.V25.Cad
             CoverKey = "RebarFoundationCoverM",
             FacesKey = "RebarFoundationFaces",
             XClosestKey = "RebarFoundationXClosestToFace",
+            NotationFallsBackToFamily = true,
             DefaultCoverM = .05d,
             DefaultThicknessM = .5d,
             AuditAction = "geometry.rebar.foundation.mesh.multiregion"
