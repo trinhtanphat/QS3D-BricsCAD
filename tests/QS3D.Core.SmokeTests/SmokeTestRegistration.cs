@@ -101,6 +101,7 @@ namespace QS3D.Core.SmokeTests
             CurtainPathFrameKnownCountContractSmoke.Run();
             CurtainFrameOpeningHealthSmoke.Run();
             BomReleaseGuardSmoke.Run();
+            BomNegativeQuantityReleaseGuardSmoke.Run();
             HealthSummaryReadinessSmoke.Run();
             DependencyHealthMissingTargetSmoke.Run();
             DependencyHealthBlankTargetSmoke.Run();

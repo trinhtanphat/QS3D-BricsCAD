@@ -112,6 +112,8 @@ namespace QS3D.Core.Diagnostics
                     }
                     if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value))
                         issues.Add(new ModelHealthIssue("BOM_QUANTITY_NONFINITE", HealthSeverity.Error, "Quantity " + quantity.Key + " không phải số hữu hạn.", element.Id));
+                    else if (quantity.Value < 0d)
+                        issues.Add(new ModelHealthIssue("BOM_QUANTITY_NEGATIVE", HealthSeverity.Error, "Quantity " + quantity.Key + " không được âm.", element.Id));
                 }
 
                 try
