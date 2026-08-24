@@ -37,7 +37,7 @@ namespace QS3D.BricsCAD.V25
                     StringComparer.OrdinalIgnoreCase);
                 var walls = project.Elements
                     .Where(element => element.Category == ElementCategory.StructuralWall)
-                    .Where(element => MatchesSelection(project, element, handles))
+                    .Where(element => SemanticReferenceHandles.MatchesSelection(element, handles))
                     .ToList();
                 if (walls.Count != 1)
                     throw new InvalidOperationException("Wall-contact probe requires selection resolving to exactly one StructuralWall.");
@@ -68,25 +68,6 @@ namespace QS3D.BricsCAD.V25
             catch (Exception error)
             {
                 try { document.Editor.WriteMessage("\nQS3D WALLCONTACT PROBE ERROR: " + error.Message); } catch { }
-            }
-        }
-
-        private static bool MatchesSelection(
-            ProjectState project,
-            ProjectElement element,
-            ISet<string> selectedHandles)
-        {
-            try
-            {
-                return SourceHandleResolver.Resolve(project, new[] { element.Id })
-                    .Select(handle => (handle ?? string.Empty).Trim())
-                    .Any(handle => handle.Length > 0 && selectedHandles.Contains(handle));
-            }
-            catch (InvalidOperationException)
-            {
-                // Selection matching is a read-only probe. Missing/stale semantic provenance
-                // must fail closed instead of making the command target an unrelated wall.
-                return false;
             }
         }
     }

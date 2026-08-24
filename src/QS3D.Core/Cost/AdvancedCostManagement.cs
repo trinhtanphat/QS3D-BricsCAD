@@ -391,18 +391,7 @@ namespace QS3D.Core.Cost
                 values.Add(records[i].UnitCost);
             values.Sort();
 
-            var average = values[0];
-            for (var i = 1; i < values.Count; i++)
-            {
-                var contribution = CostDecimalMath.DividePreservingNonZero(
-                    checked(values[i] - average),
-                    (decimal)(i + 1),
-                    "benchmark average contribution");
-                average = CostDecimalMath.AddPreservingNonZeroContribution(
-                    average,
-                    contribution,
-                    "benchmark average");
-            }
+            var average = CalculateAverage(values);
 
             decimal median;
             if (values.Count % 2 == 1)
@@ -433,6 +422,49 @@ namespace QS3D.Core.Cost
                 median,
                 currentUnitCost,
                 deviation);
+        }
+
+        private static decimal CalculateAverage(IReadOnlyList<decimal> values)
+        {
+            decimal sum = 0m;
+            var sumOverflowed = false;
+            for (var i = 0; i < values.Count; i++)
+            {
+                decimal next;
+                try
+                {
+                    next = checked(sum + values[i]);
+                }
+                catch (OverflowException)
+                {
+                    sumOverflowed = true;
+                    break;
+                }
+
+                if (values[i] != 0m && next == sum)
+                    throw new OverflowException("Cost addition precision loss: benchmark average sum.");
+                sum = next;
+            }
+
+            if (!sumOverflowed)
+                return CostDecimalMath.DividePreservingNonZero(
+                    sum,
+                    (decimal)values.Count,
+                    "benchmark average");
+
+            var average = values[0];
+            for (var i = 1; i < values.Count; i++)
+            {
+                var contribution = CostDecimalMath.DividePreservingNonZero(
+                    checked(values[i] - average),
+                    (decimal)(i + 1),
+                    "benchmark average contribution");
+                average = CostDecimalMath.AddPreservingNonZeroContribution(
+                    average,
+                    contribution,
+                    "benchmark average");
+            }
+            return average;
         }
 
         private static decimal CalculateDeviationPercent(decimal currentUnitCost, decimal averageUnitCost)
