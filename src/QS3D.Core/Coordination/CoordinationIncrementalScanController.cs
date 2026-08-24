@@ -27,7 +27,14 @@ namespace QS3D.Core.Coordination
         public void MarkDirty(IEnumerable<string> itemIds)
         {
             if (itemIds == null) throw new ArgumentNullException(nameof(itemIds));
-            foreach (var itemId in itemIds) MarkDirty(itemId);
+
+            // Validate and fully enumerate the batch before mutating controller state. This keeps the
+            // public bulk operation atomic when a later value is invalid or the source enumerable throws.
+            var pending = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var itemId in itemIds)
+                pending.Add(RequiredId(itemId, nameof(itemId)));
+
+            _pendingDirtyIds.UnionWith(pending);
         }
 
         public CoordinationIncrementalScanResult ApplySnapshot(
