@@ -56,12 +56,16 @@ namespace QS3D.BricsCAD.V25.Cad
 
             var ownership = GeneratedHandleOwnershipIndex.Build(project);
             var rollback = ProjectStateSnapshot.Capture(project);
+            var rollbackStamp = SourceReconcileUndoCoordinator.ProjectRevisionStamp.Capture(project);
             var cadCommitted = false;
+            SourceReconcileUndoCoordinator.PendingTransition? undoTransition = null;
             string generatedHandle;
             try
             {
                 using (document.LockDocument())
                 {
+                    // Validate the complete retiring ownership before any native append/erase.
+                    // The resulting ObjectIds remain valid for the document-bound transaction below.
                     var previous = ValidatePrevious(document.Database, project, element, ownership);
                     using (var transaction = document.Database.TransactionManager.StartTransaction())
                     {
@@ -72,6 +76,21 @@ namespace QS3D.BricsCAD.V25.Cad
                         var owner = transaction.GetObject(source.OwnerId, OpenMode.ForWrite, false) as BlockTableRecord;
                         if (owner == null)
                             throw new InvalidOperationException("Không mở được owner space của semantic source " + element.Id + ".");
+
+                        // Semantic tags are native CAD + canonical ProjectState in one command.
+                        // Reuse the hardened document-bound Source Reconcile history so native
+                        // UNDO/REDO restores generated ownership, audit and revision together with
+                        // MText/MLeader topology. Do not create a second command-event observer.
+                        if (!SourceReconcileUndoCoordinator.IsExternalTransitionActive(document))
+                        {
+                            undoTransition = SourceReconcileUndoCoordinator.BeginTransition(
+                                document,
+                                transaction,
+                                project,
+                                rollback,
+                                rollbackStamp);
+                            undoTransition.StageNativeMarker();
+                        }
 
                         ErasePrevious(transaction, project, element, previous);
 
@@ -110,7 +129,17 @@ namespace QS3D.BricsCAD.V25.Cad
                             "documentation.semantic-tag.replace",
                             element.Id,
                             generatedHandle + " • template=" + template);
+
+                        if (!SourceReconcileUndoCoordinator.IsExternalTransitionActive(document))
+                        {
+                            if (undoTransition == null)
+                                throw new InvalidOperationException("Semantic tag native Undo transition was not initialized before native replacement.");
+                            var afterSnapshot = ProjectStateSnapshot.Capture(project);
+                            undoTransition.StageAfter(project, afterSnapshot);
+                        }
+
                         transaction.Commit();
+                        undoTransition?.ConfirmCommitted();
                         cadCommitted = true;
                     }
                 }
@@ -128,6 +157,10 @@ namespace QS3D.BricsCAD.V25.Cad
                     }
                 }
                 throw;
+            }
+            finally
+            {
+                undoTransition?.Dispose();
             }
 
             return generatedHandle;
