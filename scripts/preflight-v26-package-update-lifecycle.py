@@ -6,6 +6,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "scripts" / "test-v26-package-update-lifecycle.ps1"
 PACKAGER = ROOT / "scripts" / "package-v26.ps1"
+INSTALLER = ROOT / "scripts" / "install-v25-autoload.ps1"
 UPDATER = ROOT / "scripts" / "update-v25.ps1"
 HANDOFF = ROOT / "docs" / "LOCAL-V26-PACKAGE-UPDATE-LIFECYCLE.md"
 
@@ -34,8 +35,14 @@ def main() -> int:
             "package-v26.ps1",
             "install-v26-autoload.ps1",
             "update-v26.ps1",
-            "rollbackRejected",
-            "rollbackPreservedState",
+            "downgradeRejected",
+            "downgradePreservedState",
+            "transactionalFailureRejected",
+            "transactionalPayloadRolledBack",
+            "transactionalRegistryRolledBack",
+            "Get-DemandLoadDigest",
+            "function global:New-ItemProperty",
+            "Function:\\global:New-ItemProperty",
             "cancelPreservedState",
             "unrelatedSentinelPreserved",
             "-AllowSameVersion -WhatIf",
@@ -49,8 +56,12 @@ def main() -> int:
         raise AssertionError("runner must refuse package mutation while BricsCAD is running")
     if not re.search(r"Get-FileHash.+SHA256", runner):
         raise AssertionError("runner must verify installed payload hashes")
-    if runner.count("Get-TreeDigest $installDir") < 3:
-        raise AssertionError("runner must compare upgraded payload state across rollback and cancel paths")
+    if runner.count("Get-TreeDigest $installDir") < 5:
+        raise AssertionError("runner must compare upgraded payload across downgrade, forced rollback, and cancel paths")
+    if runner.count("Get-DemandLoadDigest") < 3:
+        raise AssertionError("runner must compare DemandLoad registration before and after forced transactional failure")
+    if "-Force -Confirm:$false" not in runner:
+        raise AssertionError("forced rollback probe must exercise the real replacement transaction")
 
     packager = require(
         PACKAGER,
@@ -64,6 +75,17 @@ def main() -> int:
     if "update-v26.ps1" not in packager:
         raise AssertionError("V26 package must contain the generated updater")
 
+    require(
+        INSTALLER,
+        [
+            "$registrySnapshots",
+            "$backup = $installFull + '.backup-'",
+            "$payloadCommitted = $true",
+            "Restore-DemandLoadSnapshot",
+            "Move-Item -LiteralPath $backup -Destination $installFull",
+            "throw $originalError",
+        ],
+    )
     require(
         UPDATER,
         [
@@ -89,7 +111,8 @@ def main() -> int:
             "UpgradeManifestUri",
             "RollbackManifestUri",
             "ExpectedSignerThumbprint",
-            "rollbackPreservedState",
+            "transactionalPayloadRolledBack",
+            "transactionalRegistryRolledBack",
             "cancelPreservedState",
             "cleanupComplete",
         ],
