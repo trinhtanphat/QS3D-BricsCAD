@@ -52,7 +52,7 @@ namespace QS3D.BricsCAD.V25.UI
                     _lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;
                     _lifecycleDocument.CloseAborted += OnDocumentCloseAborted;
                     BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
-                    BcadApplication.BeginQuit += OnApplicationBeginQuit;
+                    BcadApplication.QuitWillStart += OnApplicationQuitWillStart;
                     BcadApplication.QuitAborted += OnApplicationQuitAborted;
                     _window.Activated += OnWindowActivated;
                     _window.PreviewMouseDown += OnPreviewMouseDown;
@@ -238,11 +238,11 @@ namespace QS3D.BricsCAD.V25.UI
                 TryCloseWindow();
             }
 
-            private void OnApplicationBeginQuit(object? sender, EventArgs e)
+            private void OnApplicationQuitWillStart(object? sender, EventArgs e)
             {
-                // BeginQuit is a host-level ownership boundary. Once it fires, BricsCAD owns final
-                // modeless HWND/WPF teardown; QS3D must only fail closed and must not initiate Close()
-                // or mutate BricsCAD lifecycle subscriptions while native teardown is active.
+                // QuitWillStart is the earliest host-level ownership boundary exposed by V25. Once
+                // it fires, BricsCAD owns final modeless HWND/WPF teardown. This callback is strictly
+                // state-only: do not initiate Close() or mutate native lifecycle subscriptions here.
                 Volatile.Write(ref _hostQuitStarted, 1);
             }
 
@@ -403,7 +403,7 @@ namespace QS3D.BricsCAD.V25.UI
 
                 DetachDocumentLifecycleHandlersIfSafe();
                 DetachDocumentManagerHandler();
-                try { BcadApplication.BeginQuit -= OnApplicationBeginQuit; }
+                try { BcadApplication.QuitWillStart -= OnApplicationQuitWillStart; }
                 catch { }
                 try { BcadApplication.QuitAborted -= OnApplicationQuitAborted; }
                 catch { }
