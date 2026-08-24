@@ -41,11 +41,11 @@ namespace QS3D.Core.SmokeTests
 
                 var worksheet = XDocument.Parse(ReadEntry(output, "xl/worksheets/sheet1.xml"));
                 var merge = worksheet.Descendants(Ns + "mergeCell").Single();
-                Require((string)merge.Attribute("ref") == "A1:D1", "Unrelated merged cells must be preserved.");
+                Require((string?)merge.Attribute("ref") == "A1:D1", "Unrelated merged cells must be preserved.");
                 var column = worksheet.Descendants(Ns + "col").Single();
-                Require((string)column.Attribute("width") == "18", "Template column widths must be preserved.");
+                Require((string?)column.Attribute("width") == "18", "Template column widths must be preserved.");
                 var formula = worksheet.Descendants(Ns + "c")
-                    .Single(cell => (string)cell.Attribute("r") == "J2")
+                    .Single(cell => (string?)cell.Attribute("r") == "J2")
                     .Element(Ns + "f");
                 Require(formula != null && formula.Value == "SUM(1,1)", "Unmapped formulas outside the data row must be preserved.");
 
@@ -239,23 +239,23 @@ namespace QS3D.Core.SmokeTests
 
         private static void RequireCellText(XDocument document, string reference, string expected, string message)
         {
-            var cell = document.Descendants(Ns + "c").Single(item => (string)item.Attribute("r") == reference);
+            var cell = document.Descendants(Ns + "c").Single(item => (string?)item.Attribute("r") == reference);
             var actual = string.Concat(cell.Descendants(Ns + "t").Select(item => item.Value));
             Require(actual == expected, message + " Expected '" + expected + "', got '" + actual + "'.");
         }
 
         private static void RequireCellNumber(XDocument document, string reference, string expected, string message)
         {
-            var cell = document.Descendants(Ns + "c").Single(item => (string)item.Attribute("r") == reference);
-            Require((string)cell.Attribute("t") == null, message + " Numeric cell must not use a string type.");
-            var actual = (string)cell.Element(Ns + "v");
+            var cell = document.Descendants(Ns + "c").Single(item => (string?)item.Attribute("r") == reference);
+            Require((string?)cell.Attribute("t") == null, message + " Numeric cell must not use a string type.");
+            var actual = (string?)cell.Element(Ns + "v");
             Require(actual == expected, message + " Expected '" + expected + "', got '" + actual + "'.");
         }
 
         private static void RequireStyle(XDocument document, string reference, string expected, string message)
         {
-            var cell = document.Descendants(Ns + "c").Single(item => (string)item.Attribute("r") == reference);
-            Require((string)cell.Attribute("s") == expected, message);
+            var cell = document.Descendants(Ns + "c").Single(item => (string?)item.Attribute("r") == reference);
+            Require((string?)cell.Attribute("s") == expected, message);
         }
 
         private static string ReadEntry(string path, string entryName)
