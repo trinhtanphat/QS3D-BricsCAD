@@ -35,6 +35,7 @@ namespace QS3D.BricsCAD.V25.Reporting
             public string Type = "Other";
             public double GrossAreaCad;
             public PlanarEntity? Plane;
+            public bool IsOuterHorizontal;
         }
 
         public static QuantityGeometryExplanation Build(
@@ -283,7 +284,7 @@ namespace QS3D.BricsCAD.V25.Reporting
             for (var index = 0; index < seeds.Count; index++)
             {
                 var seed = seeds[index];
-                if (!IncludeFormworkFace(targetCategory, seed.Type)) continue;
+                if (!IncludeFormworkFace(targetCategory, seed.Type, seed.IsOuterHorizontal)) continue;
                 var netCad = seed.Plane == null ? seed.GrossAreaCad : Math.Min(seed.GrossAreaCad, residualAreasCad[index]);
                 if (seed.Plane == null)
                     diagnostics.Add(seed.Id + ": mặt không phẳng được giữ nguyên diện tích; cần native curved-face probe nếu phải khấu trừ mặt cong.");
@@ -331,6 +332,23 @@ namespace QS3D.BricsCAD.V25.Reporting
                 // all vertical perimeter faces are side faces, even for elongated rectangular pads.
                 // Keeping the original BREP enumeration index preserves exact SOLID-xx/FACE-yy identity.
                 var endAxis = category == ElementCategory.Foundation ? -1 : DominantHorizontalAxis(solid);
+                var wallBoundsAvailable = false;
+                var wallMinZ = 0d;
+                var wallMaxZ = 0d;
+                if (category == ElementCategory.StructuralWall)
+                {
+                    try
+                    {
+                        var ext = solid.GeometricExtents;
+                        wallMinZ = ext.MinPoint.Z;
+                        wallMaxZ = ext.MaxPoint.Z;
+                        wallBoundsAvailable = true;
+                    }
+                    catch
+                    {
+                        diagnostics.Add("StructuralWall BREP extents unavailable: outer horizontal faces remain included to preserve opening reveals.");
+                    }
+                }
                 using (var brep = new Brep(solid))
                 {
                     var localIndex = 0;
@@ -346,7 +364,8 @@ namespace QS3D.BricsCAD.V25.Reporting
                             Id = "SOLID-" + (componentIndex + 1).ToString("00", CultureInfo.InvariantCulture) + "/FACE-" + localIndex.ToString("00", CultureInfo.InvariantCulture),
                             Type = FaceType(plane, endAxis),
                             GrossAreaCad = SafeAreaCad(face),
-                            Plane = plane == null ? null : new Plane(plane.PointOnPlane, plane.Normal)
+                            Plane = plane == null ? null : new Plane(plane.PointOnPlane, plane.Normal),
+                            IsOuterHorizontal = IsOuterHorizontalFace(category, plane, wallBoundsAvailable, wallMinZ, wallMaxZ)
                         });
                     }
                 }
@@ -413,14 +432,38 @@ namespace QS3D.BricsCAD.V25.Reporting
             return Math.Abs((right.PointOnPlane - left.PointOnPlane).DotProduct(ln)) <= planeToleranceCad;
         }
 
-        private static bool IncludeFormworkFace(ElementCategory category, string faceType)
+        private static bool IncludeFormworkFace(ElementCategory category, string faceType, bool isOuterHorizontal)
         {
             // BLT/QS3D foundation parity is intentionally side-only: top and bottom are not
             // formwork, and Foundation ReadFaces disables End classification so all four
-            // vertical perimeter faces remain eligible. Other categories retain their
-            // existing explanation behavior in this bounded compatibility correction.
-            if (category != ElementCategory.Foundation) return true;
-            return string.Equals(faceType, "Side", StringComparison.Ordinal);
+            // vertical perimeter faces remain eligible.
+            if (category == ElementCategory.Foundation)
+                return string.Equals(faceType, "Side", StringComparison.Ordinal);
+
+            // Wall formwork excludes only the wall solid's exterior top/bottom planes.
+            // Internal horizontal BREP faces are opening reveals (head/soffit and optional
+            // sill) and must remain eligible exactly like vertical jamb/end/broad faces.
+            if (category == ElementCategory.StructuralWall)
+                return !isOuterHorizontal;
+
+            return true;
+        }
+
+        private static bool IsOuterHorizontalFace(
+            ElementCategory category,
+            PlanarEntity? plane,
+            bool wallBoundsAvailable,
+            double wallMinZ,
+            double wallMaxZ)
+        {
+            if (category != ElementCategory.StructuralWall || plane == null || !wallBoundsAvailable) return false;
+            var normal = plane.Normal.GetNormal();
+            if (Math.Abs(normal.Z) < 0.70710678118d) return false;
+
+            var span = Math.Abs(wallMaxZ - wallMinZ);
+            var toleranceCad = Math.Max(span * 1e-8d, 1e-9d);
+            var z = plane.PointOnPlane.Z;
+            return Math.Abs(z - wallMinZ) <= toleranceCad || Math.Abs(z - wallMaxZ) <= toleranceCad;
         }
 
         private static int DominantHorizontalAxis(Solid3d solid)
