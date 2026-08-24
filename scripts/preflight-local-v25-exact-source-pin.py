@@ -8,7 +8,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_RUNNER = ROOT / "scripts" / "run-local-v25-pinned-qualification.ps1"
 LOW_LEVEL_RUNNER = ROOT / "scripts" / "run-local-v25-qualification.ps1"
-RUNBOOK = ROOT / "docs" / "LOCAL-V25-QUALIFICATION.md"
+ENTRYPOINT_DOC = ROOT / "docs" / "LOCAL-V25-PINNED-ENTRYPOINT.md"
 
 
 def fail(message: str) -> None:
@@ -24,10 +24,12 @@ def require(text: str, pattern: str, description: str, *, flags: int = 0) -> Non
 def main() -> int:
     if not PINNED_RUNNER.is_file():
         fail("missing scripts/run-local-v25-pinned-qualification.ps1")
+    if not ENTRYPOINT_DOC.is_file():
+        fail("missing docs/LOCAL-V25-PINNED-ENTRYPOINT.md")
 
     pinned = PINNED_RUNNER.read_text(encoding="utf-8")
     low_level = LOW_LEVEL_RUNNER.read_text(encoding="utf-8")
-    runbook = RUNBOOK.read_text(encoding="utf-8")
+    entrypoint_doc = ENTRYPOINT_DOC.read_text(encoding="utf-8")
 
     require(
         pinned,
@@ -54,7 +56,7 @@ def main() -> int:
     require(
         pinned,
         r"run-local-v25-qualification\.ps1",
-        "pinned runner must delegate to the existing canonical V25 qualification implementation",
+        "pinned runner must delegate to the existing V25 qualification implementation",
     )
     require(
         pinned,
@@ -63,7 +65,12 @@ def main() -> int:
     )
     require(
         pinned,
-        r"\.exactSha\s*-ne\s*\$expectedSourceShaNormalized",
+        r"\$reportedExactSha\s*=\s*\(\[string\]\$report\.exactSha\)\.Trim\(\)\.ToLowerInvariant\(\)",
+        "pinned runner must normalize the emitted report exactSha",
+    )
+    require(
+        pinned,
+        r"if\s*\(\$reportedExactSha\s*-ne\s*\$expectedSourceShaNormalized\)",
         "pinned runner must verify the emitted report exactSha against the requested pin",
     )
 
@@ -73,16 +80,16 @@ def main() -> int:
         fail("exact-SHA mismatch check must execute before the delegated expensive qualification runner")
 
     require(
-        runbook,
+        entrypoint_doc,
         r"run-local-v25-pinned-qualification\.ps1[\s\S]{0,500}-ExpectedSourceSha\s+\"<exact 40-hex source SHA from handoff>\"",
-        "canonical LOCAL-V25 runbook command must use the pinned runner and explicit handoff SHA",
+        "pinned entrypoint documentation must pass the exact handoff SHA explicitly",
     )
-    if re.search(
-        r"```powershell[\s\S]{0,500}run-local-v25-qualification\.ps1",
-        runbook,
-        re.MULTILINE,
-    ):
-        fail("canonical PowerShell examples must not bypass the pinned exact-SHA entrypoint")
+    require(
+        entrypoint_doc,
+        r"run-local-v25-qualification\.ps1.*implementation detail",
+        "entrypoint documentation must mark the unpinned runner as an implementation detail",
+        flags=re.IGNORECASE,
+    )
 
     if "exactSha = $headSha" not in low_level:
         fail("low-level qualification runner must continue emitting exactSha for post-run pin verification")
