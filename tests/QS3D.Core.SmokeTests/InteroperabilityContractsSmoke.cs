@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             DrawingSourceIdentityRequiresFingerprint();
+            BooleanPropertyValuesAreStrictAndCanonical();
             IfcNormalizationPreservesIdentityAndQuantityOrigin();
             AmbiguousIfcEvidenceBlocksAdmission();
             UnresolvedQuantityUnitBlocksAdmission();
@@ -43,6 +44,60 @@ namespace QS3D.Core.SmokeTests
             Equal("AB12", identity.DwgHandle);
             True(identity.Qs3dElementId == null);
             True(!identity.CanClaimTargetNativeOwnership);
+        }
+
+        private static void BooleanPropertyValuesAreStrictAndCanonical()
+        {
+            var truthy = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Flags",
+                "Enabled",
+                "TRUE",
+                InteroperabilityPropertyValueKind.Boolean);
+            var falsey = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Flags",
+                "Visible",
+                "False",
+                InteroperabilityPropertyValueKind.Boolean);
+
+            Equal("true", truthy.Value);
+            Equal("false", falsey.Value);
+
+            Throws<ArgumentException>(() => new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Flags",
+                "InvalidWord",
+                "banana",
+                InteroperabilityPropertyValueKind.Boolean));
+            Throws<ArgumentException>(() => new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Flags",
+                "InvalidNumeric",
+                "1",
+                InteroperabilityPropertyValueKind.Boolean));
+
+            var text = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Controls",
+                "Text",
+                "banana",
+                InteroperabilityPropertyValueKind.Text);
+            var number = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Controls",
+                "Number",
+                "1.25",
+                InteroperabilityPropertyValueKind.Number);
+
+            Equal("banana", text.Value);
+            Equal("1.25", number.Value);
+            Throws<ArgumentException>(() => new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Controls",
+                "InvalidNumber",
+                "NaN",
+                InteroperabilityPropertyValueKind.Number));
         }
 
         private static void IfcNormalizationPreservesIdentityAndQuantityOrigin()
