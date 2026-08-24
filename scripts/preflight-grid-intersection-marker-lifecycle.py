@@ -35,7 +35,7 @@ required_commands = [
     'CommandMethod("QS3DGRIDINTERSECTIONHEALTH")',
     "TryGetReadOnly(document, out var previewProject)",
     "project.ChangeVersion != previewProject.ChangeVersion",
-    'throw new InvalidOperationException("Grid intersection project changed after preview/selection; rerun the command.")',
+    "Grid intersection project changed after preview/selection; rerun the command.",
     "GridIntersectionMarkerService.Inspect(document, project)",
 ]
 required_identity = [
@@ -69,8 +69,17 @@ if "GridIntersectionMarkerService.RegAppName" not in guard:
 
 selected_marker = "if (selectedOnly)"
 bind_marker = "var project = ProjectContextCoordinator.GetOrCreate(document);"
+freshness_marker = "project.ChangeVersion != previewProject.ChangeVersion"
+freshness_message = "Grid intersection project changed after preview/selection; rerun the command."
+refresh_marker = "GridIntersectionMarkerService.Refresh"
 if selected_marker not in commands or bind_marker not in commands or commands.index(selected_marker) > commands.index(bind_marker):
     missing.append("commands:selected preview/cancel must complete before canonical mutation binding")
+elif freshness_marker not in commands or commands.index(bind_marker) > commands.index(freshness_marker):
+    missing.append("commands:project freshness check must follow canonical mutation binding")
+elif freshness_message not in commands or commands.index(freshness_marker) > commands.index(freshness_message):
+    missing.append("commands:project freshness failure must remain fail-closed")
+elif refresh_marker not in commands or commands.index(freshness_message) > commands.index(refresh_marker):
+    missing.append("commands:project freshness check must precede native marker refresh")
 health_start = commands.find("public void InspectIntersectionMarkers()")
 refresh_start = commands.find("private static void RefreshIntersectionMarkers(bool selectedOnly)")
 if health_start < 0 or refresh_start < 0 or "GetOrCreate(document)" in commands[health_start:refresh_start]:
