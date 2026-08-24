@@ -22,7 +22,7 @@ namespace QS3D.Core.Export
         private const DuplicateMatchKind KnownKinds =
             DuplicateMatchKind.ExactGeometry | DuplicateMatchKind.NearGeometry | DuplicateMatchKind.SemanticIdentity;
 
-        private CoordinationDuplicateExportRow(
+        internal CoordinationDuplicateExportRow(
             string duplicateId,
             DuplicateMatchKind matchKinds,
             string floor,
