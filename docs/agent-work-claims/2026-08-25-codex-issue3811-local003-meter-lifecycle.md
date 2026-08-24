@@ -3,6 +3,7 @@
 - Status: `LOCAL_PASS / BOUNDED`
 - Lane-Key: `issue-3811`
 - Issue: #3811
+- PR: #3814
 - Parent: #72 / LOCAL-003
 - Branch: `agent/codex/issue3811-local003-meter-lifecycle`
 - Registration baseline: `origin/main@5c7eb75ffdc1f8e79c019a5046bf6489fbe1a2d8`
