@@ -65,7 +65,7 @@ namespace QS3D.Core.Domain
 
         private static bool Same(MeasurementWorkItemMapping a, MeasurementWorkItemMapping b)
         {
-            return a.Category == b.Category && string.Equals(a.MappingId, b.MappingId, StringComparison.Ordinal) && string.Equals(a.MeasurementItemId, b.MeasurementItemId, StringComparison.Ordinal) && string.Equals(a.ClassificationId, b.ClassificationId, StringComparison.Ordinal) && string.Equals(a.WorkItemId, b.WorkItemId, StringComparison.Ordinal);
+            return a.Category == b.Category && string.Equals(a.MappingId, b.MappingId, StringComparison.OrdinalIgnoreCase) && string.Equals(a.MeasurementItemId, b.MeasurementItemId, StringComparison.OrdinalIgnoreCase) && string.Equals(a.ClassificationId, b.ClassificationId, StringComparison.Ordinal) && string.Equals(a.WorkItemId, b.WorkItemId, StringComparison.Ordinal);
         }
     }
 }
