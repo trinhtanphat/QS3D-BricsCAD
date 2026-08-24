@@ -68,6 +68,8 @@ for needle in (
     'QsWorkbookTemplateExporter.Export(',
     'new DataContractJsonSerializer(typeof(CustomMappingContract))',
     'MaxMappingBytes = 64 * 1024',
+    'using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))',
+    'if (stream.Length <= 0 || stream.Length > MaxMappingBytes)',
     'Enum.IsDefined(typeof(QsWorkbookTemplateField), field)',
     'new QsWorkbookTemplateDefinition("CHI_TIET", 2, mappings, 5000)',
     'QsWorkbookTemplateField.ElementIds',
@@ -90,6 +92,16 @@ require_order(
         'QsWorkbookTemplateExporter.Export(',
     ),
     "validated prompts -> prompt freshness -> unit bind -> detached quantity -> live provenance -> final freshness -> atomic exporter",
+)
+
+require_order(
+    command,
+    (
+        'using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))',
+        'if (stream.Length <= 0 || stream.Length > MaxMappingBytes)',
+        'contract = serializer.ReadObject(stream) as CustomMappingContract;',
+    ),
+    "opened mapping stream -> bounded size check -> deserialize",
 )
 
 for forbidden in (
