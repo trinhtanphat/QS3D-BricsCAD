@@ -50,6 +50,24 @@ require(
     "BeginDocumentClose must test host quiescence before enumerating DocumentManager.",
 )
 
+# Project-affinity close is entered after a caller-side quiescence check. Host quit can start in the
+# gap before this helper acquires its gate, so the helper itself must fail closed before invalidation
+# and before either native lifecycle detach helper can run.
+project_change = method_block(source, "private void CloseForProjectChange()")
+require(barrier in project_change, "Project-affinity close must re-check host quiescence at its own boundary.")
+require(
+    project_change.index(barrier) < project_change.index("lock (_documentAccessGate)"),
+    "Project-affinity close must re-check host quiescence before invalidation/native cleanup.",
+)
+require(
+    project_change.index(barrier) < project_change.index("DetachDocumentLifecycleHandlersIfSafe();"),
+    "Project-affinity close must not detach document lifecycle handlers after host quiescence starts.",
+)
+require(
+    project_change.index(barrier) < project_change.index("DetachDocumentManagerHandler();"),
+    "Project-affinity close must not detach DocumentManager handlers after host quiescence starts.",
+)
+
 # Every helper that removes a BricsCAD lifecycle handler must protect itself, not rely only on a
 # caller-side check that can become stale before native unsubscription executes.
 for signature, native_marker in (
@@ -77,4 +95,4 @@ require(
     "Deferred QuitAborted recovery must re-check quiescence before detaching lifecycle handlers.",
 )
 
-print("[OK] V25 modeless shutdown re-checks global host quiescence before destroying-document access, DocumentManager enumeration, native unsubscription, and deferred abort recovery.")
+print("[OK] V25 modeless shutdown re-checks global host quiescence before destroying-document access, DocumentManager enumeration, project-affinity close cleanup, native unsubscription, and deferred abort recovery.")
