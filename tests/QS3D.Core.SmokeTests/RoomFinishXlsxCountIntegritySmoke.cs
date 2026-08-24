@@ -2,6 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
+using System.Text;
 using QS3D.Core.Export;
 using QS3D.Core.Reporting;
 
@@ -13,6 +15,10 @@ namespace QS3D.Core.SmokeTests
         {
             AssertRowCountDriftFailsBeforeExistingDestinationReplacement();
             AssertRowCountDriftFailsBeforeFilesystemCreation();
+            AssertProvenanceIsExportedWithoutChangingLegacyColumns();
+            AssertExactProvenanceCellBoundaryIsAccepted();
+            AssertOversizeProvenancePreservesExistingDestination();
+            AssertInvalidProvenanceControlPreservesExistingDestination();
         }
 
         private static void AssertRowCountDriftFailsBeforeExistingDestinationReplacement()
@@ -55,6 +61,115 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void AssertProvenanceIsExportedWithoutChangingLegacyColumns()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-room-finish-xlsx-provenance-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var destination = Path.Combine(root, "room-finish.xlsx");
+                var row = ValidRow();
+                row.ProjectId = "PROJECT<&";
+                row.DrawingFingerprint = "DRAWING-001";
+                row.SourceHandles.Add("H<&1");
+                row.SourceHandles.Add("H2");
+
+                RoomFinishXlsxExporter.Export(destination, new[] { row });
+                var sheet = ReadWorksheet(destination);
+
+                AssertContains(sheet, "A1:O2", "Room-finish XLSX worksheet range must include appended provenance columns.");
+                AssertContains(sheet, ">Tầng</t>", "Existing Floor header must remain the first workbook column.");
+                AssertContains(sheet, ">Element IDs</t>", "Existing Element IDs column must remain present.");
+                AssertContains(sheet, ">Room IDs</t>", "Existing Room IDs column must remain present.");
+                AssertContains(sheet, ">Project ID</t>", "Project provenance header is missing.");
+                AssertContains(sheet, ">Drawing fingerprint</t>", "Drawing provenance header is missing.");
+                AssertContains(sheet, ">Source Handles</t>", "Source-handle provenance header is missing.");
+                AssertContains(sheet, ">PROJECT&lt;&amp;</t>", "Project provenance must be XML escaped.");
+                AssertContains(sheet, ">DRAWING-001</t>", "Drawing fingerprint provenance is missing.");
+                AssertContains(sheet, ">H&lt;&amp;1;H2</t>", "Source handles must preserve deterministic model order and XML escaping.");
+                AssertContains(sheet, ">E1</t>", "Existing element traceability value must remain present.");
+                AssertContains(sheet, ">R1</t>", "Existing room traceability value must remain present.");
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
+        private static void AssertExactProvenanceCellBoundaryIsAccepted()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-room-finish-xlsx-boundary-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var destination = Path.Combine(root, "room-finish.xlsx");
+                var row = ValidRow();
+                row.ProjectId = new string('P', 32767);
+                RoomFinishXlsxExporter.Export(destination, new[] { row });
+                if (!File.Exists(destination))
+                    throw new InvalidOperationException("Room-finish XLSX rejected the exact Excel provenance cell-text boundary.");
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
+        private static void AssertOversizeProvenancePreservesExistingDestination()
+        {
+            AssertProvenanceValidationPreservesExistingDestination(
+                row => row.ProjectId = new string('P', 32768),
+                typeof(ArgumentOutOfRangeException),
+                "Room-finish XLSX must reject provenance beyond Excel's 32,767-character cell limit.");
+        }
+
+        private static void AssertInvalidProvenanceControlPreservesExistingDestination()
+        {
+            AssertProvenanceValidationPreservesExistingDestination(
+                row => row.DrawingFingerprint = "DRAWING\u0001INVALID",
+                typeof(ArgumentException),
+                "Room-finish XLSX must reject XML control characters in provenance rather than silently sanitizing source identity.");
+        }
+
+        private static void AssertProvenanceValidationPreservesExistingDestination(
+            Action<RoomFinishScheduleRow> mutate,
+            Type expectedExceptionType,
+            string failureMessage)
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-room-finish-xlsx-atomic-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var destination = Path.Combine(root, "room-finish.xlsx");
+                const string sentinel = "preserve-existing-room-finish-destination";
+                File.WriteAllText(destination, sentinel);
+                var row = ValidRow();
+                mutate(row);
+
+                Exception observed = null;
+                try
+                {
+                    RoomFinishXlsxExporter.Export(destination, new[] { row });
+                }
+                catch (Exception ex)
+                {
+                    observed = ex;
+                }
+
+                if (observed == null || !expectedExceptionType.IsAssignableFrom(observed.GetType()))
+                    throw new InvalidOperationException(failureMessage, observed);
+                if (!string.Equals(File.ReadAllText(destination), sentinel, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Room-finish XLSX provenance validation replaced an existing destination file.");
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
         private static void AssertRowCountDrift(string destination)
         {
             try
@@ -71,10 +186,29 @@ namespace QS3D.Core.SmokeTests
             throw new InvalidOperationException("Room-finish XLSX exporter accepted a source whose row count changed during snapshot.");
         }
 
+        private static string ReadWorksheet(string path)
+        {
+            using (var stream = File.OpenRead(path))
+            using (var archive = new ZipArchive(stream, ZipArchiveMode.Read, false, Encoding.UTF8))
+            {
+                var entry = archive.GetEntry("xl/worksheets/sheet1.xml");
+                if (entry == null) throw new InvalidOperationException("Room-finish XLSX worksheet entry is missing.");
+                using (var reader = new StreamReader(entry.Open(), Encoding.UTF8)) return reader.ReadToEnd();
+            }
+        }
+
+        private static void AssertContains(string text, string expected, string message)
+        {
+            if (text.IndexOf(expected, StringComparison.Ordinal) < 0)
+                throw new InvalidOperationException(message);
+        }
+
         private static RoomFinishScheduleRow ValidRow()
         {
             var row = new RoomFinishScheduleRow
             {
+                ProjectId = "PROJECT-1",
+                DrawingFingerprint = "DRAWING-1",
                 Floor = "L1",
                 Room = "R1",
                 Category = "FloorFinish",
@@ -88,6 +222,7 @@ namespace QS3D.Core.SmokeTests
             };
             row.ElementIds.Add("E1");
             row.RoomIds.Add("R1");
+            row.SourceHandles.Add("H1");
             return row;
         }
 
