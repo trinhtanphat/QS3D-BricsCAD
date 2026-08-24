@@ -7,7 +7,6 @@ using System.Text;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using QS3D.Core.Audit;
-using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
 using QS3D.Core.Persistence;
@@ -93,13 +92,14 @@ namespace QS3D.BricsCAD.V25.Cad
             var selectedIds = selection.Value.GetObjectIds();
             if (selectedIds == null || selectedIds.Length == 0) return new MultiRegionMeshBuildResult();
             var selectedHandles = selectedIds
-                .Select(id => GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(id.Handle.ToString()))
+                .Select(id => CanonicalHandle(id.Handle.ToString(), "selected multi-region source handle"))
                 .ToList();
-            if (selectedHandles.Any(x => x.Length == 0) || selectedHandles.Distinct(StringComparer.OrdinalIgnoreCase).Count() != selectedHandles.Count)
-                throw new InvalidOperationException("Multi-region source selection contains a blank or duplicate CAD handle.");
+            if (selectedHandles.Distinct(StringComparer.OrdinalIgnoreCase).Count() != selectedHandles.Count)
+                throw new InvalidOperationException("Multi-region source selection contains a duplicate CAD handle.");
             var selectedHandleSet = new HashSet<string>(selectedHandles, StringComparer.OrdinalIgnoreCase);
 
             var element = ResolveTargetElement(project, category, selectedHandleSet);
+            var ownership = GeneratedRebarOwnershipGuard.Build(project);
             var rollback = ProjectStateSnapshot.Capture(project);
             var cadCommitted = false;
             try
@@ -167,12 +167,13 @@ namespace QS3D.BricsCAD.V25.Cad
                         project,
                         element,
                         configuration,
+                        ownership,
                         out var legacyMigration);
 
                     var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
                     var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
                     var sourceByHandle = sources.ToDictionary(
-                        x => GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x.Read.SourceHandle),
+                        x => CanonicalHandle(x.Read.SourceHandle, element.Id + "/source handle"),
                         x => x.Polyline,
                         StringComparer.OrdinalIgnoreCase);
                     var generatedByRegion = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -180,7 +181,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     foreach (var regionLayout in layout.Regions)
                     {
                         var sourceRegion = assembly.Regions.Single(x => string.Equals(x.RegionId, regionLayout.RegionId, StringComparison.OrdinalIgnoreCase));
-                        var sourcePolyline = sourceByHandle[GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(sourceRegion.OuterSourceId)];
+                        var sourcePolyline = sourceByHandle[CanonicalHandle(sourceRegion.OuterSourceId, element.Id + "/outer source handle")];
                         var handles = new List<string>(regionLayout.Count);
                         foreach (var placement in regionLayout.Layout.Bars)
                         {
@@ -271,8 +272,11 @@ namespace QS3D.BricsCAD.V25.Cad
             var candidates = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var candidate in project.Elements)
             {
-                var semanticAnchor = candidate.SourceHandles.Any(source => selectedHandles.Contains(
-                    GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(source)));
+                var semanticAnchor = candidate.SourceHandles.Any(source =>
+                {
+                    var normalized = CadHandleService.NormalizeHexHandle(source);
+                    return normalized != null && selectedHandles.Contains(normalized);
+                });
                 if (semanticAnchor || PreviousSourceManifestContainsAny(candidate, selectedHandles))
                     candidates[candidate.Id] = candidate;
             }
@@ -298,8 +302,8 @@ namespace QS3D.BricsCAD.V25.Cad
 
             foreach (var entry in MultiRegionRebarManifest.ParseSources(raw))
             {
-                if (selectedHandles.Contains(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(entry.OuterSourceHandle))) return true;
-                if (entry.HoleSourceHandles.Any(handle => selectedHandles.Contains(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle)))) return true;
+                if (selectedHandles.Contains(CanonicalHandle(entry.OuterSourceHandle, element.Id + "/previous outer source"))) return true;
+                if (entry.HoleSourceHandles.Any(handle => selectedHandles.Contains(CanonicalHandle(handle, element.Id + "/previous hole source")))) return true;
             }
             return false;
         }
@@ -309,17 +313,17 @@ namespace QS3D.BricsCAD.V25.Cad
             if (assembly == null) throw new ArgumentNullException(nameof(assembly));
             if (sources == null) throw new ArgumentNullException(nameof(sources));
             var fingerprintByHandle = sources.ToDictionary(
-                source => GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(source.Read.SourceHandle),
+                source => CanonicalHandle(source.Read.SourceHandle, "multi-region source fingerprint handle"),
                 source => source.Read.Fingerprint,
                 StringComparer.OrdinalIgnoreCase);
             var canonical = new StringBuilder();
             foreach (var region in assembly.Regions.OrderBy(x => x.RegionId, StringComparer.Ordinal))
             {
                 if (canonical.Length > 0) canonical.Append(';');
-                canonical.Append("R=").Append(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(region.RegionId));
+                canonical.Append("R=").Append(CanonicalHandle(region.RegionId, "multi-region RegionId"));
                 AppendSourceFingerprint(canonical, "O", region.OuterSourceId, fingerprintByHandle);
                 foreach (var hole in region.HoleSourceIds
-                    .Select(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity)
+                    .Select(handle => CanonicalHandle(handle, "multi-region hole source handle"))
                     .OrderBy(x => x, StringComparer.Ordinal))
                     AppendSourceFingerprint(canonical, "H", hole, fingerprintByHandle);
             }
@@ -337,9 +341,9 @@ namespace QS3D.BricsCAD.V25.Cad
             string sourceHandle,
             IReadOnlyDictionary<string, string> fingerprintByHandle)
         {
-            var handle = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(sourceHandle);
+            var handle = CanonicalHandle(sourceHandle, "multi-region topology source handle");
             string fingerprint;
-            if (handle.Length == 0 || !fingerprintByHandle.TryGetValue(handle, out fingerprint) || string.IsNullOrWhiteSpace(fingerprint))
+            if (!fingerprintByHandle.TryGetValue(handle, out fingerprint) || string.IsNullOrWhiteSpace(fingerprint))
                 throw new InvalidOperationException("Multi-region topology source " + sourceHandle + " has no deterministic geometry fingerprint.");
             target.Append('|').Append(role).Append('=').Append(handle).Append(':').Append(fingerprint);
         }
@@ -350,6 +354,7 @@ namespace QS3D.BricsCAD.V25.Cad
             ProjectState project,
             ProjectElement element,
             BuildConfiguration configuration,
+            GeneratedRebarOwnershipGuard.OwnershipIndex ownership,
             out bool LegacyAggregateMigration)
         {
             LegacyAggregateMigration = false;
@@ -358,36 +363,56 @@ namespace QS3D.BricsCAD.V25.Cad
                 return Array.Empty<string>();
 
             var aggregate = rawHandles.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity)
-                .Where(x => x.Length > 0)
+                .Select(handle => CanonicalHandle(handle.Trim(), element.Id + "/" + configuration.HandlesKey))
                 .ToList();
+            if (aggregate.Count == 0 || aggregate.Distinct(StringComparer.OrdinalIgnoreCase).Count() != aggregate.Count)
+                throw new InvalidOperationException("Generated rebar aggregate contains no handles or duplicate canonical handles; refusing erase.");
+
             var generatedManifestKey = configuration.PropertyPrefix + GeneratedManifestSuffix;
             string rawManifest;
             if (!element.Properties.TryGetValue(generatedManifestKey, out rawManifest) || string.IsNullOrWhiteSpace(rawManifest))
             {
                 LegacyAggregateMigration = true;
-                return GeneratedHandleOwnershipPolicy.ValidateAllBeforeErase(project, element, configuration.HandlesKey, aggregate, handle =>
+                foreach (var handle in aggregate)
                 {
+                    ownership.EnsureOwned(handle, element, configuration.HandlesKey);
                     var entity = ResolveLiveEntity(document, transaction, handle, OpenMode.ForRead);
                     GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(entity, project, element, configuration.HandlesKey, "migrate legacy aggregate " + handle);
-                });
+                }
+                return aggregate.AsReadOnly();
             }
 
             var manifest = MultiRegionRebarManifest.ParseGenerated(rawManifest);
-            var manifestHandles = manifest.SelectMany(x => x.Handles).ToList();
+            var manifestHandles = manifest.SelectMany(x => x.Handles)
+                .Select(handle => CanonicalHandle(handle, element.Id + "/multi-region generated manifest"))
+                .ToList();
             var aggregateSet = new HashSet<string>(aggregate, StringComparer.OrdinalIgnoreCase);
             var manifestSet = new HashSet<string>(manifestHandles, StringComparer.OrdinalIgnoreCase);
-            if (aggregateSet.Count != aggregate.Count || manifestSet.Count != manifestHandles.Count || !aggregateSet.SetEquals(manifestSet))
+            if (manifestSet.Count != manifestHandles.Count || !aggregateSet.SetEquals(manifestSet))
                 throw new InvalidOperationException("Multi-region generated manifest does not exactly match the aggregate generated-handle slot; refusing erase.");
-            var regionByHandle = manifest.SelectMany(entry => entry.Handles.Select(handle => new { Handle = handle, entry.RegionId }))
-                .ToDictionary(x => GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x.Handle), x => x.RegionId, StringComparer.OrdinalIgnoreCase);
+            var regionByHandle = manifest.SelectMany(entry => entry.Handles.Select(handle => new
+                {
+                    Handle = CanonicalHandle(handle, element.Id + "/multi-region generated handle"),
+                    entry.RegionId
+                }))
+                .ToDictionary(x => x.Handle, x => x.RegionId, StringComparer.OrdinalIgnoreCase);
 
-            return GeneratedHandleOwnershipPolicy.ValidateAllBeforeErase(project, element, configuration.HandlesKey, aggregate, handle =>
+            foreach (var handle in aggregate)
             {
+                ownership.EnsureOwned(handle, element, configuration.HandlesKey);
                 var entity = ResolveLiveEntity(document, transaction, handle, OpenMode.ForRead);
                 GeneratedRebarNativeOwnershipService.RequireMatchingOwnership(entity, project, element, configuration.HandlesKey, "refresh multi-region aggregate " + handle);
                 GeneratedRebarRegionOwnershipService.RequireMatchingOwnership(entity, project, element, configuration.HandlesKey, regionByHandle[handle], "refresh multi-region region " + handle);
-            });
+            }
+            return aggregate.AsReadOnly();
+        }
+
+        private static string CanonicalHandle(string? handle, string label)
+        {
+            var canonical = CadHandleService.NormalizeHexHandle(handle);
+            if (canonical == null)
+                throw new InvalidOperationException(label + " is not a valid positive CAD handle: " + (handle ?? "<null>") + ".");
+            return canonical;
         }
 
         private static Entity ResolveLiveEntity(Document document, Transaction transaction, string handle, OpenMode mode)
