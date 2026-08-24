@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using QS3D.Core.Domain;
 
 namespace QS3D.Core.Mapping
 {
     public sealed class MeasurementWorkItemCoverageMatrixCell
     {
         internal MeasurementWorkItemCoverageMatrixCell(
-            Domain.ElementCategory category,
+            ElementCategory category,
             string? measurementItemId,
             string? mappingId,
             string? classificationId,
@@ -28,7 +29,7 @@ namespace QS3D.Core.Mapping
             AffectedElementIds = affectedElementIds ?? throw new ArgumentNullException(nameof(affectedElementIds));
         }
 
-        public Domain.ElementCategory Category { get; }
+        public ElementCategory Category { get; }
         public string? MeasurementItemId { get; }
         public string? MappingId { get; }
         public string? ClassificationId { get; }
@@ -44,9 +45,11 @@ namespace QS3D.Core.Mapping
     {
         private MeasurementWorkItemCoverageMatrix(
             IReadOnlyList<MeasurementWorkItemCoverageMatrixCell> cells,
-            MeasurementWorkItemCoverageReport report)
+            MeasurementWorkItemCoverageReport report,
+            MeasurementWorkItemCoverageProvenance? provenance)
         {
             Cells = cells ?? throw new ArgumentNullException(nameof(cells));
+            Provenance = provenance;
             CellCount = cells.Count;
             TotalFindingCount = report.TotalCount;
             ReadyFindingCount = report.ReadyCount;
@@ -57,6 +60,7 @@ namespace QS3D.Core.Mapping
         }
 
         public IReadOnlyList<MeasurementWorkItemCoverageMatrixCell> Cells { get; }
+        public MeasurementWorkItemCoverageProvenance? Provenance { get; }
         public int CellCount { get; }
         public int TotalFindingCount { get; }
         public int ReadyFindingCount { get; }
@@ -65,7 +69,28 @@ namespace QS3D.Core.Mapping
         public int StaleQuantityFindingCount { get; }
         public int UnmappedWorkItemFindingCount { get; }
 
-        public static MeasurementWorkItemCoverageMatrix Create(MeasurementWorkItemCoverageReport report)
+        public static MeasurementWorkItemCoverageMatrix Create(MeasurementWorkItemCoverageReport report) =>
+            CreateCore(report, null);
+
+        public static MeasurementWorkItemCoverageMatrix Create(
+            ProjectState project,
+            MeasurementWorkItemCoverageReport report)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            return CreateCore(report, MeasurementWorkItemCoverageProvenance.Capture(project));
+        }
+
+        public static MeasurementWorkItemCoverageMatrix Create(
+            MeasurementWorkItemCoverageReport report,
+            MeasurementWorkItemCoverageProvenance provenance)
+        {
+            if (provenance == null) throw new ArgumentNullException(nameof(provenance));
+            return CreateCore(report, provenance);
+        }
+
+        private static MeasurementWorkItemCoverageMatrix CreateCore(
+            MeasurementWorkItemCoverageReport report,
+            MeasurementWorkItemCoverageProvenance? provenance)
         {
             if (report == null) throw new ArgumentNullException(nameof(report));
 
@@ -116,7 +141,8 @@ namespace QS3D.Core.Mapping
 
             return new MeasurementWorkItemCoverageMatrix(
                 new ReadOnlyCollection<MeasurementWorkItemCoverageMatrixCell>(cells.ToArray()),
-                report);
+                report,
+                provenance);
         }
 
         private static bool SameCell(
