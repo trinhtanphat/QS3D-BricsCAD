@@ -11,6 +11,7 @@ namespace QS3D.Core.Export
     public static class MeasurementWorkItemCoverageCsvExporter
     {
         private const string Header = "Category,MeasurementItemId,MappingId,ClassificationId,WorkItemId,IsReady,Issues,FindingCount,AffectedElementCount,AffectedElementIds";
+        private const string ProvenanceHeader = ",SourceProjectId,SourceDrawingFingerprint,SourceChangeVersion,SourceUpdatedUtc";
         private static readonly UTF8Encoding StrictUtf8WithBom = new UTF8Encoding(true, true);
 
         public static void Export(string path, MeasurementWorkItemCoverageMatrix matrix)
@@ -44,8 +45,12 @@ namespace QS3D.Core.Export
         {
             if (matrix == null) throw new ArgumentNullException(nameof(matrix));
 
+            var provenance = matrix.Provenance;
             var sb = new StringBuilder();
-            sb.Append(Header).Append("\r\n");
+            sb.Append(Header);
+            if (provenance != null) sb.Append(ProvenanceHeader);
+            sb.Append("\r\n");
+
             for (var i = 0; i < matrix.Cells.Count; i++)
             {
                 var cell = matrix.Cells[i];
@@ -61,8 +66,17 @@ namespace QS3D.Core.Export
                     .Append(Q(string.Join("|", cell.Issues.Select(x => x.ToString())))).Append(',')
                     .Append(cell.FindingCount.ToString(CultureInfo.InvariantCulture)).Append(',')
                     .Append(cell.AffectedElementCount.ToString(CultureInfo.InvariantCulture)).Append(',')
-                    .Append(Q(string.Join("|", cell.AffectedElementIds)))
-                    .Append("\r\n");
+                    .Append(Q(string.Join("|", cell.AffectedElementIds)));
+
+                if (provenance != null)
+                {
+                    sb.Append(',').Append(Q(provenance.ProjectId))
+                        .Append(',').Append(Q(provenance.DrawingFingerprint))
+                        .Append(',').Append(provenance.ChangeVersion.ToString(CultureInfo.InvariantCulture))
+                        .Append(',').Append(Q(provenance.UpdatedUtc.ToString("O", CultureInfo.InvariantCulture)));
+                }
+
+                sb.Append("\r\n");
             }
 
             var content = sb.ToString();
