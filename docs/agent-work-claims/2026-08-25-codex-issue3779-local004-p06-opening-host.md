@@ -72,9 +72,10 @@ commits are ancestors. The pinned `external/QS3D-Platform` commit was
 `a5778f4abcf3b5c308c5d6854040dbc0c3082390`. Exact plugin/Core SHA-256 values
 were `241632FA643C111814981F4C81F1436DFA14CE477DAF0B9138B643847419E6D5` and
 `73CA1842FDB09E93784A8A38D0FD26F8A1BAF956C1BC8DC9A87CCF3E2EA3AB43`.
-After runtime evidence, `origin/main` advanced to
+After runtime evidence, `origin/main` first advanced to
 `443dfe93ca471541604787508ba039049ccb9f41` through unrelated Core persistence
-changes; the carrier was refreshed after this docs commit, while the relevant
+changes and later to `c73873f471a2b201cc061dce1c33e6c5012dd788` through quantity-report-only
+source/tests. The carrier was refreshed after both movements; the relevant
 opening/Undo/project-context source stayed byte-identical and the exact tested
 SHA remained an ancestor.
 
@@ -147,6 +148,12 @@ that body lacked `Lane-Key: issue-3779`; the PR body now carries the required
 Leaf Issue, parent Issues, lane key, exact tested SHA and carrier fields. This
 tracked receipt creates the normal synchronize event for the corrected body; no
 workflow was manually dispatched, rerun or cancelled.
+
+After that corrected PR-event and push CI both passed, current main moved to the
+unrelated quantity-report revision guard at
+`c73873f471a2b201cc061dce1c33e6c5012dd788`. The branch merged that exact main at
+`24b8a0c91439d5df1d2c98dc3088a6b09e5a50d4`; the three-file docs diff and the
+tested-SHA ancestry remained unchanged.
 
 ## Non-overlap
 
