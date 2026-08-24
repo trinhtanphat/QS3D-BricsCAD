@@ -31,10 +31,13 @@ Disposition: PASS => post sanitized evidence to #1744 and #72 and close the boun
 
 ## P0 — #3681 StructuralWall live-BREP concrete-contact/formwork
 
-Status: `LOCAL_READY / PENDING_LOCAL`  
-Source issue/PR: #3665 / #3666  
-Source-ready carrier: `agent/chatgpt-gpt56sol/issue-3665-wall-contact-brep`  
-Exact SHA: `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31`
+Status: `LOCAL_READY / PENDING_LOCAL_RERUN`  
+Original source issue/PR: #3665 / #3666  
+Source defect/fix: #3687 / #3692  
+Source-ready carrier: `agent/chatgpt-gpt56sol/issue-3687-structwall-brep-contact-fix`  
+Exact SHA: `cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb`
+
+The previous tested SHA `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31` is historical failing evidence only and must not be rerun for #3681. PR #3692 corrected the source defect and merged to `main`; licensed qualification remains bound to the exact source-ready SHA above.
 
 Use licensed BricsCAD V25 to qualify live native BREP contact measurement and quantity refresh. Cover full vertical end-face contact, partial contact, multiple neighboring concrete elements with union/no-double-subtraction behavior, top/bottom exclusion, stale/missing/unresolvable BREP fail-closed behavior, semantic-capture refresh, save/cold-reopen, and Undo/Redo/second-DWG isolation where the mutation path applies.
 
@@ -46,7 +49,7 @@ Required BLT regression control:
 
 Record gross/contact/opening-reveal/net values before and after each relevant case. Local must not modify production source if any case fails.
 
-Disposition: PASS => post sanitized evidence to #3681 and #72 and close #3681. FAIL => new remote/source defect lane. NO_RESULT => bounded retry only.
+Disposition: PASS => post sanitized evidence to #3681 and #72 and close #3681. FAIL => return evidence to a separate remote/source defect lane. NO_RESULT => bounded retry only.
 
 ## P1 — #3613 Coordination Manager Locate through zoom
 
