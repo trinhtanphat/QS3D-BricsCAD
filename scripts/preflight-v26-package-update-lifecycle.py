@@ -7,8 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "scripts" / "test-v26-package-update-lifecycle.ps1"
 PACKAGER = ROOT / "scripts" / "package-v26.ps1"
 UPDATER = ROOT / "scripts" / "update-v25.ps1"
-INBOX = ROOT / "docs" / "LOCAL-AGENT-INBOX.md"
-V26 = ROOT / "docs" / "LOCAL-V26-QUALIFICATION.md"
+HANDOFF = ROOT / "docs" / "LOCAL-V26-PACKAGE-UPDATE-LIFECYCLE.md"
 
 
 def require(path: Path, tokens: list[str]) -> str:
@@ -81,19 +80,18 @@ def main() -> int:
         ],
     )
     require(
-        INBOX,
+        HANDOFF,
         [
-            "test-v26-package-update-lifecycle.ps1",
             "PENDING_LOCAL",
-        ],
-    )
-    require(
-        V26,
-        [
+            "LOCAL_ONLY",
+            "DO_NOT_RETRY_REMOTE",
             "test-v26-package-update-lifecycle.ps1",
+            "UpgradeManifestUri",
             "RollbackManifestUri",
             "ExpectedSignerThumbprint",
-            "PENDING_LOCAL",
+            "rollbackPreservedState",
+            "cancelPreservedState",
+            "cleanupComplete",
         ],
     )
 
