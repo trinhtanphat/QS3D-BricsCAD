@@ -5,9 +5,10 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-LIFETIME = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "DocumentBoundWindowLifetime.cs"
-COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "ModelessHostQuiescenceCoordinator.cs"
-PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
+V25 = ROOT / "src" / "QS3D.BricsCAD.V25"
+LIFETIME = V25 / "UI" / "DocumentBoundWindowLifetime.cs"
+COORDINATOR = V25 / "UI" / "ModelessHostQuiescenceCoordinator.cs"
+PLUGIN = V25 / "PluginEntry.cs"
 
 
 def require(condition: bool, message: str) -> None:
@@ -47,6 +48,24 @@ for marker in (
     "BcadApplication.QuitAborted -=",
 ):
     require(marker not in lifetime, f"DocumentBoundWindowLifetime must not own per-window BricsCAD application lifecycle subscriptions: {marker}")
+
+# The stronger invariant is repository-wide for production V25 source: every BricsCAD application
+# quit reactor must be owned by the one coordinator, not merely removed from this Window helper.
+quit_markers = (
+    ".QuitWillStart +=",
+    ".QuitWillStart -=",
+    ".BeginQuit +=",
+    ".BeginQuit -=",
+    ".QuitAborted +=",
+    ".QuitAborted -=",
+)
+for source_path in V25.rglob("*.cs"):
+    if source_path == COORDINATOR:
+        continue
+    source = source_path.read_text(encoding="utf-8")
+    for marker in quit_markers:
+        require(marker not in source,
+                f"Only ModelessHostQuiescenceCoordinator may own BricsCAD application quit reactors; found {marker} in {source_path.relative_to(ROOT)}")
 
 require("private int _hostQuitStarted;" not in lifetime, "Host quit state must be plugin-global, not copied into every Registration.")
 require(
@@ -98,11 +117,19 @@ for forbidden in ("Window.Close", ".Close()", "DocumentManager"):
     require(forbidden not in quit_aborted,
             f"Native QuitAborted must not perform WPF/document teardown directly: {forbidden}")
 
-stop = method_block(coordinator, "internal static void Stop()")
-require("if (IsQuiescing) return;" in stop,
+# Do not use the brace parser for this ordering check: Stop contains compact try/catch blocks and
+# this invariant is clearer when anchored directly after the Stop signature. This also ignores the
+# intentional partial-initialization rollback unsubscribe that occurs before Stop in the file.
+stop_start = coordinator.find("internal static void Stop()")
+require(stop_start >= 0, "internal static void Stop() is missing.")
+stop_quiescence = coordinator.find("if (IsQuiescing) return;", stop_start)
+stop_unsubscribe = coordinator.find("BcadApplication.QuitWillStart -= OnQuitWillStart;", stop_start)
+require(stop_quiescence >= 0,
         "Plugin Terminate during host shutdown must not unsubscribe BricsCAD native lifecycle reactors.")
-require(stop.index("if (IsQuiescing) return;") < stop.index("BcadApplication.QuitWillStart -= OnQuitWillStart;"),
-        "The host-quiescence guard must precede every native application unsubscription in Stop.")
+require(stop_unsubscribe >= 0,
+        "Normal non-host Stop must release the global QuitWillStart reactor.")
+require(stop_start < stop_quiescence < stop_unsubscribe,
+        "Stop must test host quiescence before any native QuitWillStart unsubscription.")
 
 initialize = method_block(plugin, "public void Initialize()")
 require("ModelessHostQuiescenceCoordinator.EnsureInitialized();" in initialize,
@@ -114,4 +141,4 @@ teardown = method_block(plugin, "private static void TeardownHostServices()")
 require("TryCleanup(ModelessHostQuiescenceCoordinator.Stop);" in teardown,
         "Normal plugin teardown must release the global coordinator when host shutdown is not active.")
 
-print("[OK] V25 modeless host quit has one plugin-global native lifecycle owner; per-window registrations consume managed quiescence only, QuitWillStart is state-only, and host Terminate never unsubscribes native reactors after quiescence begins.")
+print("[OK] V25 modeless host quit has one plugin-global native lifecycle owner; all other V25 source is free of application quit reactors, per-window registrations consume managed quiescence only, QuitWillStart is state-only, and host Terminate never unsubscribes native reactors after quiescence begins.")
