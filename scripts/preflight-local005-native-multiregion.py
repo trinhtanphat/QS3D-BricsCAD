@@ -89,6 +89,21 @@ REQUIRED_FILES = {
     ),
 }
 
+V26_PROJECT = "src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj"
+V26_REQUIRED = (
+    '<Compile Include="..\\QS3D.BricsCAD.V25\\**\\*.cs"',
+    '<ProjectReference Include="..\\QS3D.Core\\QS3D.Core.csproj" />',
+    '<DefineConstants>$(DefineConstants);BRICSCAD_V26</DefineConstants>',
+    'BRICSCAD_V26_DIR',
+)
+V26_FORBIDDEN = (
+    'QS3D.BricsCAD.V25\\QS3D.BricsCAD.V25.csproj',
+    '<Reference Include="QS3D.BricsCAD.V25"',
+    'GeneratedMultiRegionRebarRuntimeHealthService.cs;',
+    'MultiRegionRebarCommands.cs;',
+    'SlabFoundationMultiRegionMeshSolidBuilder.cs;',
+)
+
 
 def main():
     missing = []
@@ -102,13 +117,25 @@ def main():
             if token not in text:
                 missing.append(relative + " (missing token: " + token + ")")
 
+    v26_path = ROOT / V26_PROJECT
+    if not v26_path.is_file():
+        missing.append(V26_PROJECT + " (missing file)")
+    else:
+        v26_text = v26_path.read_text(encoding="utf-8")
+        for token in V26_REQUIRED:
+            if token not in v26_text:
+                missing.append(V26_PROJECT + " (missing V26 linked-source token: " + token + ")")
+        for token in V26_FORBIDDEN:
+            if token in v26_text:
+                missing.append(V26_PROJECT + " (forbidden V26 binary/source exclusion token: " + token + ")")
+
     if missing:
         print("LOCAL-005 native multi-region source contract is RED:")
         for item in missing:
             print(" -", item)
         return 1
 
-    print("PASS: LOCAL-005 Core assembler, native loop reader, ownership/manifests, atomic materializer, read-only Health, and commands are present.")
+    print("PASS: LOCAL-005 Core assembler, native loop reader, ownership/manifests, atomic materializer, read-only Health, commands, and V26 linked-source contract are present.")
     return 0
 
 
