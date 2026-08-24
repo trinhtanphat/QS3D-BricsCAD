@@ -32,6 +32,7 @@ namespace QS3D.Core.Geometry
             var panelDepthM = input.PanelDepthM;
             var sourceKind = input.SourceKind ?? string.Empty;
             var pathSegmentCount = input.PathSegmentCount;
+            var inputPieces = input.Pieces;
 
             Positive(sourceLengthM, nameof(input.SourceLengthM));
             Positive(heightM, nameof(input.HeightM));
@@ -46,8 +47,8 @@ namespace QS3D.Core.Geometry
                 (string.Equals(sourceKind, "Line", StringComparison.OrdinalIgnoreCase) && pathSegmentCount != 0) ||
                 (string.Equals(sourceKind, "OpenPolyline", StringComparison.OrdinalIgnoreCase) && pathSegmentCount < 1))
                 throw new ArgumentOutOfRangeException(nameof(input.PathSegmentCount));
-            if (input.Pieces == null) throw new ArgumentNullException(nameof(input.Pieces));
-            var pieceCount = input.Pieces.Count;
+            if (inputPieces == null) throw new ArgumentNullException(nameof(input.Pieces));
+            var pieceCount = inputPieces.Count;
             if (pieceCount < 0)
                 throw new InvalidOperationException("Curtain panel fingerprint Pieces Count must not be negative.");
             if (pieceCount > MaxPieces)
@@ -55,8 +56,8 @@ namespace QS3D.Core.Geometry
 
             var pieces = new List<CurtainWallPanelPiece>(pieceCount);
             for (var index = 0; index < pieceCount; index++)
-                pieces.Add(Validate(input.Pieces[index]));
-            if (input.Pieces.Count != pieceCount)
+                pieces.Add(SnapshotAndValidate(inputPieces[index]));
+            if (inputPieces.Count != pieceCount)
                 throw new InvalidOperationException("Curtain panel fingerprint Pieces Count changed while being validated.");
 
             var canonical = new StringBuilder("CURTAIN_PANEL_V1")
@@ -88,35 +89,44 @@ namespace QS3D.Core.Geometry
             }
         }
 
-        private static CurtainWallPanelPiece Validate(CurtainWallPanelPiece piece)
+        private static CurtainWallPanelPiece SnapshotAndValidate(CurtainWallPanelPiece piece)
         {
             if (piece == null) throw new InvalidOperationException("Curtain panel fingerprint piece cannot be null.");
-            if (piece.SourcePanelIndex < 0) throw new ArgumentOutOfRangeException(nameof(piece.SourcePanelIndex));
-            Finite(piece.X_M, nameof(piece.X_M));
-            Finite(piece.Z_M, nameof(piece.Z_M));
-            Positive(piece.WidthM, nameof(piece.WidthM));
-            Positive(piece.HeightM, nameof(piece.HeightM));
-            var right = piece.X_M + piece.WidthM;
-            var top = piece.Z_M + piece.HeightM;
+
+            // Piece DTOs are caller-mutable. Read each scalar exactly once, then validate and
+            // hash only the detached snapshot so one digest cannot mix multiple observations.
+            var sourcePanelIndex = piece.SourcePanelIndex;
+            var xM = piece.X_M;
+            var zM = piece.Z_M;
+            var widthM = piece.WidthM;
+            var heightM = piece.HeightM;
+
+            if (sourcePanelIndex < 0) throw new ArgumentOutOfRangeException(nameof(piece.SourcePanelIndex));
+            Finite(xM, nameof(piece.X_M));
+            Finite(zM, nameof(piece.Z_M));
+            Positive(widthM, nameof(piece.WidthM));
+            Positive(heightM, nameof(piece.HeightM));
+            var right = xM + widthM;
+            var top = zM + heightM;
             Finite(right, "panel right");
             Finite(top, "panel top");
-            if (!(right > piece.X_M))
+            if (!(right > xM))
                 throw new OverflowException("Curtain panel fingerprint piece width is below the representable coordinate resolution.");
-            if (!(top > piece.Z_M))
+            if (!(top > zM))
                 throw new OverflowException("Curtain panel fingerprint piece height is below the representable coordinate resolution.");
-            var area = piece.WidthM * piece.HeightM;
+            var area = widthM * heightM;
             if (double.IsNaN(area) || double.IsInfinity(area))
                 throw new OverflowException("Curtain panel fingerprint piece area must remain finite.");
-            if (area == 0d && piece.WidthM != 0d && piece.HeightM != 0d)
+            if (area == 0d && widthM != 0d && heightM != 0d)
                 throw new OverflowException("Curtain panel fingerprint piece area underflowed to zero.");
 
             return new CurtainWallPanelPiece
             {
-                SourcePanelIndex = piece.SourcePanelIndex,
-                X_M = piece.X_M,
-                Z_M = piece.Z_M,
-                WidthM = piece.WidthM,
-                HeightM = piece.HeightM
+                SourcePanelIndex = sourcePanelIndex,
+                X_M = xM,
+                Z_M = zM,
+                WidthM = widthM,
+                HeightM = heightM
             };
         }
 
