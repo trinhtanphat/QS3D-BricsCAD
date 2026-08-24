@@ -8,10 +8,13 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = ROOT / "docs" / "LOCAL-SOURCE-READY-INDEX-2026-08-24.md"
 DISPATCH = ROOT / "docs" / "LOCAL-DISPATCH-READY-2026-08-24.md"
+INBOX = ROOT / "docs" / "LOCAL-AGENT-INBOX.md"
 
 OLD_SHARED_SHA = "0062e0cd73a570a7ca774dfa8b3ff91e8df20f31"
 WALL_CONTACT_BRANCH = "agent/chatgpt-gpt56sol/issue-3687-structwall-brep-contact-fix"
 WALL_CONTACT_SHA = "cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb"
+REVIEW_RUNTIME_SHA = "9cfff87262d7a7117c5ef1f03b486271a0723fa3"
+REVIEW_PR = "#3693"
 
 
 def fail(message: str) -> None:
@@ -29,9 +32,12 @@ if not INDEX.is_file():
     fail("docs/LOCAL-SOURCE-READY-INDEX-2026-08-24.md is missing")
 if not DISPATCH.is_file():
     fail("docs/LOCAL-DISPATCH-READY-2026-08-24.md is missing")
+if not INBOX.is_file():
+    fail("docs/LOCAL-AGENT-INBOX.md is missing")
 
 text = INDEX.read_text(encoding="utf-8")
 dispatch_text = DISPATCH.read_text(encoding="utf-8")
+inbox_text = INBOX.read_text(encoding="utf-8")
 
 required_literals = (
     "Status: `SOURCE_READY / LOCAL_RUN_ONLY`",
@@ -43,6 +49,9 @@ required_literals = (
     "Do not rerun the obsolete #3681 binary.",
     "Do not rerun the obsolete #3593 P06 binary.",
     "PR #3616 is merged (`12b5f0d7d8549d8b107a1b921d2bb431f809bf69`)",
+    "LOCAL-019",
+    REVIEW_PR,
+    REVIEW_RUNTIME_SHA,
     "A local result is one of:",
     "`PASS`",
     "`FAIL`",
@@ -63,8 +72,16 @@ for literal in (
     if literal not in dispatch_text:
         fail(f"required #3681 rerun dispatch text is missing: {literal}")
 
+for literal in (
+    "## LOCAL-019 — six-sheet QS Review export and Excel-to-Model Locate",
+    "- Status: PASS",
+    REVIEW_RUNTIME_SHA,
+):
+    if literal not in inbox_text:
+        fail(f"required LOCAL-019 licensed handoff evidence is missing from inbox: {literal}")
+
 rows = re.findall(r"^\| (LOCAL-\d{3}) \|", text, flags=re.MULTILINE)
-expected = [f"LOCAL-{number:03d}" for number in range(1, 19)]
+expected = [f"LOCAL-{number:03d}" for number in range(1, 20)]
 if rows != expected:
     fail(f"LOCAL row order/cardinality drifted: expected {expected}, got {rows}")
 
@@ -82,6 +99,13 @@ index_3681 = f"| P0 | #3681 | `{WALL_CONTACT_BRANCH}` | `{WALL_CONTACT_SHA}` |"
 for expected_row in (index_1744, index_3613, index_3681):
     if expected_row not in text:
         fail(f"exact dispatch row drifted: {expected_row}")
+
+local_019_row = (
+    f"| LOCAL-019 | P0 / PASS | Six-sheet QS Review export + Excel-to-Model Locate source landed "
+    f"through PR {REVIEW_PR}; licensed V25/V26 exact-SHA qualification passed on `{REVIEW_RUNTIME_SHA}`. |"
+)
+if local_019_row not in text:
+    fail("LOCAL-019 source/runtime completion row drifted")
 
 stale_3681_index = (
     f"| P0 | #3681 | `agent/chatgpt-gpt56sol/issue-3665-wall-contact-brep` | `{OLD_SHARED_SHA}` |"
@@ -103,6 +127,7 @@ for relative in (
     "docs/LOCAL-V26-QUALIFICATION.md",
     "docs/LOCAL-006-NATIVE-DOCUMENTATION-QUALIFICATION.md",
     "scripts/run-local-v25-qualification.ps1",
+    "scripts/test-bricscad-review-workbook-roundtrip.ps1",
 ):
     require_file(relative)
 
