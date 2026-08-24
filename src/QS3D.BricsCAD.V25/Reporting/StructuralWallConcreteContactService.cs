@@ -269,15 +269,13 @@ namespace QS3D.BricsCAD.V25.Reporting
             {
                 foreach (BrepFace face in brep.Faces)
                 {
-                    var plane = face.Surface as PlanarEntity;
+                    var plane = ReadFacePlane(face);
                     if (plane == null) continue;
                     var normal = plane.Normal.GetNormal();
                     if (Math.Abs(normal.Z) >= HorizontalFaceNormalZ) continue;
                     var areaCad = SafeAreaCad(face);
                     if (!(areaCad > 0d)) continue;
-                    result.Add(new FaceSeed(
-                        new Plane(plane.PointOnPlane, plane.Normal),
-                        areaCad));
+                    result.Add(new FaceSeed(plane, areaCad));
                 }
             }
             return result;
@@ -293,13 +291,32 @@ namespace QS3D.BricsCAD.V25.Reporting
             {
                 foreach (BrepFace face in brep.Faces)
                 {
-                    var plane = face.Surface as PlanarEntity;
+                    var plane = ReadFacePlane(face);
                     if (plane == null) continue;
                     if (!seeds.Any(seed => SamePlane(seed.Plane, plane, distanceCad))) continue;
                     areaCad += SafeAreaCad(face);
                 }
             }
             return areaCad;
+        }
+
+        private static PlanarEntity? ReadFacePlane(BrepFace face)
+        {
+            var surface = face.Surface;
+            if (surface is PlanarEntity planar)
+                return new Plane(planar.PointOnPlane, planar.Normal);
+
+            // BricsCAD V25 exposes ACIS BREP faces as ExternalBoundedSurface even when the
+            // underlying geometry is planar. Unwrap the native base surface before deciding
+            // that the face is non-planar; otherwise every wall face can be silently skipped.
+            if (surface is ExternalBoundedSurface external && external.IsPlane)
+            {
+                var baseSurface = external.BaseSurface as PlanarEntity;
+                if (baseSurface != null)
+                    return new Plane(baseSurface.PointOnPlane, baseSurface.Normal);
+            }
+
+            return null;
         }
 
         private static bool SamePlane(PlanarEntity left, PlanarEntity right, double contactToleranceCad)
