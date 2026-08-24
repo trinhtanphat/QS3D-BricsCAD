@@ -47,34 +47,17 @@ namespace QS3D.Core.Geometry
             if (source.Count > MaxMarkers)
                 throw new InvalidOperationException("Grid intersection marker plan exceeds the supported " + MaxMarkers + " marker limit.");
 
-            var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
-            var owners = new HashSet<string>(StringComparer.Ordinal);
-            var result = new List<GridIntersectionMarkerPlan>(source.Count);
-            foreach (var intersection in source)
+            var identities = GridIntersectionIdentityPlanner.Assign(source);
+            var result = new List<GridIntersectionMarkerPlan>(identities.Count);
+            foreach (var identity in identities)
             {
-                if (intersection == null)
-                    throw new InvalidOperationException("Grid intersection marker input contains a null intersection.");
-
-                var canonical = GridIntersectionIdentityPlanner.CanonicalizePair(
-                    intersection.FirstElementId,
-                    intersection.SecondElementId);
-                var pairToken = GridIntersectionIdentityPlanner.BuildPairToken(canonical.FirstGridId, canonical.SecondGridId);
-                occurrences.TryGetValue(pairToken, out var occurrence);
-                var ownerToken = GridIntersectionIdentityPlanner.BuildIntersectionOwner(
-                    canonical.FirstGridId,
-                    canonical.SecondGridId,
-                    occurrence);
-                if (!owners.Add(ownerToken))
-                    throw new InvalidOperationException("Grid intersection marker plan produced duplicate owner token: " + ownerToken + ".");
-                occurrences[pairToken] = checked(occurrence + 1);
-
                 result.Add(new GridIntersectionMarkerPlan(
-                    canonical.FirstGridId,
-                    canonical.SecondGridId,
-                    pairToken,
-                    ownerToken,
-                    occurrence,
-                    intersection.Point));
+                    identity.FirstElementId,
+                    identity.SecondElementId,
+                    identity.PairToken,
+                    identity.OwnerToken,
+                    identity.OccurrenceIndex,
+                    identity.Point));
             }
 
             return result.AsReadOnly();
