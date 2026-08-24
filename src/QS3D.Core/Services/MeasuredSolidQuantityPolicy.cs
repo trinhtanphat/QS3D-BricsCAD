@@ -14,14 +14,15 @@ namespace QS3D.Core.Services
         {
             if (element == null) throw new ArgumentNullException(nameof(element));
 
-            // Validate every applicable measured input before mutating quantities so
-            // malformed later fields cannot leave a partially applied measurement.
+            // Validate every applicable measured and legacy input before mutating
+            // quantities so a malformed later field cannot leave partial state.
             var hasSurfaceArea = TryRead(element, SurfaceAreaProperty, out var surfaceArea);
             var supportsMaterialVolume = SupportsMaterialVolume(element.Category);
             var hasVolume = false;
             var volume = 0d;
             if (supportsMaterialVolume)
                 hasVolume = TryRead(element, VolumeProperty, out volume);
+            var legacyEvidence = BltLegacyQuantityEvidencePolicy.Prepare(element);
 
             var hadMeasuredVolume = element.Quantities.TryGetValue("MeasuredSolidVolumeM3", out var previousMeasuredVolume);
             var handled = false;
@@ -54,10 +55,9 @@ namespace QS3D.Core.Services
             }
 
             // BLT legacy evidence is a final guard on the ordinary measured/default
-            // quantity lane. Exact legacy concrete must survive later regeneration,
-            // while formwork without exact evidence must remain absent rather than
-            // silently inheriting a default Family-derived value.
-            if (BltLegacyQuantityEvidencePolicy.Apply(element)) handled = true;
+            // quantity lane. The already-validated snapshot avoids re-reading a later
+            // malformed field after measured mutations have started.
+            if (BltLegacyQuantityEvidencePolicy.ApplyPrepared(element, legacyEvidence)) handled = true;
 
             if (removed) element.MarkDirty(ElementDirtyFlags.Quantity);
             return handled;
