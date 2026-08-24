@@ -46,6 +46,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private sealed class BuildConfiguration
         {
             public string HandlesKey { get; set; } = string.Empty;
+            public string CountKey { get; set; } = string.Empty;
             public string PropertyPrefix { get; set; } = string.Empty;
             public string XNotationKey { get; set; } = string.Empty;
             public string YNotationKey { get; set; } = string.Empty;
@@ -99,6 +100,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var selectedHandleSet = new HashSet<string>(selectedHandles, StringComparer.OrdinalIgnoreCase);
 
             var element = ResolveTargetElement(project, category, selectedHandleSet);
+            EnsureAggregateMetadataConsistency(element, configuration);
             var ownership = GeneratedRebarOwnershipGuard.Build(project);
             var rollback = ProjectStateSnapshot.Capture(project);
             var cadCommitted = false;
@@ -232,6 +234,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         .SelectMany(x => x.Value.OrderBy(handle => handle, StringComparer.OrdinalIgnoreCase))
                         .ToList();
                     element.Properties[configuration.HandlesKey] = string.Join(";", allHandles);
+                    element.Properties[configuration.CountKey] = allHandles.Count.ToString(CultureInfo.InvariantCulture);
                     element.Properties[configuration.PropertyPrefix + GeneratedManifestSuffix] = MultiRegionRebarManifest.SerializeGenerated(
                         generatedByRegion.OrderBy(x => x.Key, StringComparer.Ordinal)
                             .Select(x => new GeneratedManifestEntry(x.Key, x.Value.AsReadOnly())));
@@ -243,6 +246,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     element.Properties[configuration.PropertyPrefix + "MultiRegionBarCount"] = allHandles.Count.ToString(CultureInfo.InvariantCulture);
                     element.Properties[configuration.PropertyPrefix + "MultiRegionLegacyMigration"] = legacyMigration ? "1" : "0";
                     CadElementVerticalPlacement.CommitSnapshot(element, configuration.PropertyPrefix + "MultiRegion", verticalPlacement);
+                    if (element.Category == ElementCategory.Foundation) element.ClearGeneratedFoundationMeshStale();
                     AuditTrail.ForProject(project).Record(configuration.AuditAction, element.Id,
                         allHandles.Count.ToString(CultureInfo.InvariantCulture) + " bars / " + assembly.Regions.Count.ToString(CultureInfo.InvariantCulture) + " regions");
 
@@ -308,6 +312,26 @@ namespace QS3D.BricsCAD.V25.Cad
             return false;
         }
 
+        private static void EnsureAggregateMetadataConsistency(ProjectElement element, BuildConfiguration configuration)
+        {
+            string rawHandles;
+            var hasAggregate = element.Properties.TryGetValue(configuration.HandlesKey, out rawHandles) && !string.IsNullOrWhiteSpace(rawHandles);
+            if (hasAggregate) return;
+
+            var multiRegionKeys = new[]
+            {
+                configuration.PropertyPrefix + GeneratedManifestSuffix,
+                configuration.PropertyPrefix + SourceManifestSuffix,
+                configuration.PropertyPrefix + TopologyFingerprintSuffix,
+                configuration.PropertyPrefix + "MultiRegionCount",
+                configuration.PropertyPrefix + "MultiRegionBarCount"
+            };
+            if (multiRegionKeys.Any(key => element.Properties.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value)))
+                throw new InvalidOperationException(
+                    element.Id + " has persisted multi-region metadata but its aggregate generated-handle slot " +
+                    configuration.HandlesKey + " is missing. Refusing replacement before any CAD write.");
+        }
+
         private static string ComputeTopologyFingerprint(PolygonSourceRegionAssembly2 assembly, IReadOnlyList<SourceLoop> sources)
         {
             if (assembly == null) throw new ArgumentNullException(nameof(assembly));
@@ -367,6 +391,14 @@ namespace QS3D.BricsCAD.V25.Cad
                 .ToList();
             if (aggregate.Count == 0 || aggregate.Distinct(StringComparer.OrdinalIgnoreCase).Count() != aggregate.Count)
                 throw new InvalidOperationException("Generated rebar aggregate contains no handles or duplicate canonical handles; refusing erase.");
+
+            string rawCount;
+            if (element.Properties.TryGetValue(configuration.CountKey, out rawCount) && !string.IsNullOrWhiteSpace(rawCount))
+            {
+                int expectedCount;
+                if (!int.TryParse(rawCount.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out expectedCount) || expectedCount != aggregate.Count)
+                    throw new InvalidOperationException("Generated rebar aggregate count does not match its handle slot; refusing erase.");
+            }
 
             var generatedManifestKey = configuration.PropertyPrefix + GeneratedManifestSuffix;
             string rawManifest;
@@ -523,6 +555,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private static BuildConfiguration SlabConfiguration() => new BuildConfiguration
         {
             HandlesKey = SlabHandlesKey,
+            CountKey = "GeneratedSlabMeshCount",
             PropertyPrefix = "GeneratedSlabMesh",
             XNotationKey = "RebarSlabXNotation",
             YNotationKey = "RebarSlabYNotation",
@@ -538,6 +571,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private static BuildConfiguration FoundationConfiguration() => new BuildConfiguration
         {
             HandlesKey = FoundationHandlesKey,
+            CountKey = "GeneratedFoundationMeshCount",
             PropertyPrefix = "GeneratedFoundationMesh",
             XNotationKey = "RebarFoundationXNotation",
             YNotationKey = "RebarFoundationYNotation",
