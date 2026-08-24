@@ -34,15 +34,25 @@ namespace QS3D.Core.Reporting
             ReportingProjectIdentityGuard.RequireUniqueElementIds(project, detail ? "Quantity detail report" : "Quantity report");
             RoomFinishIdentityService.ValidateProject(project);
             var selectedIds = ResolveSelection(project, elementIds);
-            var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
-            var zones = project.Zones.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
-            var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+
+            var reportVersion = project.ChangeVersion;
+            var elements = project.Elements.ToList();
+            var floorInstances = project.Floors.ToList();
+            var zoneInstances = project.Zones.ToList();
+            var familyInstances = project.Families.ToList();
+            var drawingFingerprint = project.DrawingFingerprint;
+            EnsureProjectRevision(project, reportVersion, elements, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
+
+            var floors = floorInstances.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
+            var zones = zoneInstances.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
+            var families = familyInstances.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var rows = new Dictionary<string, QuantityReportRow>(StringComparer.OrdinalIgnoreCase);
             var noteValues = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
             var order = new List<string>();
 
-            foreach (var element in project.Elements)
+            foreach (var element in elements)
             {
+                EnsureProjectRevision(project, reportVersion, elements, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
                 var elementId = element.Id.Trim();
                 if (selectedIds != null && !selectedIds.Contains(elementId)) continue;
                 if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
@@ -82,7 +92,7 @@ namespace QS3D.Core.Reporting
                         Note = note,
                         DensityKgM3 = densityKgM3,
                         MassKg = massKg,
-                        DrawingFingerprint = project.DrawingFingerprint
+                        DrawingFingerprint = drawingFingerprint
                     };
                     rows[key] = row;
                     var distinctNotes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -168,9 +178,38 @@ namespace QS3D.Core.Reporting
                 row.OtherAreaM2 = QuantityReportMath.Add(row.OtherAreaM2, QFirst(element, "OtherAreaM2", "MeasuredSurfaceAreaM2"), element.Id + "/OtherAreaM2");
                 if (created && row.MassKg.HasValue)
                     row.MassKg = QuantityReportMath.NonNegative(row.MassKg.Value, element.Id + "/MassKg");
+                EnsureProjectRevision(project, reportVersion, elements, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
             }
 
+            EnsureProjectRevision(project, reportVersion, elements, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
             return order.Select(x => rows[x]).ToList().AsReadOnly();
+        }
+
+        private static void EnsureProjectRevision(
+            ProjectState project,
+            long expectedVersion,
+            IReadOnlyList<ProjectElement> elements,
+            IReadOnlyList<FloorDefinition> floors,
+            IReadOnlyList<ZoneDefinition> zones,
+            IReadOnlyList<ProjectFamily> families,
+            string drawingFingerprint)
+        {
+            if (project.ChangeVersion != expectedVersion ||
+                !string.Equals(project.DrawingFingerprint, drawingFingerprint, StringComparison.Ordinal) ||
+                !SameInstances(project.Elements, elements) ||
+                !SameInstances(project.Floors, floors) ||
+                !SameInstances(project.Zones, zones) ||
+                !SameInstances(project.Families, families))
+                throw new InvalidOperationException(
+                    "Project changed while the quantity report was being built; recompute the report against the current project state.");
+        }
+
+        private static bool SameInstances<T>(IList<T> current, IReadOnlyList<T> snapshot) where T : class
+        {
+            if (current.Count != snapshot.Count) return false;
+            for (var index = 0; index < current.Count; index++)
+                if (!ReferenceEquals(current[index], snapshot[index])) return false;
+            return true;
         }
 
         private static HashSet<string>? ResolveSelection(ProjectState project, IEnumerable<string>? elementIds)
