@@ -29,8 +29,9 @@ required = (
     "diagnostics.FailedNativeCutCount++",
     "if (diagnostics.FailedNativeCutCount > 0) return false;",
     "private static PlanarEntity? ReadFacePlane(BrepFace face)",
-    "surface is ExternalBoundedSurface external && external.IsPlane",
-    "external.BaseSurface as PlanarEntity",
+    "surface is ExternalBoundedSurface external",
+    "external.IsPlane",
+    "external.BaseSurface is PlanarEntity basePlane",
 )
 for token in required:
     if token not in text:
@@ -41,6 +42,7 @@ for forbidden in (
     "TrySubtract(residual, contactProbe);",
     "using (var intersection = TryIntersection(target, candidate))",
     "face.Surface as PlanarEntity",
+    "external.BaseSurface as PlanarEntity",
 ):
     if forbidden in text:
         fail("stale whole-candidate/direct-face-surface path remains: " + forbidden)
@@ -63,4 +65,4 @@ for name, body in (("seed", seed_body), ("residual", residual_body)):
     if "ReadFacePlane(face)" not in body:
         fail(name + " face reader bypasses ExternalBoundedSurface planar unwrapping")
 
-print("PASS: StructuralWall contact uses clipped current-residual cuts, unwraps V25 ExternalBoundedSurface planes, exposes bounded diagnostics, and fails closed on confirmed native cut failure")
+print("PASS: StructuralWall contact uses clipped current-residual cuts, unwraps V25 ExternalBoundedSurface planes without direct PlanarEntity casts, exposes bounded diagnostics, and fails closed on confirmed native cut failure")
