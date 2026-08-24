@@ -36,9 +36,10 @@ for category in (
     require(contact, category, "concrete-contact category " + category)
 
 # Bounding boxes may reject distant objects only. Formwork deduction must remain native
-# Solid3d/BREP geometry and union-resolved through one live residual target. Every cutter is
-# first clipped against the current residual so a neighbour extending beyond the wall cannot
-# poison BoolSubtract, and overlapping neighbours naturally union as the residual shrinks.
+# Solid3d/BREP geometry. The current residual union-resolves overlapping cutters, while the
+# authoritative area is coverage on original target-face planes reached from the cutter exterior.
+# This distinction prevents a penetrating cutter from turning newly exposed side strips into
+# false formwork contact (#3697).
 require(
     contact,
     "if (!BoundingBoxesMayOverlap(target, candidate, distanceCad)) continue;",
@@ -48,6 +49,21 @@ require(
     contact,
     "TryIntersection(residual, candidate, out var intersectionFailed)",
     "residual-clipped native volume/contact intersection",
+)
+require(
+    contact,
+    "ReadEligibleOriginalFaceArea(",
+    "original-face native contact coverage",
+)
+require(
+    contact,
+    "CandidateReachesExterior(",
+    "exact cutter exterior-side classification",
+)
+require(
+    contact,
+    "TryReadSolidVertexSideRange(",
+    "native BREP vertex side range",
 )
 require(
     contact,
@@ -69,9 +85,11 @@ for forbidden in (
     "TryIntersection(target, candidate",
     "TrySubtract(residual, candidate)",
     "TrySubtract(residual, contactProbe)",
+    "grossVerticalAreaCad - residualVerticalAreaCad",
+    "ReadResidualAreaOnOriginalVerticalFaces",
 ):
     if forbidden in contact:
-        fail("stale non-residual-clipped contact path reappeared: " + forbidden)
+        fail("stale non-residual-clipped/residual-area contact authority reappeared: " + forbidden)
 require(
     contact,
     "if (diagnostics.FailedNativeCutCount > 0) return false;",
@@ -84,8 +102,13 @@ require(
 )
 require(
     contact,
-    "grossVerticalAreaCad - residualVerticalAreaCad",
-    "union-resolved contact deduction from residual vertical area",
+    "deductionM2 = Math.Min(grossVerticalAreaCad, contactAreaCad) * areaScale;",
+    "union-resolved original-face contact deduction",
+)
+require(
+    contact,
+    "diagnostics.ResidualVerticalAreaM2 = Math.Max(0d, grossVerticalAreaCad - contactAreaCad) * areaScale;",
+    "logical residual/net contact diagnostic",
 )
 require(
     contact,
@@ -127,4 +150,4 @@ for forbidden in (
         if forbidden in exclude_text:
             fail("V26 shared-source Exclude must not omit " + forbidden)
 
-print("PASS: StructuralWall Rule 1/2 contact, opening reveal, residual-union and V26 shared-source contracts are locked")
+print("PASS: StructuralWall Rule 1/2 contact uses native original-face exterior coverage with residual union, preserves opening/capture semantics, and retains V26 shared-source coverage")
