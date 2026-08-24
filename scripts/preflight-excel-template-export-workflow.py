@@ -48,8 +48,9 @@ v26 = read(V26)
 doc = read(DOC)
 
 for needle in (
+    'using QS3D.BricsCAD.V25.Services;',
     '[CommandMethod("QS3DEXCELTEMPLATE", CommandFlags.UsePickSet)]',
-    'var reviewedProjectId = project.Id;',
+    'var reviewedProjectId = project.ProjectId;',
     'var reviewedVersion = project.ChangeVersion;',
     '"Selection Floor Zone All"',
     '"Detail Group"',
@@ -57,19 +58,24 @@ for needle in (
     'Filter = "Excel Workbook (*.xlsx)|*.xlsx"',
     'Filter = "QS3D Template Mapping (*.json)|*.json"',
     'ValidateOutputPath(templateDialog.FileName, outputDialog.FileName);',
+    'promptProject.ProjectId, reviewedProjectId',
     'promptProject.ChangeVersion != reviewedVersion',
     'DrawingUnitWorkflow.EnsureResolved(document, "QS3DEXCELTEMPLATE")',
+    'currentProject.ProjectId, reviewedProjectId',
     'var exportVersion = currentProject.ChangeVersion;',
     'ProjectStateSnapshot.CreateDetachedCopy(currentProject)',
     'ProjectQuantityReportBuilder.Detail(preview',
     'ProjectQuantityReportBuilder.Group(preview',
     'EnsureHandlesAreLive(document, rows);',
+    'finalProject.ProjectId, reviewedProjectId',
     'finalProject.ChangeVersion != exportVersion',
     'QsWorkbookTemplateExporter.Export(',
     'new DataContractJsonSerializer(typeof(CustomMappingContract))',
     'MaxMappingBytes = 64 * 1024',
     'using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))',
     'if (stream.Length <= 0 || stream.Length > MaxMappingBytes)',
+    'var fieldName = item.Field ?? string.Empty;',
+    'var columnName = item.Column ?? string.Empty;',
     'Enum.IsDefined(typeof(QsWorkbookTemplateField), field)',
     'new QsWorkbookTemplateDefinition("CHI_TIET", 2, mappings, 5000)',
     'QsWorkbookTemplateField.ElementIds',
@@ -78,6 +84,14 @@ for needle in (
     'QsWorkbookTemplateField.TraceKey',
 ):
     require(command, needle, "template command")
+
+for stale_symbol in (
+    'project.Id;',
+    'promptProject.Id',
+    'currentProject.Id',
+    'finalProject.Id',
+):
+    forbid(command, stale_symbol, "compile-safe ProjectState identity")
 
 require_order(
     command,
@@ -184,5 +198,5 @@ if failures:
     print("FAILED with", len(failures), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DEXCELTEMPLATE uses canonical detached Detail/Group rows, bounded Default/Custom mapping, prompt/final freshness gates, complete live-Handle validation, atomic Core XLSX rewrite, Quantity Insight/Ribbon exposure and V25/V26 shared-source parity.")
+print("PASS: QS3DEXCELTEMPLATE uses canonical compile-safe host services, detached Detail/Group rows, bounded Default/Custom mapping, prompt/final freshness gates, complete live-Handle validation, atomic Core XLSX rewrite, Quantity Insight/Ribbon exposure and V25/V26 shared-source parity.")
 print("NOTE: interactive dialogs and licensed BricsCAD template-rendering qualification remain LOCAL_ONLY under #72.")
