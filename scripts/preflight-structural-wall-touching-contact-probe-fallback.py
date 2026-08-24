@@ -19,8 +19,9 @@ required = (
     "var directIntersectionFailed = false;",
     "directIntersectionFailed = intersectionFailed;",
     "if (!intersectionFailed && overlap != null && SafeVolumeCad(overlap) > volumeCadTolerance)",
+    "var contactProbeDistanceCad = Math.Max(distanceCad, 1e-5d / lengthToMeter);",
     "using (var contactProbe = Clone(candidate))",
-    "if (!TryOffset(contactProbe, distanceCad))",
+    "if (!TryOffset(contactProbe, contactProbeDistanceCad))",
     "using (var contact = TryIntersection(residual, contactProbe, out var contactIntersectionFailed))",
     "var probeContactAreaCad = ReadEligibleOriginalFaceArea(",
     "if (!TrySubtract(residual, contact))",
@@ -30,6 +31,13 @@ required = (
 for token in required:
     if token not in source:
         fail("missing touching fallback contract token: " + token)
+
+if "TryOffset(contactProbe, distanceCad)" in source:
+    fail("native touching probe still uses the sub-modeler quantity tolerance directly")
+if "SamePlane(x.Plane, plane, distanceCad)" not in source:
+    fail("original-face plane identity no longer uses the tighter quantity tolerance")
+if "CandidateReachesExterior(candidate, seed, distanceCad" not in source:
+    fail("exterior-side eligibility was widened to the native probe distance")
 
 old_terminal = """if (intersectionFailed)\n                                {\n                                    diagnostics.FailedNativeCutCount++;\n                                    continue;\n                                }"""
 if old_terminal in source:
@@ -82,4 +90,4 @@ for forbidden in ("error.Message", "error.StackTrace", "Handle.ToString()", "Env
     if forbidden in "\n".join(line for line in probe_source.splitlines() if "direct_fail=" in line or "probe_" in line):
         fail("bounded stage diagnostics expose unstable or sensitive detail: " + forbidden)
 
-print("PASS: zero-volume direct-intersection failure is deferred to the native touching probe, unresolved probes remain fail-closed, successful probe subtraction retains original-face area authority, and bounded stage diagnostics identify the native failure stage")
+print("PASS: touching contact uses a unit-aware 10-micrometre native offset floor while topology/plane identity stays tight, deferred failures remain fail-closed, and bounded native-stage diagnostics remain available")
