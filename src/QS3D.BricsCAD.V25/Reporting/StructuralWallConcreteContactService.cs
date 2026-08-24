@@ -154,15 +154,14 @@ namespace QS3D.BricsCAD.V25.Reporting
                             // is not gross-minus-residual: a penetrating cutter creates extra side
                             // boundaries in the residual. Measure only original target-face patches
                             // for which the original candidate actually reaches the exterior side.
+                            // A zero-volume touching BoolIntersect can throw in BricsCAD V25. Defer
+                            // that preliminary failure to the contact probe instead of rejecting the
+                            // candidate before the positive-offset touching path gets a chance to run.
+                            var directIntersectionFailed = false;
                             using (var overlap = TryIntersection(residual, candidate, out var intersectionFailed))
                             {
-                                if (intersectionFailed)
-                                {
-                                    diagnostics.FailedNativeCutCount++;
-                                    continue;
-                                }
-
-                                if (overlap != null && SafeVolumeCad(overlap) > volumeCadTolerance)
+                                directIntersectionFailed = intersectionFailed;
+                                if (!intersectionFailed && overlap != null && SafeVolumeCad(overlap) > volumeCadTolerance)
                                 {
                                     var overlapContactAreaCad = ReadEligibleOriginalFaceArea(
                                         overlap,
@@ -206,7 +205,11 @@ namespace QS3D.BricsCAD.V25.Reporting
                                         diagnostics.FailedNativeCutCount++;
                                         continue;
                                     }
-                                    if (contact == null || SafeVolumeCad(contact) <= volumeCadTolerance) continue;
+                                    if (contact == null || SafeVolumeCad(contact) <= volumeCadTolerance)
+                                    {
+                                        if (directIntersectionFailed) diagnostics.FailedNativeCutCount++;
+                                        continue;
+                                    }
 
                                     var probeContactAreaCad = ReadEligibleOriginalFaceArea(
                                         contact,
@@ -219,13 +222,21 @@ namespace QS3D.BricsCAD.V25.Reporting
                                         diagnostics.FailedNativeCutCount++;
                                         continue;
                                     }
-                                    if (probeContactAreaCad <= areaCadTolerance) continue;
+                                    if (probeContactAreaCad <= areaCadTolerance)
+                                    {
+                                        if (directIntersectionFailed) diagnostics.FailedNativeCutCount++;
+                                        continue;
+                                    }
 
                                     if (!TrySubtract(residual, contact))
                                     {
                                         diagnostics.FailedNativeCutCount++;
                                         continue;
                                     }
+
+                                    // A successful offset/intersection/original-face/subtract chain
+                                    // is authoritative touching evidence and resolves a deferred
+                                    // preliminary zero-volume intersection failure for this candidate.
                                     contactAreaCad += probeContactAreaCad;
                                     diagnostics.ContactProbeCutCount++;
                                 }
