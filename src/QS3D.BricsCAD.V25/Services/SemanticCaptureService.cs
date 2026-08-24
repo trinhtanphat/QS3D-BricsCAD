@@ -259,7 +259,14 @@ namespace QS3D.BricsCAD.V25.Services
             foreach (var wall in project.Elements.Where(x => x.Category == ElementCategory.StructuralWall).ToList())
             {
                 if (!StructuralWallConcreteContactService.TryMeasureM2(document, project, wall, out var contactAreaM2))
+                {
+                    if (!wall.Properties.Remove("ConcreteContactAreaM2")) continue;
+                    wall.MarkDirty(ElementDirtyFlags.Quantity);
+                    Regenerate(project, wall);
+                    MeasuredSolidQuantityPolicy.Apply(wall);
+                    changed = true;
                     continue;
+                }
 
                 var encoded = contactAreaM2.ToString("R", CultureInfo.InvariantCulture);
                 if (wall.Properties.TryGetValue("ConcreteContactAreaM2", out var current) &&
