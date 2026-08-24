@@ -1,5 +1,6 @@
 using System;
 using QS3D.Core.Domain;
+using QS3D.Core.Mapping;
 using QS3D.Core.Rules;
 
 namespace QS3D.Core.SmokeTests
@@ -12,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             BlankAndMissingLookupsReturnNull();
             DuplicateLookupsFailClosed();
             FloorAndZoneMutationServicesFailClosedOnDuplicateIds();
+            MeasurementWorkItemMappingCaseSemantics();
         }
 
         private static void LookupsNormalizeWhitespaceAndCase()
@@ -93,6 +95,61 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => ProjectZoneService.SetActive(project, "z1"));
             if (!string.IsNullOrEmpty(project.ActiveFloorId) || !string.IsNullOrEmpty(project.ActiveZoneId))
                 throw new Exception("Duplicate Floor/Zone mutation lookup must fail before changing active catalog state.");
+        }
+
+        private static void MeasurementWorkItemMappingCaseSemantics()
+        {
+            var project = new ProjectState("mapping-case-semantics", "Mapping case semantics");
+            var mappings = project.MeasurementWorkItemMappings;
+            mappings.Add(new MeasurementWorkItemMapping(
+                "mapping-1",
+                ElementCategory.Beam,
+                "measurement-1",
+                "class-1",
+                "work-1"));
+
+            if (!mappings.Contains(new MeasurementWorkItemMapping(
+                    "MAPPING-1",
+                    ElementCategory.Beam,
+                    "measurement-1",
+                    "class-1",
+                    "work-1")))
+                throw new Exception("MappingId identity must be case-insensitive.");
+
+            if (!mappings.Contains(new MeasurementWorkItemMapping(
+                    "mapping-1",
+                    ElementCategory.Beam,
+                    "MEASUREMENT-1",
+                    "class-1",
+                    "work-1")))
+                throw new Exception("MeasurementItemId identity must be case-insensitive.");
+
+            if (mappings.Contains(new MeasurementWorkItemMapping(
+                    "MAPPING-1",
+                    ElementCategory.Beam,
+                    "MEASUREMENT-1",
+                    "CLASS-1",
+                    "work-1")))
+                throw new Exception("ClassificationId identity must remain case-sensitive.");
+
+            if (mappings.Contains(new MeasurementWorkItemMapping(
+                    "MAPPING-1",
+                    ElementCategory.Beam,
+                    "MEASUREMENT-1",
+                    "class-1",
+                    "WORK-1")))
+                throw new Exception("WorkItemId identity must remain case-sensitive.");
+
+            if (!mappings.Remove(new MeasurementWorkItemMapping(
+                    "MAPPING-1",
+                    ElementCategory.Beam,
+                    "MEASUREMENT-1",
+                    "class-1",
+                    "work-1")))
+                throw new Exception("Remove must honor case-insensitive mapping and measurement-item identity.");
+
+            if (mappings.Count != 0)
+                throw new Exception("Case-insensitive remove must remove the stored mapping.");
         }
 
         private static void Same<T>(T expected, T? actual) where T : class
