@@ -15,9 +15,11 @@ namespace QS3D.BricsCAD.V25.Reporting
 {
     /// <summary>
     /// Measures the union of live concrete-contact regions on StructuralWall vertical faces.
-    /// Bounding boxes are used only as a broad-phase rejection. The deduction itself is
-    /// produced by Solid3d/BREP boolean residuals, including a small native offset probe for
-    /// zero-volume face contacts.
+    /// Bounding boxes are used only as a broad-phase rejection. Native Solid3d/BREP booleans
+    /// union-resolve the cutters, while deduction authority remains the area of original wall
+    /// face patches reached from the cutter's exterior side. This prevents penetration-created
+    /// side strips from being misreported as formwork contact. A small native offset probe is
+    /// retained for zero-volume face contacts.
     /// </summary>
     internal static class StructuralWallConcreteContactService
     {
@@ -39,14 +41,16 @@ namespace QS3D.BricsCAD.V25.Reporting
 
         private sealed class FaceSeed
         {
-            public FaceSeed(PlanarEntity plane, double grossAreaCad)
+            public FaceSeed(PlanarEntity plane, double grossAreaCad, int interiorSide)
             {
                 Plane = plane;
                 GrossAreaCad = grossAreaCad;
+                InteriorSide = interiorSide;
             }
 
             public PlanarEntity Plane { get; }
             public double GrossAreaCad { get; }
+            public int InteriorSide { get; }
         }
 
         public static bool IsConcreteContactCategory(ElementCategory category)
@@ -94,6 +98,7 @@ namespace QS3D.BricsCAD.V25.Reporting
             var areaScale = lengthToMeter * lengthToMeter;
             var volumeScale = areaScale * lengthToMeter;
             var distanceCad = tolerances.Distance / lengthToMeter;
+            var areaCadTolerance = tolerances.Area / areaScale;
             var volumeCadTolerance = tolerances.Volume / volumeScale;
 
             // Contact is a live-BREP concern, not a Locate concern. Prefer the generated host
@@ -130,10 +135,10 @@ namespace QS3D.BricsCAD.V25.Reporting
                 diagnostics.CandidateSolidCount = candidates.Count;
 
                 var grossVerticalAreaCad = 0d;
-                var residualVerticalAreaCad = 0d;
+                var contactAreaCad = 0d;
                 foreach (var target in targets)
                 {
-                    var seeds = ReadVerticalFaces(target);
+                    var seeds = ReadVerticalFaces(target, distanceCad);
                     diagnostics.VerticalFaceSeedCount += seeds.Count;
                     grossVerticalAreaCad += seeds.Sum(x => x.GrossAreaCad);
                     if (seeds.Count == 0) continue;
@@ -145,10 +150,10 @@ namespace QS3D.BricsCAD.V25.Reporting
                             if (!BoundingBoxesMayOverlap(target, candidate, distanceCad)) continue;
 
                             // Always clip a cutter to the *current residual* before subtraction.
-                            // Passing a neighbor that extends outside the wall directly to BoolSubtract
-                            // can fail in the native kernel even when BoolIntersect succeeds. Clipping
-                            // also makes overlapping neighbors union naturally because later cutters see
-                            // only the volume/contact patch that remains after earlier cuts.
+                            // This keeps contact patches union-resolved. However, the area authority
+                            // is not gross-minus-residual: a penetrating cutter creates extra side
+                            // boundaries in the residual. Measure only original target-face patches
+                            // for which the original candidate actually reaches the exterior side.
                             using (var overlap = TryIntersection(residual, candidate, out var intersectionFailed))
                             {
                                 if (intersectionFailed)
@@ -159,11 +164,28 @@ namespace QS3D.BricsCAD.V25.Reporting
 
                                 if (overlap != null && SafeVolumeCad(overlap) > volumeCadTolerance)
                                 {
+                                    var overlapContactAreaCad = ReadEligibleOriginalFaceArea(
+                                        overlap,
+                                        candidate,
+                                        seeds,
+                                        distanceCad,
+                                        out var overlapFaceReadFailed);
+                                    if (overlapFaceReadFailed)
+                                    {
+                                        diagnostics.FailedNativeCutCount++;
+                                        continue;
+                                    }
+
+                                    // A positive volume overlap entirely on the interior side of all
+                                    // original wall faces is embedded concrete, not formwork contact.
+                                    if (overlapContactAreaCad <= areaCadTolerance) continue;
+
                                     if (!TrySubtract(residual, overlap))
                                     {
                                         diagnostics.FailedNativeCutCount++;
                                         continue;
                                     }
+                                    contactAreaCad += overlapContactAreaCad;
                                     diagnostics.PositiveVolumeCutCount++;
                                     continue;
                                 }
@@ -185,33 +207,42 @@ namespace QS3D.BricsCAD.V25.Reporting
                                         continue;
                                     }
                                     if (contact == null || SafeVolumeCad(contact) <= volumeCadTolerance) continue;
+
+                                    var probeContactAreaCad = ReadEligibleOriginalFaceArea(
+                                        contact,
+                                        candidate,
+                                        seeds,
+                                        distanceCad,
+                                        out var probeFaceReadFailed);
+                                    if (probeFaceReadFailed)
+                                    {
+                                        diagnostics.FailedNativeCutCount++;
+                                        continue;
+                                    }
+                                    if (probeContactAreaCad <= areaCadTolerance) continue;
+
                                     if (!TrySubtract(residual, contact))
                                     {
                                         diagnostics.FailedNativeCutCount++;
                                         continue;
                                     }
+                                    contactAreaCad += probeContactAreaCad;
                                     diagnostics.ContactProbeCutCount++;
                                 }
                             }
                         }
-
-                        residualVerticalAreaCad += ReadResidualAreaOnOriginalVerticalFaces(
-                            residual,
-                            seeds,
-                            distanceCad);
                     }
                 }
 
                 diagnostics.GrossVerticalAreaM2 = grossVerticalAreaCad * areaScale;
-                diagnostics.ResidualVerticalAreaM2 = residualVerticalAreaCad * areaScale;
+                diagnostics.ResidualVerticalAreaM2 = Math.Max(0d, grossVerticalAreaCad - contactAreaCad) * areaScale;
 
                 // Once a broad-phase candidate reached a native contact operation, a failed
-                // intersect/subtract/offset makes the measurement unavailable. Publishing zero
-                // here would turn a modeling-kernel failure into a false "no contact" quantity.
+                // intersect/subtract/offset/topology-side read makes the measurement unavailable.
+                // Publishing zero here would turn a modeling-kernel failure into a false no-contact.
                 if (diagnostics.FailedNativeCutCount > 0) return false;
 
-                var deductionCad = Math.Max(0d, grossVerticalAreaCad - residualVerticalAreaCad);
-                deductionM2 = deductionCad * areaScale;
+                deductionM2 = Math.Min(grossVerticalAreaCad, contactAreaCad) * areaScale;
                 diagnostics.DeductionM2 = deductionM2;
                 if (double.IsNaN(deductionM2) || double.IsInfinity(deductionM2) || deductionM2 < 0d)
                     throw new InvalidOperationException("Structural wall concrete-contact deduction is not finite and non-negative.");
@@ -262,7 +293,7 @@ namespace QS3D.BricsCAD.V25.Reporting
             return result;
         }
 
-        private static List<FaceSeed> ReadVerticalFaces(Solid3d solid)
+        private static List<FaceSeed> ReadVerticalFaces(Solid3d solid, double distanceCad)
         {
             var result = new List<FaceSeed>();
             using (var brep = new Brep(solid))
@@ -275,29 +306,120 @@ namespace QS3D.BricsCAD.V25.Reporting
                     if (Math.Abs(normal.Z) >= HorizontalFaceNormalZ) continue;
                     var areaCad = SafeAreaCad(face);
                     if (!(areaCad > 0d)) continue;
-                    result.Add(new FaceSeed(plane, areaCad));
+                    result.Add(new FaceSeed(plane, areaCad, ReadBoundaryInteriorSide(solid, plane, distanceCad)));
                 }
             }
             return result;
         }
 
-        private static double ReadResidualAreaOnOriginalVerticalFaces(
-            Solid3d residual,
+        private static double ReadEligibleOriginalFaceArea(
+            Solid3d contactRegion,
+            Solid3d candidate,
             IReadOnlyList<FaceSeed> seeds,
-            double distanceCad)
+            double distanceCad,
+            out bool failed)
         {
+            failed = false;
             var areaCad = 0d;
-            using (var brep = new Brep(residual))
+            try
             {
-                foreach (BrepFace face in brep.Faces)
+                using (var brep = new Brep(contactRegion))
                 {
-                    var plane = ReadFacePlane(face);
-                    if (plane == null) continue;
-                    if (!seeds.Any(seed => SamePlane(seed.Plane, plane, distanceCad))) continue;
-                    areaCad += SafeAreaCad(face);
+                    foreach (BrepFace face in brep.Faces)
+                    {
+                        var plane = ReadFacePlane(face);
+                        if (plane == null) continue;
+                        var seed = seeds.FirstOrDefault(x => SamePlane(x.Plane, plane, distanceCad));
+                        if (seed == null) continue;
+                        if (!CandidateReachesExterior(candidate, seed, distanceCad, out var sideReadFailed))
+                        {
+                            if (sideReadFailed)
+                            {
+                                failed = true;
+                                return 0d;
+                            }
+                            continue;
+                        }
+                        areaCad += SafeAreaCad(face);
+                    }
                 }
+                return areaCad;
             }
-            return areaCad;
+            catch (Exception ex) when (Recoverable(ex))
+            {
+                failed = true;
+                return 0d;
+            }
+        }
+
+        private static bool CandidateReachesExterior(
+            Solid3d candidate,
+            FaceSeed seed,
+            double distanceCad,
+            out bool failed)
+        {
+            failed = false;
+            if (seed.InteriorSide == 0)
+            {
+                failed = true;
+                return false;
+            }
+
+            if (!TryReadSolidVertexSideRange(candidate, seed.Plane, out var minDistance, out var maxDistance))
+            {
+                failed = true;
+                return false;
+            }
+
+            // InteriorSide is the half-space occupied by the target solid. Contact is eligible
+            // only when the cutter has exact BREP topology on the opposite half-space. Vertices
+            // that are merely coplanar plus interior (the #3697 penetration side strips) do not
+            // satisfy this test. Touching-only neighbors still have their body on the exterior.
+            return seed.InteriorSide > 0
+                ? minDistance < -distanceCad
+                : maxDistance > distanceCad;
+        }
+
+        private static int ReadBoundaryInteriorSide(Solid3d solid, PlanarEntity plane, double distanceCad)
+        {
+            if (!TryReadSolidVertexSideRange(solid, plane, out var minDistance, out var maxDistance)) return 0;
+            var hasNegative = minDistance < -distanceCad;
+            var hasPositive = maxDistance > distanceCad;
+            if (hasNegative == hasPositive) return 0;
+            return hasPositive ? 1 : -1;
+        }
+
+        private static bool TryReadSolidVertexSideRange(
+            Solid3d solid,
+            PlanarEntity plane,
+            out double minDistance,
+            out double maxDistance)
+        {
+            minDistance = double.PositiveInfinity;
+            maxDistance = double.NegativeInfinity;
+            var count = 0;
+            try
+            {
+                var normal = plane.Normal.GetNormal();
+                using (var brep = new Brep(solid))
+                {
+                    foreach (var vertex in brep.Vertices)
+                    {
+                        var signedDistance = (vertex.Point - plane.PointOnPlane).DotProduct(normal);
+                        if (double.IsNaN(signedDistance) || double.IsInfinity(signedDistance)) return false;
+                        minDistance = Math.Min(minDistance, signedDistance);
+                        maxDistance = Math.Max(maxDistance, signedDistance);
+                        count++;
+                    }
+                }
+                return count > 0 &&
+                       !double.IsInfinity(minDistance) &&
+                       !double.IsInfinity(maxDistance);
+            }
+            catch (Exception ex) when (Recoverable(ex))
+            {
+                return false;
+            }
         }
 
         private static PlanarEntity? ReadFacePlane(BrepFace face)
