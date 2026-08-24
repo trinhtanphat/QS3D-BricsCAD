@@ -55,8 +55,8 @@ namespace QS3D.Core.Geometry
         public static CurvedOpeningFootprintPlan Plan(CurvedOpeningFootprintInput input)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
-            if (input.Centerline == null || input.Centerline.Count < 2) throw new ArgumentException("Curved host centerline requires at least two points.", nameof(input.Centerline));
-            if (input.Centerline.Count > MaxCenterlinePoints) throw new InvalidOperationException("Curved host centerline exceeds the supported point budget of " + MaxCenterlinePoints + ".");
+            if (input.Centerline == null) throw new ArgumentException("Curved host centerline is required.", nameof(input.Centerline));
+            var centerline = SnapshotCenterline(input.Centerline);
             Positive(input.OpeningWidthM, nameof(input.OpeningWidthM));
             Positive(input.HostThicknessM, nameof(input.HostThicknessM));
             NonNegative(input.ClearanceM, nameof(input.ClearanceM));
@@ -66,7 +66,7 @@ namespace QS3D.Core.Geometry
             Positive(input.ToleranceM, nameof(input.ToleranceM));
             Validate(input.OpeningPoint, "opening point");
 
-            var segments = BuildSegments(input.Centerline, input.ToleranceM);
+            var segments = BuildSegments(centerline, input.ToleranceM);
             var lastSegment = segments[segments.Count - 1];
             var totalLength = AddAdvancing(lastSegment.StationStart, lastSegment.Length, "curved host centerline length");
             var projections = segments.Select(x => Project(input.OpeningPoint, x)).OrderBy(x => x.Distance).ThenBy(x => x.Station).ToList();
@@ -109,6 +109,19 @@ namespace QS3D.Core.Geometry
                 ProjectionSegmentIndex = best.Segment.Index,
                 CutterFootprintAreaM2 = footprint.Area
             };
+        }
+
+        private static IReadOnlyList<Point2> SnapshotCenterline(IReadOnlyList<Point2> source)
+        {
+            var count = source.Count;
+            if (count < 2) throw new ArgumentException("Curved host centerline requires at least two points.", nameof(source));
+            if (count > MaxCenterlinePoints) throw new InvalidOperationException("Curved host centerline exceeds the supported point budget of " + MaxCenterlinePoints + ".");
+
+            var snapshot = new Point2[count];
+            for (var i = 0; i < count; i++) snapshot[i] = source[i];
+            if (source.Count != count)
+                throw new InvalidOperationException("Curved host centerline cardinality changed while it was being read.");
+            return snapshot;
         }
 
         private static List<Segment> BuildSegments(IReadOnlyList<Point2> points, double tolerance)
@@ -191,26 +204,18 @@ namespace QS3D.Core.Geometry
 
                 double t;
                 var interior = station > segment.StationStart && station < end;
-                if (station <= segment.StationStart)
-                {
-                    t = 0d;
-                }
-                else if (station >= end)
-                {
-                    t = 1d;
-                }
+                if (station <= segment.StationStart) t = 0d;
+                else if (station >= end) t = 1d;
                 else
                 {
                     var stationOffset = Subtract(station, segment.StationStart, "curved host station offset");
                     t = stationOffset / segment.Length;
-                    if (!Finite(t) || !(t > 0d) || !(t < 1d))
-                        throw new OverflowException("Curved host station interpolation is below the supported numeric precision.");
+                    if (!Finite(t) || !(t > 0d) || !(t < 1d)) throw new OverflowException("Curved host station interpolation is below the supported numeric precision.");
                 }
 
                 var point = new Point2(segment.Start.X + (segment.End.X - segment.Start.X) * t, segment.Start.Y + (segment.End.Y - segment.Start.Y) * t);
                 Validate(point, "curved host station point");
-                if (interior && (point.Equals(segment.Start) || point.Equals(segment.End)))
-                    throw new OverflowException("Curved host station point collapsed to a segment endpoint at floating-point precision.");
+                if (interior && (point.Equals(segment.Start) || point.Equals(segment.End))) throw new OverflowException("Curved host station point collapsed to a segment endpoint at floating-point precision.");
                 return point;
             }
             return segments[segments.Count - 1].End;
@@ -231,8 +236,7 @@ namespace QS3D.Core.Geometry
         private static double AddAdvancing(double left, double positiveRight, string label)
         {
             var value = Add(left, positiveRight, label);
-            if (!(positiveRight > 0d) || !(value > left))
-                throw new OverflowException(label + " lost a positive station increment at floating-point precision.");
+            if (!(positiveRight > 0d) || !(value > left)) throw new OverflowException(label + " lost a positive station increment at floating-point precision.");
             return value;
         }
 
