@@ -8,7 +8,7 @@ Lane-Key: `issue-3680`
 
 Canonical coordination branch: `agent/chatgpt-gpt56sol/issue-3680-local-dispatch-refresh`
 
-Baseline merged main at this sweep: `26ad36d53ba60280e2ff3a95a9bedae55839eda2`
+Latest observed merged main at this sweep: `8cb98ad968b9fecd9efcffe48beed67348c8c0a5`
 
 This index records the owner-requested boundary: remote/source work is prepared and pushed first; a compatible local agent should only fetch the named exact carrier, build/run the licensed BricsCAD matrix, and publish sanitized `PASS` / `FAIL` / `NO_RESULT`. A local runtime defect that requires production-source correction returns to a bounded remote/source lane. Local workers must not opportunistically patch normal production source.
 
@@ -16,13 +16,15 @@ This file does **not** manufacture `LOCAL_PASS`. Runtime status remains governed
 
 ## Immediate exact-SHA dispatch
 
-These carriers are already source-ready and remain the first executable queue from `docs/LOCAL-DISPATCH-READY-2026-08-24.md`:
+These carriers are source-ready and form the first executable queue from `docs/LOCAL-DISPATCH-READY-2026-08-24.md`:
 
 | Priority | Issue | Exact carrier | Exact runtime-source SHA | Local action |
 | --- | --- | --- | --- | --- |
 | P0 | #1744 | `agent/control01/slabopen-undo-semantic-1744` | `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31` | fetch, checkout, build, run only |
-| P0 | #3681 | `agent/chatgpt-gpt56sol/issue-3665-wall-contact-brep` | `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31` | fetch, checkout, build, run only |
+| P0 | #3681 | `agent/chatgpt-gpt56sol/issue-3687-structwall-brep-contact-fix` | `cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb` | fetch, checkout, build, rerun only |
 | P1 | #3613 | `agent/qs3d-uix-worker-b/issue-3613-coordination-locate-zoom` | `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31` | fetch, checkout, build, run only |
+
+For #3681, `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31` is historical failing runtime evidence only. Source defect #3687 was corrected by PR #3692; the licensed rerun must use the exact source-ready SHA `cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb`. Do not rerun the obsolete #3681 binary.
 
 Do not rerun the obsolete #3593 P06 binary. The later #3593 P07 result and closed #3621 source lane are authoritative for that H.1 correction.
 
