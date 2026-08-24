@@ -10,7 +10,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$sourceFixSha = "cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb"
+$sourceFixSha = "4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0"
 if ([string]::IsNullOrWhiteSpace($ArtifactDir)) {
     $ArtifactDir = Join-Path $repoRoot "artifacts\local-v25-wall-contact-3681"
 }
@@ -151,6 +151,7 @@ $productDll = Join-Path $repoRoot "src\QS3D.BricsCAD.V25\bin\x64\Release\net48\Q
 $coreDll = Join-Path (Split-Path -Parent $productDll) "QS3D.Core.dll"
 $harnessProject = Join-Path $repoRoot "tests\QS3D.BricsCAD.V25.LocalQualification\QS3D.BricsCAD.V25.LocalQualification.csproj"
 $harnessDll = Join-Path $repoRoot "tests\QS3D.BricsCAD.V25.LocalQualification\bin\x64\Release\net48\QS3D.BricsCAD.V25.LocalQualification.dll"
+$gatePath = Join-Path $ArtifactDir "source-fix-gate.txt"
 $geometry1Path = Join-Path $ArtifactDir "geometry-1.txt"
 $geometry2Path = Join-Path $ArtifactDir "geometry-2.txt"
 $persistPath = Join-Path $ArtifactDir "persist.txt"
@@ -172,7 +173,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "NO_RESULT: git status failed." }
         if ($dirty.Count -gt 0) { throw "NO_RESULT: working tree must be clean; local agents must not patch source." }
         & git merge-base --is-ancestor $sourceFixSha HEAD *> $null
-        if ($LASTEXITCODE -ne 0) { throw "NO_RESULT: HEAD does not contain the merged #3687/#3692 wall-contact source correction $sourceFixSha." }
+        if ($LASTEXITCODE -ne 0) { throw "NO_RESULT: HEAD does not contain the merged #3711/#3729 wall-contact source correction $sourceFixSha." }
 
         Write-Host "#3681 exact HEAD: $headSha"
         Write-Host "BricsCAD V25: $BricsCadDir"
@@ -213,6 +214,15 @@ try {
             '_.NETLOAD',
             (New-ScrLinePath $harnessDll)
         )
+
+        # Source-fix acceptance is intentionally bounded and fail-fast. Do not spend a licensed
+        # host run on the wider matrix until both the exact touching case and the 0.05 m
+        # penetration regression are coherent on the same exact binary.
+        $gateScript = @($baseScript + @('_.QS3D3681SOURCEFIXGATE', '_.QUIT', '_N'))
+        $gate = Invoke-BricsCadScript -Name "source-fix-gate" -Lines $gateScript -MarkerPath $gatePath
+        Require-Case $gate "touching_one_end"
+        Require-Case $gate "penetration_005m"
+
         $geometryScript = @($baseScript + @('_.QS3D3681GEOMETRY', '_.QUIT', '_N'))
         $geometry1 = Invoke-BricsCadScript -Name "geometry-1" -Lines $geometryScript -MarkerPath $geometry1Path
         foreach ($case in @("baseline", "full_end", "partial_end", "multi_neighbor_union", "top_bottom_exclusion", "two_end_blt", "semantic_capture_refresh", "stale_missing_brep_clear", "measurement_read_only", "undo_redo")) {
@@ -266,7 +276,7 @@ try {
 
         $overall = "LOCAL_PASS"
         $report = [ordered]@{
-            schema = "qs3d-local-3681-report-v1"
+            schema = "qs3d-local-3681-report-v2"
             status = $overall
             issue = 3681
             exactGitSha = $headSha
@@ -277,10 +287,14 @@ try {
             coreProductVersion = $coreVersion
             coreSha256 = $coreHash
             harnessSha256 = $harnessHash
+            touchingOneEndM2 = [double]::Parse([string]$gate["touching.deduction_m2"], [Globalization.CultureInfo]::InvariantCulture)
+            penetration005mM2 = [double]::Parse([string]$gate["penetration.deduction_m2"], [Globalization.CultureInfo]::InvariantCulture)
             grossFormworkM2 = $gross
             concreteContactDeductionM2 = $deduction
             netFormworkM2 = $net
             cases = @(
+                "mandatory touching-only one-end 0.1600 / 2.5088",
+                "mandatory 0.05 m penetration regression 0.1600 / 2.5088",
                 "exact zero-volume full vertical end-face contact",
                 "exact zero-volume partial vertical end-face contact",
                 "multi-neighbor union/no double subtraction",
@@ -296,7 +310,7 @@ try {
             completedUtc = [DateTime]::UtcNow.ToString("O")
         }
         $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $summaryPath -Encoding UTF8
-        Write-Host "LOCAL_PASS #3681 exact-sha=$headSha gross=2.6688 deduction=0.3200 net=2.3488"
+        Write-Host "LOCAL_PASS #3681 exact-sha=$headSha touching=0.1600 penetration=0.1600 gross=2.6688 deduction=0.3200 net=2.3488"
     }
     finally { Pop-Location }
 }
@@ -306,7 +320,7 @@ catch {
     elseif ($message.StartsWith("NO_RESULT:", [StringComparison]::OrdinalIgnoreCase)) { $overall = "NO_RESULT" }
     else { $overall = "LOCAL_FAIL" }
     $report = [ordered]@{
-        schema = "qs3d-local-3681-report-v1"
+        schema = "qs3d-local-3681-report-v2"
         status = $overall
         issue = 3681
         error = $message
