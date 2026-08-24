@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import os
 import re
 import stat
 import sys
@@ -10,6 +11,8 @@ VALIDATION_WORKFLOW = "ci.yml"
 AUTO_DISPATCHER = "dispatch-v25-cloud-after-main-integration.yml"
 RELEASE_WORKFLOWS = {"release-v25.yml", "release-v25-cloud.yml", "release-v26.yml"}
 MAX_WORKFLOW_SOURCE_BYTES = 1024 * 1024
+MAX_OPEN_IDENTITY_ATTEMPTS = 2
+WINDOWS_REPARSE_POINT_ATTRIBUTE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
 errors = []
 
 
@@ -21,7 +24,119 @@ def _is_within(candidate, root):
         return False
 
 
+def _metadata_type_error(metadata):
+    if stat.S_ISLNK(metadata.st_mode):
+        return "must not be a symlink/reparse point"
+    if getattr(metadata, "st_file_attributes", 0) & WINDOWS_REPARSE_POINT_ATTRIBUTE:
+        return "must not be a symlink/reparse point"
+    if not stat.S_ISREG(metadata.st_mode):
+        return "must be a regular file"
+    return None
+
+
+def _same_opened_file(before, opened):
+    before_dev = getattr(before, "st_dev", 0)
+    before_ino = getattr(before, "st_ino", 0)
+    opened_dev = getattr(opened, "st_dev", 0)
+    opened_ino = getattr(opened, "st_ino", 0)
+    if before_dev and before_ino and opened_dev and opened_ino:
+        return (before_dev, before_ino) == (opened_dev, opened_ino)
+    return True
+
+
+def _read_validated_workflow_source(path, root):
+    identity_changed = False
+    for attempt in range(MAX_OPEN_IDENTITY_ATTEMPTS):
+        try:
+            metadata = path.lstat()
+        except OSError as exc:
+            raise ValueError(f"{path.name}: workflow candidate cannot be inspected: {exc}") from exc
+
+        type_error = _metadata_type_error(metadata)
+        if type_error is not None:
+            raise ValueError(f"{path.name}: workflow candidate {type_error}")
+        if metadata.st_size > MAX_WORKFLOW_SOURCE_BYTES:
+            raise ValueError(
+                f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes"
+            )
+
+        try:
+            resolved = path.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise ValueError(f"{path.name}: workflow candidate cannot be resolved: {exc}") from exc
+        if not _is_within(resolved, root) or resolved.parent != root:
+            raise ValueError(f"{path.name}: workflow candidate escapes the workflow directory")
+
+        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        fd = None
+        try:
+            fd = os.open(path, flags)
+            opened_metadata = os.fstat(fd)
+            opened_type_error = _metadata_type_error(opened_metadata)
+            if opened_type_error is not None:
+                raise ValueError(f"{path.name}: opened workflow source {opened_type_error}")
+            if not _same_opened_file(metadata, opened_metadata):
+                identity_changed = True
+                if attempt + 1 < MAX_OPEN_IDENTITY_ATTEMPTS:
+                    continue
+                raise ValueError(
+                    f"{path.name}: changed identity between workflow validation and open after bounded retry"
+                )
+            if opened_metadata.st_size > MAX_WORKFLOW_SOURCE_BYTES:
+                raise ValueError(
+                    f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes"
+                )
+
+            chunks = []
+            total = 0
+            while total <= MAX_WORKFLOW_SOURCE_BYTES:
+                chunk = os.read(
+                    fd,
+                    min(64 * 1024, MAX_WORKFLOW_SOURCE_BYTES + 1 - total),
+                )
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                total += len(chunk)
+            if total > MAX_WORKFLOW_SOURCE_BYTES:
+                raise ValueError(
+                    f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes"
+                )
+            payload = b"".join(chunks)
+            identity_changed = False
+            break
+        except ValueError:
+            raise
+        except OSError as exc:
+            raise ValueError(f"{path.name}: workflow source cannot be opened/read safely: {exc}") from exc
+        finally:
+            if fd is not None:
+                os.close(fd)
+    else:
+        if identity_changed:
+            raise ValueError(
+                f"{path.name}: changed identity between workflow validation and open after bounded retry"
+            )
+        raise ValueError(f"{path.name}: workflow source could not be read safely")
+
+    try:
+        return payload.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path.name}: workflow source is not strict UTF-8") from exc
+
+
 def discover_workflow_sources(workflows):
+    try:
+        workflows_metadata = workflows.lstat()
+    except OSError as exc:
+        raise ValueError(f"workflow directory cannot be inspected: {exc}") from exc
+    if stat.S_ISLNK(workflows_metadata.st_mode) or (
+        getattr(workflows_metadata, "st_file_attributes", 0) & WINDOWS_REPARSE_POINT_ATTRIBUTE
+    ):
+        raise ValueError("workflow directory must not be a symlink/reparse point")
+    if not stat.S_ISDIR(workflows_metadata.st_mode):
+        raise ValueError("missing .github/workflows directory")
+
     try:
         root = workflows.resolve(strict=True)
     except (OSError, RuntimeError) as exc:
@@ -39,40 +154,7 @@ def discover_workflow_sources(workflows):
         raise ValueError(f"workflow directory cannot be enumerated: {exc}") from exc
 
     for path in candidates:
-        try:
-            metadata = path.lstat()
-        except OSError as exc:
-            raise ValueError(f"{path.name}: workflow candidate cannot be inspected: {exc}") from exc
-
-        if path.is_symlink() or (getattr(metadata, "st_file_attributes", 0) & 0x400):
-            raise ValueError(f"{path.name}: workflow candidate must not be a symlink/reparse point")
-        if not stat.S_ISREG(metadata.st_mode):
-            raise ValueError(f"{path.name}: workflow candidate must be a regular file")
-        if metadata.st_size > MAX_WORKFLOW_SOURCE_BYTES:
-            raise ValueError(
-                f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes"
-            )
-
-        try:
-            resolved = path.resolve(strict=True)
-        except (OSError, RuntimeError) as exc:
-            raise ValueError(f"{path.name}: workflow candidate cannot be resolved: {exc}") from exc
-        if not _is_within(resolved, root) or resolved.parent != root:
-            raise ValueError(f"{path.name}: workflow candidate escapes the workflow directory")
-
-        try:
-            with path.open("rb") as handle:
-                payload = handle.read(MAX_WORKFLOW_SOURCE_BYTES + 1)
-        except OSError as exc:
-            raise ValueError(f"{path.name}: workflow source cannot be read: {exc}") from exc
-        if len(payload) > MAX_WORKFLOW_SOURCE_BYTES:
-            raise ValueError(
-                f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes"
-            )
-        try:
-            text = payload.decode("utf-8", errors="strict")
-        except UnicodeDecodeError as exc:
-            raise ValueError(f"{path.name}: workflow source is not strict UTF-8") from exc
+        text = _read_validated_workflow_source(path, root)
         discovered.append((path, text))
 
     return discovered
