@@ -42,6 +42,14 @@ namespace QS3D.Core.Persistence
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
+
+            // Bind the complete capture to the project revision that existed before
+            // caller-controlled enumeration starts. Reading these only after the
+            // enumeration can stamp a mixed-time element snapshot with a later
+            // revision and make an invalid rollback checkpoint look coherent.
+            var projectId = project.ProjectId;
+            var projectUpdatedUtc = project.UpdatedUtc;
+            var projectChangeVersion = project.ChangeVersion;
             var expectedKnownCount = RejectMalformedKnownCounts(elementIds);
 
             var elements = new Dictionary<string, ElementPersistenceState>(StringComparer.OrdinalIgnoreCase);
@@ -67,10 +75,15 @@ namespace QS3D.Core.Persistence
             if (expectedKnownCount.HasValue && observed != expectedKnownCount.Value)
                 throw new InvalidOperationException("Persistence checkpoint known element count does not match enumerated element count.");
 
+            if (!string.Equals(project.ProjectId, projectId, StringComparison.Ordinal) ||
+                project.UpdatedUtc != projectUpdatedUtc ||
+                project.ChangeVersion != projectChangeVersion)
+                throw new InvalidOperationException("Cannot capture a persistence checkpoint while the project revision is changing.");
+
             return new ProjectPersistenceCheckpoint(
-                project.ProjectId,
-                project.UpdatedUtc,
-                project.ChangeVersion,
+                projectId,
+                projectUpdatedUtc,
+                projectChangeVersion,
                 elements);
         }
 
