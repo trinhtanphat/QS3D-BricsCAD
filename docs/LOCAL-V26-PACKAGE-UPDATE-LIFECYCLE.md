@@ -2,7 +2,7 @@
 
 Status: `PENDING_LOCAL` / `LOCAL_ONLY` / `DO_NOT_RETRY_REMOTE`.
 
-This gate qualifies the source-side V26 package updater against a disposable per-user installation. Hosted CI may validate the runner and updater source contract, but it cannot replace Windows + licensed BricsCAD V26 + real signed release assets.
+This gate qualifies the source-side V26 package updater and installer transaction against a disposable per-user installation. Hosted CI may validate the runner and source contract, but it cannot replace Windows + licensed BricsCAD V26 + real signed release assets.
 
 ## What this gate proves
 
@@ -14,10 +14,14 @@ The runner `scripts/test-v26-package-update-lifecycle.ps1` performs one coherent
 4. verifies the baseline installed payload against `SHA256SUMS.txt`;
 5. invokes the generated `update-v26.ps1` against a real HTTPS, signed, strictly newer V26 release manifest;
 6. re-verifies the upgraded payload and requires `productVersion` to change;
-7. invokes a real signed older-release manifest and requires downgrade/rollback refusal without changing the upgraded payload;
-8. invokes the same-version update with `-AllowSameVersion -WhatIf` and requires the cancel/no-op path to preserve the upgraded payload;
-9. verifies an unrelated sentinel remains untouched;
-10. invokes the packaged uninstaller during cleanup and writes sanitized JSON evidence.
+7. invokes a real signed older-release manifest and requires downgrade refusal without changing the upgraded payload;
+8. deterministically forces the **real generated installer transaction** to fail after payload replacement by temporarily shadowing `New-ItemProperty` only inside the qualification PowerShell process; the shipped installer/updater receives no test switch or security bypass;
+9. requires the installer catch path to restore both the upgraded payload tree and exact DemandLoad registration digest, and to restore the upgraded `productVersion`;
+10. invokes the same-version update with `-AllowSameVersion -WhatIf` and requires the cancel/no-op path to preserve the upgraded payload;
+11. verifies an unrelated sentinel remains untouched;
+12. invokes the packaged uninstaller during cleanup and writes sanitized JSON evidence.
+
+The forced failure is deliberately external to shipped production scripts: command shadowing is installed immediately before the qualification installer call and removed in `finally`. The production installer still executes its normal staging, backup, replacement, registry snapshot and rollback code. No signing, HTTPS, package-integrity, ownership, mutex, SemVer or official-release check is weakened.
 
 The runner does not launch BricsCAD and does not claim runtime qualification. Keep the broader V26 runtime/one-click-update matrix in `docs/LOCAL-V26-QUALIFICATION.md` pending until its own licensed evidence exists.
 
@@ -56,7 +60,7 @@ python scripts/preflight-v26-package-update-lifecycle.py
 
 ## Expected evidence
 
-The runner emits `v26-package-update-lifecycle.json` with no private paths, certificate material or raw registry data. A successful local result requires all of these fields:
+The runner emits schema-2 `v26-package-update-lifecycle.json` with no private paths, certificate material or raw registry data. A successful local result requires all of these fields:
 
 - `status = PASS`;
 - `sourceSha` equals the exact tested commit;
@@ -65,8 +69,11 @@ The runner emits `v26-package-update-lifecycle.json` with no private paths, cert
 - `baselineInstalled = true`;
 - `upgradeSucceeded = true`;
 - `upgradedPayloadValid = true`;
-- `rollbackRejected = true`;
-- `rollbackPreservedState = true`;
+- `downgradeRejected = true`;
+- `downgradePreservedState = true`;
+- `transactionalFailureRejected = true`;
+- `transactionalPayloadRolledBack = true`;
+- `transactionalRegistryRolledBack = true`;
 - `cancelPreservedState = true`;
 - `unrelatedSentinelPreserved = true`;
 - `cleanupComplete = true`.
