@@ -30,7 +30,6 @@ namespace QS3D.BricsCAD.V25.UI
             private bool _projectAffinityBound;
             private int _invalidated;
             private int _documentCloseStarted;
-            private int _hostQuitStarted;
             private string _projectId = string.Empty;
 
             public Registration(Window window, Document document)
@@ -48,12 +47,12 @@ namespace QS3D.BricsCAD.V25.UI
 
                 try
                 {
+                    ModelessHostQuiescenceCoordinator.EnsureInitialized();
                     BindProjectAffinityIfPresent();
                     _lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;
                     _lifecycleDocument.CloseAborted += OnDocumentCloseAborted;
                     BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
-                    BcadApplication.QuitWillStart += OnApplicationQuitWillStart;
-                    BcadApplication.QuitAborted += OnApplicationQuitAborted;
+                    ModelessHostQuiescenceCoordinator.QuiescenceAborted += OnHostQuiescenceAborted;
                     _window.Activated += OnWindowActivated;
                     _window.PreviewMouseDown += OnPreviewMouseDown;
                     _window.PreviewKeyDown += OnPreviewKeyDown;
@@ -69,7 +68,6 @@ namespace QS3D.BricsCAD.V25.UI
                     _projectAffinityBound = false;
                     Volatile.Write(ref _invalidated, 0);
                     Volatile.Write(ref _documentCloseStarted, 0);
-                    Volatile.Write(ref _hostQuitStarted, 0);
                     _projectId = string.Empty;
                     throw;
                 }
@@ -172,7 +170,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             private bool EnsureProjectAffinity()
             {
-                if (Volatile.Read(ref _hostQuitStarted) != 0) return false;
+                if (ModelessHostQuiescenceCoordinator.IsQuiescing) return false;
 
                 var closeForProjectChange = false;
                 lock (_documentAccessGate)
@@ -238,21 +236,11 @@ namespace QS3D.BricsCAD.V25.UI
                 TryCloseWindow();
             }
 
-            private void OnApplicationQuitWillStart(object? sender, EventArgs e)
+            private void OnHostQuiescenceAborted(object? sender, EventArgs e)
             {
-                // QuitWillStart is the earliest host-level ownership boundary exposed by V25. Once
-                // it fires, BricsCAD owns final modeless HWND/WPF teardown. This callback is strictly
-                // state-only: do not initiate Close() or mutate native lifecycle subscriptions here.
-                Volatile.Write(ref _hostQuitStarted, 1);
-            }
-
-            private void OnApplicationQuitAborted(object? sender, EventArgs e)
-            {
-                Volatile.Write(ref _hostQuitStarted, 0);
-
-                // If document teardown already invalidated this registration during the attempted
-                // quit, preserve fail-closed semantics. Native subscription cleanup and stale-window
-                // close are deferred outside BricsCAD's native QuitAborted callback.
+                // The global coordinator already cleared host quiescence. If document teardown
+                // invalidated this registration during the attempted quit, recovery is still
+                // dispatcher-deferred so no WPF/native cleanup runs on the BricsCAD quit callback.
                 if (Volatile.Read(ref _documentCloseStarted) == 0 ||
                     Volatile.Read(ref _invalidated) == 0)
                     return;
@@ -280,7 +268,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnBeginDocumentClose(object sender, DocumentBeginCloseEventArgs e)
             {
-                var abandonForHostShutdown = Volatile.Read(ref _hostQuitStarted) != 0;
+                var abandonForHostShutdown = ModelessHostQuiescenceCoordinator.IsQuiescing;
                 var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();
                 lock (_documentAccessGate)
                 {
@@ -299,7 +287,7 @@ namespace QS3D.BricsCAD.V25.UI
             private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
             {
                 if (!MatchesNativeDatabase(e.Document)) return;
-                var abandonForHostShutdown = Volatile.Read(ref _hostQuitStarted) != 0;
+                var abandonForHostShutdown = ModelessHostQuiescenceCoordinator.IsQuiescing;
                 var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();
                 lock (_documentAccessGate)
                 {
@@ -319,8 +307,8 @@ namespace QS3D.BricsCAD.V25.UI
             private void OnDocumentCloseAborted(object? sender, EventArgs e)
             {
                 // Do not mutate native lifecycle subscriptions while application quit is active.
-                // Application QuitAborted owns recovery and defers cleanup outside its native callback.
-                if (Volatile.Read(ref _hostQuitStarted) != 0) return;
+                // The global QuitAborted owner clears quiescence and schedules stale-window recovery.
+                if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
 
                 // A vetoed/aborted ordinary document close leaves the document live. The modeless
                 // window remains fail-closed (or already closed), but this callback can safely release
@@ -357,7 +345,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 try
                 {
-                    if (Volatile.Read(ref _hostQuitStarted) != 0) return;
+                    if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
                     _window.Close();
                 }
                 catch
@@ -392,20 +380,18 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnWindowClosed(object? sender, EventArgs e)
             {
-                if (Volatile.Read(ref _hostQuitStarted) != 0) return;
+                if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
                 Detach();
             }
 
             private void Detach()
             {
                 if (!_attached) return;
-                if (Volatile.Read(ref _hostQuitStarted) != 0) return;
+                if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
 
                 DetachDocumentLifecycleHandlersIfSafe();
                 DetachDocumentManagerHandler();
-                try { BcadApplication.QuitWillStart -= OnApplicationQuitWillStart; }
-                catch { }
-                try { BcadApplication.QuitAborted -= OnApplicationQuitAborted; }
+                try { ModelessHostQuiescenceCoordinator.QuiescenceAborted -= OnHostQuiescenceAborted; }
                 catch { }
                 try { _window.Activated -= OnWindowActivated; }
                 catch { }
