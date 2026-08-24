@@ -8,7 +8,7 @@ Lane-Key: `issue-3680`
 
 Canonical coordination branch: `agent/chatgpt-gpt56sol/issue-3680-local-dispatch-refresh`
 
-Latest observed merged main at this sweep: `8cb98ad968b9fecd9efcffe48beed67348c8c0a5`
+Latest observed merged main at this sweep: `16610f51628b1db7491c7706eee92639ec736330`
 
 This index records the owner-requested boundary: remote/source work is prepared and pushed first; a compatible local agent should only fetch the named exact carrier, build/run the licensed BricsCAD matrix, and publish sanitized `PASS` / `FAIL` / `NO_RESULT`. A local runtime defect that requires production-source correction returns to a bounded remote/source lane. Local workers must not opportunistically patch normal production source.
 
@@ -27,6 +27,8 @@ These carriers are source-ready and form the first executable queue from `docs/L
 For #3681, `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31` is historical failing runtime evidence only. Source defect #3687 was corrected by PR #3692; the licensed rerun must use the exact source-ready SHA `cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb`. Do not rerun the obsolete #3681 binary.
 
 Do not rerun the obsolete #3593 P06 binary. The later #3593 P07 result and closed #3621 source lane are authoritative for that H.1 correction.
+
+LOCAL-019 is already complete, not pending dispatch: PR #3693 merged the six-sheet QS Review export + Excel-to-Model Locate source, and licensed BricsCAD V25/V26 qualification passed on exact runtime-tested source SHA `9cfff87262d7a7117c5ef1f03b486271a0723fa3`. Do not schedule a repeat solely because this source-ready index was refreshed.
 
 ## All canonical LOCAL_ONLY rows
 
@@ -50,6 +52,7 @@ Do not rerun the obsolete #3593 P06 binary. The later #3593 P07 result and close
 | LOCAL-016 | P0 / IN_PROGRESS | V26 net8 host/build/runtime source plus bounded native authoring/dependent/repeated LINE workflows are integrated. | Remaining #1462 private-DWG/clean-machine/package/signing/release matrix only. |
 | LOCAL-017 | P0 / PASS | Bounded V26 native Slab POLYLINE lifecycle is complete. | No rerun unless its source scenario materially changes. |
 | LOCAL-018 | P0 / PASS | Exact V26 LINE and repeated Direct Draw lifecycle is complete. | No rerun unless its source scenario materially changes. |
+| LOCAL-019 | P0 / PASS | Six-sheet QS Review export + Excel-to-Model Locate source landed through PR #3693; licensed V25/V26 exact-SHA qualification passed on `9cfff87262d7a7117c5ef1f03b486271a0723fa3`. | No rerun unless this scenario materially changes; the committed round-trip runner remains available for regression. |
 
 ## Local pull/run contract
 
