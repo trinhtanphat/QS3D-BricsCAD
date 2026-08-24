@@ -23,6 +23,7 @@ namespace QS3D.BricsCAD.V25.Reporting
             public string ElementId = string.Empty;
             public string ElementName = string.Empty;
             public IReadOnlyList<string> Handles = Array.Empty<string>();
+            public ObjectId SourceObjectId = ObjectId.Null;
             public Solid3d Solid = null!;
             public void Dispose() => Solid?.Dispose();
         }
@@ -36,6 +37,9 @@ namespace QS3D.BricsCAD.V25.Reporting
             public double GrossAreaCad;
             public PlanarEntity? Plane;
             public bool IsOuterHorizontal;
+            public string MeasurementKind = string.Empty;
+            public double MeasurementLengthCad;
+            public double MeasurementHeightCad;
         }
 
         public static QuantityGeometryExplanation Build(
@@ -92,9 +96,18 @@ namespace QS3D.BricsCAD.V25.Reporting
 
                 for (var componentIndex = 0; componentIndex < targetSolids.Count; componentIndex++)
                 {
-                    var target = targetSolids[componentIndex].Solid;
+                    var targetOwned = targetSolids[componentIndex];
+                    var target = targetOwned.Solid;
                     grossVolumeCad += SafeVolumeCad(target);
-                    faceSeeds.AddRange(ReadFaces(target, targetElement.Category, componentIndex, faceSeeds.Count, diagnostics));
+                    faceSeeds.AddRange(ReadFaces(
+                        document,
+                        targetOwned,
+                        targetElement.Category,
+                        componentIndex,
+                        faceSeeds.Count,
+                        areaCadTolerance,
+                        distanceCad,
+                        diagnostics));
 
                     using (var volumeResidual = Clone(target))
                     {
@@ -161,6 +174,7 @@ namespace QS3D.BricsCAD.V25.Reporting
                     individualAreaCad,
                     relation,
                     areaScale,
+                    lengthToMeter,
                     areaCadTolerance,
                     distanceCad,
                     diagnostics);
@@ -217,6 +231,7 @@ namespace QS3D.BricsCAD.V25.Reporting
                         ElementId = elementId,
                         ElementName = elementName,
                         Handles = handles,
+                        SourceObjectId = id,
                         Solid = Clone(solid)
                     });
                 }
@@ -258,6 +273,7 @@ namespace QS3D.BricsCAD.V25.Reporting
             IReadOnlyDictionary<string, Dictionary<int, double>> individualAreaCad,
             IReadOnlyDictionary<string, QuantityGeometryRelation> relations,
             double areaScale,
+            double lengthToMeter,
             double areaCadTolerance,
             double distanceCad,
             ICollection<string> diagnostics)
@@ -269,7 +285,7 @@ namespace QS3D.BricsCAD.V25.Reporting
                 {
                     foreach (BrepFace face in brep.Faces)
                     {
-                        var plane = face.Surface as PlanarEntity;
+                        var plane = ReadFacePlane(face);
                         if (plane == null) continue;
                         var areaCad = SafeAreaCad(face);
                         var best = FindMatchingFace(seeds, componentIndex, plane, distanceCad);
@@ -312,6 +328,9 @@ namespace QS3D.BricsCAD.V25.Reporting
                     GrossArea = seed.GrossAreaCad * areaScale,
                     DeductionArea = deductionCad * areaScale,
                     NetArea = Math.Max(0d, seed.GrossAreaCad - deductionCad) * areaScale,
+                    MeasurementKind = seed.MeasurementKind,
+                    MeasurementLength = seed.MeasurementLengthCad * lengthToMeter,
+                    MeasurementHeight = seed.MeasurementHeightCad * lengthToMeter,
                     Deductions = rows.OrderByDescending(x => x.Area).ToList().AsReadOnly()
                 });
             }
@@ -319,13 +338,17 @@ namespace QS3D.BricsCAD.V25.Reporting
         }
 
         private static List<FaceSeed> ReadFaces(
-            Solid3d solid,
+            Document document,
+            OwnedSolid ownedSolid,
             ElementCategory category,
             int componentIndex,
             int globalOffset,
+            double areaCadTolerance,
+            double distanceCad,
             ICollection<string> diagnostics)
         {
             var result = new List<FaceSeed>();
+            var solid = ownedSolid.Solid;
             try
             {
                 // Foundation formwork follows the canonical semantic rule S = perimeter × height:
@@ -349,6 +372,8 @@ namespace QS3D.BricsCAD.V25.Reporting
                         diagnostics.Add("StructuralWall BREP extents unavailable: outer horizontal faces remain included to preserve opening reveals.");
                     }
                 }
+
+                var liveFaceExtents = ReadLiveFaceExtents(document, ownedSolid.SourceObjectId, diagnostics);
                 using (var brep = new Brep(solid))
                 {
                     var localIndex = 0;
@@ -356,22 +381,116 @@ namespace QS3D.BricsCAD.V25.Reporting
                     {
                         localIndex++;
                         var globalIndex = globalOffset + localIndex - 1;
-                        var plane = face.Surface as PlanarEntity;
+                        var plane = ReadFacePlane(face);
+                        var faceType = FaceType(plane, endAxis);
+                        var grossAreaCad = SafeAreaCad(face);
+                        var measurementKind = string.Empty;
+                        var measurementLengthCad = 0d;
+                        var measurementHeightCad = 0d;
+                        if (liveFaceExtents.TryGetValue(localIndex, out var faceExtents) &&
+                            TryBuildRectangleMeasurement(
+                                faceType,
+                                grossAreaCad,
+                                faceExtents,
+                                areaCadTolerance,
+                                distanceCad,
+                                out measurementLengthCad,
+                                out measurementHeightCad))
+                        {
+                            measurementKind = "brep-rectangle-extents-v1";
+                        }
+
                         result.Add(new FaceSeed
                         {
                             GlobalIndex = globalIndex,
                             ComponentIndex = componentIndex,
                             Id = "SOLID-" + (componentIndex + 1).ToString("00", CultureInfo.InvariantCulture) + "/FACE-" + localIndex.ToString("00", CultureInfo.InvariantCulture),
-                            Type = FaceType(plane, endAxis),
-                            GrossAreaCad = SafeAreaCad(face),
-                            Plane = plane == null ? null : new Plane(plane.PointOnPlane, plane.Normal),
-                            IsOuterHorizontal = IsOuterHorizontalFace(category, plane, wallBoundsAvailable, wallMinZ, wallMaxZ)
+                            Type = faceType,
+                            GrossAreaCad = grossAreaCad,
+                            Plane = plane,
+                            IsOuterHorizontal = IsOuterHorizontalFace(category, plane, wallBoundsAvailable, wallMinZ, wallMaxZ),
+                            MeasurementKind = measurementKind,
+                            MeasurementLengthCad = measurementLengthCad,
+                            MeasurementHeightCad = measurementHeightCad
                         });
                     }
                 }
             }
             catch (Exception ex) when (Recoverable(ex)) { diagnostics.Add("BREP face read: " + ex.Message); }
             return result;
+        }
+
+        private static IReadOnlyDictionary<int, Extents3d> ReadLiveFaceExtents(
+            Document document,
+            ObjectId sourceObjectId,
+            ICollection<string> diagnostics)
+        {
+            var result = new Dictionary<int, Extents3d>();
+            if (sourceObjectId.IsNull) return result;
+            try
+            {
+                using (var tr = document.Database.TransactionManager.StartOpenCloseTransaction())
+                {
+                    var liveSolid = tr.GetObject(sourceObjectId, OpenMode.ForRead, false) as Solid3d;
+                    if (liveSolid == null || liveSolid.IsErased) return result;
+                    var rootPath = new FullSubentityPath(new[] { liveSolid.ObjectId }, SubentityId.Null);
+                    using (var brep = new Brep(rootPath))
+                    {
+                        var localIndex = 0;
+                        foreach (BrepFace face in brep.Faces)
+                        {
+                            localIndex++;
+                            try
+                            {
+                                result[localIndex] = liveSolid.GetSubentityGeometricExtents(face.SubentityPath);
+                            }
+                            catch (Exception ex) when (Recoverable(ex))
+                            {
+                                // Exact area remains authoritative. Missing subentity extents only
+                                // suppress the optional length × height measurement trace.
+                            }
+                        }
+                    }
+                    tr.Commit();
+                }
+            }
+            catch (Exception ex) when (Recoverable(ex))
+            {
+                diagnostics.Add("BREP face measurement extents unavailable: " + ex.Message);
+            }
+            return result;
+        }
+
+        private static bool TryBuildRectangleMeasurement(
+            string faceType,
+            double grossAreaCad,
+            Extents3d extents,
+            double areaCadTolerance,
+            double distanceCad,
+            out double lengthCad,
+            out double heightCad)
+        {
+            lengthCad = 0d;
+            heightCad = 0d;
+            if (!string.Equals(faceType, "Side", StringComparison.Ordinal) &&
+                !string.Equals(faceType, "End", StringComparison.Ordinal))
+                return false;
+            if (!(grossAreaCad > areaCadTolerance)) return false;
+
+            var dx = Math.Abs(extents.MaxPoint.X - extents.MinPoint.X);
+            var dy = Math.Abs(extents.MaxPoint.Y - extents.MinPoint.Y);
+            var dz = Math.Abs(extents.MaxPoint.Z - extents.MinPoint.Z);
+            var horizontalSpan = Math.Sqrt(dx * dx + dy * dy);
+            if (!(horizontalSpan > distanceCad) || !(dz > distanceCad)) return false;
+
+            var measuredArea = horizontalSpan * dz;
+            if (double.IsNaN(measuredArea) || double.IsInfinity(measuredArea)) return false;
+            var tolerance = Math.Max(areaCadTolerance, Math.Abs(grossAreaCad) * 1e-8d);
+            if (Math.Abs(measuredArea - grossAreaCad) > tolerance) return false;
+
+            lengthCad = horizontalSpan;
+            heightCad = dz;
+            return true;
         }
 
         private static double AccumulateFaceCoverage(
@@ -391,7 +510,7 @@ namespace QS3D.BricsCAD.V25.Reporting
                 {
                     foreach (BrepFace face in brep.Faces)
                     {
-                        var plane = face.Surface as PlanarEntity;
+                        var plane = ReadFacePlane(face);
                         if (plane == null) continue;
                         var seedIndex = FindMatchingFace(seeds, componentIndex, plane, distanceCad);
                         if (seedIndex < 0) continue;
@@ -418,6 +537,24 @@ namespace QS3D.BricsCAD.V25.Reporting
                 if (SamePlane(target, plane, toleranceCad)) return seeds[i].GlobalIndex;
             }
             return -1;
+        }
+
+        private static PlanarEntity? ReadFacePlane(BrepFace face)
+        {
+            var surface = face.Surface;
+            if (surface is PlanarEntity planar)
+                return new Plane(planar.PointOnPlane, planar.Normal);
+
+            // BricsCAD V25 can expose planar ACIS faces as ExternalBoundedSurface.
+            // Unwrap the bounded base surface before deciding that a face is non-planar.
+            if (surface is ExternalBoundedSurface external &&
+                external.IsPlane &&
+                external.BaseSurface is PlanarEntity basePlane)
+            {
+                return new Plane(basePlane.PointOnPlane, basePlane.Normal);
+            }
+
+            return null;
         }
 
         private static bool SamePlane(PlanarEntity left, PlanarEntity right, double toleranceCad)

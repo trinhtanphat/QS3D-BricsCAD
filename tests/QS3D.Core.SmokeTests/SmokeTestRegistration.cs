@@ -36,6 +36,7 @@ namespace QS3D.Core.SmokeTests
             XlsxHandleReaderCoordinateSmoke.Run();
             XlsxExporterRowBoundSmoke.Run();
             QuantityExportEvidenceSmoke.Run();
+            QuantityMeasurementTraceSmoke.Run();
             CustomerWorkbookTraceSmoke.Run();
             QsWorkbookTemplateEngineSmoke.Run();
             P0UnifiedExportAcceptanceSmoke.Run();

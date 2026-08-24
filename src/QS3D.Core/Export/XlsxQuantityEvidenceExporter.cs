@@ -11,7 +11,7 @@ namespace QS3D.Core.Export
 {
     /// <summary>
     /// Writes the deterministic quantity evidence projection to a compact XLSX
-    /// workbook. All quantity values are copied from QuantityExplanation;
+    /// workbook. All quantity values and operands are copied from QuantityExplanation;
     /// no takeoff formula or geometry is evaluated by this exporter.
     /// </summary>
     public static class XlsxQuantityEvidenceExporter
@@ -37,7 +37,8 @@ namespace QS3D.Core.Export
             "SelectorKind",
             "SelectorKey",
             "SourceReference",
-            "TargetReference"
+            "TargetReference",
+            "Operands"
         };
 
         public static void Export(string path, IReadOnlyList<QuantityExplanation> explanations)
@@ -74,6 +75,7 @@ namespace QS3D.Core.Export
                 ValidateText(row.SelectorKey, index, "SelectorKey");
                 ValidateText(row.SourceReference, index, "SourceReference");
                 ValidateText(row.TargetReference, index, "TargetReference");
+                ValidateText(row.Operands, index, "Operands");
             }
         }
 
@@ -199,6 +201,7 @@ namespace QS3D.Core.Export
                 AppendTextCell(builder, CellReference(14, rowNumber), row.SelectorKey);
                 AppendTextCell(builder, CellReference(15, rowNumber), row.SourceReference);
                 AppendTextCell(builder, CellReference(16, rowNumber), row.TargetReference);
+                AppendTextCell(builder, CellReference(17, rowNumber), row.Operands);
                 builder.Append("</row>");
             }
 
