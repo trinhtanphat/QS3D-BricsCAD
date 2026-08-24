@@ -26,6 +26,7 @@ namespace QS3D.BricsCAD.V25.UI
             private readonly Document _lifecycleDocument;
             private readonly IntPtr _nativeDatabaseIdentity;
             private readonly object _documentAccessGate = new object();
+            private IDisposable? _nativeLifecycleSubscription;
             private bool _attached;
             private bool _projectAffinityBound;
             private int _invalidated;
@@ -49,9 +50,12 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     ModelessHostQuiescenceCoordinator.EnsureInitialized();
                     BindProjectAffinityIfPresent();
-                    _lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;
-                    _lifecycleDocument.CloseAborted += OnDocumentCloseAborted;
-                    BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
+                    _nativeLifecycleSubscription = DocumentBoundNativeLifecycleCoordinator.Register(
+                        _lifecycleDocument,
+                        _nativeDatabaseIdentity,
+                        OnBeginDocumentClose,
+                        OnDocumentCloseAborted,
+                        OnDocumentToBeDestroyed);
                     ModelessHostQuiescenceCoordinator.QuiescenceAborted += OnHostQuiescenceAborted;
                     _window.Activated += OnWindowActivated;
                     _window.PreviewMouseDown += OnPreviewMouseDown;
@@ -230,7 +234,6 @@ namespace QS3D.BricsCAD.V25.UI
                     if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
                 }
                 DetachDocumentLifecycleHandlersIfSafe();
-                DetachDocumentManagerHandler();
 
                 const string message = "QS3D project của cửa sổ modeless này đã thay đổi hoặc không còn được nạp. Cửa sổ đã đóng để tránh thao tác lên semantic state khác; hãy mở lại cửa sổ trong project hiện hành.";
                 try { PaletteCoordinator.SetStatus(message); } catch { }
@@ -272,33 +275,28 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnBeginDocumentClose(object sender, DocumentBeginCloseEventArgs e)
             {
-                // QuitWillStart is an earlier host boundary than document teardown. Do not even
-                // enumerate DocumentManager once the host owns final native/WPF destruction.
+                // The shared native lifecycle coordinator crosses the host-quiescence barrier before
+                // dispatching this managed callback. Re-check defensively before DocumentManager access.
                 if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
-                var abandonForHostShutdown = ModelessHostQuiescenceCoordinator.IsQuiescing;
-                var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();
+                var deferForFinalDocument = !HasAnotherLiveDocument();
                 lock (_documentAccessGate)
                 {
                     Volatile.Write(ref _documentCloseStarted, 1);
                     if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
                 }
 
-                // BeginDocumentClose is the earliest reliable per-document close boundary used by
-                // this coordinator. During application quit BricsCAD owns modeless HWND teardown and
-                // native reactor subscriptions; leave both untouched until exit or QuitAborted.
-                if (abandonForHostShutdown) return;
-                DetachDocumentManagerHandler();
+                // Preserve the proven synchronous close path while another native document exists;
+                // final/only-document close remains dispatcher-deferred.
                 TryCloseWindow(deferForFinalDocument);
             }
 
             private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
             {
-                // During host teardown the event's managed Document wrapper may already front native
-                // state being destroyed. Cross the global barrier before dereferencing e.Document.
+                // The shared coordinator rejects host-quiescing native events before dereferencing
+                // e.Document. Re-check here so the registration remains fail-closed if state changes.
                 if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
                 if (!MatchesNativeDatabase(e.Document)) return;
-                var abandonForHostShutdown = ModelessHostQuiescenceCoordinator.IsQuiescing;
-                var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();
+                var deferForFinalDocument = !HasAnotherLiveDocument();
                 lock (_documentAccessGate)
                 {
                     Volatile.Write(ref _documentCloseStarted, 1);
@@ -308,9 +306,6 @@ namespace QS3D.BricsCAD.V25.UI
                 // BricsCAD may surface a different managed Document wrapper for the same native
                 // database during destruction. Match the stable native database identity captured
                 // at bind time so wrapper drift still closes this window, without using mutable paths.
-                // If application quit is active, leave HWND/WPF and native reactor teardown to BricsCAD.
-                if (abandonForHostShutdown) return;
-                DetachDocumentManagerHandler();
                 TryCloseWindow(deferForFinalDocument);
             }
 
@@ -322,7 +317,7 @@ namespace QS3D.BricsCAD.V25.UI
 
                 // A vetoed/aborted ordinary document close leaves the document live. The modeless
                 // window remains fail-closed (or already closed), but this callback can safely release
-                // the per-document lifecycle subscriptions preserved during native close processing.
+                // its managed registration from the shared native lifecycle coordinator.
                 DetachDocumentLifecycleHandlersAfterAbort();
             }
 
@@ -365,29 +360,24 @@ namespace QS3D.BricsCAD.V25.UI
                 }
             }
 
-            private void DetachDocumentManagerHandler()
-            {
-                if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
-                try { BcadApplication.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed; }
-                catch { }
-            }
-
             private void DetachDocumentLifecycleHandlersIfSafe()
             {
                 if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
                 if (Volatile.Read(ref _documentCloseStarted) != 0) return;
-                try { _lifecycleDocument.BeginDocumentClose -= OnBeginDocumentClose; }
-                catch { }
-                try { _lifecycleDocument.CloseAborted -= OnDocumentCloseAborted; }
-                catch { }
+                DetachNativeLifecycleSubscription();
             }
 
             private void DetachDocumentLifecycleHandlersAfterAbort()
             {
                 if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
-                try { _lifecycleDocument.BeginDocumentClose -= OnBeginDocumentClose; }
-                catch { }
-                try { _lifecycleDocument.CloseAborted -= OnDocumentCloseAborted; }
+                DetachNativeLifecycleSubscription();
+            }
+
+            private void DetachNativeLifecycleSubscription()
+            {
+                var subscription = Interlocked.Exchange(ref _nativeLifecycleSubscription, null);
+                if (subscription == null) return;
+                try { subscription.Dispose(); }
                 catch { }
             }
 
@@ -403,7 +393,6 @@ namespace QS3D.BricsCAD.V25.UI
                 if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
 
                 DetachDocumentLifecycleHandlersIfSafe();
-                DetachDocumentManagerHandler();
                 try { ModelessHostQuiescenceCoordinator.QuiescenceAborted -= OnHostQuiescenceAborted; }
                 catch { }
                 try { _window.Activated -= OnWindowActivated; }
