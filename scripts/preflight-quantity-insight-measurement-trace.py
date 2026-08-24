@@ -127,11 +127,15 @@ def main():
     if isinstance(registration, int):
         return registration
 
-    build_pos = service.find("TryBuildRectangleMeasurement(")
-    reconcile_pos = service.find("Math.Abs(measuredArea - grossAreaCad) > tolerance", build_pos)
-    publish_pos = service.find('measurementKind = "brep-rectangle-extents-v1"', reconcile_pos)
-    if min(build_pos, reconcile_pos, publish_pos) < 0 or not (build_pos < reconcile_pos < publish_pos):
-        return fail("measurement dimensions must reconcile to exact BREP area before the trace is published")
+    method_pos = service.find("private static bool TryBuildRectangleMeasurement(")
+    reconcile_pos = service.find("Math.Abs(measuredArea - grossAreaCad) > tolerance", method_pos)
+    success_pos = service.find("return true;", reconcile_pos)
+    call_pos = service.find("TryBuildRectangleMeasurement(")
+    publish_pos = service.find('measurementKind = "brep-rectangle-extents-v1"', call_pos)
+    if min(method_pos, reconcile_pos, success_pos) < 0 or not (method_pos < reconcile_pos < success_pos):
+        return fail("measurement helper must reconcile to exact BREP area before returning a publishable trace")
+    if min(call_pos, publish_pos) < 0 or not (call_pos < publish_pos < method_pos):
+        return fail("measurement kind must only be published from the guarded measurement-helper call")
 
     print("PASS: Quantity Insight face measurement trace is exact-BREP-derived, fail-closed against non-reconciling dimensions, preserved in evidence/XLSX, and retains exact native face locate behavior.")
     return 0
