@@ -60,6 +60,9 @@ REQUIRED_FILES = {
         "MultiRegionSourceManifest",
         "MultiRegionGeneratedManifest",
         "MultiRegionTopologyFingerprint",
+        "GeneratedSlabMeshCount",
+        "GeneratedFoundationMeshCount",
+        "EnsureAggregateMetadataConsistency",
         "transaction.Commit()",
     ),
 }
