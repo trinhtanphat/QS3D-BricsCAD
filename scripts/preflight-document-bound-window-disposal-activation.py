@@ -111,8 +111,8 @@ for marker in (
     "lock (_documentAccessGate)",
     "Volatile.Write(ref _documentCloseStarted, 1)",
     "Interlocked.Exchange(ref _invalidated, 1) != 0",
-    "DetachDocumentManagerHandler();",
     "if (abandonForHostShutdown) return;",
+    "DetachDocumentManagerHandler();",
     "TryCloseWindow(deferForFinalDocument);",
 ):
     require(marker in begin_close, f"BeginDocumentClose barrier is missing: {marker}")
@@ -121,10 +121,10 @@ require(
     < begin_close.index("var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();")
     < begin_close.index("lock (_documentAccessGate)")
     < begin_close.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
-    < begin_close.index("DetachDocumentManagerHandler();")
     < begin_close.index("if (abandonForHostShutdown) return;")
+    < begin_close.index("DetachDocumentManagerHandler();")
     < begin_close.index("TryCloseWindow(deferForFinalDocument);"),
-    "BeginDocumentClose must classify host quit, fail closed, detach the global handler, then avoid explicit WPF teardown during application shutdown.",
+    "BeginDocumentClose must classify host quit, fail closed, preserve native lifecycle subscriptions during application shutdown, then clean up and close only for ordinary document close.",
 )
 require(
     "_lifecycleDocument." not in begin_close,
@@ -139,8 +139,8 @@ for marker in (
     "lock (_documentAccessGate)",
     "Volatile.Write(ref _documentCloseStarted, 1)",
     "Interlocked.Exchange(ref _invalidated, 1) != 0",
-    "DetachDocumentManagerHandler();",
     "if (abandonForHostShutdown) return;",
+    "DetachDocumentManagerHandler();",
     "TryCloseWindow(deferForFinalDocument);",
 ):
     require(marker in teardown, f"DocumentToBeDestroyed barrier is missing: {marker}")
@@ -150,10 +150,10 @@ require(
     < teardown.index("var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();")
     < teardown.index("lock (_documentAccessGate)")
     < teardown.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
-    < teardown.index("DetachDocumentManagerHandler();")
     < teardown.index("if (abandonForHostShutdown) return;")
+    < teardown.index("DetachDocumentManagerHandler();")
     < teardown.index("TryCloseWindow(deferForFinalDocument);"),
-    "DocumentToBeDestroyed must validate native identity, classify host quit, fail closed, then leave WPF teardown to BricsCAD when quitting.",
+    "DocumentToBeDestroyed must validate native identity, classify host quit, fail closed, preserve native lifecycle subscriptions during shutdown, then use ordinary close cleanup only outside host quit.",
 )
 require(
     "_lifecycleDocument." not in teardown,
@@ -189,4 +189,4 @@ require(
     "Full detach must release host lifecycle subscriptions on ordinary window closure.",
 )
 
-print("[OK] Modeless affinity resolves a live wrapper by native database identity, invalidates before teardown, and lets BricsCAD own WPF destruction during application quit.")
+print("[OK] Modeless affinity resolves a live wrapper by native database identity, invalidates before teardown, and keeps BricsCAD native/WPF teardown quiescent during application quit.")
