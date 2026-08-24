@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Diagnostics;
@@ -95,6 +96,7 @@ namespace QS3D.BricsCAD.V25.Cad
                     "DUPLICATE source handle detected across persisted multi-region topology.");
 
             var loops = new List<PolygonSourceLoop2>();
+            var fingerprintByHandle = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var handle in sourceHandles)
             {
                 var ids = CadHandleService.Resolve(document, new[] { handle });
@@ -121,6 +123,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         MaximumSagittaM,
                         element.Id + "/multi-region health source");
                     loops.Add(new PolygonSourceLoop2(read.SourceHandle, read.Loop));
+                    fingerprintByHandle[read.SourceHandle] = read.Fingerprint;
                 }
                 catch (Exception ex)
                 {
@@ -136,8 +139,20 @@ namespace QS3D.BricsCAD.V25.Cad
                     var current = PolygonSourceLoopRegionAssembler.Assemble(loops.AsReadOnly());
                     var currentRegions = new HashSet<string>(current.Regions.Select(x => x.RegionId), StringComparer.OrdinalIgnoreCase);
                     if (!currentRegions.SetEquals(sourceRegionIds))
+                    {
                         Add(issues, "MULTI_REGION_TOPOLOGY_STALE", element,
                             "Current source topology no longer matches the persisted multi-region region identities.");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(topologyFingerprint))
+                    {
+                        var currentFingerprint = MultiRegionTopologyFingerprint.Compute(current, fingerprintByHandle);
+                        if (!string.Equals(topologyFingerprint.Trim(), currentFingerprint, StringComparison.OrdinalIgnoreCase))
+                        {
+                            Add(issues, "MULTI_REGION_TOPOLOGY_FINGERPRINT_MISMATCH", element,
+                                "Current source geometry fingerprint no longer matches the persisted multi-region topology fingerprint.");
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -150,6 +165,28 @@ namespace QS3D.BricsCAD.V25.Cad
             if (generatedHandles.Count != generatedHandles.Distinct(StringComparer.OrdinalIgnoreCase).Count())
                 Add(issues, "MULTI_REGION_GENERATED_DUPLICATE", element,
                     "DUPLICATE generated handle detected across multi-region output.");
+
+            ValidatePersistedCount(
+                issues,
+                element,
+                prefix + "Count",
+                generatedHandles.Count,
+                "MULTI_REGION_GENERATED_COUNT_MISMATCH",
+                "Aggregate generated count");
+            ValidatePersistedCount(
+                issues,
+                element,
+                prefix + "MultiRegionBarCount",
+                generatedHandles.Count,
+                "MULTI_REGION_GENERATED_COUNT_MISMATCH",
+                "Multi-region generated bar count");
+            ValidatePersistedCount(
+                issues,
+                element,
+                prefix + "MultiRegionCount",
+                sourceManifest.Count,
+                "MULTI_REGION_REGION_COUNT_MISMATCH",
+                "Multi-region source region count");
 
             if (element.Properties.TryGetValue(handlesKey, out var aggregateRaw) && !string.IsNullOrWhiteSpace(aggregateRaw))
             {
@@ -195,6 +232,27 @@ namespace QS3D.BricsCAD.V25.Cad
                         Add(issues, "MULTI_REGION_REGION_OWNER_MISMATCH", element,
                             "Generated rebar region ownership marker does not match manifest region " + region.RegionId + ": " + handle + ".");
                 }
+            }
+        }
+
+        private static void ValidatePersistedCount(
+            ICollection<ModelHealthIssue> issues,
+            ProjectElement element,
+            string key,
+            int expected,
+            string code,
+            string label)
+        {
+            string raw;
+            int actual;
+            if (!element.Properties.TryGetValue(key, out raw)
+                || string.IsNullOrWhiteSpace(raw)
+                || !int.TryParse(raw.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out actual)
+                || actual != expected)
+            {
+                Add(issues, code, element,
+                    label + " is missing, invalid, or does not match the persisted manifest count " +
+                    expected.ToString(CultureInfo.InvariantCulture) + ".");
             }
         }
 
