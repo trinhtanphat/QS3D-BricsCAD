@@ -20,6 +20,8 @@ namespace QS3D.Core.SmokeTests
             PureStreamExactBoundRemainsAccepted();
             PureStreamStopsAtItem10001();
             DuplicateIdentityRemainsCaseInsensitive();
+            PricedTotalRejectsSwallowedContribution();
+            PricedTotalKeepsRepresentableContribution();
         }
 
         private static void NegativeKnownCountFailsBeforeEnumeration()
@@ -133,9 +135,49 @@ namespace QS3D.Core.SmokeTests
             throw new Exception("Case-insensitive duplicate estimating line ids must remain rejected.");
         }
 
+        private static void PricedTotalRejectsSwallowedContribution()
+        {
+            var portfolio = new EstimatingPortfolio(new[]
+            {
+                PricedLine("A-HIGH", 70000000000000000000000000000m),
+                PricedLine("B-TINY", 0.1m)
+            });
+
+            ExpectOverflow(
+                () => _ = portfolio.PricedTotal,
+                "precision loss",
+                "Estimating portfolio total must reject a non-zero contribution swallowed by decimal precision.");
+        }
+
+        private static void PricedTotalKeepsRepresentableContribution()
+        {
+            var portfolio = new EstimatingPortfolio(new[]
+            {
+                PricedLine("A-NORMAL", 100m),
+                PricedLine("B-FRACTION", 0.1m)
+            });
+
+            if (portfolio.PricedTotal != 100.1m)
+                throw new Exception("Representable estimating portfolio contribution changed unexpectedly.");
+        }
+
         private static EstimatingLine Line(string id)
         {
             return new EstimatingLine(id, "quantity-source", "quantity-revision", 1m, "m");
+        }
+
+        private static EstimatingLine PricedLine(string id, decimal rate)
+        {
+            return new EstimatingLine(
+                id,
+                "quantity-source-" + id,
+                "quantity-revision",
+                1m,
+                "m",
+                "cost-" + id,
+                "rate-source",
+                "rate-revision",
+                referencedRate: rate);
         }
 
         private static void ExpectInvalidOperation(Action action, string expectedMessageFragment, string message)
@@ -145,6 +187,21 @@ namespace QS3D.Core.SmokeTests
                 action();
             }
             catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf(expectedMessageFragment, StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new Exception(message + " Actual diagnostic: " + ex.Message);
+                return;
+            }
+            throw new Exception(message);
+        }
+
+        private static void ExpectOverflow(Action action, string expectedMessageFragment, string message)
+        {
+            try
+            {
+                action();
+            }
+            catch (OverflowException ex)
             {
                 if (ex.Message.IndexOf(expectedMessageFragment, StringComparison.OrdinalIgnoreCase) < 0)
                     throw new Exception(message + " Actual diagnostic: " + ex.Message);
