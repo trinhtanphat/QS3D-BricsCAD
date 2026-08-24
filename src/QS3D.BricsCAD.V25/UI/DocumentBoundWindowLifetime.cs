@@ -254,6 +254,9 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     _window.Dispatcher.BeginInvoke(new Action(() =>
                     {
+                        // QuitAborted recovery is queued. A second quit can begin before this
+                        // dispatcher turn, so re-check the global barrier before any native cleanup.
+                        if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
                         DetachDocumentLifecycleHandlersAfterAbort();
                         Detach();
                         TryCloseWindowOnDispatcher();
@@ -268,6 +271,9 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnBeginDocumentClose(object sender, DocumentBeginCloseEventArgs e)
             {
+                // QuitWillStart is an earlier host boundary than document teardown. Do not even
+                // enumerate DocumentManager once the host owns final native/WPF destruction.
+                if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
                 var abandonForHostShutdown = ModelessHostQuiescenceCoordinator.IsQuiescing;
                 var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();
                 lock (_documentAccessGate)
@@ -286,6 +292,9 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
             {
+                // During host teardown the event's managed Document wrapper may already front native
+                // state being destroyed. Cross the global barrier before dereferencing e.Document.
+                if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
                 if (!MatchesNativeDatabase(e.Document)) return;
                 var abandonForHostShutdown = ModelessHostQuiescenceCoordinator.IsQuiescing;
                 var deferForFinalDocument = !abandonForHostShutdown && !HasAnotherLiveDocument();
@@ -357,12 +366,14 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void DetachDocumentManagerHandler()
             {
+                if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
                 try { BcadApplication.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed; }
                 catch { }
             }
 
             private void DetachDocumentLifecycleHandlersIfSafe()
             {
+                if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
                 if (Volatile.Read(ref _documentCloseStarted) != 0) return;
                 try { _lifecycleDocument.BeginDocumentClose -= OnBeginDocumentClose; }
                 catch { }
@@ -372,6 +383,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void DetachDocumentLifecycleHandlersAfterAbort()
             {
+                if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
                 try { _lifecycleDocument.BeginDocumentClose -= OnBeginDocumentClose; }
                 catch { }
                 try { _lifecycleDocument.CloseAborted -= OnDocumentCloseAborted; }
