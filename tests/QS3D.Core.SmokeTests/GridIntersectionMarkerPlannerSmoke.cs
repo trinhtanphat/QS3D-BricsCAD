@@ -9,6 +9,8 @@ namespace QS3D.Core.SmokeTests
         {
             PairIdentityIsCanonicalAndOccurrenceScoped();
             InputOrderDoesNotChangePairOwnerIdentity();
+            IdentityTokensStayCompactForMaximumIds();
+            UnsupportedOccurrenceFailsClosed();
             NullIntersectionFailsClosed();
         }
 
@@ -44,6 +46,25 @@ namespace QS3D.Core.SmokeTests
 
             Equal(first.PairToken, second.PairToken);
             Equal(first.OwnerToken, second.OwnerToken);
+        }
+
+        private static void IdentityTokensStayCompactForMaximumIds()
+        {
+            var firstId = new string('A', 128);
+            var secondId = new string('B', 128);
+            var pair = GridIntersectionIdentityPlanner.BuildPairToken(firstId, secondId);
+            var owner = GridIntersectionIdentityPlanner.BuildIntersectionOwner(firstId, secondId, 1);
+
+            Equal(69, pair.Length);
+            Equal(71, owner.Length);
+            True(pair.StartsWith("GIP1:", StringComparison.Ordinal));
+            True(owner.StartsWith("GIX1:", StringComparison.Ordinal));
+        }
+
+        private static void UnsupportedOccurrenceFailsClosed()
+        {
+            Throws<ArgumentOutOfRangeException>(() =>
+                GridIntersectionIdentityPlanner.BuildIntersectionOwner("GRID-A", "GRID-B", 2));
         }
 
         private static void NullIntersectionFailsClosed()
