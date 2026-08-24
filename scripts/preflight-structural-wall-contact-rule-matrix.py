@@ -36,16 +36,47 @@ for category in (
     require(contact, category, "concrete-contact category " + category)
 
 # Bounding boxes may reject distant objects only. Formwork deduction must remain native
-# Solid3d/BREP geometry and union-resolved through one residual target.
+# Solid3d/BREP geometry and union-resolved through one live residual target. Every cutter is
+# first clipped against the current residual so a neighbour extending beyond the wall cannot
+# poison BoolSubtract, and overlapping neighbours naturally union as the residual shrinks.
 require(
     contact,
     "if (!BoundingBoxesMayOverlap(target, candidate, distanceCad)) continue;",
     "bounding-box broad phase",
 )
-require(contact, "TryIntersection(target, candidate)", "native volume/contact intersection")
+require(
+    contact,
+    "TryIntersection(residual, candidate, out var intersectionFailed)",
+    "residual-clipped native volume/contact intersection",
+)
+require(
+    contact,
+    "TrySubtract(residual, overlap)",
+    "clipped volume-overlap residual subtraction",
+)
 require(contact, "TryOffset(contactProbe, distanceCad)", "zero-volume face-contact BREP probe")
-require(contact, "TrySubtract(residual, candidate)", "volume-intersection residual subtraction")
-require(contact, "TrySubtract(residual, contactProbe)", "face-contact residual subtraction")
+require(
+    contact,
+    "TryIntersection(residual, contactProbe, out var contactIntersectionFailed)",
+    "residual-clipped contact-probe intersection",
+)
+require(
+    contact,
+    "TrySubtract(residual, contact)",
+    "clipped face-contact residual subtraction",
+)
+for forbidden in (
+    "TryIntersection(target, candidate",
+    "TrySubtract(residual, candidate)",
+    "TrySubtract(residual, contactProbe)",
+):
+    if forbidden in contact:
+        fail("stale non-residual-clipped contact path reappeared: " + forbidden)
+require(
+    contact,
+    "if (diagnostics.FailedNativeCutCount > 0) return false;",
+    "failed native-cut fail-closed measurement guard",
+)
 require(
     contact,
     "if (Math.Abs(normal.Z) >= HorizontalFaceNormalZ) continue;",
