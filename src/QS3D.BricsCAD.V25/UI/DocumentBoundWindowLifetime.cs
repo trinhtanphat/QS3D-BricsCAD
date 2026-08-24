@@ -266,6 +266,7 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     _window.Dispatcher.BeginInvoke(new Action(() =>
                     {
+                        DetachDocumentLifecycleHandlersAfterAbort();
                         Detach();
                         TryCloseWindowOnDispatcher();
                     }));
