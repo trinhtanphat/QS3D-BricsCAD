@@ -40,6 +40,7 @@ required = (
     "contactAreaCad += overlapContactAreaCad;",
     "contactAreaCad += probeContactAreaCad;",
     "deductionM2 = Math.Min(grossVerticalAreaCad, contactAreaCad) * areaScale;",
+    "diagnostics.ResidualVerticalAreaM2 = Math.Max(0d, grossVerticalAreaCad - contactAreaCad) * areaScale;",
 )
 for token in required:
     if token not in text:
@@ -52,8 +53,9 @@ for forbidden in (
     "face.Surface as PlanarEntity",
     "external.BaseSurface as PlanarEntity",
     # #3697 regression: a penetrating cutter creates new side-strip residual boundaries.
-    # Gross-minus-residual therefore over-deducts and must remain diagnostics-only.
+    # Gross-minus-residual therefore over-deducts and must never become contact authority again.
     "var deductionCad = Math.Max(0d, grossVerticalAreaCad - residualVerticalAreaCad);",
+    "ReadResidualAreaOnOriginalVerticalFaces",
 ):
     if forbidden in text:
         fail("stale whole-candidate/direct-face/residual-area authority remains: " + forbidden)
@@ -72,19 +74,17 @@ if not (0 <= probe_clip_pos < probe_coverage_pos < probe_subtract_pos):
 
 seed_reader_pos = text.find("private static List<FaceSeed> ReadVerticalFaces")
 coverage_reader_pos = text.find("private static double ReadEligibleOriginalFaceArea", seed_reader_pos)
-residual_reader_pos = text.find("private static double ReadResidualAreaOnOriginalVerticalFaces", coverage_reader_pos)
-face_plane_reader_pos = text.find("private static PlanarEntity? ReadFacePlane", residual_reader_pos)
-if not (0 <= seed_reader_pos < coverage_reader_pos < residual_reader_pos < face_plane_reader_pos):
-    fail("seed/contact/residual readers must share the guarded V25 planar-face unwrapping helper")
+face_plane_reader_pos = text.find("private static PlanarEntity? ReadFacePlane", coverage_reader_pos)
+if not (0 <= seed_reader_pos < coverage_reader_pos < face_plane_reader_pos):
+    fail("seed/contact readers must share the guarded V25 planar-face unwrapping helper")
 
 seed_body = text[seed_reader_pos:coverage_reader_pos]
-coverage_body = text[coverage_reader_pos:residual_reader_pos]
-residual_body = text[residual_reader_pos:face_plane_reader_pos]
-for name, body in (("seed", seed_body), ("contact coverage", coverage_body), ("residual", residual_body)):
+coverage_body = text[coverage_reader_pos:face_plane_reader_pos]
+for name, body in (("seed", seed_body), ("contact coverage", coverage_body)):
     if "ReadFacePlane(face)" not in body:
         fail(name + " face reader bypasses ExternalBoundedSurface planar unwrapping")
 
 if "CandidateReachesExterior(candidate, seed, distanceCad" not in coverage_body:
     fail("original-face coverage does not reject coplanar interior-only penetration side strips")
 
-print("PASS: StructuralWall contact counts union-resolved original-face patches reached from the cutter exterior side, keeps residual area diagnostic-only, unwraps V25 ExternalBoundedSurface planes, and fails closed on native/topology ambiguity")
+print("PASS: StructuralWall contact counts union-resolved original-face patches reached from the cutter exterior side, keeps physical residual boundary loss non-authoritative, unwraps V25 ExternalBoundedSurface planes, and fails closed on native/topology ambiguity")
