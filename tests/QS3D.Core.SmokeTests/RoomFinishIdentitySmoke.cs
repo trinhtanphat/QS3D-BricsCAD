@@ -23,7 +23,10 @@ namespace QS3D.Core.SmokeTests
 
         private static void CanonicalIdIsDeterministic()
         {
-            Equal("ROOM-A-WallFinish", RoomFinishIdentityService.CanonicalId(" ROOM-A ", ElementCategory.WallFinish));
+            Equal("ROOM-A-WallFinish", RoomFinishIdentityService.CanonicalId("ROOM-A", ElementCategory.WallFinish));
+            Throws<ArgumentException>(
+                () => RoomFinishIdentityService.CanonicalId(" ROOM-A ", ElementCategory.WallFinish),
+                "canonical without surrounding whitespace");
         }
 
         private static void ReusesCanonicalFinishWithoutLegacyProvenance()
