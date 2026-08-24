@@ -79,19 +79,14 @@ namespace QS3D.Core.Geometry
 
         public static CurtainPathFramePlan Plan(IReadOnlyList<Point2> centerline, IReadOnlyList<CurtainWallRect> frames)
         {
-            if (centerline == null) throw new ArgumentNullException(nameof(centerline));
-            if (frames == null) throw new ArgumentNullException(nameof(frames));
-            var sourceFrameCount = frames.Count;
-            if (sourceFrameCount < 0)
-                throw new InvalidOperationException("Curtain path frame input Count cannot be negative.");
-            if (sourceFrameCount > MaxPieces)
-                throw new InvalidOperationException("Curtain path frame input cannot exceed " + MaxPieces + " rectangles.");
+            var frameSnapshot = SnapshotFrames(frames);
+            var sourceFrameCount = frameSnapshot.Length;
             var path = BuildPath(centerline);
             var pieces = new List<CurtainPathFramePiece>();
 
             for (var frameIndex = 0; frameIndex < sourceFrameCount; frameIndex++)
             {
-                var frame = frames[frameIndex] ?? throw new InvalidOperationException("Curtain frame rectangle cannot be null.");
+                var frame = frameSnapshot[frameIndex];
                 var start = Finite(frame.X_M, "curtain frame start station");
                 var width = Positive(frame.WidthM, "curtain frame width");
                 var z = Finite(frame.Z_M, "curtain frame elevation");
@@ -250,16 +245,13 @@ namespace QS3D.Core.Geometry
 
         private static PathData BuildPath(IReadOnlyList<Point2> centerline)
         {
-            if (centerline == null) throw new ArgumentNullException(nameof(centerline));
-            if (centerline.Count < 2) throw new ArgumentException("Curtain host path requires at least two points.", nameof(centerline));
-            if (centerline.Count > MaxPathPoints) throw new InvalidOperationException("Curtain host path exceeds the supported point budget of " + MaxPathPoints + ".");
-
-            var segments = new List<PathSegment>(centerline.Count - 1);
+            var points = SnapshotCenterline(centerline);
+            var segments = new List<PathSegment>(points.Length - 1);
             var station = 0d;
-            for (var index = 0; index < centerline.Count - 1; index++)
+            for (var index = 0; index < points.Length - 1; index++)
             {
-                var start = centerline[index];
-                var end = centerline[index + 1];
+                var start = points[index];
+                var end = points[index + 1];
                 Finite(start.X, "curtain path start X");
                 Finite(start.Y, "curtain path start Y");
                 Finite(end.X, "curtain path end X");
@@ -273,6 +265,38 @@ namespace QS3D.Core.Geometry
                 station = endStation;
             }
             return new PathData(station, segments);
+        }
+
+        private static Point2[] SnapshotCenterline(IReadOnlyList<Point2> centerline)
+        {
+            if (centerline == null) throw new ArgumentNullException(nameof(centerline));
+            var count = centerline.Count;
+            if (count < 2) throw new ArgumentException("Curtain host path requires at least two points.", nameof(centerline));
+            if (count > MaxPathPoints) throw new InvalidOperationException("Curtain host path exceeds the supported point budget of " + MaxPathPoints + ".");
+
+            var snapshot = new Point2[count];
+            for (var index = 0; index < count; index++)
+                snapshot[index] = centerline[index];
+            if (centerline.Count != count)
+                throw new InvalidOperationException("Curtain host path Count changed while it was being snapshotted.");
+            return snapshot;
+        }
+
+        private static CurtainWallRect[] SnapshotFrames(IReadOnlyList<CurtainWallRect> frames)
+        {
+            if (frames == null) throw new ArgumentNullException(nameof(frames));
+            var count = frames.Count;
+            if (count < 0)
+                throw new InvalidOperationException("Curtain path frame input Count cannot be negative.");
+            if (count > MaxPieces)
+                throw new InvalidOperationException("Curtain path frame input cannot exceed " + MaxPieces + " rectangles.");
+
+            var snapshot = new CurtainWallRect[count];
+            for (var index = 0; index < count; index++)
+                snapshot[index] = frames[index] ?? throw new InvalidOperationException("Curtain frame rectangle cannot be null.");
+            if (frames.Count != count)
+                throw new InvalidOperationException("Curtain path frame input Count changed while it was being snapshotted.");
+            return snapshot;
         }
 
         private sealed class PathData
