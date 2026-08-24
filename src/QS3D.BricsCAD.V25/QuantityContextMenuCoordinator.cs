@@ -81,7 +81,7 @@ namespace QS3D.BricsCAD.V25
                     _popupHandler = null;
                 }
                 if (nativeRegistrationAdded)
-                    TryRemoveObjectContextMenuExtension(runtimeClass, extension);
+                    TryRemoveObjectContextMenuExtension(runtimeClass, extension!);
                 TryDetachEvent(extension, "Popup", popupHandler);
                 TryDetachEvent(item, "Click", clickHandler);
                 throw;
