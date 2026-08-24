@@ -79,14 +79,19 @@ namespace QS3D.Core.Geometry
 
         public static CurtainPathFramePlan Plan(IReadOnlyList<Point2> centerline, IReadOnlyList<CurtainWallRect> frames)
         {
-            var frameSnapshot = SnapshotFrames(frames);
-            var sourceFrameCount = frameSnapshot.Length;
+            if (centerline == null) throw new ArgumentNullException(nameof(centerline));
+            if (frames == null) throw new ArgumentNullException(nameof(frames));
+            var sourceFrameCount = frames.Count;
+            if (sourceFrameCount < 0)
+                throw new InvalidOperationException("Curtain path frame input Count cannot be negative.");
+            if (sourceFrameCount > MaxPieces)
+                throw new InvalidOperationException("Curtain path frame input cannot exceed " + MaxPieces + " rectangles.");
             var path = BuildPath(centerline);
             var pieces = new List<CurtainPathFramePiece>();
 
             for (var frameIndex = 0; frameIndex < sourceFrameCount; frameIndex++)
             {
-                var frame = frameSnapshot[frameIndex];
+                var frame = frames[frameIndex] ?? throw new InvalidOperationException("Curtain frame rectangle cannot be null.");
                 var start = Finite(frame.X_M, "curtain frame start station");
                 var width = Positive(frame.WidthM, "curtain frame width");
                 var z = Finite(frame.Z_M, "curtain frame elevation");
@@ -279,23 +284,6 @@ namespace QS3D.Core.Geometry
                 snapshot[index] = centerline[index];
             if (centerline.Count != count)
                 throw new InvalidOperationException("Curtain host path Count changed while it was being snapshotted.");
-            return snapshot;
-        }
-
-        private static CurtainWallRect[] SnapshotFrames(IReadOnlyList<CurtainWallRect> frames)
-        {
-            if (frames == null) throw new ArgumentNullException(nameof(frames));
-            var count = frames.Count;
-            if (count < 0)
-                throw new InvalidOperationException("Curtain path frame input Count cannot be negative.");
-            if (count > MaxPieces)
-                throw new InvalidOperationException("Curtain path frame input cannot exceed " + MaxPieces + " rectangles.");
-
-            var snapshot = new CurtainWallRect[count];
-            for (var index = 0; index < count; index++)
-                snapshot[index] = frames[index] ?? throw new InvalidOperationException("Curtain frame rectangle cannot be null.");
-            if (frames.Count != count)
-                throw new InvalidOperationException("Curtain path frame input Count changed while it was being snapshotted.");
             return snapshot;
         }
 
