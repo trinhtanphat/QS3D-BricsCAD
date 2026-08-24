@@ -33,12 +33,13 @@ Disposition: PASS => post sanitized evidence to #1744 and #72 and close the boun
 
 Status: `LOCAL_READY / PULL_RUN_ONLY`  
 Original source issue/PR: #3665 / #3666  
-Source defect/fix: #3687 / #3692  
-Required source-fix ancestor: `cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb`  
+Earlier source defects/fixes: #3687 / #3692 and #3697 / #3702  
+Touching-contact source defect/fixes: #3711 / #3716 / #3729  
+Required source-fix ancestor: `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0`  
 Runnable carrier: `agent/chatgpt-gpt56sol/issue-3680-local-dispatch-refresh`  
-Exact runnable SHA: published on #3681 and #72 after protected branch CI succeeds.
+Exact runnable SHA: published on #3681 and #72 after this carrier's protected branch CI succeeds.
 
-The previous tested SHA `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31` is historical failing evidence only and must not be rerun for #3681. PR #3692 corrected that source defect; the committed local runner additionally verifies that its exact HEAD contains the source-fix ancestor before any licensed work starts.
+The post-#3716 licensed source `a4ec7cdc84cc63cb35d1162b1e469638ed796ddf` is superseded failing evidence: touching-only still failed while 0.05 m penetration remained correct. Licensed stage diagnostics proved BricsCAD V25 rejected the 1 micrometre native OffsetBody probe but accepted 10 micrometres with the correct `0.1600 m²` eligible original-face area. PR #3729 integrated the unit-aware 10 micrometre native-probe floor as `main@4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0`. Do not rerun #3681 on `a4ec7cdc84cc63cb35d1162b1e469638ed796ddf` or any older carrier.
 
 Local agents do not author a wall, paste commands, assemble a matrix, edit C#, or modify production source. After fetching/checking out the exact runnable SHA, their complete action is:
 
@@ -48,15 +49,17 @@ Local agents do not author a wall, paste commands, assemble a matrix, edit C#, o
 
 The runner automatically:
 
-- requires Windows, an interactive licensed V25 session, a clean worktree, and the #3692 source-fix ancestor;
+- requires Windows, an interactive licensed V25 session, a clean worktree, and the merged #3729 source-fix ancestor `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0`;
 - runs repository preflights, Core smoke and V25 Release|x64 build through the committed baseline runner;
-- builds `tests/QS3D.BricsCAD.V25.LocalQualification`, a local-only x64/net48 NETLOAD harness that invokes the production StructuralWall contact/capture/context paths;
-- proves baseline, full end-face `0.1600 m²`, partial `0.0800 m²`, overlapping-neighbor union `0.1600 m²`, top/bottom exclusion, stale/missing BREP clearing and semantic-capture refresh;
+- builds `tests/QS3D.BricsCAD.V25.LocalQualification`, including a focused source-fix gate plus the broader local-only x64/net48 qualification harness; both invoke production contact/capture/context paths;
+- **fails fast before the broader matrix** unless touching-only one-end passes at deduction `0.1600 m²`, residual/net `2.5088 m²`, `failed_native=0`, through the production contact-probe path;
+- immediately proves the **0.05 m penetration regression** still passes at deduction `0.1600 m²`, residual/net `2.5088 m²`, `failed_native=0`, through the positive-volume path;
+- only after both mandatory cells pass, proves baseline, partial `0.0800 m²`, overlapping-neighbor union `0.1600 m²`, top/bottom exclusion, stale/missing BREP clearing and semantic-capture refresh;
 - proves the contact measurement is read-only, so native Undo/Redo is explicitly not applicable to that read-only measurement path rather than being faked;
-- repeats the deterministic geometry matrix in a second fresh BricsCAD process/drawing for isolation;
+- repeats the deterministic broader geometry matrix in a second fresh BricsCAD process/drawing for isolation;
 - creates a test-owned scratch DWG + QSDB with the two-end contact, saves, closes, cold-reopens, remeasures through production code and removes the scratch DWG/QSDB afterwards;
 - requires the BLT control `gross 2.6688 - contact 0.3200 = net 2.3488 m²` after cold reopen;
-- records exact Git SHA, plugin/Core ProductVersion + SHA-256, harness hash and sanitized case status under ignored `artifacts/local-v25-wall-contact-3681/`;
+- records exact Git SHA, source-fix ancestor, plugin/Core ProductVersion + SHA-256, harness hash and sanitized case status under ignored `artifacts/local-v25-wall-contact-3681/`;
 - exits `0` only for `LOCAL_PASS`, `1` for `LOCAL_FAIL`, and `2` for `NO_RESULT`.
 
 Disposition: `LOCAL_PASS` => post the sanitized JSON/evidence to #3681 and #72 and close #3681. `LOCAL_FAIL` => return the exact bounded failure to a separate remote/source defect lane. `NO_RESULT` => environment/license/host retry only. No local source coding is authorized or needed.
@@ -75,4 +78,4 @@ Disposition: PASS => post sanitized evidence to #3613 and #72 and close #3613. F
 
 ## Existing broader local queue
 
-This dispatch file does not replace `docs/LOCAL-AGENT-INBOX.md`; it only fixes the immediate exact-SHA dispatch ambiguity for the rows above. The broader canonical queue remains governed by #72 and the inbox. Do not rerun already-completed LOCAL-017, LOCAL-018, LOCAL-019, or H.1 P07. Prefer remaining P0 work before P1, then P2, and use the exact pushed carrier declared by the owning issue.
+This dispatch file does not replace `docs/LOCAL-AGENT-INBOX.md`; it fixes the immediate exact-SHA dispatch ambiguity for the rows above. The broader canonical queue remains governed by #72 and the inbox. Do not rerun already-completed LOCAL-017, LOCAL-018, LOCAL-019, #1744, #3613, or H.1 P07 solely because historical text still mentions them. Prefer remaining P0 work before P1, then P2, and always use the exact pushed carrier declared by the owning issue.
