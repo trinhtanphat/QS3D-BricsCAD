@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
+using QS3D.Core.Domain;
 
 namespace QS3D.Core.Persistence
 {
@@ -9,6 +10,34 @@ namespace QS3D.Core.Persistence
     {
         internal const int MaxTopLevelEntries = 100000;
         internal const int MaxNestedEntries = 10000;
+
+        internal static void Validate(ProjectState project)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+
+            ValidateCount(project.Metadata.Count, MaxNestedEntries, "project metadata");
+            ValidateCount(project.Zones.Count, MaxTopLevelEntries, "zones");
+            ValidateCount(project.Floors.Count, MaxTopLevelEntries, "floors");
+            ValidateCount(project.Families.Count, MaxTopLevelEntries, "families");
+            ValidateCount(project.QuantityRules.Count, MaxTopLevelEntries, "quantity rules");
+            ValidateCount(project.Elements.Count, MaxTopLevelEntries, "elements");
+            ValidateCount(project.AuditEvents.Count, MaxTopLevelEntries, "audit events");
+
+            foreach (var family in project.Families)
+            {
+                if (family == null) continue;
+                ValidateCount(family.Properties.Count, MaxNestedEntries, "family " + family.Id + " properties");
+            }
+
+            foreach (var element in project.Elements)
+            {
+                if (element == null) continue;
+                ValidateCount(element.SourceHandles.Count, MaxNestedEntries, "element " + element.Id + " handles");
+                ValidateCount(element.DependsOn.Count, MaxNestedEntries, "element " + element.Id + " dependencies");
+                ValidateCount(element.Properties.Count, MaxNestedEntries, "element " + element.Id + " properties");
+                ValidateCount(element.Quantities.Count, MaxNestedEntries, "element " + element.Id + " quantities");
+            }
+        }
 
         internal static void Validate(XElement root)
         {
@@ -61,6 +90,15 @@ namespace QS3D.Core.Persistence
         {
             if (container == null) return;
             if (container.Elements().Take(maximum + 1).Count() > maximum)
+            {
+                throw new InvalidDataException(
+                    "QSDB " + label + " exceeds the maximum supported cardinality of " + maximum + ".");
+            }
+        }
+
+        private static void ValidateCount(int count, int maximum, string label)
+        {
+            if (count > maximum)
             {
                 throw new InvalidDataException(
                     "QSDB " + label + " exceeds the maximum supported cardinality of " + maximum + ".");
