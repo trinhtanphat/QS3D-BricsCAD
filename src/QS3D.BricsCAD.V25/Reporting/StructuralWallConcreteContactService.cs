@@ -24,6 +24,19 @@ namespace QS3D.BricsCAD.V25.Reporting
         private const double HorizontalFaceNormalZ = 0.70710678118d;
         private const string GeneratedHostSolidOwnerSlot = "GeneratedSolidHandle";
 
+        internal sealed class StructuralWallConcreteContactDiagnostics
+        {
+            public int TargetSolidCount { get; internal set; }
+            public int CandidateSolidCount { get; internal set; }
+            public int VerticalFaceSeedCount { get; internal set; }
+            public int PositiveVolumeCutCount { get; internal set; }
+            public int ContactProbeCutCount { get; internal set; }
+            public int FailedNativeCutCount { get; internal set; }
+            public double GrossVerticalAreaM2 { get; internal set; }
+            public double ResidualVerticalAreaM2 { get; internal set; }
+            public double DeductionM2 { get; internal set; }
+        }
+
         private sealed class FaceSeed
         {
             public FaceSeed(PlanarEntity plane, double grossAreaCad)
@@ -58,6 +71,16 @@ namespace QS3D.BricsCAD.V25.Reporting
             ProjectElement wall,
             out double deductionM2)
         {
+            return TryMeasureM2(document, project, wall, out deductionM2, out _);
+        }
+
+        internal static bool TryMeasureM2(
+            Document document,
+            ProjectState project,
+            ProjectElement wall,
+            out double deductionM2,
+            out StructuralWallConcreteContactDiagnostics diagnostics)
+        {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (wall == null) throw new ArgumentNullException(nameof(wall));
@@ -65,6 +88,7 @@ namespace QS3D.BricsCAD.V25.Reporting
                 throw new ArgumentException("Concrete-contact measurement requires a StructuralWall target.", nameof(wall));
 
             deductionM2 = 0d;
+            diagnostics = new StructuralWallConcreteContactDiagnostics();
             var tolerances = new QuantityGeometryTolerances();
             var lengthToMeter = LengthToMeter(document.Database.Insunits);
             var areaScale = lengthToMeter * lengthToMeter;
@@ -84,6 +108,7 @@ namespace QS3D.BricsCAD.V25.Reporting
                 targetIds.Select(x => x.Handle.ToString()),
                 StringComparer.OrdinalIgnoreCase);
             var targets = CloneSolids(document, targetIds);
+            diagnostics.TargetSolidCount = targets.Count;
             if (targets.Count == 0) return false;
 
             var candidates = new List<Solid3d>();
@@ -102,12 +127,14 @@ namespace QS3D.BricsCAD.V25.Reporting
                         .ToList();
                     candidates.AddRange(CloneSolids(document, ids));
                 }
+                diagnostics.CandidateSolidCount = candidates.Count;
 
                 var grossVerticalAreaCad = 0d;
                 var residualVerticalAreaCad = 0d;
                 foreach (var target in targets)
                 {
                     var seeds = ReadVerticalFaces(target);
+                    diagnostics.VerticalFaceSeedCount += seeds.Count;
                     grossVerticalAreaCad += seeds.Sum(x => x.GrossAreaCad);
                     if (seeds.Count == 0) continue;
 
@@ -117,24 +144,53 @@ namespace QS3D.BricsCAD.V25.Reporting
                         {
                             if (!BoundingBoxesMayOverlap(target, candidate, distanceCad)) continue;
 
-                            var volumeIntersection = false;
-                            using (var intersection = TryIntersection(target, candidate))
+                            // Always clip a cutter to the *current residual* before subtraction.
+                            // Passing a neighbor that extends outside the wall directly to BoolSubtract
+                            // can fail in the native kernel even when BoolIntersect succeeds. Clipping
+                            // also makes overlapping neighbors union naturally because later cutters see
+                            // only the volume/contact patch that remains after earlier cuts.
+                            using (var overlap = TryIntersection(residual, candidate, out var intersectionFailed))
                             {
-                                if (intersection != null && SafeVolumeCad(intersection) > volumeCadTolerance)
+                                if (intersectionFailed)
                                 {
-                                    volumeIntersection = true;
-                                    TrySubtract(residual, candidate);
+                                    diagnostics.FailedNativeCutCount++;
+                                    continue;
+                                }
+
+                                if (overlap != null && SafeVolumeCad(overlap) > volumeCadTolerance)
+                                {
+                                    if (!TrySubtract(residual, overlap))
+                                    {
+                                        diagnostics.FailedNativeCutCount++;
+                                        continue;
+                                    }
+                                    diagnostics.PositiveVolumeCutCount++;
+                                    continue;
                                 }
                             }
-                            if (volumeIntersection) continue;
 
                             using (var contactProbe = Clone(candidate))
                             {
-                                if (!TryOffset(contactProbe, distanceCad)) continue;
-                                using (var contact = TryIntersection(target, contactProbe))
+                                if (!TryOffset(contactProbe, distanceCad))
                                 {
+                                    diagnostics.FailedNativeCutCount++;
+                                    continue;
+                                }
+
+                                using (var contact = TryIntersection(residual, contactProbe, out var contactIntersectionFailed))
+                                {
+                                    if (contactIntersectionFailed)
+                                    {
+                                        diagnostics.FailedNativeCutCount++;
+                                        continue;
+                                    }
                                     if (contact == null || SafeVolumeCad(contact) <= volumeCadTolerance) continue;
-                                    TrySubtract(residual, contactProbe);
+                                    if (!TrySubtract(residual, contact))
+                                    {
+                                        diagnostics.FailedNativeCutCount++;
+                                        continue;
+                                    }
+                                    diagnostics.ContactProbeCutCount++;
                                 }
                             }
                         }
@@ -146,8 +202,17 @@ namespace QS3D.BricsCAD.V25.Reporting
                     }
                 }
 
+                diagnostics.GrossVerticalAreaM2 = grossVerticalAreaCad * areaScale;
+                diagnostics.ResidualVerticalAreaM2 = residualVerticalAreaCad * areaScale;
+
+                // Once a broad-phase candidate reached a native contact operation, a failed
+                // intersect/subtract/offset makes the measurement unavailable. Publishing zero
+                // here would turn a modeling-kernel failure into a false "no contact" quantity.
+                if (diagnostics.FailedNativeCutCount > 0) return false;
+
                 var deductionCad = Math.Max(0d, grossVerticalAreaCad - residualVerticalAreaCad);
                 deductionM2 = deductionCad * areaScale;
+                diagnostics.DeductionM2 = deductionM2;
                 if (double.IsNaN(deductionM2) || double.IsInfinity(deductionM2) || deductionM2 < 0d)
                     throw new InvalidOperationException("Structural wall concrete-contact deduction is not finite and non-negative.");
                 return true;
@@ -250,8 +315,9 @@ namespace QS3D.BricsCAD.V25.Reporting
             return Math.Abs((right.PointOnPlane - left.PointOnPlane).DotProduct(leftNormal)) <= planeToleranceCad;
         }
 
-        private static Solid3d? TryIntersection(Solid3d target, Solid3d candidate)
+        private static Solid3d? TryIntersection(Solid3d target, Solid3d candidate, out bool failed)
         {
+            failed = false;
             try
             {
                 var intersection = Clone(target);
@@ -261,21 +327,22 @@ namespace QS3D.BricsCAD.V25.Reporting
             }
             catch (Exception ex) when (Recoverable(ex))
             {
+                failed = true;
                 return null;
             }
         }
 
-        private static void TrySubtract(Solid3d target, Solid3d cutterSource)
+        private static bool TrySubtract(Solid3d target, Solid3d cutterSource)
         {
             try
             {
                 using (var cutter = Clone(cutterSource))
                     target.BooleanOperation(BooleanOperationType.BoolSubtract, cutter);
+                return true;
             }
             catch (Exception ex) when (Recoverable(ex))
             {
-                // Match the existing quantity-geometry service's recoverable native-boolean
-                // behavior: leave the residual unchanged rather than inventing contact area.
+                return false;
             }
         }
 
@@ -312,12 +379,25 @@ namespace QS3D.BricsCAD.V25.Reporting
 
         private static double SafeVolumeCad(Solid3d solid)
         {
+            // EntitySnapshotReader uses the host Solid3d mass-properties volume as the
+            // authoritative native volume metric. Use the same surface for transient boolean
+            // results first; some V25 transient BREP wrappers can report zero/unavailable
+            // GetVolume even when the Solid3d mass properties are valid.
+            try
+            {
+                var value = Math.Abs(solid.MassProperties.Volume);
+                if (!double.IsNaN(value) && !double.IsInfinity(value) && value >= 0d) return value;
+            }
+            catch
+            {
+            }
+
             try
             {
                 using (var brep = new Brep(solid))
                 {
-                    var value = brep.GetVolume();
-                    return double.IsNaN(value) || double.IsInfinity(value) || value < 0d ? 0d : value;
+                    var value = Math.Abs(brep.GetVolume());
+                    return double.IsNaN(value) || double.IsInfinity(value) ? 0d : value;
                 }
             }
             catch
