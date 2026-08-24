@@ -15,6 +15,7 @@ namespace QS3D.BricsCAD.V25
             ProductionUiPolish.EnsureRegistered();
             try
             {
+                ModelessHostQuiescenceCoordinator.EnsureInitialized();
                 DocumentLifecycleCoordinator.Start();
                 RibbonInitializationCoordinator.Start();
             }
@@ -63,6 +64,7 @@ namespace QS3D.BricsCAD.V25
             TryCleanup(ReferenceWallRibbonAugmenter.Reset);
             TryCleanup(ProjectRibbonAugmenter.Reset);
             TryCleanup(RibbonBootstrapper.Reset);
+            TryCleanup(ModelessHostQuiescenceCoordinator.Stop);
         }
 
         private static void TryCleanup(Action cleanup)

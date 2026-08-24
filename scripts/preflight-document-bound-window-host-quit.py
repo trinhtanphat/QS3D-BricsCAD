@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Guard V25 modeless windows against WPF/native-reactor teardown during BricsCAD host shutdown."""
+"""Guard V25 modeless windows with one plugin-global, non-reentrant host-quiescence owner."""
 
-# Lane-Key: issue-3621 — keep this regression on the canonical source carrier.
+# Lane-Key: issue-3621 — H.2 must eliminate per-window BricsCAD Application quit callbacks.
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "DocumentBoundWindowLifetime.cs"
+WINDOW_SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "DocumentBoundWindowLifetime.cs"
+COORDINATOR_SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "ModelessHostQuiescenceCoordinator.cs"
 
 
 def require(condition: bool, message: str) -> None:
@@ -30,48 +31,122 @@ def method_block(source: str, signature: str) -> str:
     raise AssertionError(f"{signature} body is unterminated.")
 
 
-source = SOURCE.read_text(encoding="utf-8")
-
 require(
-    "private int _hostQuitStarted;" in source,
-    "Each modeless registration must track BricsCAD host-quit state independently of document-count heuristics.",
+    COORDINATOR_SOURCE.exists(),
+    "H.2 requires one plugin-global ModelessHostQuiescenceCoordinator instead of per-window BricsCAD Application quit subscriptions.",
 )
+window_source = WINDOW_SOURCE.read_text(encoding="utf-8")
+coordinator_source = COORDINATOR_SOURCE.read_text(encoding="utf-8")
 
-attach = method_block(source, "public void Attach(Document document)")
+# The only native Application quit owner is the global coordinator.
 for marker in (
-    "BcadApplication.BeginQuit += OnApplicationBeginQuit;",
-    "BcadApplication.QuitAborted += OnApplicationQuitAborted;",
+    "BcadApplication.QuitWillStart += OnQuitWillStart;",
+    "BcadApplication.QuitAborted += OnQuitAborted;",
 ):
-    require(marker in attach, f"Attach must subscribe the host lifecycle barrier: {marker}")
+    require(marker in coordinator_source, f"Global coordinator is missing native host lifecycle ownership: {marker}")
 
-begin_quit = method_block(source, "private void OnApplicationBeginQuit(object? sender, EventArgs e)")
-require(
-    "Volatile.Write(ref _hostQuitStarted, 1);" in begin_quit,
-    "BeginQuit must atomically mark host shutdown before document destruction can trigger WPF teardown.",
-)
+for forbidden in (
+    "BcadApplication.BeginQuit +=",
+    "BcadApplication.QuitWillStart +=",
+    "BcadApplication.QuitAborted +=",
+    "BcadApplication.BeginQuit -=",
+    "BcadApplication.QuitWillStart -=",
+    "BcadApplication.QuitAborted -=",
+    "_hostQuitStarted",
+):
+    require(
+        forbidden not in window_source,
+        f"Per-window Registration must not own native BricsCAD Application quit lifecycle state: {forbidden}",
+    )
 
-ensure_affinity = method_block(source, "private bool EnsureProjectAffinity()")
 require(
-    "if (Volatile.Read(ref _hostQuitStarted) != 0) return false;" in ensure_affinity,
-    "Modeless input/activation must stop before resolving BricsCAD documents once host quit has started.",
+    "internal static bool IsQuiescing" in coordinator_source,
+    "Global coordinator must expose managed host-quiescence state.",
 )
 require(
-    ensure_affinity.index("if (Volatile.Read(ref _hostQuitStarted) != 0) return false;")
-    < ensure_affinity.index("lock (_documentAccessGate)"),
-    "The host-quit input barrier must run before any DocumentManager/project access.",
-)
-
-quit_aborted = method_block(source, "private void OnApplicationQuitAborted(object? sender, EventArgs e)")
-require(
-    "Volatile.Write(ref _hostQuitStarted, 0);" in quit_aborted,
-    "QuitAborted must clear the host-shutdown marker.",
-)
-require(
-    "TryRecoverAfterQuitAbort();" in quit_aborted,
-    "If quit aborts after this registration failed closed, native subscription cleanup and WPF close must be deferred outside the native quit callback.",
+    "internal static event EventHandler? QuiescenceAborted;" in coordinator_source,
+    "Global coordinator must expose a managed quit-abort recovery event.",
 )
 
-recover = method_block(source, "private void TryRecoverAfterQuitAbort()")
+quit_will_start = method_block(coordinator_source, "private static void OnQuitWillStart(object? sender, EventArgs e)")
+require(
+    "Volatile.Write(ref _isQuiescing, 1);" in quit_will_start,
+    "QuitWillStart must atomically arm global quiescence before document destruction.",
+)
+for forbidden in (
+    "Window.Close",
+    ".Close()",
+    "DocumentManager",
+    "Detach",
+    "QuiescenceAborted",
+):
+    require(
+        forbidden not in quit_will_start,
+        f"QuitWillStart must remain state-only and non-reentrant: {forbidden}",
+    )
+
+quit_aborted = method_block(coordinator_source, "private static void OnQuitAborted(object? sender, EventArgs e)")
+require(
+    "Interlocked.Exchange(ref _isQuiescing, 0)" in quit_aborted,
+    "QuitAborted must clear global quiescence atomically.",
+)
+require(
+    "QuiescenceAborted?.Invoke(null, EventArgs.Empty);" in quit_aborted,
+    "QuitAborted must notify windows through a managed event after clearing global state.",
+)
+require(
+    quit_aborted.index("Interlocked.Exchange(ref _isQuiescing, 0)")
+    < quit_aborted.index("QuiescenceAborted?.Invoke(null, EventArgs.Empty);"),
+    "QuitAborted must clear global state before managed recovery callbacks run.",
+)
+
+attach = method_block(window_source, "public void Attach(Document document)")
+for marker in (
+    "ModelessHostQuiescenceCoordinator.EnsureInitialized();",
+    "ModelessHostQuiescenceCoordinator.QuiescenceAborted += OnHostQuiescenceAborted;",
+):
+    require(marker in attach, f"Per-window registration is missing managed coordinator wiring: {marker}")
+
+host_abort = method_block(window_source, "private void OnHostQuiescenceAborted(object? sender, EventArgs e)")
+require(
+    "TryRecoverAfterQuitAbort();" in host_abort,
+    "Managed quit-abort callback must enter dispatcher-deferred recovery.",
+)
+
+ensure_affinity = method_block(window_source, "private bool EnsureProjectAffinity()")
+barrier = "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return false;"
+require(barrier in ensure_affinity, "Modeless activation/input must stop before BricsCAD document access during host quiescence.")
+require(
+    ensure_affinity.index(barrier) < ensure_affinity.index("lock (_documentAccessGate)"),
+    "Global host-quiescence guard must run before DocumentManager/project access.",
+)
+
+for signature in (
+    "private void OnBeginDocumentClose(object sender, DocumentBeginCloseEventArgs e)",
+    "private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)",
+):
+    teardown = method_block(window_source, signature)
+    for marker in (
+        "var abandonForHostShutdown = ModelessHostQuiescenceCoordinator.IsQuiescing;",
+        "if (abandonForHostShutdown) return;",
+        "DetachDocumentManagerHandler();",
+        "TryCloseWindow(deferForFinalDocument);",
+    ):
+        require(marker in teardown, f"{signature} is missing global host-quiescence barrier: {marker}")
+    require(
+        teardown.index("if (abandonForHostShutdown) return;")
+        < teardown.index("DetachDocumentManagerHandler();")
+        < teardown.index("TryCloseWindow(deferForFinalDocument);"),
+        f"{signature} must not mutate native subscriptions or request WPF close after global quiescence starts.",
+    )
+
+close_aborted = method_block(window_source, "private void OnDocumentCloseAborted(object? sender, EventArgs e)")
+require(
+    "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;" in close_aborted,
+    "Document CloseAborted must not mutate native lifecycle handlers while host quiescence is active.",
+)
+
+recover = method_block(window_source, "private void TryRecoverAfterQuitAbort()")
 for marker in (
     "_window.Dispatcher.BeginInvoke",
     "DetachDocumentLifecycleHandlersAfterAbort();",
@@ -83,84 +158,44 @@ require(
     recover.index("DetachDocumentLifecycleHandlersAfterAbort();")
     < recover.index("Detach();")
     < recover.index("TryCloseWindowOnDispatcher();"),
-    "Quit-abort recovery must release per-document handlers before shared detach and stale-window close, even when the dispatcher runs before CloseAborted.",
+    "Quit-abort recovery must release document handlers before shared detach and stale-window close.",
 )
 
-for signature in (
-    "private void OnBeginDocumentClose(object sender, DocumentBeginCloseEventArgs e)",
-    "private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)",
-):
-    teardown = method_block(source, signature)
-    for marker in (
-        "var abandonForHostShutdown = Volatile.Read(ref _hostQuitStarted) != 0;",
-        "if (abandonForHostShutdown) return;",
-        "DetachDocumentManagerHandler();",
-        "TryCloseWindow(deferForFinalDocument);",
-    ):
-        require(marker in teardown, f"{signature} is missing host-shutdown barrier: {marker}")
-    require(
-        teardown.index("if (abandonForHostShutdown) return;")
-        < teardown.index("DetachDocumentManagerHandler();")
-        < teardown.index("TryCloseWindow(deferForFinalDocument);"),
-        f"{signature} must leave native DocumentManager subscriptions untouched during host quit before any normal close cleanup/dispatch.",
-    )
-
-close_aborted = method_block(source, "private void OnDocumentCloseAborted(object? sender, EventArgs e)")
+close_on_dispatcher = method_block(window_source, "private void TryCloseWindowOnDispatcher()")
 require(
-    "if (Volatile.Read(ref _hostQuitStarted) != 0) return;" in close_aborted,
-    "Document CloseAborted must not remove BricsCAD lifecycle handlers while host quit is still active.",
+    "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;" in close_on_dispatcher,
+    "Already-queued dispatcher close must re-check global host quiescence before WPF HWND teardown.",
 )
-
-# Host-owned final teardown must never be translated into a dispatcher Window.Close request.
 require(
-    "TryCloseWindow(abandonForHostShutdown" not in source,
-    "Host-shutdown state must suppress explicit WPF close, not merely change its dispatch timing.",
-)
-
-# A close request may have been queued before BeginQuit and execute after BeginQuit. The final
-# dispatcher callback is therefore the last authoritative barrier before WPF detaches its HWND.
-close_on_dispatcher = method_block(source, "private void TryCloseWindowOnDispatcher()")
-for marker in (
-    "if (Volatile.Read(ref _hostQuitStarted) != 0) return;",
-    "_window.Close();",
-):
-    require(marker in close_on_dispatcher, f"Dispatcher close owner is missing host-quit race guard: {marker}")
-require(
-    close_on_dispatcher.index("if (Volatile.Read(ref _hostQuitStarted) != 0) return;")
+    close_on_dispatcher.index("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;")
     < close_on_dispatcher.index("_window.Close();"),
-    "An already-queued dispatcher close must re-check host quit before initiating WPF Window.Close.",
+    "Global quiescence guard must precede Window.Close().",
 )
 
-window_closed = method_block(source, "private void OnWindowClosed(object? sender, EventArgs e)")
+window_closed = method_block(window_source, "private void OnWindowClosed(object? sender, EventArgs e)")
 require(
-    "if (Volatile.Read(ref _hostQuitStarted) != 0) return;" in window_closed,
-    "Host-owned WPF Closed must not translate into BricsCAD lifecycle unsubscription during native teardown.",
+    "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;" in window_closed,
+    "Host-owned WPF Closed must not translate into native lifecycle unsubscription.",
 )
 require(
-    "Detach();" in window_closed,
-    "Ordinary WPF Closed must still detach the registration.",
-)
-require(
-    window_closed.index("if (Volatile.Read(ref _hostQuitStarted) != 0) return;")
+    window_closed.index("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;")
     < window_closed.index("Detach();"),
-    "Window Closed must cross the host-quit barrier before normal native subscription cleanup.",
+    "Window Closed must cross global quiescence before normal cleanup.",
 )
 
-detach = method_block(source, "private void Detach()")
+detach = method_block(window_source, "private void Detach()")
 require(
-    "if (Volatile.Read(ref _hostQuitStarted) != 0) return;" in detach,
-    "The shared detach owner must fail closed instead of mutating BricsCAD subscriptions during host quit.",
+    "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;" in detach,
+    "Shared detach must fail closed while global host quiescence is active.",
 )
-for marker in (
-    "BcadApplication.BeginQuit -= OnApplicationBeginQuit;",
-    "BcadApplication.QuitAborted -= OnApplicationQuitAborted;",
-):
-    require(marker in detach, f"Normal detach must release the host lifecycle subscription: {marker}")
 require(
-    detach.index("if (Volatile.Read(ref _hostQuitStarted) != 0) return;")
-    < detach.index("DetachDocumentManagerHandler();")
-    < detach.index("BcadApplication.BeginQuit -= OnApplicationBeginQuit;"),
-    "No BricsCAD lifecycle handler may be removed by shared detach after BeginQuit has started.",
+    "ModelessHostQuiescenceCoordinator.QuiescenceAborted -= OnHostQuiescenceAborted;" in detach,
+    "Normal detach must release the managed recovery subscription.",
+)
+require(
+    detach.index("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;")
+    < detach.index("DetachDocumentManagerHandler();"),
+    "Shared detach must not touch native DocumentManager handlers after host quiescence starts.",
 )
 
-print("[OK] BricsCAD BeginQuit owns final native/WPF teardown: QS3D blocks modeless document access, Window.Close, and native lifecycle unsubscription until normal exit or dispatcher-deferred QuitAborted recovery.")
+print("[OK] V25 modeless host teardown uses one plugin-global QuitWillStart/QuitAborted owner; per-window registrations consume managed quiescence state and never own BricsCAD Application quit callbacks.")
