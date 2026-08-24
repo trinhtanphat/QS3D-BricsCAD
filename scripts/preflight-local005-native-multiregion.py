@@ -45,6 +45,23 @@ REQUIRED_FILES = {
         "MaxRegions",
         "MaxHandlesPerRegion",
     ),
+    "src/QS3D.BricsCAD.V25/Cad/SlabFoundationMultiRegionMeshSolidBuilder.cs": (
+        "SlabFoundationMultiRegionMeshSolidBuilder",
+        "PolygonSourceLoopRegionAssembler.Assemble",
+        "PolygonalSlabMultiRegionMeshPlanner.Plan",
+        "MaxBarsPerBatch = 12000",
+        "ProjectStateSnapshot.Capture",
+        "GeneratedRebarNativeOwnershipService.RequireMatchingOwnership",
+        "GeneratedRebarRegionOwnershipService.RequireMatchingOwnership",
+        "GeneratedRebarNativeOwnershipService.MarkGenerated",
+        "GeneratedRebarRegionOwnershipService.MarkGenerated",
+        "MultiRegionRebarManifest.SerializeSources",
+        "MultiRegionRebarManifest.SerializeGenerated",
+        "MultiRegionSourceManifest",
+        "MultiRegionGeneratedManifest",
+        "MultiRegionTopologyFingerprint",
+        "transaction.Commit()",
+    ),
 }
 
 
@@ -66,7 +83,7 @@ def main():
             print(" -", item)
         return 1
 
-    print("PASS: LOCAL-005 Core assembler, native loop reader, region ownership, and bounded manifests are present.")
+    print("PASS: LOCAL-005 Core assembler, native loop reader, region ownership, bounded manifests, and atomic materializer are present.")
     return 0
 
 
