@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         {
             BltParityDeductsConcreteContactAndPersistsAudit();
             PartialUnionResolvedContactIsDeductedOnce();
+            LinkedOpeningRevealAdjustmentIsPersisted();
         }
 
         private static void BltParityDeductsConcreteContactAndPersistsAudit()
@@ -57,6 +58,30 @@ namespace QS3D.Core.SmokeTests
             Near(4.4d, wall.Quantities["GrossFormworkM2"], "partial-contact gross wall formwork");
             Near(0.15d, wall.Quantities["ConcreteContactDeductionM2"], "partial union contact deduction");
             Near(4.25d, wall.Quantities["FormworkM2"], "partial-contact net wall formwork");
+        }
+
+        private static void LinkedOpeningRevealAdjustmentIsPersisted()
+        {
+            var project = new ProjectState("wall-formwork-opening", "Wall formwork opening audit regression");
+            var wall = new ProjectElement("W-OPEN", ElementCategory.StructuralWall);
+            wall.Properties["LengthM"] = "5";
+            wall.Properties["ThicknessM"] = "0.20";
+            wall.Properties["HeightM"] = "3";
+            project.Elements.Add(wall);
+
+            var opening = new ProjectElement("O-OPEN", ElementCategory.WallOpening);
+            opening.Properties["WidthM"] = "0.9";
+            opening.Properties["HeightM"] = "2.2";
+            project.Elements.Add(opening);
+            new HostLinkService().LinkOpening(project, opening.Id, wall.Id);
+            new OpeningRegenerator().Regenerate(project, opening);
+
+            new StructuralRegenerator().Regenerate(project, wall);
+
+            Near(31.2d, wall.Quantities["GrossFormworkM2"], "opening gross wall formwork");
+            Near(0d, wall.Quantities["ConcreteContactDeductionM2"], "opening concrete-contact deduction");
+            Near(2.90d, wall.Quantities["OpeningRevealFormworkAdjustmentM2"], "opening/reveal adjustment audit");
+            Near(28.30d, wall.Quantities["FormworkM2"], "opening net wall formwork");
         }
 
         private static void Near(double expected, double actual, string message)
