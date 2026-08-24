@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import os
+import signal
 import stat
 import subprocess
 import sys
@@ -11,8 +12,10 @@ SCRIPTS = ROOT / "scripts"
 SELF = Path(__file__).resolve()
 CHILD_TIMEOUT_SECONDS = 180
 AGGREGATE_TIMEOUT_SECONDS = 15 * 60
+PROCESS_TREE_CLEANUP_TIMEOUT_SECONDS = 10
 MAX_FEATURE_GATES = 1024
 MAX_FEATURE_GATE_SOURCE_BYTES = 512 * 1024
+WINDOWS_CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
 PYTHON_ENVIRONMENT_CONTROLS = (
     "PYTHONBREAKPOINT",
     "PYTHONHOME",
@@ -23,6 +26,13 @@ PYTHON_ENVIRONMENT_CONTROLS = (
     "PYTHONUSERBASE",
     "PYTHONWARNINGS",
 )
+
+
+class GateTimeoutError(TimeoutError):
+    def __init__(self, timeout_seconds, cleanup_error=None):
+        super().__init__("feature preflight timed out")
+        self.timeout_seconds = timeout_seconds
+        self.cleanup_error = cleanup_error
 
 
 def _relative_candidate(path):
@@ -136,6 +146,78 @@ def remaining_child_timeout(started_at, now=None):
     return min(float(CHILD_TIMEOUT_SECONDS), remaining)
 
 
+def _process_group_launch_kwargs(platform_name=None):
+    platform = os.name if platform_name is None else platform_name
+    if platform == "nt":
+        return {"creationflags": WINDOWS_CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def _wait_after_tree_cleanup(process):
+    try:
+        process.wait(timeout=PROCESS_TREE_CLEANUP_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        return "process-tree-cleanup-wait-timeout"
+    except OSError:
+        return "process-tree-cleanup-wait-error"
+    return None
+
+
+def _terminate_process_tree(process, platform_name=None):
+    platform = os.name if platform_name is None else platform_name
+    cleanup_error = None
+
+    if platform == "nt":
+        try:
+            completed = subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=PROCESS_TREE_CLEANUP_TIMEOUT_SECONDS,
+            )
+            if completed.returncode != 0:
+                cleanup_error = "process-tree-cleanup-exit=" + str(completed.returncode)
+        except subprocess.TimeoutExpired:
+            cleanup_error = "process-tree-cleanup-command-timeout"
+        except OSError:
+            cleanup_error = "process-tree-cleanup-command-error"
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except OSError:
+            cleanup_error = "process-tree-cleanup-signal-error"
+
+    if cleanup_error is not None:
+        try:
+            process.kill()
+        except OSError:
+            pass
+
+    wait_error = _wait_after_tree_cleanup(process)
+    if cleanup_error is None:
+        cleanup_error = wait_error
+    elif wait_error is not None:
+        cleanup_error += "+" + wait_error
+    return cleanup_error
+
+
+def run_gate(path, child_env, timeout_seconds):
+    process = subprocess.Popen(
+        [sys.executable, str(path)],
+        cwd=str(ROOT),
+        env=child_env,
+        **_process_group_launch_kwargs(),
+    )
+    try:
+        return process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired as exc:
+        cleanup_error = _terminate_process_tree(process)
+        raise GateTimeoutError(timeout_seconds, cleanup_error) from exc
+
+
 def escape_actions_data(value):
     return str(value).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
@@ -182,18 +264,17 @@ def main():
 
         print("\n===", rel, "===")
         try:
-            completed = subprocess.run(
-                [sys.executable, str(path)],
-                cwd=str(ROOT),
-                check=False,
-                env=child_env,
-                timeout=child_timeout,
-            )
-        except subprocess.TimeoutExpired:
-            reason = "aggregate-timeout" if remaining_child_timeout(aggregate_started_at) <= 0 else "timeout"
-            print("ERROR:", rel, "timed out after", child_timeout, "seconds (", reason, ").")
+            returncode = run_gate(path, child_env, child_timeout)
+        except GateTimeoutError as exc:
+            timeout_reason = "aggregate-timeout" if remaining_child_timeout(aggregate_started_at) <= 0 else "timeout"
+            reason = timeout_reason
+            if exc.cleanup_error is not None:
+                reason += "-cleanup-failed"
+            print("ERROR:", rel, "timed out after", exc.timeout_seconds, "seconds (", reason, ").")
+            if exc.cleanup_error is not None:
+                print("ERROR:", rel, "owned process-tree cleanup failed:", exc.cleanup_error)
             failed.append((str(rel), reason))
-            if reason == "aggregate-timeout":
+            if timeout_reason == "aggregate-timeout" or exc.cleanup_error is not None:
                 break
             continue
         except OSError as exc:
@@ -201,8 +282,8 @@ def main():
             failed.append((str(rel), "launch"))
             continue
 
-        if completed.returncode != 0:
-            failed.append((str(rel), "exit=" + str(completed.returncode)))
+        if returncode != 0:
+            failed.append((str(rel), "exit=" + str(returncode)))
 
     if failed:
         print("\nAggregate preflight FAILED:")

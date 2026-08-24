@@ -8,6 +8,7 @@ namespace QS3D.Core.SmokeTests
             GoldenProjectE2ERegressionSmoke.Run();
             P0QuantityContractRegressionSmoke.Run();
             QuantityReportSelectionCountIntegritySmoke.Run();
+            QuantityReportProjectRevisionGuardSmoke.Run();
             QuantityRuleCanonicalNumericKeySmoke.Run();
             QuantityRuleTokenCanonicalitySmoke.Run();
             QuantityReportDistinctNoteSmoke.Run();
