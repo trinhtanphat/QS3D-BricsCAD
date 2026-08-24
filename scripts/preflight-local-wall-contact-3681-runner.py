@@ -2,6 +2,7 @@
 """Fail closed unless #3681 remains a committed pull/run-only V25 qualification lane."""
 
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +26,15 @@ def require_tokens(text: str, label: str, tokens: tuple[str, ...]) -> None:
     for token in tokens:
         if token not in text:
             fail(label + " is missing: " + token)
+
+
+def contains_forbidden(text: str, forbidden: str) -> bool:
+    if forbidden in ("TODO", "FIXME"):
+        # Treat work-marker words as tokens. A substring check would falsely reject valid
+        # identifiers such as Convert.ToDouble because "todouble" starts with "todo".
+        pattern = rf"(?<![A-Za-z0-9_]){re.escape(forbidden)}(?![A-Za-z0-9_])"
+        return re.search(pattern, text, flags=re.IGNORECASE) is not None
+    return forbidden.lower() in text.lower()
 
 
 for path in (RUNNER, PROJECT, HARNESS, PRODUCTION, INDEX, DISPATCH):
@@ -142,7 +152,7 @@ for forbidden in (
     "paste this",
     "edit production source",
 ):
-    if forbidden.lower() in runner.lower() or forbidden.lower() in harness.lower():
+    if contains_forbidden(runner, forbidden) or contains_forbidden(harness, forbidden):
         fail("local lane still delegates implementation work: " + forbidden)
 
 print("PASS #3681 committed one-command licensed V25 runner/harness")
