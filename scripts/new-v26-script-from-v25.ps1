@@ -37,10 +37,24 @@ if ($text.IndexOf('V25', [StringComparison]::Ordinal) -lt 0 -and $text.IndexOf('
     throw "V25 template contains no host-major token to transform: $SourceScript"
 }
 
-# This transformation is intentionally narrow: only the host-major token changes.
-# Every security/transaction/download/signature branch remains byte-for-byte equivalent
-# apart from V25/v25 -> V26/v26 identifiers, paths, registry selectors and asset names.
+# The common transformation is intentionally narrow: only the host-major token changes.
+# V26 has one additional runtime requirement that V25 does not: the generated installer
+# must place the net8 runtimeconfig beside the managed plugin. Keep that delta explicit
+# here rather than weakening the V25 template or post-editing a packaged artifact.
 $generated = $text.Replace('V25', 'V26').Replace('v25', 'v26')
+if ($SourceScript -eq 'install-v25-autoload.ps1') {
+    $payloadAnchor = "        'QS3D.BricsCAD.V26.dll',`r`n        'QS3D.Core.dll',"
+    $payloadReplacement = "        'QS3D.BricsCAD.V26.dll',`r`n        'QS3D.BricsCAD.V26.runtimeconfig.json',`r`n        'QS3D.Core.dll',"
+    if ($generated.IndexOf($payloadAnchor, [StringComparison]::Ordinal) -lt 0) {
+        # Source files are LF-only in some checkouts. Preserve the source newline form.
+        $payloadAnchor = "        'QS3D.BricsCAD.V26.dll',`n        'QS3D.Core.dll',"
+        $payloadReplacement = "        'QS3D.BricsCAD.V26.dll',`n        'QS3D.BricsCAD.V26.runtimeconfig.json',`n        'QS3D.Core.dll',"
+    }
+    if ($generated.IndexOf($payloadAnchor, [StringComparison]::Ordinal) -lt 0) {
+        throw 'Generated V26 installer payload anchor changed; refusing to omit the required runtimeconfig.'
+    }
+    $generated = $generated.Replace($payloadAnchor, $payloadReplacement)
+}
 
 if ($generated.IndexOf('V25', [StringComparison]::Ordinal) -ge 0 -or
     $generated.IndexOf('v25', [StringComparison]::Ordinal) -ge 0) {
@@ -49,7 +63,7 @@ if ($generated.IndexOf('V25', [StringComparison]::Ordinal) -ge 0 -or
 
 $requiredTokens = switch ($SourceScript) {
     'install-v25-autoload.ps1' {
-        @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'BricsCAD-V26', '^V26', 'QS3D-BricsCAD-V26-Update-')
+        @('QS3D.BricsCAD.V26.dll', 'QS3D.BricsCAD.V26.runtimeconfig.json', 'BricsCAD V26 x64', 'BricsCAD-V26', '^V26', 'QS3D-BricsCAD-V26-Update-')
         break
     }
     'uninstall-v25-autoload.ps1' {
