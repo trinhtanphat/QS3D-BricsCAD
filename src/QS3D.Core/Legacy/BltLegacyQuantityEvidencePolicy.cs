@@ -100,7 +100,20 @@ namespace QS3D.Core.Legacy
                 !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value) ||
                 double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
                 throw new InvalidOperationException(element.Id + "/" + key + " must be a canonical finite non-negative invariant quantity.");
+            if (value == 0d && HasNonZeroSignificand(raw))
+                throw new InvalidOperationException(element.Id + "/" + key + " underflowed to zero.");
             return true;
+        }
+
+        private static bool HasNonZeroSignificand(string raw)
+        {
+            for (var i = 0; i < raw.Length; i++)
+            {
+                var character = raw[i];
+                if (character == 'e' || character == 'E') break;
+                if (character >= '1' && character <= '9') return true;
+            }
+            return false;
         }
 
         private static bool Set(ProjectElement element, string key, double value)
