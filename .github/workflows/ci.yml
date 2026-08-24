@@ -42,6 +42,8 @@ jobs:
           python-version: "3.12"
       - name: CI trigger and publishing policy gate
         run: python scripts/preflight-ci-manual-only.py
+      - name: Changed-path tokenization regression
+        run: python scripts/test-ci-changed-path-tokenization.py
       - name: Repository professionalism gate
         run: python scripts/preflight-repository-professionalism.py
       - name: Immutable GitHub Actions supply-chain gate
