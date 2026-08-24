@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
+using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
-using QS3D.Core.Services;
 using Teigha.BoundaryRepresentation;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
@@ -22,6 +22,7 @@ namespace QS3D.BricsCAD.V25.Reporting
     internal static class StructuralWallConcreteContactService
     {
         private const double HorizontalFaceNormalZ = 0.70710678118d;
+        private const string GeneratedHostSolidOwnerSlot = "GeneratedSolidHandle";
 
         private sealed class FaceSeed
         {
@@ -51,7 +52,11 @@ namespace QS3D.BricsCAD.V25.Reporting
             }
         }
 
-        public static double MeasureM2(Document document, ProjectState project, ProjectElement wall)
+        public static bool TryMeasureM2(
+            Document document,
+            ProjectState project,
+            ProjectElement wall,
+            out double deductionM2)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -59,6 +64,7 @@ namespace QS3D.BricsCAD.V25.Reporting
             if (wall.Category != ElementCategory.StructuralWall)
                 throw new ArgumentException("Concrete-contact measurement requires a StructuralWall target.", nameof(wall));
 
+            deductionM2 = 0d;
             var tolerances = new QuantityGeometryTolerances();
             var lengthToMeter = LengthToMeter(document.Database.Insunits);
             var areaScale = lengthToMeter * lengthToMeter;
@@ -66,14 +72,19 @@ namespace QS3D.BricsCAD.V25.Reporting
             var distanceCad = tolerances.Distance / lengthToMeter;
             var volumeCadTolerance = tolerances.Volume / volumeScale;
 
-            var targetHandles = SourceHandleResolver.Resolve(project, new[] { wall.Id });
+            // Contact is a live-BREP concern, not a Locate concern. Prefer the generated host
+            // Solid3d owner even when the semantic element also has an authoritative LINE or
+            // POLYLINE SourceHandle. Fall back to SourceHandles only when the source entity is
+            // itself a live Solid3d (for example a native solid captured directly).
+            var targetHandles = ResolveLiveSolidHandles(document, wall);
+            if (targetHandles.Count == 0) return false;
+
             var targetIds = CadHandleService.Resolve(document, targetHandles);
             var targetHandleSet = new HashSet<string>(
                 targetIds.Select(x => x.Handle.ToString()),
                 StringComparer.OrdinalIgnoreCase);
             var targets = CloneSolids(document, targetIds);
-            if (targets.Count == 0)
-                throw new InvalidOperationException("Structural wall " + wall.Id + " has no live Solid3d for concrete-contact measurement.");
+            if (targets.Count == 0) return false;
 
             var candidates = new List<Solid3d>();
             try
@@ -83,15 +94,8 @@ namespace QS3D.BricsCAD.V25.Reporting
                     if (string.Equals(neighbor.Id, wall.Id, StringComparison.OrdinalIgnoreCase)) continue;
                     if (!IsConcreteContactCategory(neighbor.Category)) continue;
 
-                    IReadOnlyList<string> handles;
-                    try
-                    {
-                        handles = SourceHandleResolver.Resolve(project, new[] { neighbor.Id });
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        continue;
-                    }
+                    var handles = ResolveLiveSolidHandles(document, neighbor);
+                    if (handles.Count == 0) continue;
 
                     var ids = CadHandleService.Resolve(document, handles)
                         .Where(x => !targetHandleSet.Contains(x.Handle.ToString()))
@@ -143,16 +147,31 @@ namespace QS3D.BricsCAD.V25.Reporting
                 }
 
                 var deductionCad = Math.Max(0d, grossVerticalAreaCad - residualVerticalAreaCad);
-                var deductionM2 = deductionCad * areaScale;
+                deductionM2 = deductionCad * areaScale;
                 if (double.IsNaN(deductionM2) || double.IsInfinity(deductionM2) || deductionM2 < 0d)
                     throw new InvalidOperationException("Structural wall concrete-contact deduction is not finite and non-negative.");
-                return deductionM2;
+                return true;
             }
             finally
             {
                 foreach (var solid in candidates) solid.Dispose();
                 foreach (var solid in targets) solid.Dispose();
             }
+        }
+
+        private static IReadOnlyList<string> ResolveLiveSolidHandles(Document document, ProjectElement element)
+        {
+            var generated = GeneratedHandleOwnershipPolicy
+                .EnumerateLogicalOwnerHandles(element)
+                .Where(x => GeneratedHandleOwnershipPolicy.AreSameLogicalOwnerSlots(x.Value, GeneratedHostSolidOwnerSlot))
+                .Select(x => x.Key)
+                .ToList();
+            var liveGenerated = CadHandleService.GetLiveSolidHandles(document, generated);
+            if (liveGenerated.Count > 0)
+                return liveGenerated.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+
+            var liveSources = CadHandleService.GetLiveSolidHandles(document, element.SourceHandles);
+            return liveSources.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
 
         private static List<Solid3d> CloneSolids(Document document, IEnumerable<ObjectId> ids)
