@@ -60,10 +60,9 @@ function Stop-OwnedProcessTree {
         [ValidateRange(1, 60000)][int]$CleanupTimeoutMs = 10000
     )
 
-    if ($Process.HasExited) {
-        return
-    }
-
+    # Always attempt PID-scoped tree cleanup after the extraction timeout. The
+    # root may race to exit between WaitForExit(false) and this helper; treating
+    # that race as a clean return would make surviving descendants unverifiable.
     $taskkill = $null
     try {
         $taskkill = Start-Process -FilePath 'taskkill.exe' -ArgumentList @('/PID', [string]$Process.Id, '/T', '/F') -PassThru -NoNewWindow
