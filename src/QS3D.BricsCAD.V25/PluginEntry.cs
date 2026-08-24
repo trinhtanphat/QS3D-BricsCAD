@@ -46,6 +46,15 @@ namespace QS3D.BricsCAD.V25
 
         public void Terminate()
         {
+            // QuitWillStart is earlier than BricsCAD's final native/UI destruction. Once the
+            // plugin-global quiescence barrier is armed, do not detach document/command reactors,
+            // remove native context menus, reset ribbon components, or dispose PaletteSet HWND/WPF
+            // surfaces from IExtensionApplication.Terminate. BricsCAD/process teardown owns those
+            // final resources. Ordinary NETUNLOAD still performs the complete cleanup below because
+            // host quiescence is false on that path.
+            if (ModelessHostQuiescenceCoordinator.IsQuiescing)
+                return;
+
             TeardownHostServices();
         }
 
