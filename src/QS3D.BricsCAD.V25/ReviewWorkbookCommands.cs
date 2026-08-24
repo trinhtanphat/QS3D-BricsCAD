@@ -51,6 +51,8 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     internal static class ReviewWorkbookHostService
     {
+        private const int LiveHandleBatchSize = 5000;
+
         public static string ModelRevision(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -165,7 +167,9 @@ namespace QS3D.BricsCAD.V25
             if (expected.Count == 0)
                 throw new InvalidOperationException("QS3D Review export has no CAD Handle provenance.");
 
-            var live = CadHandleService.GetLiveHandles(document, expected);
+            var live = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var batch in Qs3dReviewLiveHandleBatchPlanner.Create(expected, LiveHandleBatchSize))
+                live.UnionWith(CadHandleService.GetLiveHandles(document, batch));
             var missing = expected.Where(handle => !live.Contains(handle)).ToList();
             if (missing.Count > 0)
                 throw new InvalidOperationException(

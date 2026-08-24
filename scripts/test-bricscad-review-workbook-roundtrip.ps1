@@ -138,6 +138,11 @@ foreach ($required in @($bricscadExe, $PluginDll, $coreDll, $DrawingCopy)) {
         throw "Required QS Review runtime input is missing: $required"
     }
 }
+$bricscadVersionInfo = (Get-Item -LiteralPath $bricscadExe).VersionInfo
+$expectedHostMajor = if ($HostMajor -eq "V25") { 25 } else { 26 }
+if ($bricscadVersionInfo.FileMajorPart -ne $expectedHostMajor) {
+    throw "HostMajor $HostMajor does not match bricscad.exe file major $($bricscadVersionInfo.FileMajorPart)."
+}
 
 $git = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
 $gitHead = (& $git.Source -C $repoRoot rev-parse HEAD).Trim().ToLowerInvariant()
@@ -184,10 +189,13 @@ $scriptPath = Join-Path $ArtifactDir "review-workbook-roundtrip.scr"
 $metadataPath = Join-Path $ArtifactDir "review-workbook-roundtrip-metadata.json"
 $drawingHashBefore = (Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()
 $pluginHash = (Get-FileHash -LiteralPath $PluginDll -Algorithm SHA256).Hash.ToUpperInvariant()
+$coreHash = (Get-FileHash -LiteralPath $coreDll -Algorithm SHA256).Hash.ToUpperInvariant()
 $nonce = [Guid]::NewGuid().ToString("N")
 $oldResult = [Environment]::GetEnvironmentVariable("QS3D_REVIEW_ROUNDTRIP_RESULT", "Process")
 $oldWorkbook = [Environment]::GetEnvironmentVariable("QS3D_REVIEW_ROUNDTRIP_WORKBOOK", "Process")
 $oldNonce = [Environment]::GetEnvironmentVariable("QS3D_REVIEW_ROUNDTRIP_NONCE", "Process")
+$oldPlugin = [Environment]::GetEnvironmentVariable("QS3D_REVIEW_ROUNDTRIP_PLUGIN", "Process")
+$oldCore = [Environment]::GetEnvironmentVariable("QS3D_REVIEW_ROUNDTRIP_CORE", "Process")
 $process = $null
 $proxyDialogsDismissed = 0
 $startedAt = Get-Date
@@ -196,6 +204,8 @@ try {
     $env:QS3D_REVIEW_ROUNDTRIP_RESULT = $resultPath
     $env:QS3D_REVIEW_ROUNDTRIP_WORKBOOK = $workbookPath
     $env:QS3D_REVIEW_ROUNDTRIP_NONCE = $nonce
+    $env:QS3D_REVIEW_ROUNDTRIP_PLUGIN = $PluginDll
+    $env:QS3D_REVIEW_ROUNDTRIP_CORE = $coreDll
     $script = @(
         "FILEDIA", "0",
         "CMDECHO", "1",
@@ -236,7 +246,12 @@ try {
     Require-Qs3dValue $marker "nonce" $nonce
     Require-Qs3dValue $marker "process" "bricscad"
     Require-Qs3dValue $marker "plugin_assembly" $expectedAssembly
+    Require-Qs3dValue $marker "plugin_path_match" "true"
+    Require-Qs3dValue $marker "plugin_sha256" $pluginHash
+    Require-Qs3dValue $marker "core_path_match" "true"
+    Require-Qs3dValue $marker "core_sha256" $coreHash
     Require-Qs3dValue $marker "is_64bit" "true"
+    Require-Qs3dValue $marker "readonly_unit_resolution" "true"
     foreach ($key in @(
         "wrong_fingerprint_refused", "wrong_revision_refused", "stale_handle_refused",
         "partial_resolution_refused", "all_targets_resolved_before_selection",
@@ -286,11 +301,12 @@ try {
         source_sha = $ExpectedSourceSha
         started_at = $startedAt.ToUniversalTime().ToString("O")
         completed_at = (Get-Date).ToUniversalTime().ToString("O")
-        bricscad_file_version = (Get-Item -LiteralPath $bricscadExe).VersionInfo.FileVersion
-        bricscad_product_version = (Get-Item -LiteralPath $bricscadExe).VersionInfo.ProductVersion
+        bricscad_file_version = $bricscadVersionInfo.FileVersion
+        bricscad_product_version = $bricscadVersionInfo.ProductVersion
         bricscad_exe_sha256 = (Get-FileHash -LiteralPath $bricscadExe -Algorithm SHA256).Hash.ToUpperInvariant()
         plugin_assembly = $expectedAssembly
         plugin_sha256 = $pluginHash
+        core_sha256 = $coreHash
         drawing_copy_sha256_before = $drawingHashBefore
         drawing_copy_sha256_after = $drawingHashAfter
         workbook_sha256 = (Get-FileHash -LiteralPath $workbookPath -Algorithm SHA256).Hash.ToUpperInvariant()
@@ -311,4 +327,6 @@ finally {
     Restore-EnvironmentValue -Name "QS3D_REVIEW_ROUNDTRIP_RESULT" -Value $oldResult
     Restore-EnvironmentValue -Name "QS3D_REVIEW_ROUNDTRIP_WORKBOOK" -Value $oldWorkbook
     Restore-EnvironmentValue -Name "QS3D_REVIEW_ROUNDTRIP_NONCE" -Value $oldNonce
+    Restore-EnvironmentValue -Name "QS3D_REVIEW_ROUNDTRIP_PLUGIN" -Value $oldPlugin
+    Restore-EnvironmentValue -Name "QS3D_REVIEW_ROUNDTRIP_CORE" -Value $oldCore
 }

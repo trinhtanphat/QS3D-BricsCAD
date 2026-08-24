@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Xml.Linq;
 using QS3D.Core.Coordination;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
@@ -20,9 +21,83 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             SixSheetWorkbookRoundTripsAllTraceKinds();
+            ExcelResavedRelationshipsAndSharedStringsRoundTrip();
+            TraceKeyTamperFailsClosed();
+            TraceReaderRejectsFormulaIdentityCell();
+            BoundedLiveHandleBatchesCoverMoreThanTenThousand();
             CanonicalIssuesProjectWithoutReRunningDetectors();
             CanonicalLifecyclePairMismatchFailsClosed();
             MixedDrawingFailsBeforeReplacingExistingWorkbook();
+        }
+
+        private static void ExcelResavedRelationshipsAndSharedStringsRoundTrip()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-review-excel-resave-" + Guid.NewGuid().ToString("N") + ".xlsx");
+            try
+            {
+                ExportTraceFixture(path);
+                ConvertInlineStringsToSharedStrings(path);
+                RemapWorksheetPart(path, "sheet2.xml", "review-qto.xml");
+                RemapWorksheetPart(path, "sheet3.xml", "review-clashes.xml");
+                RemapWorksheetPart(path, "sheet4.xml", "review-duplicates.xml");
+
+                var traces = new[]
+                {
+                    Qs3dReviewWorkbookTraceReader.Read(path, Qs3dReviewWorkbookExporter.QuantitySheet, 2),
+                    Qs3dReviewWorkbookTraceReader.Read(path, Qs3dReviewWorkbookExporter.ClashSheet, 2),
+                    Qs3dReviewWorkbookTraceReader.Read(path, Qs3dReviewWorkbookExporter.DuplicateSheet, 2)
+                };
+                foreach (var trace in traces)
+                    Qs3dReviewTraceValidator.ValidateIdentity(trace, "drawing-fp", "REV-TRACE-01");
+            }
+            finally { TryDelete(path); }
+        }
+
+        private static void TraceKeyTamperFailsClosed()
+        {
+            var cases = new[]
+            {
+                new { SheetPart = "xl/worksheets/sheet2.xml", Cell = "B2", Value = "EL-QTO-TAMPER", Sheet = Qs3dReviewWorkbookExporter.QuantitySheet },
+                new { SheetPart = "xl/worksheets/sheet3.xml", Cell = "K2", Value = "2AF94", Sheet = Qs3dReviewWorkbookExporter.ClashSheet },
+                new { SheetPart = "xl/worksheets/sheet4.xml", Cell = "J2", Value = "COL-TAMPER", Sheet = Qs3dReviewWorkbookExporter.DuplicateSheet }
+            };
+            foreach (var item in cases)
+            {
+                var path = Path.Combine(Path.GetTempPath(), "qs3d-review-trace-tamper-" + Guid.NewGuid().ToString("N") + ".xlsx");
+                try
+                {
+                    ExportTraceFixture(path);
+                    MutateCell(path, item.SheetPart, item.Cell, item.Value, false);
+                    var trace = Qs3dReviewWorkbookTraceReader.Read(path, item.Sheet, 2);
+                    Throws<InvalidDataException>(() => Qs3dReviewTraceValidator.ValidateIdentity(trace, "drawing-fp", "REV-TRACE-01"));
+                }
+                finally { TryDelete(path); }
+            }
+        }
+
+        private static void TraceReaderRejectsFormulaIdentityCell()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-review-formula-identity-" + Guid.NewGuid().ToString("N") + ".xlsx");
+            try
+            {
+                ExportTraceFixture(path);
+                MutateCell(path, "xl/worksheets/sheet2.xml", "B2", "EL-QTO-01", true);
+                Throws<InvalidDataException>(() => Qs3dReviewWorkbookTraceReader.Read(
+                    path, Qs3dReviewWorkbookExporter.QuantitySheet, 2));
+            }
+            finally { TryDelete(path); }
+        }
+
+        private static void BoundedLiveHandleBatchesCoverMoreThanTenThousand()
+        {
+            var handles = Enumerable.Range(1, 10001).Select(value => value.ToString("X")).ToArray();
+            var batches = Qs3dReviewLiveHandleBatchPlanner.Create(handles, 4096);
+            Equal(3, batches.Count, "live Handle batch count above legacy 10,000 cap");
+            Equal(4096, batches[0].Count, "first live Handle batch size");
+            Equal(4096, batches[1].Count, "second live Handle batch size");
+            Equal(1809, batches[2].Count, "final live Handle batch size");
+            if (!batches.SelectMany(batch => batch).SequenceEqual(handles, StringComparer.Ordinal))
+                throw new InvalidOperationException("Qs3dReviewWorkbookSmoke: bounded live Handle batches changed order or scope.");
         }
 
         private static void SixSheetWorkbookRoundTripsAllTraceKinds()
@@ -152,8 +227,26 @@ namespace QS3D.Core.SmokeTests
             Equal(1, projection.Duplicates.Count, "canonical duplicate projection count");
             Equal("ISSUE-CLASH-01", projection.Clashes.Single().ClashId, "canonical clash issue id");
             Equal("ISSUE-DUPLICATE-01", projection.Duplicates.Single().DuplicateId, "canonical duplicate issue id");
-            Equal(DuplicateMatchKind.SemanticIdentity, projection.Duplicates.Single().MatchKinds, "conservative duplicate evidence");
+            Equal(DuplicateMatchKind.None, projection.Duplicates.Single().MatchKinds, "evidence-neutral persisted review projection");
+            Equal(string.Empty, projection.Clashes.Single().RuleId, "persisted clash must not fabricate a rule id");
+            Equal(string.Empty, projection.Duplicates.Single().RuleId, "persisted review must not fabricate a rule id");
             Equal(2, projection.LifecycleByFindingId.Count, "canonical lifecycle projection count");
+
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-review-neutral-projection-" + Guid.NewGuid().ToString("N") + ".xlsx");
+            try
+            {
+                var quantity = QuantityRow("review-drawing-fp", "PIPE-01", "A1", 1d, 0d, 1d, 2d);
+                Qs3dReviewWorkbookExporter.Export(
+                    path, new[] { quantity }, new[] { quantity }, projection.Clashes, projection.Duplicates,
+                    null, new Qs3dReviewModelInfo("REVIEW-PROJECT", "review.dwg", "review-drawing-fp", "R1", DateTimeOffset.UtcNow),
+                    projection.LifecycleByFindingId);
+                var duplicateXml = ReadEntry(path, "xl/worksheets/sheet4.xml");
+                Contains(duplicateXml, "ReviewOnly", "persisted review row must disclose evidence-neutral classification");
+                if (duplicateXml.Contains("SemanticIdentity", StringComparison.Ordinal) ||
+                    duplicateXml.Contains("QS3D_PERSISTED_", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Qs3dReviewWorkbookSmoke: persisted review projection fabricated detector/rule evidence.");
+            }
+            finally { TryDelete(path); }
         }
 
         private static ProjectElement Element(string id, ElementCategory category, string handle)
@@ -293,6 +386,149 @@ namespace QS3D.Core.SmokeTests
             row.ElementIds.Add(elementId);
             row.SourceHandles.Add(handle);
             return row;
+        }
+
+        private static void ExportTraceFixture(string path)
+        {
+            var detail = QuantityRow("drawing-fp", "EL-QTO-01", "A", 1d, 0d, 1d, 2d);
+            var summary = QuantityRow("drawing-fp", "EL-QTO-01", "A", 1d, 0d, 1d, 2d);
+            var clash = CoordinationClashExportRow.CreateExactHard(
+                "drawing-fp", "2AF93", "2B109", "PIPE-021", "BEAM-104", "Pipe", "Beam", "L03");
+            var duplicate = CoordinationDuplicateExportRow.Create(
+                "drawing-fp", "COL-055", "2C001", "COL-056", "2C002",
+                DuplicateMatchKind.ExactGeometry, "Column", "Column", "L05");
+            Qs3dReviewWorkbookExporter.Export(
+                path,
+                new[] { detail },
+                new[] { summary },
+                new[] { clash },
+                new[] { duplicate },
+                null,
+                new Qs3dReviewModelInfo("TRACE-PROJECT", "trace.dwg", "drawing-fp", "REV-TRACE-01", DateTimeOffset.UtcNow));
+        }
+
+        private static void ConvertInlineStringsToSharedStrings(string path)
+        {
+            XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            XNamespace package = "http://schemas.openxmlformats.org/package/2006/relationships";
+            XNamespace content = "http://schemas.openxmlformats.org/package/2006/content-types";
+            var strings = new List<string>();
+            var indexes = new Dictionary<string, int>(StringComparer.Ordinal);
+            using (var archive = ZipFile.Open(path, ZipArchiveMode.Update))
+            {
+                var worksheets = archive.Entries
+                    .Where(entry => entry.FullName.StartsWith("xl/worksheets/", StringComparison.Ordinal) &&
+                                    entry.FullName.EndsWith(".xml", StringComparison.Ordinal))
+                    .Select(entry => entry.FullName)
+                    .ToList();
+                foreach (var worksheet in worksheets)
+                {
+                    MutateXmlEntry(archive, worksheet, document =>
+                    {
+                        foreach (var cell in document.Descendants(ns + "c")
+                            .Where(item => string.Equals(item.Attribute("t")?.Value, "inlineStr", StringComparison.Ordinal)).ToList())
+                        {
+                            var value = string.Concat(cell.Descendants(ns + "t").Select(text => text.Value));
+                            int index;
+                            if (!indexes.TryGetValue(value, out index))
+                            {
+                                index = strings.Count;
+                                strings.Add(value);
+                                indexes.Add(value, index);
+                            }
+                            cell.Elements(ns + "is").Remove();
+                            cell.SetAttributeValue("t", "s");
+                            cell.Add(new XElement(ns + "v", index));
+                        }
+                    });
+                }
+
+                var shared = archive.CreateEntry("xl/sharedStrings.xml", CompressionLevel.Optimal);
+                using (var writer = new StreamWriter(shared.Open(), new UTF8Encoding(false)))
+                    new XDocument(new XElement(ns + "sst",
+                        new XAttribute("count", strings.Count),
+                        new XAttribute("uniqueCount", strings.Count),
+                        strings.Select(value => new XElement(ns + "si", new XElement(ns + "t", value)))))
+                        .Save(writer, SaveOptions.DisableFormatting);
+
+                MutateXmlEntry(archive, "xl/_rels/workbook.xml.rels", document =>
+                    document.Root!.Add(new XElement(package + "Relationship",
+                        new XAttribute("Id", "rIdSharedStrings"),
+                        new XAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings"),
+                        new XAttribute("Target", "sharedStrings.xml"))));
+                MutateXmlEntry(archive, "[Content_Types].xml", document =>
+                    document.Root!.Add(new XElement(content + "Override",
+                        new XAttribute("PartName", "/xl/sharedStrings.xml"),
+                        new XAttribute("ContentType", "application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"))));
+            }
+        }
+
+        private static void RemapWorksheetPart(string path, string oldName, string newName)
+        {
+            XNamespace package = "http://schemas.openxmlformats.org/package/2006/relationships";
+            XNamespace content = "http://schemas.openxmlformats.org/package/2006/content-types";
+            using (var archive = ZipFile.Open(path, ZipArchiveMode.Update))
+            {
+                var oldPath = "xl/worksheets/" + oldName;
+                var newPath = "xl/worksheets/" + newName;
+                var source = archive.GetEntry(oldPath) ?? throw new InvalidOperationException("Missing worksheet fixture part " + oldPath + ".");
+                byte[] bytes;
+                using (var input = source.Open())
+                using (var memory = new MemoryStream())
+                {
+                    input.CopyTo(memory);
+                    bytes = memory.ToArray();
+                }
+                source.Delete();
+                var replacement = archive.CreateEntry(newPath, CompressionLevel.Optimal);
+                using (var output = replacement.Open()) output.Write(bytes, 0, bytes.Length);
+
+                MutateXmlEntry(archive, "xl/_rels/workbook.xml.rels", document =>
+                {
+                    var relationship = document.Descendants(package + "Relationship")
+                        .Single(item => string.Equals(item.Attribute("Target")?.Value.Replace('\\', '/'), "worksheets/" + oldName, StringComparison.Ordinal));
+                    relationship.SetAttributeValue("Target", "worksheets/" + newName);
+                });
+                MutateXmlEntry(archive, "[Content_Types].xml", document =>
+                {
+                    var entry = document.Descendants(content + "Override")
+                        .Single(item => string.Equals(item.Attribute("PartName")?.Value, "/" + oldPath, StringComparison.Ordinal));
+                    entry.SetAttributeValue("PartName", "/" + newPath);
+                });
+            }
+        }
+
+        private static void MutateCell(string path, string entryName, string cellReference, string value, bool formula)
+        {
+            using (var archive = ZipFile.Open(path, ZipArchiveMode.Update))
+            {
+                MutateXmlEntry(archive, entryName, document =>
+                {
+                    XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+                    var cell = document.Descendants(ns + "c")
+                        .Single(item => string.Equals(item.Attribute("r")?.Value, cellReference, StringComparison.Ordinal));
+                    var text = cell.Descendants(ns + "t").Single();
+                    text.Value = value;
+                    if (formula) cell.AddFirst(new XElement(ns + "f", "1+1"));
+                });
+            }
+        }
+
+        private static void MutateXmlEntry(ZipArchive archive, string entryName, Action<XDocument> mutation)
+        {
+            var entry = archive.GetEntry(entryName) ?? throw new InvalidOperationException("Missing XLSX fixture entry " + entryName + ".");
+            XDocument document;
+            using (var stream = entry.Open()) document = XDocument.Load(stream, LoadOptions.PreserveWhitespace);
+            mutation(document);
+            entry.Delete();
+            var replacement = archive.CreateEntry(entryName, CompressionLevel.Optimal);
+            using (var writer = new StreamWriter(replacement.Open(), new UTF8Encoding(false)))
+                document.Save(writer, SaveOptions.DisableFormatting);
+        }
+
+        private static string ReadEntry(string path, string entryName)
+        {
+            using (var archive = ZipFile.OpenRead(path)) return Read(archive, entryName);
         }
 
         private static string Read(ZipArchive archive, string path)

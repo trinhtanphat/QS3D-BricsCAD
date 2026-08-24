@@ -72,7 +72,7 @@ namespace QS3D.Core.Export
                 {
                     duplicates.Add(new CoordinationDuplicateExportRow(
                         issue.IssueId,
-                        DuplicateMatchKind.SemanticIdentity,
+                        DuplicateMatchKind.None,
                         floor,
                         left.Id,
                         leftHandle,
@@ -80,7 +80,7 @@ namespace QS3D.Core.Export
                         right.Id,
                         rightHandle,
                         right.Category.ToString(),
-                        "QS3D_PERSISTED_REVIEW_V1",
+                        string.Empty,
                         project.DrawingFingerprint,
                         comment));
                     continue;
@@ -98,7 +98,7 @@ namespace QS3D.Core.Export
                     right.Id,
                     rightHandle,
                     right.Category.ToString(),
-                    "QS3D_PERSISTED_" + issue.Kind.ToString().ToUpperInvariant() + "_V1",
+                    string.Empty,
                     project.DrawingFingerprint,
                     comment));
             }

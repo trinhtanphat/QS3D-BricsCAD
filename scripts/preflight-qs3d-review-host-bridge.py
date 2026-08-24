@@ -8,8 +8,11 @@ FILES = {
     "commands": ROOT / "src/QS3D.BricsCAD.V25/ReviewWorkbookCommands.cs",
     "probe": ROOT / "src/QS3D.BricsCAD.V25/ReviewWorkbookRuntimeProbeCommands.cs",
     "resolver": ROOT / "src/QS3D.BricsCAD.V25/Services/ExcelLocateResolutionService.cs",
+    "units": ROOT / "src/QS3D.BricsCAD.V25/Services/DrawingUnitWorkflow.cs",
     "projection": ROOT / "src/QS3D.Core/Export/Qs3dReviewWorkbook.IssueProjection.cs",
+    "reader": ROOT / "src/QS3D.Core/Export/Qs3dReviewWorkbook.TraceReader.cs",
     "validator": ROOT / "src/QS3D.Core/Export/Qs3dReviewWorkbook.TraceValidator.cs",
+    "smoke": ROOT / "tests/QS3D.Core.SmokeTests/Qs3dReviewWorkbookSmoke.cs",
     "runner": ROOT / "scripts/test-bricscad-review-workbook-roundtrip.ps1",
     "v26": ROOT / "src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj",
     "inbox": ROOT / "docs/LOCAL-AGENT-INBOX.md",
@@ -41,6 +44,7 @@ require("commands", (
     "CoordinationIssuePersistence.Load(preview)",
     "Qs3dReviewIssueProjection.Build(preview, issueSnapshot)",
     "Qs3dReviewWorkbookExporter.Export(",
+    "Qs3dReviewLiveHandleBatchPlanner.Create(expected, LiveHandleBatchSize)",
     "Qs3dReviewWorkbookTraceReader.Read(dialog.FileName, sheet, row.Value)",
     "ReviewWorkbookHostService.ResolveTrace(document, currentProject, trace)",
     "document.Editor.SetImpliedSelection(resolution.ObjectIds.ToArray())",
@@ -57,25 +61,57 @@ require("resolver", (
 if "SetImpliedSelection" in texts.get("resolver", "") or "SendStringToExecute" in texts.get("resolver", ""):
     errors.append("review resolver must validate every target without mutating PICKFIRST or dispatching Zoom")
 
+require("units", (
+    'string.Equals(operation, "QS3DREVIEWEXPORT", StringComparison.OrdinalIgnoreCase)',
+    "if (readOnlyReviewPreparation)",
+    "if (!readOnlyExportPreparation)",
+    "QS3DREVIEWEXPORT: drawing unit is undefined/unsupported",
+))
+
 require("projection", (
     "CoordinationIssuePersistenceSnapshot snapshot",
     "CoordinationIssueExcelLifecycle.Project(snapshot)",
     "CoordinationIssueKind.Review",
-    "DuplicateMatchKind.SemanticIdentity",
+    "DuplicateMatchKind.None",
     "CoordinationClashExportRow(",
     "CoordinationDuplicateExportRow(",
     "RequireSemanticHandle(",
 ))
-for forbidden in ("DuplicateDetectionService", "DetectExact(", "Detect("):
+for forbidden in ("DuplicateDetectionService", "DetectExact(", "Detect(", "QS3D_PERSISTED_", "DuplicateMatchKind.SemanticIdentity"):
     if forbidden in texts.get("projection", ""):
         errors.append("persisted issue projection must not re-run a detector: " + forbidden)
 
 require("validator", (
     "public static class Qs3dReviewTraceValidator",
+    "ValidateTraceKey(trace)",
+    '"QTO", trace.DrawingFingerprint',
+    '"CLASH", trace.DrawingFingerprint',
+    '"DUPLICATE", trace.DrawingFingerprint',
     "StringComparison.OrdinalIgnoreCase",
     "StringComparison.Ordinal",
     "different drawing fingerprint",
     "model revision is stale",
+))
+require("reader", (
+    "WorksheetRelationshipType",
+    "ResolveSheets(archive, out sheetOrder)",
+    "ReadSharedStrings(archive)",
+    "ReadCells(",
+    "workbook.xml.rels",
+    "sharedStrings.xml",
+    "identity cells must be literal",
+    "RequiredColumns(",
+))
+for forbidden in ('"xl/worksheets/sheet2.xml"', '"xl/worksheets/sheet3.xml"', '"xl/worksheets/sheet4.xml"'):
+    if forbidden in texts.get("reader", ""):
+        errors.append("review trace reader must resolve worksheet relationships instead of hardcoding package parts: " + forbidden)
+
+require("smoke", (
+    "ExcelResavedRelationshipsAndSharedStringsRoundTrip",
+    "TraceKeyTamperFailsClosed",
+    "TraceReaderRejectsFormulaIdentityCell",
+    "Enumerable.Range(1, 10001)",
+    "ReviewOnly",
 ))
 require("probe", (
     '[CommandMethod("QS3DREVIEWROUNDTRIPPROBE", CommandFlags.Modal)]',
@@ -89,7 +125,17 @@ require("probe", (
     "negativeSelectionPreserved != 4",
     "negativeSemanticUnchanged != 4",
     "authoritative.RequireUnchanged(project)",
+    'DrawingUnitWorkflow.EnsureResolved(document, "QS3DREVIEWEXPORT")',
+    "QS3D_REVIEW_ROUNDTRIP_PLUGIN",
+    "QS3D_REVIEW_ROUNDTRIP_CORE",
+    ".Assembly.Location",
+    "SHA256.Create()",
     '"schema=QS3D_REVIEW_HOST_ROUNDTRIP_V1"',
+    '"plugin_path_match=true"',
+    '"plugin_sha256="',
+    '"core_path_match=true"',
+    '"core_sha256="',
+    '"readonly_unit_resolution=true"',
     '"all_targets_resolved_before_selection=true"',
 ))
 require("runner", (
@@ -104,6 +150,15 @@ require("runner", (
     "QS3D_REVIEW_ROUNDTRIP_RESULT",
     "QS3D_REVIEW_ROUNDTRIP_WORKBOOK",
     "QS3D_REVIEW_ROUNDTRIP_NONCE",
+    "QS3D_REVIEW_ROUNDTRIP_PLUGIN",
+    "QS3D_REVIEW_ROUNDTRIP_CORE",
+    "FileMajorPart",
+    '$expectedHostMajor = if ($HostMajor -eq "V25") { 25 } else { 26 }',
+    'Require-Qs3dValue $marker "plugin_path_match" "true"',
+    'Require-Qs3dValue $marker "plugin_sha256" $pluginHash',
+    'Require-Qs3dValue $marker "core_path_match" "true"',
+    'Require-Qs3dValue $marker "core_sha256" $coreHash',
+    'Require-Qs3dValue $marker "readonly_unit_resolution" "true"',
     "Wait-Qs3dNoExactBricsCadProcesses",
     "Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256",
     '"01_TONG_HOP", "02_CHI_TIET_QTO", "03_CLASHES"',

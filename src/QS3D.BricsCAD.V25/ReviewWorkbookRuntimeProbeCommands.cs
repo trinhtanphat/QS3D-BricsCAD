@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
@@ -30,6 +31,8 @@ namespace QS3D.BricsCAD.V25
         private const string ResultVariable = "QS3D_REVIEW_ROUNDTRIP_RESULT";
         private const string WorkbookVariable = "QS3D_REVIEW_ROUNDTRIP_WORKBOOK";
         private const string NonceVariable = "QS3D_REVIEW_ROUNDTRIP_NONCE";
+        private const string PluginVariable = "QS3D_REVIEW_ROUNDTRIP_PLUGIN";
+        private const string CoreVariable = "QS3D_REVIEW_ROUNDTRIP_CORE";
         private const string ResultFileName = "review-workbook-roundtrip-result.txt";
         private const string WorkbookFileName = "review-workbook-roundtrip.xlsx";
 
@@ -49,6 +52,9 @@ namespace QS3D.BricsCAD.V25
                 var nonce = Environment.GetEnvironmentVariable(NonceVariable) ?? string.Empty;
                 if (!Guid.TryParseExact(nonce, "N", out _))
                     throw new InvalidOperationException("QS3D Review probe nonce is invalid.");
+                var loadedPluginHash = ValidateLoadedAssembly(
+                    typeof(ReviewWorkbookRuntimeProbeCommands), PluginVariable, "plugin");
+                var loadedCoreHash = ValidateLoadedAssembly(typeof(ProjectState), CoreVariable, "Core dependency");
 
                 var document = Application.DocumentManager.MdiActiveDocument
                     ?? throw new InvalidOperationException("No active BricsCAD document is available.");
@@ -58,6 +64,9 @@ namespace QS3D.BricsCAD.V25
 
                 var seeded = Seed(document, project);
                 var authoritative = ProjectReadOnlyStamp.Capture(project);
+                if (!DrawingUnitWorkflow.EnsureResolved(document, "QS3DREVIEWEXPORT"))
+                    throw new InvalidOperationException("QS3D Review probe could not resolve drawing units read-only.");
+                authoritative.RequireUnchanged(project);
                 var export = ReviewWorkbookHostService.Export(document, project, workbookPath, DateTimeOffset.UtcNow);
                 if (export.QuantityDetailCount != 3 || export.QuantitySummaryCount != 3 ||
                     export.ClashCount != 1 || export.DuplicateCount != 1)
@@ -132,7 +141,12 @@ namespace QS3D.BricsCAD.V25
                     "nonce=" + nonce,
                     "process=" + System.Diagnostics.Process.GetCurrentProcess().ProcessName,
                     "plugin_assembly=" + typeof(ReviewWorkbookRuntimeProbeCommands).Assembly.GetName().Name,
+                    "plugin_path_match=true",
+                    "plugin_sha256=" + loadedPluginHash,
+                    "core_path_match=true",
+                    "core_sha256=" + loadedCoreHash,
                     "is_64bit=" + (Environment.Is64BitProcess ? "true" : "false"),
+                    "readonly_unit_resolution=true",
                     "sheet_count=6",
                     "quantity_detail_count=" + export.QuantityDetailCount.ToString(CultureInfo.InvariantCulture),
                     "quantity_summary_count=" + export.QuantitySummaryCount.ToString(CultureInfo.InvariantCulture),
@@ -161,6 +175,23 @@ namespace QS3D.BricsCAD.V25
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
                     "\nQS3D Review workbook round-trip probe FAIL. See the local qualification result.");
                 throw;
+            }
+        }
+
+        private static string ValidateLoadedAssembly(Type anchor, string variable, string label)
+        {
+            var expected = Environment.GetEnvironmentVariable(variable);
+            if (string.IsNullOrWhiteSpace(expected))
+                throw new InvalidOperationException("QS3D Review probe expected " + label + " path is missing.");
+            var expectedPath = Path.GetFullPath(expected);
+            var loadedPath = Path.GetFullPath(anchor.Assembly.Location);
+            if (!string.Equals(expectedPath, loadedPath, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("QS3D Review probe loaded a different " + label + " path than the guarded candidate.");
+
+            using (var stream = new FileStream(loadedPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var sha256 = SHA256.Create())
+            {
+                return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty);
             }
         }
 
