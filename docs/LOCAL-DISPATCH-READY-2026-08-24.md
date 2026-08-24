@@ -61,7 +61,7 @@ Disposition: `LOCAL_PASS` => post the sanitized JSON/evidence to #3681 and #72 a
 ## P1 source-ready continuations
 
 - **LOCAL-005 / #83:** source defect #3715 is fixed by merged PR #3727 (`ba6e1c7508086beb8ac5db9a4a78d2c43fc09492`). On one exact descendant, local reruns only multi-region build -> native Undo -> native Redo first; broader refresh/add/remove/corrupt/cap/Foundation/save-reopen/multi-DWG resumes only after coherence passes.
-- **LOCAL-006 / #77:** source defect #3721 is fixed by merged PR #3728 (`887173f28126b928765e458f28202e83a6f3b88f`). On one exact descendant, local reruns only `QS3DTAG -> native Undo -> native Redo` first; broader documentation lifecycle/visual matrix resumes only after coherence passes.
+- **LOCAL-006 / #77:** source defect #3721 is fixed by merged PR #3728 (`887173f28126b928765e458f28202e83a6f3b88f`). The bounded `QS3DTAG -> native Undo -> native Redo` cell is `LOCAL_PASS` on exact pushed `a572ab0a350f54f8e994ac1e91f825907646af9c`: cancel boundaries, cold-cache MText build, native/semantic Undo and native/semantic Redo were coherent with Health 0. Resume the broader MLeader/Table/Sheet/Layout/Viewport/Unicode/HiDPI/save-reopen/multi-DWG matrix; do not rerun this bounded cell unchanged.
 
 ## Existing broader local queue
 
