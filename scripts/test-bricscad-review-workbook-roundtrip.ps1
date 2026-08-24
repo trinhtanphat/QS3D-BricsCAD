@@ -70,6 +70,35 @@ function Restore-EnvironmentValue {
     else { Set-Item -LiteralPath ("Env:" + $Name) -Value $Value }
 }
 
+function Set-Qs3dDemandLoadControls {
+    param(
+        [Parameter(Mandatory = $true)][string]$RegistryPath,
+        [Parameter(Mandatory = $true)][int]$ExpectedCurrent,
+        [Parameter(Mandatory = $true)][int]$NewValue
+    )
+    $current = [int](Get-ItemPropertyValue -LiteralPath $RegistryPath -Name "LoadCtrls" -ErrorAction Stop)
+    if ($current -ne $ExpectedCurrent) {
+        throw "QS3D DemandLoad controls changed concurrently; refusing to overwrite them."
+    }
+    Set-ItemProperty -LiteralPath $RegistryPath -Name "LoadCtrls" -Value $NewValue -ErrorAction Stop
+    $readback = [int](Get-ItemPropertyValue -LiteralPath $RegistryPath -Name "LoadCtrls" -ErrorAction Stop)
+    if ($readback -ne $NewValue) {
+        throw "QS3D DemandLoad control readback did not match the guarded isolated value."
+    }
+}
+
+function Restore-Qs3dDemandLoadControls {
+    param(
+        [Parameter(Mandatory = $true)][string]$RegistryPath,
+        [Parameter(Mandatory = $true)][int]$OriginalValue,
+        [Parameter(Mandatory = $true)][int]$IsolatedValue
+    )
+    $current = [int](Get-ItemPropertyValue -LiteralPath $RegistryPath -Name "LoadCtrls" -ErrorAction Stop)
+    if ($current -eq $OriginalValue) { return }
+    Set-Qs3dDemandLoadControls -RegistryPath $RegistryPath `
+        -ExpectedCurrent $IsolatedValue -NewValue $OriginalValue
+}
+
 function Stop-Qs3dLaunchedProcess {
     param([AllowNull()][Diagnostics.Process]$Process)
     if ($null -eq $Process) { return }
@@ -166,6 +195,29 @@ if (@(Get-Qs3dExactBricsCadProcesses -ExpectedExecutable $bricscadExe).Count -gt
     throw "Close existing $HostMajor BricsCAD processes before starting the isolated QS Review probe."
 }
 
+$demandLoadRegistryPath =
+    "Registry::HKEY_CURRENT_USER\Software\Bricsys\BricsCAD\$($HostMajor)x64\en_US\Applications\QS3D"
+$isolateDemandLoad = $false
+$demandLoadOriginalControls = 0
+$demandLoadIsolatedControls = 0
+if (Test-Path -LiteralPath $demandLoadRegistryPath -PathType Container) {
+    $demandLoadOriginalControls =
+        [int](Get-ItemPropertyValue -LiteralPath $demandLoadRegistryPath -Name "LoadCtrls" -ErrorAction Stop)
+    if (($demandLoadOriginalControls -band 2) -ne 0) {
+        $commandsPath = $demandLoadRegistryPath + "\Commands"
+        if (-not (Test-Path -LiteralPath $commandsPath -PathType Container)) {
+            throw "Cannot isolate startup DemandLoad without the installed command-trigger registration."
+        }
+        $runtimeCommand = [string](
+            Get-ItemPropertyValue -LiteralPath $commandsPath -Name "QS3DRUNTIMEPROBE" -ErrorAction Stop)
+        if (-not [string]::Equals($runtimeCommand, "QS3DRUNTIMEPROBE", [StringComparison]::Ordinal)) {
+            throw "Installed QS3D command-trigger registration is not canonical."
+        }
+        $demandLoadIsolatedControls = [int](($demandLoadOriginalControls -band (-bnot 2)) -bor 4)
+        $isolateDemandLoad = $true
+    }
+}
+
 $projectSidecar = [IO.Path]::ChangeExtension($DrawingCopy, ".qsdb")
 $drawingBackup = [IO.Path]::ChangeExtension($DrawingCopy, ".bak")
 $drawingLocks = @(
@@ -198,9 +250,17 @@ $oldPlugin = [Environment]::GetEnvironmentVariable("QS3D_REVIEW_ROUNDTRIP_PLUGIN
 $oldCore = [Environment]::GetEnvironmentVariable("QS3D_REVIEW_ROUNDTRIP_CORE", "Process")
 $process = $null
 $proxyDialogsDismissed = 0
+$demandLoadChanged = $false
+$demandLoadRestored = -not $isolateDemandLoad
 $startedAt = Get-Date
 
 try {
+    if ($isolateDemandLoad) {
+        Set-Qs3dDemandLoadControls -RegistryPath $demandLoadRegistryPath `
+            -ExpectedCurrent $demandLoadOriginalControls -NewValue $demandLoadIsolatedControls
+        $demandLoadChanged = $true
+        $demandLoadRestored = $false
+    }
     $env:QS3D_REVIEW_ROUNDTRIP_RESULT = $resultPath
     $env:QS3D_REVIEW_ROUNDTRIP_WORKBOOK = $workbookPath
     $env:QS3D_REVIEW_ROUNDTRIP_NONCE = $nonce
@@ -287,6 +347,12 @@ try {
     if (-not (Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 20)) {
         throw "BricsCAD $HostMajor process residue remains after the QS Review probe."
     }
+    if ($demandLoadChanged) {
+        Restore-Qs3dDemandLoadControls -RegistryPath $demandLoadRegistryPath `
+            -OriginalValue $demandLoadOriginalControls -IsolatedValue $demandLoadIsolatedControls
+        $demandLoadChanged = $false
+        $demandLoadRestored = $true
+    }
     $drawingHashAfter = (Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256).Hash.ToUpperInvariant()
     if (-not [string]::Equals($drawingHashBefore, $drawingHashAfter, [StringComparison]::Ordinal)) {
         throw "Disposable QS Review DWG changed on disk."
@@ -312,6 +378,8 @@ try {
         workbook_sha256 = (Get-FileHash -LiteralPath $workbookPath -Algorithm SHA256).Hash.ToUpperInvariant()
         workbook_sheets = $actualSheets
         proxy_information_dialogs_dismissed = $proxyDialogsDismissed
+        startup_demandload_isolated = $isolateDemandLoad
+        startup_demandload_restored = $demandLoadRestored
         marker = $marker
     }
     $metadata | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
@@ -323,10 +391,22 @@ try {
     Write-Host "Metadata: $metadataPath"
 }
 finally {
-    Stop-Qs3dLaunchedProcess -Process $process
-    Restore-EnvironmentValue -Name "QS3D_REVIEW_ROUNDTRIP_RESULT" -Value $oldResult
-    Restore-EnvironmentValue -Name "QS3D_REVIEW_ROUNDTRIP_WORKBOOK" -Value $oldWorkbook
-    Restore-EnvironmentValue -Name "QS3D_REVIEW_ROUNDTRIP_NONCE" -Value $oldNonce
-    Restore-EnvironmentValue -Name "QS3D_REVIEW_ROUNDTRIP_PLUGIN" -Value $oldPlugin
-    Restore-EnvironmentValue -Name "QS3D_REVIEW_ROUNDTRIP_CORE" -Value $oldCore
+    try { Stop-Qs3dLaunchedProcess -Process $process }
+    finally {
+        try {
+            if ($demandLoadChanged) {
+                Restore-Qs3dDemandLoadControls -RegistryPath $demandLoadRegistryPath `
+                    -OriginalValue $demandLoadOriginalControls -IsolatedValue $demandLoadIsolatedControls
+                $demandLoadChanged = $false
+                $demandLoadRestored = $true
+            }
+        }
+        finally {
+            Restore-EnvironmentValue -Name "QS3D_REVIEW_ROUNDTRIP_RESULT" -Value $oldResult
+            Restore-EnvironmentValue -Name "QS3D_REVIEW_ROUNDTRIP_WORKBOOK" -Value $oldWorkbook
+            Restore-EnvironmentValue -Name "QS3D_REVIEW_ROUNDTRIP_NONCE" -Value $oldNonce
+            Restore-EnvironmentValue -Name "QS3D_REVIEW_ROUNDTRIP_PLUGIN" -Value $oldPlugin
+            Restore-EnvironmentValue -Name "QS3D_REVIEW_ROUNDTRIP_CORE" -Value $oldCore
+        }
+    }
 }
