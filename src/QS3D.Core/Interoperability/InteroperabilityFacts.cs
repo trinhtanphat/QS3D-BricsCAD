@@ -553,6 +553,8 @@ namespace QS3D.Core.Interoperability
 
     public static class InteroperabilityAdmission
     {
+        public const int MaxAdditionalDiagnostics = 10000;
+
         public static InteroperabilityAdmissionResult Evaluate(
             InteroperabilityFactSet factSet,
             IEnumerable<InteroperabilityLossDiagnostic>? additionalDiagnostics = null)
@@ -561,8 +563,13 @@ namespace QS3D.Core.Interoperability
             var diagnostics = new List<InteroperabilityLossDiagnostic>();
             if (additionalDiagnostics != null)
             {
+                var additionalCount = 0;
                 foreach (var diagnostic in additionalDiagnostics)
                 {
+                    additionalCount++;
+                    if (additionalCount > MaxAdditionalDiagnostics)
+                        throw new InvalidOperationException(
+                            "Interoperability admission cannot exceed " + MaxAdditionalDiagnostics + " additional diagnostics.");
                     if (diagnostic == null)
                         throw new ArgumentException("Diagnostic collection cannot contain null entries.", nameof(additionalDiagnostics));
                     diagnostics.Add(diagnostic);
