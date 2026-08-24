@@ -309,11 +309,11 @@ namespace QS3D.BricsCAD.V25.Reporting
             // BricsCAD V25 exposes ACIS BREP faces as ExternalBoundedSurface even when the
             // underlying geometry is planar. Unwrap the native base surface before deciding
             // that the face is non-planar; otherwise every wall face can be silently skipped.
-            if (surface is ExternalBoundedSurface external && external.IsPlane)
+            if (surface is ExternalBoundedSurface external &&
+                external.IsPlane &&
+                external.BaseSurface is PlanarEntity basePlane)
             {
-                var baseSurface = external.BaseSurface as PlanarEntity;
-                if (baseSurface != null)
-                    return new Plane(baseSurface.PointOnPlane, baseSurface.Normal);
+                return new Plane(basePlane.PointOnPlane, basePlane.Normal);
             }
 
             return null;
