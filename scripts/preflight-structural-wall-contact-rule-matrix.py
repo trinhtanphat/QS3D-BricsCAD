@@ -70,7 +70,16 @@ require(
     "TrySubtract(residual, overlap)",
     "clipped volume-overlap residual subtraction",
 )
-require(contact, "TryOffset(contactProbe, distanceCad)", "zero-volume face-contact BREP probe")
+require(
+    contact,
+    "var contactProbeDistanceCad = Math.Max(distanceCad, 1e-5d / lengthToMeter);",
+    "unit-aware native touching-probe distance floor",
+)
+require(
+    contact,
+    "TryOffset(contactProbe, contactProbeDistanceCad)",
+    "zero-volume face-contact BREP probe",
+)
 require(
     contact,
     "TryIntersection(residual, contactProbe, out var contactIntersectionFailed)",
@@ -85,6 +94,7 @@ for forbidden in (
     "TryIntersection(target, candidate",
     "TrySubtract(residual, candidate)",
     "TrySubtract(residual, contactProbe)",
+    "TryOffset(contactProbe, distanceCad)",
     "grossVerticalAreaCad - residualVerticalAreaCad",
     "ReadResidualAreaOnOriginalVerticalFaces",
 ):
@@ -150,4 +160,4 @@ for forbidden in (
         if forbidden in exclude_text:
             fail("V26 shared-source Exclude must not omit " + forbidden)
 
-print("PASS: StructuralWall Rule 1/2 contact uses native original-face exterior coverage with residual union, preserves opening/capture semantics, and retains V26 shared-source coverage")
+print("PASS: StructuralWall Rule 1/2 contact uses native original-face exterior coverage with residual union, preserves the unit-aware touching-probe floor, opening/capture semantics, and V26 shared-source coverage")

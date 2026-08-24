@@ -152,7 +152,8 @@ namespace QS3D.BricsCAD.V25
             if (!Projects.TryGetValue(document, out var project)) return false;
             EnsureBackingStoreUnchanged(document, project, true, "QS3D pending-state inspection");
             ValidateDrawingIdentityReadOnly(project, document);
-            if (!SameDrawingName(project.DrawingPath, document.Name)) return true;
+            var drawing = ResolveDrawingPath(document);
+            if (!SameDrawingName(project.DrawingPath, drawing)) return true;
             return GetPersistenceStamp(document, project).RequiresSave(project);
         }
 
@@ -242,7 +243,7 @@ namespace QS3D.BricsCAD.V25
         public static string GetProjectPath(Document document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
-            var drawing = document.Name;
+            var drawing = ResolveDrawingPath(document);
             if (string.IsNullOrWhiteSpace(drawing) || !Path.IsPathRooted(drawing))
             {
                 if (UnsavedProjectPaths.TryGetValue(document, out var existingPath)) return existingPath;
@@ -284,7 +285,7 @@ namespace QS3D.BricsCAD.V25
         private static bool TryGetExistingProjectPath(Document document, out string path)
         {
             path = string.Empty;
-            var drawing = document.Name;
+            var drawing = ResolveDrawingPath(document);
             if (string.IsNullOrWhiteSpace(drawing) || !Path.IsPathRooted(drawing)) return false;
             try
             {
@@ -380,7 +381,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void SyncDrawingIdentity(ProjectState project, Document document)
         {
-            var drawing = document.Name ?? string.Empty;
+            var drawing = ResolveDrawingPath(document);
             var fingerprint = GetDrawingFingerprint(document, drawing);
             var storedPath = project.DrawingPath ?? string.Empty;
             var storedFingerprint = project.DrawingFingerprint ?? string.Empty;
@@ -400,7 +401,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void ValidateDrawingIdentityReadOnly(ProjectState project, Document document)
         {
-            var drawing = document.Name ?? string.Empty;
+            var drawing = ResolveDrawingPath(document);
             var fingerprint = GetDrawingFingerprint(document, drawing);
             var storedPath = project.DrawingPath ?? string.Empty;
             var storedFingerprint = project.DrawingFingerprint ?? string.Empty;
@@ -478,6 +479,21 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static string ResolveDrawingPath(Document document)
+        {
+            try
+            {
+                var databasePath = (document.Database.Filename ?? string.Empty).Trim();
+                if (!string.IsNullOrWhiteSpace(databasePath)) return databasePath;
+            }
+            catch (Exception)
+            {
+                // Closing/disposed wrappers may stop exposing the database. Fall back to the document display name.
+            }
+
+            return (document.Name ?? string.Empty).Trim();
+        }
+
         private static bool SameDrawingName(string? left, string? right)
         {
             if (string.Equals(left, right, StringComparison.OrdinalIgnoreCase)) return true;
@@ -548,8 +564,9 @@ namespace QS3D.BricsCAD.V25
 
         private static ProjectState CreateDefault(Document document)
         {
-            var project = new ProjectState(Guid.NewGuid().ToString("N"), Path.GetFileNameWithoutExtension(document.Name));
-            project.DrawingPath = document.Name ?? string.Empty;
+            var drawing = ResolveDrawingPath(document);
+            var project = new ProjectState(Guid.NewGuid().ToString("N"), Path.GetFileNameWithoutExtension(drawing));
+            project.DrawingPath = drawing;
             project.DrawingFingerprint = GetDrawingFingerprint(document, project.DrawingPath);
             project.Zones.Add(new ZoneDefinition("zone-1", "Vùng-1"));
             project.Floors.Add(new FloorDefinition("floor-0", "Nền 0.00", 0d));

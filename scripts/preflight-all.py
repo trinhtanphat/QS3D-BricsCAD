@@ -4,11 +4,13 @@ import os
 import stat
 import subprocess
 import sys
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SELF = Path(__file__).resolve()
 CHILD_TIMEOUT_SECONDS = 180
+AGGREGATE_TIMEOUT_SECONDS = 15 * 60
 MAX_FEATURE_GATES = 1024
 MAX_FEATURE_GATE_SOURCE_BYTES = 512 * 1024
 PYTHON_ENVIRONMENT_CONTROLS = (
@@ -88,11 +90,6 @@ def _is_feature_gate_name(name):
 
 
 def discover():
-    # Bound filesystem discovery itself. Use os.scandir() directly so the aggregate
-    # runner controls iteration and can reject the first candidate beyond the configured
-    # maximum without asking a higher-level glob implementation to enumerate/materialize
-    # the whole directory first. Do not call DirEntry.is_file() here: symlink/non-regular/
-    # size checks remain in validate_candidates() and happen only after the count gate.
     candidates = []
     try:
         with os.scandir(SCRIPTS) as entries:
@@ -131,6 +128,14 @@ def build_child_env(source=None):
     return child_env
 
 
+def remaining_child_timeout(started_at, now=None):
+    current = time.monotonic() if now is None else now
+    remaining = AGGREGATE_TIMEOUT_SECONDS - max(0.0, current - started_at)
+    if remaining <= 0:
+        return 0.0
+    return min(float(CHILD_TIMEOUT_SECONDS), remaining)
+
+
 def escape_actions_data(value):
     return str(value).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
@@ -149,6 +154,7 @@ def emit_failure_annotation(path, reason):
 
 
 def main():
+    aggregate_started_at = time.monotonic()
     try:
         gates = discover()
     except RuntimeError as exc:
@@ -168,6 +174,12 @@ def main():
     child_env = build_child_env()
     for path in gates:
         rel = path.relative_to(ROOT)
+        child_timeout = remaining_child_timeout(aggregate_started_at)
+        if child_timeout <= 0:
+            print("ERROR: aggregate preflight exceeded", AGGREGATE_TIMEOUT_SECONDS, "seconds before launching", rel)
+            failed.append((str(rel), "aggregate-timeout"))
+            break
+
         print("\n===", rel, "===")
         try:
             completed = subprocess.run(
@@ -175,11 +187,14 @@ def main():
                 cwd=str(ROOT),
                 check=False,
                 env=child_env,
-                timeout=CHILD_TIMEOUT_SECONDS,
+                timeout=child_timeout,
             )
         except subprocess.TimeoutExpired:
-            print("ERROR:", rel, "timed out after", CHILD_TIMEOUT_SECONDS, "seconds.")
-            failed.append((str(rel), "timeout"))
+            reason = "aggregate-timeout" if remaining_child_timeout(aggregate_started_at) <= 0 else "timeout"
+            print("ERROR:", rel, "timed out after", child_timeout, "seconds (", reason, ").")
+            failed.append((str(rel), reason))
+            if reason == "aggregate-timeout":
+                break
             continue
         except OSError as exc:
             print("ERROR: failed to start", rel, "-", exc)

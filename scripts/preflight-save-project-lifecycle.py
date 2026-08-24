@@ -56,8 +56,34 @@ if pending_body:
         errors.append("HasPendingChanges must validate drawing identity without mutating project state")
     if "SyncDrawingIdentity(project, document);" in pending_body:
         errors.append("HasPendingChanges must remain side-effect-free and must not normalize drawing identity")
-    if "if (!SameDrawingName(project.DrawingPath, document.Name)) return true;" not in pending_body:
-        errors.append("HasPendingChanges must still report a DWG path transition as pending without mutating the project")
+    if "var drawing = ResolveDrawingPath(document);" not in pending_body:
+        errors.append("HasPendingChanges must resolve the stable database drawing path before checking path transitions")
+    if "if (!SameDrawingName(project.DrawingPath, drawing)) return true;" not in pending_body:
+        errors.append("HasPendingChanges must still report a real DWG path transition as pending without mutating the project")
+    if "SameDrawingName(project.DrawingPath, document.Name)" in pending_body:
+        errors.append("HasPendingChanges must not compare persisted identity directly with transient Document.Name")
+
+resolve_body = method_body(
+    coordinator,
+    "private static string ResolveDrawingPath(Document document)",
+    "private static bool SameDrawingName(string? left, string? right)",
+    "ProjectContextCoordinator.ResolveDrawingPath",
+)
+if resolve_body:
+    if "document.Database.Filename" not in resolve_body:
+        errors.append("ResolveDrawingPath must prefer the database filename as the stable saved-drawing identity")
+    if "return (document.Name ?? string.Empty).Trim();" not in resolve_body:
+        errors.append("ResolveDrawingPath must fall back to Document.Name when the host database filename is unavailable")
+
+for start_token, end_token, name in (
+    ("public static string GetProjectPath(Document document)", "private static void CleanupObsoleteUnsavedProject", "GetProjectPath"),
+    ("private static bool TryGetExistingProjectPath(Document document, out string path)", "private static ProjectState LoadProject", "TryGetExistingProjectPath"),
+    ("private static void SyncDrawingIdentity(ProjectState project, Document document)", "private static void ValidateDrawingIdentityReadOnly", "SyncDrawingIdentity"),
+    ("private static void ValidateDrawingIdentityReadOnly(ProjectState project, Document document)", "private static void ThrowDrawingIdentityMismatch", "ValidateDrawingIdentityReadOnly"),
+):
+    body = method_body(coordinator, start_token, end_token, "ProjectContextCoordinator." + name)
+    if body and "ResolveDrawingPath(document)" not in body:
+        errors.append(name + " must use the same stable drawing-path resolver")
 
 pending_save_body = method_body(
     coordinator,
@@ -108,4 +134,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: clean bind/reload captures persistence only after identity normalization, pending-state inspection is side-effect-free while preserving Save-As detection, and QS3DSAVE persists only an existing canonical project.")
+print("PASS: clean bind/reload captures persistence only after stable database drawing-identity normalization, pending-state inspection is side-effect-free without false Document.Name dirty transitions, and QS3DSAVE persists only an existing canonical project.")
