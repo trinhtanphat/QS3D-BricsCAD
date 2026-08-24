@@ -49,16 +49,18 @@ finally {
 
 $runnerArgs = @{
     BricsCadDir = $BricsCadDir
-    Profile = $Profile
-    ArtifactDir = $ArtifactDir
-    PythonPath = $PythonPath
-    SkipRuntime = [bool]$SkipRuntime
-    SkipScreenshot = [bool]$SkipScreenshot
-    Package = [bool]$Package
-    ReleaseTag = $ReleaseTag
-    SignPackage = [bool]$SignPackage
-    SigningCertThumbprint = $SigningCertThumbprint
-    TimestampUrl = $TimestampUrl
+}
+if (-not [string]::IsNullOrWhiteSpace($Profile)) { $runnerArgs.Profile = $Profile }
+if (-not [string]::IsNullOrWhiteSpace($ArtifactDir)) { $runnerArgs.ArtifactDir = $ArtifactDir }
+if (-not [string]::IsNullOrWhiteSpace($PythonPath)) { $runnerArgs.PythonPath = $PythonPath }
+if ($SkipRuntime) { $runnerArgs.SkipRuntime = $true }
+if ($SkipScreenshot) { $runnerArgs.SkipScreenshot = $true }
+if ($Package) { $runnerArgs.Package = $true }
+if (-not [string]::IsNullOrWhiteSpace($ReleaseTag)) { $runnerArgs.ReleaseTag = $ReleaseTag }
+if ($SignPackage) {
+    $runnerArgs.SignPackage = $true
+    $runnerArgs.SigningCertThumbprint = $SigningCertThumbprint
+    $runnerArgs.TimestampUrl = $TimestampUrl
 }
 
 & (Join-Path $PSScriptRoot "run-local-v25-qualification.ps1") @runnerArgs
