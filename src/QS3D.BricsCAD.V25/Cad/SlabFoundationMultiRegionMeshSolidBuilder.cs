@@ -111,7 +111,11 @@ namespace QS3D.BricsCAD.V25.Cad
                     EnsureCommonElevation(sources, element.Id);
                     var assembly = PolygonSourceLoopRegionAssembler.Assemble(
                         sources.Select(source => new PolygonSourceLoop2(source.Read.SourceHandle, source.Read.Loop)));
-                    var topologyFingerprint = MultiRegionTopologyFingerprint.Compute(assembly, sources);
+                    var fingerprintByHandle = sources.ToDictionary(
+                        source => CanonicalHandle(source.Read.SourceHandle, "multi-region source fingerprint handle"),
+                        source => source.Read.Fingerprint,
+                        StringComparer.OrdinalIgnoreCase);
+                    var topologyFingerprint = MultiRegionTopologyFingerprint.Compute(assembly, fingerprintByHandle);
 
                     var family = project.FindFamily(element.FamilyId);
                     var xGroup = ParseDirection(element, family, configuration.XNotationKey, configuration.NotationFallsBackToFamily);
