@@ -74,13 +74,16 @@ require(
 recover = method_block(source, "private void TryRecoverAfterQuitAbort()")
 for marker in (
     "_window.Dispatcher.BeginInvoke",
+    "DetachDocumentLifecycleHandlersAfterAbort();",
     "Detach();",
     "TryCloseWindowOnDispatcher();",
 ):
     require(marker in recover, f"Quit-abort recovery is missing deferred cleanup marker: {marker}")
 require(
-    recover.index("Detach();") < recover.index("TryCloseWindowOnDispatcher();"),
-    "Quit-abort recovery must detach native subscriptions outside the quit callback before requesting any stale-window close.",
+    recover.index("DetachDocumentLifecycleHandlersAfterAbort();")
+    < recover.index("Detach();")
+    < recover.index("TryCloseWindowOnDispatcher();"),
+    "Quit-abort recovery must release per-document handlers before shared detach and stale-window close, even when the dispatcher runs before CloseAborted.",
 )
 
 for signature in (
