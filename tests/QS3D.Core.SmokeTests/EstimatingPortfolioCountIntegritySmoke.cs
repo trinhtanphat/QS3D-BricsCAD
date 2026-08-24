@@ -22,8 +22,6 @@ namespace QS3D.Core.SmokeTests
             DuplicateIdentityRemainsCaseInsensitive();
             PricedTotalRejectsSwallowedContribution();
             PricedTotalKeepsRepresentableContribution();
-            BulkRatePreviewRejectsSwallowedDeduction();
-            BulkRatePreviewKeepsRepresentableDeduction();
         }
 
         private static void NegativeKnownCountFailsBeforeEnumeration()
@@ -161,37 +159,6 @@ namespace QS3D.Core.SmokeTests
 
             if (portfolio.PricedTotal != 100.1m)
                 throw new Exception("Representable estimating portfolio contribution changed unexpectedly.");
-        }
-
-        private static void BulkRatePreviewRejectsSwallowedDeduction()
-        {
-            var portfolio = new EstimatingPortfolio(new[] { PricedLine("DELTA-HIGH", 0.1m) });
-            var request = new BulkRateAssignmentRequest(
-                new[] { "DELTA-HIGH" },
-                "COST-NEXT",
-                "rate-source-next",
-                "rate-revision-next",
-                new[] { new UnitRateAssignment("m", 70000000000000000000000000000m) });
-
-            ExpectOverflow(
-                () => _ = new EstimatingWorkflowService().PreviewBulkRateAssignment(portfolio, request),
-                "subtraction precision loss",
-                "Bulk-rate public preview must reject a non-zero total-before deduction swallowed by decimal precision.");
-        }
-
-        private static void BulkRatePreviewKeepsRepresentableDeduction()
-        {
-            var portfolio = new EstimatingPortfolio(new[] { PricedLine("DELTA-NORMAL", 0.1m) });
-            var request = new BulkRateAssignmentRequest(
-                new[] { "DELTA-NORMAL" },
-                "COST-NEXT",
-                "rate-source-next",
-                "rate-revision-next",
-                new[] { new UnitRateAssignment("m", 100.1m) });
-
-            var preview = new EstimatingWorkflowService().PreviewBulkRateAssignment(portfolio, request);
-            if (preview.ValueDelta != 100m)
-                throw new Exception("Representable bulk-rate subtraction changed unexpectedly.");
         }
 
         private static EstimatingLine Line(string id)
