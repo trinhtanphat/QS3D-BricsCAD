@@ -65,6 +65,28 @@ REQUIRED_FILES = {
         "EnsureAggregateMetadataConsistency",
         "transaction.Commit()",
     ),
+    "src/QS3D.BricsCAD.V25/Cad/GeneratedMultiRegionRebarRuntimeHealthService.cs": (
+        "GeneratedMultiRegionRebarRuntimeHealthService",
+        "Inspect",
+        "MultiRegionRebarManifest.ParseSources",
+        "MultiRegionRebarManifest.ParseGenerated",
+        "ClosedPolygonSourceLoopReader.Read",
+        "PolygonSourceLoopRegionAssembler.Assemble",
+        "GeneratedRebarNativeOwnershipService.HasMatchingOwnership",
+        "GeneratedRebarRegionOwnershipService.HasMatchingOwnership",
+        "MultiRegionTopologyFingerprint",
+        "DUPLICATE",
+        "never mutates",
+    ),
+    "src/QS3D.BricsCAD.V25/MultiRegionRebarCommands.cs": (
+        "QS3DSLABREBAR3DMULTI",
+        "QS3DFOUNDATIONREBAR3DMULTI",
+        "QS3DMULTIREBARHEALTH",
+        "SlabFoundationMultiRegionMeshSolidBuilder.BuildSlab",
+        "SlabFoundationMultiRegionMeshSolidBuilder.BuildFoundation",
+        "GeneratedMultiRegionRebarRuntimeHealthService",
+        "TryGetReadOnly",
+    ),
 }
 
 
@@ -86,7 +108,7 @@ def main():
             print(" -", item)
         return 1
 
-    print("PASS: LOCAL-005 Core assembler, native loop reader, region ownership, bounded manifests, and atomic materializer are present.")
+    print("PASS: LOCAL-005 Core assembler, native loop reader, ownership/manifests, atomic materializer, read-only Health, and commands are present.")
     return 0
 
 
