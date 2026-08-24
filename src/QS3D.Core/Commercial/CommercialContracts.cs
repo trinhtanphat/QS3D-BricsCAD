@@ -252,14 +252,20 @@ namespace QS3D.Core.Commercial
 
         internal static decimal Add(decimal left, decimal right, string label)
         {
+            decimal result;
             try
             {
-                return checked(left + right);
+                result = checked(left + right);
             }
             catch (OverflowException ex)
             {
                 throw new OverflowException(label + " overflowed decimal arithmetic.", ex);
             }
+
+            if ((right != 0m && result == left) || (left != 0m && result == right))
+                throw new OverflowException("Commercial addition precision loss: " + label + ".");
+
+            return result;
         }
 
         internal static decimal Subtract(decimal left, decimal right, string label)
