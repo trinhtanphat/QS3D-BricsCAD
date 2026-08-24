@@ -12,9 +12,9 @@ Final-document/ordinary-close source-fix issue: #3621
 
 Lane-Key: `issue-3593`
 
-Qualification branch: `agent/codex/issue3593-v25-modeless-h1-p05-rerun`
+Qualification branch: `agent/codex/issue3593-v25-modeless-h1-p06-rerun`
 
-Latest attempted licensed runtime baseline: `3d5b77066c30e0f1e7d11065c3ec5feb8f1b87c5`
+Latest attempted licensed runtime baseline: `ec4384eb6a12ff6763dfdd19d4e4b84747ab60f3`
 
 Current exact licensed rerun target: `PENDING_NEXT_MERGED_SOURCE_SHA`
 
@@ -68,20 +68,32 @@ Final-host acceptance failed more directly. The exact host HWND matched, one ord
 
 The public fixture and protected user drawing stayed byte-identical, the installed DemandLoad loader path/bytes and `LoadCtrls=2` were restored, exact cleanup left zero BricsCAD processes, and the tracked worktree stayed clean. Raw dump/report/runtime files remain ignored. #3593 and #3621 remain open; the local lane changed no production source.
 
+## 2026-08-24 post-#3654 plugin-global host-quiescence licensed p06 rerun
+
+PR #3654 replaced per-window application-quit subscriptions with one plugin-global modeless host-quiescence coordinator and added an earlier state-only `QuitWillStart` barrier plus race re-checks. Exact source head `3958572813a833d5e8dca945b1841acf955e6849` merged as exact `main@ec4384eb6a12ff6763dfdd19d4e4b84747ab60f3`; protected run `32681341209` was green. The pre-staged p06 carrier was identical to that exact main, and the private runner/helper remained byte-identical to p05.
+
+Sixteen focused lifetime/dispatch/global-quiescence/race guards passed. The V25 Release x64 and private-helper builds each completed with `0 warnings / 0 errors`; Core deterministic smoke returned `ALL PASS`; plugin/Core PDB SourceLink named the exact candidate SHA; current production source and current harness contained no early-quit diagnostic hook. Exact candidate SHA-256 values were plugin `BAF4B6165060DAB7280BB0EEA4F8637F8546053D1BF80099CBEAE1D5367F1C01`, Core `A68A2A030DF2B0E19D9E1AC5125C3973C1392E19653E8D3EA102137343F109DC`, and unchanged private helper `176CFFE8B2435A2B7A2314B133305BAA84E886F7C24A2E9D88A69690A12ED368`.
+
+The licensed BricsCAD V25.2.10 functional marker again passed completely: A 13/13 and B 2/2 windows closed/detached exactly once; managed-wrapper drift matched by stable native database identity without path identity; C Family/BBS windows and both active-document-dynamic hubs stayed alive; project isolation, repeat cycle and final one-document count passed.
+
+Final-host acceptance still failed. The exact host HWND matched, one ordinary close was requested and one disposable save dialog was discarded. The process returned exit code `0` with `graceful_exit=true`, but exact-PID evidence contained one `ucrtbase.dll` / `c0000409` Application Error plus one WER `BEX64`; there were zero Application Hang and zero .NET Runtime events. The BricsCAD-generated report remained `ACCESS_VIOLATION (C0000005)` in `brx25.dll`. The normalized three `AcRxProtocolReactorManagerImp`/`AcRxObject` frames and three concurrent `MilContent_DetachFromHwnd` frames matched p05 line-for-line. This is `FAIL / CLEANUP_FAILED` with `marker_status=PASS`, not `LOCAL_PASS`.
+
+The public fixture and protected user drawing stayed byte-identical, the installed DemandLoad loader path/bytes and `LoadCtrls=2` were restored, exact cleanup left zero BricsCAD processes, and the tracked worktree stayed clean. Raw dump/report/runtime files remain ignored. #3593 and #3621 remain open; the local lane changed no production source and used no manual Actions operation.
+
 ## Validation and safety
 
-- Historical licensed V25 Release x64 builds: `0 warnings / 0 errors`.
-- Historical private licensed probe builds: `0 warnings / 0 errors`.
-- The post-#3651 licensed attempt passed all fourteen focused lifetime/dispatch/host-quit guards and the complete A/B/C marker before failing final-host crash acceptance.
-- Historical `QS3D.Core.SmokeTests` Release build/execution: `0 warnings / 0 errors`, `ALL PASS`.
+- Current licensed V25 Release x64 build: `0 warnings / 0 errors`.
+- Current unchanged private licensed probe build: `0 warnings / 0 errors`.
+- The post-#3654 licensed attempt passed all sixteen focused lifetime/dispatch/global-quiescence/race guards and the complete A/B/C marker before failing final-host crash acceptance.
+- Current `QS3D.Core.SmokeTests` Release build/execution: `0 warnings / 0 errors`, `ALL PASS`.
 - The public fixture remained byte-identical at SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`.
 - The user's drawing, installed loader bytes/path and `LoadCtrls=2` were preserved; no `SECURELOAD` or `TRUSTEDPATHS` setting changed.
 - Fail-closed cleanup ended with zero BricsCAD processes and a clean tracked worktree.
-- Post-#3651 licensed evidence is `BLOCKED_SOURCE_FIX`, not `LOCAL_PASS`.
+- Post-#3654 licensed evidence is `BLOCKED_SOURCE_FIX`, not `LOCAL_PASS`.
 
 ## Next exact handoff
 
-Remote/source owner #3621 must reassess the final host native/WPF teardown architecture using the p05 heap-corruption outcome and the unchanged normalized reactor/WPF frames. After a new correction merges, rerun the unchanged bounded #3593 licensed BricsCAD V25.2.10 A/B/C + final-host qualification on a fresh canonical branch whose HEAD exactly matches freshly fetched `origin/main`.
+Remote/source owner #3621 must reassess the final host native/WPF teardown architecture using the p06 `ucrtbase.dll / c0000409` outcome and the still-unchanged normalized reactor/WPF frames. Do not rerun the unchanged p06 binary. After a new correction merges, rerun the unchanged bounded #3593 licensed BricsCAD V25.2.10 A/B/C + final-host qualification on a fresh canonical branch whose HEAD exactly matches freshly fetched `origin/main`.
 
 A qualifying result must first close all 13 A-bound windows exactly once, preserve the #3594 B wrapper-drift/native-identity behavior, keep C-bound windows and Domain/Rebar dynamic hubs correct, then complete the final exact-host shutdown with exit code `0`, zero exact-PID Application Error events, no retained-Document `get_Name` AccessViolation, zero BricsCAD residue and all drawing/loader/private-state safety checks passing.
 
