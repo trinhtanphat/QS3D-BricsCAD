@@ -8,6 +8,7 @@ namespace QS3D.Core.Persistence
 {
     public sealed class ProjectStateSnapshot
     {
+        private const int MaximumSnapshotEntries = 10000;
         private readonly ProjectState _snapshot;
         private readonly ProjectState _capturedProject;
         private readonly IReadOnlyDictionary<string, ZoneDefinition> _capturedZones;
@@ -34,6 +35,7 @@ namespace QS3D.Core.Persistence
         public static ProjectStateSnapshot Capture(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            ValidateCollectionEntries(project);
             var capturedZones = CaptureZoneReferences(project);
             var capturedFloors = CaptureFloorReferences(project);
             var capturedFamilies = CaptureFamilyReferences(project);
@@ -237,6 +239,14 @@ namespace QS3D.Core.Persistence
 
         private static void ValidateCollectionEntries(ProjectState source)
         {
+            RequireSupportedCount(source.Metadata.Count, "metadata");
+            RequireSupportedCount(source.Zones.Count, "zones");
+            RequireSupportedCount(source.Floors.Count, "floors");
+            RequireSupportedCount(source.Families.Count, "families");
+            RequireSupportedCount(source.Elements.Count, "elements");
+            RequireSupportedCount(source.QuantityRules.Count, "quantity rules");
+            RequireSupportedCount(source.AuditEvents.Count, "audit events");
+
             RequireNoNullEntries(source.Zones, "zone");
             RequireNoNullEntries(source.Floors, "floor");
             RequireNoNullEntries(source.Families, "family");
@@ -249,6 +259,24 @@ namespace QS3D.Core.Persistence
             RequireUniqueIds(source.Families, x => x.Id, "family");
             RequireUniqueIds(source.Elements, x => x.Id, "element");
             RequireUniqueIds(source.QuantityRules, x => x.Id, "quantity rule");
+
+            foreach (var family in source.Families)
+                RequireSupportedCount(family.Properties.Count, "family " + family.Id + " properties");
+
+            foreach (var element in source.Elements)
+            {
+                RequireSupportedCount(element.SourceHandles.Count, "element " + element.Id + " source handles");
+                RequireSupportedCount(element.DependsOn.Count, "element " + element.Id + " dependencies");
+                RequireSupportedCount(element.Properties.Count, "element " + element.Id + " properties");
+                RequireSupportedCount(element.Quantities.Count, "element " + element.Id + " quantities");
+            }
+        }
+
+        private static void RequireSupportedCount(int count, string label)
+        {
+            if (count <= MaximumSnapshotEntries) return;
+            throw new InvalidOperationException(
+                "Cannot snapshot a project whose " + label + " contains more than " + MaximumSnapshotEntries + " entries.");
         }
 
         private static void RequireNoNullEntries<T>(IEnumerable<T> values, string label) where T : class
