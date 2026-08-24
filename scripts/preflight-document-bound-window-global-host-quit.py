@@ -137,8 +137,21 @@ require("ModelessHostQuiescenceCoordinator.EnsureInitialized();" in initialize,
 require(initialize.index("ModelessHostQuiescenceCoordinator.EnsureInitialized();") < initialize.index("DocumentLifecycleCoordinator.Start();"),
         "Host quit ownership must be armed before document/modeless lifecycle services.")
 
+# P07: once QuitWillStart has armed global quiescence, IExtensionApplication.Terminate must not
+# enter the generic teardown stack at all. That stack removes native context menus, document and
+# command reactors, ribbons and PaletteSet HWND/WPF surfaces; touching those from final host teardown
+# can race BricsCAD's own native/WPF destruction. Ordinary NETUNLOAD still uses the full teardown.
+terminate = method_block(plugin, "public void Terminate()")
+terminate_barrier = "if (ModelessHostQuiescenceCoordinator.IsQuiescing)"
+require(terminate_barrier in terminate,
+        "Plugin Terminate must fail closed at the global host-quiescence barrier before generic native/UI teardown.")
+require("TeardownHostServices();" in terminate,
+        "Normal non-host Terminate must still release QS3D host services.")
+require(terminate.index(terminate_barrier) < terminate.index("TeardownHostServices();"),
+        "Plugin Terminate must test global host quiescence before entering TeardownHostServices.")
+
 teardown = method_block(plugin, "private static void TeardownHostServices()")
 require("TryCleanup(ModelessHostQuiescenceCoordinator.Stop);" in teardown,
         "Normal plugin teardown must release the global coordinator when host shutdown is not active.")
 
-print("[OK] V25 modeless host quit has one plugin-global native lifecycle owner; all other V25 source is free of application quit reactors, per-window registrations consume managed quiescence only, QuitWillStart is state-only, and host Terminate never unsubscribes native reactors after quiescence begins.")
+print("[OK] V25 modeless host quit has one plugin-global native lifecycle owner; all other V25 source is free of application quit reactors, per-window registrations consume managed quiescence only, QuitWillStart is state-only, and host Terminate skips all generic native/UI teardown after quiescence begins.")
