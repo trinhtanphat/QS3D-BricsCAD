@@ -105,6 +105,10 @@ namespace QS3D.BricsCAD.V25.Reporting
             var areaScale = lengthToMeter * lengthToMeter;
             var volumeScale = areaScale * lengthToMeter;
             var distanceCad = tolerances.Distance / lengthToMeter;
+            // BricsCAD V25's native ACIS OffsetBody rejects the 1e-6 m quantity tolerance on
+            // otherwise valid touching solids. Keep topology/plane tests on distanceCad, but give
+            // only the native positive-volume probe a unit-aware 10 micrometre modeler-stable floor.
+            var contactProbeDistanceCad = Math.Max(distanceCad, 1e-5d / lengthToMeter);
             var areaCadTolerance = tolerances.Area / areaScale;
             var volumeCadTolerance = tolerances.Volume / volumeScale;
 
@@ -200,7 +204,7 @@ namespace QS3D.BricsCAD.V25.Reporting
 
                             using (var contactProbe = Clone(candidate))
                             {
-                                if (!TryOffset(contactProbe, distanceCad))
+                                if (!TryOffset(contactProbe, contactProbeDistanceCad))
                                 {
                                     diagnostics.ContactProbeOffsetFailureCount++;
                                     diagnostics.FailedNativeCutCount++;
