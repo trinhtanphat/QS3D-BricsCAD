@@ -101,7 +101,9 @@ namespace QS3D.BricsCAD.V25.Cad
             EnsureAggregateMetadataConsistency(element, configuration);
             var ownership = GeneratedRebarOwnershipGuard.Build(project);
             var rollback = ProjectStateSnapshot.Capture(project);
+            var rollbackStamp = SourceReconcileUndoCoordinator.ProjectRevisionStamp.Capture(project);
             var cadCommitted = false;
+            SourceReconcileUndoCoordinator.PendingTransition? undoTransition = null;
             try
             {
                 using (document.LockDocument())
@@ -173,6 +175,21 @@ namespace QS3D.BricsCAD.V25.Cad
                         configuration,
                         ownership,
                         out var legacyMigration);
+
+                    // Multi-region materialization mutates native topology and the canonical
+                    // semantic ownership/manifests in one command. Register the before-state
+                    // in the same document-bound native Undo bridge used by structural rebuilds
+                    // before the first generated bar is appended or an old bar is erased.
+                    if (!SourceReconcileUndoCoordinator.IsExternalTransitionActive(document))
+                    {
+                        undoTransition = SourceReconcileUndoCoordinator.BeginTransition(
+                            document,
+                            transaction,
+                            project,
+                            rollback,
+                            rollbackStamp);
+                        undoTransition.StageNativeMarker();
+                    }
 
                     var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
                     var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
@@ -252,7 +269,16 @@ namespace QS3D.BricsCAD.V25.Cad
                     AuditTrail.ForProject(project).Record(configuration.AuditAction, element.Id,
                         allHandles.Count.ToString(CultureInfo.InvariantCulture) + " bars / " + assembly.Regions.Count.ToString(CultureInfo.InvariantCulture) + " regions");
 
+                    if (!SourceReconcileUndoCoordinator.IsExternalTransitionActive(document))
+                    {
+                        if (undoTransition == null)
+                            throw new InvalidOperationException("Multi-region semantic Undo transition was not initialized before native materialization.");
+                        var afterSnapshot = ProjectStateSnapshot.Capture(project);
+                        undoTransition.StageAfter(project, afterSnapshot);
+                    }
+
                     transaction.Commit();
+                    undoTransition?.ConfirmCommitted();
                     cadCommitted = true;
                     return new MultiRegionMeshBuildResult { Elements = 1, Regions = assembly.Regions.Count, Bars = allHandles.Count };
                 }
@@ -270,6 +296,10 @@ namespace QS3D.BricsCAD.V25.Cad
                     }
                 }
                 throw;
+            }
+            finally
+            {
+                undoTransition?.Dispose();
             }
         }
 
