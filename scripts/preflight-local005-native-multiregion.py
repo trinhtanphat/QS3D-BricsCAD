@@ -45,6 +45,12 @@ REQUIRED_FILES = {
         "MaxRegions",
         "MaxHandlesPerRegion",
     ),
+    "src/QS3D.BricsCAD.V25/Cad/MultiRegionTopologyFingerprint.cs": (
+        "MultiRegionTopologyFingerprint",
+        "Compute",
+        "SHA256.Create",
+        "fingerprintByHandle",
+    ),
     "src/QS3D.BricsCAD.V25/Cad/SlabFoundationMultiRegionMeshSolidBuilder.cs": (
         "SlabFoundationMultiRegionMeshSolidBuilder",
         "PolygonSourceLoopRegionAssembler.Assemble",
@@ -72,6 +78,9 @@ REQUIRED_FILES = {
         "MultiRegionRebarManifest.ParseGenerated",
         "ClosedPolygonSourceLoopReader.Read",
         "PolygonSourceLoopRegionAssembler.Assemble",
+        "MultiRegionTopologyFingerprint.Compute",
+        "MULTI_REGION_TOPOLOGY_FINGERPRINT_MISMATCH",
+        "MULTI_REGION_GENERATED_COUNT_MISMATCH",
         "GeneratedRebarNativeOwnershipService.HasMatchingOwnership",
         "GeneratedRebarRegionOwnershipService.HasMatchingOwnership",
         "MultiRegionTopologyFingerprint",
