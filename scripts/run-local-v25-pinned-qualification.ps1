@@ -78,8 +78,9 @@ $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
 if ($null -eq $report.exactSha -or [string]::IsNullOrWhiteSpace([string]$report.exactSha)) {
     throw "qualification.json does not contain exactSha; exact-source evidence cannot be accepted."
 }
-if ([string]$report.exactSha.ToLowerInvariant() -ne $expectedSourceShaNormalized) {
-    throw "qualification.json exactSha mismatch: expected $expectedSourceShaNormalized but report contains $([string]$report.exactSha)."
+$reportedExactSha = ([string]$report.exactSha).Trim().ToLowerInvariant()
+if ($reportedExactSha -ne $expectedSourceShaNormalized) {
+    throw "qualification.json exactSha mismatch: expected $expectedSourceShaNormalized but report contains $reportedExactSha."
 }
 
 Write-Host "Pinned exact source SHA verified before and after qualification: $expectedSourceShaNormalized"
