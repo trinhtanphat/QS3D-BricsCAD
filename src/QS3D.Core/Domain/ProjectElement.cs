@@ -122,8 +122,8 @@ namespace QS3D.Core.Domain
         public void SetProperty(string name, string value)
         {
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Property name is required.", nameof(name));
+            if (name.Any(char.IsControl)) throw new ArgumentException("Property name cannot contain control characters.", nameof(name));
             var key = name.Trim();
-            if (key.Any(char.IsControl)) throw new ArgumentException("Property name cannot contain control characters.", nameof(name));
             key = RequireXmlText(key, nameof(name), "Property name");
             var normalized = RequireXmlText(value ?? string.Empty, nameof(value), "Property value");
             if (Properties.TryGetValue(key, out var existing) && string.Equals(existing, normalized, StringComparison.Ordinal)) return;
@@ -138,6 +138,7 @@ namespace QS3D.Core.Domain
         internal bool RemoveProperty(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Property name is required.", nameof(name));
+            if (name.Any(char.IsControl)) throw new ArgumentException("Property name cannot contain control characters.", nameof(name));
             var key = name.Trim();
             if (!Properties.Remove(key)) return false;
             var affectsGeneratedGeometry = ElementGeometryPolicy.AffectsGeneratedGeometry(Category, key);
@@ -151,10 +152,10 @@ namespace QS3D.Core.Domain
         public void SetQuantity(string name, double value)
         {
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Quantity name is required.", nameof(name));
+            if (name.Any(char.IsControl)) throw new ArgumentException("Quantity name cannot contain control characters.", nameof(name));
             if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d) throw new ArgumentOutOfRangeException(nameof(value));
             value = value == 0d ? 0d : value;
             var key = name.Trim();
-            if (key.Any(char.IsControl)) throw new ArgumentException("Quantity name cannot contain control characters.", nameof(name));
             key = RequireXmlText(key, nameof(name), "Quantity name");
             if (Quantities.TryGetValue(key, out var existing) && existing.Equals(value)) return;
             Quantities[key] = value;

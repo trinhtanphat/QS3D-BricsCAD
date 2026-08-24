@@ -8,10 +8,11 @@ RUNNER = ROOT / "scripts/test-bricscad-v25-curtain-panel-multidwg.ps1"
 HELPER = ROOT / "scripts/bricscad-runner-window-interop.ps1"
 WINDOW = ROOT / "src/QS3D.BricsCAD.V25/UI/CurtainWallWindow.xaml.cs"
 LIFETIME = ROOT / "src/QS3D.BricsCAD.V25/UI/DocumentBoundWindowLifetime.cs"
+NATIVE = ROOT / "src/QS3D.BricsCAD.V25/UI/DocumentBoundNativeLifecycleCoordinator.cs"
 RUNBOOK = ROOT / "docs/CURTAIN-NATIVE-PANELS.md"
 errors = []
 
-for path in (COMMAND, RUNNER, HELPER, WINDOW, LIFETIME, RUNBOOK):
+for path in (COMMAND, RUNNER, HELPER, WINDOW, LIFETIME, NATIVE, RUNBOOK):
     if not path.is_file():
         errors.append("missing Curtain P12 probe surface: " + str(path.relative_to(ROOT)))
 
@@ -151,9 +152,31 @@ if WINDOW.is_file():
 
 if LIFETIME.is_file():
     text = LIFETIME.read_text(encoding="utf-8")
-    for token in ('DocumentToBeDestroyed += OnDocumentToBeDestroyed', 'window.Close();'):
+    for token in (
+        '_nativeLifecycleSubscription = DocumentBoundNativeLifecycleCoordinator.Register(',
+        'if (!MatchesNativeDatabase(e.Document)) return;',
+        '_window.Close();',
+    ):
         if token not in text:
-            errors.append("Document-bound lifetime contract missing token: " + token)
+            errors.append("Document-bound H3 lifetime contract missing token: " + token)
+    for forbidden in (
+        'BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;',
+        '_lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;',
+    ):
+        if forbidden in text:
+            errors.append("Curtain P12 lifetime must not restore per-window native reactor ownership: " + forbidden)
+
+if NATIVE.is_file():
+    text = NATIVE.read_text(encoding="utf-8")
+    for token in (
+        'BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;',
+        'lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;',
+        'lifecycleDocument.CloseAborted += OnDocumentCloseAborted;',
+        'new WeakReference<Callbacks>(callbacks)',
+        'if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;',
+    ):
+        if token not in text:
+            errors.append("Curtain P12 shared native lifetime contract missing token: " + token)
 
 if RUNBOOK.is_file():
     text = RUNBOOK.read_text(encoding="utf-8")
@@ -168,4 +191,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: P12 probe drives the real A-bound Curtain Hub across two projects, proves wrong-DWG routed-button refusal, reactivation success and A-destroy window closure, while the guarded exact-SHA runner preserves both disposable DWGs and removes private process/script/sidecar state.")
+print("PASS: P12 probe drives the real A-bound Curtain Hub across two projects, proves wrong-DWG routed-button refusal, reactivation success and A-destroy window closure; H3 keeps per-window lifetime managed-only while the shared native coordinator owns document reactors, and the exact-SHA runner preserves both disposable DWGs and cleanup boundaries.")
