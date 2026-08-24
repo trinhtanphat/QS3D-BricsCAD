@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
             InputOrderDoesNotChangePairOwnerIdentity();
             IdentityTokensStayCompactForMaximumIds();
             UnsupportedOccurrenceFailsClosed();
+            PairRecordCodecRoundTripsCanonicalOwnership();
+            PairRecordCodecRejectsTampering();
             NullIntersectionFailsClosed();
         }
 
@@ -65,6 +67,65 @@ namespace QS3D.Core.SmokeTests
         {
             Throws<ArgumentOutOfRangeException>(() =>
                 GridIntersectionIdentityPlanner.BuildIntersectionOwner("GRID-A", "GRID-B", 2));
+        }
+
+        private static void PairRecordCodecRoundTripsCanonicalOwnership()
+        {
+            const string firstId = "GRID-A";
+            const string secondId = "LƯỚI-B";
+            var pair = GridIntersectionIdentityPlanner.BuildPairToken(firstId, secondId);
+            var record = new GridIntersectionPairRecord(
+                firstId,
+                secondId,
+                pair,
+                new[]
+                {
+                    new GridIntersectionMarkerRecordEntry(
+                        0,
+                        GridIntersectionIdentityPlanner.BuildIntersectionOwner(firstId, secondId, 0),
+                        "A1",
+                        new Point2(-1.25, 2.5),
+                        -0.0d),
+                    new GridIntersectionMarkerRecordEntry(
+                        1,
+                        GridIntersectionIdentityPlanner.BuildIntersectionOwner(firstId, secondId, 1),
+                        "B2",
+                        new Point2(3.75, -4.5),
+                        6.25)
+                });
+
+            var key = GridIntersectionMarkerRecordCodec.MetadataKey(pair);
+            var encoded = GridIntersectionMarkerRecordCodec.Encode(record);
+            var decoded = GridIntersectionMarkerRecordCodec.Decode(key, encoded);
+
+            Equal(firstId, decoded.FirstElementId);
+            Equal(secondId, decoded.SecondElementId);
+            Equal(pair, decoded.PairToken);
+            Equal(2, decoded.Entries.Count);
+            Equal("A1", decoded.Entries[0].Handle);
+            Equal(0d, decoded.Entries[0].Elevation);
+            Equal("B2", decoded.Entries[1].Handle);
+            Equal(6.25d, decoded.Entries[1].Elevation);
+        }
+
+        private static void PairRecordCodecRejectsTampering()
+        {
+            const string firstId = "GRID-A";
+            const string secondId = "GRID-B";
+            var pair = GridIntersectionIdentityPlanner.BuildPairToken(firstId, secondId);
+            var owner = GridIntersectionIdentityPlanner.BuildIntersectionOwner(firstId, secondId, 0);
+            var record = new GridIntersectionPairRecord(
+                firstId,
+                secondId,
+                pair,
+                new[] { new GridIntersectionMarkerRecordEntry(0, owner, "A1", new Point2(1, 2), 3) });
+            var key = GridIntersectionMarkerRecordCodec.MetadataKey(pair);
+            var encoded = GridIntersectionMarkerRecordCodec.Encode(record);
+            var tamperedOwner = "GIX1:" + new string('0', 64) + ":0";
+
+            Throws<FormatException>(() => GridIntersectionMarkerRecordCodec.Decode(key, encoded.Replace(owner, tamperedOwner)));
+            Throws<ArgumentException>(() =>
+                new GridIntersectionMarkerRecordEntry(0, owner, "0A", new Point2(1, 2), 3));
         }
 
         private static void NullIntersectionFailsClosed()
