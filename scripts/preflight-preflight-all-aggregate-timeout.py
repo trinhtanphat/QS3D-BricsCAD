@@ -130,10 +130,19 @@ def test_posix_cleanup_targets_owned_group(module):
     def fake_killpg(pid, sig):
         observed.append(("killpg", pid, sig))
 
+    had_sigkill = hasattr(module.signal, "SIGKILL")
+    original_sigkill = getattr(module.signal, "SIGKILL", None)
+    expected_sigkill = original_sigkill if had_sigkill else 9
+    if not had_sigkill:
+        module.signal.SIGKILL = expected_sigkill
     module.os.killpg = fake_killpg
-    error = module._terminate_process_tree(FakeProcess(), "posix")
+    try:
+        error = module._terminate_process_tree(FakeProcess(), "posix")
+    finally:
+        if not had_sigkill:
+            delattr(module.signal, "SIGKILL")
     require(error is None, "successful POSIX process-group cleanup must be accepted")
-    require(("killpg", 6161, module.signal.SIGKILL) in observed, "POSIX cleanup must target the launched process group")
+    require(("killpg", 6161, expected_sigkill) in observed, "POSIX cleanup must target the launched process group")
     require(not [entry for entry in observed if entry[0] == "kill"], "direct fallback kill must not run after successful group cleanup")
 
 
