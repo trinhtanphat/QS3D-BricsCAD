@@ -6,7 +6,7 @@ Purpose: give local-capable workers a source-ready queue where they only fetch/c
 
 ## Non-negotiable local contract
 
-For every row below:
+For every active row below:
 
 1. `git fetch --all --prune`.
 2. Check out the named pushed carrier at the exact SHA published by its owning issue; never run an approximate moving `latest`.
@@ -17,17 +17,11 @@ For every row below:
 7. If licensed runtime reveals a production-source defect, stop. Do not patch production source in the local lane. Return sanitized reproduction/evidence to a separate remote/source issue and rerun only after a new pushed exact SHA exists.
 8. Do not commit BricsCAD proprietary DLLs, private/customer DWGs, credentials, signing material, raw handles/project IDs, or unsanitized runtime dumps.
 
-## P0 — #1744 Slab opening peer replay + Undo semantic coherence
+## Completed bounded references — DO_NOT_RERUN
 
-Status: `LOCAL_RERUN_READY`  
-Carrier: `agent/control01/slabopen-undo-semantic-1744`  
-Exact SHA: `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31`
-
-Run the existing #1744 licensed V25.2.10 matrix. The important regression is native Undo restoring both the retiring CAD solid and matching semantic host/opening metadata (`GeneratedSolidHandle`, peer applied handles/fingerprints and `SlabOpeningCutCount`), followed by Health=0, coherent Redo, save/cold-reopen and second-DWG isolation.
-
-The old scheduling dependency on #3593 P06 is obsolete. #3593 reached P07 `LOCAL_PASS` and is closed; #3621 is also closed. Do not rerun H.1 P06/P07 merely because older runbook text still mentions it.
-
-Disposition: PASS => post sanitized evidence to #1744 and #72 and close the bounded child. FAIL => return evidence to a new remote/source fix lane. NO_RESULT => bounded retry only.
+- **#1744 Slab opening peer replay + Undo semantic coherence:** accepted licensed V25 `LOCAL_PASS` on exact `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31`, including peer replay, native Undo/Redo semantic coherence, Health=0, save/cold-reopen and second-DWG isolation. Do not schedule it again from historical queue text.
+- **#3613 Coordination Manager Locate/zoom:** accepted licensed V25 `LOCAL_PASS` on exact `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31`, including exact PICKFIRST selection, synchronous framing, fail-closed provenance and modeless multi-DWG affinity. Do not schedule it again.
+- **H.1 #3593/#3621:** final P07 is authoritative; obsolete P06 scheduling text must not trigger another run.
 
 ## P0 — #3681 StructuralWall live-BREP concrete-contact/formwork
 
@@ -64,18 +58,11 @@ The runner automatically:
 
 Disposition: `LOCAL_PASS` => post the sanitized JSON/evidence to #3681 and #72 and close #3681. `LOCAL_FAIL` => return the exact bounded failure to a separate remote/source defect lane. `NO_RESULT` => environment/license/host retry only. No local source coding is authorized or needed.
 
-## P1 — #3613 Coordination Manager Locate through zoom
+## P1 source-ready continuations
 
-Status: `LOCAL_READY / PENDING_LOCAL`  
-Carrier: `agent/qs3d-uix-worker-b/issue-3613-coordination-locate-zoom`  
-Exact SHA: `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31`
-
-Use licensed BricsCAD V25 (and V26 parity where applicable). Verify Coordination Manager Locate resolves both sides all-or-nothing, sets exactly the intended PICKFIRST selection, synchronously frames it, preserves exact selection if framing cannot be calculated, refuses stale/missing/wrong-drawing provenance, stays document-affine across modeless active-DWG switches, and leaves no unhandled UI/runtime exception or process/private-state residue.
-
-The former fallback-behind-#3593 wording is obsolete because #3593 is already closed with P07 `LOCAL_PASS`.
-
-Disposition: PASS => post sanitized evidence to #3613 and #72 and close #3613. FAIL => remote/source defect lane. NO_RESULT => bounded retry only.
+- **LOCAL-005 / #83:** source defect #3715 is fixed by merged PR #3727 (`ba6e1c7508086beb8ac5db9a4a78d2c43fc09492`). On one exact descendant, local reruns only multi-region build -> native Undo -> native Redo first; broader refresh/add/remove/corrupt/cap/Foundation/save-reopen/multi-DWG resumes only after coherence passes.
+- **LOCAL-006 / #77:** source defect #3721 is fixed by merged PR #3728 (`887173f28126b928765e458f28202e83a6f3b88f`). On one exact descendant, local reruns only `QS3DTAG -> native Undo -> native Redo` first; broader documentation lifecycle/visual matrix resumes only after coherence passes.
 
 ## Existing broader local queue
 
-This dispatch file does not replace `docs/LOCAL-AGENT-INBOX.md`; it fixes the immediate exact-SHA dispatch ambiguity for the rows above. The broader canonical queue remains governed by #72 and the inbox. Do not rerun already-completed LOCAL-017, LOCAL-018, LOCAL-019, #1744, #3613, or H.1 P07 solely because historical text still mentions them. Prefer remaining P0 work before P1, then P2, and always use the exact pushed carrier declared by the owning issue.
+This dispatch file does not replace `docs/LOCAL-AGENT-INBOX.md`; it fixes the immediate exact-SHA/source-first ambiguity for the rows above. The broader canonical queue remains governed by #72 and the inbox. Do not rerun already-completed LOCAL-017, LOCAL-018, LOCAL-019, #1744, #3613, or H.1 P07 solely because historical text still mentions them. Prefer remaining P0 work before P1, then P2, and always use the exact pushed carrier declared by the owning issue.
