@@ -55,7 +55,7 @@ namespace QS3D.Core.SmokeTests
             Equal(ItemCount, initial.SnapshotItemCount, "initial snapshot item count");
             Equal(PairCount, initial.CandidatePairs.Count, "initial controller pair count");
 
-            var noOp = controller.ApplySnapshot(2d, BuildItems("1").Reverse());
+            var noOp = controller.ApplySnapshot(2d, BuildItems("1").AsEnumerable().Reverse());
             True(noOp.IsNoOp, "same logical scale snapshot produced recomputation churn");
             Equal(0, noOp.CandidatePairs.Count, "no-op candidate count");
             Equal(0, noOp.InvalidatedPairKeys.Count, "no-op invalidation count");
