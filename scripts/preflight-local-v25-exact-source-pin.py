@@ -79,6 +79,19 @@ def main() -> int:
     if mismatch_guard < 0 or delegate < 0 or mismatch_guard > delegate:
         fail("exact-SHA mismatch check must execute before the delegated expensive qualification runner")
 
+    for optional_name in ("Profile", "ArtifactDir", "PythonPath", "ReleaseTag"):
+        require(
+            pinned,
+            rf"if\s*\(-not\s+\[string\]::IsNullOrWhiteSpace\(\${optional_name}\)\)\s*\{{\s*\$runnerArgs\.{optional_name}\s*=\s*\${optional_name}",
+            f"pinned runner must forward optional {optional_name} only when non-empty",
+            flags=re.DOTALL,
+        )
+    require(
+        pinned,
+        r"if\s*\(\$SignPackage\)\s*\{[\s\S]*?\$runnerArgs\.SignPackage\s*=\s*\$true[\s\S]*?\$runnerArgs\.SigningCertThumbprint\s*=\s*\$SigningCertThumbprint[\s\S]*?\$runnerArgs\.TimestampUrl\s*=\s*\$TimestampUrl",
+        "signing-only validated strings must be forwarded only when SignPackage is requested",
+    )
+
     require(
         entrypoint_doc,
         r"run-local-v25-pinned-qualification\.ps1[\s\S]{0,500}-ExpectedSourceSha\s+\"<exact 40-hex source SHA from handoff>\"",
