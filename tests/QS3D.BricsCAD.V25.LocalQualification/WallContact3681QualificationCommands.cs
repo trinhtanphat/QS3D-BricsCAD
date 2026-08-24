@@ -11,6 +11,7 @@ using Teigha.DatabaseServices;
 using Teigha.Geometry;
 using Teigha.Runtime;
 using Application = Bricscad.ApplicationServices.Application;
+using Exception = System.Exception;
 
 namespace QS3D.BricsCAD.V25.LocalQualification
 {
@@ -99,9 +100,6 @@ namespace QS3D.BricsCAD.V25.LocalQualification
             result["baseline.gross_m2"] = Format(baseline.GrossVerticalAreaM2);
             result["baseline.deduction_m2"] = Format(baseline.DeductionM2);
 
-            // Exact zero-volume face contact at the left wall end. This deliberately exercises
-            // the production OffsetBody contact-probe path instead of hiding the V25 BREP issue
-            // behind a positive-volume overlap.
             var full = RunMeasureCase(document, new[]
             {
                 new SolidSpec(-100d, -100d, 0d, 100d, 200d, 800d)
@@ -119,8 +117,6 @@ namespace QS3D.BricsCAD.V25.LocalQualification
             result["case.partial_end"] = "PASS";
             result["partial_end.deduction_m2"] = Format(partial.DeductionM2);
 
-            // Two exact face-contact neighbors overlap along Z. The production residual cutter
-            // must union them rather than subtract the overlapping strip twice.
             var union = RunMeasureCase(document, new[]
             {
                 new SolidSpec(-100d, -100d, 0d, 100d, 200d, 500d),
@@ -130,8 +126,6 @@ namespace QS3D.BricsCAD.V25.LocalQualification
             result["case.multi_neighbor_union"] = "PASS";
             result["multi_neighbor_union.deduction_m2"] = Format(union.DeductionM2);
 
-            // Exact contact on the horizontal top face is not formwork contact and must not be
-            // deducted from the vertical-face formwork quantity.
             var top = RunMeasureCase(document, new[]
             {
                 new SolidSpec(100d, -50d, 800d, 1268d, 100d, 100d)
@@ -256,9 +250,6 @@ namespace QS3D.BricsCAD.V25.LocalQualification
                 result["capture_refresh.deduction_m2"] = Format(ExpectedOneEndM2);
                 result["capture_refresh.net_m2"] = Format(wall.Quantities["FormworkM2"]);
 
-                // Make the wall's authoritative live Solid3d unresolvable, then trigger the same
-                // semantic-capture refresh path. Production must fail closed by removing the stale
-                // deduction instead of publishing the previous 0.1600 m² value.
                 Erase(document, new[] { wallSolid.Id });
                 document.Editor.SetImpliedSelection(new[] { distant.Id });
                 captured = CaptureSelection(document, ElementCategory.Column);
