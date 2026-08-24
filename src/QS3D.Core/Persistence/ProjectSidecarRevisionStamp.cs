@@ -116,18 +116,25 @@ namespace QS3D.Core.Persistence
                 try { attributes = File.GetAttributes(path); }
                 catch (FileNotFoundException) { return new FileCapture(path, null); }
                 catch (DirectoryNotFoundException) { return new FileCapture(path, null); }
-                if ((attributes & FileAttributes.Directory) != 0)
-                    throw new InvalidDataException("QS3D sidecar path resolves to a directory.");
+                RequireRegularSidecar(attributes);
 
                 try
                 {
                     var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                    if (stream.Length > MaxSidecarBytes)
+                    try
+                    {
+                        // Recheck path identity after opening so a redirected member cannot
+                        // gain digest authority through a pre-open attribute race.
+                        RequireRegularSidecar(File.GetAttributes(path));
+                        if (stream.Length > MaxSidecarBytes)
+                            throw new InvalidDataException("QS3D sidecar exceeds the bounded revision-check size.");
+                        return new FileCapture(path, stream);
+                    }
+                    catch
                     {
                         stream.Dispose();
-                        throw new InvalidDataException("QS3D sidecar exceeds the bounded revision-check size.");
+                        throw;
                     }
-                    return new FileCapture(path, stream);
                 }
                 catch (FileNotFoundException) { return new FileCapture(path, null); }
                 catch (DirectoryNotFoundException) { return new FileCapture(path, null); }
@@ -148,7 +155,19 @@ namespace QS3D.Core.Persistence
             {
                 if (_stream != null)
                 {
-                    if (!File.Exists(_path) || _stream.Length > MaxSidecarBytes)
+                    FileAttributes attributes;
+                    try { attributes = File.GetAttributes(_path); }
+                    catch (FileNotFoundException)
+                    {
+                        throw new IOException("QS3D sidecar changed while its pair revision was being captured.");
+                    }
+                    catch (DirectoryNotFoundException)
+                    {
+                        throw new IOException("QS3D sidecar changed while its pair revision was being captured.");
+                    }
+
+                    RequireRegularSidecar(attributes);
+                    if (_stream.Length > MaxSidecarBytes)
                         throw new IOException("QS3D sidecar changed while its pair revision was being captured.");
                     return;
                 }
@@ -158,6 +177,14 @@ namespace QS3D.Core.Persistence
             }
 
             public void Dispose() => _stream?.Dispose();
+
+            private static void RequireRegularSidecar(FileAttributes attributes)
+            {
+                if ((attributes & FileAttributes.Directory) != 0)
+                    throw new InvalidDataException("QS3D sidecar path resolves to a directory.");
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidDataException("QS3D sidecar path must not be a redirected or reparse-point file.");
+            }
 
             private static byte[] ComputeDigest(FileStream stream)
             {
