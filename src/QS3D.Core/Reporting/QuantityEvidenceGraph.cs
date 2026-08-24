@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -219,8 +220,8 @@ public sealed class QuantityContribution
 
         ValidateSignedValue(operation, value, nameof(value));
 
-        var orderedOperands = (operands ?? Array.Empty<QuantityEvidenceOperand>())
-            .Select(static operand => operand ?? throw new ArgumentException("Operands cannot contain null values.", nameof(operands)))
+        var orderedOperands = QuantityEvidenceCollectionSnapshot
+            .Capture(operands, nameof(operands), "Quantity contribution operands")
             .OrderBy(static operand => operand.CanonicalKey, StringComparer.Ordinal)
             .ToArray();
 
@@ -408,13 +409,13 @@ public sealed class QuantityExplanation
             throw new ArgumentOutOfRangeException(nameof(netValue), "Net quantity cannot be negative.");
         }
 
-        var orderedContributions = (contributions ?? Array.Empty<QuantityContribution>())
-            .Select(static item => item ?? throw new ArgumentException("Contributions cannot contain null values.", nameof(contributions)))
+        var orderedContributions = QuantityEvidenceCollectionSnapshot
+            .Capture(contributions, nameof(contributions), "Quantity explanation contributions")
             .OrderBy(static item => item.EvidenceId, StringComparer.Ordinal)
             .ToArray();
 
-        var orderedAdjustments = (adjustments ?? Array.Empty<QuantityAdjustment>())
-            .Select(static item => item ?? throw new ArgumentException("Adjustments cannot contain null values.", nameof(adjustments)))
+        var orderedAdjustments = QuantityEvidenceCollectionSnapshot
+            .Capture(adjustments, nameof(adjustments), "Quantity explanation adjustments")
             .OrderBy(static item => item.EvidenceId, StringComparer.Ordinal)
             .ToArray();
 
@@ -436,6 +437,80 @@ public sealed class QuantityExplanation
             netValue,
             orderedContributions,
             orderedAdjustments);
+    }
+}
+
+internal static class QuantityEvidenceCollectionSnapshot
+{
+    internal const int MaximumItems = 10000;
+
+    internal static IReadOnlyList<T> Capture<T>(IEnumerable<T>? source, string parameterName, string label)
+        where T : class
+    {
+        if (source is null)
+        {
+            return Array.Empty<T>();
+        }
+
+        var knownCount = ReadKnownCount(source, label);
+        if (knownCount.HasValue && knownCount.Value > MaximumItems)
+        {
+            throw new InvalidOperationException(label + " supports at most " + MaximumItems.ToString(CultureInfo.InvariantCulture) + " items.");
+        }
+
+        var snapshot = knownCount.HasValue ? new List<T>(knownCount.Value) : new List<T>();
+        foreach (var item in source)
+        {
+            if (snapshot.Count >= MaximumItems)
+            {
+                throw new InvalidOperationException(label + " supports at most " + MaximumItems.ToString(CultureInfo.InvariantCulture) + " items.");
+            }
+
+            if (item is null)
+            {
+                throw new ArgumentException(label + " cannot contain null values.", parameterName);
+            }
+
+            snapshot.Add(item);
+        }
+
+        if (knownCount.HasValue && snapshot.Count != knownCount.Value)
+        {
+            throw new InvalidOperationException(label + " count changed during snapshot.");
+        }
+
+        return snapshot.ToArray();
+    }
+
+    private static int? ReadKnownCount<T>(IEnumerable<T> source, string label)
+    {
+        int? knownCount = null;
+        if (source is ICollection<T> genericCollection)
+        {
+            AddKnownCount(ref knownCount, genericCollection.Count, label);
+        }
+        if (source is IReadOnlyCollection<T> readOnlyCollection)
+        {
+            AddKnownCount(ref knownCount, readOnlyCollection.Count, label);
+        }
+        if (source is ICollection collection)
+        {
+            AddKnownCount(ref knownCount, collection.Count, label);
+        }
+        return knownCount;
+    }
+
+    private static void AddKnownCount(ref int? knownCount, int candidate, string label)
+    {
+        if (candidate < 0)
+        {
+            throw new InvalidOperationException(label + " reported a negative known count.");
+        }
+        if (knownCount.HasValue && knownCount.Value != candidate)
+        {
+            throw new InvalidOperationException(label + " reported conflicting known counts.");
+        }
+        knownCount = candidate;
     }
 }
 
