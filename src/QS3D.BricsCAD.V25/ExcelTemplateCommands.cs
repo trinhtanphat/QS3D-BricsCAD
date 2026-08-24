@@ -34,6 +34,8 @@ namespace QS3D.BricsCAD.V25
                 if (project.Elements.Count == 0)
                     throw new InvalidOperationException("Xuất theo mẫu chưa có semantic element để xuất.");
 
+                var reviewedProjectId = project.Id;
+                var reviewedVersion = project.ChangeVersion;
                 var implied = Cad.EntitySnapshotReader.ReadImpliedSelection(document);
                 var defaultScope = implied.Count > 0 ? "Selection" : "All";
                 var scopePrompt = document.Editor.GetKeywords(
@@ -100,14 +102,23 @@ namespace QS3D.BricsCAD.V25
                 if (outputDialog.ShowDialog() != true) return;
                 ValidateOutputPath(templateDialog.FileName, outputDialog.FileName);
 
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                    throw new InvalidOperationException("Active DWG đã thay đổi trong lúc chọn template/mapping/output. Hãy chạy lại lệnh.");
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var promptProject)
+                    || !string.Equals(promptProject.Id, reviewedProjectId, StringComparison.OrdinalIgnoreCase)
+                    || promptProject.ChangeVersion != reviewedVersion)
+                    throw new InvalidOperationException("Project đã thay đổi trong lúc chọn template/mapping/output. Hãy chạy lại lệnh.");
+
                 // All user prompts, file choices and mapping validation complete before any
                 // operation that may bind/update project unit state.
                 if (!DrawingUnitWorkflow.EnsureResolved(document, "QS3DEXCELTEMPLATE")) return;
 
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                    throw new InvalidOperationException("Active DWG đã thay đổi sau khi xác nhận unit policy. Hãy chạy lại lệnh.");
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)
-                    || !string.Equals(currentProject.Id, project.Id, StringComparison.OrdinalIgnoreCase)
-                    || currentProject.ChangeVersion != project.ChangeVersion)
-                    throw new InvalidOperationException("Project đã thay đổi trong lúc chọn template/mapping/output. Hãy chạy lại lệnh.");
+                    || !string.Equals(currentProject.Id, reviewedProjectId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Project đã bị thay thế sau khi xác nhận unit policy. Hãy chạy lại lệnh.");
+                var exportVersion = currentProject.ChangeVersion;
 
                 var allScope = string.Equals(scope, "All", StringComparison.OrdinalIgnoreCase);
                 var elementIds = allScope ? Array.Empty<string>() : ResolveScope(document, currentProject, scope, implied);
@@ -136,6 +147,13 @@ namespace QS3D.BricsCAD.V25
                 if (rows.Count == 0)
                     throw new InvalidOperationException("Phạm vi " + scope + " không có quantity row hợp lệ để xuất theo mẫu.");
                 EnsureHandlesAreLive(document, rows);
+
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                    throw new InvalidOperationException("Active DWG đã thay đổi trước khi ghi output. Hãy chạy lại lệnh.");
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var finalProject)
+                    || !string.Equals(finalProject.Id, reviewedProjectId, StringComparison.OrdinalIgnoreCase)
+                    || finalProject.ChangeVersion != exportVersion)
+                    throw new InvalidOperationException("Project đã thay đổi trong lúc dựng quantity rows; output chưa được thay thế.");
 
                 QsWorkbookTemplateExporter.Export(
                     templateDialog.FileName,
@@ -193,9 +211,9 @@ namespace QS3D.BricsCAD.V25
             var mappings = fields.Select((field, index) =>
                 new QsWorkbookTemplateMapping(field, ExcelColumn(index + 1))).ToArray();
 
-            // Dedicated CHI_TIET templates commonly reserve a data block. The safe default
-            // reserves rows 2..5001; company templates with a footer/formulas inside that block
-            // must opt into an explicit Custom mapping instead of being guessed by QS3D.
+            // Dedicated CHI_TIET templates commonly reserve a data block. The default
+            // reserves rows 2..5001; templates with a footer/formulas inside that block
+            // must use an explicit Custom mapping instead of being guessed by QS3D.
             return new QsWorkbookTemplateDefinition("CHI_TIET", 2, mappings, 5000);
         }
 
