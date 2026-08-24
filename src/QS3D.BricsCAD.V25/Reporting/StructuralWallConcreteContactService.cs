@@ -169,7 +169,7 @@ namespace QS3D.BricsCAD.V25.Reporting
             {
                 var generated = GeneratedHandleOwnershipPolicy
                     .EnumerateLogicalOwnerHandles(element)
-                    .Where(x => GeneratedHandleOwnershipPolicy.AreSameLogicalOwnerSlots(x.Value, GeneratedHostSolidOwnerSlot))
+                    .Where(x => string.Equals(x.Value, GeneratedHostSolidOwnerSlot, StringComparison.OrdinalIgnoreCase))
                     .Select(x => x.Key)
                     .ToList();
                 var liveGenerated = CadHandleService.GetLiveSolidHandles(document, generated);
