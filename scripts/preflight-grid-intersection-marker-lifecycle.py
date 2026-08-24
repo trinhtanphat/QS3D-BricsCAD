@@ -18,7 +18,7 @@ required_service = [
     "ProjectContextCoordinator.RequireBackingStoreUnchanged",
     "document.LockDocument()",
     "StartTransaction()",
-    "ValidateExistingAgainstDesired(existing, desired)",
+    "ValidateExistingAgainstRecords(records, existing)",
     "RequireMatchingMarker(entity, marker, project.ProjectId)",
     "entity.Erase()",
     "transaction.Commit()",
