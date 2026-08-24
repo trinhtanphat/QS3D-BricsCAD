@@ -188,4 +188,9 @@ for forbidden in (
     if contains_forbidden(runner, forbidden) or contains_forbidden(harness, forbidden) or contains_forbidden(gate, forbidden):
         fail("local lane still delegates implementation work: " + forbidden)
 
+# Process ownership must be explicit. Inferring ownership from a process start timestamp can
+# terminate a user-launched BricsCAD session that happened to start while qualification ran.
+if "StartTime.ToUniversalTime() -ge $startedUtc" in runner:
+    fail("runner must not infer BricsCAD process ownership from process start time")
+
 print("PASS #3681 committed one-command licensed V25 runner with #3729 touching/penetration fail-fast gate")
