@@ -3,6 +3,8 @@ using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Diagnostics;
+using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -33,7 +35,10 @@ namespace QS3D.BricsCAD.V25
                 var project = ExistingProjectMutationContext.Require(document, "Slab Multi-Region Rebar 3D");
                 EnsureSameProjectSnapshot(project.ProjectId, project.ChangeVersion, expectedProjectId, expectedChangeVersion, "Slab Multi-Region Rebar 3D");
 
-                var result = SlabFoundationMultiRegionMeshSolidBuilder.BuildSlab(document, project);
+                var result = BuildWithNativeUndoBridge(
+                    document,
+                    project,
+                    () => SlabFoundationMultiRegionMeshSolidBuilder.BuildSlab(document, project));
                 var message = result.Bars == 0
                     ? "Slab Multi-Region Rebar 3D: không có multi-region output được tạo."
                     : "Slab Multi-Region Rebar 3D: đã tạo/cập nhật " + result.Bars + " thanh trên " + result.Regions + " region.";
@@ -69,7 +74,10 @@ namespace QS3D.BricsCAD.V25
                 var project = ExistingProjectMutationContext.Require(document, "Foundation Multi-Region Rebar 3D");
                 EnsureSameProjectSnapshot(project.ProjectId, project.ChangeVersion, expectedProjectId, expectedChangeVersion, "Foundation Multi-Region Rebar 3D");
 
-                var result = SlabFoundationMultiRegionMeshSolidBuilder.BuildFoundation(document, project);
+                var result = BuildWithNativeUndoBridge(
+                    document,
+                    project,
+                    () => SlabFoundationMultiRegionMeshSolidBuilder.BuildFoundation(document, project));
                 var message = result.Bars == 0
                     ? "Foundation Multi-Region Rebar 3D: không có multi-region output được tạo."
                     : "Foundation Multi-Region Rebar 3D: đã tạo/cập nhật " + result.Bars + " thanh trên " + result.Regions + " region.";
@@ -105,6 +113,63 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex)
             {
                 Report(document, "QS3DMULTIREBARHEALTH lỗi: " + ex.Message);
+            }
+        }
+
+        private static MultiRegionMeshBuildResult BuildWithNativeUndoBridge(
+            Document document,
+            ProjectState project,
+            Func<MultiRegionMeshBuildResult> build)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (build == null) throw new ArgumentNullException(nameof(build));
+
+            var beforeSnapshot = ProjectStateSnapshot.Capture(project);
+            var beforeStamp = SourceReconcileUndoCoordinator.ProjectRevisionStamp.Capture(project);
+            SourceReconcileUndoCoordinator.PendingTransition? undoTransition = null;
+            var nativeCommitted = false;
+            try
+            {
+                // The builder keeps its own nested native transaction. This outer transaction is the
+                // command-level commit boundary: the revision marker is enrolled before generated
+                // topology changes, and both marker + bars become one native Undo/Redo group.
+                using (var commandTransaction = document.Database.TransactionManager.StartTransaction())
+                {
+                    undoTransition = SourceReconcileUndoCoordinator.BeginTransition(
+                        document,
+                        commandTransaction,
+                        project,
+                        beforeSnapshot,
+                        beforeStamp);
+                    undoTransition.StageNativeMarker();
+
+                    var result = build();
+
+                    undoTransition.StageAfter(project, ProjectStateSnapshot.Capture(project));
+                    commandTransaction.Commit();
+                    nativeCommitted = true;
+                    undoTransition.ConfirmCommitted();
+                    return result;
+                }
+            }
+            catch (Exception operationError)
+            {
+                if (!nativeCommitted)
+                {
+                    try { beforeSnapshot.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "Multi-region reinforcement native Undo registration failed before outer CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
+                    }
+                }
+                throw;
+            }
+            finally
+            {
+                undoTransition?.Dispose();
             }
         }
 
