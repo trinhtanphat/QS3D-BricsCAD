@@ -21,7 +21,7 @@ required = (
     "AddObjectContextMenuExtension(runtimeClass, extension);",
     "nativeRegistrationAdded = true;",
     "if (nativeRegistrationAdded)",
-    "TryRemoveObjectContextMenuExtension(runtimeClass, extension);",
+    "TryRemoveObjectContextMenuExtension(runtimeClass, extension!);",
     "private static void AddObjectContextMenuExtension(RXClass runtimeClass, object extension)",
     "private static void TryRemoveObjectContextMenuExtension(RXClass runtimeClass, object extension)",
     'FindApplicationMethod("AddObjectContextMenuExtension", runtimeClass.GetType(), extension.GetType())',
@@ -36,7 +36,7 @@ mark_registered = text.find("nativeRegistrationAdded = true;", add_call)
 publish_owner = text.find("_entityRuntimeClass = runtimeClass;", mark_registered)
 refresh = text.find("RefreshMenuItemState();", publish_owner)
 catch_block = text.find("catch\n            {", refresh)
-rollback = text.find("TryRemoveObjectContextMenuExtension(runtimeClass, extension);", catch_block)
+rollback = text.find("TryRemoveObjectContextMenuExtension(runtimeClass, extension!);", catch_block)
 detach_popup = text.find('TryDetachEvent(extension, "Popup", popupHandler);', catch_block)
 if min(add_call, mark_registered, publish_owner, refresh, catch_block, rollback, detach_popup) < 0:
     fail("cannot locate transactional startup/rollback ordering")
