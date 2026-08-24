@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Lane-Key: review-workbook-host-bridge
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -191,8 +192,30 @@ require("v26", (
 require("inbox", (
     "## LOCAL-019 — six-sheet QS Review export and Excel-to-Model Locate",
     "issue `#3536`",
-    "PENDING_LOCAL until both licensed host-major runs pass",
 ))
+inbox_text = texts.get("inbox", "")
+local_019_start = inbox_text.find("## LOCAL-019 — six-sheet QS Review export and Excel-to-Model Locate")
+local_019_end = inbox_text.find("\n## ", local_019_start + 1) if local_019_start >= 0 else -1
+local_019 = inbox_text[local_019_start:local_019_end if local_019_end >= 0 else None]
+local_019_pending = (
+    "- Status: IN_PROGRESS" in local_019
+    and "PENDING_LOCAL until both licensed host-major runs pass" in local_019
+)
+local_019_pass = (
+    "- Status: PASS" in local_019
+    and "`LOCAL_PASS` on the same exact clean pushed source SHA" in local_019
+    and re.search(r"source SHA `[0-9a-f]{40}`", local_019) is not None
+    and "Licensed BricsCAD V25" in local_019
+    and "licensed BricsCAD V26" in local_019
+    and "PICKFIRST counts `1/2/2`" in local_019
+    and "all four wrong-fingerprint, wrong-revision, stale-handle and partial-resolution cases refused" in local_019
+    and "source drawing hashes were unchanged" in local_019
+    and "no QSDB sidecar or matching BricsCAD process remained" in local_019
+)
+if not (local_019_pending or local_019_pass):
+    errors.append(
+        "LOCAL-019 must remain IN_PROGRESS with PENDING_LOCAL evidence or record a complete exact-SHA LOCAL_PASS"
+    )
 
 print("QS3D six-sheet Review host bridge preflight")
 if errors:
