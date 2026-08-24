@@ -76,7 +76,11 @@ def main():
     # Clean-room BLT foundation reference: semantic quantity and native BREP explanation must both be side-only.
     require(structural, 'var gross = QuantityMath.Multiply(area, thickness, element.Id + "/foundation volume")', "foundation concrete L/W-area x height arithmetic", failures)
     require(structural, 'var formwork = QuantityMath.Multiply(perimeter, thickness, element.Id + "/foundation formwork")', "foundation side-only perimeter x height formwork", failures)
-    require(geometry_service, "ReadFaces(target, targetElement.Category, componentIndex", "category-aware native face classification", failures)
+    read_faces_pos = geometry_service.find("private static List<FaceSeed> ReadFaces(")
+    owned_face_pos = geometry_service.find("OwnedSolid ownedSolid", read_faces_pos)
+    category_face_pos = geometry_service.find("ElementCategory category", owned_face_pos)
+    if min(read_faces_pos, owned_face_pos, category_face_pos) < 0 or not (read_faces_pos < owned_face_pos < category_face_pos):
+        failures.append("category-aware native face classification must retain owned-solid + category context")
     require(geometry_service, "ElementCategory targetCategory", "category-aware formwork result projection", failures)
     require(geometry_service, "if (!IncludeFormworkFace(targetCategory, seed.Type, seed.IsOuterHorizontal)) continue;", "native formwork eligibility filter", failures)
     require(geometry_service, "category == ElementCategory.Foundation ? -1 : DominantHorizontalAxis(solid)", "foundation keeps every vertical perimeter face as Side", failures)
