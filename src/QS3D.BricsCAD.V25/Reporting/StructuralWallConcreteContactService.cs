@@ -5,6 +5,7 @@ using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
+using QS3D.Core.Services;
 using Teigha.BoundaryRepresentation;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
