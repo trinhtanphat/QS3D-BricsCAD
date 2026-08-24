@@ -6,6 +6,7 @@ using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -86,29 +87,41 @@ namespace QS3D.BricsCAD.V25
                 else
                     OpeningBooleanCutGuard.RequireSelectedTargetsReady(document, project, openingIds);
 
-                var count = openingIds == null
-                    ? OpeningBooleanService.CutLinkedOpenings(document, project)
-                    : OpeningBooleanService.CutLinkedOpenings(document, project, openingIds);
-
-                var liveNote = string.Empty;
-                try
+                var beforeSnapshot = ProjectStateSnapshot.Capture(project);
+                var beforeStamp = SourceReconcileUndoCoordinator.ProjectRevisionStamp.Capture(project);
+                using (SourceReconcileUndoCoordinator.BeginExternalTransitionScope(document))
                 {
-                    var stamped = PhysicalOpeningCutLiveStateService.StampStraight(document, project, openingIds);
-                    if (stamped > 0) liveNote = " • live-fingerprint=" + stamped;
-                }
-                catch (Exception stampError)
-                {
-                    liveNote = " • cảnh báo live-health metadata: " + stampError.Message;
-                }
+                    var count = openingIds == null
+                        ? OpeningBooleanService.CutLinkedOpenings(document, project)
+                        : OpeningBooleanService.CutLinkedOpenings(document, project, openingIds);
 
-                var message = count == 0
-                    ? openingIds == null
-                        ? label + ": không có linked opening mới cần khoét, host chưa có generated solid tương thích hoặc fingerprint hiện tại đã khớp."
-                        : label + ": target set đã ở đúng physical-cut fingerprint; không cần khoét lại."
-                    : openingIds == null
-                        ? label + ": đã khoét " + count + " Cửa/Lỗ Mở vào generated host solid."
-                        : label + ": đã thực hiện " + count + " phép khoét mới; target có fingerprint đã khớp được giữ nguyên.";
-                FinalizeUi(document, message + liveNote);
+                    var liveNote = string.Empty;
+                    try
+                    {
+                        var stamped = PhysicalOpeningCutLiveStateService.StampStraight(document, project, openingIds);
+                        if (stamped > 0) liveNote = " • live-fingerprint=" + stamped;
+                    }
+                    catch (Exception stampError)
+                    {
+                        liveNote = " • cảnh báo live-health metadata: " + stampError.Message;
+                    }
+
+                    if (!beforeStamp.Matches(project))
+                        SourceReconcileUndoCoordinator.CommitExternalTransition(
+                            document,
+                            project,
+                            beforeSnapshot,
+                            beforeStamp);
+
+                    var message = count == 0
+                        ? openingIds == null
+                            ? label + ": không có linked opening mới cần khoét, host chưa có generated solid tương thích hoặc fingerprint hiện tại đã khớp."
+                            : label + ": target set đã ở đúng physical-cut fingerprint; không cần khoét lại."
+                        : openingIds == null
+                            ? label + ": đã khoét " + count + " Cửa/Lỗ Mở vào generated host solid."
+                            : label + ": đã thực hiện " + count + " phép khoét mới; target có fingerprint đã khớp được giữ nguyên.";
+                    FinalizeUi(document, message + liveNote);
+                }
             }
             catch (Exception ex)
             {
