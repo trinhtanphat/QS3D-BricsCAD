@@ -14,6 +14,7 @@ OLD_SHARED_SHA = "0062e0cd73a570a7ca774dfa8b3ff91e8df20f31"
 WALL_CONTACT_BRANCH = "agent/chatgpt-gpt56sol/issue-3680-local-dispatch-refresh"
 WALL_CONTACT_SOURCE_FIX_SHA = "cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb"
 WALL_CONTACT_RUNNER = "scripts/run-local-v25-wall-contact-3681.ps1"
+WALL_CONTACT_RUNNER_NAME = Path(WALL_CONTACT_RUNNER).name
 REVIEW_RUNTIME_SHA = "9cfff87262d7a7117c5ef1f03b486271a0723fa3"
 REVIEW_PR = "#3693"
 
@@ -85,7 +86,7 @@ require_tokens(
         "Source defect/fix: #3687 / #3692",
         f"Required source-fix ancestor: `{WALL_CONTACT_SOURCE_FIX_SHA}`",
         f"Runnable carrier: `{WALL_CONTACT_BRANCH}`",
-        WALL_CONTACT_RUNNER,
+        WALL_CONTACT_RUNNER_NAME,
         "gross 2.6688 - contact 0.3200 = net 2.3488 m²",
         "LOCAL_PASS",
         "LOCAL_FAIL",
