@@ -126,6 +126,8 @@ require("probe", (
     "negativeSemanticUnchanged != 4",
     "authoritative.RequireUnchanged(project)",
     'DrawingUnitWorkflow.EnsureResolved(document, "QS3DREVIEWEXPORT")',
+    "DrawingUnitResolutionPolicy.BindQuantityUnit(",
+    "DrawingUnitResolutionSource.NativeInsunits",
     "QS3D_REVIEW_ROUNDTRIP_PLUGIN",
     "QS3D_REVIEW_ROUNDTRIP_CORE",
     ".Assembly.Location",
@@ -137,6 +139,8 @@ require("probe", (
     '"core_sha256="',
     '"readonly_unit_resolution=true"',
     '"all_targets_resolved_before_selection=true"',
+    '"error_stage=" + stage',
+    '"error_class=" + exception.GetType().Name',
 ))
 require("runner", (
     '[ValidateSet("V25", "V26")]',
@@ -150,6 +154,7 @@ require("runner", (
     'Applications\\QS3D"',
     "($demandLoadOriginalControls -band (-bnot 2)) -bor 4",
     "startup_demandload_restored",
+    "failed at sanitized stage",
     '"NETLOAD"',
     '"QS3DREVIEWROUNDTRIPPROBE"',
     "QS3D_REVIEW_ROUNDTRIP_RESULT",
@@ -171,6 +176,12 @@ require("runner", (
 ))
 if texts.get("runner", "").count("Get-FileHash -LiteralPath $DrawingCopy -Algorithm SHA256") < 2:
     errors.append("QS Review runner must hash the disposable DWG before and after the host run")
+runner_text = texts.get("runner", "")
+isolation_start = runner_text.find("try {\n    if ($isolateDemandLoad)")
+restoration_obligation = runner_text.find("$demandLoadChanged = $true", isolation_start)
+isolation_write = runner_text.find("Set-Qs3dDemandLoadControls -RegistryPath $demandLoadRegistryPath", isolation_start)
+if not (isolation_start >= 0 and isolation_start < restoration_obligation < isolation_write):
+    errors.append("QS Review runner must record its DemandLoad restoration obligation before the guarded registry write")
 
 require("v26", (
     r'<Compile Include="..\QS3D.BricsCAD.V25\**\*.cs"',

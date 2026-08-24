@@ -12,6 +12,7 @@ using QS3D.Core.Coordination;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
 using QS3D.Core.Reporting;
+using QS3D.Core.Units;
 using QS3D.Platform.Domain;
 using QS3D.Platform.Parity;
 using Teigha.DatabaseServices;
@@ -40,6 +41,7 @@ namespace QS3D.BricsCAD.V25
         public void Run()
         {
             var resultPath = Environment.GetEnvironmentVariable(ResultVariable);
+            var stage = "validate_inputs";
             try
             {
                 var validatedResultPath = RequiredOutputPath(resultPath, ResultFileName, "result");
@@ -52,30 +54,46 @@ namespace QS3D.BricsCAD.V25
                 var nonce = Environment.GetEnvironmentVariable(NonceVariable) ?? string.Empty;
                 if (!Guid.TryParseExact(nonce, "N", out _))
                     throw new InvalidOperationException("QS3D Review probe nonce is invalid.");
+                stage = "validate_loaded_assemblies";
                 var loadedPluginHash = ValidateLoadedAssembly(
                     typeof(ReviewWorkbookRuntimeProbeCommands), PluginVariable, "plugin");
                 var loadedCoreHash = ValidateLoadedAssembly(typeof(ProjectState), CoreVariable, "Core dependency");
 
+                stage = "validate_project_state";
                 var document = Application.DocumentManager.MdiActiveDocument
                     ?? throw new InvalidOperationException("No active BricsCAD document is available.");
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 if (project.Elements.Count != 0 || CoordinationIssuePersistence.Load(project) != null)
                     throw new InvalidOperationException("QS3D Review probe requires a disposable drawing with empty semantic/coordination state.");
 
+                stage = "bind_fixture_unit";
+                if (!CadUnitService.TryGetNativeLengthUnit(document, out var nativeUnit))
+                    throw new InvalidOperationException("QS3D Review probe requires a supported native drawing unit.");
+                DrawingUnitResolutionPolicy.BindQuantityUnit(
+                    project.Metadata,
+                    false,
+                    nativeUnit,
+                    DrawingUnitResolutionSource.NativeInsunits);
+
+                stage = "seed_native_and_semantic_state";
                 var seeded = Seed(document, project);
                 var authoritative = ProjectReadOnlyStamp.Capture(project);
+                stage = "resolve_units_readonly";
                 if (!DrawingUnitWorkflow.EnsureResolved(document, "QS3DREVIEWEXPORT"))
                     throw new InvalidOperationException("QS3D Review probe could not resolve drawing units read-only.");
                 authoritative.RequireUnchanged(project);
+                stage = "export_workbook";
                 var export = ReviewWorkbookHostService.Export(document, project, workbookPath, DateTimeOffset.UtcNow);
                 if (export.QuantityDetailCount != 3 || export.QuantitySummaryCount != 3 ||
                     export.ClashCount != 1 || export.DuplicateCount != 1)
                     throw new InvalidOperationException("QS3D Review production export did not contain the seeded 3/3/1/1 review scope.");
                 authoritative.RequireUnchanged(project);
 
+                stage = "read_positive_traces";
                 var qtoTrace = Qs3dReviewWorkbookTraceReader.Read(workbookPath, Qs3dReviewWorkbookExporter.QuantitySheet, 2);
                 var clashTrace = Qs3dReviewWorkbookTraceReader.Read(workbookPath, Qs3dReviewWorkbookExporter.ClashSheet, 2);
                 var duplicateTrace = Qs3dReviewWorkbookTraceReader.Read(workbookPath, Qs3dReviewWorkbookExporter.DuplicateSheet, 2);
+                stage = "resolve_positive_traces";
                 var qto = ReviewWorkbookHostService.ResolveTrace(document, project, qtoTrace);
                 var clash = ReviewWorkbookHostService.ResolveTrace(document, project, clashTrace);
                 var duplicate = ReviewWorkbookHostService.ResolveTrace(document, project, duplicateTrace);
@@ -89,12 +107,14 @@ namespace QS3D.BricsCAD.V25
                 var negativeRefusals = 0;
                 var negativeSelectionPreserved = 0;
                 var negativeSemanticUnchanged = 0;
+                stage = "refuse_wrong_fingerprint";
                 var wrongFingerprint = NegativeProject("wrong-" + project.DrawingFingerprint, qtoTrace.ElementIds, qtoTrace.Handles);
                 AssertNegative(
                     document, project, authoritative, baselineSelection,
                     () => ReviewWorkbookHostService.ResolveTrace(document, wrongFingerprint, qtoTrace),
                     ref negativeAttempts, ref negativeRefusals, ref negativeSelectionPreserved, ref negativeSemanticUnchanged);
 
+                stage = "refuse_wrong_revision";
                 var directory = Path.GetDirectoryName(workbookPath) ?? throw new InvalidOperationException("Workbook directory is unavailable.");
                 var staleRevisionPath = Path.Combine(directory, "review-wrong-revision.xlsx");
                 WriteNegativeWorkbook(staleRevisionPath, project.DrawingFingerprint, "STALE-" + nonce, seeded[0], seeded[1], false);
@@ -105,6 +125,7 @@ namespace QS3D.BricsCAD.V25
                     () => ReviewWorkbookHostService.ResolveTrace(document, project, staleRevisionTrace),
                     ref negativeAttempts, ref negativeRefusals, ref negativeSelectionPreserved, ref negativeSemanticUnchanged);
 
+                stage = "refuse_stale_handle";
                 var missingHandle = FindMissingHandle(document, seeded.Select(x => x.Handle));
                 var staleProject = NegativeProject(project.DrawingFingerprint, new[] { "NEG-QTO" }, new[] { missingHandle });
                 var stalePath = Path.Combine(directory, "review-stale-handle.xlsx");
@@ -116,6 +137,7 @@ namespace QS3D.BricsCAD.V25
                     () => ReviewWorkbookHostService.ResolveTrace(document, staleProject, staleTrace),
                     ref negativeAttempts, ref negativeRefusals, ref negativeSelectionPreserved, ref negativeSemanticUnchanged);
 
+                stage = "refuse_partial_resolution";
                 var partialProject = NegativeProject(
                     project.DrawingFingerprint,
                     new[] { "NEG-LIVE", "NEG-MISSING" },
@@ -133,6 +155,7 @@ namespace QS3D.BricsCAD.V25
                 if (negativeAttempts != 4 || negativeRefusals != 4 || negativeSelectionPreserved != 4 || negativeSemanticUnchanged != 4)
                     throw new InvalidOperationException("QS3D Review negative locate matrix is incomplete.");
 
+                stage = "write_pass_marker";
                 WriteMarkerAtomic(validatedResultPath, new[]
                 {
                     "status=PASS",
@@ -169,9 +192,9 @@ namespace QS3D.BricsCAD.V25
                 });
                 document.Editor.WriteMessage("\nQS3D Review workbook round-trip probe PASS.");
             }
-            catch (Exception)
+            catch (Exception exception)
             {
-                TryWriteFailure(resultPath);
+                TryWriteFailure(resultPath, stage, exception);
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
                     "\nQS3D Review workbook round-trip probe FAIL. See the local qualification result.");
                 throw;
@@ -438,13 +461,20 @@ namespace QS3D.BricsCAD.V25
             return fullPath;
         }
 
-        private static void TryWriteFailure(string? resultPath)
+        private static void TryWriteFailure(string? resultPath, string stage, Exception exception)
         {
             try
             {
                 var normalized = (resultPath ?? string.Empty).Trim();
                 if (normalized.Length > 0 && !File.Exists(normalized))
-                    WriteMarkerAtomic(normalized, new[] { "status=FAIL", "command=QS3DREVIEWROUNDTRIPPROBE", "error_code=ROUNDTRIP_FAILED" });
+                    WriteMarkerAtomic(normalized, new[]
+                    {
+                        "status=FAIL",
+                        "command=QS3DREVIEWROUNDTRIPPROBE",
+                        "error_code=ROUNDTRIP_FAILED",
+                        "error_stage=" + stage,
+                        "error_class=" + exception.GetType().Name
+                    });
             }
             catch { }
         }

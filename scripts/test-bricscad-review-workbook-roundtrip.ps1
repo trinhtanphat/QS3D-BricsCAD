@@ -256,10 +256,12 @@ $startedAt = Get-Date
 
 try {
     if ($isolateDemandLoad) {
-        Set-Qs3dDemandLoadControls -RegistryPath $demandLoadRegistryPath `
-            -ExpectedCurrent $demandLoadOriginalControls -NewValue $demandLoadIsolatedControls
+        # Record the restoration obligation before the write. If the registry write
+        # succeeds but its guarded readback fails, finally must still restore it.
         $demandLoadChanged = $true
         $demandLoadRestored = $false
+        Set-Qs3dDemandLoadControls -RegistryPath $demandLoadRegistryPath `
+            -ExpectedCurrent $demandLoadOriginalControls -NewValue $demandLoadIsolatedControls
     }
     $env:QS3D_REVIEW_ROUNDTRIP_RESULT = $resultPath
     $env:QS3D_REVIEW_ROUNDTRIP_WORKBOOK = $workbookPath
@@ -300,6 +302,12 @@ try {
     }
 
     $marker = Read-Qs3dMarker -Path $resultPath
+    if ($marker.ContainsKey("status") -and
+        -not [string]::Equals([string]$marker["status"], "PASS", [StringComparison]::OrdinalIgnoreCase)) {
+        $failureStage = if ($marker.ContainsKey("error_stage")) { [string]$marker["error_stage"] } else { "UNKNOWN" }
+        $failureClass = if ($marker.ContainsKey("error_class")) { [string]$marker["error_class"] } else { "UNKNOWN" }
+        throw "QS Review probe failed at sanitized stage '$failureStage' with '$failureClass'."
+    }
     Require-Qs3dValue $marker "status" "PASS"
     Require-Qs3dValue $marker "command" "QS3DREVIEWROUNDTRIPPROBE"
     Require-Qs3dValue $marker "schema" "QS3D_REVIEW_HOST_ROUNDTRIP_V1"
