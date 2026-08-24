@@ -13,6 +13,7 @@ CORE_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/Commands.cs"
 INSIGHT_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/QuantityInsightCommands.cs"
 REVIEW_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/ReviewCommands.cs"
 CUSTOMER_EXCEL_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/CustomerExcelCommands.cs"
+CAD_TO_EXCEL_COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/CadToExcelCommands.cs"
 errors = []
 
 for path in (
@@ -26,6 +27,7 @@ for path in (
     INSIGHT_COMMANDS,
     REVIEW_COMMANDS,
     CUSTOMER_EXCEL_COMMANDS,
+    CAD_TO_EXCEL_COMMANDS,
 ):
     if not path.is_file():
         errors.append("missing quantity Ribbon parity source: " + str(path.relative_to(ROOT)))
@@ -37,6 +39,7 @@ button_specs = (
     ("QS3D_QTY_BLT_VIEW", "Xem khối\\nlượng", "QS3DBQ", "QuantityView"),
     ("QS3D_QTY_BLT_EXPLAIN", "Diễn\\ngiải", "QS3DQUANTITYINSIGHT", "QuantityExplain"),
     ("QS3D_QTY_BLT_COMPARE", "Excel →\\nCAD", "QS3DEXCELTRACE", "QuantityCompare"),
+    ("QS3D_QTY_BLT_CAD_TO_EXCEL", "CAD →\\nExcel", "QS3DCADTOEXCEL", "QuantityCompare"),
 )
 
 legacy_panel_ids = (
@@ -84,8 +87,14 @@ if AUGMENTER.is_file():
             errors.append("expected exactly one quantity button id: " + button_id)
         if text.count(f'"{label}"') != 1:
             errors.append("expected exactly one quantity button label: " + label)
-        if text.count(f"RibbonIconKind.{icon}") != 1:
-            errors.append("expected exactly one quantity button icon binding: " + icon)
+
+    for icon in sorted({spec[3] for spec in button_specs}):
+        expected_count = sum(1 for spec in button_specs if spec[3] == icon)
+        actual_count = text.count(f"RibbonIconKind.{icon}")
+        if actual_count != expected_count:
+            errors.append(
+                f"expected {expected_count} quantity button icon binding(s) for {icon}, found {actual_count}"
+            )
 
     expected_command_counts = {
         "QS3DQUANTITYSETTINGS": 1,
@@ -95,6 +104,7 @@ if AUGMENTER.is_file():
         "QS3DBQ": 1,
         "QS3DQUANTITYINSIGHT": 1,
         "QS3DEXCELTRACE": 1,
+        "QS3DCADTOEXCEL": 1,
         # Legacy ED2/revision commands stay registered but are no longer visible in this compact customer Ribbon.
         "QS3DED2": 0,
         "QS3DREVDIFF": 0,
@@ -122,7 +132,7 @@ if AUGMENTER.is_file():
 
 if ICON_FACTORY.is_file():
     text = ICON_FACTORY.read_text(encoding="utf-8")
-    for _, _, _, icon in button_specs:
+    for icon in sorted({spec[3] for spec in button_specs}):
         if text.count(f"case RibbonIconKind.{icon}:") != 1:
             errors.append("RibbonIconFactory must render exactly one quantity icon case: " + icon)
         enum_count = text.count(f"        {icon},") + text.count(f"        {icon}\n")
@@ -220,6 +230,19 @@ behavior_contracts = (
             'SendStringToExecute("QS3DZOOMSELECTED "',
         ),
     ),
+    (
+        CAD_TO_EXCEL_COMMANDS,
+        "CAD → Excel",
+        (
+            '[CommandMethod("QS3DCADTOEXCEL", CommandFlags.UsePickSet)]',
+            "ExcelModelRowActivationService.TryFindActiveWorkbookRow(",
+            "QsCustomerWorkbookTraceReader.Read(",
+            "XlsxHandleReader.ReadHandleLookup(",
+            "ExcelLocateResolutionService.ResolveCustomerTrace(document, project, trace);",
+            "ExcelLocateResolutionService.ResolveModern(document, project, lookup);",
+            "ExcelModelRowActivationService.TryActivateValidatedRow(candidate, out var activationError)",
+        ),
+    ),
 )
 
 for path, action_name, needles in behavior_contracts:
@@ -290,7 +313,7 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: QS3D_QTY is reconciled to the two-panel customer quantity workflow with six large icon buttons, "
-    "deterministic removal of legacy QS3D quantity panels, registered QS3DEXCEL/QS3DEXCELTRACE routing, "
+    "PASS: QS3D_QTY is reconciled to the two-panel customer quantity workflow with seven large icon buttons, "
+    "deterministic removal of legacy QS3D quantity panels, registered QS3DEXCEL/QS3DEXCELTRACE/QS3DCADTOEXCEL routing, "
     "preserved ED2/revision compatibility commands, coordinated initialization, and contained teardown."
 )

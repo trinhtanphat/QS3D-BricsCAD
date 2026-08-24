@@ -108,6 +108,14 @@ namespace QS3D.BricsCAD.V25.UI
             );
         }
 
+        private void OnCadToExcelClick(object sender, RoutedEventArgs e)
+        {
+            DispatchExistingCommand(
+                "QS3DCADTOEXCEL ",
+                "CAD → Excel: chọn đúng một cấu kiện QS3D; workbook Excel đang mở phải được lưu và khớp ElementId + Handle + Drawing Fingerprint."
+            );
+        }
+
         private IReadOnlyList<QuantityInsightItemViewModel> SelectedScopeItems()
         {
             var selected = QuantityTree.SelectedItem;

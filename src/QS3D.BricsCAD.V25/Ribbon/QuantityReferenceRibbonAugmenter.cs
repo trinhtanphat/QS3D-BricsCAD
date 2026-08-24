@@ -86,6 +86,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 "QS3D_QTY_BLT_COMPARE",
                 "Excel →\nCAD",
                 "QS3DEXCELTRACE",
+                RibbonIconKind.QuantityCompare),
+            new ButtonSpec(
+                "QS3D_QTY_BLT_CAD_TO_EXCEL",
+                "CAD →\nExcel",
+                "QS3DCADTOEXCEL",
                 RibbonIconKind.QuantityCompare)
         };
 
