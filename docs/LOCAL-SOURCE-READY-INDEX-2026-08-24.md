@@ -20,7 +20,7 @@ Completed historical rows are not rescheduled here. #1744 and #3613 already have
 
 | Priority | Issue / row | Exact carrier | Minimum integrated source | Local action |
 | --- | --- | --- | --- | --- |
-| P0 | #3681 | tested `main@881f7b57176514e6e87c943f88165a5868c68539`; next exact carrier pending #3754 | must contain `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0` (#3729) plus the merged #3754 harness correction | `BLOCKED_SOURCE_HARNESS_FIX`; do not rerun the unchanged harness |
+| P0 | #3681 | tested `main@881f7b57176514e6e87c943f88165a5868c68539`; next exact carrier pending #3754 and #3770 | must contain `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0` (#3729), the merged #3754 harness correction and the merged #3770 area correction | `BLOCKED_TWO_SOURCE_FIXES`; do not rerun the unchanged harness |
 | P1 | LOCAL-005 / #83 | exact intended descendant published by #83/#72 | contains `ba6e1c7508086beb8ac5db9a4a78d2c43fc09492` (#3727); current integrated descendant is `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0` | rerun bounded multi-region build -> native Undo -> native Redo first |
 | P1 | LOCAL-006 / #77 | exact intended descendant published by #77/#72 | contains `887173f28126b928765e458f28202e83a6f3b88f` (#3728); current integrated descendant is `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0` | rerun bounded `QS3DTAG -> native Undo -> native Redo` first |
 
@@ -28,7 +28,9 @@ For #3681, post-#3716 source `a4ec7cdc84cc63cb35d1162b1e469638ed796ddf` is super
 
 The later official exact-main run on `881f7b57176514e6e87c943f88165a5868c68539` returned `LOCAL_FAIL` at `touching_one_end_deduction`, but a licensed native bounds probe proved that both committed harness helpers place centered `Solid3d.CreateBox` instances as though the requested coordinates were minimum corners. The resulting official geometry is not the intended touching topology. This is `SOURCE_HARNESS_DEFECT / NO PRODUCT VERDICT`; #3754 owns the correction and focused placement guard. #3681 stays open, and local must not rerun until a new merged exact SHA containing #3754 is published.
 
-After #3754 is merged and its new exact descendant is published, the #3681 local action remains deliberately one command after exact checkout:
+An ignored corrected-fixture diagnostic then passed touching-only and 0.05 m penetration at `0.1600 m2` with zero native failures, before the wider matrix found a second source defect: partial `200 x 400 mm` exact contact returned `0.080004 m2` instead of `0.080000 m2`. The 4 mm2 excess comes from treating the 10 micrometre positive `OffsetBody` probe envelope as authoritative contact area. #3770 owns the product correction; this diagnostic is not `LOCAL_PASS`.
+
+After both #3754 and #3770 are merged and their new exact latest-main descendant is published, the #3681 local action remains deliberately one command after exact checkout:
 
 ```powershell
 .\scripts\run-local-v25-wall-contact-3681.ps1
@@ -74,7 +76,7 @@ git checkout --detach <exact-runtime-carrier-sha>
 git status --short
 ```
 
-The worktree must be clean before qualification. Once #3754 is merged and an exact corrected carrier is published, #3681 needs no separate build/manual fixture procedure; run exactly:
+The worktree must be clean before qualification. Once #3754 and #3770 are merged and an exact corrected carrier is published, #3681 needs no separate build/manual fixture procedure; run exactly:
 
 ```powershell
 .\scripts\run-local-v25-wall-contact-3681.ps1

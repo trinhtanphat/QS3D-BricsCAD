@@ -1,10 +1,11 @@
 # #3681 exact-main V25 official runner: harness fixture defect
 
-- Status: `SOURCE_HARNESS_DEFECT / LOCAL_FAIL / NO PRODUCT VERDICT`
+- Status: `SOURCE_HARNESS_DEFECT + SOURCE_PRODUCT_DEFECT / LOCAL_FAIL / NO FINAL PRODUCT VERDICT`
 - Lane-Key: `issue-3681-881f-local-evidence`
 - Parent local queue: #72
 - Licensed qualification: #3681
 - Source-safe harness defect: #3754
+- Source-safe partial-contact area defect: #3770
 - Tested exact Git SHA: `881f7b57176514e6e87c943f88165a5868c68539`
 - Evidence branch baseline: `2810c81146b11b4ccad99433c3bacf2b2e96d4d1` (documentation descendant only; not the tested binary)
 - BricsCAD host: V25.2.10 Windows x64, licensed native runtime
@@ -43,8 +44,23 @@ The harness therefore treats its requested `(x, y, z)` as a minimum corner even 
 
 A separate ignored production-fixture diagnostic on the same exact SHA produced the expected one-end deduction `0.15999999999999093 m2` and residual `2.5088000000000146 m2` for both touching-only and 0.05 m penetration controls. That diagnostic supports the harness/fixture divergence, but it does not replace the official runner or complete #3681.
 
+## Follow-on corrected-fixture diagnostic
+
+To bound the product behavior without modifying the repository, a Git-ignored diagnostic copy aligned each native V25 box from its actual `GeometricExtents.MinPoint` to the requested minimum corner. The corrected diagnostic harness SHA-256 was `99EBB1C89A002AEB2724218EE201AFCCE4EB9999A3A1D50200F75D712B0D5219`; neither that harness nor its raw scripts or results are committed.
+
+The fail-fast live-BREP gate then passed on the same exact product DLL:
+
+```text
+touching-only: deduction=0.16, residual=2.5088, contact_cuts=1, volume_cuts=0, failed_native=0
+penetration_005m: deduction=0.16, residual=2.5088, contact_cuts=0, volume_cuts=1, failed_native=0
+```
+
+The wider diagnostic matrix stopped at the partial exact end-face contact cell. A `200 x 400 mm` original contact footprint should deduct `0.080000 m2`, but licensed V25 returned `0.080003999999999992 m2`. The `0.000004 m2` (`4 mm2`) excess matches the production touching probe: `OffsetBody(10 micrometres)` expands the 400 mm candidate to 400.02 mm before the offset intersection region is used as contact-area authority. Issue #3770 owns the source-safe correction so the positive probe establishes touching topology without inflating the authoritative original-candidate footprint. Loosening the harness tolerance is not an acceptable product fix.
+
+This diagnostic is `LOCAL_FAIL / NO FINAL PRODUCT VERDICT`, not an official runner PASS. At the subsequent sync checkpoint, `origin/main@f4f3fb4fcdb553d76419f9cec86c92a56acb2ba6` contained neither #3754 nor #3770, and both issues remained open.
+
 ## Cleanup and handoff
 
-The official run restored the installed DemandLoad registration (`LoadCtrls=2`), removed its temporary registration, preserved the installed loader, left zero BricsCAD processes, and kept raw scripts, DWGs, handles, sidecars, paths and runtime logs Git-ignored. The local lane made no production or committed harness patch.
+The official and follow-on diagnostic runs restored the installed DemandLoad registration (`LoadCtrls=2`), preserved the installed loader and its hash, left zero BricsCAD processes, and kept raw scripts, DWGs, handles, sidecars, paths and runtime logs Git-ignored. The local lane made no production or committed harness patch.
 
-#3681 remains OPEN. Do not rerun the unchanged official harness and do not report `LOCAL_PASS`. After #3754 merges, publish one new exact descendant SHA, rebuild with exact PDB SourceLink identity, and rerun the official command from a clean worktree.
+#3681 remains OPEN. Do not rerun the unchanged official harness and do not report `LOCAL_PASS`. After both #3754 and #3770 merge, replace the old candidate with the new exact latest `origin/main`, rebuild with exact PDB SourceLink identity, and rerun the official command from a clean worktree.

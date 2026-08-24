@@ -25,20 +25,22 @@ For every active row below:
 
 ## P0 — #3681 StructuralWall live-BREP concrete-contact/formwork
 
-- Status: `SOURCE_HARNESS_DEFECT / BLOCKED_SOURCE_HARNESS_FIX / NO PRODUCT VERDICT`
+- Status: `SOURCE_HARNESS_DEFECT + SOURCE_PRODUCT_DEFECT / BLOCKED_TWO_SOURCE_FIXES / NO FINAL PRODUCT VERDICT`
 - Original source issue/PR: #3665 / #3666
 - Earlier source defects/fixes: #3687 / #3692 and #3697 / #3702
 - Touching-contact source defect/fixes: #3711 / #3716 / #3729
 - Required source-fix ancestor: `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0`
 - Superseded runnable carrier: `agent/chatgpt-gpt56sol/issue-3680-local-dispatch-refresh`
 - Tested exact SHA: `881f7b57176514e6e87c943f88165a5868c68539`
-- Next runnable SHA: pending merged harness correction #3754.
+- Next runnable SHA: pending merged harness correction #3754 and partial-contact area correction #3770.
 
 The post-#3716 licensed source `a4ec7cdc84cc63cb35d1162b1e469638ed796ddf` is superseded failing evidence: touching-only still failed while 0.05 m penetration remained correct. Licensed stage diagnostics proved BricsCAD V25 rejected the 1 micrometre native OffsetBody probe but accepted 10 micrometres with the correct `0.1600 m²` eligible original-face area. PR #3729 integrated the unit-aware 10 micrometre native-probe floor as `main@4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0`. Do not rerun #3681 on `a4ec7cdc84cc63cb35d1162b1e469638ed796ddf` or any older carrier.
 
 The subsequent official run on exact clean `main@881f7b57176514e6e87c943f88165a5868c68539` reached the native source-fix gate and returned `LOCAL_FAIL` at `touching_one_end_deduction`. A separate licensed bounds probe showed the two committed harness helpers misinterpret the centered V25 `Solid3d.CreateBox` origin as a requested minimum corner, converting the intended touching fixture into overlap. This is a source-safe harness defect, not a product verdict. #3754 owns the helper correction and placement guard; keep #3681 open and do not rerun the unchanged harness.
 
-Local agents do not author a wall, paste commands, assemble a matrix, edit C#, or modify production source. Only after #3754 merges and a new exact corrected SHA is published, their complete action is:
+A Git-ignored diagnostic copy that aligned the centered boxes to their requested minima then passed both bounded controls on the same product DLL: touching-only deducted `0.1600 m2` through the contact probe and 0.05 m penetration deducted `0.1600 m2` through the positive-volume path, with zero native failures. The wider diagnostic matrix exposed a separate production defect: partial `200 x 400 mm` exact face contact returned `0.080004 m2` instead of `0.080000 m2` because the 10 micrometre `OffsetBody` envelope was used as contact-area authority. #3770 owns that source fix. The diagnostic is not the official runner and is not `LOCAL_PASS`.
+
+Local agents do not author a wall, paste commands, assemble a matrix, edit C#, or modify production source. Only after both #3754 and #3770 merge and a new exact latest-main SHA is published, their complete action is:
 
 ```powershell
 .\scripts\run-local-v25-wall-contact-3681.ps1
@@ -59,7 +61,7 @@ The runner automatically:
 - records exact Git SHA, source-fix ancestor, plugin/Core ProductVersion + SHA-256, harness hash and sanitized case status under ignored `artifacts/local-v25-wall-contact-3681/`;
 - exits `0` only for `LOCAL_PASS`, `1` for `LOCAL_FAIL`, and `2` for `NO_RESULT`.
 
-Current disposition: `SOURCE_HARNESS_DEFECT / LOCAL_FAIL / NO PRODUCT VERDICT`; source lane #3754 must merge before rerun. On the corrected exact SHA: `LOCAL_PASS` => post the sanitized JSON/evidence to #3681 and #72 and close #3681; `LOCAL_FAIL` => return the exact bounded failure to a separate remote/source defect lane; `NO_RESULT` => environment/license/host retry only. No local source coding is authorized or needed.
+Current disposition: `SOURCE_HARNESS_DEFECT + SOURCE_PRODUCT_DEFECT / LOCAL_FAIL / NO FINAL PRODUCT VERDICT`; source lanes #3754 and #3770 must both merge before rerun. On the corrected exact SHA: `LOCAL_PASS` => post the sanitized JSON/evidence to #3681 and #72 and close #3681; `LOCAL_FAIL` => return the exact bounded failure to a separate remote/source defect lane; `NO_RESULT` => environment/license/host retry only. No local source coding is authorized or needed.
 
 ## P1 source-ready continuations
 
