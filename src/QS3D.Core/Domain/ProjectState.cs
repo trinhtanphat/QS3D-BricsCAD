@@ -278,12 +278,16 @@ namespace QS3D.Core.Domain
                 throw new ArgumentException("Drawing fingerprint cannot contain control characters.", nameof(drawingFingerprint));
             restoredDrawingFingerprint = PersistedTextXml.Verify(restoredDrawingFingerprint, nameof(drawingFingerprint), "Drawing fingerprint");
 
-            var restoredActiveZoneId = (activeZoneId ?? string.Empty).Trim();
+            var restoredActiveZoneId = activeZoneId ?? string.Empty;
+            if (restoredActiveZoneId.Length != 0 && !string.Equals(restoredActiveZoneId, restoredActiveZoneId.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Active context id must be empty or canonical without surrounding whitespace.", nameof(activeZoneId));
             if (restoredActiveZoneId.Any(char.IsControl))
                 throw new ArgumentException("Active context id cannot contain control characters.", nameof(activeZoneId));
             restoredActiveZoneId = PersistedTextXml.Verify(restoredActiveZoneId, nameof(activeZoneId), "Active context id");
 
-            var restoredActiveFloorId = (activeFloorId ?? string.Empty).Trim();
+            var restoredActiveFloorId = activeFloorId ?? string.Empty;
+            if (restoredActiveFloorId.Length != 0 && !string.Equals(restoredActiveFloorId, restoredActiveFloorId.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Active context id must be empty or canonical without surrounding whitespace.", nameof(activeFloorId));
             if (restoredActiveFloorId.Any(char.IsControl))
                 throw new ArgumentException("Active context id cannot contain control characters.", nameof(activeFloorId));
             restoredActiveFloorId = PersistedTextXml.Verify(restoredActiveFloorId, nameof(activeFloorId), "Active context id");
