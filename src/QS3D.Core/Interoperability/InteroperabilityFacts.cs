@@ -196,6 +196,11 @@ namespace QS3D.Core.Interoperability
             Unit = InteroperabilityContract.OptionalToken(unit, nameof(unit));
             IsMeasured = isMeasured;
 
+            if (IsMeasured && ValueKind != InteroperabilityPropertyValueKind.Number)
+                throw new ArgumentException(
+                    "Measured interoperability property must use Number value kind.",
+                    nameof(isMeasured));
+
             if (ValueKind == InteroperabilityPropertyValueKind.Number)
             {
                 if (!double.TryParse(canonicalValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var numeric) ||

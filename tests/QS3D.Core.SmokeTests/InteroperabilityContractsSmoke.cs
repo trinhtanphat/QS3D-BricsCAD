@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             DrawingSourceIdentityRequiresFingerprint();
             BooleanPropertyValuesAreStrictAndCanonical();
+            MeasuredPropertiesRequireNumericValueKind();
             IfcNormalizationPreservesIdentityAndQuantityOrigin();
             AmbiguousIfcEvidenceBlocksAdmission();
             UnresolvedQuantityUnitBlocksAdmission();
@@ -98,6 +99,55 @@ namespace QS3D.Core.SmokeTests
                 "InvalidNumber",
                 "NaN",
                 InteroperabilityPropertyValueKind.Number));
+        }
+
+        private static void MeasuredPropertiesRequireNumericValueKind()
+        {
+            Throws<ArgumentException>(() => new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Measured",
+                "TextKind",
+                "12.5",
+                InteroperabilityPropertyValueKind.Text,
+                unit: "m",
+                isMeasured: true));
+            Throws<ArgumentException>(() => new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Measured",
+                "BooleanKind",
+                "true",
+                InteroperabilityPropertyValueKind.Boolean,
+                unit: "m",
+                isMeasured: true));
+
+            var measuredNumber = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Measured",
+                "NumericKind",
+                "12.5",
+                InteroperabilityPropertyValueKind.Number,
+                unit: "m",
+                isMeasured: true);
+            True(measuredNumber.IsMeasured);
+            Equal(InteroperabilityPropertyValueKind.Number, measuredNumber.ValueKind);
+            Equal("m", measuredNumber.Unit);
+
+            var nonMeasuredText = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "MeasuredControls",
+                "Text",
+                "12.5",
+                InteroperabilityPropertyValueKind.Text);
+            var nonMeasuredBoolean = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "MeasuredControls",
+                "Boolean",
+                "TRUE",
+                InteroperabilityPropertyValueKind.Boolean);
+            True(!nonMeasuredText.IsMeasured);
+            True(!nonMeasuredBoolean.IsMeasured);
+            Equal("12.5", nonMeasuredText.Value);
+            Equal("true", nonMeasuredBoolean.Value);
         }
 
         private static void IfcNormalizationPreservesIdentityAndQuantityOrigin()
