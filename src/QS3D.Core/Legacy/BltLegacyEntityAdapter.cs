@@ -247,7 +247,7 @@ namespace QS3D.Core.Legacy
         private static void AddExplicitCategoryCode(string? key, string? value, IDictionary<ElementCategory, string> matches)
         {
             var normalizedKey = NormalizeKey(key);
-            if (!CategoryKeyAliases.Any(alias => normalizedKey.Contains(alias))) return;
+            if (!CategoryKeyAliases.Any(alias => string.Equals(normalizedKey, alias, StringComparison.Ordinal))) return;
             var normalizedValue = (value ?? string.Empty).Trim();
             if (!int.TryParse(normalizedValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var code)) return;
 
