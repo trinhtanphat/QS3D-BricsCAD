@@ -170,6 +170,7 @@ namespace QS3D.BricsCAD.V25.LocalQualification
 
                 var project = GetOrCreateProject(document);
                 project.Elements.Clear();
+                BindFixtureMillimeterUnit(project);
                 var wall = NewWall("local-3681-wall", wallSolid.Handle);
                 project.Elements.Add(wall);
                 project.Elements.Add(NewNeighbor("local-3681-left", left.Handle));
@@ -235,7 +236,7 @@ namespace QS3D.BricsCAD.V25.LocalQualification
 
                 var project = GetOrCreateProject(document);
                 project.Elements.Clear();
-                BindCaptureFixtureMillimeterUnit(project);
+                BindFixtureMillimeterUnit(project);
                 var wall = NewWall("local-3681-capture-wall", wallSolid.Handle);
                 project.Elements.Add(wall);
                 new StructuralRegenerator().Regenerate(project, wall);
@@ -271,7 +272,7 @@ namespace QS3D.BricsCAD.V25.LocalQualification
             }
         }
 
-        private static void BindCaptureFixtureMillimeterUnit(ProjectState project)
+        private static void BindFixtureMillimeterUnit(ProjectState project)
         {
             const LengthUnit unit = LengthUnit.Millimeter;
             var hasElements = project.Elements.Count > 0;
@@ -347,6 +348,7 @@ namespace QS3D.BricsCAD.V25.LocalQualification
         private static ProjectState NewProject(string wallHandle, IEnumerable<string> candidateHandles)
         {
             var project = new ProjectState("local-3681-" + Guid.NewGuid().ToString("N"), "LOCAL 3681");
+            BindFixtureMillimeterUnit(project);
             var wall = NewWall("wall", wallHandle);
             project.Elements.Add(wall);
             var index = 0;
