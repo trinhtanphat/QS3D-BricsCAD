@@ -79,7 +79,7 @@ function Assert-HostIdentity {
     $majorText = $version.Split('.')[0]
     $major = 0
     if (-not [int]::TryParse($majorText, [ref]$major) -or $major -ne 26) { throw 'Configured BricsCAD host is not major version 26.' }
-    if ($VersionKey -notmatch '^V26(?:\.|$)') { throw 'VersionKey must identify a V26 registry key.' }
+    if ($VersionKey -notmatch '^V26(?:x64)?(?:\.|$)') { throw 'VersionKey must identify a V26 registry key.' }
     if ($LanguageKey -notmatch '^[A-Za-z]{2}_[A-Za-z]{2}$') { throw 'LanguageKey is not canonical.' }
     $result.hostMajor = $major
 }
