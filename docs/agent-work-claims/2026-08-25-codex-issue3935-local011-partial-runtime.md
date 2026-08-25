@@ -4,9 +4,10 @@
 - Lane-Key: `issue-3935`
 - Canonical branch: `agent/local003/issue-3935-local011-v25-qualification`
 - Tested source SHA: `5c9217d1f7b5701bb23cbf1f22d9cf97948b4077`
-- Current source/static reconciliation SHA: `0f0169ab23e71ea382614a5f89f167542ae6bed0`
-- Source-defect handoffs: `#3955` (generated mesh ownership) and `#3959` (bounded aggregate gate)
-- Candidate source fixes: PR `#3960` and PR `#3961` (open; neither is part of the tested runtime SHA)
+- Current source/static reconciliation SHA: `273f172e1c86a3b3de97ce0a61dc1bbbab035b04`
+- Source-defect handoff: `#3955` (generated mesh ownership)
+- Resolved source blocker: `#3959` via merged PR `#3961`
+- Candidate generated-ownership fix: PR `#3960` (open; not part of the tested runtime SHA)
 - Environment: Windows x64; BricsCAD Ultimate V25.2.10; V25 `Release/net48`
 - Outcome: `PARTIAL_RUNTIME / BLOCKED_SOURCE_FIX`
 
@@ -26,6 +27,8 @@ This lane has real licensed BricsCAD V25 evidence, but it does **not** claim `LO
 | Process/private-state cleanup for P08 and P09 | `PASS` | Each runner verified owned-process exit, script cleanup, drawing-lock cleanup, sidecar/backup absence and restoration of the disposable drawing copy. |
 | Focused LOCAL-011 source guards on `0f0169ab2` | `PASS_STATIC` | 16 focused guards passed for runner/failure-matrix contracts, existing-project mutation context, modeless detached/document/project lifetime, BBS/BQ safety, Rebar Mesh stale-save atomicity, and Grid/Curtain/Rebar exact-set ownership. Static evidence is not licensed-runtime evidence. |
 | Clean-checkout orchestration-alias gate on `0f0169ab2` | `BLOCKED_TIMING` | The focused gate returned content `PASS` in 225.621 seconds, exceeding the aggregate child limit of 180 seconds. The immediately following interchange selector returned `PASS` in 41.902 seconds. Independent evidence was added to source issue `#3959`; candidate fix is PR `#3961`. |
+| Post-merge orchestration-alias gate on `4129f92bc` | `PASS_STATIC` | After PR `#3961` merged, the clean focused gate passed in 78.580 seconds (below 180 seconds) and its tracked-only regression passed in 1.742 seconds. |
+| Canonical aggregate on `273f172e1` | `PASS_STATIC` | Clean detached checkout: `scripts/preflight.py` passed, then all 1040 discovered feature gates passed in 352.470 seconds. No BricsCAD process was launched. |
 
 The P08/P09 markers retain their own narrow `LOCAL_002` qualification boundary and do not independently qualify LOCAL-011. They are used here only as exact-SHA native rollback and post-commit supporting evidence.
 
@@ -33,12 +36,12 @@ The P08/P09 markers retain their own narrow `LOCAL_002` qualification boundary a
 
 Issue `#3955` carries the sanitized native-ownership defect. PR `#3960` is the source owner's candidate fix for both Slab and Foundation append-time ownership, but it is not merged into the tested runtime SHA and therefore is not qualified here. Until a fix is integrated and rebuilt, these LOCAL-011 rows cannot pass: representative Rebar stale/exact replacement, malformed/duplicate Rebar metadata across the required mesh families, RebarMesh modeless stale Save, and the final complete generated-owner matrix.
 
-Issue `#3959` independently carries the aggregate preflight timing defect, with PR `#3961` as the open candidate fix. LOCAL-011 reproduced the gate at 225.621 seconds from a clean detached `0f0169ab2` checkout, so the canonical runner cannot pass its required pre-runtime aggregate gate on that SHA even though the gate's content result is `PASS`.
+Issue `#3959` carried the independently reproduced aggregate preflight timing defect. PR `#3961` is now merged; LOCAL-011 verified the fixed focused gate below the production timeout and then passed the full clean aggregate on `273f172e1`. This blocker is resolved, but those static results do not qualify the licensed runtime rows.
 
-The following independent work remains queued for the same lane: Curtain ownership P06, Undo/save/cold-reopen P11, multi-DWG/modeless P12, the full Door/Room/BBS/BQ/Recognition/Workspace/RebarMesh lifecycle matrix, and the canonical `scripts/run-local-v25-local-011.ps1` 21-row report. An aggregate preflight attempt at the earlier `10ced6bef` reconciliation SHA timed out in the full-tree orchestration-alias scan and reached the interchange selector only after the aggregate budget expired; after syncing `0f0169ab2`, the new aggregate output/timeout regressions and all 16 focused LOCAL-011 guards passed, while the clean focused timing above confirmed the remaining `#3959` blocker. Runtime use of the single licensed V25 host is coordinated with the other registered local lanes rather than run concurrently.
+The following independent work remains queued for the same lane: Curtain ownership P06, Undo/save/cold-reopen P11, multi-DWG/modeless P12, the full Door/Room/BBS/BQ/Recognition/Workspace/RebarMesh lifecycle matrix, and the canonical `scripts/run-local-v25-local-011.ps1` 21-row report. The required pre-runtime aggregate is now healthy; runtime work remains paused until the generated-ownership fix lands and until the currently registered single-host owner sends literal `HOST_RELEASED` after cleanup.
 
 ## Resume condition
 
-After the `#3955` and `#3959` fixes are integrated, refresh the task branch to the newest intended exact SHA, pass the canonical aggregate from a clean checkout, rebuild the V25 adapter, rerun the generated-owner and modeless harness, then finish the canonical 21-row runner. A full `LOCAL_PASS` requires all 21 rows on one exact clean SHA; the P08/P09 results above must not be promoted beyond their recorded supporting scope.
+After the `#3955` fix is integrated, refresh the task branch to the newest intended exact SHA, rerun the canonical aggregate from a clean checkout, rebuild the V25 adapter, rerun the generated-owner and modeless harness, then finish the canonical 21-row runner. A full `LOCAL_PASS` requires all 21 rows on one exact clean SHA; the P08/P09 results above must not be promoted beyond their recorded supporting scope.
 
 Raw DWG copies, handles, nonces, hashes, scripts and machine paths remain under ignored local artifact roots and are intentionally not committed.
