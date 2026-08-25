@@ -397,7 +397,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void FinishSemanticOnlyImport(Document document, string status)
         {
-            Services.InterchangePostMutationRefresh.Schedule(document);
+            InterchangePostMutationUi.RefreshProjectFailClosed(document);
             try { PaletteCoordinator.SetStatus(status); } catch { }
             document.Editor.WriteMessage("\nQS3D " + status);
         }
