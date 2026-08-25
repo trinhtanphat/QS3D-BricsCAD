@@ -10,6 +10,8 @@ namespace QS3D.Core.Export
 {
     public static class BcfIssueExchangeSerializer
     {
+        public const int MaxSemanticXmlCharacters = 16 * 1024 * 1024;
+
         public static string Serialize(BcfIssueExchange exchange)
         {
             if (exchange == null) throw new ArgumentNullException(nameof(exchange));
@@ -72,6 +74,8 @@ namespace QS3D.Core.Export
 
         public static BcfIssueExchange Deserialize(string payload)
         {
+            if (payload == null || payload.Length == 0) throw new InvalidDataException("BCF payload is empty.");
+            if (payload.Length > MaxSemanticXmlCharacters) throw new InvalidDataException("BCF payload exceeds the bounded semantic XML size.");
             if (string.IsNullOrWhiteSpace(payload)) throw new InvalidDataException("BCF payload is empty.");
             try
             {
