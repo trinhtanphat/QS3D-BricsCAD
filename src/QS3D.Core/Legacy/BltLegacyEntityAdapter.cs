@@ -110,12 +110,14 @@ namespace QS3D.Core.Legacy
 
         private static readonly string[] ConcreteMetricAliases =
         {
-            "concretem3", "netconcretem3", "betongm3", "btm3", "thetichm3", "volumem3"
+            "concretem3", "netconcretem3", "betongm3", "btm3", "thetichm3", "volumem3",
+            BltLegacyMetadataKeys.ConcreteM3
         };
 
         private static readonly string[] FormworkMetricAliases =
         {
-            "formworkm2", "coppham2", "dientichcoppham2", "vkm2"
+            "formworkm2", "coppham2", "dientichcoppham2", "vkm2",
+            BltLegacyMetadataKeys.FormworkM2
         };
 
         public static BltLegacyElementCandidate Adapt(EntitySnapshot snapshot)
