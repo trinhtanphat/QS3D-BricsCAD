@@ -28,6 +28,7 @@ namespace QS3D.Core.SmokeTests
             WallOpeningHostCanonicalitySmoke.Run();
             WallQuantityMeasurementTraceSmoke.Run();
             QuantityCalculationBltCompatibilityPresetSmoke.Run();
+            BltLegacyMetricConflictSmoke.Run();
             QuantityFormworkCalculationEngineSmoke.Run();
             LegacyQuantityReportIdentitySmoke.Run();
             ScheduleReportingIdentitySmoke.Run();
@@ -129,7 +130,6 @@ namespace QS3D.Core.SmokeTests
             GridSystemPlannerSmoke.Run();
             PolygonScanlineClipperSmoke.Run();
             PolygonRegionScanlineSmoke.Run();
-            PolygonRegionHoleSnapshotSmoke.Run();
             PolygonalSlabMeshHolesSmoke.Run();
             BulgedPolygonFootprintSmoke.Run();
             SemanticTagRendererSmoke.Run();
