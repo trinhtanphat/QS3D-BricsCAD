@@ -56,6 +56,16 @@ namespace QS3D.Core.SmokeTests
             Contains(paddedMessage, "Takeoff handle must not contain surrounding whitespace.",
                 "Padded TakeoffResult handles must fail closed instead of aliasing canonical identity.");
 
+            var internalWhitespaceMessage = Capture<ArgumentException>(() =>
+                new TakeoffResult("H 1", TakeoffKind.Count, 1d, "ea"));
+            Contains(internalWhitespaceMessage, "Takeoff handle must not contain whitespace.",
+                "Internal whitespace must fail at the direct TakeoffResult provenance boundary.");
+
+            var snapshotWhitespaceMessage = Capture<ArgumentException>(() =>
+                new EntitySnapshot("E 1", "Point", "QTO"));
+            Contains(snapshotWhitespaceMessage, "Handle must not contain whitespace.",
+                "EntitySnapshot must reject the same whitespace-bearing provenance identity before either takeoff path runs.");
+
             var canonical = new TakeoffResult("H1", TakeoffKind.Count, 1d, "ea");
             Equal("H1", canonical.Handle, "Canonical TakeoffResult handle must be preserved exactly.");
             Equal("ea", canonical.Unit, "Canonical TakeoffResult unit must be preserved exactly.");
