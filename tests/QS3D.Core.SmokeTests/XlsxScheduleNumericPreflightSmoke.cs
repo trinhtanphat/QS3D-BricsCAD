@@ -124,7 +124,7 @@ namespace QS3D.Core.SmokeTests
 
         private static DoorOpeningScheduleRow DoorRow()
         {
-            return new DoorOpeningScheduleRow
+            var row = new DoorOpeningScheduleRow
             {
                 Floor = "L1",
                 Category = "Door",
@@ -138,6 +138,9 @@ namespace QS3D.Core.SmokeTests
                 OpeningAreaM2 = 1.89d,
                 HostCount = 1
             };
+            row.ElementIds.Add("E-1");
+            row.HostIds.Add("H-1");
+            return row;
         }
 
         private static MaterialUsageRow MaterialRow()

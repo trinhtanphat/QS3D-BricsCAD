@@ -34,7 +34,9 @@ namespace QS3D.Core.SmokeTests
                     FamilyName = "Door family",
                     Material = "Glass",
                     WidthM = 0.9d,
-                    HeightM = 2.2d
+                    HeightM = 2.2d,
+                    Count = 2,
+                    HostCount = 2
                 };
                 row.ElementIds.Add(new string('E', 16383));
                 row.ElementIds.Add(new string('I', 16383));
