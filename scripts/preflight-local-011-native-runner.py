@@ -4,12 +4,14 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "scripts" / "run-local-v25-local-011.ps1"
 RUNBOOK = ROOT / "docs" / "LOCAL-011-NATIVE-QUALIFICATION.md"
+MATRIX_DOC = ROOT / "docs" / "PROJECT-ROLLBACK-FAILURE-MATRIX.md"
 SHAS = ("761b9b92f5dd3638b18d281c273a406e41069511","ffd26294f3f27d03de1050643aa0aeb894dcb0f2","1850f02382c8ccf71f04e3ea9daa28455aaae08f","b22eacd681230f231e0f970fb670e8f89769c35e")
 CASES = ("native.before_commit_abort","native.during_commit_abort","native.after_commit_ui_failure","native.document_lock_multi_dwg","recognition.stale_apply_no_project","modeless.door_detached","modeless.room_detached","modeless.bbs_detached","modeless.bq_canonical_write","modeless.rebar_mesh_stale_save","palette.unavailable_project_teardown_rebind","generated.grid_stale_handle","generated.curtain_line_stale_handle","generated.curtain_path_stale_handle","generated.rebar_stale_handle","generated.rebar_malformed_metadata","generated.rebar_duplicate_canonical","generated.full_live_exact_replacement","generated.foreign_object_protection","generated.undo_save_reopen","isolation.other_dwg_untouched")
 def fail(msg): print(f"ERROR: LOCAL-011 native runner preflight failed: {msg}", file=sys.stderr); raise SystemExit(1)
 if not RUNNER.is_file(): fail("missing runner")
 if not RUNBOOK.is_file(): fail("missing runbook")
-r=RUNNER.read_text(encoding="utf-8"); d=RUNBOOK.read_text(encoding="utf-8")
+if not MATRIX_DOC.is_file(): fail("missing rollback matrix doc")
+r=RUNNER.read_text(encoding="utf-8"); d=RUNBOOK.read_text(encoding="utf-8"); m=MATRIX_DOC.read_text(encoding="utf-8")
 for x in SHAS:
     if x not in r: fail(f"missing source-ready ancestor {x}")
 for x in CASES:
@@ -27,4 +29,6 @@ if 'PASS {0}, FAIL {0}, or BLOCKED {0}' not in r or "Evidence note is too short"
 if "exit 2" not in r or "exit 3" not in r: fail("BLOCKED/NO_RESULT must be nonzero")
 for token in ("one command","run-local-v25-local-011.ps1","does not add a production fault switch","PASS","BLOCKED","NO_RESULT"):
     if token.lower() not in d.lower(): fail(f"runbook missing token: {token}")
+for token in ("LOCAL-011 executable handoff", "run-local-v25-local-011.ps1", "pull/sync", "one command"):
+    if token.lower() not in m.lower(): fail(f"rollback matrix handoff missing token: {token}")
 print("LOCAL-011 native runner preflight PASS")
