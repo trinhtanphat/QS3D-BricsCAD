@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             ConflictingEmbeddedAliasesFailClosed();
             ValidAndMalformedAliasesFailClosedRegardlessOfOrder();
             EqualAliasesRemainDeterministic();
+            CanonicalReadaptationRemainsCompatible();
         }
 
         private static void ConflictingConcreteAliasesFailClosed()
@@ -84,6 +85,33 @@ namespace QS3D.Core.SmokeTests
                 "equal formwork aliases lost exact quantity evidence");
             Near(2.5d, formworkCandidate.LegacyFormworkM2.GetValueOrDefault(),
                 "equal formwork aliases produced the wrong quantity");
+        }
+
+        private static void CanonicalReadaptationRemainsCompatible()
+        {
+            var snapshot = CreateSnapshot("CANONICAL-READAPT");
+            snapshot.Metadata["ConcreteM3"] = "1.75";
+            snapshot.Metadata["VKM2"] = "2.25";
+
+            var first = BltLegacyEntityAdapter.Adapt(snapshot);
+            True(first.LegacyConcreteM3.HasValue && first.LegacyFormworkM2.HasValue,
+                "single legacy aliases lost exact quantity evidence before canonicalization");
+            Near(1.75d, first.LegacyConcreteM3.GetValueOrDefault(),
+                "single concrete alias produced the wrong quantity");
+            Near(2.25d, first.LegacyFormworkM2.GetValueOrDefault(),
+                "single formwork alias produced the wrong quantity");
+
+            True(snapshot.Metadata.ContainsKey(BltLegacyMetadataKeys.ConcreteM3) &&
+                 snapshot.Metadata.ContainsKey(BltLegacyMetadataKeys.FormworkM2),
+                "first adaptation did not publish canonical BLT metric keys");
+
+            var second = BltLegacyEntityAdapter.Adapt(snapshot);
+            True(second.EvidenceMode == BltLegacyEvidenceMode.ExactLegacyQuantity,
+                "canonical BLT metric re-adaptation lost ExactLegacyQuantity mode");
+            Near(1.75d, second.LegacyConcreteM3.GetValueOrDefault(),
+                "canonical concrete re-adaptation changed the quantity");
+            Near(2.25d, second.LegacyFormworkM2.GetValueOrDefault(),
+                "canonical formwork re-adaptation changed the quantity");
         }
 
         private static void AssertMetricRejected(
