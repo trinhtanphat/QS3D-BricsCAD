@@ -180,12 +180,13 @@ namespace QS3D.Core.Persistence
 
         private static void Validate(string tempPath, string destinationPath, out string temp, out string destination)
         {
-            temp = RequireFullPath(tempPath, nameof(tempPath), "Temporary path is required.");
+            tempPath = RequireFullPath(tempPath, nameof(tempPath), "Temporary path is required.");
             destination = RequireFullPath(destinationPath, nameof(destinationPath), "Destination path is required.");
-            RequireDistinct(temp, nameof(tempPath), destination, nameof(destinationPath));
-            RequireSafe(temp, "temporary");
+            RequireDistinct(tempPath, nameof(tempPath), destination, nameof(destinationPath));
+            RequireSafe(tempPath, "temporary");
             RequireSafe(destination, "destination");
-            if (!File.Exists(temp)) throw new FileNotFoundException("Temporary file was not found.", temp);
+            if (!File.Exists(tempPath)) throw new FileNotFoundException("Temporary file was not found.", tempPath);
+            temp = tempPath;
         }
 
         private static string RequireFullPath(string path, string paramName, string requiredMessage)
