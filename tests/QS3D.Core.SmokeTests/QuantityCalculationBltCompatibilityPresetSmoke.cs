@@ -1,5 +1,8 @@
 using System;
 using System.Linq;
+using QS3D.Core.Domain;
+using QS3D.Core.Legacy;
+using QS3D.Core.Model;
 using QS3D.Core.Reporting;
 
 namespace QS3D.Core.SmokeTests
@@ -41,6 +44,48 @@ namespace QS3D.Core.SmokeTests
             var native = QuantityCalculationSettings.CreateDefault();
             True(native.CategoryRules.All(x => x.Category != 201), "native default must not be replaced by BLT codes");
             True(native.IntersectionRules.All(IsConservative), "native default intersections remain conservative");
+
+            ExplicitCategoryCodeRequiresExactKeyAlias();
+        }
+
+        private static void ExplicitCategoryCodeRequiresExactKeyAlias()
+        {
+            var lookalikeKeys = new[] { "NotCategory", "SubCategory", "CategorySuffix", "MyCategoryCode" };
+            for (var i = 0; i < lookalikeKeys.Length; i++)
+            {
+                var snapshot = CreateBltSnapshot("LOOKALIKE-" + i);
+                snapshot.Metadata[lookalikeKeys[i]] = "601";
+                var candidate = BltLegacyEntityAdapter.Adapt(snapshot);
+                True(!candidate.Category.HasValue, lookalikeKeys[i] + " must not create explicit category-code evidence");
+            }
+
+            var embeddedLookalike = CreateBltSnapshot("EMBEDDED-LOOKALIKE");
+            embeddedLookalike.Metadata["LegacyProbe.XData.000.Value"] = "BLT3D; NotCategory=601";
+            True(!BltLegacyEntityAdapter.Adapt(embeddedLookalike).Category.HasValue,
+                "embedded lookalike category key must not create explicit category-code evidence");
+
+            var exactCategory = CreateBltSnapshot("EXACT-CATEGORY");
+            exactCategory.Metadata["Category"] = "601";
+            True(BltLegacyEntityAdapter.Adapt(exactCategory).Category == ElementCategory.Column,
+                "exact Category key must preserve established code 601");
+
+            var exactCategoryCode = CreateBltSnapshot("EXACT-CATEGORYCODE");
+            exactCategoryCode.Metadata["Category Code"] = "701";
+            True(BltLegacyEntityAdapter.Adapt(exactCategoryCode).Category == ElementCategory.StructuralWall,
+                "normalized exact CategoryCode key must preserve established code 701");
+
+            var embeddedExact = CreateBltSnapshot("EMBEDDED-EXACT");
+            embeddedExact.Metadata["LegacyProbe.XData.000.Value"] = "BLT3D; Category=601";
+            True(BltLegacyEntityAdapter.Adapt(embeddedExact).Category == ElementCategory.Column,
+                "embedded exact Category key must preserve established code 601");
+        }
+
+        private static EntitySnapshot CreateBltSnapshot(string id)
+        {
+            var snapshot = new EntitySnapshot(id, "ProxyEntity", "LEGACY");
+            snapshot.Metadata["LegacyProbe.ProxyOriginalClass"] = "BLT_OBJECT";
+            snapshot.Metadata[BltLegacyMetadataKeys.ProbeMetricEvidence] = BltLegacyEvidenceMode.ExactGeometry.ToString();
+            return snapshot;
         }
 
         private static QuantityCategoryRuleSetting RequireCategory(QuantityCalculationSettings settings, int code)
