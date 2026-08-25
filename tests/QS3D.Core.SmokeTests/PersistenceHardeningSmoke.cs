@@ -313,15 +313,15 @@ namespace QS3D.Core.SmokeTests
             var path = Temp("export", ".xlsx");
             try
             {
-                var rows = new[]
+                var row = new QuantityReportRow
                 {
-                    new QuantityReportRow
-                    {
-                        Floor = "Nền 0.00", Category = "ArchitecturalWall", FamilyName = "Tường 200", Count = 1,
-                        BottomAreaM2 = 1.1, TopAreaM2 = 1.2, OtherAreaM2 = 1.3
-                    }
+                    Floor = "Nền 0.00", Category = "ArchitecturalWall", FamilyName = "Tường 200", Count = 1,
+                    BottomAreaM2 = 1.1, TopAreaM2 = 1.2, OtherAreaM2 = 1.3,
+                    DrawingFingerprint = "DWG-PERSISTENCE-HEADER"
                 };
-                XlsxQuantityExporter.Export(path, rows);
+                row.ElementIds.Add("PERSISTENCE-HEADER-E1");
+                row.SourceHandles.Add("1");
+                XlsxQuantityExporter.Export(path, new[] { row });
                 using (var archive = ZipFile.OpenRead(path))
                 {
                     var entry = archive.GetEntry("xl/worksheets/sheet1.xml") ?? throw new Exception("Missing worksheet XML.");
