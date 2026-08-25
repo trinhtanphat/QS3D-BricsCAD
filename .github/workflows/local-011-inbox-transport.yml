@@ -10,18 +10,23 @@ permissions:
 
 jobs:
   patch-inbox:
-    if: ${{ github.event.head_commit.message == 'chore(local): apply lossless LOCAL-011 inbox patch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Apply bounded LOCAL-011 handoff patch
+      - name: Apply and commit bounded LOCAL-011 handoff
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
           p = Path('docs/LOCAL-AGENT-INBOX.md')
           s = p.read_text(encoding='utf-8')
+          start = s.index('## LOCAL-011')
+          end = s.index('## LOCAL-012', start)
+          section = s[start:end]
+          if 'scripts/run-local-v25-local-011.ps1' in section:
+              print('LOCAL-011 inbox handoff already wired')
+              raise SystemExit(0)
           needle = '- Source-side status: REMOTE_DONE for Grid annotation exact-set replacement (`761b9b92f5dd3638b18d281c273a406e41069511`), Curtain LINE/PATH exact-set replacement (`ffd26294f3f27d03de1050643aa0aeb894dcb0f2`), the shared seven-family Rebar exact-set ownership guard (`1850f02382c8ccf71f04e3ea9daa28455aaae08f`), and the dedicated Column Tie exact-set guard follow-up (`b22eacd681230f231e0f970fb670e8f89769c35e`). Runtime qualification remains `PENDING_LOCAL`; remote/non-local agents must not re-run or re-claim this V25 proof unless the source scenario materially changes.\n'
           if s.count(needle) != 1:
               raise SystemExit('LOCAL-011 source-side anchor must occur exactly once')
@@ -33,15 +38,16 @@ jobs:
           )
           p.write_text(s.replace(needle, addition), encoding='utf-8', newline='')
           PY
+          if git diff --quiet -- docs/LOCAL-AGENT-INBOX.md; then
+            echo "No inbox patch required."
+            exit 0
+          fi
           read -r added deleted changed_path <<< "$(git diff --numstat -- docs/LOCAL-AGENT-INBOX.md)"
           test "$added" = "3"
           test "$deleted" = "0"
           test "$changed_path" = "docs/LOCAL-AGENT-INBOX.md"
           git diff --check -- docs/LOCAL-AGENT-INBOX.md
           git diff -- docs/LOCAL-AGENT-INBOX.md
-      - name: Commit bounded inbox handoff
-        shell: bash
-        run: |
           git config user.name "QS3D LOCAL-011 handoff"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/LOCAL-AGENT-INBOX.md
