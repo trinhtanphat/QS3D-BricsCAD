@@ -35,6 +35,10 @@ require(RUNNER, [
     "BricsCAD V26 x64",
     "net8.0-windows",
     "QS3D.BricsCAD.V26.runtimeconfig.json",
+    "runtimeOptions",
+    "frameworks",
+    "PSObject.Properties['frameworks']",
+    "PSObject.Properties['name']",
     "Microsoft.WindowsDesktop.App",
     "install-v26-autoload.ps1",
     "uninstall-v26-autoload.ps1",
@@ -79,6 +83,9 @@ runner_text = RUNNER.read_text(encoding="utf-8") if RUNNER.is_file() else ""
 for forbidden in ("Start-Process bricscad", "NETLOAD", "LOCAL_PASS", "private DWG", "$IsWindows"):
     if forbidden in runner_text:
         errors.append(f"runner must not claim/perform licensed runtime boundary or require PowerShell 7-only host detection: {forbidden}")
+
+if ".runtimeOptions.framework.name" in runner_text:
+    errors.append("qualification runner must validate the .NET 8 runtimeOptions.frameworks array, not the legacy singular framework property")
 
 # The canonical calls intentionally omit the installer's/uninstaller's ownership-bypass
 # switch. Remove-Item -Force is cleanup only and is not a package-identity bypass.
