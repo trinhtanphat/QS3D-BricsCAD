@@ -117,8 +117,22 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
   `afff082096998fa404f08a5e29bcfd9fbc3830dd`; a future write-capable
   continuation must repin that then-current branch rather than publish this
   stale local carrier unchanged.
+  On 2026-08-25 the unchanged canonical runner was invoked exactly once from a
+  clean detached checkout of the post-#3985 source-ready SHA
+  `d52a0065a3f63575885761bc59fab2c08a32f4a4`. Exact-SHA/manual-CI/generic
+  source checks, all `1043/1043` aggregate gates, Core Release and deterministic
+  smoke, the V25 `Release|x64` adapter build with `0 warnings / 0 errors`, and
+  offline WPF qualification passed. The licensed NETLOAD/Ribbon/Palette row is
+  `NO_RESULT`: one concurrently opened BricsCAD V25 process appeared before the
+  hosted boundary, so the canonical dedicated-runner precondition stopped the
+  attempt before launching its own host. The worker performed one blocker audit,
+  did not touch that process, and did not rerun. DemandLoad and the installed
+  loader hash were restored, the exact-SHA tree remained clean, and no source or
+  runner file changed. This is environmental interference, not
+  `SOURCE_FIX_REQUIRED`; post-#3985 Interchange continuation and the remaining
+  current-candidate matrix remain `PENDING_LOCAL` under #3924/#72.
 - Related docs: `docs/LOCAL-V25-QUALIFICATION.md`; `docs/EXISTING-PROJECT-MUTATION-CONTEXT.md`; `docs/INTERCHANGE-FIELD-PRECEDENCE.md`; `scripts/preflight-interchange-field-merge-execution.py`; `scripts/preflight-room-finish-project-lifecycle.py`; `scripts/preflight-grid-auto-number-project-lifecycle.py`; `scripts/preflight-room-auto-project-lifecycle.py`; `docs/ROOM-AUTO-PREVIEW-COMMIT-FRESHNESS.md`; `scripts/preflight-save-project-lifecycle.py`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
-- Updated: 2026-08-21
+- Updated: 2026-08-25
 
 ## LOCAL-002 — Curtain whole-command atomicity and native panels
 
