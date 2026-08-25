@@ -110,6 +110,28 @@ def discovery_regressions(runner):
         discovered = runner.discover()
         assert_true(self_gate not in discovered, "aggregate runner must never recursively discover itself")
 
+        legacy_overflow_count = 1025
+        capacity_candidates = [
+            scripts / ("preflight-capacity-" + str(index).zfill(4) + ".py")
+            for index in range(legacy_overflow_count)
+        ]
+        with mock.patch.object(runner.os, "lstat", return_value=regular_mode), \
+             mock.patch.object(Path, "is_symlink", return_value=False):
+            validated = runner.validate_candidates(capacity_candidates)
+        assert_true(
+            len(validated) == legacy_overflow_count,
+            "aggregate discovery must accept the repository's 1025-gate scale",
+        )
+
+        over_capacity = [
+            scripts / ("preflight-over-capacity-" + str(index).zfill(4) + ".py")
+            for index in range(runner.MAX_FEATURE_GATES + 1)
+        ]
+        assert_raises_runtime(
+            lambda: runner.validate_candidates(over_capacity),
+            "exceeds maximum " + str(runner.MAX_FEATURE_GATES),
+        )
+
 
 def execution_regressions(runner):
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -145,7 +167,7 @@ def execution_regressions(runner):
         runner.CHILD_TIMEOUT_SECONDS = 180
         slow.unlink()
         output = StringIO()
-        with mock.patch.object(runner.subprocess, "run", side_effect=OSError("synthetic launch failure")), \
+        with mock.patch.object(runner, "run_gate", side_effect=OSError("synthetic launch failure")), \
              redirect_stdout(output):
             result = runner.main()
         text = output.getvalue()
@@ -153,11 +175,11 @@ def execution_regressions(runner):
         assert_true("preflight-a-ok.py launch" in text, "launch failure reason must remain visible")
 
         calls = []
-        with mock.patch.object(runner.subprocess, "run", side_effect=lambda args, **kwargs: calls.append(args) or mock.Mock(returncode=0)), \
+        with mock.patch.object(runner, "run_gate", side_effect=lambda path, child_env, timeout: calls.append(path) or 0), \
              redirect_stdout(StringIO()):
             result = runner.main()
         assert_true(result == 0, "all-success child execution must pass")
-        assert_true(len(calls) == 1 and calls[0][1].endswith("preflight-a-ok.py"),
+        assert_true(len(calls) == 1 and calls[0].name == "preflight-a-ok.py",
                     "each discovered gate must execute exactly once")
 
 

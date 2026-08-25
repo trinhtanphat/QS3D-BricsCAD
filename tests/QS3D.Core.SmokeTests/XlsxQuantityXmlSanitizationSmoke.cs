@@ -22,10 +22,9 @@ namespace QS3D.Core.SmokeTests
             var path = Path.Combine(root, "quantity.xlsx");
             try
             {
-                XlsxQuantityExporter.Export(path, new[]
-                {
-                    new QuantityReportRow { FamilyName = "A\u0001B\uD800C<&" }
-                });
+                var row = ValidStandardRow("E1", "1");
+                row.FamilyName = "A\u0001B\uD800C<&";
+                XlsxQuantityExporter.Export(path, new[] { row });
 
                 using (var archive = ZipFile.OpenRead(path))
                 {
@@ -62,6 +61,18 @@ namespace QS3D.Core.SmokeTests
                 }
             }
             finally { Delete(root); }
+        }
+
+        private static QuantityReportRow ValidStandardRow(string elementId, string handle)
+        {
+            var row = new QuantityReportRow
+            {
+                DrawingFingerprint = "DRAWING-1",
+                Count = 1
+            };
+            row.ElementIds.Add(elementId);
+            row.SourceHandles.Add(handle);
+            return row;
         }
 
         private static QuantityReportRow ValidEd2Row(string elementId)
