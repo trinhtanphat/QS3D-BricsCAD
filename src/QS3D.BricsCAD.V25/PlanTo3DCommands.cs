@@ -95,6 +95,10 @@ namespace QS3D.BricsCAD.V25
                 RequireSameSources(sources, refreshedSources);
                 sources = refreshedSources;
 
+                // Begin one document-native undo record before the first semantic/CAD mutation.
+                // BricsCAD can then undo or redo the whole conversion batch as one command unit.
+                document.Database.StartUndoRecord();
+
                 var project = projectPreview.ResolveForMutation(document, operation);
                 var commitSources = PreflightSources(document, selectedIds);
                 RequireSameSources(sources, commitSources);
