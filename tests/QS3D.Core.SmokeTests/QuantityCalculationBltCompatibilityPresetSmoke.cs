@@ -112,7 +112,7 @@ namespace QS3D.Core.SmokeTests
             var exactConcreteCandidate = BltLegacyEntityAdapter.Adapt(exactConcrete);
             True(exactConcreteCandidate.LegacyConcreteM3.HasValue,
                 "normalized exact ConcreteM3 alias must remain supported");
-            Near(1.25d, exactConcreteCandidate.LegacyConcreteM3.Value, "exact ConcreteM3 quantity");
+            Near(1.25d, exactConcreteCandidate.LegacyConcreteM3.GetValueOrDefault(), "exact ConcreteM3 quantity");
             True(exactConcreteCandidate.EvidenceMode == BltLegacyEvidenceMode.ExactLegacyQuantity,
                 "exact ConcreteM3 alias must retain ExactLegacyQuantity evidence");
 
@@ -121,14 +121,14 @@ namespace QS3D.Core.SmokeTests
             var exactNetCandidate = BltLegacyEntityAdapter.Adapt(exactNetConcrete);
             True(exactNetCandidate.LegacyConcreteM3.HasValue,
                 "exact NetConcreteM3 alias must remain supported");
-            Near(1.5d, exactNetCandidate.LegacyConcreteM3.Value, "exact NetConcreteM3 quantity");
+            Near(1.5d, exactNetCandidate.LegacyConcreteM3.GetValueOrDefault(), "exact NetConcreteM3 quantity");
 
             var exactFormwork = CreateBltSnapshot("EXACT-FORMWORK");
             exactFormwork.Metadata["FormworkM2"] = "2.5";
             var exactFormworkCandidate = BltLegacyEntityAdapter.Adapt(exactFormwork);
             True(exactFormworkCandidate.LegacyFormworkM2.HasValue,
                 "exact FormworkM2 alias must remain supported");
-            Near(2.5d, exactFormworkCandidate.LegacyFormworkM2.Value, "exact FormworkM2 quantity");
+            Near(2.5d, exactFormworkCandidate.LegacyFormworkM2.GetValueOrDefault(), "exact FormworkM2 quantity");
         }
 
         private static EntitySnapshot CreateBltSnapshot(string id)
