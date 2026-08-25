@@ -21,7 +21,8 @@ namespace QS3D.Core.SmokeTests
             source.Elements[0].SourceHandles.Add("AA");
             source.Elements[0].Dependencies.Add("HOST-1");
 
-            var detacher = typeof(RevisionService).Assembly.GetType("QS3D.Core.Revisions.RevisionSnapshotDetacher", true);
+            var detacher = typeof(RevisionService).Assembly.GetType("QS3D.Core.Revisions.RevisionSnapshotDetacher", true)
+                ?? throw new Exception("RevisionSnapshotDetacher type was not found.");
             var capture = detacher.GetMethod("Capture", BindingFlags.Static | BindingFlags.NonPublic)
                 ?? throw new Exception("RevisionSnapshotDetacher.Capture was not found.");
             var detached = (RevisionSnapshot)(capture.Invoke(null, new object[] { source, "smoke" })
