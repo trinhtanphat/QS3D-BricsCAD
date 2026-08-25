@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             PairEnumerationIsDeterministic();
             ChangedOnlyMatchesImpactedFullPairs();
             SnapshotDiffTracksLifecycleChanges();
+            SnapshotDiffTracksCaseOnlyIdentityDrift();
             InvalidInputsFailClosed();
         }
 
@@ -74,6 +75,16 @@ namespace QS3D.Core.SmokeTests
             Equal("A|ADDED|B", string.Join("|", delta.ChangedOrAddedIds), "changed/add set was incorrect");
             Equal("REMOVED", string.Join("|", delta.RemovedIds), "removed set was incorrect");
             Equal("A|ADDED|B|REMOVED", string.Join("|", delta.AllDirtyIds), "dirty invalidation set was incorrect");
+        }
+
+        private static void SnapshotDiffTracksCaseOnlyIdentityDrift()
+        {
+            var before = new CoordinationSpatialIndex(2d, new[] { Item("A", "1", 0, 2) });
+            var after = new CoordinationSpatialIndex(2d, new[] { Item("a", "1", 0, 2) });
+            var delta = after.Diff(before);
+
+            Equal("a", string.Join("|", delta.ChangedOrAddedIds), "case-only ItemId drift was not detected");
+            Equal(string.Empty, string.Join("|", delta.RemovedIds), "case-only ItemId drift was misclassified as removal");
         }
 
         private static void InvalidInputsFailClosed()
