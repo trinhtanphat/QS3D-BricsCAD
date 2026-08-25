@@ -50,6 +50,28 @@ def evidence_remains_pending(section):
     return False
 
 
+def local_status(section):
+    for line in section.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- Status:"):
+            return stripped.split(":", 1)[1].replace("`", "").strip()
+    return ""
+
+
+def local_014_requires_followup(section):
+    if evidence_remains_pending(section):
+        return True
+    required_blocked_tokens = (
+        "Status: BLOCKED",
+        "PARTIAL_LOCAL_PASS / BLOCKED_SOURCE_FIX",
+        "#3966",
+        "UNDO_AFTER_GENERATED_STILL_PRESENT",
+        "production_local014_qualified=false",
+        "PENDING_LOCAL / DO_NOT_RETRY_REMOTE",
+    )
+    return all(token in section for token in required_blocked_tokens)
+
+
 for fixture, expected in (
     ("- Evidence: PENDING_LOCAL", True),
     ("- Evidence: P01 / Sheet row 2 `LOCAL_PASS`; overall `PENDING_LOCAL`", True),
@@ -145,9 +167,21 @@ for token in ('QS3DCONVERT2D', 'QS3DPLAN2WALLS', 'QS3DCONVERT2DADV', 'LOCAL-014'
 for token in ('QS3DDRAWWINDOW', 'Ribbon', 'Auto Host', 'QS3DCUTSELECTEDOPENINGS', 'LOCAL-008'):
     if token not in boundary:
         errors.append("workflow runtime boundary must assign Window/finish token to LOCAL-008: " + token)
-for token in ('PENDING_LOCAL', 'source review không được coi là `LOCAL_PASS`'):
+for token in ('PENDING_LOCAL',):
     if token not in boundary:
         errors.append("workflow runtime boundary must remain static-only/PENDING_LOCAL: " + token)
+if not (
+    'source review không được coi là `LOCAL_PASS`' in boundary
+    or all(
+        token in boundary
+        for token in (
+            'PARTIAL_LOCAL_PASS / BLOCKED_SOURCE_FIX',
+            '#3966',
+            'production_local014_qualified=false',
+        )
+    )
+):
+    errors.append("workflow runtime boundary must preserve either static-only or exact licensed blocked evidence truth")
 
 local_008 = local_section("LOCAL-008")
 local_014 = local_section("LOCAL-014")
@@ -156,9 +190,13 @@ for token in ('Status: OPEN', 'QS3DDRAWWINDOW', 'OpeningUsage=Window', 'Auto Hos
         errors.append("LOCAL-008 must own Window/finish runtime qualification: " + token)
 if not evidence_remains_pending(local_008):
     errors.append("LOCAL-008 must keep Window/finish runtime qualification overall PENDING_LOCAL")
-for token in ('Status: OPEN', 'Evidence: PENDING_LOCAL', 'QS3DCONVERT2D', 'QS3DPLAN2WALLS', 'QS3DCONVERT2DADV', 'PENDING_LOCAL / DO_NOT_RETRY_REMOTE'):
+for token in ('QS3DCONVERT2D', 'QS3DPLAN2WALLS', 'QS3DCONVERT2DADV', 'PENDING_LOCAL / DO_NOT_RETRY_REMOTE'):
     if token not in local_014:
         errors.append("LOCAL-014 must own Plan-to-3D runtime qualification: " + token)
+if local_status(local_014) not in ('OPEN', 'IN_PROGRESS', 'BLOCKED'):
+    errors.append("LOCAL-014 must remain actionable or source-blocked until full qualification")
+if not local_014_requires_followup(local_014):
+    errors.append("LOCAL-014 must retain pending evidence or exact blocked-source follow-up")
 if 'Status: PASS' in local_008 or 'Status: PASS' in local_014:
     errors.append("LOCAL-008/LOCAL-014 must not be promoted by a static workflow preflight")
 
@@ -169,4 +207,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: quick 2D->3D workflow is discoverable in the grouped Author Ribbon, Window authoring reuses guarded WallOpening+AutoHost semantics with rollback, Ribbon initialization follows the bounded coordinator and contained teardown, schedules preserve a Window usage group, and local-runtime qualification remains pending until exact evidence exists.")
+print("PASS: quick 2D->3D workflow is discoverable in the grouped Author Ribbon, Window authoring reuses guarded WallOpening+AutoHost semantics with rollback, Ribbon initialization follows the bounded coordinator and contained teardown, schedules preserve a Window usage group, and local-runtime qualification remains pending or exact-evidence source-blocked until its required follow-up passes.")
