@@ -231,8 +231,6 @@ namespace QS3D.Core.SmokeTests
             {
                 var rows = BuildRows();
                 rows[0].DrawingFingerprint = "smoke-drawing";
-                rows[0].ElementIds.Add("A");
-                rows[0].ElementIds.Add("B");
                 rows[0].SourceHandles.Add("1A");
                 rows[0].SourceHandles.Add("2B");
                 XlsxQuantityExporter.Export(path,rows);
