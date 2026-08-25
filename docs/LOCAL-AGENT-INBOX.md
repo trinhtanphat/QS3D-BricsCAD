@@ -22,14 +22,14 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 ## P0 — #3681 StructuralWall live-BREP concrete-contact/formwork
 
 - Priority: P0
-- Status: OPEN
+- Status: PASS
 - Area: StructuralWall live-BREP concrete-contact / formwork licensed qualification
-- Remote disposition: SOURCE_READY / LOCAL_RUN_ONLY
-- Exact runtime checkout: `447ba9805d777a3225827117587d932135cf0959`
+- Remote disposition: COMPLETED / NO_RERUN
+- Exact runtime checkout: `a4f1a53683a9296532a0290fcb79bc49b9d4b892`
 - Minimum source-ready ancestor: `c64eb8c1b83761e155da670904a72e64669464b7`
 - Runner: `scripts/run-local-v25-wall-contact-3681.ps1`
-- Local contract: fetch and checkout the exact runtime SHA, run the committed runner on licensed BricsCAD V25, and publish only sanitized `LOCAL_PASS`, `LOCAL_FAIL`, or `NO_RESULT` evidence. The local worker must not edit production source; hosted/static CI cannot manufacture `LOCAL_PASS`.
-- Evidence: PENDING_LOCAL
+- Local contract: licensed BricsCAD V25 qualification is complete for this bounded scenario. Keep the committed runner only as a regression reference; do not rerun unless a material source change explicitly reopens qualification. Hosted/static CI cannot manufacture or replace `LOCAL_PASS`.
+- Evidence: `LOCAL_PASS` on exact runtime source `a4f1a53683a9296532a0290fcb79bc49b9d4b892`; sanitized evidence PR #3849 merged as `7fec6f36a7c1181d7113f0e7220ea3dafca66e29`. #3681 is CLOSED/completed.
 
 ## LOCAL-001 — exact V25 build/load baseline
 
@@ -347,7 +347,6 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 
 - Priority: P1
 - Status: OPEN
-- Cell status: `P03` bounded `LOCAL_PASS`; broader matrix pending
 - Area: `QS3DCONVERT2D` / `QS3DPLAN2WALLS` quick path, `QS3DCONVERT2DADV`, immediate native wall creation
 - Source-side status: REMOTE_DONE in the current working source for the quick/no-prompt and advanced-prompt split, canonical project identity, drawing-unit and source eligibility/identity checks, deterministic same-ObjectId LINE/open-POLYLINE geometry fingerprints, per-created-element semantic regeneration and ownership-scoped batch compensation. Interactive proof remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`; static source review is not `LOCAL_PASS`.
 - Why local: Exact Model Space/UCS state, live ObjectId/source geometry changes while advanced prompts are open, native Solid3d ownership, editor selection, unrelated dirty semantic state and ownership-scoped rollback require licensed BricsCAD V25.
@@ -355,10 +354,9 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Evidence required: Exact SHA and V25 version; command/prompt count; default Family identity and effective values; before/after DWG/project identity, Model Space/UCS, drawing unit and deterministic source-geometry fingerprint; unrelated dirty element IDs/flags before and after; successful semantic/native ownership counts; injected-failure compensation/rollback; save/reopen and Undo/Redo. Evidence must be sanitized and must not include private drawing paths or raw Handle lists.
 - P01 exact evidence: exact clean source SHA `21ca2d08427013f3ef8154708fef85fb2454ff8f` passed the strict BricsCAD V25 `Release|x64` build with zero warnings/errors and the automation-only `QS3DPLAN2DPROBE` quick-positive run on BricsCAD V25.2.10 x64. Plugin SHA-256 was `3CF3F79C22A8659743E4CC72F777CD30596ED794775714C6F0A342C477E2200C`. Two seeded LINE sources produced two semantic `ArchitecturalWall` owners and two live owned Solid3d outputs using fallback `0.2 m / 3.0 m / 0 m`; source geometry remained unchanged, ownership sets were disjoint, native length/thickness/min-Z/max-Z bounds passed and both Core/runtime blocking Health counts were zero. The disposable synthetic copy retained SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`; no `.qsdb`/backup/lock, generated script or BricsCAD process remained. The run first exposed and then verified the one-line `WallSolidBuilder` centered-box Z-placement correction integrated by PR `#744`. P01 does not cover the alias, open-POLYLINE, preferred Family, advanced prompts, cancellation/drift, unrelated-dirty preservation, injected rollback, Undo/Redo or save/reopen, so it does not promote LOCAL-014 and the remaining matrix stays `PENDING_LOCAL`.
 - P02 exact evidence: exact clean source SHA `7f57130470d4440f25dd27ea0bc3207cbb777a07` passed the strict BricsCAD V25 `Release|x64` build with zero warnings/errors and the guarded `QS3D_PLAN_TO_3D_P02_RUNTIME_V1` run on BricsCAD V25.2.10 x64. Automation-only `QS3DPLAN2DP02PREPARE` / `QS3DPLAN2DP02VERIFY` and `scripts/test-bricscad-v25-plan-to-3d-p02.ps1` drove the real production quick aliases. Plugin SHA-256 was `EE7FA1C5F1A28127622C76F9E246B2E1388E77ED1C2029E1167B7457EE336C80`. Production `QS3DCONVERT2D` and `QS3DPLAN2WALLS` converted one LINE and one open straight POLYLINE into two semantic `ArchitecturalWall` owners and two owned Solid3d outputs using the active preferred Family values `0.31 m / 4.2 m / 0.45 m`. The unrelated dirty semantic state and source geometry were preserved; ownership sets were disjoint; native bounds passed; both wall-scoped Core/runtime blocking Health counts were zero. The disposable copy retained SHA-256 `CEC1350FB2207542AEECD96A790A198A6C9CC9E99A9F875871F367554B3D967E`; launched process, private script, `.qsdb`, `.bak` and lock state were absent after cleanup. P02 is `LOCAL_PASS` only for `P02_QUICK_ALIAS_POLYLINE_FAMILY_DIRTY_ONLY`; advanced prompt drift/cancel, rollback injection, Undo/Redo, save/reopen and the rest of LOCAL-014 remain `PENDING_LOCAL`.
-- P03 exact evidence: exact clean pushed source SHA `1736ae8db0086041f0b1e8ce4b79839469b10061` passed all `1024/1024` aggregate preflights, Core build/smoke, installed-reference V25 `Release|x64` build and offline WPF/Workspace/RightPanel smoke after the repository-pinned submodule was initialized; builds completed with `0 warnings / 0 errors`. On licensed BricsCAD V25.2.10 x64, three fresh exact-PID runs drove production `QS3DCONVERT2DADV` and delivered physical ESC independently at Thickness, Height after accepting `0.25`, and BottomOffset after accepting `0.25 / 3.5`. Every run reached application Idle with `CMDACTIVE=0`, retained the same one LINE with unchanged geometry/no XData and zero Solid3d, preserved `DBMOD`, stayed one-document, and created no project cache/pending state, sidecar or semantic/audit state. Adapter/Core SHA-256 values were `4352707C5D715996CACB82D414CC7A3C28378A413EBCC35952249FE734D8948C` / `1D42F9835898AD475E4DBAA6106FE028AADF194DA92C38B27E6FC235DCC6ED4F`. All three processes exited gracefully with code `0`; exact native discard-dialog handling, DemandLoad restoration to `LoadCtrls=2`, fixture hash preservation, process/private-file cleanup and zero host error/WER/hang/.NET events passed. Earlier runner-only diagnostics were `NO PRODUCT VERDICT`; the accepted result used a fresh artifact root/process/nonce set after their cleanup/serialization/modal-dialog races were corrected. P03 is bounded `LOCAL_PASS` only for `P03_ADV_PHYSICAL_ESC_PROMPTS`; no production source changed.
-- Evidence: P01/P02/P03 are bounded `LOCAL_PASS`. Overall LOCAL-014 remains `PENDING_LOCAL` for prompt-time document/UCS/unit/source/project drift, forced mid-batch compensation/rollback, Undo/Redo, save/cold reopen and multi-DWG isolation.
+- Evidence: PENDING_LOCAL
 - Related docs: `docs/PLAN-TO-3D-WORKFLOW.md`; `src/QS3D.BricsCAD.V25/PlanTo3DCommands.cs`; `src/QS3D.BricsCAD.V25/PlanTo3DRuntimeProbeCommands.cs`; `scripts/test-bricscad-v25-plan-to-3d.ps1`; `scripts/preflight-plan-to-3d-runtime-probe.py`; `scripts/preflight-plan-to-3d-project-lifecycle.py`; `scripts/preflight-plan-to-3d-source-geometry-freshness.py`; `scripts/preflight-plan-to-3d-quick-authoring.py`; `scripts/preflight-plan-to-3d-scoped-regeneration.py`; `docs/LOCAL-V25-QUALIFICATION.md`
-- Updated: 2026-08-25
+- Updated: 2026-08-14
 
 ## LOCAL-015 — Construction Reference Search browser/modeless runtime
 
