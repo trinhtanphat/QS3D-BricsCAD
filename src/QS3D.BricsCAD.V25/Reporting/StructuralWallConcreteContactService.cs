@@ -226,37 +226,83 @@ namespace QS3D.BricsCAD.V25.Reporting
                                         continue;
                                     }
 
-                                    var probeContactAreaCad = ReadEligibleOriginalFaceArea(
+                                    // The positive OffsetBody exists only to make zero-volume touching
+                                    // topology modeler-stable. Never use its expanded tangential faces
+                                    // as deduction authority: a 10 um offset grows a finite partial
+                                    // patch and produced #3770's 0.080004 m2 instead of 0.080000 m2.
+                                    var touchingSeeds = ReadEligibleTouchingFaceSeeds(
                                         contact,
                                         candidate,
                                         seeds,
                                         distanceCad,
-                                        out var probeFaceReadFailed);
-                                    if (probeFaceReadFailed)
+                                        out var touchingSeedReadFailed);
+                                    if (touchingSeedReadFailed)
                                     {
                                         diagnostics.ContactProbeFaceReadFailureCount++;
                                         diagnostics.FailedNativeCutCount++;
                                         continue;
                                     }
-                                    if (probeContactAreaCad <= areaCadTolerance)
+                                    if (touchingSeeds.Count == 0)
                                     {
                                         diagnostics.ContactProbeNoEligibleFaceCount++;
                                         if (directIntersectionFailed) diagnostics.FailedNativeCutCount++;
                                         continue;
                                     }
 
-                                    if (!TrySubtract(residual, contact))
+                                    var resolvedTouchingCandidate = false;
+                                    var footprintFailed = false;
+                                    foreach (var touchingSeed in touchingSeeds)
                                     {
-                                        diagnostics.ContactProbeSubtractFailureCount++;
-                                        diagnostics.FailedNativeCutCount++;
-                                        continue;
+                                        using (var footprintContact = TryCreateFootprintContact(
+                                            residual,
+                                            candidate,
+                                            touchingSeed,
+                                            contactProbeDistanceCad,
+                                            out var footprintIntersectionFailed))
+                                        {
+                                            if (footprintIntersectionFailed)
+                                            {
+                                                diagnostics.ContactProbeIntersectionFailureCount++;
+                                                diagnostics.FailedNativeCutCount++;
+                                                footprintFailed = true;
+                                                break;
+                                            }
+                                            if (footprintContact == null || SafeVolumeCad(footprintContact) <= volumeCadTolerance)
+                                                continue;
+
+                                            var footprintContactAreaCad = ReadEligibleOriginalFaceArea(
+                                                footprintContact,
+                                                candidate,
+                                                new[] { touchingSeed },
+                                                distanceCad,
+                                                out var footprintFaceReadFailed);
+                                            if (footprintFaceReadFailed)
+                                            {
+                                                diagnostics.ContactProbeFaceReadFailureCount++;
+                                                diagnostics.FailedNativeCutCount++;
+                                                footprintFailed = true;
+                                                break;
+                                            }
+                                            if (footprintContactAreaCad <= areaCadTolerance)
+                                                continue;
+
+                                            if (!TrySubtract(residual, footprintContact))
+                                            {
+                                                diagnostics.ContactProbeSubtractFailureCount++;
+                                                diagnostics.FailedNativeCutCount++;
+                                                footprintFailed = true;
+                                                break;
+                                            }
+
+                                            contactAreaCad += footprintContactAreaCad;
+                                            diagnostics.ContactProbeCutCount++;
+                                            resolvedTouchingCandidate = true;
+                                        }
                                     }
 
-                                    // A successful offset/intersection/original-face/subtract chain
-                                    // is authoritative touching evidence and resolves a deferred
-                                    // preliminary zero-volume intersection failure for this candidate.
-                                    contactAreaCad += probeContactAreaCad;
-                                    diagnostics.ContactProbeCutCount++;
+                                    if (footprintFailed) continue;
+                                    if (!resolvedTouchingCandidate && directIntersectionFailed)
+                                        diagnostics.FailedNativeCutCount++;
                                 }
                             }
                         }
@@ -378,6 +424,77 @@ namespace QS3D.BricsCAD.V25.Reporting
             {
                 failed = true;
                 return 0d;
+            }
+        }
+
+        private static IReadOnlyList<FaceSeed> ReadEligibleTouchingFaceSeeds(
+            Solid3d contactRegion,
+            Solid3d candidate,
+            IReadOnlyList<FaceSeed> seeds,
+            double distanceCad,
+            out bool failed)
+        {
+            failed = false;
+            var result = new List<FaceSeed>();
+            try
+            {
+                using (var brep = new Brep(contactRegion))
+                {
+                    foreach (BrepFace face in brep.Faces)
+                    {
+                        var plane = ReadFacePlane(face);
+                        if (plane == null) continue;
+                        var seed = seeds.FirstOrDefault(x => SamePlane(x.Plane, plane, distanceCad));
+                        if (seed == null || result.Contains(seed)) continue;
+                        if (!CandidateReachesExterior(candidate, seed, distanceCad, out var sideReadFailed))
+                        {
+                            if (sideReadFailed)
+                            {
+                                failed = true;
+                                return result.AsReadOnly();
+                            }
+                            continue;
+                        }
+                        result.Add(seed);
+                    }
+                }
+                return result.AsReadOnly();
+            }
+            catch (Exception ex) when (Recoverable(ex))
+            {
+                failed = true;
+                return result.AsReadOnly();
+            }
+        }
+
+        private static Solid3d? TryCreateFootprintContact(
+            Solid3d residual,
+            Solid3d candidate,
+            FaceSeed seed,
+            double contactProbeDistanceCad,
+            out bool failed)
+        {
+            failed = false;
+            if (seed.InteriorSide == 0 || !(contactProbeDistanceCad > 0d))
+            {
+                failed = true;
+                return null;
+            }
+
+            try
+            {
+                using (var footprintProbe = Clone(candidate))
+                {
+                    var displacement = seed.Plane.Normal.GetNormal()
+                        .MultiplyBy(seed.InteriorSide * contactProbeDistanceCad);
+                    footprintProbe.TransformBy(Matrix3d.Displacement(displacement));
+                    return TryIntersection(residual, footprintProbe, out failed);
+                }
+            }
+            catch (Exception ex) when (Recoverable(ex))
+            {
+                failed = true;
+                return null;
             }
         }
 
