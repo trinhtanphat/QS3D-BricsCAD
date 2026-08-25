@@ -1,15 +1,13 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using QS3D.Core.Geometry;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class PolygonRegionHoleSnapshotSmoke
     {
-        [ModuleInitializer]
-        internal static void Initialize()
+        internal static void Run()
         {
             UsesInitialHoleReferenceWhenSameCountSourceReplacesItem();
             RejectsHoleCollectionGrowthDuringSnapshot();
