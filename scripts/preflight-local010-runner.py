@@ -19,6 +19,8 @@ for token in required_runner:
 required_runbook = [
     'run-local-v25-local-010.ps1', 'sanitized/disposable', '100%', '125%', '150%', '200%',
     'narrow', 'normal', 'wide', 'V25 and V26 identities are separate',
+    'LOCAL-010-START-CENTER-HANDOFF-2026-08-17.md', '`Dự án`', '`Cấu hình`',
+    '`Mô hình`', '`BQ`', 'exactly once', 'no standalone QS3D application/process',
     'localPassClaimedByRunner=false', 'NO_RESULT'
 ]
 for token in required_runbook:
