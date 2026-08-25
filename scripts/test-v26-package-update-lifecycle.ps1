@@ -41,7 +41,7 @@ function Assert-HostIdentity {
     foreach($name in @('BrxMgd.dll','TD_Mgd.dll','TD_MgdBrep.dll')) { Assert-Leaf (Join-Path $BricsCadDir $name) "BricsCAD V26 $name" }
     $major=0; $version=[Diagnostics.FileVersionInfo]::GetVersionInfo($exe).FileVersion
     if ([string]::IsNullOrWhiteSpace($version) -or -not [int]::TryParse($version.Split('.')[0],[ref]$major) -or $major -ne 26) { throw 'Configured BricsCAD host is not major version 26.' }
-    if ($VersionKey -notmatch '^V26(?:\.|$)' -or $LanguageKey -notmatch '^[A-Za-z]{2}_[A-Za-z]{2}$') { throw 'V26 registry identity is not canonical.' }
+    if ($VersionKey -notmatch '^V26(?:x64)?(?:\.|$)' -or $LanguageKey -notmatch '^[A-Za-z]{2}_[A-Za-z]{2}$') { throw 'V26 registry identity is not canonical.' }
     $result.hostMajor=$major
 }
 function Get-TreeDigest([string]$Directory) {
