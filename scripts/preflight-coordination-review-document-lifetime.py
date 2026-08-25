@@ -41,7 +41,7 @@ def main():
 
     try:
         require(source, "MdiActiveDocument", "action-time active-document resolution")
-        require(source, "RequireCurrentProject(out var document)", "current-document/project binding")
+        require(source, "RequireCurrentProject(out document)", "current-document/project binding")
         require(source, "CadHandleService.Resolve(document, handles)", "fresh-document handle resolution")
         require(source, "List<string> _highlightedHandles", "portable transient highlight identity")
         require(source, "IsOriginDocument(e.Document)", "destroy-event stable origin identity")
