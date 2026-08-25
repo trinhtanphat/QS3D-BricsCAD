@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             NoneRoundingRequiresReconciliation();
             BalancedFiniteAdjustmentsDoNotOverflow();
             ScaledResidualUnderflowIsPreserved();
+            SwallowedNonZeroAdjustmentFailsClosed();
             OptionalMetadataNullability();
             AdjustmentRuleIdentity();
             OptionalRulePair();
@@ -281,6 +282,76 @@ namespace QS3D.Core.SmokeTests
                 "none");
 
             Equal(double.Epsilon, trace.NetValue, "Scaled reconciliation must preserve a representable residual that underflows at the largest scale.");
+        }
+
+        private static void SwallowedNonZeroAdjustmentFailsClosed()
+        {
+            var addition = new MeasurementTraceAdjustment(
+                MeasurementTraceAdjustmentKind.Addition,
+                1d,
+                "m2",
+                "tiny-addition",
+                "SRC-ADD");
+            var deduction = new MeasurementTraceAdjustment(
+                MeasurementTraceAdjustmentKind.Deduction,
+                1d,
+                "m2",
+                "tiny-deduction",
+                "SRC-DED");
+
+            Throws<ArgumentException>(() => new MeasurementTrace(
+                "SEM-WALL-SWALLOWED-ADD",
+                "SRC-WALL",
+                "NetAreaM2",
+                Array.Empty<MeasurementTraceFact>(),
+                double.MaxValue,
+                new[] { addition },
+                double.MaxValue,
+                "m2",
+                "none"));
+
+            Throws<ArgumentException>(() => new MeasurementTrace(
+                "SEM-WALL-SWALLOWED-DED",
+                "SRC-WALL",
+                "NetAreaM2",
+                Array.Empty<MeasurementTraceFact>(),
+                double.MaxValue,
+                new[] { deduction },
+                double.MaxValue,
+                "m2",
+                "none"));
+
+            var balanced = new MeasurementTrace(
+                "SEM-WALL-BALANCED-SMALL",
+                "SRC-WALL",
+                "NetAreaM2",
+                Array.Empty<MeasurementTraceFact>(),
+                double.MaxValue,
+                new[] { addition, deduction },
+                double.MaxValue,
+                "m2",
+                "none");
+            Equal(double.MaxValue, balanced.NetValue, "A truly zero net adjustment must remain valid at large gross magnitudes.");
+
+            var representable = new MeasurementTrace(
+                "SEM-WALL-REPRESENTABLE",
+                "SRC-WALL",
+                "NetAreaM2",
+                Array.Empty<MeasurementTraceFact>(),
+                1024d,
+                new[]
+                {
+                    new MeasurementTraceAdjustment(
+                        MeasurementTraceAdjustmentKind.Addition,
+                        0.5d,
+                        "m2",
+                        "representable-addition",
+                        "SRC-REP")
+                },
+                1024.5d,
+                "m2",
+                "none");
+            Equal(1024.5d, representable.NetValue, "Representable non-zero adjustments must continue to reconcile exactly.");
         }
 
         private static void OptionalMetadataNullability()
