@@ -79,9 +79,6 @@ def discovery_regressions(runner):
             assert_raises_runtime(lambda: runner.validate_candidates([symlink_candidate]), "symlink")
         symlink_candidate.unlink()
 
-        # A symlink-like candidate whose resolved target is the aggregate runner
-        # must not be silently excluded as SELF before validation. This models the
-        # bypass without requiring Windows symlink privileges in CI.
         self_alias = scripts / "preflight-self-alias.py"
         self_alias.write_text("", encoding="utf-8")
         original_resolve = Path.resolve
@@ -155,16 +152,63 @@ def execution_regressions(runner):
 
         fail.unlink()
         slow = scripts / "preflight-b-slow.py"
-        write_gate(slow, "import time\ntime.sleep(1)\n")
-        runner.CHILD_TIMEOUT_SECONDS = 0.05
+        write_gate(slow, "raise SystemExit(0)\n")
         output = StringIO()
-        with redirect_stdout(output):
+        with mock.patch.object(
+                runner,
+                "run_gate",
+                side_effect=[0, runner.GateTimeoutError(0.05)],
+             ), mock.patch.object(
+                runner,
+                "remaining_child_timeout",
+                return_value=0.05,
+             ), redirect_stdout(output):
             result = runner.main()
         text = output.getvalue()
         assert_true(result == 1, "timed-out child must fail aggregate runner")
         assert_true("preflight-b-slow.py timeout" in text, "timeout reason must remain visible")
 
-        runner.CHILD_TIMEOUT_SECONDS = 180
+        output = StringIO()
+        with mock.patch.object(
+                runner,
+                "run_gate",
+                side_effect=[0, runner.GateTimeoutError(0.05, "synthetic-cleanup-error")],
+             ), mock.patch.object(
+                runner,
+                "remaining_child_timeout",
+                return_value=0.05,
+             ), redirect_stdout(output):
+            result = runner.main()
+        text = output.getvalue()
+        assert_true(result == 1, "cleanup failure after child timeout must fail aggregate runner")
+        assert_true(
+            "preflight-b-slow.py timeout-cleanup-failed" in text,
+            "cleanup-failure timeout reason must remain visible",
+        )
+        assert_true(
+            "owned process-tree cleanup failed: synthetic-cleanup-error" in text,
+            "cleanup failure detail must remain visible",
+        )
+
+        output = StringIO()
+        timeout_budget = iter([0.05, 0.05, 0.0])
+        with mock.patch.object(
+                runner,
+                "run_gate",
+                side_effect=[0, runner.GateTimeoutError(0.05)],
+             ), mock.patch.object(
+                runner,
+                "remaining_child_timeout",
+                side_effect=lambda started_at: next(timeout_budget),
+             ), redirect_stdout(output):
+            result = runner.main()
+        text = output.getvalue()
+        assert_true(result == 1, "aggregate timeout during child execution must fail aggregate runner")
+        assert_true(
+            "preflight-b-slow.py aggregate-timeout" in text,
+            "aggregate-timeout reason must remain visible",
+        )
+
         slow.unlink()
         output = StringIO()
         with mock.patch.object(runner, "run_gate", side_effect=OSError("synthetic launch failure")), \

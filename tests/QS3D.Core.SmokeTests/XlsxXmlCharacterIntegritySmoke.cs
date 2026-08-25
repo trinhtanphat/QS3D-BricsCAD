@@ -79,8 +79,8 @@ namespace QS3D.Core.SmokeTests
                 Count = 1,
                 HostCount = 1
             };
-            row.ElementIds.Add(HostileText);
-            row.HostIds.Add(HostileText);
+            row.ElementIds.Add("E-1");
+            row.HostIds.Add("H-1");
             DoorOpeningXlsxExporter.Export(path, new List<DoorOpeningScheduleRow> { row });
             VerifyWorksheet(path, "door/opening");
         }
