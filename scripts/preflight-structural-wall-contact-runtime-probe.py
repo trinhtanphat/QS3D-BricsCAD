@@ -18,7 +18,9 @@ service = SERVICE.read_text(encoding="utf-8")
 for token in (
     '[CommandMethod("QS3DWALLCONTACTPROBE", CommandFlags.UsePickSet)]',
     "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
-    "SemanticReferenceHandles.MatchesSelection(element, handles)",
+    ".Where(element => MatchesSelection(project, element, handles))",
+    "SourceHandleResolver.Resolve(project, new[] { element.Id })",
+    "catch (InvalidOperationException)",
     "StructuralWallConcreteContactService.TryMeasureM2(",
     '"target_solids="',
     '"candidates="',
@@ -39,9 +41,10 @@ for forbidden in (
     "ForWrite",
     "ProjectId",
     "SourceHandles=",
+    "SemanticReferenceHandles.MatchesSelection(element, handles)",
 ):
     if forbidden in probe:
-        fail("read-only/sanitized probe contains forbidden mutation/private token: " + forbidden)
+        fail("read-only/sanitized probe contains forbidden mutation/private or stale selection token: " + forbidden)
 
 for token in (
     "public int CandidateSolidCount { get; internal set; }",
@@ -53,4 +56,4 @@ for token in (
     if token not in service:
         fail("measurement diagnostics are incomplete: " + token)
 
-print("PASS: QS3DWALLCONTACTPROBE is read-only, sanitized, and exposes candidate/face/cut/residual stages for exact-SHA V25 rerun")
+print("PASS: QS3DWALLCONTACTPROBE is read-only, sanitized, uses semantic source-handle resolution, and exposes candidate/face/cut/residual stages for exact-SHA V25 rerun")
