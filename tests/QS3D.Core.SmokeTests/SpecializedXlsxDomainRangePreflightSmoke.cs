@@ -99,7 +99,8 @@ internal static class SpecializedXlsxDomainRangePreflightSmoke
             MinimumClearPanelWidthM = 0.5d,
             MaximumClearPanelWidthM = 1d,
             MinimumClearPanelHeightM = 0.5d,
-            MaximumClearPanelHeightM = 2d
+            MaximumClearPanelHeightM = 2d,
+            ElementIds = { "CW-DOMAIN-RANGE-1" }
         };
     }
 
