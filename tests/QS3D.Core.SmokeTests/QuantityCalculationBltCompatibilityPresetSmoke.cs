@@ -84,7 +84,11 @@ namespace QS3D.Core.SmokeTests
 
         private static void CategoryTextMetadataKeyRequiresExplicitBoundary()
         {
-            var lookalikeKeys = new[] { "ColumnSpacing", "BeamLength", "StructuralWallThickness" };
+            var lookalikeKeys = new[]
+            {
+                "ColumnSpacing", "BeamLength", "StructuralWallThickness",
+                "Column Spacing", "Beam Length", "Structural Wall Thickness"
+            };
             for (var i = 0; i < lookalikeKeys.Length; i++)
             {
                 var snapshot = CreateBltSnapshot("CATEGORY-TEXT-LOOKALIKE-" + i);
