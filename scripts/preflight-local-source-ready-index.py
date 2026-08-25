@@ -18,6 +18,9 @@ WALL_CONTACT_EVIDENCE_PR = "#3849"
 WALL_CONTACT_EVIDENCE_MERGE = "7fec6f36a7c1181d7113f0e7220ea3dafca66e29"
 WALL_CONTACT_RUNNER = "scripts/run-local-v25-wall-contact-3681.ps1"
 WALL_CONTACT_RUNNER_NAME = Path(WALL_CONTACT_RUNNER).name
+LOCAL001_SOURCE_READY_SHA = "ab0202194e33a1a27dbdf322b9b6d73b9d56778a"
+LOCAL001_SOURCE_FIX_ISSUE = "#3930"
+LOCAL001_SOURCE_FIX_PR = "#3932"
 LOCAL005_SOURCE_MERGE = "ba6e1c7508086beb8ac5db9a4a78d2c43fc09492"
 LOCAL005_EVIDENCE_PR = "#3735"
 LOCAL005_EVIDENCE_MERGE = "73fec2c48726c09196b773c117be77ee1983031e"
@@ -93,6 +96,10 @@ require_tokens(
         WALL_CONTACT_RUNNER,
         "touching-only",
         "0.05 m penetration",
+        "LOCAL-001 | P0 / IN_PROGRESS",
+        LOCAL001_SOURCE_READY_SHA,
+        LOCAL001_SOURCE_FIX_ISSUE,
+        LOCAL001_SOURCE_FIX_PR,
         "LOCAL-005 | P1 / OPEN",
         LOCAL005_SOURCE_MERGE,
         LOCAL005_EVIDENCE_PR,
@@ -169,6 +176,21 @@ for stale in (
 require_local_row_status(inbox, "LOCAL-001", "LOCAL-002", "IN_PROGRESS")
 
 require_tokens(
+    index,
+    "LOCAL-001 source-ready continuation",
+    (
+        "| LOCAL-001 | P0 / IN_PROGRESS |",
+        LOCAL001_SOURCE_FIX_ISSUE,
+        LOCAL001_SOURCE_FIX_PR,
+        LOCAL001_SOURCE_READY_SHA,
+        "scripts/run-local-v25-qualification.ps1",
+        "Do not patch production source locally",
+    ),
+)
+if "| LOCAL-001 | P0 / PASS |" in index:
+    fail("LOCAL-001 source-ready index must not claim PASS while the canonical inbox remains IN_PROGRESS")
+
+require_tokens(
     inbox,
     "LOCAL-019 inbox evidence",
     (
@@ -229,6 +251,7 @@ require_tokens(
 )
 
 for token in (
+    "| LOCAL-001 | P0 / IN_PROGRESS |",
     "| LOCAL-005 | P1 / OPEN |",
     "| LOCAL-006 | P1 / OPEN |",
     "| LOCAL-019 | P0 / PASS |",
@@ -259,4 +282,4 @@ for stale in (
     if stale in index or stale in dispatch:
         fail(f"stale local scheduling/carrier text reintroduced: {stale}")
 
-print("PASS local source-ready pull-test index with truthful completed bounded LOCAL-005/006 evidence, LOCAL-001 status, and #3681 exact licensed PASS/no-rerun semantics")
+print("PASS local source-ready pull-test index with truthful LOCAL-001 continuation, completed bounded LOCAL-005/006 evidence, and #3681 exact licensed PASS/no-rerun semantics")
