@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Diagnostics;
@@ -37,36 +36,6 @@ namespace QS3D.BricsCAD.V25.Cad
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, GeneratedOwnershipIdentityToken.Element(element.Id)),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, ownerSlot)))
                 entity.XData = marker;
-        }
-
-        public static void MarkFreshGeneratedHandles(
-            Document document,
-            Transaction transaction,
-            ProjectState project,
-            ProjectElement element,
-            string propertyKey,
-            IEnumerable<string> handles)
-        {
-            if (document == null) throw new ArgumentNullException(nameof(document));
-            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
-            if (project == null) throw new ArgumentNullException(nameof(project));
-            if (element == null) throw new ArgumentNullException(nameof(element));
-            if (handles == null) throw new ArgumentNullException(nameof(handles));
-            if (string.IsNullOrWhiteSpace(propertyKey)) throw new ArgumentException("Generated rebar owner slot is required.", nameof(propertyKey));
-
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var rawHandle in handles)
-            {
-                var handle = (rawHandle ?? string.Empty).Trim();
-                if (handle.Length == 0 || !seen.Add(handle)) continue;
-                var ids = CadHandleService.Resolve(document, new[] { handle });
-                if (ids.Count != 1)
-                    throw new InvalidOperationException("Fresh generated rebar handle " + handle + " must resolve to exactly one CAD object before commit.");
-                var entity = transaction.GetObject(ids[0], OpenMode.ForWrite, false) as Entity;
-                if (entity == null || entity.IsErased || !entity.IsNewObject)
-                    throw new InvalidOperationException("Fresh generated rebar handle " + handle + " must identify a new live Entity in the current CAD transaction.");
-                MarkGenerated(document, transaction, entity, project, element, propertyKey);
-            }
         }
 
         public static void RequireMatchingOwnership(
