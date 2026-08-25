@@ -65,10 +65,9 @@ namespace QS3D.Core.SmokeTests
             var path = Path.Combine(root, "quantity.xlsx");
             try
             {
-                XlsxQuantityExporter.Export(path, new[]
-                {
-                    new QuantityReportRow { FamilyName = new string('A', 32767) }
-                });
+                var row = ValidStandardRow("E1", "1");
+                row.FamilyName = new string('A', 32767);
+                XlsxQuantityExporter.Export(path, new[] { row });
                 if (!File.Exists(path)) throw new Exception("Quantity XLSX must accept exactly 32,767 text characters.");
             }
             finally { Delete(root); }
@@ -80,10 +79,9 @@ namespace QS3D.Core.SmokeTests
             var path = Path.Combine(root, "quantity.xlsx");
             try
             {
-                Throws<ArgumentOutOfRangeException>(() => XlsxQuantityExporter.Export(path, new[]
-                {
-                    new QuantityReportRow { FamilyName = new string('B', 32768) }
-                }));
+                var row = ValidStandardRow("E1", "1");
+                row.FamilyName = new string('B', 32768);
+                Throws<ArgumentOutOfRangeException>(() => XlsxQuantityExporter.Export(path, new[] { row }));
                 RequireNoDestinationMutation(root, path, "Oversized Quantity XLSX scalar text");
             }
             finally { Delete(root); }
@@ -95,10 +93,10 @@ namespace QS3D.Core.SmokeTests
             var path = Path.Combine(root, "quantity.xlsx");
             try
             {
-                var row = new QuantityReportRow();
-                row.ElementIds.Add(new string('C', 16384));
-                row.ElementIds.Add("   ");
+                var row = ValidStandardRow(new string('C', 16384), "1");
                 row.ElementIds.Add(new string('D', 16383));
+                row.SourceHandles.Add("2");
+                row.Count = 2;
                 Throws<ArgumentOutOfRangeException>(() => XlsxQuantityExporter.Export(path, new[] { row }));
                 RequireNoDestinationMutation(root, path, "Oversized Quantity XLSX joined ElementIds text");
             }
@@ -134,6 +132,18 @@ namespace QS3D.Core.SmokeTests
                 RequireNoDestinationMutation(root, path, "Oversized ED2 FloorZone text");
             }
             finally { Delete(root); }
+        }
+
+        private static QuantityReportRow ValidStandardRow(string elementId, string handle)
+        {
+            var row = new QuantityReportRow
+            {
+                DrawingFingerprint = "DRAWING-1",
+                Count = 1
+            };
+            row.ElementIds.Add(elementId);
+            row.SourceHandles.Add(handle);
+            return row;
         }
 
         private static QuantityReportRow ValidEd2Row(string elementId)
