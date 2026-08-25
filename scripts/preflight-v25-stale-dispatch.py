@@ -11,6 +11,7 @@ surface_contract = (
     ("src/*", "'src/'"),
     ("tests/*", "'tests/'"),
     ("scripts/*", "'scripts/'"),
+    (".gitmodules", "'.gitmodules'"),
     ("Directory.Build.props", "'Directory.Build.props'"),
     ("QS3D.sln", "'QS3D.sln'"),
     ("QS3D.V26.sln", "'QS3D.V26.sln'"),
