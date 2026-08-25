@@ -21,6 +21,8 @@ namespace QS3D.Core.SmokeTests
         {
             PackageIsByteDeterministicAndSchemaShaped();
             PackageRoundTripPreservesSemanticIdentity();
+            StandardVocabularyPackageWithoutExtensionsIsAccepted();
+            LegacyExtensionsRemainStrict();
             UnsafeMalformedAndUnsupportedPackagesFailClosed();
             MalformedLeafStructureFailsClosed();
             NonCanonicalXmlNodeFormsFailClosed();
@@ -39,19 +41,16 @@ namespace QS3D.Core.SmokeTests
             var expected = new[]
             {
                 "bcf.version",
-                "extensions.xml",
                 TopicA + "/markup.bcf",
                 TopicB + "/markup.bcf",
                 TopicB + "/" + Viewpoint + ".bcfv"
             };
             if (!paths.SequenceEqual(expected)) throw new Exception("BCF package entries are not emitted in canonical deterministic order.");
+            if (archive.GetEntry("extensions.xml") != null) throw new Exception("BCF 3.0 writer must not emit the legacy QS3D extensions.xml vocabulary file.");
 
             var version = ReadEntry(archive, "bcf.version");
             Require(version, "VersionId=\"3.0\"");
             Require(version, "xsi:noNamespaceSchemaLocation=");
-            var extensions = ReadEntry(archive, "extensions.xml");
-            Require(extensions, "<TopicType>Coordination</TopicType>");
-            Require(extensions, "<TopicStatus>Open</TopicStatus>");
             var markup = ReadEntry(archive, TopicB + "/markup.bcf");
             Require(markup, "Guid=\"" + TopicB + "\"");
             Require(markup, "<CreationDate>2026-08-14T09:00:00.0000000Z</CreationDate>");
@@ -72,6 +71,48 @@ namespace QS3D.Core.SmokeTests
             var expected = BcfIssueExchangeSerializer.Serialize(exchange);
             var actual = BcfIssueExchangeSerializer.Serialize(roundTrip);
             if (!string.Equals(expected, actual, StringComparison.Ordinal)) throw new Exception("BCF package round-trip changed semantic topic/comment/viewpoint identity or camera data.");
+        }
+
+        private static void StandardVocabularyPackageWithoutExtensionsIsAccepted()
+        {
+            var standard = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\" />",
+                [TopicA + "/markup.bcf"] = "<Markup><Topic Guid=\"" + TopicA + "\" TopicType=\"ThirdPartyCoordination\" TopicStatus=\"InReview\"><Title>Third party package</Title><CreationDate>2026-08-14T09:00:00.0000000Z</CreationDate><CreationAuthor>partner@example.test</CreationAuthor></Topic></Markup>"
+            });
+
+            var exchange = BcfZipPackage.Read(standard);
+            if (exchange.Topics.Count != 1) throw new Exception("Standard BCF package without extensions.xml must preserve its topic.");
+            var topic = exchange.Topics[0];
+            if (!string.Equals(topic.Type, "ThirdPartyCoordination", StringComparison.Ordinal) || !string.Equals(topic.Status, "InReview", StringComparison.Ordinal))
+                throw new Exception("Standard BCF package vocabulary must come from markup topic attributes when extensions.xml is absent.");
+        }
+
+        private static void LegacyExtensionsRemainStrict()
+        {
+            var legacy = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\" />",
+                ["extensions.xml"] = ExtensionsXml(),
+                [TopicA + "/markup.bcf"] = "<Markup><Topic Guid=\"" + TopicA + "\" TopicType=\"Coordination\" TopicStatus=\"Open\"><Title>Legacy package</Title><CreationDate>2026-08-14T09:00:00.0000000Z</CreationDate><CreationAuthor>qa@qs3d</CreationAuthor></Topic></Markup>"
+            });
+            if (BcfZipPackage.Read(legacy).Topics.Count != 1) throw new Exception("Legacy QS3D BCF package with extensions.xml must remain readable.");
+
+            var undeclaredType = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\" />",
+                ["extensions.xml"] = ExtensionsXml(),
+                [TopicA + "/markup.bcf"] = "<Markup><Topic Guid=\"" + TopicA + "\" TopicType=\"Information\" TopicStatus=\"Open\"><Title>Undeclared type</Title><CreationDate>2026-08-14T09:00:00.0000000Z</CreationDate><CreationAuthor>qa@qs3d</CreationAuthor></Topic></Markup>"
+            });
+            ThrowsInvalidData(() => BcfZipPackage.Read(undeclaredType), "Legacy extensions.xml must continue enforcing declared topic types.");
+
+            var undeclaredStatus = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\" />",
+                ["extensions.xml"] = ExtensionsXml(),
+                [TopicA + "/markup.bcf"] = "<Markup><Topic Guid=\"" + TopicA + "\" TopicType=\"Coordination\" TopicStatus=\"Closed\"><Title>Undeclared status</Title><CreationDate>2026-08-14T09:00:00.0000000Z</CreationDate><CreationAuthor>qa@qs3d</CreationAuthor></Topic></Markup>"
+            });
+            ThrowsInvalidData(() => BcfZipPackage.Read(undeclaredStatus), "Legacy extensions.xml must continue enforcing declared topic statuses.");
         }
 
         private static void UnsafeMalformedAndUnsupportedPackagesFailClosed()
