@@ -24,6 +24,7 @@ namespace QS3D.Core.SmokeTests
             DanglingAndDuplicateReferencesFailClosed();
             MalformedPayloadFailsClosed();
             OversizedSemanticPayloadFailsBeforeXmlParse();
+            OversizedFreeTextFailsAtSerializerBoundary();
             AmbiguousXmlStructureFailsClosed();
         }
 
@@ -139,6 +140,42 @@ namespace QS3D.Core.SmokeTests
                 return;
             }
             throw new Exception("Oversized BCF semantic XML must fail closed before XML parsing.");
+        }
+
+        private static void OversizedFreeTextFailsAtSerializerBoundary()
+        {
+            var oversizedTitle = new string('T', BcfIssueExchangeSerializer.MaxFreeTextCharacters + 1);
+            var topic = new BcfTopic(
+                TopicA,
+                oversizedTitle,
+                "Open",
+                "Coordination",
+                string.Empty,
+                "qa@qs3d",
+                Utc(9),
+                Array.Empty<BcfComment>(),
+                Array.Empty<BcfViewpoint>());
+            var exchange = BcfIssueExchange.Create(new[] { topic });
+            try
+            {
+                BcfIssueExchangeSerializer.Serialize(exchange);
+            }
+            catch (InvalidDataException exception)
+            {
+                if (!string.Equals(exception.Message, "BCF free-text value exceeds the bounded scalar size: Title.", StringComparison.Ordinal))
+                    throw new Exception("Oversized BCF free text must fail at the serializer scalar guard before XML materialization.");
+            }
+            catch (Exception exception)
+            {
+                throw new Exception("Oversized BCF free text failed through an unexpected boundary.", exception);
+            }
+
+            var valid = BcfIssueExchangeSerializer.Serialize(BuildFixture(false));
+            var title = new string('T', BcfIssueExchangeSerializer.MaxFreeTextCharacters + 1);
+            var oversizedPayload = valid.Replace("<Title>Canonical ordering</Title>", "<Title>" + title + "</Title>");
+            ThrowsInvalidData(
+                () => BcfIssueExchangeSerializer.Deserialize(oversizedPayload),
+                "Oversized BCF free text must fail closed on semantic XML input.");
         }
 
         private static void AmbiguousXmlStructureFailsClosed()
