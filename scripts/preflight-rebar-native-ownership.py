@@ -108,11 +108,16 @@ else:
         'private const string OwnershipVersion = "1";',
         "GeneratedHandleOwnershipPolicy.CanonicalOwnerSlot(propertyKey.Trim())",
         "entity.GetXDataForApplication(RegAppName)",
-        "entity == null || entity.IsErased || !entity.IsNewObject",
-        "MarkGenerated(document, transaction, entity, project, element, propertyKey);",
+        "public static void MarkGenerated(",
+        "public static void RequireMatchingOwnership(",
+        "public static bool HasMatchingOwnership(",
     ):
         if token not in text:
             errors.append("native ownership service missing token: " + token)
+    if "MarkFreshGeneratedHandles" in text:
+        errors.append("native ownership service must not reintroduce handle-based fresh-object marking")
+    if "IsNewObject" in text:
+        errors.append("native ownership service must not depend on host-specific Entity.IsNewObject after handle re-resolution")
 
 check_exact_set_guard(
     OWNERSHIP_GUARD,

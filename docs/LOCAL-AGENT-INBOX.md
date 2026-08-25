@@ -282,6 +282,14 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Priority: P2
 - Status: OPEN
 - Area: Performance / UI / HiDPI
+- Source/runner status: `SOURCE_READY / PENDING_LOCAL / DO_NOT_RETRY_REMOTE`.
+- Runner: `scripts/run-local-v25-local-010.ps1`
+- Runbook: `docs/LOCAL-010-PERFORMANCE-UI-QUALIFICATION.md`
+- Remote disposition: `REMOTE_DONE / PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
+- Local handoff: From one clean exact intended `main` SHA containing this runner/runbook, with licensed interactive BricsCAD V25 x64 and zero pre-existing BricsCAD processes, **pull/sync only and run one command**: `powershell -ExecutionPolicy Bypass -File .\scripts\run-local-v25-local-010.ps1`. Do not patch production source in this local lane.
+- Exact-source rule: Evidence is valid only for the runner-reported exact checkout SHA and matching V25/plugin identity. A newer intended `main` candidate requires a clean restart from the beginning; hosted/source CI never manufactures `LOCAL_PASS`.
+- Result semantics: `artifacts/local-v25-local-010/qualification.json` records exact SHA, Windows/V25 identity, canonical baseline and per-row `PASS`/`FAIL`/`BLOCKED` evidence; runner exit 0/1/2/3 means complete PASS/FAIL/BLOCKED/NO_RESULT and `localPassClaimedByRunner=false`.
+- Cleanup/host-major boundary: Use sanitized/disposable projects only, publish no private paths/raw Handles/ProjectIds/proprietary files, preserve user/DemandLoad state, never kill unrelated BricsCAD sessions, and finish with zero test-owned BricsCAD process residue. This runner qualifies V25 only; V26 requires its matching assembly/runtime and must never reuse or relabel the V25 binary.
 - Why local: Representative timings, native palette responsiveness, GPU/driver effects, and DPI/layout behavior need real hardware and V25.
 - Scenario: Measure DependencyGraph/regeneration, rooms, wall junctions, Auto Host, Curtain, BQ/BBS/ED2/Interchange, ownership/Health, rebar limits, plus 100/125/150/200% DPI and narrow/normal/wide palettes on representative large projects.
 - Evidence required: Exact SHA; hardware/OS/V25 build; project sizes; timings; DPI/layout results; sanitized bottleneck notes.
