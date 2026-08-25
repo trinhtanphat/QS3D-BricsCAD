@@ -230,8 +230,25 @@ function Assert-InstalledPayload($Manifest) {
         throw 'Installed V26 payload identity differs from the generated package.'
     }
     $runtime = Get-Content -LiteralPath (Join-Path $installDir 'QS3D.BricsCAD.V26.runtimeconfig.json') -Raw | ConvertFrom-Json
-    $frameworkName = [string]$runtime.runtimeOptions.framework.name
-    if ($frameworkName -ne 'Microsoft.WindowsDesktop.App') { throw 'Installed V26 runtimeconfig does not target Microsoft.WindowsDesktop.App.' }
+    if ($null -eq $runtime.runtimeOptions) { throw 'Installed V26 runtimeconfig runtimeOptions are missing.' }
+    if ([string]$runtime.runtimeOptions.tfm -ne 'net8.0') { throw 'Installed V26 runtimeconfig TFM is invalid.' }
+    $frameworksProperty = $runtime.runtimeOptions.PSObject.Properties['frameworks']
+    if ($null -eq $frameworksProperty) { throw 'Installed V26 runtimeconfig frameworks array is missing.' }
+    $frameworks = @($frameworksProperty.Value)
+    if ($frameworks.Count -eq 0) { throw 'Installed V26 runtimeconfig frameworks array is empty.' }
+    $frameworkNames = @(
+        foreach ($framework in $frameworks) {
+            if ($null -eq $framework) { throw 'Installed V26 runtimeconfig frameworks array contains a null entry.' }
+            $nameProperty = $framework.PSObject.Properties['name']
+            if ($null -eq $nameProperty -or [string]::IsNullOrWhiteSpace([string]$nameProperty.Value)) {
+                throw 'Installed V26 runtimeconfig frameworks array contains an entry without a valid name.'
+            }
+            [string]$nameProperty.Value
+        }
+    )
+    if (-not ($frameworkNames -contains 'Microsoft.WindowsDesktop.App')) {
+        throw "Installed V26 runtimeconfig frameworks do not include Microsoft.WindowsDesktop.App: $($frameworkNames -join ', ')"
+    }
     $result.installedPayloadValid = $true
     $result.installedPayloadHashesMatch = $true
     $result.runtimeConfigInstalled = $true
