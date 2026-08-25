@@ -14,6 +14,8 @@ The V26 installer is generated from the hardened V25 installer. V26 additionally
 
 The source handoff therefore requires `scripts/new-v26-script-from-v25.ps1` to add exactly that V26-only runtimeconfig payload entry and fail closed if the installer payload anchor changes. The runner must verify the runtimeconfig is packaged, hash-covered, installed byte-for-byte from the package and targets `Microsoft.WindowsDesktop.App`.
 
+The install-lifecycle host-identity guard also accepts the canonical initialized x64 registry key `V26x64` (and the existing V26/V26.x family) while remaining bounded to major 26. V25, cross-major and malformed version keys remain rejected. This mirrors the already-qualified V26 package-update lifecycle contract and prevents a real licensed V26 profile from being rejected before any owned package mutation.
+
 ## Local command
 
 Start from a clean checkout at the exact pushed candidate SHA. Close every BricsCAD process and use a disposable V26 user profile/registry target that has no existing QS3D V26 DemandLoad registration.
@@ -21,7 +23,7 @@ Start from a clean checkout at the exact pushed candidate SHA. Close every Brics
 ```powershell
 .\scripts\test-v26-package-install-lifecycle.ps1 `
   -BricsCadDir $env:BRICSCAD_V26_DIR `
-  -VersionKey '<exact initialized V26 registry version key>' `
+  -VersionKey 'V26x64' `
   -LanguageKey '<exact initialized language key, for example en_US>' `
   -ExpectedSourceSha (git rev-parse HEAD) `
   -ArtifactDir '.\artifacts\local-v26-package-install-lifecycle\run' `
@@ -40,7 +42,7 @@ The runner refuses before owned install mutation when any of these conditions is
 - a BricsCAD process is running;
 - `bricscad.exe`, `BrxMgd.dll`, `TD_Mgd.dll` or `TD_MgdBrep.dll` is missing from the supplied host directory;
 - host major is not 26;
-- `VersionKey` is not V26 or `LanguageKey` is malformed;
+- `VersionKey` is not a canonical V26 family key (`V26`, `V26.x`, `V26x64` or `V26x64.x`) or `LanguageKey` is malformed;
 - the selected V26 profile already contains a QS3D DemandLoad registration;
 - the disposable install directory escapes `%LOCALAPPDATA%\QS3D\Qualification`;
 - Release build/package generation, package identity or exact hash coverage fails.
