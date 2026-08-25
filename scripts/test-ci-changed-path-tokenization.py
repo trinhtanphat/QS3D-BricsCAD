@@ -129,6 +129,7 @@ def prove_bounded_process_contract() -> None:
         success = SCOPE.run_bounded_process(
             [
                 sys.executable,
+                "-S",
                 "-c",
                 "import sys; sys.stdout.buffer.write(b'scripts/ok.py\\0'); "
                 "sys.stderr.buffer.write(b'note'); sys.stdout.flush(); sys.stderr.flush()",
@@ -144,6 +145,7 @@ def prove_bounded_process_contract() -> None:
         nonzero = SCOPE.run_bounded_process(
             [
                 sys.executable,
+                "-S",
                 "-c",
                 "import sys; sys.stderr.write('bounded diagnostic'); raise SystemExit(7)",
             ],
@@ -157,7 +159,7 @@ def prove_bounded_process_contract() -> None:
 
         expect_scope_error(
             lambda: SCOPE.run_bounded_process(
-                [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'x' * 8192); sys.stdout.flush()"],
+                [sys.executable, "-S", "-c", "import sys; sys.stdout.buffer.write(b'x' * 8192); sys.stdout.flush()"],
                 cwd=cwd,
                 timeout_seconds=2.0,
                 max_stdout_bytes=128,
@@ -168,7 +170,7 @@ def prove_bounded_process_contract() -> None:
 
         expect_scope_error(
             lambda: SCOPE.run_bounded_process(
-                [sys.executable, "-c", "import sys; sys.stderr.buffer.write(b'e' * 8192); sys.stderr.flush()"],
+                [sys.executable, "-S", "-c", "import sys; sys.stderr.buffer.write(b'e' * 8192); sys.stderr.flush()"],
                 cwd=cwd,
                 timeout_seconds=2.0,
                 max_stdout_bytes=1024,
@@ -179,7 +181,7 @@ def prove_bounded_process_contract() -> None:
 
         expect_scope_error(
             lambda: SCOPE.run_bounded_process(
-                [sys.executable, "-c", "import time; time.sleep(5)"],
+                [sys.executable, "-S", "-c", "import time; time.sleep(5)"],
                 cwd=cwd,
                 timeout_seconds=0.1,
                 max_stdout_bytes=1024,
