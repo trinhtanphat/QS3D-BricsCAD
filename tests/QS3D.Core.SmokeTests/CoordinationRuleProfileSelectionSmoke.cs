@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             MissingRevisionFailsClosed();
             DuplicateRevisionFailsClosed();
             InvalidBindingFailsClosed();
+            CatalogResolutionRejectsWildcardActualCategory();
         }
 
         private static void ExactBindingPreservesRequestedRevision()
@@ -94,6 +95,22 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentOutOfRangeException>(() => new CoordinationRuleProfileBinding("PROJECT-MEP", 0));
             var catalog = new CoordinationRuleProfileCatalog(new CoordinationRuleProfile[0]);
             Throws<ArgumentNullException>(() => catalog.Resolve(null!, "Pipe", "Beam"));
+        }
+
+        private static void CatalogResolutionRejectsWildcardActualCategory()
+        {
+            var profile = new CoordinationRuleProfile(
+                "PROJECT-MEP",
+                5,
+                new[]
+                {
+                    new CoordinationRule("FALLBACK", 1, "*", "*", CoordinationRuleKind.Clearance, "Info", 0.05d)
+                });
+            var catalog = new CoordinationRuleProfileCatalog(new[] { profile });
+            var binding = catalog.Bind("PROJECT-MEP", 5);
+
+            Throws<ArgumentException>(() => catalog.Resolve(binding, "*", "Beam"));
+            Throws<ArgumentException>(() => catalog.Resolve(binding, "Pipe", "*"));
         }
 
         private static void Throws<T>(Action action) where T : Exception
