@@ -165,12 +165,14 @@ namespace QS3D.Core.Persistence
 
         private static void RestorePreviousBackup(string? previousBackupSafety, string backupPath)
         {
-            if (string.IsNullOrWhiteSpace(previousBackupSafety) || !File.Exists(previousBackupSafety)) return;
+            if (string.IsNullOrWhiteSpace(previousBackupSafety)) return;
+            var previousBackupPath = previousBackupSafety!;
+            if (!File.Exists(previousBackupPath)) return;
             try
             {
-                RequireSafe(previousBackupSafety, "previous-backup safety");
+                RequireSafe(previousBackupPath, "previous-backup safety");
                 RequireSafe(backupPath, "backup");
-                if (!File.Exists(backupPath)) File.Move(previousBackupSafety, backupPath);
+                if (!File.Exists(backupPath)) File.Move(previousBackupPath, backupPath);
             }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
