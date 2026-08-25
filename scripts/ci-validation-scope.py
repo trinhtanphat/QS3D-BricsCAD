@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
@@ -12,6 +11,7 @@ import subprocess
 import sys
 import threading
 import time
+from typing import NamedTuple
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -50,8 +50,7 @@ class ScopeError(RuntimeError):
     pass
 
 
-@dataclass(frozen=True)
-class BoundedProcessResult:
+class BoundedProcessResult(NamedTuple):
     returncode: int
     stdout: bytes
     stderr: bytes
