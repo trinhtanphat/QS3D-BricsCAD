@@ -42,7 +42,7 @@ def main():
         require(source, "TryResolveBoundDocument(out var document)", "reload-time live-document resolution")
         require(source, "foreach (Document candidate in BcadApplication.DocumentManager)", "live DocumentManager enumeration")
         require(source, "candidate == null || candidate.IsDisposed", "disposed-wrapper rejection")
-        require(source, "database.UnmanagedObject == _nativeDatabaseIdentity", "bound native database validation")
+        require(source, "if (database.UnmanagedObject != _nativeDatabaseIdentity) continue;", "bound native database validation")
         require(source, "ProjectContextCoordinator.TryGetReadOnly(document, out var project)", "fresh-document project read")
         require(source, "DrawingLabel(document)", "fresh-document drawing label")
         require(
