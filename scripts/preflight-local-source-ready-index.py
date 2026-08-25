@@ -38,6 +38,19 @@ def require_tokens(text: str, label: str, tokens: tuple[str, ...]) -> None:
             fail(f"{label} contract is missing: {token}")
 
 
+def require_local_row_status(text: str, row: str, next_row: str, status: str) -> None:
+    match = re.search(
+        rf"^## {re.escape(row)}\b.*?(?=^## {re.escape(next_row)}\b)",
+        text,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    if match is None:
+        fail(f"canonical inbox row is missing or cannot be bounded: {row}")
+    expected = f"- Status: {status}"
+    if expected not in match.group(0):
+        fail(f"{row} must publish truthful top-level status {status}")
+
+
 for relative in (
     "docs/LOCAL-SOURCE-READY-INDEX-2026-08-24.md",
     "docs/LOCAL-DISPATCH-READY-2026-08-24.md",
@@ -128,6 +141,8 @@ require_tokens(
     ),
 )
 
+require_local_row_status(inbox, "LOCAL-001", "LOCAL-002", "IN_PROGRESS")
+
 require_tokens(
     inbox,
     "LOCAL-019 inbox evidence",
@@ -168,4 +183,4 @@ for stale in (
     if stale in index or stale in dispatch:
         fail(f"stale local scheduling/carrier text reintroduced: {stale}")
 
-print("PASS local source-ready pull-test index with #3681 canonical inbox publication, #3727/#3728 source-ready rows and #3833/#3836 source floor")
+print("PASS local source-ready pull-test index with truthful LOCAL-001 status, #3681 canonical inbox publication, #3727/#3728 source-ready rows and #3833/#3836 source floor")
