@@ -27,6 +27,7 @@ require(RUNNER, [
     "status --porcelain",
     "completely clean working tree",
     "BRICSCAD_V26_DIR",
+    "^V26(?:x64)?(?:\\.|$)",
     "dotnet build",
     "package-v26.ps1",
     "PACKAGE-METADATA.json",
@@ -68,6 +69,7 @@ require(V26_PROJECT, [
 require(RUNBOOK, [
     "PENDING_LOCAL",
     "test-v26-package-install-lifecycle.ps1",
+    "V26x64",
     "QS3D.BricsCAD.V26.runtimeconfig.json",
     "unrelated V25",
     "LOCAL_PASS",
