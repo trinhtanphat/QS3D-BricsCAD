@@ -21,43 +21,26 @@ For every active row below:
 
 - **#1744 Slab opening peer replay + Undo semantic coherence:** accepted licensed V25 `LOCAL_PASS` on exact `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31`, including peer replay, native Undo/Redo semantic coherence, Health=0, save/cold-reopen and second-DWG isolation. Do not schedule it again from historical queue text.
 - **#3613 Coordination Manager Locate/zoom:** accepted licensed V25 `LOCAL_PASS` on exact `0062e0cd73a570a7ca774dfa8b3ff91e8df20f31`, including exact PICKFIRST selection, synchronous framing, fail-closed provenance and modeless multi-DWG affinity. Do not schedule it again.
+- **#3681 StructuralWall live-BREP concrete-contact/formwork:** accepted licensed V25 `LOCAL_PASS` on exact runtime source `a4f1a53683a9296532a0290fcb79bc49b9d4b892`; sanitized evidence PR #3849 merged as `7fec6f36a7c1181d7113f0e7220ea3dafca66e29`. Do not rerun unless a material source change explicitly reopens qualification.
 - **H.1 #3593/#3621:** final P07 is authoritative; obsolete P06 scheduling text must not trigger another run.
 
-## P0 — #3681 StructuralWall live-BREP concrete-contact/formwork
+## Completed history — #3681 StructuralWall live-BREP concrete-contact/formwork
 
-Status: `LOCAL_READY / PULL_RUN_ONLY`  
+Status: `COMPLETED / DO_NOT_RERUN`  
 Original source issue/PR: #3665 / #3666  
 Earlier source defects/fixes: #3687 / #3692 and #3697 / #3702  
 Touching-probe floor source defect/fixes: #3711 / #3716 / #3729  
 Harness-minimum correction: #3754 / #3833  
 Finite touching-footprint correction: #3770 / #3836  
 Minimum source-ready ancestor: `c64eb8c1b83761e155da670904a72e64669464b7`  
-Exact runnable SHA: published on #3681 and #72 after this carrier's protected branch CI succeeds.
+Exact runtime source: `a4f1a53683a9296532a0290fcb79bc49b9d4b892`  
+Accepted evidence: PR #3849 / merge `7fec6f36a7c1181d7113f0e7220ea3dafca66e29`
 
-The post-#3716 licensed source `a4ec7cdc84cc63cb35d1162b1e469638ed796ddf` is superseded failing evidence: touching-only still failed while 0.05 m penetration remained correct. Licensed stage diagnostics proved BricsCAD V25 rejected the 1 micrometre native OffsetBody probe but accepted 10 micrometres with the correct `0.1600 m²` eligible original-face area. PR #3729 integrated that unit-aware 10 micrometre native-probe floor at `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0`. PR #3833 later integrated the corrected local fixture minimum, and PR #3836 integrated original-footprint authority so partial exact contact is no longer inflated by the positive probe envelope. The next official #3681 run must therefore use one exact published descendant containing `c64eb8c1b83761e155da670904a72e64669464b7`; do not rerun any pre-#3833/#3836 carrier.
+The post-#3716 licensed source `a4ec7cdc84cc63cb35d1162b1e469638ed796ddf` remains superseded failing evidence: touching-only still failed while 0.05 m penetration remained correct. Licensed stage diagnostics proved BricsCAD V25 rejected the 1 micrometre native OffsetBody probe but accepted 10 micrometres with the correct `0.1600 m²` eligible original-face area. PR #3729 integrated that unit-aware 10 micrometre native-probe floor at `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0`. PR #3833 integrated the corrected local fixture minimum, PR #3836 integrated original-footprint authority, and the final licensed matrix passed on `a4f1a53683a9296532a0290fcb79bc49b9d4b892`.
 
-Local agents do not author a wall, paste commands, assemble a matrix, edit C#, or modify production source. After fetching/checking out the exact runnable SHA, their complete action is:
+The committed runner `scripts/run-local-v25-wall-contact-3681.ps1` remains only as a regression reference. Do not execute it by default. A future run is authorized only if a material source change explicitly reopens #3681 qualification.
 
-```powershell
-.\scripts\run-local-v25-wall-contact-3681.ps1
-```
-
-The runner automatically:
-
-- requires Windows, an interactive licensed V25 session, a clean worktree, and the merged #3833/#3836 source-ready floor `c64eb8c1b83761e155da670904a72e64669464b7`;
-- runs repository preflights, Core smoke and V25 Release|x64 build through the committed baseline runner;
-- builds `tests/QS3D.BricsCAD.V25.LocalQualification`, including a focused source-fix gate plus the broader local-only x64/net48 qualification harness; both invoke production contact/capture/context paths;
-- **fails fast before the broader matrix** unless touching-only one-end passes at deduction `0.1600 m²`, residual/net `2.5088 m²`, `failed_native=0`, through the production contact-probe path;
-- immediately proves the **0.05 m penetration regression** still passes at deduction `0.1600 m²`, residual/net `2.5088 m²`, `failed_native=0`, through the positive-volume path;
-- only after both mandatory cells pass, proves baseline, partial `0.0800 m²`, overlapping-neighbor union `0.1600 m²`, top/bottom exclusion, stale/missing BREP clearing and semantic-capture refresh;
-- proves the contact measurement is read-only, so native Undo/Redo is explicitly not applicable to that read-only measurement path rather than being faked;
-- repeats the deterministic broader geometry matrix in a second fresh BricsCAD process/drawing for isolation;
-- creates a test-owned scratch DWG + QSDB with the two-end contact, saves, closes, cold-reopens, remeasures through production code and removes the scratch DWG/QSDB afterwards;
-- requires the BLT control `gross 2.6688 - contact 0.3200 = net 2.3488 m²` after cold reopen;
-- records exact Git SHA, source-ready floor, plugin/Core ProductVersion + SHA-256, harness hash and sanitized case status under ignored `artifacts/local-v25-wall-contact-3681/`;
-- exits `0` only for `LOCAL_PASS`, `1` for `LOCAL_FAIL`, and `2` for `NO_RESULT`.
-
-Disposition: `LOCAL_PASS` => post the sanitized JSON/evidence to #3681 and #72 and close #3681. `LOCAL_FAIL` => return the exact bounded failure to a separate remote/source defect lane. `NO_RESULT` => environment/license/host retry only. No local source coding is authorized or needed.
+The accepted runner covered the source-fix gate, touching-only one-end at deduction `0.1600 m²`, residual/net `2.5088 m²`, `failed_native=0`, the **0.05 m penetration regression**, partial/union/top-bottom/stale/capture-refresh/two-end, second-process isolation, save/cold-reopen and the BLT `gross 2.6688 - contact 0.3200 = net 2.3488 m²` control. This is historical qualification evidence, not an active dispatch instruction.
 
 ## P1 source-ready continuations
 
@@ -66,4 +49,4 @@ Disposition: `LOCAL_PASS` => post the sanitized JSON/evidence to #3681 and #72 a
 
 ## Existing broader local queue
 
-This dispatch file does not replace `docs/LOCAL-AGENT-INBOX.md`; it fixes the immediate exact-SHA/source-first ambiguity for the rows above. The broader canonical queue remains governed by #72 and the inbox. Do not rerun already-completed LOCAL-017, LOCAL-018, LOCAL-019, #1744, #3613, or H.1 P07 solely because historical text still mentions them. Prefer remaining P0 work before P1, then P2, and always use the exact pushed carrier declared by the owning issue.
+This dispatch file does not replace `docs/LOCAL-AGENT-INBOX.md`; it fixes the immediate exact-SHA/source-first ambiguity for the rows above. The broader canonical queue remains governed by #72 and the inbox. Do not rerun already-completed LOCAL-017, LOCAL-018, LOCAL-019, #1744, #3613, #3681, or H.1 P07 solely because historical text still mentions them. Prefer remaining P0 work before P1, then P2, and always use the exact pushed carrier declared by the owning issue.

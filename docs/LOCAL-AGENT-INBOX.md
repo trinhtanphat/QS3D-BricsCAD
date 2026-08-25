@@ -22,19 +22,19 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 ## P0 — #3681 StructuralWall live-BREP concrete-contact/formwork
 
 - Priority: P0
-- Status: OPEN
+- Status: PASS
 - Area: StructuralWall live-BREP concrete-contact / formwork licensed qualification
-- Remote disposition: SOURCE_READY / LOCAL_RUN_ONLY
-- Exact runtime checkout: `447ba9805d777a3225827117587d932135cf0959`
+- Remote disposition: COMPLETED / NO_RERUN
+- Exact runtime checkout: `a4f1a53683a9296532a0290fcb79bc49b9d4b892`
 - Minimum source-ready ancestor: `c64eb8c1b83761e155da670904a72e64669464b7`
 - Runner: `scripts/run-local-v25-wall-contact-3681.ps1`
-- Local contract: fetch and checkout the exact runtime SHA, run the committed runner on licensed BricsCAD V25, and publish only sanitized `LOCAL_PASS`, `LOCAL_FAIL`, or `NO_RESULT` evidence. The local worker must not edit production source; hosted/static CI cannot manufacture `LOCAL_PASS`.
-- Evidence: PENDING_LOCAL
+- Local contract: licensed BricsCAD V25 qualification is complete for this bounded scenario. Keep the committed runner only as a regression reference; do not rerun unless a material source change explicitly reopens qualification. Hosted/static CI cannot manufacture or replace `LOCAL_PASS`.
+- Evidence: `LOCAL_PASS` on exact runtime source `a4f1a53683a9296532a0290fcb79bc49b9d4b892`; sanitized evidence PR #3849 merged as `7fec6f36a7c1181d7113f0e7220ea3dafca66e29`. #3681 is CLOSED/completed.
 
 ## LOCAL-001 — exact V25 build/load baseline
 
 - Priority: P0
-- Status: PASS
+- Status: IN_PROGRESS
 - Area: BricsCAD V25 adapter / packaging baseline
 - 2026-08-21 exact issue-72 continuation: clean candidate `0ae7fb4369172198d25347b9b0d75bdbceead2bb` on BricsCAD V25.2.10 passed the official qualification runner with manual-CI/generic preflight, all `962/962` aggregate gates, Core Release `0/0`, Core smoke `ALL PASS`, V25 `Release|x64` `0/0`, offline WPF and licensed NETLOAD/Ribbon/Palette. Matching adapter/Core ProductVersion is `0.1.0-preview.10081+0ae7fb4369172198d25347b9b0d75bdbceead2bb`; SHA-256 values are `B725F335AA71E90E9584EA1A6940A6889ACA2E2FDB22D88C2CB3713047268D01` / `2A5DCE45CC74EB9248A7079E02835DA81DEFD5A492AAF318CF21FB001CB44A2A`. The same exact candidate passed schema-3 Project Lifecycle across four disposable documents: SaveComplete/cold identity/canonical bind/detached and multi-DWG isolation, absent/corrupt sidecar fail-closed, nine REGEN/REFRESH/FINISH phases, legacy/native unit boundaries and explicit unbound Meter override resolution. Package/signing were not requested; the full interactive/private-DWG matrix remains `NOT_RUN` and customer-release qualification remains false.
 - 2026-08-23 exact #3612 continuation: refreshed `origin/main@bacfc918982570475d3ab1369310dfbf5119d2a0` is represented by the task branch. Repeated-mode source candidate `9a77d329e90809a2006d8e4dc1bafc995c0a8ca2` passed licensed `NETLOAD` and exact-plugin identity on BricsCAD V25.2.10 and V26.2.07. Each host ran independent two-segment Wall and Beam sequences, observed eight hosted `DrawJig.WorldDraw` callbacks per Family, and passed Enter, physical ESC, planar UCS, active-document switch refusal/isolation, native/semantic Undo/Redo, QS3D/DWG save, sidecar persistence and fresh-process Wall/Beam cold reopen. On predecessor candidate `e5725e96eed6dcebb46370c33e6f8a88e2cc2b68`, V26 CLR 8.0.29 identity/native LINE and the V25 eligible CAD -> B4D -> ED2 XLSX -> Excel Locate -> real PICKFIRST -> visible Workspace bridge passed; the Workspace showed one selected semantic Instance/Family and `1 chọn`, while wrong fingerprint, unknown element, stale Handle and partial resolution all failed closed without corrupting selection/state. This closes only the bounded #3612 cells; private/customer DWG, missing historical BRC-proxy parity, signing/package and the remaining full interactive/release matrix stay pending under their parent issues.
