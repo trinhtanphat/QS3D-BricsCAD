@@ -7,6 +7,7 @@ CONTACT = ROOT / "src" / "QS3D.BricsCAD.V25" / "Reporting" / "StructuralWallConc
 CAPTURE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Services" / "SemanticCaptureService.cs"
 CORE = ROOT / "src" / "QS3D.Core" / "Services" / "StructuralRegenerator.cs"
 V26 = ROOT / "src" / "QS3D.BricsCAD.V26" / "QS3D.BricsCAD.V26.csproj"
+QUALIFICATION = ROOT / "tests" / "QS3D.BricsCAD.V25.LocalQualification" / "WallContact3681QualificationCommands.cs"
 
 
 def fail(message: str) -> None:
@@ -23,6 +24,7 @@ contact = CONTACT.read_text(encoding="utf-8")
 capture = CAPTURE.read_text(encoding="utf-8")
 core = CORE.read_text(encoding="utf-8")
 v26 = V26.read_text(encoding="utf-8")
+qualification = QUALIFICATION.read_text(encoding="utf-8")
 
 # Rule 1/2 concrete-neighbour scope: all currently supported concrete structural hosts.
 for category in (
@@ -78,18 +80,50 @@ require(
 require(
     contact,
     "TryOffset(contactProbe, contactProbeDistanceCad)",
-    "zero-volume face-contact BREP probe",
+    "zero-volume face-contact BREP topology probe",
 )
 require(
     contact,
     "TryIntersection(residual, contactProbe, out var contactIntersectionFailed)",
-    "residual-clipped contact-probe intersection",
+    "residual-clipped contact-probe topology intersection",
+)
+
+# #3770: the positive OffsetBody probe may establish touching topology, but it must never become
+# authoritative contact footprint. The expanded probe grows finite/partial patches tangentially
+# (for the licensed matrix, 200 x 400 mm becomes 0.080004 m2). Resolve which original target-face
+# seeds are touched, then clip/subtract a translated clone of the original candidate so its
+# tangential footprint is preserved exactly and overlapping neighbours remain union-resolved.
+require(
+    contact,
+    "ReadEligibleTouchingFaceSeeds(",
+    "touching topology to original-face seed classification",
 )
 require(
     contact,
-    "TrySubtract(residual, contact)",
-    "clipped face-contact residual subtraction",
+    "TryCreateFootprintContact(",
+    "original-candidate footprint-preserving touching cutter",
 )
+require(
+    contact,
+    "TrySubtract(residual, footprintContact)",
+    "footprint-clipped face-contact residual subtraction",
+)
+for forbidden in (
+    "TrySubtract(residual, contact)",
+    "contactAreaCad += probeContactAreaCad",
+):
+    if forbidden in contact:
+        fail("expanded touching probe became authoritative contact geometry again: " + forbidden)
+
+# Deterministic matrix contract: exact finite touching footprints stay exact. Do not hide the
+# licensed #3770 delta by loosening the matrix tolerance.
+for token, label in (
+    ("private const double ToleranceM2 = 1e-6d;", "strict local matrix tolerance"),
+    ("private const double ExpectedOneEndM2 = 0.1600d;", "full touching contact expectation"),
+    ("private const double ExpectedPartialM2 = 0.0800d;", "partial touching contact expectation"),
+):
+    require(qualification, token, label)
+
 for forbidden in (
     "TryIntersection(target, candidate",
     "TrySubtract(residual, candidate)",
@@ -160,4 +194,4 @@ for forbidden in (
         if forbidden in exclude_text:
             fail("V26 shared-source Exclude must not omit " + forbidden)
 
-print("PASS: StructuralWall Rule 1/2 contact uses native original-face exterior coverage with residual union, preserves the unit-aware touching-probe floor, opening/capture semantics, and V26 shared-source coverage")
+print("PASS: StructuralWall Rule 1/2 contact uses native original-face exterior coverage with residual union, preserves the topology-only touching probe and original candidate footprint, exact partial/full matrix values, opening/capture semantics, and V26 shared-source coverage")

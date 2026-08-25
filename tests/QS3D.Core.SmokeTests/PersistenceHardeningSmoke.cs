@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -23,9 +24,123 @@ namespace QS3D.Core.SmokeTests
             DuplicateIdRejected();
             InvalidNumericRejected();
             DirtyStateRoundtrip();
+            CheckpointCaptureRejectsRevisionDrift();
+            CheckpointCaptureStableControl();
+            SnapshotRejectsOversizedTopLevelState();
+            SnapshotRejectsOversizedNestedState();
+            SnapshotAcceptsExactBoundaryAndRestores();
             StableIdQuantityGrouping();
             ExportHeadersAndWorksheetUx();
             HealthRecoveryStates();
+        }
+
+        private static void CheckpointCaptureRejectsRevisionDrift()
+        {
+            var project = NewProject("checkpoint-drift", "Checkpoint drift");
+            var first = new ProjectElement("E1", ElementCategory.ArchitecturalWall);
+            var second = new ProjectElement("E2", ElementCategory.ArchitecturalWall);
+            project.Elements.Add(first);
+            project.Elements.Add(second);
+            project.Zones.Add(new ZoneDefinition("z2", "Vùng-2"));
+
+            var rejected = false;
+            try
+            {
+                ProjectPersistenceCheckpoint.Capture(project, MutatingCheckpointIds(project));
+            }
+            catch (InvalidOperationException ex)
+            {
+                rejected = ex.Message.IndexOf("project revision is changing", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            Require(rejected, "Persistence checkpoint accepted element state captured across a project revision change.");
+        }
+
+        private static IEnumerable<string> MutatingCheckpointIds(ProjectState project)
+        {
+            yield return "E1";
+            project.ActiveZoneId = "z2";
+            yield return "E2";
+        }
+
+        private static void CheckpointCaptureStableControl()
+        {
+            var project = NewProject("checkpoint-stable", "Checkpoint stable");
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall);
+            project.Elements.Add(element);
+            var checkpoint = ProjectPersistenceCheckpoint.Capture(project, new[] { "E1" });
+
+            Require(checkpoint.Matches(project), "Stable persistence checkpoint did not match its unchanged project revision.");
+            var expectedVersion = checkpoint.ProjectChangeVersion;
+            var expectedUpdatedUtc = checkpoint.ProjectUpdatedUtc;
+            element.SetProperty("LengthM", "5");
+            Require(!checkpoint.Matches(project), "Persistence checkpoint ignored changed element persistence state.");
+            checkpoint.Restore(project);
+            Require(checkpoint.Matches(project), "Persistence checkpoint did not restore its captured persistence state.");
+            Require(project.ChangeVersion == expectedVersion && project.UpdatedUtc == expectedUpdatedUtc,
+                "Persistence checkpoint did not restore the captured project persistence revision.");
+        }
+
+        private static void SnapshotRejectsOversizedTopLevelState()
+        {
+            var project = new ProjectState("snapshot-top-level-bound", "Snapshot top-level bound");
+            for (var index = 0; index <= 100000; index++)
+                project.Zones.Add(new ZoneDefinition("Z" + index, "Zone " + index));
+
+            var captureRejected = false;
+            try { ProjectStateSnapshot.Capture(project); }
+            catch (InvalidOperationException ex)
+            {
+                captureRejected = ex.Message.IndexOf("zones", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                  ex.Message.IndexOf("100000", StringComparison.Ordinal) >= 0;
+            }
+            Require(captureRejected, "ProjectStateSnapshot.Capture accepted more than 100,000 top-level zones.");
+
+            var detachedRejected = false;
+            try { ProjectStateSnapshot.CreateDetachedCopy(project); }
+            catch (InvalidOperationException ex)
+            {
+                detachedRejected = ex.Message.IndexOf("zones", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                   ex.Message.IndexOf("100000", StringComparison.Ordinal) >= 0;
+            }
+            Require(detachedRejected, "ProjectStateSnapshot.CreateDetachedCopy bypassed the top-level snapshot bound.");
+        }
+
+        private static void SnapshotRejectsOversizedNestedState()
+        {
+            var project = new ProjectState("snapshot-nested-bound", "Snapshot nested bound");
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall);
+            for (var index = 0; index <= 10000; index++)
+                element.Properties.Add("P" + index, index.ToString());
+            project.Elements.Add(element);
+
+            var rejected = false;
+            try { ProjectStateSnapshot.Capture(project); }
+            catch (InvalidOperationException ex)
+            {
+                rejected = ex.Message.IndexOf("element E1 properties", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                           ex.Message.IndexOf("10000", StringComparison.Ordinal) >= 0;
+            }
+            Require(rejected, "ProjectStateSnapshot accepted more than 10,000 nested element properties.");
+        }
+
+        private static void SnapshotAcceptsExactBoundaryAndRestores()
+        {
+            var project = new ProjectState("snapshot-exact-bound", "Snapshot exact bound");
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall);
+            for (var index = 0; index < 10000; index++)
+                element.SourceHandles.Add(index.ToString("X"));
+            project.Elements.Add(element);
+
+            var snapshot = ProjectStateSnapshot.Capture(project);
+            element.SourceHandles[0] = "MUTATED";
+            element.SourceHandles.RemoveAt(element.SourceHandles.Count - 1);
+            snapshot.Restore(project);
+
+            Require(ReferenceEquals(project.Elements.Single(), element), "Snapshot restore replaced the captured element identity at the exact bound.");
+            Require(element.SourceHandles.Count == 10000, "Snapshot restore lost exact-bound source handles.");
+            Require(element.SourceHandles[0] == "0" && element.SourceHandles[9999] == 9999.ToString("X"),
+                "Snapshot restore did not reproduce exact-bound nested state.");
         }
 
         private static void RecoverySavePreservesValidatedBackup()

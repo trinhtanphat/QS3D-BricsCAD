@@ -8,7 +8,7 @@ Lane-Key: `issue-3680`
 
 Canonical coordination branch: `agent/chatgpt-gpt56sol/issue-3680-local-dispatch-refresh`
 
-Latest integrated source baseline for this sweep: `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0`
+Latest integrated source baseline for this sweep: `c64eb8c1b83761e155da670904a72e64669464b7`
 
 This index records the owner-requested boundary: remote/source work is prepared and pushed first; a compatible local agent should only fetch an exact published carrier, build/run the licensed BricsCAD matrix, and publish sanitized `PASS` / `FAIL` / `NO_RESULT`. A local runtime defect that requires production-source correction returns to a bounded remote/source lane. Local workers must not opportunistically patch normal production source.
 
@@ -20,11 +20,11 @@ Completed historical rows are not rescheduled here. #1744 and #3613 already have
 
 | Priority | Issue / row | Exact carrier | Minimum integrated source | Local action |
 | --- | --- | --- | --- | --- |
-| P0 | #3681 | `agent/chatgpt-gpt56sol/issue-3680-local-dispatch-refresh` | must contain `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0` (#3729) | fetch exact validated carrier SHA, run `scripts/run-local-v25-wall-contact-3681.ps1` only |
+| P0 | #3681 | exact published descendant recorded on #3681 / #72 | must contain `c64eb8c1b83761e155da670904a72e64669464b7` (#3833 + #3836); this descendant also contains `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0` (#3729) | fetch the exact published SHA, run `scripts/run-local-v25-wall-contact-3681.ps1` only |
 | P1 | LOCAL-005 / #83 | exact intended descendant published by #83/#72 | contains `ba6e1c7508086beb8ac5db9a4a78d2c43fc09492` (#3727); current integrated descendant is `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0` | rerun bounded multi-region build -> native Undo -> native Redo first |
 | P1 | LOCAL-006 / #77 | bounded cell passed on exact pushed `a572ab0a350f54f8e994ac1e91f825907646af9c` | contains `887173f28126b928765e458f28202e83a6f3b88f` (#3728) | resume the broader MLeader/Table/Sheet/Layout/Viewport/Unicode/HiDPI/save-reopen/multi-DWG matrix; do not rerun the bounded cell unchanged |
 
-For #3681, post-#3716 source `a4ec7cdc84cc63cb35d1162b1e469638ed796ddf` is superseded licensed failing evidence: touching-only still failed while the 0.05 m penetration control passed. Licensed native-stage evidence proved the remaining failure was `OffsetBody(1e-6)` in BricsCAD V25; `1e-5` and larger bounded probes passed with the correct `0.1600 m²` eligible original-face area. PR #3729 integrated the unit-aware 10 micrometre native touching-probe floor as `main@4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0`.
+For #3681, post-#3716 source `a4ec7cdc84cc63cb35d1162b1e469638ed796ddf` is superseded licensed failing evidence: touching-only still failed while the 0.05 m penetration control passed. Licensed native-stage evidence proved the remaining failure was `OffsetBody(1e-6)` in BricsCAD V25; `1e-5` and larger bounded probes passed with the correct `0.1600 m²` eligible original-face area. PR #3729 integrated the unit-aware 10 micrometre native touching-probe floor as `main@4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0`. PR #3833 then integrated the corrected #3681 fixture minimum, and PR #3836 integrated the finite original-footprint contact authority. The combined source-ready floor for the next official run is `c64eb8c1b83761e155da670904a72e64669464b7`; local execution must use one separately published exact descendant containing that floor, never the pre-#3833/#3836 carrier.
 
 The #3681 local action is deliberately one command after exact checkout:
 

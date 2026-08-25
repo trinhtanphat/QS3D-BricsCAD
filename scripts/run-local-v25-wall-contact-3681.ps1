@@ -10,7 +10,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$sourceFixSha = "4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0"
+$sourceFixSha = "c64eb8c1b83761e155da670904a72e64669464b7"
 if ([string]::IsNullOrWhiteSpace($ArtifactDir)) {
     $ArtifactDir = Join-Path $repoRoot "artifacts\local-v25-wall-contact-3681"
 }
@@ -173,7 +173,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "NO_RESULT: git status failed." }
         if ($dirty.Count -gt 0) { throw "NO_RESULT: working tree must be clean; local agents must not patch source." }
         & git merge-base --is-ancestor $sourceFixSha HEAD *> $null
-        if ($LASTEXITCODE -ne 0) { throw "NO_RESULT: HEAD does not contain the merged #3711/#3729 wall-contact source correction $sourceFixSha." }
+        if ($LASTEXITCODE -ne 0) { throw "NO_RESULT: HEAD does not contain the integrated #3833/#3836 wall-contact source-ready correction $sourceFixSha." }
 
         Write-Host "#3681 exact HEAD: $headSha"
         Write-Host "BricsCAD V25: $BricsCadDir"

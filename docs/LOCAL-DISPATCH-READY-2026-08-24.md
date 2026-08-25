@@ -28,12 +28,13 @@ For every active row below:
 Status: `LOCAL_READY / PULL_RUN_ONLY`  
 Original source issue/PR: #3665 / #3666  
 Earlier source defects/fixes: #3687 / #3692 and #3697 / #3702  
-Touching-contact source defect/fixes: #3711 / #3716 / #3729  
-Required source-fix ancestor: `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0`  
-Runnable carrier: `agent/chatgpt-gpt56sol/issue-3680-local-dispatch-refresh`  
+Touching-probe floor source defect/fixes: #3711 / #3716 / #3729  
+Harness-minimum correction: #3754 / #3833  
+Finite touching-footprint correction: #3770 / #3836  
+Minimum source-ready ancestor: `c64eb8c1b83761e155da670904a72e64669464b7`  
 Exact runnable SHA: published on #3681 and #72 after this carrier's protected branch CI succeeds.
 
-The post-#3716 licensed source `a4ec7cdc84cc63cb35d1162b1e469638ed796ddf` is superseded failing evidence: touching-only still failed while 0.05 m penetration remained correct. Licensed stage diagnostics proved BricsCAD V25 rejected the 1 micrometre native OffsetBody probe but accepted 10 micrometres with the correct `0.1600 m²` eligible original-face area. PR #3729 integrated the unit-aware 10 micrometre native-probe floor as `main@4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0`. Do not rerun #3681 on `a4ec7cdc84cc63cb35d1162b1e469638ed796ddf` or any older carrier.
+The post-#3716 licensed source `a4ec7cdc84cc63cb35d1162b1e469638ed796ddf` is superseded failing evidence: touching-only still failed while 0.05 m penetration remained correct. Licensed stage diagnostics proved BricsCAD V25 rejected the 1 micrometre native OffsetBody probe but accepted 10 micrometres with the correct `0.1600 m²` eligible original-face area. PR #3729 integrated that unit-aware 10 micrometre native-probe floor at `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0`. PR #3833 later integrated the corrected local fixture minimum, and PR #3836 integrated original-footprint authority so partial exact contact is no longer inflated by the positive probe envelope. The next official #3681 run must therefore use one exact published descendant containing `c64eb8c1b83761e155da670904a72e64669464b7`; do not rerun any pre-#3833/#3836 carrier.
 
 Local agents do not author a wall, paste commands, assemble a matrix, edit C#, or modify production source. After fetching/checking out the exact runnable SHA, their complete action is:
 
@@ -43,7 +44,7 @@ Local agents do not author a wall, paste commands, assemble a matrix, edit C#, o
 
 The runner automatically:
 
-- requires Windows, an interactive licensed V25 session, a clean worktree, and the merged #3729 source-fix ancestor `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0`;
+- requires Windows, an interactive licensed V25 session, a clean worktree, and the merged #3833/#3836 source-ready floor `c64eb8c1b83761e155da670904a72e64669464b7`;
 - runs repository preflights, Core smoke and V25 Release|x64 build through the committed baseline runner;
 - builds `tests/QS3D.BricsCAD.V25.LocalQualification`, including a focused source-fix gate plus the broader local-only x64/net48 qualification harness; both invoke production contact/capture/context paths;
 - **fails fast before the broader matrix** unless touching-only one-end passes at deduction `0.1600 m²`, residual/net `2.5088 m²`, `failed_native=0`, through the production contact-probe path;
@@ -53,7 +54,7 @@ The runner automatically:
 - repeats the deterministic broader geometry matrix in a second fresh BricsCAD process/drawing for isolation;
 - creates a test-owned scratch DWG + QSDB with the two-end contact, saves, closes, cold-reopens, remeasures through production code and removes the scratch DWG/QSDB afterwards;
 - requires the BLT control `gross 2.6688 - contact 0.3200 = net 2.3488 m²` after cold reopen;
-- records exact Git SHA, source-fix ancestor, plugin/Core ProductVersion + SHA-256, harness hash and sanitized case status under ignored `artifacts/local-v25-wall-contact-3681/`;
+- records exact Git SHA, source-ready floor, plugin/Core ProductVersion + SHA-256, harness hash and sanitized case status under ignored `artifacts/local-v25-wall-contact-3681/`;
 - exits `0` only for `LOCAL_PASS`, `1` for `LOCAL_FAIL`, and `2` for `NO_RESULT`.
 
 Disposition: `LOCAL_PASS` => post the sanitized JSON/evidence to #3681 and #72 and close #3681. `LOCAL_FAIL` => return the exact bounded failure to a separate remote/source defect lane. `NO_RESULT` => environment/license/host retry only. No local source coding is authorized or needed.

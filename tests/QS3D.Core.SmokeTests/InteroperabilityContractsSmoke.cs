@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             DrawingSourceIdentityRequiresFingerprint();
             BooleanPropertyValuesAreStrictAndCanonical();
+            NumericPropertyValuesAreStrictAndCanonical();
             MeasuredPropertiesRequireNumericValueKind();
             IfcNormalizationPreservesIdentityAndQuantityOrigin();
             AmbiguousIfcEvidenceBlocksAdmission();
@@ -100,6 +101,84 @@ namespace QS3D.Core.SmokeTests
                 "InvalidNumber",
                 "NaN",
                 InteroperabilityPropertyValueKind.Number));
+        }
+
+        private static void NumericPropertyValuesAreStrictAndCanonical()
+        {
+            var exactZero = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Numbers",
+                "Zero",
+                "0",
+                InteroperabilityPropertyValueKind.Number);
+            Equal("0", exactZero.Value);
+
+            var positive = InteroperabilityPropertyFact.Number(
+                "QS3D.Test",
+                "Numbers",
+                "Positive",
+                1.25,
+                "m");
+            var negativeExponent = InteroperabilityPropertyFact.Number(
+                "QS3D.Test",
+                "Numbers",
+                "NegativeExponent",
+                -1.5e100,
+                null,
+                isMeasured: false);
+
+            var positiveRoundTrip = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Numbers",
+                "PositiveRoundTrip",
+                positive.Value,
+                InteroperabilityPropertyValueKind.Number,
+                "m",
+                isMeasured: true);
+            var exponentRoundTrip = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "Numbers",
+                "ExponentRoundTrip",
+                negativeExponent.Value,
+                InteroperabilityPropertyValueKind.Number);
+
+            Equal(positive.Value, positiveRoundTrip.Value);
+            Equal(negativeExponent.Value, exponentRoundTrip.Value);
+
+            foreach (var alias in new[] { "1.0", "1e0", "+1", "01" })
+            {
+                Throws<ArgumentException>(() => new InteroperabilityPropertyFact(
+                    "QS3D.Test",
+                    "Numbers",
+                    "Alias",
+                    alias,
+                    InteroperabilityPropertyValueKind.Number));
+            }
+
+            foreach (var underflow in new[] { "1e-5000", "-1e-5000" })
+            {
+                Throws<ArgumentException>(() => new InteroperabilityPropertyFact(
+                    "QS3D.Test",
+                    "Numbers",
+                    "Underflow",
+                    underflow,
+                    InteroperabilityPropertyValueKind.Number));
+            }
+
+            var textAlias = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "NumberControls",
+                "TextAlias",
+                "1e0",
+                InteroperabilityPropertyValueKind.Text);
+            var booleanControl = new InteroperabilityPropertyFact(
+                "QS3D.Test",
+                "NumberControls",
+                "Boolean",
+                "TRUE",
+                InteroperabilityPropertyValueKind.Boolean);
+            Equal("1e0", textAlias.Value);
+            Equal("true", booleanControl.Value);
         }
 
         private static void MeasuredPropertiesRequireNumericValueKind()
