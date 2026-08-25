@@ -253,6 +253,7 @@ namespace QS3D.Core.Export
             if (container == null) return comments;
             EnsureAllowedAttributes(container);
             EnsureAllowedChildren(container, "Comment");
+            EnsureMaximumChildCount(container, "Comment", BcfIssueExchangeContract.MaxCommentsPerTopic, "BCF comment count exceeds the bounded package contract.");
             foreach (var element in container.Elements("Comment"))
             {
                 EnsureAllowedAttributes(element, "Guid");
@@ -276,6 +277,7 @@ namespace QS3D.Core.Export
             if (container == null) return result;
             EnsureAllowedAttributes(container);
             EnsureAllowedChildren(container, "ViewPoint");
+            EnsureMaximumChildCount(container, "ViewPoint", BcfIssueExchangeContract.MaxViewpointsPerTopic, "BCF viewpoint count exceeds the bounded package contract.");
             var ids = new HashSet<string>(StringComparer.Ordinal);
             foreach (var element in container.Elements("ViewPoint"))
             {
@@ -309,6 +311,7 @@ namespace QS3D.Core.Export
             var selection = RequiredSingle(componentsElement, "Selection");
             EnsureAllowedAttributes(selection);
             EnsureAllowedChildren(selection, "Component");
+            EnsureMaximumChildCount(selection, "Component", BcfIssueExchangeContract.MaxComponentsPerViewpoint, "BCF viewpoint component count exceeds the bounded package contract.");
             var components = new List<BcfComponentReference>();
             foreach (var component in selection.Elements("Component"))
             {
@@ -399,6 +402,16 @@ namespace QS3D.Core.Export
             foreach (var child in element.Elements())
             {
                 if (child.Name.NamespaceName.Length != 0 || !allowed.Contains(child.Name.LocalName)) throw new InvalidDataException("Unsupported BCF XML element: " + child.Name.LocalName);
+            }
+        }
+
+        private static void EnsureMaximumChildCount(XElement element, string childName, int maximumCount, string message)
+        {
+            var count = 0;
+            foreach (var child in element.Elements(childName))
+            {
+                count++;
+                if (count > maximumCount) throw new InvalidDataException(message);
             }
         }
 
