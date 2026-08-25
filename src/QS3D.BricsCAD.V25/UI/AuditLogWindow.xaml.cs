@@ -5,23 +5,19 @@ using System.Windows;
 using System.Windows.Controls;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Audit;
-using BcadApplication = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
 {
     public partial class AuditLogWindow : Window
     {
-        private readonly IntPtr _nativeDatabaseIdentity;
-        private readonly string _boundDrawingLabel;
+        private readonly Document _document;
         private IReadOnlyList<AuditEvent> _rows = Array.Empty<AuditEvent>();
 
         public AuditLogWindow(Document document)
         {
-            if (document == null) throw new ArgumentNullException(nameof(document));
-            _nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
-            _boundDrawingLabel = DrawingLabel(document);
+            _document = document ?? throw new ArgumentNullException(nameof(document));
             InitializeComponent();
-            DocumentBoundWindowLifetime.Attach(this, document);
+            DocumentBoundWindowLifetime.Attach(this, _document);
             Activated += (_, __) => Reload();
             Reload();
         }
@@ -30,17 +26,12 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                if (!TryResolveBoundDocument(out var document))
+                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
                 {
-                    ClearProjection("Bản vẽ gắn với Audit Log không còn khả dụng; cửa sổ đang chờ lifecycle host đóng an toàn.");
-                    Title = "QS3D • Nhật ký thay đổi • " + _boundDrawingLabel;
-                    return;
-                }
-
-                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
-                {
-                    ClearProjection("Chưa có QS3D project hiện hữu; Audit Log không tạo project mới.");
-                    Title = "QS3D • Nhật ký thay đổi • " + DrawingLabel(document);
+                    _rows = Array.Empty<AuditEvent>();
+                    if (Grid != null) Grid.ItemsSource = _rows;
+                    if (Summary != null) Summary.Text = "Chưa có QS3D project hiện hữu; Audit Log không tạo project mới.";
+                    Title = "QS3D • Nhật ký thay đổi • " + DrawingLabel(_document);
                     return;
                 }
 
@@ -48,63 +39,15 @@ namespace QS3D.BricsCAD.V25.UI
                     .Where(x => x != null)
                     .OrderByDescending(x => x.Utc)
                     .ToList();
-                Title = "QS3D • Nhật ký thay đổi • " + DrawingLabel(document);
+                Title = "QS3D • Nhật ký thay đổi • " + DrawingLabel(_document);
                 ApplyFilter();
             }
             catch (Exception ex)
             {
-                ClearProjection("Không đọc được audit: " + ex.Message);
+                _rows = Array.Empty<AuditEvent>();
+                if (Grid != null) Grid.ItemsSource = _rows;
+                if (Summary != null) Summary.Text = "Không đọc được audit: " + ex.Message;
             }
-        }
-
-        private bool TryResolveBoundDocument(out Document document)
-        {
-            document = null!;
-            try
-            {
-                foreach (Document candidate in BcadApplication.DocumentManager)
-                {
-                    if (candidate == null || candidate.IsDisposed) continue;
-                    try
-                    {
-                        var database = candidate.Database;
-                        if (database == null || database.UnmanagedObject == IntPtr.Zero) continue;
-                        if (database.UnmanagedObject != _nativeDatabaseIdentity) continue;
-                        document = candidate;
-                        return true;
-                    }
-                    catch
-                    {
-                        // One wrapper can become stale while BricsCAD is changing document state.
-                        // Ignore it and continue looking for the live wrapper of the bound database.
-                    }
-                }
-            }
-            catch
-            {
-                document = null!;
-            }
-
-            return false;
-        }
-
-        private static IntPtr GetNativeDatabaseIdentity(Document document)
-        {
-            var database = document.Database;
-            if (database == null)
-                throw new InvalidOperationException("Audit Log requires a BricsCAD document database.");
-
-            var identity = database.UnmanagedObject;
-            if (identity == IntPtr.Zero)
-                throw new InvalidOperationException("Audit Log requires a live native BricsCAD database.");
-            return identity;
-        }
-
-        private void ClearProjection(string message)
-        {
-            _rows = Array.Empty<AuditEvent>();
-            if (Grid != null) Grid.ItemsSource = _rows;
-            if (Summary != null) Summary.Text = message;
         }
 
         private void OnSearchChanged(object sender, TextChangedEventArgs e) => ApplyFilter();
