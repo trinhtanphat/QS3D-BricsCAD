@@ -66,22 +66,19 @@ namespace QS3D.Core.SmokeTests
             var path = Path.Combine(directory, "out.xlsx");
             try
             {
-                CurtainWallXlsxExporter.Export(
-                    path,
-                    new[]
-                    {
-                        new CurtainWallScheduleRow
-                        {
-                            Floor = "  Level 2  ",
-                            FamilyName = "Glass & Frame",
-                            WallCount = 1,
-                            PanelCount = 1,
-                            MinimumClearPanelWidthM = 0d,
-                            MaximumClearPanelWidthM = 0d,
-                            MinimumClearPanelHeightM = 0d,
-                            MaximumClearPanelHeightM = 0d
-                        }
-                    });
+                var row = new CurtainWallScheduleRow
+                {
+                    Floor = "  Level 2  ",
+                    FamilyName = "Glass & Frame",
+                    WallCount = 1,
+                    PanelCount = 1,
+                    MinimumClearPanelWidthM = 0d,
+                    MaximumClearPanelWidthM = 0d,
+                    MinimumClearPanelHeightM = 0d,
+                    MaximumClearPanelHeightM = 0d
+                };
+                row.ElementIds.Add("CW-WHITESPACE-1");
+                CurtainWallXlsxExporter.Export(path, new[] { row });
 
                 using (var archive = ZipFile.OpenRead(path))
                 {

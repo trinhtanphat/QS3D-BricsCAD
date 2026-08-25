@@ -49,17 +49,16 @@ namespace QS3D.Core.SmokeTests
 
         private static void VerifyCurtainExporter(string path)
         {
-            CurtainWallXlsxExporter.Export(path, new List<CurtainWallScheduleRow>
+            var row = new CurtainWallScheduleRow
             {
-                new CurtainWallScheduleRow
-                {
-                    Floor = HostileText,
-                    FamilyName = HostileText,
-                    WallCount = 1,
-                    MinimumClearPanelWidthM = 0d,
-                    MinimumClearPanelHeightM = 0d
-                }
-            });
+                Floor = HostileText,
+                FamilyName = HostileText,
+                WallCount = 1,
+                MinimumClearPanelWidthM = 0d,
+                MinimumClearPanelHeightM = 0d
+            };
+            row.ElementIds.Add("CW-XML-1");
+            CurtainWallXlsxExporter.Export(path, new List<CurtainWallScheduleRow> { row });
             VerifyWorksheet(path, "curtain");
         }
 

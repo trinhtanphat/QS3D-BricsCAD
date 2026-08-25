@@ -101,56 +101,66 @@ namespace QS3D.BricsCAD.V25
                 sources = commitSources;
                 RequireFreshSources(project, sources);
                 var rollback = ProjectStateSnapshot.Capture(project);
+                var rollbackStamp = SourceReconcileUndoCoordinator.ProjectRevisionStamp.Capture(project);
                 var createdElements = new List<ProjectElement>();
                 var regenerated = 0;
                 var solids = 0;
 
-                try
+                using (SourceReconcileUndoCoordinator.BeginExternalTransitionScope(document))
                 {
-                    var regenerator = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
-                    foreach (var source in sources)
+                    try
                     {
-                        EnsureActive(document, operation);
-                        document.Editor.SetImpliedSelection(new[] { source.Id });
+                        var regenerator = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault());
+                        foreach (var source in sources)
+                        {
+                            EnsureActive(document, operation);
+                            document.Editor.SetImpliedSelection(new[] { source.Id });
 
-                        var captured = SemanticCaptureService.Capture(document, ElementCategory.ArchitecturalWall);
-                        if (captured != 1)
-                            throw new InvalidOperationException(
-                                "2D -> 3D cần capture đúng một wall cho source " + source.Handle + ", nhận được " + captured + ".");
+                            var captured = SemanticCaptureService.Capture(document, ElementCategory.ArchitecturalWall);
+                            if (captured != 1)
+                                throw new InvalidOperationException(
+                                    "2D -> 3D cần capture đúng một wall cho source " + source.Handle + ", nhận được " + captured + ".");
 
-                        var element = project.Elements.SingleOrDefault(x =>
-                            x.Category == ElementCategory.ArchitecturalWall &&
-                            x.SourceHandles.Any(h => string.Equals(h, source.Handle, StringComparison.OrdinalIgnoreCase)));
-                        if (element == null)
-                            throw new InvalidOperationException("Không tìm thấy QS3D wall vừa capture cho source " + source.Handle + ".");
+                            var element = project.Elements.SingleOrDefault(x =>
+                                x.Category == ElementCategory.ArchitecturalWall &&
+                                x.SourceHandles.Any(h => string.Equals(h, source.Handle, StringComparison.OrdinalIgnoreCase)));
+                            if (element == null)
+                                throw new InvalidOperationException("Không tìm thấy QS3D wall vừa capture cho source " + source.Handle + ".");
 
-                        createdElements.Add(element);
-                        element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
-                        element.Properties["QS3D.PlanTo3D"] = "1";
-                        element.MarkDirty(ElementDirtyFlags.Properties);
+                            createdElements.Add(element);
+                            element.Properties["ThicknessM"] = thicknessM.Value.ToString("R", CultureInfo.InvariantCulture);
+                            element.Properties["HeightM"] = heightM.Value.ToString("R", CultureInfo.InvariantCulture);
+                            element.Properties["BottomOffsetM"] = bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture);
+                            element.Properties["QS3D.PlanTo3D"] = "1";
+                            element.MarkDirty(ElementDirtyFlags.Properties);
 
-                        regenerated += regenerator.RegenerateDirtySubset(project, new[] { element.Id });
+                            regenerated += regenerator.RegenerateDirtySubset(project, new[] { element.Id });
 
-                        var built = source.Kind == SourceKind.Line
-                            ? WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.ArchitecturalWall)
-                            : PolylineWallSolidBuilder.BuildSelected(document, project, ElementCategory.ArchitecturalWall);
-                        if (built != 1)
-                            throw new InvalidOperationException(
-                                "Native 3D builder cần tạo đúng một Solid3d cho source " + source.Handle + ", nhận được " + built + ".");
-                        solids += built;
+                            var built = source.Kind == SourceKind.Line
+                                ? WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.ArchitecturalWall)
+                                : PolylineWallSolidBuilder.BuildSelected(document, project, ElementCategory.ArchitecturalWall);
+                            if (built != 1)
+                                throw new InvalidOperationException(
+                                    "Native 3D builder cần tạo đúng một Solid3d cho source " + source.Handle + ", nhận được " + built + ".");
+                            solids += built;
+                        }
+
+                        project.Touch();
+                        if (!rollbackStamp.Matches(project))
+                            SourceReconcileUndoCoordinator.CommitExternalTransition(
+                                document,
+                                project,
+                                rollback,
+                                rollbackStamp);
+                    }
+                    catch (Exception operationError)
+                    {
+                        RollbackBatch(document, project, rollback, createdElements, operationError);
+                        throw;
                     }
 
-                    project.Touch();
+                    FinalizeUi(document, createdElements, sources.Count, solids, regenerated);
                 }
-                catch (Exception operationError)
-                {
-                    RollbackBatch(document, project, rollback, createdElements, operationError);
-                    throw;
-                }
-
-                FinalizeUi(document, createdElements, sources.Count, solids, regenerated);
             });
         }
 
