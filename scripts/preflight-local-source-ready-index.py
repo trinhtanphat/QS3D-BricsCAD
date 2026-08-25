@@ -10,8 +10,9 @@ INDEX = ROOT / "docs" / "LOCAL-SOURCE-READY-INDEX-2026-08-24.md"
 DISPATCH = ROOT / "docs" / "LOCAL-DISPATCH-READY-2026-08-24.md"
 INBOX = ROOT / "docs" / "LOCAL-AGENT-INBOX.md"
 
-WALL_CONTACT_BRANCH = "agent/chatgpt-gpt56sol/issue-3680-local-dispatch-refresh"
-WALL_CONTACT_SOURCE_FIX_SHA = "4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0"
+WALL_CONTACT_SOURCE_READY_FLOOR_SHA = "c64eb8c1b83761e155da670904a72e64669464b7"
+WALL_CONTACT_TOUCHING_PROBE_FLOOR_SHA = "4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0"
+WALL_CONTACT_EXACT_RUNTIME_SHA = "447ba9805d777a3225827117587d932135cf0959"
 WALL_CONTACT_RUNNER = "scripts/run-local-v25-wall-contact-3681.ps1"
 WALL_CONTACT_RUNNER_NAME = Path(WALL_CONTACT_RUNNER).name
 LOCAL005_SOURCE_MERGE = "ba6e1c7508086beb8ac5db9a4a78d2c43fc09492"
@@ -35,6 +36,19 @@ def require_tokens(text: str, label: str, tokens: tuple[str, ...]) -> None:
     for token in tokens:
         if token not in text:
             fail(f"{label} contract is missing: {token}")
+
+
+def require_local_row_status(text: str, row: str, next_row: str, status: str) -> None:
+    match = re.search(
+        rf"^## {re.escape(row)}\b.*?(?=^## {re.escape(next_row)}\b)",
+        text,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    if match is None:
+        fail(f"canonical inbox row is missing or cannot be bounded: {row}")
+    expected = f"- Status: {status}"
+    if expected not in match.group(0):
+        fail(f"{row} must publish truthful top-level status {status}")
 
 
 for relative in (
@@ -63,9 +77,11 @@ require_tokens(
     (
         "Status: `SOURCE_READY / LOCAL_RUN_ONLY`",
         "Lane-Key: `issue-3680`",
-        WALL_CONTACT_BRANCH,
-        WALL_CONTACT_SOURCE_FIX_SHA,
+        WALL_CONTACT_SOURCE_READY_FLOOR_SHA,
+        WALL_CONTACT_TOUCHING_PROBE_FLOOR_SHA,
         "#3729",
+        "#3833",
+        "#3836",
         WALL_CONTACT_RUNNER,
         "touching-only",
         "0.05 m penetration",
@@ -91,9 +107,11 @@ require_tokens(
     "#3681 dispatch",
     (
         "Status: `LOCAL_READY / PULL_RUN_ONLY`",
-        "Touching-contact source defect/fixes: #3711 / #3716 / #3729",
-        f"Required source-fix ancestor: `{WALL_CONTACT_SOURCE_FIX_SHA}`",
-        f"Runnable carrier: `{WALL_CONTACT_BRANCH}`",
+        "Touching-probe floor source defect/fixes: #3711 / #3716 / #3729",
+        "Harness-minimum correction: #3754 / #3833",
+        "Finite touching-footprint correction: #3770 / #3836",
+        f"Minimum source-ready ancestor: `{WALL_CONTACT_SOURCE_READY_FLOOR_SHA}`",
+        "Exact runnable SHA: published on #3681 and #72 after this carrier's protected branch CI succeeds.",
         WALL_CONTACT_RUNNER_NAME,
         "touching-only",
         "0.05 m penetration",
@@ -104,6 +122,26 @@ require_tokens(
         "NO_RESULT",
     ),
 )
+
+require_tokens(
+    inbox,
+    "#3681 canonical inbox",
+    (
+        "## P0 — #3681 StructuralWall live-BREP concrete-contact/formwork",
+        "- Priority: P0",
+        "- Status: OPEN",
+        "- Remote disposition: SOURCE_READY / LOCAL_RUN_ONLY",
+        WALL_CONTACT_EXACT_RUNTIME_SHA,
+        WALL_CONTACT_SOURCE_READY_FLOOR_SHA,
+        WALL_CONTACT_RUNNER,
+        "LOCAL_PASS",
+        "LOCAL_FAIL",
+        "NO_RESULT",
+        "local worker must not edit production source",
+    ),
+)
+
+require_local_row_status(inbox, "LOCAL-001", "LOCAL-002", "IN_PROGRESS")
 
 require_tokens(
     inbox,
@@ -121,8 +159,8 @@ if rows != expected:
     fail(f"LOCAL row order/cardinality drifted: expected {expected}, got {rows}")
 
 for token in (
-    f"| P0 | #3681 | `{WALL_CONTACT_BRANCH}` | must contain `{WALL_CONTACT_SOURCE_FIX_SHA}` (#3729) |",
-    f"run `{WALL_CONTACT_RUNNER}` only",
+    f"| P0 | #3681 | exact published descendant recorded on #3681 / #72 | must contain `{WALL_CONTACT_SOURCE_READY_FLOOR_SHA}` (#3833 + #3836); this descendant also contains `{WALL_CONTACT_TOUCHING_PROBE_FLOOR_SHA}` (#3729) |",
+    f"fetch the exact published SHA, run `{WALL_CONTACT_RUNNER}` only",
     f"| LOCAL-005 | P1 / SOURCE_FIX_READY |",
     f"| LOCAL-006 | P1 / SOURCE_FIX_READY |",
     "| LOCAL-019 | P0 / PASS |",
@@ -133,6 +171,10 @@ for token in (
 for stale in (
     "| P0 | #3681 | `agent/chatgpt-gpt56sol/issue-3665-wall-contact-brep` |",
     "| P0 | #3681 | `agent/chatgpt-gpt56sol/issue-3687-structwall-brep-contact-fix` |",
+    "| P0 | #3681 | `agent/chatgpt-gpt56sol/issue-3680-local-dispatch-refresh` |",
+    f"Required source-fix ancestor: `{WALL_CONTACT_TOUCHING_PROBE_FLOOR_SHA}`",
+    "Runnable carrier: `agent/chatgpt-gpt56sol/issue-3680-local-dispatch-refresh`",
+    f"Exact runnable SHA: `{WALL_CONTACT_SOURCE_READY_FLOOR_SHA}`",
     "must contain `cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb`",
     "Required source-fix ancestor: `cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb`",
     "P03 is separately qualified on PR #3616 but not yet integrated",
@@ -141,4 +183,4 @@ for stale in (
     if stale in index or stale in dispatch:
         fail(f"stale local scheduling/carrier text reintroduced: {stale}")
 
-print("PASS local source-ready pull-test index with #3727/#3728/#3729 exact source-first handoff")
+print("PASS local source-ready pull-test index with truthful LOCAL-001 status, #3681 canonical inbox publication, #3727/#3728 source-ready rows and #3833/#3836 source floor")

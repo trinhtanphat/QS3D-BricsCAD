@@ -38,6 +38,7 @@ namespace QS3D.Core.SmokeTests
             XlsxHandleReaderCoordinateSmoke.Run();
             XlsxExporterRowBoundSmoke.Run();
             QuantityExportEvidenceSmoke.Run();
+            QuantityEvidenceCollectionBoundSmoke.Run();
             QuantityMeasurementTraceSmoke.Run();
             CustomerWorkbookTraceSmoke.Run();
             QsWorkbookTemplateEngineSmoke.Run();
@@ -45,6 +46,7 @@ namespace QS3D.Core.SmokeTests
             QuantityReportRevisionReviewSmoke.Run();
             QuantityRevisionProjectIdentitySmoke.Run();
             PersistenceHardeningSmoke.Run();
+            QsdbStructuralCardinalitySmoke.Run();
             LicenseVerifierSmoke.Run();
             AdvancedDomainSmoke.Run();
             EstimatingPortfolioCountIntegritySmoke.Run();
