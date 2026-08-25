@@ -20,6 +20,7 @@ Completed historical rows are not rescheduled here. #1744, #3613 and #3681 alrea
 
 | Priority | Issue / row | Accepted bounded evidence | Local action |
 | --- | --- | --- | --- |
+| P0 | LOCAL-001 / #72 | Source fix #3930 / PR #3932 is integrated at exact source-ready SHA `ab0202194e33a1a27dbdf322b9b6d73b9d56778a`; the canonical inbox remains `IN_PROGRESS`, so this is not a runtime PASS claim. | Fetch and checkout exact `ab0202194e33a1a27dbdf322b9b6d73b9d56778a`, then run `scripts/run-local-v25-qualification.ps1`. No local source patches. Do not patch production source locally; publish only sanitized `PASS` / `FAIL` / `NO_RESULT`. |
 | P1 | LOCAL-005 / #83 | `LOCAL_PASS` on exact `main@ba6e1c7508086beb8ac5db9a4a78d2c43fc09492`; sanitized evidence PR #3735 merged as `73fec2c48726c09196b773c117be77ee1983031e` | Continue only the still-pending refresh/add/remove-region, corrupt/mixed-owner refusal, cap, Foundation, save/cold-reopen and multi-DWG cells on one exact intended descendant. Do not repeat the accepted build -> native Undo -> native Redo cell solely because this index changed. |
 | P1 | LOCAL-006 / #77 | `BOUNDED_LOCAL_PASS / OVERALL_IN_PROGRESS` on exact tested source `a572ab0a350f54f8e994ac1e91f825907646af9c`; sanitized evidence PR #3777 merged as `7f30d019a97d36c025c34a4e08364ef3bd73ffad` | Continue only the broader MLeader/Table/Sheet/Layout/Viewport/Unicode/HiDPI/save-reopen/multi-DWG/V26 matrix on one exact intended descendant. Do not repeat the accepted `QS3DTAG -> native Undo -> native Redo` cell solely because this index changed. |
 
@@ -39,7 +40,7 @@ LOCAL-019 is already complete, not pending dispatch: PR #3693 merged the six-she
 
 | Local row | Priority / status | Remote/source disposition | What remains for the local agent |
 | --- | --- | --- | --- |
-| LOCAL-001 | P0 / PASS | Source, baseline runner and lifecycle probes are integrated. | Only explicitly unqualified wider interactive/private/release cells; start from `scripts/run-local-v25-qualification.ps1`. |
+| LOCAL-001 | P0 / IN_PROGRESS | #3930/#3932 source-fix gate is integrated at exact source-ready SHA `ab0202194e33a1a27dbdf322b9b6d73b9d56778a`; the canonical inbox remains `IN_PROGRESS`. | Fetch/checkout exact `ab0202194e33a1a27dbdf322b9b6d73b9d56778a` and run `scripts/run-local-v25-qualification.ps1` only. No local source patches. Do not patch production source locally; return any product defect to a bounded remote source lane. |
 | LOCAL-002 | P0 / OPEN | `REMOTE_DONE`; Curtain host/frame/panel atomicity, ownership, Health, Family writes and P01-P12 probes exist. H.1 source fix is integrated; stale P06 text is historical only. | Licensed broad H.1/final runtime matrix only. Do not re-code Curtain or #3621 locally. |
 | LOCAL-003 | P0 / IN_PROGRESS | `SOURCE_INTEGRATED / AUTOMATED_RUNTIME_PROBE_PASS`; shared Level Z-chain is implemented. | Full licensed dual-unit/Undo/save-reopen/multi-DWG/private matrix only. |
 | LOCAL-004 | P0 / IN_PROGRESS | Source Reconcile implementation plus P01-P05 native runners/probes are integrated and bounded cells passed. | Broader #80 topology/category/dependent/failure matrix only. |
