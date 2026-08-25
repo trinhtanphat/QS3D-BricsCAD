@@ -6,7 +6,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
-using System.Windows.Media;
 using System.Windows.Threading;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI.ViewModels;
@@ -45,7 +44,6 @@ namespace QS3D.BricsCAD.V25.UI
         private bool _applyingFamilySubtypeFilter;
         private bool _familyHighlightRefreshPending;
         private string _familySubtypeFilter = string.Empty;
-        private ListBoxItem? _lastHighlightedFamilyItem;
 
         private void AttachFamilySubtypeInteractions()
         {
@@ -537,37 +535,10 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RevealSelectedFamilyAndRefreshHighlight()
         {
-            if (_lastHighlightedFamilyItem != null)
-            {
-                _lastHighlightedFamilyItem.ClearValue(Control.BackgroundProperty);
-                _lastHighlightedFamilyItem.ClearValue(Control.ForegroundProperty);
-                _lastHighlightedFamilyItem.ClearValue(Control.FontWeightProperty);
-                _lastHighlightedFamilyItem.ClearValue(UIElement.OpacityProperty);
-                _lastHighlightedFamilyItem = null;
-            }
             if (!(FamilyList.SelectedItem is ProjectFamily selected)) return;
             if (FamilyList.ItemContainerGenerator.Status == GeneratorStatus.GeneratingContainers) return;
 
             FamilyList.ScrollIntoView(selected);
-            Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() => ApplySelectedFamilyHighlight(selected)));
-        }
-
-        private void ApplySelectedFamilyHighlight(ProjectFamily selected)
-        {
-            if (!ReferenceEquals(FamilyList.SelectedItem, selected))
-            {
-                RefreshSelectedFamilyHighlight();
-                return;
-            }
-            if (FamilyList.ItemContainerGenerator.Status == GeneratorStatus.GeneratingContainers) return;
-
-            var container = FamilyList.ItemContainerGenerator.ContainerFromItem(selected) as ListBoxItem;
-            if (container == null) return;
-            container.Background = TryFindResource("AccentBrush") as Brush ?? SystemColors.HighlightBrush;
-            container.Foreground = Brushes.White;
-            container.FontWeight = FontWeights.SemiBold;
-            container.Opacity = 1.0;
-            _lastHighlightedFamilyItem = container;
         }
     }
 }
