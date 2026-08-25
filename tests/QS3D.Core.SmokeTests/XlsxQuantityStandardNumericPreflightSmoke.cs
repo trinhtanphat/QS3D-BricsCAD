@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
+            XlsxQuantityProvenanceIntegritySmoke.Run();
             RejectsNonFiniteBeforeFilesystemMutation();
             RejectsNegativeCountAndPhysicalQuantitiesBeforeFilesystemMutation();
             ExportsZeroAndPositivePhysicalQuantities();
