@@ -16,6 +16,11 @@ namespace QS3D.Core.SmokeTests
             AssertRowCountDriftFailsBeforeFilesystemCreation();
             AssertProvenanceIsExported();
             AssertOversizedSourceHandlesFailBeforeFilesystemCreation();
+            AssertCardinalityMismatchFailsBeforePublication();
+            AssertInvalidProvenanceFailsBeforePublication();
+            AssertInvalidProvenanceFailsBeforeFilesystemCreation();
+            AssertDisplayTextSanitizationRemainsCompatible();
+            AssertZeroHostRowRemainsValid();
         }
 
         private static void AssertRowCountDriftFailsBeforeExistingDestinationReplacement()
@@ -126,6 +131,149 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void AssertCardinalityMismatchFailsBeforePublication()
+        {
+            AssertInvalidRowPreservesExistingDestination(
+                "count-element-mismatch",
+                row => row.Count = row.ElementIds.Count + 1,
+                "Count must match Element IDs count");
+
+            AssertInvalidRowPreservesExistingDestination(
+                "host-count-mismatch",
+                row => row.HostCount = row.HostIds.Count + 1,
+                "HostCount must match Host IDs count");
+        }
+
+        private static void AssertInvalidProvenanceFailsBeforePublication()
+        {
+            AssertInvalidRowPreservesExistingDestination(
+                "project-control",
+                row => row.ProjectId = "project\u0001bad",
+                "Project ID XML control");
+
+            AssertInvalidRowPreservesExistingDestination(
+                "fingerprint-control",
+                row => row.DrawingFingerprint = "drawing\u0001bad",
+                "Drawing Fingerprint XML control");
+
+            AssertInvalidRowPreservesExistingDestination(
+                "element-control",
+                row => row.ElementIds[0] = "E\u0001bad",
+                "Element ID XML control");
+
+            AssertInvalidRowPreservesExistingDestination(
+                "host-control",
+                row => row.HostIds[0] = "H\u0001bad",
+                "Host ID XML control");
+
+            AssertInvalidRowPreservesExistingDestination(
+                "source-handle-control",
+                row => row.SourceHandles.Add("AB\u0001bad"),
+                "Source Handle XML control");
+        }
+
+        private static void AssertInvalidProvenanceFailsBeforeFilesystemCreation()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-door-opening-xlsx-invalid-provenance-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var untouchedDirectory = Path.Combine(root, "must-not-be-created");
+                var row = ValidRow();
+                row.DrawingFingerprint = "drawing\u0001bad";
+                ExpectArgumentException(
+                    () => DoorOpeningXlsxExporter.Export(Path.Combine(untouchedDirectory, "door-opening.xlsx"), new[] { row }),
+                    "Door/opening XLSX accepted an XML-invalid drawing fingerprint.");
+                if (Directory.Exists(untouchedDirectory))
+                    throw new InvalidOperationException("Door/opening XLSX invalid provenance touched the filesystem before failing.");
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
+        private static void AssertDisplayTextSanitizationRemainsCompatible()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-door-opening-xlsx-display-sanitize-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var destination = Path.Combine(root, "door-opening.xlsx");
+                var row = ValidRow();
+                row.FamilyName = "Invalid\u0001Family";
+                DoorOpeningXlsxExporter.Export(destination, new[] { row });
+
+                using (var archive = ZipFile.OpenRead(destination))
+                {
+                    var entry = archive.GetEntry("xl/worksheets/sheet1.xml")
+                        ?? throw new InvalidOperationException("Door/opening XLSX is missing sheet1.xml.");
+                    string xml;
+                    using (var reader = new StreamReader(entry.Open())) xml = reader.ReadToEnd();
+                    if (xml.IndexOf('\u0001') >= 0)
+                        throw new InvalidOperationException("Door/opening XLSX retained an XML-invalid display control character.");
+                    if (xml.IndexOf('\uFFFD') < 0)
+                        throw new InvalidOperationException("Door/opening XLSX no longer preserves display-text sanitization compatibility.");
+                }
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
+        private static void AssertZeroHostRowRemainsValid()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-door-opening-xlsx-zero-host-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var destination = Path.Combine(root, "door-opening.xlsx");
+                var row = ValidRow();
+                row.HostIds.Clear();
+                row.HostCount = 0;
+                DoorOpeningXlsxExporter.Export(destination, new[] { row });
+                if (!File.Exists(destination))
+                    throw new InvalidOperationException("Door/opening XLSX rejected a valid unhosted row.");
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
+        private static void AssertInvalidRowPreservesExistingDestination(
+            string suffix,
+            Action<DoorOpeningScheduleRow> mutate,
+            string label)
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-door-opening-xlsx-" + suffix + "-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var destination = Path.Combine(root, "door-opening.xlsx");
+                const string sentinel = "preserve-existing-door-opening-destination";
+                File.WriteAllText(destination, sentinel);
+                var row = ValidRow();
+                mutate(row);
+
+                ExpectArgumentException(
+                    () => DoorOpeningXlsxExporter.Export(destination, new[] { row }),
+                    "Door/opening XLSX accepted invalid input: " + label + ".");
+
+                if (!string.Equals(File.ReadAllText(destination), sentinel, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Door/opening XLSX modified an existing destination after rejecting " + label + ".");
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
         private static void AssertRowCountDrift(string destination)
         {
             try
@@ -142,6 +290,13 @@ namespace QS3D.Core.SmokeTests
             throw new InvalidOperationException("Door/opening XLSX exporter accepted a source whose row count changed during snapshot.");
         }
 
+        private static void ExpectArgumentException(Action action, string message)
+        {
+            try { action(); }
+            catch (ArgumentException) { return; }
+            throw new InvalidOperationException(message);
+        }
+
         private static void AssertContains(string text, string expected, string label)
         {
             if (text.IndexOf(expected, StringComparison.Ordinal) < 0)
@@ -152,6 +307,8 @@ namespace QS3D.Core.SmokeTests
         {
             var row = new DoorOpeningScheduleRow
             {
+                ProjectId = "project",
+                DrawingFingerprint = "drawing-fingerprint",
                 Floor = "L1",
                 Category = "Door",
                 FamilyName = "D1",

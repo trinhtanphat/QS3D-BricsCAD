@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from contextlib import redirect_stdout
 from importlib.util import module_from_spec, spec_from_file_location
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from types import SimpleNamespace
 import subprocess
@@ -56,6 +56,9 @@ def test_run_gate_timeout_requests_tree_cleanup(module):
     class FakeProcess:
         pid = 4242
 
+        def __init__(self):
+            self.stdout = BytesIO(b"partial-timeout-output")
+
         def wait(self, timeout=None):
             raise subprocess.TimeoutExpired(cmd="fake", timeout=timeout)
 
@@ -74,6 +77,7 @@ def test_run_gate_timeout_requests_tree_cleanup(module):
     except module.GateTimeoutError as exc:
         require(exc.timeout_seconds == 12.5, "timeout exception must preserve the applied child timeout")
         require(exc.cleanup_error is None, "successful owned-tree cleanup must not report cleanup failure")
+        require(exc.output_error is None, "successfully drained timeout output must not report output failure")
     else:
         raise AssertionError("run_gate must convert process timeout into GateTimeoutError")
 
@@ -82,6 +86,8 @@ def test_run_gate_timeout_requests_tree_cleanup(module):
     require(launch_args[0] == [module.sys.executable, str(gate)], "gate launch command changed unexpectedly")
     require(launch_kwargs["cwd"] == str(module.ROOT), "gate launch cwd must remain repository root")
     require(launch_kwargs["env"] == {"QS3D_SENTINEL": "1"}, "gate launch must preserve sanitized child environment")
+    require(launch_kwargs["stdout"] is subprocess.PIPE, "gate stdout must use the bounded output pipe")
+    require(launch_kwargs["stderr"] is subprocess.STDOUT, "gate stderr must share the bounded output pipe")
     require(cleanup == [(4242, None)], "timeout must target cleanup at the exact launched process")
 
 
@@ -265,7 +271,7 @@ def main():
     module = load_target()
     test_cleanup_failure_stops_following_children(module)
 
-    print("PASS: aggregate preflight wall-clock and process-tree timeout cleanup are bounded and fail-closed")
+    print("PASS: aggregate preflight wall-clock, bounded-output, and process-tree timeout cleanup contracts are fail-closed")
     return 0
 
 
