@@ -12,6 +12,7 @@ on:
       - "src/**"
       - "tests/**"
       - "scripts/**"
+      - ".gitmodules"
       - "Directory.Build.props"
       - "QS3D.sln"
       - "QS3D.V26.sln"
@@ -69,7 +70,7 @@ jobs:
             while IFS= read -r changed_path; do
               [[ -n "${changed_path}" ]] || continue
               case "${changed_path}" in
-                src/*|tests/*|scripts/*|Directory.Build.props|QS3D.sln|QS3D.V26.sln|.github/workflows/release-v25-cloud.yml|.github/workflows/dispatch-v25-cloud-after-main-integration.yml)
+                src/*|tests/*|scripts/*|.gitmodules|Directory.Build.props|QS3D.sln|QS3D.V26.sln|.github/workflows/release-v25-cloud.yml|.github/workflows/dispatch-v25-cloud-after-main-integration.yml)
                   echo "Newer release-relevant main path supersedes ${source_sha}: ${changed_path}"
                   release_relevant_drift=1
                   ;;
