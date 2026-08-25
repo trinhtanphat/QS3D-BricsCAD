@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -219,8 +220,8 @@ public sealed class QuantityContribution
 
         ValidateSignedValue(operation, value, nameof(value));
 
-        var orderedOperands = (operands ?? Array.Empty<QuantityEvidenceOperand>())
-            .Select(static operand => operand ?? throw new ArgumentException("Operands cannot contain null values.", nameof(operands)))
+        var orderedOperands = QuantityEvidenceCollectionSnapshot
+            .Capture(operands, nameof(operands), "Quantity contribution operands")
             .OrderBy(static operand => operand.CanonicalKey, StringComparer.Ordinal)
             .ToArray();
 
@@ -408,13 +409,13 @@ public sealed class QuantityExplanation
             throw new ArgumentOutOfRangeException(nameof(netValue), "Net quantity cannot be negative.");
         }
 
-        var orderedContributions = (contributions ?? Array.Empty<QuantityContribution>())
-            .Select(static item => item ?? throw new ArgumentException("Contributions cannot contain null values.", nameof(contributions)))
+        var orderedContributions = QuantityEvidenceCollectionSnapshot
+            .Capture(contributions, nameof(contributions), "Quantity explanation contributions")
             .OrderBy(static item => item.EvidenceId, StringComparer.Ordinal)
             .ToArray();
 
-        var orderedAdjustments = (adjustments ?? Array.Empty<QuantityAdjustment>())
-            .Select(static item => item ?? throw new ArgumentException("Adjustments cannot contain null values.", nameof(adjustments)))
+        var orderedAdjustments = QuantityEvidenceCollectionSnapshot
+            .Capture(adjustments, nameof(adjustments), "Quantity explanation adjustments")
             .OrderBy(static item => item.EvidenceId, StringComparer.Ordinal)
             .ToArray();
 
@@ -436,6 +437,94 @@ public sealed class QuantityExplanation
             netValue,
             orderedContributions,
             orderedAdjustments);
+    }
+}
+
+internal static class QuantityEvidenceCollectionSnapshot
+{
+    internal const int MaximumItems = 10000;
+
+    internal static IReadOnlyList<T> Capture<T>(IEnumerable<T>? source, string parameterName, string label)
+        where T : class
+    {
+        if (source is null)
+        {
+            return Array.Empty<T>();
+        }
+
+        var knownCount = ReadKnownCount(source, label);
+        var snapshot = knownCount.HasValue ? new List<T>(knownCount.Value) : new List<T>();
+        foreach (var item in source)
+        {
+            if (snapshot.Count >= MaximumItems)
+            {
+                throw CapacityError(label);
+            }
+
+            if (item is null)
+            {
+                throw new ArgumentException(label + " cannot contain null values.", parameterName);
+            }
+
+            snapshot.Add(item);
+        }
+
+        if (knownCount.HasValue && snapshot.Count != knownCount.Value)
+        {
+            throw new InvalidOperationException(label + " count changed during snapshot.");
+        }
+
+        return snapshot.ToArray();
+    }
+
+    private static int? ReadKnownCount<T>(IEnumerable<T> source, string label)
+    {
+        var counts = new List<int>(3);
+        if (source is ICollection<T> genericCollection)
+        {
+            counts.Add(genericCollection.Count);
+        }
+        if (source is IReadOnlyCollection<T> readOnlyCollection)
+        {
+            counts.Add(readOnlyCollection.Count);
+        }
+        if (source is ICollection collection)
+        {
+            counts.Add(collection.Count);
+        }
+
+        for (var index = 0; index < counts.Count; index++)
+        {
+            if (counts[index] < 0)
+            {
+                throw new InvalidOperationException(label + " reported a negative known count.");
+            }
+            if (counts[index] > MaximumItems)
+            {
+                throw CapacityError(label);
+            }
+        }
+
+        if (counts.Count == 0)
+        {
+            return null;
+        }
+
+        var knownCount = counts[0];
+        for (var index = 1; index < counts.Count; index++)
+        {
+            if (counts[index] != knownCount)
+            {
+                throw new InvalidOperationException(label + " reported conflicting known counts.");
+            }
+        }
+        return knownCount;
+    }
+
+    private static InvalidOperationException CapacityError(string label)
+    {
+        return new InvalidOperationException(
+            label + " supports at most " + MaximumItems.ToString(CultureInfo.InvariantCulture) + " items.");
     }
 }
 

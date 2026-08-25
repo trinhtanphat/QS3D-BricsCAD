@@ -207,6 +207,12 @@ namespace QS3D.Core.Interoperability
                     double.IsNaN(numeric) ||
                     double.IsInfinity(numeric))
                     throw new ArgumentException("Numeric interoperability property must contain a finite invariant number.", nameof(value));
+
+                var roundTrip = numeric.ToString("R", CultureInfo.InvariantCulture);
+                if (!string.Equals(canonicalValue, roundTrip, StringComparison.Ordinal))
+                    throw new ArgumentException(
+                        "Numeric interoperability property must use the canonical finite invariant round-trip form.",
+                        nameof(value));
             }
             else if (ValueKind == InteroperabilityPropertyValueKind.Boolean)
             {

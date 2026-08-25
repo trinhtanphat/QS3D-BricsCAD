@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             StandardWorkbookLeavesAbsentMetricsBlankAndKeepsProvenance();
             Ed2WorkbookKeepsDetailSummaryEvidenceParity();
             LegacyRowsRemainNumericByDefault();
+            QuantityEvidenceXlsxHardeningSmoke.Run();
         }
 
         private static void BuilderKeepsMeasuredZeroDistinctFromAbsentEvidence()
