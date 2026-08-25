@@ -48,7 +48,7 @@ def main() -> int:
     forbid(launcher, 'update-v25.ps1', "V25 updater cross-use")
 
     require(updater, 'ExpectedSignerThumbprint', "updater signer input")
-    require(updater, 'PackageUri', "updater package URI input")
+    require(updater, "Require-ManifestProperty -Manifest $manifest -Name 'packageUri'", "updater manifest package URI binding")
     require(v26_generator, 'update-v26.ps1', "generated V26 updater")
 
     print("V26 signed one-click update source guard PASS")
