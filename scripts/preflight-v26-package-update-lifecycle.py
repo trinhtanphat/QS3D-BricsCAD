@@ -32,6 +32,7 @@ def main() -> int:
             "ConfirmDisposableInstall",
             "Assert-CleanExactSource",
             "Assert-HostIdentity",
+            "^V26(?:x64)?(?:\\.|$)",
             "package-v26.ps1",
             "install-v26-autoload.ps1",
             "update-v26.ps1",
