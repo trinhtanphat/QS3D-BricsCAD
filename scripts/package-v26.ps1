@@ -81,7 +81,7 @@ $coreProductVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVers
 if (-not [string]::Equals($productVersion, $coreProductVersion, [StringComparison]::Ordinal)) {
     throw "QS3D V26 plugin/Core product versions differ: plugin=$productVersion core=$coreProductVersion"
 }
-if (-not [string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
+if (-not [string]::IsNullOrEmpty($env:RELEASE_TAG)) {
     $expectedTag = 'v' + $productVersion
     if (-not [string]::Equals($env:RELEASE_TAG, $expectedTag, [StringComparison]::Ordinal)) {
         throw "RELEASE_TAG must exactly match the V26 source product version. Expected $expectedTag, got $env:RELEASE_TAG."
