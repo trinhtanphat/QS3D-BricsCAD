@@ -1,0 +1,59 @@
+name: issue-3842 canonical inbox self-patch
+
+on:
+  push:
+    branches:
+      - agent/qs3d-local/issue-3842-canonical-inbox-3681
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 1
+      - name: Insert canonical #3681 handoff and remove temporary workflow
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/LOCAL-AGENT-INBOX.md')
+          text = path.read_text(encoding='utf-8')
+          heading = '## P0 — #3681 StructuralWall live-BREP concrete-contact/formwork'
+          if heading in text:
+              raise SystemExit('refusing duplicate #3681 canonical inbox section')
+
+          anchor = 'Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.\n\n'
+          if text.count(anchor) != 1:
+              raise SystemExit(f'expected exactly one inbox insertion anchor, got {text.count(anchor)}')
+
+          section = '''## P0 — #3681 StructuralWall live-BREP concrete-contact/formwork
+
+- Priority: P0
+- Status: OPEN
+- Remote disposition: SOURCE_READY / LOCAL_RUN_ONLY
+- Owning issue: #3681; parent #72
+- Exact licensed checkout: `447ba9805d777a3225827117587d932135cf0959`
+- Minimum source-ready ancestor: `c64eb8c1b83761e155da670904a72e64669464b7` (#3833 + #3836)
+- Runner: `scripts/run-local-v25-wall-contact-3681.ps1`
+- Remote/source status: #3833, #3836 and runner-lock #3840 are merged; protected branch CI is green. The local worker must not edit production source or relax the `1e-6` acceptance tolerance. Hosted CI is source readiness only and is not `LOCAL_PASS`.
+- Local action: fetch origin, checkout the exact SHA above detached in a clean worktree, then run only `scripts/run-local-v25-wall-contact-3681.ps1` on an interactive licensed Windows/BricsCAD V25 host.
+- Result handling: `LOCAL_PASS` => publish sanitized exact-SHA/ProductVersion/hash evidence to #3681 and #72 and close bounded #3681; `LOCAL_FAIL` => keep open and return the sanitized source defect to a remote lane without a local patch; `NO_RESULT` => host/license/environment retry only.
+- Acceptance remains touching `0.160000 m²`, penetration `0.160000 m²`, finite partial `0.080000 m²` at `1e-6`, union/no-double-subtraction, top/bottom exclusion, two-end BLT `2.6688 - 0.3200 = 2.3488 m²`, semantic refresh/stale-BREP clearing, second-process isolation, save/cold-reopen and cleanup.
+- Updated: 2026-08-25
+
+'''
+          path.write_text(text.replace(anchor, anchor + section, 1), encoding='utf-8')
+          PY
+          git rm .github/workflows/issue-3842-selfpatch.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/LOCAL-AGENT-INBOX.md
+          git diff --cached --check
+          git diff --cached --name-only
+          git commit -m 'fix(local): publish #3681 in canonical inbox'
+          git push origin HEAD:${GITHUB_REF_NAME}
