@@ -123,7 +123,7 @@ namespace QS3D.BricsCAD.V25
                     "Interchange Append");
 
                 var result = ProjectInterchangeAppendOnlyImporter.Import(currentProject, json);
-                try { PaletteCoordinator.RefreshProject(); } catch { }
+                Services.InterchangePostMutationRefresh.Schedule(document);
 
                 var status =
                     "Interchange Append: Zone +" + result.ZonesAdded.ToString(CultureInfo.InvariantCulture) +
