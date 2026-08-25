@@ -131,6 +131,22 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
   and a new exact `main` SHA is published. The full interactive/private-DWG
   matrix remains `PENDING_LOCAL`; sanitized execution evidence is tracked by
   issue #3924 and the source correction is assigned to #3930.
+  Source issue #3930 was then completed by merged PR #3932 at exact `main`
+  `ab0202194e33a1a27dbdf322b9b6d73b9d56778a`. The owner-requested unchanged
+  one-shot rerun on a clean detached checkout of that exact SHA passed all
+  `1035/1035` aggregate gates, Core Release with `0 warnings / 0 errors`, Core
+  smoke with `ALL PASS`, installed-reference V25 `Release|x64` with `0 warnings
+  / 0 errors`, and offline WPF qualification. Adapter/Core ProductVersion was
+  `0.1.0-preview.10081`; adapter/Core SHA-256 values were
+  `1CBD959B4C6B4E66D37CA6681C2DABADE624DD7A1C18B9F7563BAB20A103299A` /
+  `30D57AC10F809576B11ECD074529AD2565C5B95D0E3A034A419B64E6AE847702`.
+  Licensed BricsCAD V25.2.10 runtime then produced no
+  `QS3DRUNTIMEPROBE` marker within the runner's unchanged 120-second bound, so
+  the exact verdict is `NO_RESULT`, not a product `FAIL` or `LOCAL_PASS`.
+  Runtime metadata remained empty, package/signing were not requested, the full
+  interactive/private-DWG matrix stayed `NOT_RUN`, and a post-run scan found
+  zero BricsCAD processes. No source defect was established, no source/runner
+  edit was made and this exact candidate was not rerun.
 - Related docs: `docs/LOCAL-V25-QUALIFICATION.md`; `docs/EXISTING-PROJECT-MUTATION-CONTEXT.md`; `docs/INTERCHANGE-FIELD-PRECEDENCE.md`; `scripts/preflight-interchange-field-merge-execution.py`; `scripts/preflight-room-finish-project-lifecycle.py`; `scripts/preflight-grid-auto-number-project-lifecycle.py`; `scripts/preflight-room-auto-project-lifecycle.py`; `docs/ROOM-AUTO-PREVIEW-COMMIT-FRESHNESS.md`; `scripts/preflight-save-project-lifecycle.py`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
 - Updated: 2026-08-25
 
