@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Fail-closed source guard for the canonical local source-ready dispatcher.
 
-This guard intentionally proves repository/source wiring only. It never treats hosted
-execution as LOCAL_PASS and never executes BricsCAD.
+This guard proves repository/source wiring only. Hosted execution never becomes
+LOCAL_PASS and this script never executes BricsCAD.
 """
 from __future__ import annotations
 
@@ -35,8 +35,8 @@ runner = RUNNER.read_text(encoding="utf-8")
 inbox = INBOX.read_text(encoding="utf-8")
 ci = CI.read_text(encoding="utf-8")
 
-# The dispatcher must read the canonical queue dynamically instead of embedding
-# priority/status as a second live queue.
+# The dispatcher reads live priority/status from the canonical queue instead of
+# embedding a second queue.
 require("docs\\LOCAL-AGENT-INBOX.md" in runner, "dispatcher does not bind the canonical inbox")
 require("Get-CanonicalLocalQueue" in runner, "dispatcher lacks canonical inbox parsing")
 require("$row.status -eq 'PASS' -or $row.noRerun" in runner, "PASS/NO_RERUN refusal is missing")
@@ -49,30 +49,48 @@ require(
     "dispatcher is not covered by the shared CI PowerShell parse gate",
 )
 
-# #3681 is authoritative completed/no-rerun truth. The wrapper may retain its
-# regression runner path only as a non-executable reference.
+# #3681 is authoritative completed/no-rerun truth. Its runner may remain only as
+# a non-executable regression reference.
 wall_contact = block(inbox, r"P0 — #3681")
 require(re.search(r"(?m)^- Status: PASS\s*$", wall_contact) is not None, "#3681 must remain PASS")
 require("NO_RERUN" in wall_contact, "#3681 must remain NO_RERUN")
-require("'#3681'" in runner and "COMPLETED_NO_RERUN" in runner, "dispatcher does not preserve #3681 no-rerun contract")
+require(
+    "'#3681'" in runner and "COMPLETED_NO_RERUN" in runner,
+    "dispatcher does not preserve #3681 no-rerun contract",
+)
 
-# Verify every concrete runner referenced by the dispatcher exists. Keep this
-# source-only: parameter/runtime semantics are validated by each runner's own guards.
+# Verify every concrete runner referenced by the dispatcher exists.
 referenced = sorted(set(re.findall(r"'((?:run|test)-[^']+\.ps1)'", runner)))
 require(referenced, "dispatcher references no concrete runner scripts")
 missing = [name for name in referenced if not (ROOT / "scripts" / name).is_file()]
 require(not missing, f"dispatcher references missing runner(s): {', '.join(missing)}")
 
-# Lock the orchestration call surface to the committed runner parameter contracts.
-# This catches a renamed/removed parameter before a local operator spends a licensed run.
+# Lock orchestration calls to the committed runner parameter contracts. This
+# catches a renamed/removed parameter before a licensed local run is spent.
 runner_parameter_contracts = {
-    "run-local-v25-qualification.ps1": ("$BricsCadDir", "$Profile", "$ArtifactDir", "$PythonPath", "$SkipScreenshot"),
-    "test-bricscad-v25-level-z.ps1": ("$BricsCadDir", "$PluginDll", "$DrawingCopy", "$Profile", "$ArtifactDir", "$ExpectedSourceSha", "$ConfirmDisposableCopy", "$NativeDrawingUnit"),
-    "test-bricscad-v25-level-z-lifecycle.ps1": ("$BricsCadDir", "$PluginDll", "$DrawingCopy", "$Profile", "$ArtifactDir", "$ExpectedSourceSha", "$ConfirmDisposableCopy"),
-    "test-bricscad-v25-source-reconcile.ps1": ("$BricsCadDir", "$PluginDll", "$FixtureDwg", "$Profile", "$ArtifactDir", "$ConfirmDisposableCopies"),
-    "test-bricscad-v25-brc-probe.ps1": ("$BricsCadDir", "$PluginDll", "$DrawingCopy", "$Profile", "$ArtifactDir", "$ConfirmReferenceCopy"),
-    "test-bricscad-v25-brc-quantity-roundtrip.ps1": ("$BricsCadDir", "$PluginDll", "$DrawingCopy", "$Profile", "$ArtifactDir", "$ConfirmReferenceCopy"),
-    "test-v26-package-install-lifecycle.ps1": ("$BricsCadDir", "$VersionKey", "$LanguageKey", "$ExpectedSourceSha", "$ArtifactDir", "$ConfirmDisposableInstall"),
+    "run-local-v25-qualification.ps1": (
+        "$BricsCadDir", "$Profile", "$ArtifactDir", "$PythonPath", "$SkipScreenshot"
+    ),
+    "test-bricscad-v25-level-z.ps1": (
+        "$BricsCadDir", "$PluginDll", "$DrawingCopy", "$Profile", "$ArtifactDir",
+        "$ExpectedSourceSha", "$ConfirmDisposableCopy", "$NativeDrawingUnit"
+    ),
+    "test-bricscad-v25-level-z-lifecycle.ps1": (
+        "$BricsCadDir", "$PluginDll", "$DrawingCopy", "$Profile", "$ArtifactDir",
+        "$ExpectedSourceSha", "$ConfirmDisposableCopy"
+    ),
+    "test-bricscad-v25-source-reconcile.ps1": (
+        "$BricsCadDir", "$PluginDll", "$FixtureDwg", "$Profile", "$ArtifactDir",
+        "$ConfirmDisposableCopies"
+    ),
+    "test-bricscad-v25-brc-probe.ps1": (
+        "$BricsCadDir", "$PluginDll", "$DrawingCopy", "$Profile", "$ArtifactDir",
+        "$ConfirmReferenceCopy"
+    ),
+    "test-bricscad-v25-brc-quantity-roundtrip.ps1": (
+        "$BricsCadDir", "$PluginDll", "$DrawingCopy", "$Profile", "$ArtifactDir",
+        "$ConfirmReferenceCopy"
+    ),
 }
 for name, parameters in runner_parameter_contracts.items():
     path = ROOT / "scripts" / name
@@ -81,14 +99,38 @@ for name, parameters in runner_parameter_contracts.items():
     absent = [parameter for parameter in parameters if parameter not in text]
     require(not absent, f"runner {name} lost parameter(s): {', '.join(absent)}")
 
-# Guard known historical truth drift at the execution boundary even if old prose
-# remains in the large historical inbox: completed bounded rows must not be
-# executable merely because a stale paragraph says OPEN/PENDING.
-require("'LOCAL-007'" in runner and "COMPLETED_BOUNDED" in runner, "LOCAL-007 P01-P03 completion boundary is missing")
-require("#3593/#3621" in runner and "do not rerun superseded H.1 P01-P06" in runner, "LOCAL-002 H.1 completed-boundary warning is missing")
+# Guard historical truth drift at the execution boundary even while the large
+# canonical inbox retains provenance text from earlier pending states.
+require(
+    "'LOCAL-007'" in runner and "COMPLETED_BOUNDED" in runner,
+    "LOCAL-007 P01-P03 completion boundary is missing",
+)
+require(
+    "#3593/#3621" in runner and "do not rerun superseded H.1 P01-P06" in runner,
+    "LOCAL-002 H.1 completed-boundary warning is missing",
+)
 
-# The currently automated source-ready lanes must retain their exact committed
-# handoff runners. Adding a new lane requires updating this guard deliberately.
+# #3878 received the one intended licensed rerun and LOCAL_PASS on exact source
+# e90c6aba7ef7bf903042d42dd991f9e7112fe659. It must now be impossible for the
+# source-ready dispatcher to spend another package-install lifecycle run.
+require(
+    "'LOCAL-016'" in runner
+    and "COMPLETED_NO_RERUN" in runner
+    and "e90c6aba7ef7bf903042d42dd991f9e7112fe659" in runner,
+    "LOCAL-016 completed licensed boundary is missing",
+)
+require(
+    "test-v26-package-install-lifecycle.ps1" not in runner,
+    "LOCAL-016 completed lifecycle runner became executable again",
+)
+for obsolete_parameter in ("$VersionKey", "$LanguageKey", "$ConfirmDisposableInstall"):
+    require(
+        obsolete_parameter not in runner,
+        f"LOCAL-016 obsolete execution parameter remains exposed: {obsolete_parameter}",
+    )
+
+# These are the only currently automated source-ready handoff runners. Adding a
+# new executable lane requires deliberate guard expansion.
 required_runner_names = {
     "run-local-v25-qualification.ps1",
     "test-bricscad-v25-level-z.ps1",
@@ -96,7 +138,6 @@ required_runner_names = {
     "test-bricscad-v25-source-reconcile.ps1",
     "test-bricscad-v25-brc-probe.ps1",
     "test-bricscad-v25-brc-quantity-roundtrip.ps1",
-    "test-v26-package-install-lifecycle.ps1",
 }
 require(required_runner_names.issubset(set(referenced)), "source-ready automated runner set drifted")
 
