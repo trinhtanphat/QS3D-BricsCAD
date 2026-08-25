@@ -14,7 +14,7 @@ GATE = ROOT / "tests" / "QS3D.BricsCAD.V25.LocalQualification" / "WallContact368
 PRODUCTION = ROOT / "src" / "QS3D.BricsCAD.V25" / "Reporting" / "StructuralWallConcreteContactService.cs"
 INDEX = ROOT / "docs" / "LOCAL-SOURCE-READY-INDEX-2026-08-24.md"
 DISPATCH = ROOT / "docs" / "LOCAL-DISPATCH-READY-2026-08-24.md"
-SOURCE_READY_SHA = "c64eb8c1b83761e155da670904a72e64669464b7"
+SOURCE_READY_FLOOR_SHA = "c64eb8c1b83761e155da670904a72e64669464b7"
 TOUCHING_PROBE_FLOOR_SHA = "4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0"
 
 
@@ -52,7 +52,7 @@ require_tokens(
     runner,
     "runner contract",
     (
-        SOURCE_READY_SHA,
+        SOURCE_READY_FLOOR_SHA,
         "git merge-base --is-ancestor",
         "working tree must be clean",
         "run-local-v25-qualification.ps1",
@@ -121,7 +121,7 @@ require_tokens(
 )
 
 # The local harness must contain the stable native-probe-floor correction as well as the
-# later harness-minimum and finite-footprint corrections integrated in SOURCE_READY_SHA.
+# later harness-minimum and finite-footprint corrections integrated in SOURCE_READY_FLOOR_SHA.
 require_tokens(
     production,
     "production V25 contact service",
@@ -151,7 +151,7 @@ require_tokens(
     index,
     "#3681 source-ready index",
     (
-        SOURCE_READY_SHA,
+        SOURCE_READY_FLOOR_SHA,
         TOUCHING_PROBE_FLOOR_SHA,
         "#3833",
         "#3836",
@@ -166,7 +166,8 @@ require_tokens(
     "#3681 dispatch",
     (
         "Status: `LOCAL_READY / PULL_RUN_ONLY`",
-        f"Exact runnable SHA: `{SOURCE_READY_SHA}`",
+        f"Minimum source-ready ancestor: `{SOURCE_READY_FLOOR_SHA}`",
+        "Exact runnable SHA: published on #3681 and #72 after this carrier's protected branch CI succeeds.",
         "#3833",
         "#3836",
         RUNNER_NAME,
@@ -191,4 +192,4 @@ for forbidden in (
 if "StartTime.ToUniversalTime() -ge $startedUtc" in runner:
     fail("runner must not infer BricsCAD process ownership from process start time")
 
-print("PASS #3681 one-command V25 runner locked to #3833/#3836 source-ready integration")
+print("PASS #3681 one-command V25 runner requires the #3833/#3836 source-ready floor and a separately published exact execution SHA")
