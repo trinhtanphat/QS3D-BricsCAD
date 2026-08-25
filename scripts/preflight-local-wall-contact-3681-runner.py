@@ -117,8 +117,37 @@ require_tokens(
         "ProjectContextCoordinator",
         "GetOrCreate",
         "Save",
+        "using QS3D.Core.Units;",
+        "private static void BindCaptureFixtureMillimeterUnit(ProjectState project)",
+        "LengthUnit.Millimeter",
+        "DrawingUnitResolutionPolicy.ValidateQuantityCompatibility",
+        "DrawingUnitResolutionPolicy.BindQuantityUnit",
+        "DrawingUnitResolutionSource.ProjectOverride",
+        "DrawingUnitResolutionPolicy.SetProjectOverride",
     ),
 )
+
+capture_start = harness.find("private static void RunCaptureRefreshAndMissingTargetClear")
+capture_end = harness.find("private static void RunReadOnlyMutationGuard", capture_start)
+if capture_start < 0 or capture_end < 0:
+    fail("runtime harness capture-refresh method boundary is missing")
+capture_block = harness[capture_start:capture_end]
+ordered_capture_tokens = (
+    "project.Elements.Clear();",
+    "BindCaptureFixtureMillimeterUnit(project);",
+    'var wall = NewWall("local-3681-capture-wall", wallSolid.Handle);',
+    "project.Elements.Add(wall);",
+    "new StructuralRegenerator().Regenerate(project, wall);",
+    "CaptureSelection(document, ElementCategory.Column)",
+)
+last_index = -1
+for token in ordered_capture_tokens:
+    index = capture_block.find(token)
+    if index < 0:
+        fail("runtime harness capture-refresh path is missing: " + token)
+    if index <= last_index:
+        fail("runtime harness must bind the trusted drawing unit before creating semantic quantities/capture: " + token)
+    last_index = index
 
 # The local harness must contain the stable native-probe-floor correction as well as the
 # later harness-minimum and finite-footprint corrections integrated in SOURCE_READY_FLOOR_SHA.
