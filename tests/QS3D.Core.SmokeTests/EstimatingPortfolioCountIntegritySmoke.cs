@@ -22,6 +22,8 @@ namespace QS3D.Core.SmokeTests
             DuplicateIdentityRemainsCaseInsensitive();
             PricedTotalRejectsSwallowedContribution();
             PricedTotalKeepsRepresentableContribution();
+            BulkPreviewRejectsSwallowedAfterTotal();
+            BulkPreviewKeepsRepresentableValueDelta();
         }
 
         private static void NegativeKnownCountFailsBeforeEnumeration()
@@ -159,6 +161,44 @@ namespace QS3D.Core.SmokeTests
 
             if (portfolio.PricedTotal != 100.1m)
                 throw new Exception("Representable estimating portfolio contribution changed unexpectedly.");
+        }
+
+        private static void BulkPreviewRejectsSwallowedAfterTotal()
+        {
+            var portfolio = new EstimatingPortfolio(new[]
+            {
+                PricedLine("DELTA-HIGH", 70000000000000000000000000000m)
+            });
+            var request = ReplacementRequest("DELTA-HIGH", 0.1m);
+            var service = new EstimatingWorkflowService();
+
+            ExpectOverflow(
+                () => _ = service.PreviewBulkRateAssignment(portfolio, request),
+                "precision loss",
+                "Bulk preview value delta must reject a non-zero after total swallowed by decimal subtraction precision.");
+        }
+
+        private static void BulkPreviewKeepsRepresentableValueDelta()
+        {
+            var portfolio = new EstimatingPortfolio(new[]
+            {
+                PricedLine("DELTA-NORMAL", 100m)
+            });
+            var request = ReplacementRequest("DELTA-NORMAL", 0.1m);
+            var preview = new EstimatingWorkflowService().PreviewBulkRateAssignment(portfolio, request);
+
+            if (preview.TotalBefore != 100m || preview.TotalAfter != 0.1m || preview.ValueDelta != -99.9m)
+                throw new Exception("Representable bulk preview value delta changed unexpectedly.");
+        }
+
+        private static BulkRateAssignmentRequest ReplacementRequest(string lineId, decimal rate)
+        {
+            return new BulkRateAssignmentRequest(
+                new[] { lineId },
+                "replacement-cost",
+                "replacement-rate-source",
+                "replacement-rate-revision",
+                new[] { new UnitRateAssignment("m", rate) });
         }
 
         private static EstimatingLine Line(string id)

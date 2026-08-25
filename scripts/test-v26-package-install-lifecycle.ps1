@@ -79,7 +79,7 @@ function Assert-HostIdentity {
     $majorText = $version.Split('.')[0]
     $major = 0
     if (-not [int]::TryParse($majorText, [ref]$major) -or $major -ne 26) { throw 'Configured BricsCAD host is not major version 26.' }
-    if ($VersionKey -notmatch '^V26(?:\.|$)') { throw 'VersionKey must identify a V26 registry key.' }
+    if ($VersionKey -notmatch '^V26(?:x64)?(?:\.|$)') { throw 'VersionKey must identify a V26 registry key.' }
     if ($LanguageKey -notmatch '^[A-Za-z]{2}_[A-Za-z]{2}$') { throw 'LanguageKey is not canonical.' }
     $result.hostMajor = $major
 }
@@ -203,6 +203,27 @@ function Assert-RegistrationIdentity {
     $result.registrationIdentityValid = $true
 }
 
+function Get-RuntimeFrameworkNames($RuntimeConfig) {
+    if ($null -eq $RuntimeConfig) { throw 'Installed V26 runtimeconfig is empty.' }
+    $runtimeOptionsProperty = $RuntimeConfig.PSObject.Properties['runtimeOptions']
+    if ($null -eq $runtimeOptionsProperty -or $null -eq $runtimeOptionsProperty.Value) { throw 'Installed V26 runtimeconfig is missing runtimeOptions.' }
+    $frameworksProperty = $runtimeOptionsProperty.Value.PSObject.Properties['frameworks']
+    if ($null -eq $frameworksProperty -or $null -eq $frameworksProperty.Value) { throw 'Installed V26 runtimeconfig is missing runtimeOptions.frameworks.' }
+    if (-not ($frameworksProperty.Value -is [System.Array])) { throw 'Installed V26 runtimeconfig runtimeOptions.frameworks must be an array.' }
+    $frameworks = @($frameworksProperty.Value)
+    if ($frameworks.Count -eq 0) { throw 'Installed V26 runtimeconfig runtimeOptions.frameworks is empty.' }
+    $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($framework in $frameworks) {
+        if ($null -eq $framework) { throw 'Installed V26 runtimeconfig contains a null framework entry.' }
+        $nameProperty = $framework.PSObject.Properties['name']
+        if ($null -eq $nameProperty) { throw 'Installed V26 runtimeconfig contains a framework without a name.' }
+        $name = [string]$nameProperty.Value
+        if ([string]::IsNullOrWhiteSpace($name)) { throw 'Installed V26 runtimeconfig contains an empty framework name.' }
+        if (-not $names.Add($name)) { throw 'Installed V26 runtimeconfig contains a duplicate framework name.' }
+    }
+    return @($names)
+}
+
 function Assert-InstalledPayload($Manifest) {
     $expected = @(
         'QS3D.BricsCAD.V26.dll',
@@ -230,8 +251,8 @@ function Assert-InstalledPayload($Manifest) {
         throw 'Installed V26 payload identity differs from the generated package.'
     }
     $runtime = Get-Content -LiteralPath (Join-Path $installDir 'QS3D.BricsCAD.V26.runtimeconfig.json') -Raw | ConvertFrom-Json
-    $frameworkName = [string]$runtime.runtimeOptions.framework.name
-    if ($frameworkName -ne 'Microsoft.WindowsDesktop.App') { throw 'Installed V26 runtimeconfig does not target Microsoft.WindowsDesktop.App.' }
+    $frameworkNames = @(Get-RuntimeFrameworkNames $runtime)
+    if (-not ($frameworkNames -contains 'Microsoft.WindowsDesktop.App')) { throw 'Installed V26 runtimeconfig does not target Microsoft.WindowsDesktop.App.' }
     $result.installedPayloadValid = $true
     $result.installedPayloadHashesMatch = $true
     $result.runtimeConfigInstalled = $true
