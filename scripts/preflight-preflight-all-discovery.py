@@ -110,6 +110,28 @@ def discovery_regressions(runner):
         discovered = runner.discover()
         assert_true(self_gate not in discovered, "aggregate runner must never recursively discover itself")
 
+        legacy_overflow_count = 1025
+        capacity_candidates = [
+            scripts / ("preflight-capacity-" + str(index).zfill(4) + ".py")
+            for index in range(legacy_overflow_count)
+        ]
+        with mock.patch.object(runner.os, "lstat", return_value=regular_mode), \
+             mock.patch.object(Path, "is_symlink", return_value=False):
+            validated = runner.validate_candidates(capacity_candidates)
+        assert_true(
+            len(validated) == legacy_overflow_count,
+            "aggregate discovery must accept the repository's 1025-gate scale",
+        )
+
+        over_capacity = [
+            scripts / ("preflight-over-capacity-" + str(index).zfill(4) + ".py")
+            for index in range(runner.MAX_FEATURE_GATES + 1)
+        ]
+        assert_raises_runtime(
+            lambda: runner.validate_candidates(over_capacity),
+            "exceeds maximum " + str(runner.MAX_FEATURE_GATES),
+        )
+
 
 def execution_regressions(runner):
     with tempfile.TemporaryDirectory() as temp_dir:
