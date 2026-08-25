@@ -29,6 +29,17 @@ def require_tokens(text: str, label: str, tokens: tuple[str, ...]) -> None:
             fail(label + " is missing: " + token)
 
 
+def require_ordered_tokens(text: str, label: str, tokens: tuple[str, ...]) -> None:
+    last_offset = -1
+    for token in tokens:
+        offset = text.find(token)
+        if offset < 0:
+            fail(label + " is missing: " + token)
+        if offset <= last_offset:
+            fail(label + " must bind the trusted drawing unit before semantic quantity creation/capture: " + token)
+        last_offset = offset
+
+
 def contains_forbidden(text: str, forbidden: str) -> bool:
     if forbidden in ("TODO", "FIXME"):
         pattern = rf"(?<![A-Za-z0-9_]){re.escape(forbidden)}(?![A-Za-z0-9_])"
@@ -117,6 +128,62 @@ require_tokens(
         "ProjectContextCoordinator",
         "GetOrCreate",
         "Save",
+        "using QS3D.Core.Units;",
+        "private static void BindFixtureMillimeterUnit(ProjectState project)",
+        "LengthUnit.Millimeter",
+        "DrawingUnitResolutionPolicy.ValidateQuantityCompatibility",
+        "DrawingUnitResolutionPolicy.BindQuantityUnit",
+        "DrawingUnitResolutionSource.ProjectOverride",
+        "DrawingUnitResolutionPolicy.SetProjectOverride",
+    ),
+)
+
+capture_start = harness.find("private static void RunCaptureRefreshAndMissingTargetClear")
+capture_end = harness.find("private static void RunReadOnlyMutationGuard", capture_start)
+if capture_start < 0 or capture_end < 0:
+    fail("runtime harness capture-refresh method boundary is missing")
+require_ordered_tokens(
+    harness[capture_start:capture_end],
+    "runtime harness capture-refresh path",
+    (
+        "project.Elements.Clear();",
+        "BindFixtureMillimeterUnit(project);",
+        'var wall = NewWall("local-3681-capture-wall", wallSolid.Handle);',
+        "project.Elements.Add(wall);",
+        "new StructuralRegenerator().Regenerate(project, wall);",
+        "CaptureSelection(document, ElementCategory.Column)",
+    ),
+)
+
+persistence_start = harness.find("private static IDictionary<string, string> RunPersistenceSetup")
+persistence_end = harness.find("private static IDictionary<string, string> RunColdReopenVerification", persistence_start)
+if persistence_start < 0 or persistence_end < 0:
+    fail("runtime harness persistence method boundary is missing")
+require_ordered_tokens(
+    harness[persistence_start:persistence_end],
+    "runtime harness persistence setup",
+    (
+        "project.Elements.Clear();",
+        "BindFixtureMillimeterUnit(project);",
+        'var wall = NewWall("local-3681-wall", wallSolid.Handle);',
+        "project.Elements.Add(wall);",
+        "new StructuralRegenerator().Regenerate(project, wall);",
+        "RefreshContacts(document, project);",
+    ),
+)
+
+project_start = harness.find("private static ProjectState NewProject")
+project_end = harness.find("private static ProjectElement NewWall", project_start)
+if project_start < 0 or project_end < 0:
+    fail("runtime harness direct-measure project method boundary is missing")
+require_ordered_tokens(
+    harness[project_start:project_end],
+    "runtime harness direct-measure project setup",
+    (
+        'var project = new ProjectState("local-3681-" + Guid.NewGuid().ToString("N"), "LOCAL 3681");',
+        "BindFixtureMillimeterUnit(project);",
+        'var wall = NewWall("wall", wallHandle);',
+        "project.Elements.Add(wall);",
     ),
 )
 
@@ -192,4 +259,4 @@ for forbidden in (
 if "StartTime.ToUniversalTime() -ge $startedUtc" in runner:
     fail("runner must not infer BricsCAD process ownership from process start time")
 
-print("PASS #3681 one-command V25 runner requires the #3833/#3836 source-ready floor and a separately published exact execution SHA")
+print("PASS #3681 one-command V25 runner requires the #3833/#3836 source-ready floor and unit-bound capture/persistence/direct-measure fixtures")
