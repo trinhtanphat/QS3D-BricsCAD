@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Services;
@@ -64,6 +65,99 @@ namespace QS3D.BricsCAD.V25
             FinalizeUi(document, count, subtype);
         }
 
+        [CommandMethod("QS3DGRIDINTERSECTIONS")]
+        public void RefreshAllIntersectionMarkers()
+        {
+            RefreshIntersectionMarkers(false);
+        }
+
+        [CommandMethod("QS3DGRIDINTERSECTIONSSEL", CommandFlags.UsePickSet)]
+        public void RefreshSelectedIntersectionMarkers()
+        {
+            RefreshIntersectionMarkers(true);
+        }
+
+        [CommandMethod("QS3DGRIDINTERSECTIONHEALTH")]
+        public void InspectIntersectionMarkers()
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) return;
+            try
+            {
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
+                {
+                    TryWriteMessage(document, "\nQS3D Grid intersections: chưa có project sidecar để kiểm tra.");
+                    return;
+                }
+                var issues = Cad.GridIntersectionMarkerService.Inspect(document, project);
+                var status = issues.Count == 0
+                    ? "Grid intersections: native marker health OK."
+                    : "Grid intersections: " + issues.Count + " health issue(s). " + string.Join(" | ", issues.Take(5));
+                try { PaletteCoordinator.SetStatus(status); } catch { }
+                TryWriteMessage(document, "\nQS3D " + status);
+            }
+            catch (Exception ex)
+            {
+                ReportOperationFailure(document, "QS3DGRIDINTERSECTIONHEALTH lỗi: " + ex.Message);
+            }
+        }
+
+        private static void RefreshIntersectionMarkers(bool selectedOnly)
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) return;
+            try
+            {
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
+                {
+                    TryWriteMessage(document, "\nQS3D Grid intersections: chưa có project sidecar. Capture Grid và lưu project trước.");
+                    return;
+                }
+
+                IReadOnlyCollection<string>? targets = null;
+                if (selectedOnly)
+                {
+                    var snapshots = Cad.EntitySnapshotReader.ReadCurrentSelection(document);
+                    if (snapshots.Count == 0)
+                    {
+                        TryWriteMessage(document, "\nQS3D Grid intersections: chưa chọn native Grid source.");
+                        return;
+                    }
+                    var handles = new HashSet<string>(snapshots.Select(x => x.Handle), StringComparer.OrdinalIgnoreCase);
+                    var selected = previewProject.Elements
+                        .Where(x => x.Category == ElementCategory.Grid && x.SourceHandles.Any(handles.Contains))
+                        .Select(x => x.Id)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                    if (selected.Length == 0)
+                    {
+                        TryWriteMessage(document, "\nQS3D Grid intersections: selection không map tới semantic Grid hiện hành.");
+                        return;
+                    }
+                    targets = selected;
+                }
+
+                var project = ProjectContextCoordinator.GetOrCreate(document);
+                if (!string.Equals(project.ProjectId, previewProject.ProjectId, StringComparison.Ordinal) ||
+                    project.ChangeVersion != previewProject.ChangeVersion)
+                    throw new InvalidOperationException("Grid intersection project changed after preview/selection; rerun the command.");
+
+                var count = Cad.GridIntersectionMarkerService.Refresh(document, project, targets);
+                var status = "Grid intersections: đã materialize " + count + " pair-owned marker(s)" + (selectedOnly ? " cho selection." : ".");
+                try
+                {
+                    PaletteCoordinator.RefreshProject();
+                    PaletteCoordinator.SetStatus(status);
+                }
+                catch { }
+                TryWriteMessage(document, "\nQS3D " + status);
+            }
+            catch (Exception ex)
+            {
+                ReportOperationFailure(document, (selectedOnly ? "QS3DGRIDINTERSECTIONSSEL" : "QS3DGRIDINTERSECTIONS") + " lỗi: " + ex.Message);
+            }
+        }
+
         private static string ResolveActiveGridSubtype(Document document)
         {
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project)) return string.Empty;
@@ -96,7 +190,7 @@ namespace QS3D.BricsCAD.V25
         private static void FinalizeUi(Document document, int count, string subtype)
         {
             var label = subtype.Length > 0 ? subtype : "Grid/Trục";
-            var status = label + ": đã capture " + count + " semantic reference(s). Grid hiện là reference/takeoff semantic, không sinh native 3D.";
+            var status = label + ": đã capture " + count + " semantic reference(s). Grid hiện là reference/takeoff semantic; chạy QS3DGRIDINTERSECTIONS để materialize giao điểm pair-owned.";
             try
             {
                 PaletteCoordinator.RefreshProject();
