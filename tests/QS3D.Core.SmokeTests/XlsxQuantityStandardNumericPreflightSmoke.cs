@@ -11,14 +11,14 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsNonFiniteBeforeFilesystemMutation();
             RejectsNegativeCountAndPhysicalQuantitiesBeforeFilesystemMutation();
-            ExportsZeroAndPositiveStandardRows();
+            ExportsZeroAndPositivePhysicalQuantities();
         }
 
         private static void RejectsNonFiniteBeforeFilesystemMutation()
         {
             var root = Path.Combine(Path.GetTempPath(), "qs3d-quantity-xlsx-numeric-" + Guid.NewGuid().ToString("N"));
             Delete(root);
-            var row = ValidRow();
+            var row = ValidRow("E-NONFINITE", "10");
             row.FormworkM2 = double.PositiveInfinity;
             try
             {
@@ -73,7 +73,7 @@ namespace QS3D.Core.SmokeTests
                     Path.GetTempPath(),
                     "qs3d-quantity-xlsx-negative-" + index + "-" + Guid.NewGuid().ToString("N"));
                 Delete(root);
-                var row = ValidRow();
+                var row = ValidRow("E-NEG-" + index, (index + 1).ToString("X"));
                 mutation.Apply(row);
                 try
                 {
@@ -139,15 +139,15 @@ namespace QS3D.Core.SmokeTests
             return true;
         }
 
-        private static void ExportsZeroAndPositiveStandardRows()
+        private static void ExportsZeroAndPositivePhysicalQuantities()
         {
             var root = Path.Combine(Path.GetTempPath(), "qs3d-quantity-xlsx-numeric-" + Guid.NewGuid().ToString("N"));
             var path = Path.Combine(root, "valid.xlsx");
             try
             {
-                XlsxQuantityExporter.Export(path, new[] { ValidRow(), ZeroRow() });
+                XlsxQuantityExporter.Export(path, new[] { ValidRow("E-POS", "A"), ZeroPhysicalQuantityRow() });
                 if (!File.Exists(path))
-                    throw new InvalidOperationException("Quantity XLSX zero/positive standard export did not produce a workbook.");
+                    throw new InvalidOperationException("Quantity XLSX zero/positive physical-quantity export did not produce a workbook.");
             }
             finally
             {
@@ -155,17 +155,20 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
-        private static QuantityReportRow ZeroRow()
+        private static QuantityReportRow ZeroPhysicalQuantityRow()
         {
-            return new QuantityReportRow
+            var row = new QuantityReportRow
             {
                 Floor = "L0",
                 Zone = "Z0",
                 Category = "Other",
-                FamilyName = "Zero",
-                Count = 0,
+                FamilyName = "Zero quantities",
+                Count = 1,
                 DrawingFingerprint = "DRAWING-1"
             };
+            row.ElementIds.Add("E-ZERO");
+            row.SourceHandles.Add("B");
+            return row;
         }
 
         private sealed class NegativeMutation
@@ -180,9 +183,9 @@ namespace QS3D.Core.SmokeTests
             public Action<QuantityReportRow> Apply { get; }
         }
 
-        private static QuantityReportRow ValidRow()
+        private static QuantityReportRow ValidRow(string elementId, string handle)
         {
-            return new QuantityReportRow
+            var row = new QuantityReportRow
             {
                 Floor = "L1",
                 Zone = "Z1",
@@ -203,6 +206,9 @@ namespace QS3D.Core.SmokeTests
                 OtherAreaM2 = 0d,
                 DrawingFingerprint = "DRAWING-1"
             };
+            row.ElementIds.Add(elementId);
+            row.SourceHandles.Add(handle);
+            return row;
         }
 
         private static void Delete(string directory)
