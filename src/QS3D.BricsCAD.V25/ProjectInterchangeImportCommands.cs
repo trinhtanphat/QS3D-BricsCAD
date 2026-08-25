@@ -352,15 +352,13 @@ namespace QS3D.BricsCAD.V25
         {
             EnsureActive(document, "Interchange UseSource element import");
             var result = InterchangeUseSourceElementImportService.Import(document, confirmedProject, json);
-            try { PaletteCoordinator.RefreshProject(); } catch { }
             var status =
                 "Interchange Import / UseSource Element: replaced " + result.ElementsReplaced.ToString(CultureInfo.InvariantCulture) +
                 " • Element +" + result.ElementsAdded.ToString(CultureInfo.InvariantCulture) +
                 " • catalog +" + (result.ZonesAdded + result.FloorsAdded + result.FamiliesAdded).ToString(CultureInfo.InvariantCulture) +
                 " • generated closure invalidated " + result.GeneratedElementsInvalidated.ToString(CultureInfo.InvariantCulture) +
                 ". Rebuild explicit; chưa tự lưu .qsdb.";
-            try { PaletteCoordinator.SetStatus(status); } catch { }
-            document.Editor.WriteMessage("\nQS3D " + status);
+            FinishSemanticOnlyImport(document, status);
         }
 
         private static void RunUseSourceCatalog(
@@ -370,7 +368,6 @@ namespace QS3D.BricsCAD.V25
         {
             EnsureActive(document, "Interchange UseSource catalog import");
             var result = InterchangeUseSourceCatalogImportService.Import(document, confirmedProject, json);
-            try { PaletteCoordinator.RefreshProject(); } catch { }
             var status =
                 "Interchange Import / UseSource Catalog: Zone " + result.ZonesReplaced.ToString(CultureInfo.InvariantCulture) +
                 " • Floor " + result.FloorsReplaced.ToString(CultureInfo.InvariantCulture) +
@@ -378,8 +375,7 @@ namespace QS3D.BricsCAD.V25
                 " replaced • Element collisions kept " + result.ElementCollisionsKept.ToString(CultureInfo.InvariantCulture) +
                 " • generated closure invalidated " + result.GeneratedElementsInvalidated.ToString(CultureInfo.InvariantCulture) +
                 ". Rebuild explicit; chưa tự lưu .qsdb.";
-            try { PaletteCoordinator.SetStatus(status); } catch { }
-            document.Editor.WriteMessage("\nQS3D " + status);
+            FinishSemanticOnlyImport(document, status);
         }
 
         private static void RunUseSourceAll(
@@ -389,7 +385,6 @@ namespace QS3D.BricsCAD.V25
         {
             EnsureActive(document, "Interchange UseSource all-scope import");
             var result = InterchangeUseSourceAllImportService.Import(document, confirmedProject, json);
-            try { PaletteCoordinator.RefreshProject(); } catch { }
             var status =
                 "Interchange Import / UseSource ALL: Zone " + result.ZonesReplaced.ToString(CultureInfo.InvariantCulture) +
                 " • Floor " + result.FloorsReplaced.ToString(CultureInfo.InvariantCulture) +
@@ -397,13 +392,12 @@ namespace QS3D.BricsCAD.V25
                 " • Element " + result.ElementsReplaced.ToString(CultureInfo.InvariantCulture) +
                 " replaced in one CAD transaction • generated closure invalidated " + result.GeneratedElementsInvalidated.ToString(CultureInfo.InvariantCulture) +
                 ". Rebuild explicit; chưa tự lưu .qsdb.";
-            try { PaletteCoordinator.SetStatus(status); } catch { }
-            document.Editor.WriteMessage("\nQS3D " + status);
+            FinishSemanticOnlyImport(document, status);
         }
 
         private static void FinishSemanticOnlyImport(Document document, string status)
         {
-            try { PaletteCoordinator.RefreshProject(); } catch { }
+            Services.InterchangePostMutationRefresh.Schedule(document);
             try { PaletteCoordinator.SetStatus(status); } catch { }
             document.Editor.WriteMessage("\nQS3D " + status);
         }
