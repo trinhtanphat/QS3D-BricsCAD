@@ -10,6 +10,8 @@ internal enum InterchangeGeneratedOutputKind
     None = 0,
     NativeGeometry = 1 << 0,
     Quantity = 1 << 1,
+    // Reserved output classes. They are not persisted generated-owner artifacts
+    // that FieldMerge can atomically rebuild today, so Create must fail closed.
     Workbook = 1 << 2,
     Trace = 1 << 3,
 }
@@ -23,9 +25,7 @@ internal sealed class InterchangeFieldMergeGeneratedRebuildPlan
 {
     private static readonly InterchangeGeneratedOutputKind SupportedKinds =
         InterchangeGeneratedOutputKind.NativeGeometry |
-        InterchangeGeneratedOutputKind.Quantity |
-        InterchangeGeneratedOutputKind.Workbook |
-        InterchangeGeneratedOutputKind.Trace;
+        InterchangeGeneratedOutputKind.Quantity;
 
     private InterchangeFieldMergeGeneratedRebuildPlan(
         IReadOnlyList<string> elementIds,
@@ -39,6 +39,8 @@ internal sealed class InterchangeFieldMergeGeneratedRebuildPlan
 
     public InterchangeGeneratedOutputKind OutputKinds { get; }
 
+    public bool Includes(InterchangeGeneratedOutputKind kind) => (OutputKinds & kind) == kind;
+
     public bool IsNoOp => ElementIds.Count == 0 || OutputKinds == InterchangeGeneratedOutputKind.None;
 
     public static InterchangeFieldMergeGeneratedRebuildPlan Create(
@@ -50,7 +52,8 @@ internal sealed class InterchangeFieldMergeGeneratedRebuildPlan
             throw new ArgumentOutOfRangeException(
                 nameof(requestedKinds),
                 requestedKinds,
-                "FieldMerge rebuild contains an unsupported generated-output kind.");
+                "FieldMerge rebuild requested an unsupported generated-output kind. " +
+                "Only atomic NativeGeometry and Quantity rebuilds are supported; Workbook/Trace remain explicit external outputs.");
         }
 
         string[] ids = (invalidatedElementIds ?? Enumerable.Empty<string>())
