@@ -16,6 +16,7 @@ namespace QS3D.Core.Persistence
             if (document == null) throw new ArgumentNullException(nameof(document));
             var callerRoot = document.Root ?? throw new InvalidDataException("QSDB has no root element.");
             if (!string.Equals(callerRoot.Name.LocalName, "qs3d", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("QSDB root element must be qs3d.");
+            QsdbProjectStructuralCardinality.Validate(callerRoot);
 
             var schema = ReadSchema(callerRoot);
             if (schema <= 0) throw new InvalidDataException("Unsupported QSDB schema version: " + schema.ToString(CultureInfo.InvariantCulture));
@@ -53,6 +54,7 @@ namespace QS3D.Core.Persistence
                 root.SetAttributeValue("schema", schema.ToString(CultureInfo.InvariantCulture));
             }
 
+            QsdbProjectStructuralCardinality.Validate(root);
             ValidateCurrentPersistenceState(root);
             QsdbProjectXmlSchemaValidator.ValidateCurrent(root);
 

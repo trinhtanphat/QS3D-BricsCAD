@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Security;
 using System.Text;
+using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
 
 namespace QS3D.Core.Export
@@ -21,24 +22,9 @@ namespace QS3D.Core.Export
 
         private static readonly string[] Headers =
         {
-            "EvidenceId",
-            "ParentEvidenceId",
-            "RecordKind",
-            "SubjectKey",
-            "Category",
-            "Metric",
-            "Unit",
-            "GrossValue",
-            "NetValue",
-            "Value",
-            "Operation",
-            "SemanticKey",
-            "FormulaOrReason",
-            "SelectorKind",
-            "SelectorKey",
-            "SourceReference",
-            "TargetReference",
-            "Operands"
+            "EvidenceId", "ParentEvidenceId", "RecordKind", "SubjectKey", "Category", "Metric", "Unit",
+            "GrossValue", "NetValue", "Value", "Operation", "SemanticKey", "FormulaOrReason", "SelectorKind",
+            "SelectorKey", "SourceReference", "TargetReference", "Operands"
         };
 
         public static void Export(string path, IReadOnlyList<QuantityExplanation> explanations)
@@ -48,12 +34,47 @@ namespace QS3D.Core.Export
             if (explanations == null)
                 throw new ArgumentNullException(nameof(explanations));
 
+            ValidateProjectedRowCapacity(explanations);
             var rows = QuantityEvidenceExportProjection.CreateMany(explanations);
             if (rows.Count > MaxDataRows)
                 throw new ArgumentOutOfRangeException(nameof(explanations), "Quantity evidence XLSX export supports at most " + MaxDataRows + " data rows.");
 
             ValidateRows(rows);
             WritePackage(path, rows);
+        }
+
+        private static void ValidateProjectedRowCapacity(IReadOnlyList<QuantityExplanation> explanations)
+        {
+            long projectedRows = 0;
+            for (var index = 0; index < explanations.Count; index++)
+            {
+                var explanation = explanations[index];
+                if (explanation == null)
+                    throw new ArgumentException("Quantity explanations cannot contain null entries.", nameof(explanations));
+
+                projectedRows = AddProjectedRows(
+                    projectedRows,
+                    explanation.Contributions.Count,
+                    explanation.Adjustments.Count);
+            }
+        }
+
+        private static long AddProjectedRows(long projectedRows, int contributionCount, int adjustmentCount)
+        {
+            if (projectedRows < 0 || projectedRows > MaxDataRows)
+                throw new ArgumentOutOfRangeException(nameof(projectedRows));
+            if (contributionCount < 0)
+                throw new ArgumentOutOfRangeException(nameof(contributionCount));
+            if (adjustmentCount < 0)
+                throw new ArgumentOutOfRangeException(nameof(adjustmentCount));
+
+            var additionalRows = 1L + contributionCount + adjustmentCount;
+            if (additionalRows > MaxDataRows - projectedRows)
+                throw new ArgumentOutOfRangeException(
+                    "explanations",
+                    "Quantity evidence XLSX export supports at most " + MaxDataRows + " data rows.");
+
+            return projectedRows + additionalRows;
         }
 
         private static void ValidateRows(IReadOnlyList<QuantityEvidenceExportRecord> rows)
@@ -99,11 +120,21 @@ namespace QS3D.Core.Export
 
         private static void WritePackage(string path, IReadOnlyList<QuantityEvidenceExportRecord> rows)
         {
+            WritePackage(path, rows, AtomicFileCommit.ReplaceWithoutBackup);
+        }
+
+        private static void WritePackage(
+            string path,
+            IReadOnlyList<QuantityEvidenceExportRecord> rows,
+            Action<string, string> commit)
+        {
+            if (commit == null) throw new ArgumentNullException(nameof(commit));
+
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
-            var temporaryPath = fullPath + ".tmp-" + Guid.NewGuid().ToString("N");
+            var temporaryPath = AtomicFileCommit.CreateTempPath(fullPath);
             try
             {
                 using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
@@ -116,12 +147,11 @@ namespace QS3D.Core.Export
                     WriteEntry(archive, "xl/worksheets/sheet1.xml", WorksheetXml(rows));
                 }
 
-                if (File.Exists(fullPath)) File.Delete(fullPath);
-                File.Move(temporaryPath, fullPath);
+                commit(temporaryPath, fullPath);
             }
             finally
             {
-                if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+                AtomicFileCommit.TryDelete(temporaryPath);
             }
         }
 

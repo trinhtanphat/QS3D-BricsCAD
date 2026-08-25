@@ -48,6 +48,7 @@ namespace QS3D.Core.Persistence
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
             if (maximumBytes <= 0L) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
 
+            QsdbProjectStructuralCardinality.Validate(project);
             ValidateProject(project);
             ValidateSerializedXmlText(project);
             var fullPath = Path.GetFullPath(path);
