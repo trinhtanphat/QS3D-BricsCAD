@@ -91,34 +91,27 @@ jobs:
       - name: All discovered feature source guards
         if: ${{ steps.scope.outputs.source_validation == 'true' }}
         run: python scripts/preflight-all.py
-      - name: Validate release PowerShell syntax
+      - name: Validate tracked PowerShell syntax
         if: ${{ steps.scope.outputs.source_validation == 'true' }}
         shell: pwsh
         run: |
-          foreach ($script in @(
-            'scripts/package-v25.ps1',
-            'scripts/verify-v25-package.ps1',
-            'scripts/test-v25-package-verifier.ps1',
-            'scripts/install-v25-autoload.ps1',
-            'scripts/uninstall-v25-autoload.ps1',
-            'scripts/update-v25.ps1',
-            'scripts/new-v25-update-manifest.ps1',
-            'scripts/finalize-v25-signed-package.ps1',
-            'scripts/sign-v25.ps1',
-            'scripts/verify-v25-signatures.ps1',
-            'scripts/sync-preview-release-version.ps1',
-            'scripts/prepare-v25-cloud-release.ps1',
-            'scripts/acquire-v25-compile-references.ps1',
-            'scripts/run-local-v25-wall-contact-3681.ps1'
-          )) {
+          $ErrorActionPreference = 'Stop'
+          $scripts = @(& git ls-files -- 'scripts' | Where-Object { $_ -match '\.ps1$' } | Sort-Object -Unique)
+          if ($LASTEXITCODE -ne 0) { throw 'Could not enumerate tracked PowerShell scripts.' }
+          if ($scripts.Count -eq 0) { throw 'No tracked PowerShell scripts were found below scripts/.' }
+          foreach ($script in $scripts) {
+            if (-not (Test-Path -LiteralPath $script -PathType Leaf)) {
+              throw "Tracked PowerShell script is missing from the checkout: $script"
+            }
             $tokens = $null
             $parseErrors = $null
-            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script).Path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $script).Path, [ref]$tokens, [ref]$parseErrors) | Out-Null
             if ($parseErrors.Count -gt 0) {
               $parseErrors | Format-Table -AutoSize | Out-String | Write-Host
               throw "PowerShell parse failure: $script"
             }
           }
+          Write-Host "Validated $($scripts.Count) tracked PowerShell script(s)."
       - name: V25 package integrity contract tests
         if: ${{ steps.scope.outputs.source_validation == 'true' }}
         shell: pwsh
