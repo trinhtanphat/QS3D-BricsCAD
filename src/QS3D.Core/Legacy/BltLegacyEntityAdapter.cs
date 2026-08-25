@@ -315,10 +315,10 @@ namespace QS3D.Core.Legacy
             foreach (var pair in metadata)
             {
                 var pairValue = pair.Value ?? string.Empty;
-                if (KeyMatches(pair.Key, aliases) && TryFiniteNonNegative(pairValue, out value)) return true;
+                if (MetricKeyMatches(pair.Key, aliases) && TryFiniteNonNegative(pairValue, out value)) return true;
                 foreach (Match match in EmbeddedPair.Matches(pairValue))
                 {
-                    if (!KeyMatches(match.Groups["key"].Value, aliases)) continue;
+                    if (!MetricKeyMatches(match.Groups["key"].Value, aliases)) continue;
                     if (TryFiniteNonNegative(match.Groups["value"].Value, out value)) return true;
                 }
             }
@@ -339,6 +339,12 @@ namespace QS3D.Core.Legacy
                 }
             }
             return string.Empty;
+        }
+
+        private static bool MetricKeyMatches(string? raw, IEnumerable<string> aliases)
+        {
+            var key = NormalizeKey(raw);
+            return aliases.Any(alias => string.Equals(key, NormalizeKey(alias), StringComparison.Ordinal));
         }
 
         private static bool KeyMatches(string? raw, IEnumerable<string> aliases)
