@@ -10,9 +10,13 @@ namespace QS3D.Core.Export
 {
     public static class BcfIssueExchangeSerializer
     {
+        public const int MaxSemanticXmlCharacters = 16 * 1024 * 1024;
+        public const int MaxFreeTextCharacters = 64 * 1024;
+
         public static string Serialize(BcfIssueExchange exchange)
         {
             if (exchange == null) throw new ArgumentNullException(nameof(exchange));
+            ValidateExchangeFreeText(exchange);
             var root = new XElement("BcfIssueExchange", new XAttribute("schemaVersion", BcfIssueExchange.SchemaVersion));
             foreach (var topic in exchange.Topics)
             {
@@ -72,6 +76,8 @@ namespace QS3D.Core.Export
 
         public static BcfIssueExchange Deserialize(string payload)
         {
+            if (payload == null || payload.Length == 0) throw new InvalidDataException("BCF payload is empty.");
+            if (payload.Length > MaxSemanticXmlCharacters) throw new InvalidDataException("BCF payload exceeds the bounded semantic XML size.");
             if (string.IsNullOrWhiteSpace(payload)) throw new InvalidDataException("BCF payload is empty.");
             try
             {
@@ -95,11 +101,11 @@ namespace QS3D.Core.Export
                     topics.Add(
                         new BcfTopic(
                             RequiredAttribute(topicElement, "id"),
-                            RequiredElementValue(topicElement, "Title"),
+                            RequiredFreeTextElementValue(topicElement, "Title"),
                             RequiredAttribute(topicElement, "status"),
                             RequiredAttribute(topicElement, "type"),
-                            RequiredElementValue(topicElement, "Description"),
-                            RequiredAttribute(topicElement, "creationAuthor"),
+                            RequiredFreeTextElementValue(topicElement, "Description"),
+                            RequiredFreeTextAttribute(topicElement, "creationAuthor"),
                             ParseUtc(RequiredAttribute(topicElement, "creationDateUtc")),
                             comments,
                             viewpoints));
@@ -157,12 +163,27 @@ namespace QS3D.Core.Export
                 comments.Add(
                     new BcfComment(
                         RequiredAttribute(commentElement, "id"),
-                        RequiredAttribute(commentElement, "author"),
+                        RequiredFreeTextAttribute(commentElement, "author"),
                         ParseUtc(RequiredAttribute(commentElement, "createdUtc")),
-                        RequiredElementValue(commentElement, "Text"),
+                        RequiredFreeTextElementValue(commentElement, "Text"),
                         OptionalAttribute(commentElement, "viewpointId")));
             }
             return comments;
+        }
+
+        private static void ValidateExchangeFreeText(BcfIssueExchange exchange)
+        {
+            foreach (var topic in exchange.Topics)
+            {
+                EnsureFreeTextBound(topic.Title, "Title");
+                EnsureFreeTextBound(topic.Description, "Description");
+                EnsureFreeTextBound(topic.CreationAuthor, "creationAuthor");
+                foreach (var comment in topic.Comments)
+                {
+                    EnsureFreeTextBound(comment.Author, "author");
+                    EnsureFreeTextBound(comment.Text, "Text");
+                }
+            }
         }
 
         private static XElement Point(string name, BcfPoint3 point) =>
@@ -271,6 +292,13 @@ namespace QS3D.Core.Export
             return attribute.Value;
         }
 
+        private static string RequiredFreeTextAttribute(XElement element, string name)
+        {
+            var value = RequiredAttribute(element, name);
+            EnsureFreeTextBound(value, name);
+            return value;
+        }
+
         private static string? OptionalAttribute(XElement element, string name)
         {
             var attribute = element.Attribute(name);
@@ -283,6 +311,19 @@ namespace QS3D.Core.Export
             EnsureAllowedAttributes(element);
             EnsureScalarContent(element);
             return element.Value;
+        }
+
+        private static string RequiredFreeTextElementValue(XElement parent, string name)
+        {
+            var value = RequiredElementValue(parent, name);
+            EnsureFreeTextBound(value, name);
+            return value;
+        }
+
+        private static void EnsureFreeTextBound(string value, string name)
+        {
+            if (value.Length > MaxFreeTextCharacters)
+                throw new InvalidDataException("BCF free-text value exceeds the bounded scalar size: " + name + ".");
         }
     }
 }
