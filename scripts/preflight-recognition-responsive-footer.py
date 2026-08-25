@@ -70,7 +70,7 @@ for token in (
     'Click="OnApplyClick"',
     'Click="OnApplyConfidentClick"',
     'Header="Độ tin cậy"',
-    'Binding="{Binding RequiresReview}"',
+    'Binding="{Binding RequiresReview, Mode=OneWay}"',
     'Text="REVIEW GATED"',
 ):
     if token not in text:
