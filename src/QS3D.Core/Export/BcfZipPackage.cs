@@ -26,7 +26,7 @@ namespace QS3D.Core.Export
         public static byte[] Write(BcfIssueExchange exchange)
         {
             if (exchange == null) throw new ArgumentNullException(nameof(exchange));
-            var entryCount = 2;
+            var entryCount = 1;
             foreach (var topic in exchange.Topics)
             {
                 entryCount += 1 + topic.Viewpoints.Count;
@@ -37,7 +37,6 @@ namespace QS3D.Core.Export
             using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, true))
             {
                 WriteTextEntry(archive, VersionFileName, BuildVersion());
-                WriteTextEntry(archive, ExtensionsFileName, BuildExtensions(exchange));
                 foreach (var topic in exchange.Topics)
                 {
                     WriteTextEntry(archive, topic.Id + "/" + MarkupFileName, BuildMarkup(topic));
@@ -60,7 +59,9 @@ namespace QS3D.Core.Export
                 using var archive = new ZipArchive(stream, ZipArchiveMode.Read, false);
                 var entries = ValidateEntries(archive);
                 ValidateVersion(ReadRequired(entries, VersionFileName));
-                var vocabularies = ReadExtensions(ReadRequired(entries, ExtensionsFileName));
+                ExtensionVocabularies? vocabularies = null;
+                if (entries.TryGetValue(ExtensionsFileName, out var extensionsEntry))
+                    vocabularies = ReadExtensions(extensionsEntry);
 
                 var topicFolders = new SortedSet<string>(StringComparer.Ordinal);
                 foreach (var path in entries.Keys)
@@ -82,8 +83,8 @@ namespace QS3D.Core.Export
                 {
                     var markup = ReadRequired(entries, folder + "/" + MarkupFileName);
                     var data = ReadMarkup(markup, folder);
-                    if (!vocabularies.TopicTypes.Contains(data.Type)) throw new InvalidDataException("BCF topic type is not declared in extensions.xml: " + data.Type);
-                    if (!vocabularies.TopicStatuses.Contains(data.Status)) throw new InvalidDataException("BCF topic status is not declared in extensions.xml: " + data.Status);
+                    if (vocabularies != null && !vocabularies.TopicTypes.Contains(data.Type)) throw new InvalidDataException("BCF topic type is not declared in extensions.xml: " + data.Type);
+                    if (vocabularies != null && !vocabularies.TopicStatuses.Contains(data.Status)) throw new InvalidDataException("BCF topic status is not declared in extensions.xml: " + data.Status);
 
                     var viewpoints = new List<BcfViewpoint>();
                     foreach (var reference in data.Viewpoints)
