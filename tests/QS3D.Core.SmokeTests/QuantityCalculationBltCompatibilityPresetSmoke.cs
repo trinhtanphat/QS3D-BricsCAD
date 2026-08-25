@@ -46,6 +46,7 @@ namespace QS3D.Core.SmokeTests
             True(native.IntersectionRules.All(IsConservative), "native default intersections remain conservative");
 
             ExplicitCategoryCodeRequiresExactKeyAlias();
+            CategoryTextMetadataKeyRequiresExplicitBoundary();
             LegacyMetricRequiresExactKeyAlias();
         }
 
@@ -79,6 +80,49 @@ namespace QS3D.Core.SmokeTests
             embeddedExact.Metadata["LegacyProbe.XData.000.Value"] = "BLT3D; Category=601";
             True(BltLegacyEntityAdapter.Adapt(embeddedExact).Category == ElementCategory.Column,
                 "embedded exact Category key must preserve established code 601");
+        }
+
+        private static void CategoryTextMetadataKeyRequiresExplicitBoundary()
+        {
+            var lookalikeKeys = new[]
+            {
+                "ColumnSpacing", "BeamLength", "StructuralWallThickness",
+                "Column Spacing", "Beam Length", "Structural Wall Thickness"
+            };
+            for (var i = 0; i < lookalikeKeys.Length; i++)
+            {
+                var snapshot = CreateBltSnapshot("CATEGORY-TEXT-LOOKALIKE-" + i);
+                snapshot.Metadata[lookalikeKeys[i]] = "400";
+                var candidate = BltLegacyEntityAdapter.Adapt(snapshot);
+                True(!candidate.Category.HasValue,
+                    lookalikeKeys[i] + " must not create category text evidence from a compound metadata key");
+            }
+
+            var exactKey = CreateBltSnapshot("CATEGORY-TEXT-EXACT-KEY");
+            exactKey.Metadata["Column"] = "present";
+            True(BltLegacyEntityAdapter.Adapt(exactKey).Category == ElementCategory.Column,
+                "exact category-bearing metadata key must remain supported");
+
+            var bltPrefixedKey = CreateBltSnapshot("CATEGORY-TEXT-BLT-KEY");
+            bltPrefixedKey.Metadata["BLTColumnData"] = "present";
+            True(BltLegacyEntityAdapter.Adapt(bltPrefixedKey).Category == ElementCategory.Column,
+                "BLT-prefixed category metadata key must remain supported");
+
+            var categoryValue = CreateBltSnapshot("CATEGORY-TEXT-VALUE");
+            categoryValue.Metadata["LegacyObjectKind"] = "StructuralWall";
+            True(BltLegacyEntityAdapter.Adapt(categoryValue).Category == ElementCategory.StructuralWall,
+                "category-bearing metadata value must remain supported");
+
+            var runtimeClass = new EntitySnapshot("CATEGORY-TEXT-RUNTIME", "BLTBeamProxy", "LEGACY");
+            runtimeClass.Metadata[BltLegacyMetadataKeys.ProbeMetricEvidence] = BltLegacyEvidenceMode.ExactGeometry.ToString();
+            True(BltLegacyEntityAdapter.Adapt(runtimeClass).Category == ElementCategory.Beam,
+                "BLT-prefixed runtime class must remain supported");
+
+            var ambiguous = CreateBltSnapshot("CATEGORY-TEXT-AMBIGUOUS");
+            ambiguous.Metadata["Column"] = "present";
+            ambiguous.Metadata["Beam"] = "present";
+            True(!BltLegacyEntityAdapter.Adapt(ambiguous).Category.HasValue,
+                "multiple explicit category metadata keys must remain fail-closed as ambiguous");
         }
 
         private static void LegacyMetricRequiresExactKeyAlias()
