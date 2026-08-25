@@ -54,6 +54,37 @@ function Test-CanonicalPathWithin {
     return $Candidate.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)
 }
 
+function Stop-OwnedProcessTree {
+    param(
+        [Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process,
+        [ValidateRange(1, 60000)][int]$CleanupTimeoutMs = 10000
+    )
+
+    # Always attempt PID-scoped tree cleanup after the extraction timeout. The
+    # root may race to exit between WaitForExit(false) and this helper; treating
+    # that race as a clean return would make surviving descendants unverifiable.
+    $taskkill = $null
+    try {
+        $taskkill = Start-Process -FilePath 'taskkill.exe' -ArgumentList @('/PID', [string]$Process.Id, '/T', '/F') -PassThru -NoNewWindow
+        if (-not $taskkill.WaitForExit($CleanupTimeoutMs)) {
+            try { $taskkill.Kill() } catch { }
+            try { [void]$taskkill.WaitForExit(1000) } catch { }
+            throw "owned process-tree cleanup command timed out after $CleanupTimeoutMs ms"
+        }
+        if ($taskkill.ExitCode -ne 0) {
+            throw "owned process-tree cleanup command failed with exit code $($taskkill.ExitCode)"
+        }
+        if (-not $Process.WaitForExit($CleanupTimeoutMs)) {
+            throw "owned MSI root process did not exit within $CleanupTimeoutMs ms after tree cleanup"
+        }
+    }
+    finally {
+        if ($null -ne $taskkill) {
+            $taskkill.Dispose()
+        }
+    }
+}
+
 $msi = Get-CanonicalAbsolutePath -Path $MsiPath
 $extract = Get-CanonicalAbsolutePath -Path $ExtractDir
 $cacheDir = Get-CanonicalAbsolutePath -Path (Split-Path -Parent $msi)
@@ -153,9 +184,18 @@ try {
     $process = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -PassThru
     $exited = $process.WaitForExit(900000)
     if (-not $exited) {
-        try { $process.Kill() } catch { }
+        $cleanupFailure = $null
+        try {
+            Stop-OwnedProcessTree -Process $process -CleanupTimeoutMs 10000
+        }
+        catch {
+            $cleanupFailure = $_.Exception.Message
+        }
         if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
-        throw 'BricsCAD V25 MSI administrative extraction timed out after 15 minutes.'
+        if (-not [string]::IsNullOrWhiteSpace([string]$cleanupFailure)) {
+            throw "BricsCAD V25 MSI administrative extraction timed out after 15 minutes; owned process-tree cleanup failed: $cleanupFailure"
+        }
+        throw 'BricsCAD V25 MSI administrative extraction timed out after 15 minutes; owned process tree terminated.'
     }
     if ($process.ExitCode -notin @(0, 3010)) {
         if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
