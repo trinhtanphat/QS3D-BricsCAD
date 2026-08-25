@@ -58,6 +58,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          # scripts/ci-validation-scope.py owns the exact path classes: src/, tests/, scripts/,
+          # samples/generated/, .github/workflows/, build roots, and watched policy Markdown.
           if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
             & python scripts/ci-validation-scope.py --all --github-output $env:GITHUB_OUTPUT
           }
