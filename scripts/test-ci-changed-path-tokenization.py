@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-import re
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -11,6 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+CLASSIFIER = ROOT / "scripts" / "ci-validation-scope.py"
 
 
 def fail(message: str) -> None:
@@ -18,35 +19,16 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-def classify_control(path: str) -> tuple[bool, bool]:
-    normalized = path.replace("\\", "/")
-    build = bool(
-        re.match(r"^(src|tests|scripts)/", normalized)
-        or re.match(r"^samples/generated/", normalized)
-        or re.match(r"^\.github/workflows/", normalized)
-        or normalized in {".gitmodules", "Directory.Build.props", "QS3D.sln", "QS3D.V26.sln"}
-    )
-    source = build or normalized in {
-        "CI_POLICY.md",
-        "AGENTS.md",
-        "README.md",
-        "docs/MAIN-WRITE-AUTHORIZATION.md",
-        "docs/AGENT-WORK-REGISTRATION.md",
-        "docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md",
-        "docs/AGENT-STATUS-MARKER-SEMANTICS.md",
-        "docs/AGENT-BRANCH-CI-ACTIONS-LOOKUP.md",
-    }
-    return source, build
+def load_classifier():
+    spec = importlib.util.spec_from_file_location("qs3d_ci_validation_scope", CLASSIFIER)
+    if spec is None or spec.loader is None:
+        fail("could not load production validation-scope classifier")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def classify_paths(paths: list[str]) -> tuple[bool, bool]:
-    source = False
-    build = False
-    for path in paths:
-        path_source, path_build = classify_control(path)
-        source = source or path_source
-        build = build or path_build
-    return source, build
+SCOPE = load_classifier()
 
 
 def run_git(repo: Path, *args: str) -> str:
@@ -84,6 +66,50 @@ def split_paths(output: str) -> list[str]:
     return [line for line in output.splitlines() if line]
 
 
+def prove_lossless_records() -> None:
+    expected = [
+        "scripts/line\nbreak.py",
+        "tests/tab\tname.cs",
+        'src/quote"name.cs',
+        "scripts/back\\slash.py",
+        "scripts/unicode-đường-dẫn-ß.py",
+        "tests/name with trailing space ",
+        "docs/line\nbreak.md",
+    ]
+    raw = b"\0".join(path.encode("utf-8") for path in expected) + b"\0"
+    actual = SCOPE.parse_nul_paths(raw)
+    if actual != expected:
+        fail(f"NUL-delimited path records did not preserve exact identity: {actual!r}")
+
+    source, build = SCOPE.classify_paths(actual)
+    if (source, build) != (True, True):
+        fail("unusual watched path records must retain source/build validation")
+
+    if SCOPE.classify_path("docs/line\nbreak.md") != (False, False):
+        fail("unusual docs-only path must remain lightweight")
+    if SCOPE.classify_path("scripts\\literal-root-name.py") != (False, False):
+        fail("a literal backslash in a root filename must not be rewritten into a watched directory separator")
+
+    malformed = (
+        (b"scripts/not-terminated.py", "unterminated output"),
+        (b"scripts/one.py\0\0scripts/two.py\0", "empty record"),
+        (b"scripts/bad-\xff.py\0", "invalid UTF-8"),
+    )
+    for payload, label in malformed:
+        try:
+            SCOPE.parse_nul_paths(payload)
+        except SCOPE.ScopeError:
+            continue
+        fail(f"production parser accepted {label}")
+
+    historical = '"scripts/line\\nbreak.py"\n'
+    historical_tokens = split_paths(historical)
+    if historical_tokens != ['"scripts/line\\nbreak.py"']:
+        fail("historical C-quoted control is invalid")
+    if SCOPE.classify_paths(historical_tokens) != (False, False):
+        fail("historical line-tokenized control must demonstrate why quoted records cannot be classified safely")
+
+
 def prove_rename_behavior() -> None:
     with tempfile.TemporaryDirectory(prefix="qs3d-ci-path-rename-") as temp_dir:
         repo = Path(temp_dir)
@@ -106,70 +132,47 @@ def prove_rename_behavior() -> None:
                 "hermetic control no longer demonstrates Git rename destination collapse: "
                 + repr(rename_detected)
             )
-        if classify_paths(rename_detected) != (False, False):
+        if SCOPE.classify_paths(rename_detected) != (False, False):
             fail("rename-detection control must demonstrate the historical docs-only misclassification")
 
-        rename_safe = split_paths(
-            run_git(
-                repo,
-                "-c",
-                "core.quotePath=false",
-                "diff",
-                "--no-renames",
-                "--name-only",
-                f"{baseline}...HEAD",
-                "--",
-            )
-        )
+        rename_safe = SCOPE.changed_paths(baseline, root=repo)
         expected = ["docs/preflight-rename-fixture.py", "scripts/preflight-rename-fixture.py"]
         if sorted(rename_safe) != sorted(expected):
-            fail(f"rename-safe diff must expose both source and destination paths: {rename_safe!r}")
-        if classify_paths(rename_safe) != (True, True):
+            fail(f"rename-safe NUL diff must expose both source and destination paths: {rename_safe!r}")
+        if SCOPE.classify_paths(rename_safe) != (True, True):
             fail("watched-path rename must retain source/build validation")
 
         docs_baseline = run_git(repo, "rev-parse", "HEAD").strip()
         run_git(repo, "mv", "docs/preflight-rename-fixture.py", "docs/renamed-fixture.py")
         commit_all(repo, "rename docs path")
-        docs_only = split_paths(
-            run_git(
-                repo,
-                "-c",
-                "core.quotePath=false",
-                "diff",
-                "--no-renames",
-                "--name-only",
-                f"{docs_baseline}...HEAD",
-                "--",
-            )
-        )
-        if classify_paths(docs_only) != (False, False):
+        docs_only = SCOPE.changed_paths(docs_baseline, root=repo)
+        if SCOPE.classify_paths(docs_only) != (False, False):
             fail(f"docs-only rename must remain lightweight: {docs_only!r}")
 
 
-def main() -> int:
+def prove_workflow_contract() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
-
     required = (
-        "git -c core.quotePath=false diff --no-renames --name-only",
-        "$path = [string]$rawPath",
-        "[string]::IsNullOrEmpty($path)",
-        "Git returned a C-quoted changed path; refusing ambiguous validation classification",
-        "$path = $path.Replace('\\', '/')",
+        "python scripts/ci-validation-scope.py --all --github-output $env:GITHUB_OUTPUT",
+        'python scripts/ci-validation-scope.py --base "origin/$baseBranch" --head HEAD --github-output $env:GITHUB_OUTPUT',
+        'git fetch --no-tags origin "+refs/heads/$baseBranch`:refs/remotes/origin/$baseBranch"',
     )
     for snippet in required:
         if snippet not in text:
-            fail(f"Shared CI changed-path safety contract is missing: {snippet}")
+            fail(f"Shared CI NUL-safe changed-path contract is missing: {snippet}")
 
-    if "git -c core.quotePath=false diff --name-only" in text:
-        fail("Shared CI must disable rename detection before name-only validation-scope classification")
-    if "([string]$rawPath).Trim()" in text or "$path = $path.Trim()" in text:
-        fail("Shared CI must not trim Git path tokens before validation-scope classification")
+    forbidden = (
+        "git -c core.quotePath=false diff --no-renames --name-only",
+        "Git returned a C-quoted changed path",
+        "$path = $path.Replace('\\', '/')",
+        "foreach ($rawPath in $changed)",
+    )
+    for snippet in forbidden:
+        if snippet in text:
+            fail(f"Shared CI still contains line/C-quote changed-path parsing: {snippet}")
 
-    quote_guard = text.index("Git returned a C-quoted changed path; refusing ambiguous validation classification")
-    build_classifier = text.index("$path -match '^(src|tests|scripts)/'")
-    if quote_guard > build_classifier:
-        fail("C-quoted path rejection must occur before source/build path classification")
 
+def main() -> int:
     controls = {
         "src/đường-dẫn/fixture.cs": (True, True),
         "scripts/preflight-unicode-ß.py": (True, True),
@@ -181,21 +184,15 @@ def main() -> int:
         "docs/ARCHITECTURE.md": (False, False),
     }
     for path, expected in controls.items():
-        actual = classify_control(path)
+        actual = SCOPE.classify_path(path)
         if actual != expected:
             fail(f"classification control failed for {path!r}: expected {expected}, got {actual}")
 
-    quoted_controls = (
-        '"src/control\\nname.cs"',
-        '"scripts/quote\\"name.py"',
-    )
-    for path in quoted_controls:
-        if not (len(path) >= 2 and path[0] == '"' and path[-1] == '"'):
-            fail(f"quoted-path negative control is invalid: {path!r}")
-
+    prove_lossless_records()
     prove_rename_behavior()
+    prove_workflow_contract()
 
-    print("PASS: Shared CI preserves path identity, rejects ambiguous tokens, and retains watched rename scope")
+    print("PASS: Shared CI uses lossless NUL-delimited paths and preserves rename-safe validation scope")
     return 0
 
 
