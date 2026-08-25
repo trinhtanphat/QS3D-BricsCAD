@@ -27,7 +27,7 @@ if not errors:
         "requestedKinds & ~SupportedKinds",
         "Only atomic NativeGeometry and Quantity rebuilds are supported",
         ".Distinct(StringComparer.OrdinalIgnoreCase)",
-        ".OrderBy(id, StringComparer.OrdinalIgnoreCase)" if False else ".OrderBy(id => id, StringComparer.OrdinalIgnoreCase)",
+        ".OrderBy(id => id, StringComparer.OrdinalIgnoreCase)",
     ):
         if token not in plan:
             errors.append("FieldMerge rebuild plan missing bounded/fail-closed token: " + token)
