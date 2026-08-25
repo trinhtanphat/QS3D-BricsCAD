@@ -25,14 +25,15 @@ namespace QS3D.Core.Persistence
         public ProjectPersistenceStamp(ProjectState project)
         {
             _project = project ?? throw new ArgumentNullException(nameof(project));
-            _savedChangeVersion = project.ChangeVersion;
-            _savedSchemaVersion = project.SchemaVersion;
-            _savedDrawingPath = project.DrawingPath;
-            _savedDrawingFingerprint = project.DrawingFingerprint;
-            _savedActiveZoneId = project.ActiveZoneId;
-            _savedActiveFloorId = project.ActiveFloorId;
-            _savedMetadata = SnapshotMetadata(project.Metadata);
-            _savedNestedPersistedContent = SnapshotNestedPersistedContent(project);
+            var snapshot = CaptureStableSnapshot(project);
+            _savedChangeVersion = snapshot.Boundary.ChangeVersion;
+            _savedSchemaVersion = snapshot.Boundary.SchemaVersion;
+            _savedDrawingPath = snapshot.Boundary.DrawingPath;
+            _savedDrawingFingerprint = snapshot.Boundary.DrawingFingerprint;
+            _savedActiveZoneId = snapshot.Boundary.ActiveZoneId;
+            _savedActiveFloorId = snapshot.Boundary.ActiveFloorId;
+            _savedMetadata = snapshot.Metadata;
+            _savedNestedPersistedContent = snapshot.NestedPersistedContent;
         }
 
         public long SavedChangeVersion => _savedChangeVersion;
@@ -43,33 +44,30 @@ namespace QS3D.Core.Persistence
             if (project.Metadata.TryGetValue(RecoveredFromBackupKey, out var recovered) &&
                 string.Equals(recovered, "true", StringComparison.OrdinalIgnoreCase))
                 return true;
-            return project.ChangeVersion != _savedChangeVersion ||
-                   !PersistedScalarsMatch(project) ||
-                   !MetadataMatches(project.Metadata, _savedMetadata) ||
-                   !string.Equals(SnapshotNestedPersistedContent(project), _savedNestedPersistedContent, StringComparison.Ordinal);
+            if (project.ChangeVersion != _savedChangeVersion)
+                return true;
+
+            var snapshot = CaptureStableSnapshot(project);
+            return snapshot.Boundary.ChangeVersion != _savedChangeVersion ||
+                   !PersistedScalarsMatch(snapshot.Boundary) ||
+                   !MetadataMatches(snapshot.Metadata, _savedMetadata) ||
+                   !string.Equals(snapshot.NestedPersistedContent, _savedNestedPersistedContent, StringComparison.Ordinal);
         }
 
         public void MarkSaved(ProjectState project)
         {
             EnsureSameProject(project);
 
-            var savedChangeVersion = project.ChangeVersion;
-            var savedSchemaVersion = project.SchemaVersion;
-            var savedDrawingPath = project.DrawingPath;
-            var savedDrawingFingerprint = project.DrawingFingerprint;
-            var savedActiveZoneId = project.ActiveZoneId;
-            var savedActiveFloorId = project.ActiveFloorId;
-            var savedMetadata = SnapshotMetadata(project.Metadata);
-            var savedNestedPersistedContent = SnapshotNestedPersistedContent(project);
+            var snapshot = CaptureStableSnapshot(project);
 
-            _savedChangeVersion = savedChangeVersion;
-            _savedSchemaVersion = savedSchemaVersion;
-            _savedDrawingPath = savedDrawingPath;
-            _savedDrawingFingerprint = savedDrawingFingerprint;
-            _savedActiveZoneId = savedActiveZoneId;
-            _savedActiveFloorId = savedActiveFloorId;
-            _savedMetadata = savedMetadata;
-            _savedNestedPersistedContent = savedNestedPersistedContent;
+            _savedChangeVersion = snapshot.Boundary.ChangeVersion;
+            _savedSchemaVersion = snapshot.Boundary.SchemaVersion;
+            _savedDrawingPath = snapshot.Boundary.DrawingPath;
+            _savedDrawingFingerprint = snapshot.Boundary.DrawingFingerprint;
+            _savedActiveZoneId = snapshot.Boundary.ActiveZoneId;
+            _savedActiveFloorId = snapshot.Boundary.ActiveFloorId;
+            _savedMetadata = snapshot.Metadata;
+            _savedNestedPersistedContent = snapshot.NestedPersistedContent;
         }
 
         private void EnsureSameProject(ProjectState project)
@@ -79,13 +77,26 @@ namespace QS3D.Core.Persistence
                 throw new InvalidOperationException("A persistence stamp cannot be reused for a different QS3D project.");
         }
 
-        private bool PersistedScalarsMatch(ProjectState project)
+        private bool PersistedScalarsMatch(PersistenceBoundary boundary)
         {
-            return project.SchemaVersion == _savedSchemaVersion &&
-                   string.Equals(project.DrawingPath, _savedDrawingPath, StringComparison.Ordinal) &&
-                   string.Equals(project.DrawingFingerprint, _savedDrawingFingerprint, StringComparison.Ordinal) &&
-                   string.Equals(project.ActiveZoneId, _savedActiveZoneId, StringComparison.Ordinal) &&
-                   string.Equals(project.ActiveFloorId, _savedActiveFloorId, StringComparison.Ordinal);
+            return boundary.SchemaVersion == _savedSchemaVersion &&
+                   string.Equals(boundary.DrawingPath, _savedDrawingPath, StringComparison.Ordinal) &&
+                   string.Equals(boundary.DrawingFingerprint, _savedDrawingFingerprint, StringComparison.Ordinal) &&
+                   string.Equals(boundary.ActiveZoneId, _savedActiveZoneId, StringComparison.Ordinal) &&
+                   string.Equals(boundary.ActiveFloorId, _savedActiveFloorId, StringComparison.Ordinal);
+        }
+
+        private static StableSnapshot CaptureStableSnapshot(ProjectState project)
+        {
+            var boundary = new PersistenceBoundary(project);
+            var metadata = SnapshotMetadata(project.Metadata);
+            var nestedPersistedContent = SnapshotNestedPersistedContent(project, boundary);
+
+            if (!boundary.Matches(project))
+                throw new InvalidOperationException(
+                    "Project state changed while the persistence stamp was materializing persisted content.");
+
+            return new StableSnapshot(boundary, metadata, nestedPersistedContent);
         }
 
         private static Dictionary<string, string> SnapshotMetadata(IDictionary<string, string> metadata)
@@ -100,26 +111,26 @@ namespace QS3D.Core.Persistence
             return snapshot;
         }
 
-        private static bool MetadataMatches(IDictionary<string, string> metadata, IReadOnlyDictionary<string, string> savedMetadata)
+        private static bool MetadataMatches(
+            IReadOnlyDictionary<string, string> metadata,
+            IReadOnlyDictionary<string, string> savedMetadata)
         {
-            var items = SnapshotBounded(metadata, metadata.Count, "project metadata");
-            var trackedCount = 0;
-            foreach (var item in items)
+            if (metadata.Count != savedMetadata.Count)
+                return false;
+            foreach (var item in metadata)
             {
-                if (!TracksSemanticDirtyState(item.Key)) continue;
-                trackedCount++;
                 if (!savedMetadata.TryGetValue(item.Key, out var savedValue) ||
                     !string.Equals(item.Value, savedValue, StringComparison.Ordinal))
                     return false;
             }
-            return trackedCount == savedMetadata.Count;
+            return true;
         }
 
-        private static string SnapshotNestedPersistedContent(ProjectState project)
+        private static string SnapshotNestedPersistedContent(ProjectState project, PersistenceBoundary boundary)
         {
             var snapshot = new StringBuilder();
-            AppendString(snapshot, project.Name);
-            AppendDateTime(snapshot, project.UpdatedUtc);
+            AppendString(snapshot, boundary.Name);
+            AppendDateTime(snapshot, boundary.UpdatedUtc);
 
             var zones = SnapshotBounded(project.Zones, project.Zones.Count, "project zones");
             AppendSequenceCount(snapshot, zones.Count);
@@ -330,6 +341,59 @@ namespace QS3D.Core.Persistence
         private static bool TracksSemanticDirtyState(string key)
         {
             return !string.Equals(key, ProjectBrowserWorkspaceStateKey, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private sealed class StableSnapshot
+        {
+            public StableSnapshot(
+                PersistenceBoundary boundary,
+                Dictionary<string, string> metadata,
+                string nestedPersistedContent)
+            {
+                Boundary = boundary;
+                Metadata = metadata;
+                NestedPersistedContent = nestedPersistedContent;
+            }
+
+            public PersistenceBoundary Boundary { get; }
+            public Dictionary<string, string> Metadata { get; }
+            public string NestedPersistedContent { get; }
+        }
+
+        private sealed class PersistenceBoundary
+        {
+            public PersistenceBoundary(ProjectState project)
+            {
+                ChangeVersion = project.ChangeVersion;
+                SchemaVersion = project.SchemaVersion;
+                Name = project.Name;
+                DrawingPath = project.DrawingPath;
+                DrawingFingerprint = project.DrawingFingerprint;
+                ActiveZoneId = project.ActiveZoneId;
+                ActiveFloorId = project.ActiveFloorId;
+                UpdatedUtc = project.UpdatedUtc;
+            }
+
+            public long ChangeVersion { get; }
+            public int SchemaVersion { get; }
+            public string Name { get; }
+            public string DrawingPath { get; }
+            public string DrawingFingerprint { get; }
+            public string ActiveZoneId { get; }
+            public string ActiveFloorId { get; }
+            public DateTime UpdatedUtc { get; }
+
+            public bool Matches(ProjectState project)
+            {
+                return project.ChangeVersion == ChangeVersion &&
+                       project.SchemaVersion == SchemaVersion &&
+                       string.Equals(project.Name, Name, StringComparison.Ordinal) &&
+                       string.Equals(project.DrawingPath, DrawingPath, StringComparison.Ordinal) &&
+                       string.Equals(project.DrawingFingerprint, DrawingFingerprint, StringComparison.Ordinal) &&
+                       string.Equals(project.ActiveZoneId, ActiveZoneId, StringComparison.Ordinal) &&
+                       string.Equals(project.ActiveFloorId, ActiveFloorId, StringComparison.Ordinal) &&
+                       project.UpdatedUtc == UpdatedUtc;
+            }
         }
     }
 }
