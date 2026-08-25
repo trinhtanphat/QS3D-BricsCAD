@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression test for Shared CI changed-path tokenization and rename safety."""
+"""Regression test for Shared CI changed-path tokenization, rename and execution bounds."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ def load_classifier():
     if spec is None or spec.loader is None:
         fail("could not load production validation-scope classifier")
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -38,6 +39,7 @@ def run_git(repo: Path, *args: str) -> str:
         capture_output=True,
         text=True,
         encoding="utf-8",
+        timeout=15,
     )
     if completed.returncode != 0:
         fail(
@@ -64,6 +66,16 @@ def commit_all(repo: Path, message: str) -> None:
 
 def split_paths(output: str) -> list[str]:
     return [line for line in output.splitlines() if line]
+
+
+def expect_scope_error(action, expected: str) -> None:
+    try:
+        action()
+    except SCOPE.ScopeError as exc:
+        if expected not in str(exc):
+            fail(f"expected ScopeError containing {expected!r}, got {str(exc)!r}")
+        return
+    fail(f"expected ScopeError containing {expected!r}")
 
 
 def prove_lossless_records() -> None:
@@ -108,6 +120,85 @@ def prove_lossless_records() -> None:
         fail("historical C-quoted control is invalid")
     if SCOPE.classify_paths(historical_tokens) != (False, False):
         fail("historical line-tokenized control must demonstrate why quoted records cannot be classified safely")
+
+
+def prove_bounded_process_contract() -> None:
+    with tempfile.TemporaryDirectory(prefix="qs3d-ci-scope-bounds-") as temp_dir:
+        cwd = Path(temp_dir)
+
+        success = SCOPE.run_bounded_process(
+            [
+                sys.executable,
+                "-c",
+                "import sys; sys.stdout.buffer.write(b'scripts/ok.py\\0'); "
+                "sys.stderr.buffer.write(b'note'); sys.stdout.flush(); sys.stderr.flush()",
+            ],
+            cwd=cwd,
+            timeout_seconds=2.0,
+            max_stdout_bytes=1024,
+            max_stderr_bytes=1024,
+        )
+        if success.returncode != 0 or success.stdout != b"scripts/ok.py\0" or success.stderr != b"note":
+            fail(f"bounded process success contract changed: {success!r}")
+
+        nonzero = SCOPE.run_bounded_process(
+            [
+                sys.executable,
+                "-c",
+                "import sys; sys.stderr.write('bounded diagnostic'); raise SystemExit(7)",
+            ],
+            cwd=cwd,
+            timeout_seconds=2.0,
+            max_stdout_bytes=1024,
+            max_stderr_bytes=1024,
+        )
+        if nonzero.returncode != 7 or nonzero.stderr != b"bounded diagnostic":
+            fail(f"bounded nonzero diagnostic contract changed: {nonzero!r}")
+
+        expect_scope_error(
+            lambda: SCOPE.run_bounded_process(
+                [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'x' * 8192); sys.stdout.flush()"],
+                cwd=cwd,
+                timeout_seconds=2.0,
+                max_stdout_bytes=128,
+                max_stderr_bytes=1024,
+            ),
+            "Git changed-path output exceeded 128-byte limit",
+        )
+
+        expect_scope_error(
+            lambda: SCOPE.run_bounded_process(
+                [sys.executable, "-c", "import sys; sys.stderr.buffer.write(b'e' * 8192); sys.stderr.flush()"],
+                cwd=cwd,
+                timeout_seconds=2.0,
+                max_stdout_bytes=1024,
+                max_stderr_bytes=128,
+            ),
+            "Git diagnostic output exceeded 128-byte limit",
+        )
+
+        expect_scope_error(
+            lambda: SCOPE.run_bounded_process(
+                [sys.executable, "-c", "import time; time.sleep(5)"],
+                cwd=cwd,
+                timeout_seconds=0.1,
+                max_stdout_bytes=1024,
+                max_stderr_bytes=1024,
+            ),
+            "timed out after 0.1 seconds",
+        )
+
+        missing = cwd / "definitely-missing-qs3d-executable"
+        expect_scope_error(
+            lambda: SCOPE.run_bounded_process(
+                [str(missing)],
+                cwd=cwd,
+                timeout_seconds=1.0,
+                max_stdout_bytes=1024,
+                max_stderr_bytes=1024,
+            ),
+            "could not launch changed-path command",
+        )
 
 
 def prove_rename_behavior() -> None:
@@ -171,6 +262,21 @@ def prove_workflow_contract() -> None:
         if snippet in text:
             fail(f"Shared CI still contains line/C-quote changed-path parsing: {snippet}")
 
+    source = CLASSIFIER.read_text(encoding="utf-8")
+    production_required = (
+        "GIT_DIFF_TIMEOUT_SECONDS = 30.0",
+        "MAX_CHANGED_PATH_BYTES = 4 * 1024 * 1024",
+        "MAX_GIT_DIAGNOSTIC_BYTES = 64 * 1024",
+        "run_bounded_process(",
+        "stdout=subprocess.PIPE",
+        "stderr=subprocess.PIPE",
+    )
+    for snippet in production_required:
+        if snippet not in source:
+            fail(f"validation-scope execution bound is missing: {snippet}")
+    if "subprocess.run(" in source:
+        fail("production validation-scope classifier must not return to unbounded subprocess.run capture")
+
 
 def main() -> int:
     controls = {
@@ -189,10 +295,11 @@ def main() -> int:
             fail(f"classification control failed for {path!r}: expected {expected}, got {actual}")
 
     prove_lossless_records()
+    prove_bounded_process_contract()
     prove_rename_behavior()
     prove_workflow_contract()
 
-    print("PASS: Shared CI uses lossless NUL-delimited paths and preserves rename-safe validation scope")
+    print("PASS: Shared CI changed-path classification is lossless, rename-safe and execution-bounded")
     return 0
 
 
