@@ -227,7 +227,17 @@ namespace QS3D.Core.SmokeTests
         private static void XlsxExporterPackage()
         {
             var path=Path.Combine(Path.GetTempPath(),"qs3d-smoke-"+Guid.NewGuid().ToString("N")+".xlsx");
-            try { XlsxQuantityExporter.Export(path,BuildRows()); using(var a=ZipFile.OpenRead(path)){RequireEntry(a,"[Content_Types].xml");RequireEntry(a,"xl/workbook.xml");RequireEntry(a,"xl/worksheets/sheet1.xml");} }
+            try
+            {
+                var rows = BuildRows();
+                rows[0].DrawingFingerprint = "smoke-drawing";
+                rows[0].ElementIds.Add("A");
+                rows[0].ElementIds.Add("B");
+                rows[0].SourceHandles.Add("1A");
+                rows[0].SourceHandles.Add("2B");
+                XlsxQuantityExporter.Export(path,rows);
+                using(var a=ZipFile.OpenRead(path)){RequireEntry(a,"[Content_Types].xml");RequireEntry(a,"xl/workbook.xml");RequireEntry(a,"xl/worksheets/sheet1.xml");}
+            }
             finally { SafeDelete(path); }
         }
 
