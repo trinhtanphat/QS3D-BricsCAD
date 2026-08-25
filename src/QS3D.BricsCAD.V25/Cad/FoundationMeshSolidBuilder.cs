@@ -30,6 +30,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private sealed class PendingUpdate
         {
+            public ProjectState Project { get; set; } = null!;
             public ProjectElement Element { get; set; } = null!;
             public CadElementVerticalPlacement VerticalPlacement { get; set; } = null!;
             public List<string> Handles { get; } = new List<string>();
@@ -132,7 +133,7 @@ namespace QS3D.BricsCAD.V25.Cad
                             });
                             ReserveBatchBars(ref batchBars, layout.Count);
                             ErasePrevious(document, transaction, project, element, ownership);
-                            var update = CreateUpdate(element, verticalPlacement, xGroup, yGroup, coverM, layout.XActualSpacingM, layout.YActualSpacingM, includeBottom, includeTop, RectangleFootprintMode);
+                            var update = CreateUpdate(project, element, verticalPlacement, xGroup, yGroup, coverM, layout.XActualSpacingM, layout.YActualSpacingM, includeBottom, includeTop, RectangleFootprintMode);
                             AppendRectangleBars(document, transaction, modelSpace, polyline, element, rectangle, centerZ, layout, update);
                             pending.Add(update);
                             continue;
@@ -156,7 +157,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         });
                         ReserveBatchBars(ref batchBars, polygonLayout.Count);
                         ErasePrevious(document, transaction, project, element, ownership);
-                        var polygonUpdate = CreateUpdate(element, verticalPlacement, xGroup, yGroup, coverM, polygonLayout.XActualSpacingM, polygonLayout.YActualSpacingM, includeBottom, includeTop, PolygonFootprintMode);
+                        var polygonUpdate = CreateUpdate(project, element, verticalPlacement, xGroup, yGroup, coverM, polygonLayout.XActualSpacingM, polygonLayout.YActualSpacingM, includeBottom, includeTop, PolygonFootprintMode);
                         AppendPolygonBars(document, transaction, modelSpace, polyline, element, centerZ, polygonLayout, polygonUpdate);
                         pending.Add(polygonUpdate);
                     }
@@ -185,6 +186,7 @@ namespace QS3D.BricsCAD.V25.Cad
         }
 
         private static PendingUpdate CreateUpdate(
+            ProjectState project,
             ProjectElement element,
             CadElementVerticalPlacement verticalPlacement,
             RebarGroup xGroup,
@@ -198,6 +200,7 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             return new PendingUpdate
             {
+                Project = project,
                 Element = element,
                 VerticalPlacement = verticalPlacement,
                 XDiameterMm = xGroup.DiameterMm,
@@ -289,7 +292,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 bar.Layer = source.Layer;
                 modelSpace.AppendEntity(bar);
                 transaction.AddNewlyCreatedDBObject(bar, true);
-                GeneratedRebarNativeOwnershipService.MarkGenerated(document, transaction, bar, project: null!, element, HandlesKey);
+                GeneratedRebarNativeOwnershipService.MarkGenerated(document, transaction, bar, update.Project, element, HandlesKey);
                 update.Handles.Add(bar.Handle.ToString());
                 bar = null;
             }
