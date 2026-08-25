@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 
 namespace QS3D.Core.Reporting
@@ -16,6 +17,7 @@ namespace QS3D.Core.Reporting
         public static QuantityReportTotals FromRows(IEnumerable<QuantityReportRow> rows)
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            var knownCount = SnapshotKnownRowCount(rows);
             var totals = new QuantityReportTotals();
             var grossConcreteCompensation = 0d;
             var deductionCompensation = 0d;
@@ -26,6 +28,8 @@ namespace QS3D.Core.Reporting
             var rowIndex = 0;
             foreach (var row in rows)
             {
+                if (knownCount.HasValue && rowIndex >= knownCount.Value)
+                    throw RowCountMismatch(knownCount.Value, rowIndex + 1);
                 if (row == null)
                     throw new ArgumentException("Quantity report rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
                 totals.Count = QuantityReportMath.AddCount(totals.Count, row.Count);
@@ -37,6 +41,8 @@ namespace QS3D.Core.Reporting
                 totals.DoorAreaM2 = Add(totals.DoorAreaM2, ref doorAreaCompensation, row.DoorAreaM2, rowIndex, "DoorAreaM2");
                 rowIndex++;
             }
+            if (knownCount.HasValue && rowIndex != knownCount.Value)
+                throw RowCountMismatch(knownCount.Value, rowIndex);
 
             totals.GrossConcreteM3 = Finalize(totals.GrossConcreteM3, grossConcreteCompensation, "GrossConcreteM3");
             totals.DeductionM3 = Finalize(totals.DeductionM3, deductionCompensation, "DeductionM3");
@@ -45,6 +51,35 @@ namespace QS3D.Core.Reporting
             totals.LengthM = Finalize(totals.LengthM, lengthCompensation, "LengthM");
             totals.DoorAreaM2 = Finalize(totals.DoorAreaM2, doorAreaCompensation, "DoorAreaM2");
             return totals;
+        }
+
+        private static int? SnapshotKnownRowCount(IEnumerable<QuantityReportRow> rows)
+        {
+            int? knownCount = null;
+            if (rows is ICollection<QuantityReportRow> genericCollection)
+                ObserveKnownRowCount(genericCollection.Count, ref knownCount);
+            if (rows is IReadOnlyCollection<QuantityReportRow> readOnlyCollection)
+                ObserveKnownRowCount(readOnlyCollection.Count, ref knownCount);
+            if (rows is ICollection nonGenericCollection)
+                ObserveKnownRowCount(nonGenericCollection.Count, ref knownCount);
+            return knownCount;
+        }
+
+        private static void ObserveKnownRowCount(int count, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Quantity report row input reported a negative known count.");
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException(
+                    "Quantity report row input exposes conflicting known counts: " + knownCount.Value + " and " + count + ".");
+            knownCount = count;
+        }
+
+        private static InvalidOperationException RowCountMismatch(int reportedCount, int observedCount)
+        {
+            return new InvalidOperationException(
+                "Quantity report row input changed during enumeration; Count reported " + reportedCount +
+                " rows but enumeration produced " + observedCount + ".");
         }
 
         private static double Add(double current, ref double compensation, double value, int rowIndex, string quantity)
