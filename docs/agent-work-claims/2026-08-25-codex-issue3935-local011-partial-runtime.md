@@ -1,5 +1,7 @@
 # LOCAL-011 partial licensed-runtime handoff
 
+> Superseded on 2026-08-25 by `docs/agent-work-claims/2026-08-25-codex-issue3935-local011-runtime-pass.md`. This file remains only as historical provenance for the pre-fix partial run and its source handoffs.
+
 - Carrier issue: `#3935`
 - Lane-Key: `issue-3935`
 - Canonical branch: `agent/local003/issue-3935-local011-v25-qualification`
