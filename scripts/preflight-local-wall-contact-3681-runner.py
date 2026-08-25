@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless #3681 remains a committed pull/run-only V25 qualification lane."""
+"""Fail closed unless #3681 retains its committed runner and completed V25 evidence."""
 
 from pathlib import Path
 import re
@@ -16,6 +16,8 @@ INDEX = ROOT / "docs" / "LOCAL-SOURCE-READY-INDEX-2026-08-24.md"
 DISPATCH = ROOT / "docs" / "LOCAL-DISPATCH-READY-2026-08-24.md"
 SOURCE_READY_FLOOR_SHA = "c64eb8c1b83761e155da670904a72e64669464b7"
 TOUCHING_PROBE_FLOOR_SHA = "4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0"
+ACCEPTED_RUNTIME_SHA = "a4f1a53683a9296532a0290fcb79bc49b9d4b892"
+ACCEPTED_EVIDENCE_SHA = "7fec6f36a7c1181d7113f0e7220ea3dafca66e29"
 
 
 def fail(message: str) -> None:
@@ -230,19 +232,20 @@ require_tokens(
 )
 require_tokens(
     dispatch,
-    "#3681 dispatch",
+    "#3681 completed dispatch",
     (
-        "Status: `LOCAL_READY / PULL_RUN_ONLY`",
+        "Status: `COMPLETED / DO_NOT_RERUN`",
         f"Minimum source-ready ancestor: `{SOURCE_READY_FLOOR_SHA}`",
-        "Exact runnable SHA: published on #3681 and #72 after this carrier's protected branch CI succeeds.",
+        f"Exact runtime source: `{ACCEPTED_RUNTIME_SHA}`",
+        f"Accepted evidence: PR #3849 / merge `{ACCEPTED_EVIDENCE_SHA}`",
         "#3833",
         "#3836",
         RUNNER_NAME,
+        "regression reference",
         "touching-only",
         "0.05 m penetration",
         "LOCAL_PASS",
-        "LOCAL_FAIL",
-        "NO_RESULT",
+        "Do not execute it by default",
     ),
 )
 
@@ -259,4 +262,4 @@ for forbidden in (
 if "StartTime.ToUniversalTime() -ge $startedUtc" in runner:
     fail("runner must not infer BricsCAD process ownership from process start time")
 
-print("PASS #3681 one-command V25 runner requires the #3833/#3836 source-ready floor and unit-bound capture/persistence/direct-measure fixtures")
+print("PASS #3681 runner remains committed as a regression reference and dispatch binds accepted completed V25 evidence")
