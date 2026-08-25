@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,17 +15,31 @@ for path in (WINDOW, COMMAND):
 if WINDOW.is_file():
     text = WINDOW.read_text(encoding="utf-8")
     for token in (
-        "private readonly Document _document;",
+        "using BcadApplication = Bricscad.ApplicationServices.Application;",
+        "private readonly IntPtr _nativeDatabaseIdentity;",
         "public AuditLogWindow(Document document)",
+        "_nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
+        "DocumentBoundWindowLifetime.Attach(this, document);",
         "Activated += (_, __) => Reload();",
-        "ProjectContextCoordinator.TryGetReadOnly(_document, out var project)",
-        "DrawingLabel(_document)",
+        "TryResolveBoundDocument(out var document)",
+        "foreach (Document candidate in BcadApplication.DocumentManager)",
+        "if (candidate == null || candidate.IsDisposed) continue;",
+        "if (database.UnmanagedObject != _nativeDatabaseIdentity) continue;",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        "DrawingLabel(document)",
     ):
         if token not in text:
-            errors.append("AuditLogWindow.xaml.cs missing source-document read-only refresh token: " + token)
+            errors.append("AuditLogWindow.xaml.cs missing live source-document read-only refresh token: " + token)
+
+    retained_document = re.search(
+        r"\b(?:private|protected|public|internal)\s+(?:readonly\s+)?Document\s+_[A-Za-z0-9_]+\s*;",
+        text,
+    )
+    if retained_document:
+        errors.append("Audit Log must not retain a BricsCAD Document wrapper across modeless lifetime: " + retained_document.group(0))
     if "private readonly ProjectState _project" in text:
         errors.append("Audit Log must not retain a stale ProjectState reference across modeless project reload/replacement")
-    if "ProjectContextCoordinator.GetOrCreate(_document)" in text:
+    if "ProjectContextCoordinator.GetOrCreate" in text:
         errors.append("Audit Log is read-only and must not create/cache project state while refreshing")
 
 if COMMAND.is_file():
@@ -43,4 +58,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] modeless Audit Log is bound to its source DWG and re-resolves existing audit state read-only on activation")
+print("[PASS] modeless Audit Log binds to its source native database identity, resolves a live Document wrapper for each read-only refresh, and does not retain stale host/project wrappers")
