@@ -5,6 +5,7 @@ import signal
 import stat
 import subprocess
 import sys
+import threading
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,6 +14,9 @@ SELF = Path(__file__).resolve()
 CHILD_TIMEOUT_SECONDS = 180
 AGGREGATE_TIMEOUT_SECONDS = 15 * 60
 PROCESS_TREE_CLEANUP_TIMEOUT_SECONDS = 10
+OUTPUT_DRAIN_JOIN_TIMEOUT_SECONDS = 10
+MAX_FEATURE_GATE_OUTPUT_BYTES = 1024 * 1024
+OUTPUT_READ_CHUNK_BYTES = 64 * 1024
 # Keep discovery finite while leaving explicit headroom above the repository's current 1025-gate scale.
 MAX_FEATURE_GATES = 2048
 MAX_FEATURE_GATE_SOURCE_BYTES = 512 * 1024
@@ -30,10 +34,15 @@ PYTHON_ENVIRONMENT_CONTROLS = (
 
 
 class GateTimeoutError(TimeoutError):
-    def __init__(self, timeout_seconds, cleanup_error=None):
+    def __init__(self, timeout_seconds, cleanup_error=None, output_error=None):
         super().__init__("feature preflight timed out")
         self.timeout_seconds = timeout_seconds
         self.cleanup_error = cleanup_error
+        self.output_error = output_error
+
+
+class GateOutputError(RuntimeError):
+    pass
 
 
 def _relative_candidate(path):
@@ -205,18 +214,120 @@ def _terminate_process_tree(process, platform_name=None):
     return cleanup_error
 
 
+def _write_output_bytes(target, data):
+    if hasattr(target, "buffer"):
+        target.buffer.write(data)
+        target.buffer.flush()
+        return
+    try:
+        target.write(data)
+    except TypeError:
+        target.write(data.decode("utf-8", errors="replace"))
+    if hasattr(target, "flush"):
+        target.flush()
+
+
+def copy_bounded_output(stream, target=None, limit_bytes=MAX_FEATURE_GATE_OUTPUT_BYTES):
+    if limit_bytes < 0:
+        raise ValueError("feature gate output limit must be non-negative")
+    output = sys.stdout if target is None else target
+    emitted = 0
+    truncated = False
+
+    while True:
+        chunk = stream.read(OUTPUT_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        if not isinstance(chunk, bytes):
+            raise GateOutputError("feature preflight output stream returned non-bytes data")
+
+        remaining = max(0, limit_bytes - emitted)
+        if remaining:
+            visible = chunk[:remaining]
+            _write_output_bytes(output, visible)
+            emitted += len(visible)
+        if len(chunk) > remaining:
+            truncated = True
+
+    return emitted, truncated
+
+
+def _drain_gate_output(stream, state):
+    try:
+        emitted, truncated = copy_bounded_output(stream)
+        state["emitted"] = emitted
+        state["truncated"] = truncated
+    except Exception as exc:
+        state["error"] = exc
+    finally:
+        try:
+            stream.close()
+        except OSError:
+            pass
+
+
+def _finish_output_drain(thread, state):
+    thread.join(timeout=OUTPUT_DRAIN_JOIN_TIMEOUT_SECONDS)
+    if thread.is_alive():
+        return "output-drain-timeout"
+    error = state.get("error")
+    if error is not None:
+        return "output-drain-error=" + type(error).__name__
+    return None
+
+
 def run_gate(path, child_env, timeout_seconds):
     process = subprocess.Popen(
         [sys.executable, str(path)],
         cwd=str(ROOT),
         env=child_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         **_process_group_launch_kwargs(),
     )
+    if process.stdout is None:
+        try:
+            process.kill()
+        except OSError:
+            pass
+        raise GateOutputError("feature preflight output pipe was not created")
+
+    output_state = {}
+    output_thread = threading.Thread(
+        target=_drain_gate_output,
+        args=(process.stdout, output_state),
+        name="preflight-output-" + str(process.pid),
+        daemon=True,
+    )
+    output_thread.start()
+
+    timed_out = False
+    timeout_exception = None
+    cleanup_error = None
+    returncode = None
+
     try:
-        return process.wait(timeout=timeout_seconds)
+        returncode = process.wait(timeout=timeout_seconds)
     except subprocess.TimeoutExpired as exc:
+        timed_out = True
+        timeout_exception = exc
         cleanup_error = _terminate_process_tree(process)
-        raise GateTimeoutError(timeout_seconds, cleanup_error) from exc
+
+    output_error = _finish_output_drain(output_thread, output_state)
+    if output_state.get("truncated"):
+        print(
+            "\n[aggregate output truncated after",
+            MAX_FEATURE_GATE_OUTPUT_BYTES,
+            "bytes for",
+            path.relative_to(ROOT),
+            "]",
+        )
+
+    if timed_out:
+        raise GateTimeoutError(timeout_seconds, cleanup_error, output_error) from timeout_exception
+    if output_error is not None:
+        raise GateOutputError("feature preflight output drain failed: " + output_error)
+    return returncode
 
 
 def escape_actions_data(value):
@@ -271,13 +382,21 @@ def main():
             reason = timeout_reason
             if exc.cleanup_error is not None:
                 reason += "-cleanup-failed"
+            if exc.output_error is not None:
+                reason += "-output-failed"
             print("ERROR:", rel, "timed out after", exc.timeout_seconds, "seconds (", reason, ").")
             if exc.cleanup_error is not None:
                 print("ERROR:", rel, "owned process-tree cleanup failed:", exc.cleanup_error)
+            if exc.output_error is not None:
+                print("ERROR:", rel, "output drain failed:", exc.output_error)
             failed.append((str(rel), reason))
-            if timeout_reason == "aggregate-timeout" or exc.cleanup_error is not None:
+            if timeout_reason == "aggregate-timeout" or exc.cleanup_error is not None or exc.output_error is not None:
                 break
             continue
+        except GateOutputError as exc:
+            print("ERROR:", rel, "output handling failed -", exc)
+            failed.append((str(rel), "output"))
+            break
         except OSError as exc:
             print("ERROR: failed to start", rel, "-", exc)
             failed.append((str(rel), "launch"))

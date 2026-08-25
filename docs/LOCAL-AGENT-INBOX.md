@@ -117,8 +117,22 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
   `afff082096998fa404f08a5e29bcfd9fbc3830dd`; a future write-capable
   continuation must repin that then-current branch rather than publish this
   stale local carrier unchanged.
+  On 2026-08-25 the unchanged canonical runner was invoked exactly once from a
+  clean detached checkout of the post-#3985 source-ready SHA
+  `d52a0065a3f63575885761bc59fab2c08a32f4a4`. Exact-SHA/manual-CI/generic
+  source checks, all `1043/1043` aggregate gates, Core Release and deterministic
+  smoke, the V25 `Release|x64` adapter build with `0 warnings / 0 errors`, and
+  offline WPF qualification passed. The licensed NETLOAD/Ribbon/Palette row is
+  `NO_RESULT`: one concurrently opened BricsCAD V25 process appeared before the
+  hosted boundary, so the canonical dedicated-runner precondition stopped the
+  attempt before launching its own host. The worker performed one blocker audit,
+  did not touch that process, and did not rerun. DemandLoad and the installed
+  loader hash were restored, the exact-SHA tree remained clean, and no source or
+  runner file changed. This is environmental interference, not
+  `SOURCE_FIX_REQUIRED`; post-#3985 Interchange continuation and the remaining
+  current-candidate matrix remain `PENDING_LOCAL` under #3924/#72.
 - Related docs: `docs/LOCAL-V25-QUALIFICATION.md`; `docs/EXISTING-PROJECT-MUTATION-CONTEXT.md`; `docs/INTERCHANGE-FIELD-PRECEDENCE.md`; `scripts/preflight-interchange-field-merge-execution.py`; `scripts/preflight-room-finish-project-lifecycle.py`; `scripts/preflight-grid-auto-number-project-lifecycle.py`; `scripts/preflight-room-auto-project-lifecycle.py`; `docs/ROOM-AUTO-PREVIEW-COMMIT-FRESHNESS.md`; `scripts/preflight-save-project-lifecycle.py`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
-- Updated: 2026-08-21
+- Updated: 2026-08-25
 
 ## LOCAL-002 — Curtain whole-command atomicity and native panels
 
@@ -282,6 +296,14 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Priority: P2
 - Status: OPEN
 - Area: Performance / UI / HiDPI
+- Source/runner status: `SOURCE_READY / PENDING_LOCAL / DO_NOT_RETRY_REMOTE`.
+- Runner: `scripts/run-local-v25-local-010.ps1`
+- Runbook: `docs/LOCAL-010-PERFORMANCE-UI-QUALIFICATION.md`
+- Remote disposition: `REMOTE_DONE / PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
+- Local handoff: From one clean exact intended `main` SHA containing this runner/runbook, with licensed interactive BricsCAD V25 x64 and zero pre-existing BricsCAD processes, **pull/sync only and run one command**: `powershell -ExecutionPolicy Bypass -File .\scripts\run-local-v25-local-010.ps1`. Do not patch production source in this local lane.
+- Exact-source rule: Evidence is valid only for the runner-reported exact checkout SHA and matching V25/plugin identity. A newer intended `main` candidate requires a clean restart from the beginning; hosted/source CI never manufactures `LOCAL_PASS`.
+- Result semantics: `artifacts/local-v25-local-010/qualification.json` records exact SHA, Windows/V25 identity, canonical baseline and per-row `PASS`/`FAIL`/`BLOCKED` evidence; runner exit 0/1/2/3 means complete PASS/FAIL/BLOCKED/NO_RESULT and `localPassClaimedByRunner=false`.
+- Cleanup/host-major boundary: Use sanitized/disposable projects only, publish no private paths/raw Handles/ProjectIds/proprietary files, preserve user/DemandLoad state, never kill unrelated BricsCAD sessions, and finish with zero test-owned BricsCAD process residue. This runner qualifies V25 only; V26 requires its matching assembly/runtime and must never reuse or relabel the V25 binary.
 - Why local: Representative timings, native palette responsiveness, GPU/driver effects, and DPI/layout behavior need real hardware and V25.
 - Scenario: Measure DependencyGraph/regeneration, rooms, wall junctions, Auto Host, Curtain, BQ/BBS/ED2/Interchange, ownership/Health, rebar limits, plus 100/125/150/200% DPI and narrow/normal/wide palettes on representative large projects.
 - Evidence required: Exact SHA; hardware/OS/V25 build; project sizes; timings; DPI/layout results; sanitized bottleneck notes.
