@@ -12,12 +12,9 @@ param(
     [string]$DrawingCopy = '',
     [string]$FixtureDwg = '',
     [string]$ReferenceCopy = '',
-    [string]$VersionKey = '',
-    [string]$LanguageKey = '',
     [switch]$ConfirmDisposableCopy,
     [switch]$ConfirmDisposableCopies,
-    [switch]$ConfirmReferenceCopy,
-    [switch]$ConfirmDisposableInstall
+    [switch]$ConfirmReferenceCopy
 )
 
 Set-StrictMode -Version Latest
@@ -77,12 +74,11 @@ function Get-CanonicalLocalQueue {
     return $rows.ToArray()
 }
 
-# This registry is execution metadata only. Priority/status always come from
-# docs/LOCAL-AGENT-INBOX.md at run time; do not turn this into a second queue.
+# Execution metadata only. Priority/status always come from the canonical inbox.
 $contracts = [ordered]@{
     '#3681' = [ordered]@{ host = 'V25'; mode = 'COMPLETED_NO_RERUN'; runners = @('run-local-v25-wall-contact-3681.ps1'); note = 'Completed licensed qualification; regression reference only.' }
     'LOCAL-001' = [ordered]@{ host = 'V25'; mode = 'AUTOMATED_BASELINE'; runners = @('run-local-v25-qualification.ps1'); note = 'Runs exact-SHA source/build/offline-WPF/licensed NETLOAD baseline. Broader interactive/private-DWG rows remain governed by the inbox.' }
-    'LOCAL-002' = [ordered]@{ host = 'V25'; mode = 'MANUAL_OR_EXTERNAL'; runners = @(); note = 'Curtain P01-P12, Family editor and H.1 P07 are already bounded evidence; do not rerun superseded H.1 P01-P06 blockers. Execute only a still-explicit broader current inbox row.' }
+    'LOCAL-002' = [ordered]@{ host = 'V25'; mode = 'MANUAL_OR_EXTERNAL'; runners = @(); note = 'H.1 #3593/#3621 P07 is completed bounded evidence; do not rerun superseded H.1 P01-P06 blockers. Curtain P01-P12 and Family editor are also bounded; execute only a still-explicit broader current inbox row.' }
     'LOCAL-003' = [ordered]@{ host = 'V25'; mode = 'AUTOMATED_REGRESSION'; runners = @('run-local-v25-qualification.ps1','test-bricscad-v25-level-z.ps1','test-bricscad-v25-level-z-lifecycle.ps1'); note = 'Fresh exact-SHA Millimeter + Meter representative Level Z and lifecycle regression. Complete-family/private-DWG breadth remains local.' }
     'LOCAL-004' = [ordered]@{ host = 'V25'; mode = 'AUTOMATED_REGRESSION'; runners = @('run-local-v25-qualification.ps1','test-bricscad-v25-source-reconcile.ps1'); note = 'Exact-SHA production Source Reconcile base matrix. Broader topology/category/manual-grip breadth remains local.' }
     'LOCAL-005' = [ordered]@{ host = 'V25'; mode = 'MANUAL_OR_EXTERNAL'; runners = @(); note = 'Polygon reinforcement native topology requires the exact local runbook/native matrix.' }
@@ -96,7 +92,7 @@ $contracts = [ordered]@{
     'LOCAL-013' = [ordered]@{ host = 'V25'; mode = 'AUTOMATED_WITH_AUTHORIZED_INPUT'; runners = @('run-local-v25-qualification.ps1','test-bricscad-v25-brc-probe.ps1','test-bricscad-v25-brc-quantity-roundtrip.ps1'); note = 'Requires an explicitly authorized disposable BRC/reference copy; never reconstruct a missing private reference.' }
     'LOCAL-014' = [ordered]@{ host = 'V25'; mode = 'MANUAL_OR_EXTERNAL'; runners = @(); note = 'Bounded Plan-to-3D probes already exist; remaining prompt drift/cancel/rollback breadth is interactive.' }
     'LOCAL-015' = [ordered]@{ host = 'V25'; mode = 'MANUAL_OR_EXTERNAL'; runners = @(); note = 'Default-browser/modeless lifecycle is local desktop behavior.' }
-    'LOCAL-016' = [ordered]@{ host = 'V26'; mode = 'AUTOMATED_SOURCE_READY'; runners = @('test-v26-package-install-lifecycle.ps1'); note = 'Post-#3878 exact-SHA V26 package install/uninstall lifecycle only; no signing/customer-release inference.' }
+    'LOCAL-016' = [ordered]@{ host = 'V26'; mode = 'COMPLETED_NO_RERUN'; runners = @(); note = 'Issue #3878 lifecycle fix was licensed-qualified LOCAL_PASS on exact source e90c6aba7ef7bf903042d42dd991f9e7112fe659; do not rerun this bounded lifecycle row.' }
     'LOCAL-017' = [ordered]@{ host = 'V26'; mode = 'COMPLETED_BOUNDED'; runners = @(); note = 'Bounded V26 Slab POLYLINE row already PASS.' }
     'LOCAL-018' = [ordered]@{ host = 'V26'; mode = 'COMPLETED_BOUNDED'; runners = @(); note = 'Bounded V26 LINE/repeated Direct Draw lifecycle already PASS.' }
     'LOCAL-019' = [ordered]@{ host = 'V25+V26'; mode = 'COMPLETED_BOUNDED'; runners = @(); note = 'Six-sheet Review export/Locate row already PASS.' }
@@ -224,15 +220,6 @@ switch ($Lane) {
         & (Join-Path $PSScriptRoot 'test-bricscad-v25-brc-quantity-roundtrip.ps1') `
             -BricsCadDir $BricsCadDir -PluginDll $dll -DrawingCopy $ReferenceCopy -Profile $Profile `
             -ArtifactDir (Join-Path $ArtifactDir 'brc-roundtrip') -ConfirmReferenceCopy
-    }
-    'LOCAL-016' {
-        Require-Value $BricsCadDir '-BricsCadDir'
-        Require-Value $VersionKey '-VersionKey'
-        Require-Value $LanguageKey '-LanguageKey'
-        if (-not $ConfirmDisposableInstall) { throw 'LOCAL-016 requires -ConfirmDisposableInstall.' }
-        & (Join-Path $PSScriptRoot 'test-v26-package-install-lifecycle.ps1') `
-            -BricsCadDir $BricsCadDir -VersionKey $VersionKey -LanguageKey $LanguageKey `
-            -ExpectedSourceSha $exactSha -ArtifactDir (Join-Path $ArtifactDir 'v26-package-install') -ConfirmDisposableInstall
     }
     default {
         throw "Lane '$Lane' is mapped but has no safe automated dispatcher. $($contract.note)"
