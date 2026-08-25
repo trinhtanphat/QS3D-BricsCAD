@@ -11,6 +11,11 @@ on:
       - "agent/**"
       - "integration/**"
   "pull_request":
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
     branches:
       - main
       - "integration/**"
@@ -68,11 +73,10 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Could not classify changed paths against $baseBranch." }
 
             foreach ($rawPath in $changed) {
-              $path = ([string]$rawPath).Trim().Replace('\', '/')
+              $path = ([string]$rawPath).Trim().Replace('\\', '/')
               if ([string]::IsNullOrWhiteSpace($path)) { continue }
 
               if ($path -match '^(src|tests|scripts)/' -or
-                  $path -match '^samples/generated/' -or
                   $path -match '^\.github/workflows/' -or
                   $path -in @('Directory.Build.props', 'QS3D.sln', 'QS3D.V26.sln')) {
                 $sourceValidation = $true
