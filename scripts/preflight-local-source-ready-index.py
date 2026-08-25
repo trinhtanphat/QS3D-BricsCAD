@@ -18,8 +18,16 @@ WALL_CONTACT_EVIDENCE_PR = "#3849"
 WALL_CONTACT_EVIDENCE_MERGE = "7fec6f36a7c1181d7113f0e7220ea3dafca66e29"
 WALL_CONTACT_RUNNER = "scripts/run-local-v25-wall-contact-3681.ps1"
 WALL_CONTACT_RUNNER_NAME = Path(WALL_CONTACT_RUNNER).name
+LOCAL001_SOURCE_READY_SHA = "ab0202194e33a1a27dbdf322b9b6d73b9d56778a"
+LOCAL001_SOURCE_FIX_ISSUE = "#3930"
+LOCAL001_SOURCE_FIX_PR = "#3932"
 LOCAL005_SOURCE_MERGE = "ba6e1c7508086beb8ac5db9a4a78d2c43fc09492"
+LOCAL005_EVIDENCE_PR = "#3735"
+LOCAL005_EVIDENCE_MERGE = "73fec2c48726c09196b773c117be77ee1983031e"
 LOCAL006_SOURCE_MERGE = "887173f28126b928765e458f28202e83a6f3b88f"
+LOCAL006_RUNTIME_SHA = "a572ab0a350f54f8e994ac1e91f825907646af9c"
+LOCAL006_EVIDENCE_PR = "#3777"
+LOCAL006_EVIDENCE_MERGE = "7f30d019a97d36c025c34a4e08364ef3bd73ffad"
 REVIEW_RUNTIME_SHA = "9cfff87262d7a7117c5ef1f03b486271a0723fa3"
 REVIEW_PR = "#3693"
 
@@ -88,10 +96,19 @@ require_tokens(
         WALL_CONTACT_RUNNER,
         "touching-only",
         "0.05 m penetration",
-        "LOCAL-005 | P1 / SOURCE_FIX_READY",
+        "LOCAL-001 | P0 / IN_PROGRESS",
+        LOCAL001_SOURCE_READY_SHA,
+        LOCAL001_SOURCE_FIX_ISSUE,
+        LOCAL001_SOURCE_FIX_PR,
+        "LOCAL-005 | P1 / OPEN",
         LOCAL005_SOURCE_MERGE,
-        "LOCAL-006 | P1 / SOURCE_FIX_READY",
+        LOCAL005_EVIDENCE_PR,
+        LOCAL005_EVIDENCE_MERGE,
+        "LOCAL-006 | P1 / OPEN",
         LOCAL006_SOURCE_MERGE,
+        LOCAL006_RUNTIME_SHA,
+        LOCAL006_EVIDENCE_PR,
+        LOCAL006_EVIDENCE_MERGE,
         "Do not rerun the obsolete #3593 P06 binary.",
         "PR #3616 is merged",
         "LOCAL-019",
@@ -159,6 +176,21 @@ for stale in (
 require_local_row_status(inbox, "LOCAL-001", "LOCAL-002", "IN_PROGRESS")
 
 require_tokens(
+    index,
+    "LOCAL-001 source-ready continuation",
+    (
+        "| LOCAL-001 | P0 / IN_PROGRESS |",
+        LOCAL001_SOURCE_FIX_ISSUE,
+        LOCAL001_SOURCE_FIX_PR,
+        LOCAL001_SOURCE_READY_SHA,
+        "scripts/run-local-v25-qualification.ps1",
+        "Do not patch production source locally",
+    ),
+)
+if "| LOCAL-001 | P0 / PASS |" in index:
+    fail("LOCAL-001 source-ready index must not claim PASS while the canonical inbox remains IN_PROGRESS")
+
+require_tokens(
     inbox,
     "LOCAL-019 inbox evidence",
     (
@@ -189,9 +221,39 @@ require_tokens(
     ),
 )
 
+require_tokens(
+    index,
+    "LOCAL-005 accepted bounded evidence",
+    (
+        "| LOCAL-005 | P1 / OPEN |",
+        "LOCAL-005 post-#3715 build -> native Undo -> native Redo",
+        "`LOCAL_PASS`",
+        LOCAL005_SOURCE_MERGE,
+        LOCAL005_EVIDENCE_PR,
+        LOCAL005_EVIDENCE_MERGE,
+        "Do not repeat the accepted build -> native Undo -> native Redo cell solely because this index changed.",
+    ),
+)
+
+require_tokens(
+    index,
+    "LOCAL-006 accepted bounded evidence",
+    (
+        "| LOCAL-006 | P1 / OPEN |",
+        "LOCAL-006 post-#3721 `QS3DTAG -> native Undo -> native Redo`",
+        "`BOUNDED_LOCAL_PASS / OVERALL_IN_PROGRESS`",
+        LOCAL006_SOURCE_MERGE,
+        LOCAL006_RUNTIME_SHA,
+        LOCAL006_EVIDENCE_PR,
+        LOCAL006_EVIDENCE_MERGE,
+        "Do not repeat the accepted `QS3DTAG -> native Undo -> native Redo` cell solely because this index changed.",
+    ),
+)
+
 for token in (
-    "| LOCAL-005 | P1 / SOURCE_FIX_READY |",
-    "| LOCAL-006 | P1 / SOURCE_FIX_READY |",
+    "| LOCAL-001 | P0 / IN_PROGRESS |",
+    "| LOCAL-005 | P1 / OPEN |",
+    "| LOCAL-006 | P1 / OPEN |",
     "| LOCAL-019 | P0 / PASS |",
 ):
     if token not in index:
@@ -212,8 +274,12 @@ for stale in (
     "Required source-fix ancestor: `cb10e04954973aedf77a9cfeebbd28a5ccbcbbdb`",
     "P03 is separately qualified on PR #3616 but not yet integrated",
     "#3621 remains SOURCE_FIX_REQUIRED; do not rerun the unchanged P06 binary",
+    "rerun bounded multi-region build -> native Undo -> native Redo first",
+    "run multi-region build -> native Undo -> native Redo first",
+    "rerun bounded `QS3DTAG -> native Undo -> native Redo` first",
+    "run `QS3DTAG -> native Undo -> native Redo` first",
 ):
     if stale in index or stale in dispatch:
         fail(f"stale local scheduling/carrier text reintroduced: {stale}")
 
-print("PASS local source-ready pull-test index with truthful LOCAL-001 status and #3681 completed licensed PASS pinned to exact evidence/no-rerun semantics")
+print("PASS local source-ready pull-test index with truthful LOCAL-001 continuation, completed bounded LOCAL-005/006 evidence, and #3681 exact licensed PASS/no-rerun semantics")

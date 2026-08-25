@@ -85,7 +85,10 @@ namespace QS3D.Core.Coordination
 
         internal static string NormalizeCategory(string value, string parameterName)
         {
-            return Category(value, parameterName);
+            var normalized = Category(value, parameterName);
+            if (IsWildcard(normalized))
+                throw new ArgumentException("Actual coordination category cannot be the rule wildcard '*'.", parameterName);
+            return normalized;
         }
 
         private static string Category(string value, string parameterName)

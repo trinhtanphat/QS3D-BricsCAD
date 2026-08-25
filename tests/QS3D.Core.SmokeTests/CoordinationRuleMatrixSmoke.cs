@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             EquallySpecificRulesFailClosed();
             DisabledRulesAreIgnored();
             RuleValidationFailsClosed();
+            ActualCategoriesRejectWildcardButRuleWildcardsRemainValid();
             ResolutionCarriesProfileAndRuleVersion();
         }
 
@@ -78,6 +79,25 @@ namespace QS3D.Core.SmokeTests
                         new CoordinationRule("RULE", 1, "Pipe", "Beam", CoordinationRuleKind.HardClash, "Error", 0d),
                         new CoordinationRule("rule", 2, "Pipe", "Wall", CoordinationRuleKind.HardClash, "Error", 0d)
                     }));
+        }
+
+        private static void ActualCategoriesRejectWildcardButRuleWildcardsRemainValid()
+        {
+            var profile = new CoordinationRuleProfile(
+                "WILDCARD-BOUNDARY",
+                1,
+                new[]
+                {
+                    new CoordinationRule("PIPE-ANY", 1, "Pipe", "*", CoordinationRuleKind.Clearance, "Warning", 0.05d),
+                    new CoordinationRule("FALLBACK", 1, "*", "*", CoordinationRuleKind.Clearance, "Info", 0.10d)
+                });
+
+            var resolved = profile.Resolve("Pipe", "Wall") ??
+                           throw new InvalidOperationException("Expected wildcard rule to match concrete categories.");
+            Equal("PIPE-ANY", resolved.RuleId, "rule wildcard stopped matching concrete category input");
+
+            Throws<ArgumentException>(() => profile.Resolve("*", "Beam"));
+            Throws<ArgumentException>(() => profile.Resolve("Pipe", "*"));
         }
 
         private static void ResolutionCarriesProfileAndRuleVersion()
