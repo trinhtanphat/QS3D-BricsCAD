@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             InitialAndNoOpAreDeterministic();
             ChangedMoveInvalidatesOldAndQueuesNewPair();
             RemovalInvalidatesWithoutRequeue();
+            CaseOnlyIdentityDriftInvalidatesOldAndQueuesCurrentPair();
             DuplicateDirtyNotificationsCoalesce();
             CellSizeChangeForcesFullRescan();
             UnknownDirtyFailsClosedWithoutLosingState();
@@ -67,6 +68,19 @@ namespace QS3D.Core.SmokeTests
             Equal("B", string.Join("|", removed.Delta.RemovedIds), "removed element not detected");
             Equal("A\u001fB", string.Join("|", removed.InvalidatedPairKeys), "removed pair not invalidated");
             Equal(string.Empty, JoinPairs(removed), "removed element queued a current pair");
+        }
+
+        private static void CaseOnlyIdentityDriftInvalidatesOldAndQueuesCurrentPair()
+        {
+            var controller = new CoordinationIncrementalScanController();
+            controller.ApplySnapshot(2d, new[] { Item("A", "1", 0, 2), Item("B", "1", 1, 3) });
+
+            var changed = controller.ApplySnapshot(2d, new[] { Item("a", "1", 0, 2), Item("B", "1", 1, 3) });
+
+            True(!changed.IsNoOp, "case-only ItemId drift was silently treated as a no-op");
+            Equal("a", string.Join("|", changed.Delta.ChangedOrAddedIds), "case-only ItemId drift was not marked changed");
+            Equal("A\u001fB", string.Join("|", changed.InvalidatedPairKeys), "old pair identity was not invalidated");
+            Equal("B\u001fa", JoinPairs(changed), "current pair identity was not queued");
         }
 
         private static void DuplicateDirtyNotificationsCoalesce()

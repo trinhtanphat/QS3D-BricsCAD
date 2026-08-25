@@ -207,6 +207,7 @@ namespace QS3D.Core.Coordination
             {
                 CoordinationSpatialItem old;
                 if (!previous._items.TryGetValue(current.ItemId, out old) ||
+                    !string.Equals(current.ItemId, old.ItemId, StringComparison.Ordinal) ||
                     !string.Equals(current.Revision, old.Revision, StringComparison.Ordinal) ||
                     !current.Bounds.Equals(old.Bounds))
                     changedOrAdded.Add(current.ItemId);
