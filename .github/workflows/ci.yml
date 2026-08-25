@@ -142,7 +142,8 @@ jobs:
             'scripts/sync-preview-release-version.ps1',
             'scripts/prepare-v25-cloud-release.ps1',
             'scripts/acquire-v25-compile-references.ps1',
-            'scripts/run-local-v25-wall-contact-3681.ps1'
+            'scripts/run-local-v25-wall-contact-3681.ps1',
+            'scripts/run-local-source-ready-queue.ps1'
           )) {
             $tokens = $null
             $parseErrors = $null
