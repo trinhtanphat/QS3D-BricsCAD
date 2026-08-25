@@ -20,7 +20,8 @@ if REGION.is_file():
         "private const int MaxTotalVertices = 16384",
         "private const int MaxSegments = 4096",
         "PolygonScanlineClipper.NormalizeAndValidate(outer)",
-        "PolygonScanlineClipper.NormalizeAndValidate(hole)",
+        "SnapshotHoleReferences(holes)",
+        "PolygonScanlineClipper.NormalizeAndValidate(sourceHoles[i])",
         "must be strictly inside the outer boundary without touching it",
         "intersects/touches the outer boundary",
         "intersect/touch",
@@ -40,6 +41,7 @@ if SMOKE.is_file():
         "OverlappingHolesFailClosed",
         "NestedHolesFailClosed",
         "WindingDirectionDoesNotChangeRegion",
+        "PolygonRegionHoleSnapshotSmoke.Run();",
     ):
         if token not in text: errors.append("PolygonRegionScanlineSmoke.cs missing regression scenario: " + token)
 
