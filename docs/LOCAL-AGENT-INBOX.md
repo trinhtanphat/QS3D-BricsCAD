@@ -117,8 +117,22 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
   `afff082096998fa404f08a5e29bcfd9fbc3830dd`; a future write-capable
   continuation must repin that then-current branch rather than publish this
   stale local carrier unchanged.
+  The owner-requested exact-main continuation was then run once on clean
+  `fba0342bf4cbd528fedffb475e6a30f9b68f3e6e` on 2026-08-25. The canonical
+  runner passed its exact-SHA/clean-tree, manual-only CI-policy and generic
+  source gates, then returned `NO_RESULT / SOURCE_FIX_REQUIRED` before Core
+  build and before licensed BricsCAD startup because
+  `scripts/preflight-smoke-registration.py` exceeded the unchanged 180-second
+  child budget. At current scale that gate repeatedly scans 1,515 C# smoke-test
+  source files for 891 static `Run()` sources. The local worker made no source
+  patch; zero BricsCAD processes remained and no plugin hash/runtime marker was
+  produced. Do not repeat this unchanged candidate. Resume the canonical runner
+  once after the source-safe smoke-registration scaling correction is integrated
+  and a new exact `main` SHA is published. The full interactive/private-DWG
+  matrix remains `PENDING_LOCAL`; sanitized execution evidence is tracked by
+  issue #3924 and the source correction is assigned to #3930.
 - Related docs: `docs/LOCAL-V25-QUALIFICATION.md`; `docs/EXISTING-PROJECT-MUTATION-CONTEXT.md`; `docs/INTERCHANGE-FIELD-PRECEDENCE.md`; `scripts/preflight-interchange-field-merge-execution.py`; `scripts/preflight-room-finish-project-lifecycle.py`; `scripts/preflight-grid-auto-number-project-lifecycle.py`; `scripts/preflight-room-auto-project-lifecycle.py`; `docs/ROOM-AUTO-PREVIEW-COMMIT-FRESHNESS.md`; `scripts/preflight-save-project-lifecycle.py`; `docs/LOCAL-AGENT-CONTINUE-ALL-2026-08-10.md`
-- Updated: 2026-08-21
+- Updated: 2026-08-25
 
 ## LOCAL-002 — Curtain whole-command atomicity and native panels
 
