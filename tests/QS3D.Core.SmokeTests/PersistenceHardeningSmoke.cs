@@ -318,7 +318,10 @@ namespace QS3D.Core.SmokeTests
                     new QuantityReportRow
                     {
                         Floor = "Nền 0.00", Category = "ArchitecturalWall", FamilyName = "Tường 200", Count = 1,
-                        BottomAreaM2 = 1.1, TopAreaM2 = 1.2, OtherAreaM2 = 1.3
+                        BottomAreaM2 = 1.1, TopAreaM2 = 1.2, OtherAreaM2 = 1.3,
+                        DrawingFingerprint = "PERSISTENCE-SMOKE",
+                        ElementIds = { "PERSISTENCE-ROW-1" },
+                        SourceHandles = { "1A" }
                     }
                 };
                 XlsxQuantityExporter.Export(path, rows);
