@@ -24,6 +24,7 @@ $releaseRelevantPrefixes = @(
     'scripts/'
 )
 $releaseRelevantExactPaths = @(
+    '.gitmodules',
     'Directory.Build.props',
     'QS3D.sln',
     'QS3D.V26.sln',
