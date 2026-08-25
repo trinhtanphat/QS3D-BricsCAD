@@ -134,7 +134,6 @@ namespace QS3D.BricsCAD.V25.Cad
                             ErasePrevious(document, transaction, project, element, ownership);
                             var update = CreateUpdate(element, verticalPlacement, xGroup, yGroup, coverM, layout.XActualSpacingM, layout.YActualSpacingM, includeBottom, includeTop, RectangleFootprintMode);
                             AppendRectangleBars(document, transaction, modelSpace, polyline, element, rectangle, centerZ, layout, update);
-                            GeneratedRebarNativeOwnershipService.MarkFreshGeneratedHandles(document, transaction, project, element, HandlesKey, update.Handles);
                             pending.Add(update);
                             continue;
                         }
@@ -159,7 +158,6 @@ namespace QS3D.BricsCAD.V25.Cad
                         ErasePrevious(document, transaction, project, element, ownership);
                         var polygonUpdate = CreateUpdate(element, verticalPlacement, xGroup, yGroup, coverM, polygonLayout.XActualSpacingM, polygonLayout.YActualSpacingM, includeBottom, includeTop, PolygonFootprintMode);
                         AppendPolygonBars(document, transaction, modelSpace, polyline, element, centerZ, polygonLayout, polygonUpdate);
-                        GeneratedRebarNativeOwnershipService.MarkFreshGeneratedHandles(document, transaction, project, element, HandlesKey, polygonUpdate.Handles);
                         pending.Add(polygonUpdate);
                     }
 
@@ -291,6 +289,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 bar.Layer = source.Layer;
                 modelSpace.AppendEntity(bar);
                 transaction.AddNewlyCreatedDBObject(bar, true);
+                GeneratedRebarNativeOwnershipService.MarkGenerated(document, transaction, bar, project: null!, element, HandlesKey);
                 update.Handles.Add(bar.Handle.ToString());
                 bar = null;
             }
