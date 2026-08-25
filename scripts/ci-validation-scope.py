@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
+import threading
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -36,9 +39,148 @@ SOURCE_EXACT = {
     "docs/AGENT-BRANCH-CI-ACTIONS-LOOKUP.md",
 }
 
+GIT_DIFF_TIMEOUT_SECONDS = 30.0
+MAX_CHANGED_PATH_BYTES = 4 * 1024 * 1024
+MAX_GIT_DIAGNOSTIC_BYTES = 64 * 1024
+READ_CHUNK_BYTES = 64 * 1024
+PROCESS_STOP_TIMEOUT_SECONDS = 5.0
+
 
 class ScopeError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class BoundedProcessResult:
+    returncode: int
+    stdout: bytes
+    stderr: bytes
+
+
+def _drain_bounded(
+    stream,
+    limit: int,
+    retained: bytearray,
+    overflow: threading.Event,
+    errors: list[BaseException],
+) -> None:
+    try:
+        while True:
+            chunk = stream.read(READ_CHUNK_BYTES)
+            if not chunk:
+                return
+            remaining = limit - len(retained)
+            if remaining > 0:
+                retained.extend(chunk[:remaining])
+            if len(chunk) > max(remaining, 0):
+                overflow.set()
+    except BaseException as exc:  # reader failures must fail the classifier closed
+        errors.append(exc)
+    finally:
+        try:
+            stream.close()
+        except OSError:
+            pass
+
+
+def run_bounded_process(
+    command: list[str],
+    *,
+    cwd: Path,
+    timeout_seconds: float,
+    max_stdout_bytes: int,
+    max_stderr_bytes: int,
+) -> BoundedProcessResult:
+    if timeout_seconds <= 0:
+        raise ScopeError("process timeout must be positive")
+    if max_stdout_bytes <= 0 or max_stderr_bytes <= 0:
+        raise ScopeError("process output limits must be positive")
+
+    try:
+        process = subprocess.Popen(
+            command,
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except OSError as exc:
+        raise ScopeError(f"could not launch changed-path command: {exc}") from exc
+
+    if process.stdout is None or process.stderr is None:
+        try:
+            process.kill()
+        except OSError:
+            pass
+        raise ScopeError("changed-path command did not expose bounded output pipes")
+
+    stdout = bytearray()
+    stderr = bytearray()
+    stdout_overflow = threading.Event()
+    stderr_overflow = threading.Event()
+    reader_errors: list[BaseException] = []
+
+    stdout_thread = threading.Thread(
+        target=_drain_bounded,
+        args=(process.stdout, max_stdout_bytes, stdout, stdout_overflow, reader_errors),
+        name="qs3d-ci-scope-stdout",
+        daemon=True,
+    )
+    stderr_thread = threading.Thread(
+        target=_drain_bounded,
+        args=(process.stderr, max_stderr_bytes, stderr, stderr_overflow, reader_errors),
+        name="qs3d-ci-scope-stderr",
+        daemon=True,
+    )
+    stdout_thread.start()
+    stderr_thread.start()
+
+    deadline = time.monotonic() + timeout_seconds
+    stop_reason: str | None = None
+    while process.poll() is None:
+        if reader_errors:
+            stop_reason = "changed-path output drain failed"
+            break
+        if stdout_overflow.is_set():
+            stop_reason = f"Git changed-path output exceeded {max_stdout_bytes}-byte limit"
+            break
+        if stderr_overflow.is_set():
+            stop_reason = f"Git diagnostic output exceeded {max_stderr_bytes}-byte limit"
+            break
+        if time.monotonic() >= deadline:
+            stop_reason = f"Git changed-path command timed out after {timeout_seconds:g} seconds"
+            break
+        time.sleep(0.01)
+
+    if stop_reason is not None:
+        try:
+            process.kill()
+        except OSError:
+            pass
+
+    try:
+        returncode = process.wait(timeout=PROCESS_STOP_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as exc:
+        try:
+            process.kill()
+        except OSError:
+            pass
+        raise ScopeError("changed-path command did not stop after bounded termination") from exc
+
+    stdout_thread.join(PROCESS_STOP_TIMEOUT_SECONDS)
+    stderr_thread.join(PROCESS_STOP_TIMEOUT_SECONDS)
+    if stdout_thread.is_alive() or stderr_thread.is_alive():
+        raise ScopeError("changed-path output drain did not stop after bounded termination")
+
+    if reader_errors:
+        raise ScopeError(f"changed-path output drain failed: {reader_errors[0]}") from reader_errors[0]
+    if stop_reason is not None:
+        raise ScopeError(stop_reason)
+    if stdout_overflow.is_set():
+        raise ScopeError(f"Git changed-path output exceeded {max_stdout_bytes}-byte limit")
+    if stderr_overflow.is_set():
+        raise ScopeError(f"Git diagnostic output exceeded {max_stderr_bytes}-byte limit")
+
+    return BoundedProcessResult(returncode, bytes(stdout), bytes(stderr))
 
 
 def parse_nul_paths(raw: bytes) -> list[str]:
@@ -82,7 +224,7 @@ def classify_paths(paths: list[str]) -> tuple[bool, bool]:
 
 
 def changed_paths(base_ref: str, head_ref: str = "HEAD", root: Path = ROOT) -> list[str]:
-    completed = subprocess.run(
+    result = run_bounded_process(
         [
             "git",
             "diff",
@@ -94,17 +236,17 @@ def changed_paths(base_ref: str, head_ref: str = "HEAD", root: Path = ROOT) -> l
             f"{base_ref}...{head_ref}",
             "--",
         ],
-        cwd=str(root),
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        cwd=root,
+        timeout_seconds=GIT_DIFF_TIMEOUT_SECONDS,
+        max_stdout_bytes=MAX_CHANGED_PATH_BYTES,
+        max_stderr_bytes=MAX_GIT_DIAGNOSTIC_BYTES,
     )
-    if completed.returncode != 0:
-        stderr = completed.stderr.decode("utf-8", errors="replace").strip()
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", errors="replace").strip()
         raise ScopeError(
-            f"could not classify changed paths against {base_ref} (git exit={completed.returncode}): {stderr}"
+            f"could not classify changed paths against {base_ref} (git exit={result.returncode}): {stderr}"
         )
-    return parse_nul_paths(completed.stdout)
+    return parse_nul_paths(result.stdout)
 
 
 def write_outputs(output_path: Path, source: bool, build: bool) -> None:
