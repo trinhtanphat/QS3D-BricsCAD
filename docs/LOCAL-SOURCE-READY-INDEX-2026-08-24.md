@@ -16,23 +16,20 @@ This file does **not** manufacture `LOCAL_PASS`. Runtime status remains governed
 
 ## Immediate source-ready dispatch
 
-Completed historical rows are not rescheduled here. #1744 and #3613 already have accepted licensed bounded PASS evidence and must not be rerun merely because this index changed.
+Completed historical rows are not rescheduled here. #1744, #3613 and #3681 already have accepted licensed bounded PASS evidence and must not be rerun merely because this index changed.
 
 | Priority | Issue / row | Exact carrier | Minimum integrated source | Local action |
 | --- | --- | --- | --- | --- |
-| P0 | #3681 | exact published descendant recorded on #3681 / #72 | must contain `c64eb8c1b83761e155da670904a72e64669464b7` (#3833 + #3836); this descendant also contains `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0` (#3729) | fetch the exact published SHA, run `scripts/run-local-v25-wall-contact-3681.ps1` only |
 | P1 | LOCAL-005 / #83 | exact intended descendant published by #83/#72 | contains `ba6e1c7508086beb8ac5db9a4a78d2c43fc09492` (#3727); current integrated descendant is `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0` | rerun bounded multi-region build -> native Undo -> native Redo first |
 | P1 | LOCAL-006 / #77 | exact intended descendant published by #77/#72 | contains `887173f28126b928765e458f28202e83a6f3b88f` (#3728); current integrated descendant is `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0` | rerun bounded `QS3DTAG -> native Undo -> native Redo` first |
 
-For #3681, post-#3716 source `a4ec7cdc84cc63cb35d1162b1e469638ed796ddf` is superseded licensed failing evidence: touching-only still failed while the 0.05 m penetration control passed. Licensed native-stage evidence proved the remaining failure was `OffsetBody(1e-6)` in BricsCAD V25; `1e-5` and larger bounded probes passed with the correct `0.1600 m²` eligible original-face area. PR #3729 integrated the unit-aware 10 micrometre native touching-probe floor as `main@4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0`. PR #3833 then integrated the corrected #3681 fixture minimum, and PR #3836 integrated the finite original-footprint contact authority. The combined source-ready floor for the next official run is `c64eb8c1b83761e155da670904a72e64669464b7`; local execution must use one separately published exact descendant containing that floor, never the pre-#3833/#3836 carrier.
+## Completed #3681 licensed wall-contact qualification — DO_NOT_RERUN
 
-The #3681 local action is deliberately one command after exact checkout:
+#3681 StructuralWall live-BREP concrete-contact/formwork is complete. Licensed BricsCAD V25 qualification passed on exact runtime source `a4f1a53683a9296532a0290fcb79bc49b9d4b892`; sanitized evidence was merged through PR #3849 as `7fec6f36a7c1181d7113f0e7220ea3dafca66e29`. The accepted source contains minimum source-ready ancestor `c64eb8c1b83761e155da670904a72e64669464b7` (#3833 + #3836) and touching-probe floor `4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0` (#3729).
 
-```powershell
-.\scripts\run-local-v25-wall-contact-3681.ps1
-```
+The committed regression runner remains `scripts/run-local-v25-wall-contact-3681.ps1`, but #3681 is `COMPLETED / DO_NOT_RERUN`. Do not schedule or execute it again unless a material source change explicitly reopens the qualification. Historical failing carriers, including `a4ec7cdc84cc63cb35d1162b1e469638ed796ddf`, remain diagnostic provenance only and are not runnable candidates.
 
-The runner first executes a **source-fix gate**. It must pass touching-only one-end at deduction `0.1600 m²`, residual/net `2.5088 m²`, `failed_native=0` through the contact-probe path, then immediately pass the **0.05 m penetration** regression at the same deduction/residual through the positive-volume path. Only after both pass does it execute partial/union/top-bottom/stale/capture-refresh/two-end, second-process isolation and save/cold-reopen. It checks the BLT `2.6688 - 0.3200 = 2.3488 m²` control, records plugin/Core identity and removes test-owned scratch state. No manual geometry authoring or production-source patch is delegated to the local agent.
+The accepted licensed matrix covered the source-fix gate, touching-only one-end deduction `0.1600 m²`, residual/net `2.5088 m²`, `failed_native=0`, the **0.05 m penetration** regression at the same deduction/residual, partial/union/top-bottom/stale/capture-refresh/two-end, second-process isolation, save/cold-reopen and the BLT `2.6688 - 0.3200 = 2.3488 m²` control. This historical description does not authorize another local run.
 
 Do not rerun the obsolete #3593 P06 binary. The later #3593 P07 result and closed #3621 source lane are authoritative for that H.1 correction.
 
@@ -72,13 +69,7 @@ git checkout --detach <exact-runtime-carrier-sha>
 git status --short
 ```
 
-The worktree must be clean before qualification. For #3681 no separate build/manual fixture procedure is required; run exactly:
-
-```powershell
-.\scripts\run-local-v25-wall-contact-3681.ps1
-```
-
-The runner auto-detects a standard BricsCAD V25 installation; `-BricsCadDir` is only an environment override when V25 is installed elsewhere. Other V25 rows may use the general `scripts/run-local-v25-qualification.ps1` plus the row-specific committed runner/runbook. V26 rows follow `docs/LOCAL-V26-QUALIFICATION.md` and must use the matching V26 `net8.0-windows` plugin, not a relabeled V25 binary.
+The worktree must be clean before qualification. Completed #3681 must not be scheduled from this section; its committed runner remains available only as a regression reference if a material source change explicitly reopens qualification. Other V25 rows may use the general `scripts/run-local-v25-qualification.ps1` plus the row-specific committed runner/runbook. V26 rows follow `docs/LOCAL-V26-QUALIFICATION.md` and must use the matching V26 `net8.0-windows` plugin, not a relabeled V25 binary.
 
 ## Fail/return routing
 

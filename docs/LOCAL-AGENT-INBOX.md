@@ -22,14 +22,14 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 ## P0 — #3681 StructuralWall live-BREP concrete-contact/formwork
 
 - Priority: P0
-- Status: OPEN
+- Status: PASS
 - Area: StructuralWall live-BREP concrete-contact / formwork licensed qualification
-- Remote disposition: SOURCE_READY / LOCAL_RUN_ONLY
-- Exact runtime checkout: `447ba9805d777a3225827117587d932135cf0959`
+- Remote disposition: COMPLETED / NO_RERUN
+- Exact runtime checkout: `a4f1a53683a9296532a0290fcb79bc49b9d4b892`
 - Minimum source-ready ancestor: `c64eb8c1b83761e155da670904a72e64669464b7`
 - Runner: `scripts/run-local-v25-wall-contact-3681.ps1`
-- Local contract: fetch and checkout the exact runtime SHA, run the committed runner on licensed BricsCAD V25, and publish only sanitized `LOCAL_PASS`, `LOCAL_FAIL`, or `NO_RESULT` evidence. The local worker must not edit production source; hosted/static CI cannot manufacture `LOCAL_PASS`.
-- Evidence: PENDING_LOCAL
+- Local contract: licensed BricsCAD V25 qualification is complete for this bounded scenario. Keep the committed runner only as a regression reference; do not rerun unless a material source change explicitly reopens qualification. Hosted/static CI cannot manufacture or replace `LOCAL_PASS`.
+- Evidence: `LOCAL_PASS` on exact runtime source `a4f1a53683a9296532a0290fcb79bc49b9d4b892`; sanitized evidence PR #3849 merged as `7fec6f36a7c1181d7113f0e7220ea3dafca66e29`. #3681 is CLOSED/completed.
 
 ## LOCAL-001 — exact V25 build/load baseline
 
