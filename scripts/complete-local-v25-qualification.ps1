@@ -20,6 +20,104 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$MaxQualificationJsonBytes = 1048576
+$StrictUtf8 = New-Object System.Text.UTF8Encoding($false, $true)
+
+function Get-SafeInputFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][long]$MaxBytes
+    )
+
+    $resolved = [IO.Path]::GetFullPath($Path)
+    if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) {
+        throw "$Label does not exist as a file: $resolved"
+    }
+
+    $item = Get-Item -LiteralPath $resolved -Force
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "$Label must be an ordinary non-reparse file: $resolved"
+    }
+    if ($item.Length -le 0 -or $item.Length -gt $MaxBytes) {
+        throw "$Label must be non-empty and no larger than $MaxBytes bytes."
+    }
+
+    return $item
+}
+
+function Read-StrictUtf8File {
+    param(
+        [Parameter(Mandatory = $true)][IO.FileInfo]$File,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][long]$MaxBytes
+    )
+
+    $stream = $null
+    try {
+        $stream = New-Object IO.FileStream(
+            $File.FullName,
+            [IO.FileMode]::Open,
+            [IO.FileAccess]::Read,
+            [IO.FileShare]::Read
+        )
+        if ($stream.Length -le 0 -or $stream.Length -gt $MaxBytes) {
+            throw "$Label changed size while opening; refusing to read $($stream.Length) bytes."
+        }
+
+        $buffer = New-Object byte[] ([int]$stream.Length)
+        $offset = 0
+        while ($offset -lt $buffer.Length) {
+            $read = $stream.Read($buffer, $offset, $buffer.Length - $offset)
+            if ($read -le 0) {
+                throw "$Label ended before its validated length was read."
+            }
+            $offset += $read
+        }
+        if ($stream.ReadByte() -ne -1) {
+            throw "$Label grew beyond the validated maximum while reading."
+        }
+
+        try {
+            return $StrictUtf8.GetString($buffer)
+        }
+        catch {
+            throw "$Label is not strict UTF-8: $($_.Exception.Message)"
+        }
+    }
+    finally {
+        if ($null -ne $stream) { $stream.Dispose() }
+    }
+}
+
+function Write-JsonAtomically {
+    param(
+        [Parameter(Mandatory = $true)]$Value,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+
+    $directory = [IO.Path]::GetDirectoryName($Destination)
+    $tempPath = Join-Path $directory (".qualification-{0}.tmp" -f ([Guid]::NewGuid().ToString("N")))
+    try {
+        $json = $Value | ConvertTo-Json -Depth 10
+        $bytes = $StrictUtf8.GetBytes($json + [Environment]::NewLine)
+        if ($bytes.Length -gt $MaxQualificationJsonBytes) {
+            throw "Completed qualification.json would exceed $MaxQualificationJsonBytes bytes."
+        }
+        [IO.File]::WriteAllBytes($tempPath, $bytes)
+        $temp = Get-Item -LiteralPath $tempPath -Force
+        if (($temp.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $temp.Length -ne $bytes.Length) {
+            throw "Temporary qualification report is not the expected ordinary file."
+        }
+        [IO.File]::Replace($tempPath, $Destination, $null)
+    }
+    finally {
+        if (Test-Path -LiteralPath $tempPath) {
+            Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($ArtifactDir)) {
     $ArtifactDir = Join-Path $repoRoot "artifacts\local-v25-qualification"
@@ -46,11 +144,14 @@ if ($SignPackage) {
 }
 
 & (Join-Path $PSScriptRoot "run-local-v25-qualification.ps1") @runnerArgs
-if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
-    throw "Base V25 qualification completed without qualification.json: $reportPath"
+$reportFile = Get-SafeInputFile -Path $reportPath -Label "qualification.json" -MaxBytes $MaxQualificationJsonBytes
+$rawReport = Read-StrictUtf8File -File $reportFile -Label "qualification.json" -MaxBytes $MaxQualificationJsonBytes
+try {
+    $report = $rawReport | ConvertFrom-Json
 }
-
-$report = Get-Content -LiteralPath $reportPath -Raw -Encoding UTF8 | ConvertFrom-Json
+catch {
+    throw "qualification.json is not valid JSON: $($_.Exception.Message)"
+}
 if ([string]$report.status -ne "PASS" -or [string]$report.automatedGateStatus -ne "PASS") {
     throw "Automated exact-SHA qualification gates are not PASS."
 }
@@ -69,7 +170,8 @@ if ([string]$report.pluginSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
     -ExpectedSha ([string]$report.exactSha) `
     -ExpectedPluginSha256 ([string]$report.pluginSha256)
 
-$evidenceDigest = (Get-FileHash -LiteralPath $evidencePath -Algorithm SHA256).Hash.ToLowerInvariant()
+$evidenceFile = Get-SafeInputFile -Path $evidencePath -Label "Interactive matrix evidence" -MaxBytes $MaxQualificationJsonBytes
+$evidenceDigest = (Get-FileHash -LiteralPath $evidenceFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
 $stableCustomerReleaseQualified = $false
 if ($Package -and $SignPackage) {
     $stableCustomerReleaseQualified = (
@@ -89,7 +191,7 @@ $scope = [string]$report.qualificationScope
 if ($scope -notmatch '(?:^|\+)full-interactive-matrix(?:\+|$)') {
     $report.qualificationScope = if ([string]::IsNullOrWhiteSpace($scope)) { "full-interactive-matrix" } else { "$scope+full-interactive-matrix" }
 }
-$report | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $reportPath -Encoding UTF8
+Write-JsonAtomically -Value $report -Destination $reportPath
 
 Write-Host ""
 Write-Host ("LICENSED V25 RUNTIME QUALIFICATION: PASS for exact SHA {0}" -f ([string]$report.exactSha))
