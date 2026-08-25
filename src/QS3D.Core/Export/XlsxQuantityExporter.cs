@@ -33,6 +33,7 @@ namespace QS3D.Core.Export
             var count = rows.Count;
             if (count > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Quantity XLSX export supports at most " + MaxDataRows + " data rows.");
             var snapshot = new List<QuantityReportRow>(count);
+            var workbookElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (var rowIndex = 0; rowIndex < count; rowIndex++)
             {
                 var source = rows[rowIndex];
@@ -75,6 +76,7 @@ namespace QS3D.Core.Export
                 SnapshotStrings(source.SourceHandles, row.SourceHandles);
                 ValidateStandardRowText(row, rowIndex);
                 ValidateStandardRowNumbers(row, rowIndex);
+                ValidateStandardRowProvenance(row, rowIndex, workbookElementIds);
                 snapshot.Add(row);
             }
             return snapshot;
@@ -434,6 +436,57 @@ namespace QS3D.Core.Export
             ValidateJoinedNonBlankCellText(row.ElementIds, rowIndex, "ElementIds", "Quantity XLSX");
             ValidateJoinedNonBlankCellText(row.SourceHandles, rowIndex, "SourceHandles", "Quantity XLSX");
             ValidateCellText(row.DrawingFingerprint, rowIndex, "DrawingFingerprint", "Quantity XLSX");
+        }
+
+        private static void ValidateStandardRowProvenance(
+            QuantityReportRow row,
+            int rowIndex,
+            ISet<string> workbookElementIds)
+        {
+            RequiredStandardProvenance(row.DrawingFingerprint, rowIndex, "DrawingFingerprint");
+            if (row.ElementIds.Count == 0)
+                throw StandardProvenanceError(rowIndex, "ElementIds", "must contain at least one semantic Element ID");
+            if (row.Count != row.ElementIds.Count)
+                throw StandardProvenanceError(
+                    rowIndex,
+                    "Count",
+                    "must match semantic Element ID cardinality (Count=" + row.Count.ToString(CultureInfo.InvariantCulture) +
+                    ", ElementIds=" + row.ElementIds.Count.ToString(CultureInfo.InvariantCulture) + ")");
+
+            foreach (var rawElementId in row.ElementIds)
+            {
+                var elementId = RequiredStandardProvenance(rawElementId, rowIndex, "ElementIds");
+                if (!workbookElementIds.Add(elementId))
+                    throw StandardProvenanceError(rowIndex, "ElementIds", "contains duplicate semantic Element ID: " + elementId);
+            }
+
+            if (row.SourceHandles.Count == 0)
+                throw StandardProvenanceError(rowIndex, "SourceHandles", "must contain at least one CAD Handle");
+            foreach (var rawHandle in row.SourceHandles)
+                ValidateStandardHandle(rawHandle, rowIndex);
+        }
+
+        private static string RequiredStandardProvenance(string? value, int rowIndex, string fieldName)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+                throw StandardProvenanceError(rowIndex, fieldName, "must not contain blank provenance values");
+            return normalized;
+        }
+
+        private static void ValidateStandardHandle(string? value, int rowIndex)
+        {
+            var handle = RequiredStandardProvenance(value, rowIndex, "SourceHandles");
+            var token = handle.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? handle.Substring(2) : handle;
+            if (!long.TryParse(token, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var number) || number <= 0)
+                throw StandardProvenanceError(rowIndex, "SourceHandles", "contains an invalid positive hexadecimal CAD Handle: " + handle);
+        }
+
+        private static InvalidDataException StandardProvenanceError(int rowIndex, string fieldName, string requirement)
+        {
+            return new InvalidDataException(
+                "Quantity XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) +
+                " field " + fieldName + " " + requirement + ".");
         }
 
         private static void ValidateStandardRowNumbers(QuantityReportRow row, int rowIndex)

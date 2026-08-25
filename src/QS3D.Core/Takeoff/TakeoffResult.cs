@@ -20,6 +20,8 @@ namespace QS3D.Core.Takeoff
             {
                 if (char.IsControl(canonicalHandle[index]))
                     throw new ArgumentException("Takeoff handle must not contain control characters.", nameof(handle));
+                if (char.IsWhiteSpace(canonicalHandle[index]))
+                    throw new ArgumentException("Takeoff handle must not contain whitespace.", nameof(handle));
             }
 
             var canonicalUnit = unit.Trim();

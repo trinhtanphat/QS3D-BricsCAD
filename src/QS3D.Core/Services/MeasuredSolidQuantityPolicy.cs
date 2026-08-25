@@ -78,9 +78,16 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException(element.Id + "/" + key + " must not contain surrounding whitespace.");
             if (raw == null || !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value) || double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
                 throw new InvalidOperationException(element.Id + "/" + key + " must be a finite non-negative metric.");
+            if (IsNegativeZero(value))
+                throw new InvalidOperationException(element.Id + "/" + key + " must not be negative zero.");
             if (value == 0d && HasNonZeroSignificand(raw))
                 throw new InvalidOperationException(element.Id + "/" + key + " underflowed to zero.");
             return true;
+        }
+
+        private static bool IsNegativeZero(double value)
+        {
+            return value == 0d && BitConverter.DoubleToInt64Bits(value) < 0L;
         }
 
         private static bool HasNonZeroSignificand(string raw)

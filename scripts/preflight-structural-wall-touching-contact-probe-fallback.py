@@ -23,14 +23,18 @@ required = (
     "using (var contactProbe = Clone(candidate))",
     "if (!TryOffset(contactProbe, contactProbeDistanceCad))",
     "using (var contact = TryIntersection(residual, contactProbe, out var contactIntersectionFailed))",
-    "var probeContactAreaCad = ReadEligibleOriginalFaceArea(",
-    "if (!TrySubtract(residual, contact))",
+    "var touchingSeeds = ReadEligibleTouchingFaceSeeds(",
+    "foreach (var touchingSeed in touchingSeeds)",
+    "using (var footprintContact = TryCreateFootprintContact(",
+    "var footprintContactAreaCad = ReadEligibleOriginalFaceArea(",
+    "if (!TrySubtract(residual, footprintContact))",
+    "contactAreaCad += footprintContactAreaCad;",
     "diagnostics.ContactProbeCutCount++;",
     "if (diagnostics.FailedNativeCutCount > 0) return false;",
 )
 for token in required:
     if token not in source:
-        fail("missing touching fallback contract token: " + token)
+        fail("missing touching fallback/original-footprint contract token: " + token)
 
 if "TryOffset(contactProbe, distanceCad)" in source:
     fail("native touching probe still uses the sub-modeler quantity tolerance directly")
@@ -38,6 +42,10 @@ if "SamePlane(x.Plane, plane, distanceCad)" not in source:
     fail("original-face plane identity no longer uses the tighter quantity tolerance")
 if "CandidateReachesExterior(candidate, seed, distanceCad" not in source:
     fail("exterior-side eligibility was widened to the native probe distance")
+if "var probeContactAreaCad = ReadEligibleOriginalFaceArea(" in source:
+    fail("expanded OffsetBody region regained authority over touching deduction area")
+if "TrySubtract(residual, contact)" in source:
+    fail("expanded OffsetBody intersection regained authority over residual subtraction")
 
 old_terminal = """if (intersectionFailed)\n                                {\n                                    diagnostics.FailedNativeCutCount++;\n                                    continue;\n                                }"""
 if old_terminal in source:
@@ -56,18 +64,40 @@ if probe_block.count("if (directIntersectionFailed) diagnostics.FailedNativeCutC
 for unresolved_token in (
     "if (contactIntersectionFailed)",
     "if (contact == null || SafeVolumeCad(contact) <= volumeCadTolerance)",
-    "if (probeFaceReadFailed)",
-    "if (probeContactAreaCad <= areaCadTolerance)",
-    "if (!TrySubtract(residual, contact))",
+    "if (touchingSeedReadFailed)",
+    "if (touchingSeeds.Count == 0)",
+    "if (footprintIntersectionFailed)",
+    "if (footprintContact == null || SafeVolumeCad(footprintContact) <= volumeCadTolerance)",
+    "if (footprintFaceReadFailed)",
+    "if (footprintContactAreaCad <= areaCadTolerance)",
+    "if (!TrySubtract(residual, footprintContact))",
 ):
     if unresolved_token not in probe_block:
-        fail("touching probe lost fail-closed stage: " + unresolved_token)
+        fail("touching probe lost fail-closed/original-footprint stage: " + unresolved_token)
 
-success_tail = source[source.index("if (!TrySubtract(residual, contact))", probe):probe_end]
-if "contactAreaCad += probeContactAreaCad;" not in success_tail:
-    fail("successful touching probe no longer publishes only eligible original-face area")
+footprint = source.index("using (var footprintContact = TryCreateFootprintContact(", probe)
+footprint_area = source.index("var footprintContactAreaCad = ReadEligibleOriginalFaceArea(", footprint)
+footprint_subtract = source.index("if (!TrySubtract(residual, footprintContact))", footprint_area)
+footprint_publish = source.index("contactAreaCad += footprintContactAreaCad;", footprint_subtract)
+if not (probe < footprint < footprint_area < footprint_subtract < footprint_publish < probe_end):
+    fail("touching fallback must discover topology first, then measure/subtract/publish only the original candidate footprint")
+
+success_tail = source[footprint_subtract:probe_end]
+if "contactAreaCad += footprintContactAreaCad;" not in success_tail:
+    fail("successful touching probe no longer publishes only authoritative original-footprint area")
 if "diagnostics.FailedNativeCutCount++;" not in success_tail:
-    fail("touching probe subtract failure is no longer fail-closed")
+    fail("touching footprint subtract failure is no longer fail-closed")
+
+footprint_reader = source.index("private static Solid3d? TryCreateFootprintContact")
+face_plane_reader = source.index("private static PlanarEntity? ReadFacePlane", footprint_reader)
+footprint_body = source[footprint_reader:face_plane_reader]
+for token in (
+    "seed.InteriorSide * contactProbeDistanceCad",
+    "footprintProbe.TransformBy(Matrix3d.Displacement(displacement));",
+    "return TryIntersection(residual, footprintProbe, out failed);",
+):
+    if token not in footprint_body:
+        fail("original touching footprint reconstruction lost normal-translation contract: " + token)
 
 stage_contract = (
     ("DirectIntersectionFailureCount", "diagnostics.DirectIntersectionFailureCount++;", "direct_fail="),
@@ -90,4 +120,4 @@ for forbidden in ("error.Message", "error.StackTrace", "Handle.ToString()", "Env
     if forbidden in "\n".join(line for line in probe_source.splitlines() if "direct_fail=" in line or "probe_" in line):
         fail("bounded stage diagnostics expose unstable or sensitive detail: " + forbidden)
 
-print("PASS: touching contact uses a unit-aware 10-micrometre native offset floor while topology/plane identity stays tight, deferred failures remain fail-closed, and bounded native-stage diagnostics remain available")
+print("PASS: touching contact uses a unit-aware 10-micrometre native offset only for topology discovery, reconstructs authoritative area/subtraction from the original candidate footprint, keeps deferred failures fail-closed, and preserves bounded native-stage diagnostics")
