@@ -15,7 +15,6 @@ namespace QS3D.BricsCAD.V25.UI
 {
     internal sealed class CoordinationManagerWindow : Window
     {
-        private readonly Document _document;
         private readonly string _projectId;
         private readonly string _drawingFingerprint;
         private readonly DataGrid _grid;
@@ -31,7 +30,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         public CoordinationManagerWindow(Document document, string projectId, string drawingFingerprint)
         {
-            _document = document ?? throw new ArgumentNullException(nameof(document));
+            if (document == null) throw new ArgumentNullException(nameof(document));
             _projectId = RequireToken(projectId, nameof(projectId));
             _drawingFingerprint = RequireToken(drawingFingerprint, nameof(drawingFingerprint));
 
@@ -156,7 +155,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                var project = RequireCurrentProject(false);
+                var project = RequireCurrentProject(false, out _);
                 var snapshot = CoordinationIssuePersistence.Load(project);
                 if (snapshot == null)
                 {
@@ -202,7 +201,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 var selected = SelectedRow();
-                var project = RequireCurrentProject(false);
+                var project = RequireCurrentProject(false, out var document);
                 var snapshot = CoordinationIssuePersistence.Load(project)
                     ?? throw new InvalidOperationException("Coordination persistence không còn tồn tại.");
                 var issue = RequireFreshIssue(snapshot, selected);
@@ -220,12 +219,12 @@ namespace QS3D.BricsCAD.V25.UI
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                     .ToList();
-                var resolved = CadHandleService.Resolve(_document, handles);
+                var resolved = CadHandleService.Resolve(document, handles);
                 if (resolved.Count != handles.Count)
                     throw new InvalidOperationException("Không resolve đủ toàn bộ source Handle hiện hành; selection không đổi.");
 
-                _document.Editor.SetImpliedSelection(resolved.ToArray());
-                var zoomed = global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(_document);
+                document.Editor.SetImpliedSelection(resolved.ToArray());
+                var zoomed = global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(document);
                 SetMessage(zoomed
                     ? "Đã định vị issue " + issue.IssueId + " bằng " + resolved.Count + " CAD object sau khi revalidate toàn bộ provenance."
                     : "Đã chọn issue " + issue.IssueId + " bằng " + resolved.Count + " CAD object sau khi revalidate toàn bộ provenance nhưng chưa thể zoom vùng chọn hiện hành.");
@@ -241,7 +240,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 var selected = SelectedRow();
-                var project = RequireCurrentProject(true);
+                var project = RequireCurrentProject(true, out var document);
                 var snapshot = CoordinationIssuePersistence.Load(project)
                     ?? throw new InvalidOperationException("Coordination persistence không còn tồn tại.");
                 var issue = RequireFreshIssue(snapshot, selected);
@@ -289,7 +288,7 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     var nextRevision = checked(snapshot.Revision + 1L);
                     CoordinationIssuePersistence.Save(project, snapshot.Issues, nextRevision);
-                    ProjectContextCoordinator.Save(_document);
+                    ProjectContextCoordinator.Save(document);
                 }
                 catch
                 {
@@ -308,20 +307,20 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
-        private ProjectState RequireCurrentProject(bool mutation)
+        private ProjectState RequireCurrentProject(bool mutation, out Document document)
         {
-            if (!ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document))
-                throw new InvalidOperationException("DWG đã đổi; Coordination Manager này không được phép tác động lên document khác.");
+            document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument
+                ?? throw new InvalidOperationException("Không có DWG đang active; Coordination Manager không được phép thao tác.");
 
             ProjectState project;
             if (mutation)
-                project = ExistingProjectMutationContext.Require(_document, "Coordination Manager");
-            else if (!ProjectContextCoordinator.TryGetReadOnly(_document, out project))
+                project = ExistingProjectMutationContext.Require(document, "Coordination Manager");
+            else if (!ProjectContextCoordinator.TryGetReadOnly(document, out project))
                 throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng.");
 
             if (!string.Equals(project.ProjectId, _projectId, StringComparison.Ordinal) ||
                 !string.Equals(project.DrawingFingerprint, _drawingFingerprint, StringComparison.Ordinal))
-                throw new InvalidOperationException("Project/Drawing Fingerprint đã đổi; đóng cửa sổ và mở lại Coordination Manager.");
+                throw new InvalidOperationException("DWG hoặc Project/Drawing Fingerprint đã đổi; Coordination Manager này không được phép tác động lên document khác.");
             return project;
         }
 
