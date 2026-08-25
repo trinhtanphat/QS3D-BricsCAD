@@ -28,21 +28,21 @@ internal sealed class InterchangeFieldMergeGeneratedRebuildPlan
         InterchangeGeneratedOutputKind.Trace;
 
     private InterchangeFieldMergeGeneratedRebuildPlan(
-        IReadOnlyList<Guid> elementIds,
+        IReadOnlyList<string> elementIds,
         InterchangeGeneratedOutputKind outputKinds)
     {
         ElementIds = elementIds;
         OutputKinds = outputKinds;
     }
 
-    public IReadOnlyList<Guid> ElementIds { get; }
+    public IReadOnlyList<string> ElementIds { get; }
 
     public InterchangeGeneratedOutputKind OutputKinds { get; }
 
     public bool IsNoOp => ElementIds.Count == 0 || OutputKinds == InterchangeGeneratedOutputKind.None;
 
     public static InterchangeFieldMergeGeneratedRebuildPlan Create(
-        IEnumerable<Guid>? invalidatedElementIds,
+        IEnumerable<string>? invalidatedElementIds,
         InterchangeGeneratedOutputKind requestedKinds)
     {
         if ((requestedKinds & ~SupportedKinds) != 0)
@@ -53,10 +53,11 @@ internal sealed class InterchangeFieldMergeGeneratedRebuildPlan
                 "FieldMerge rebuild contains an unsupported generated-output kind.");
         }
 
-        Guid[] ids = (invalidatedElementIds ?? Array.Empty<Guid>())
-            .Where(id => id != Guid.Empty)
-            .Distinct()
-            .OrderBy(id => id)
+        string[] ids = (invalidatedElementIds ?? Enumerable.Empty<string>())
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         return new InterchangeFieldMergeGeneratedRebuildPlan(ids, requestedKinds);
