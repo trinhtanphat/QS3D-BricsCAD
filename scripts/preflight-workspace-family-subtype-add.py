@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 source_path = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.FamilySubtype.cs"
 quick_draw_path = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.QuickDraw.cs"
 panel_path = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs"
+workspace_xaml_path = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml"
 errors = []
 
 
@@ -19,6 +20,7 @@ def read(path: Path, label: str) -> str:
 source = read(source_path, "WorkspacePanel.FamilySubtype.cs")
 quick_draw = read(quick_draw_path, "WorkspacePanel.QuickDraw.cs")
 panel = read(panel_path, "WorkspacePanel.xaml.cs")
+workspace_xaml = read(workspace_xaml_path, "WorkspacePanel.xaml")
 
 for token in (
     '"Móng Băng", "Móng Bè"',
@@ -28,10 +30,18 @@ for token in (
     "private static bool FamilyNameHasSubtype(string familyName, string subtype)",
     "private static string NextSubtypeFamilyName(string subtype, ISet<string> existingNames)",
     "FamilyList.ScrollIntoView(selected);",
-    'TryFindResource("AccentBrush")',
 ):
     if token not in source:
         errors.append("Workspace subtype/Add contract missing: " + token)
+
+for token in (
+    "<ListBox.ItemContainerStyle>",
+    '<Trigger Property="IsSelected" Value="True">',
+    '<Setter Property="Background" Value="{StaticResource AccentBrush}"/>',
+    '<Setter Property="Foreground" Value="White"/>',
+):
+    if token not in workspace_xaml:
+        errors.append("Workspace selected-row highlight contract missing: " + token)
 
 method_start = source.find("private void CreateFamilyFromWorkspaceSubtype(bool launchSolid3D)")
 method_end = source.find("private static void SeedQuickSchemaDefaults", method_start)
@@ -82,4 +92,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: subtype filtering, Add mode routing, unsupported-Solid3D pre-mutation refusal, native builder delegation, and selected-row highlight are source-guarded.")
+print("PASS: subtype filtering, Add mode routing, unsupported-Solid3D pre-mutation refusal, native builder delegation, and WPF-managed selected-row highlight are source-guarded.")

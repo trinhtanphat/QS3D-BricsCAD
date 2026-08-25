@@ -61,6 +61,8 @@ namespace QS3D.Core.Model
             {
                 if (char.IsControl(canonical[index]))
                     throw new ArgumentException("Handle must not contain control characters.", parameterName);
+                if (char.IsWhiteSpace(canonical[index]))
+                    throw new ArgumentException("Handle must not contain whitespace.", parameterName);
             }
 
             return canonical;
