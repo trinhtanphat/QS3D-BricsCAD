@@ -300,7 +300,7 @@ namespace QS3D.Core.Commercial
                 throw new OverflowException(label + " overflowed decimal arithmetic.", ex);
             }
 
-            if (right != 0m && result == left)
+            if ((right != 0m && result == left) || (left != 0m && result == -right))
                 throw new OverflowException("Commercial subtraction precision loss: " + label + ".");
 
             return result;
