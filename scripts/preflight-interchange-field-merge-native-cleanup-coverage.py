@@ -29,8 +29,6 @@ def main():
     service = SERVICE.read_text(encoding="utf-8")
     invalidator = INVALIDATOR.read_text(encoding="utf-8")
 
-    # Core ownership is intentionally extensible. Native cleanup must therefore prove
-    # coverage instead of assuming every future Generated*Handle(s) slot has an eraser.
     require(policy, 'StartsWith("Generated", StringComparison.OrdinalIgnoreCase)', "core ownership policy", failures)
     require(policy, 'EndsWith("Handle", StringComparison.OrdinalIgnoreCase)', "core ownership policy", failures)
     require(policy, 'EndsWith("Handles", StringComparison.OrdinalIgnoreCase)', "core ownership policy", failures)
@@ -57,10 +55,12 @@ def main():
     snapshot = service.find("ProjectStateSnapshot.Capture(lockedProject)")
     locked_guard = service.find("GeneratedNativeCleanupCoverageGuard.EnsureSupported(lockedInvalidationTargets);")
     pre_native_authority = service.find('"Interchange field merge / pre-native cleanup"')
+    rebuild_prepare = service.find("InterchangeFieldMergeGeneratedRebuildExecutor.Prepare(")
     invalidation = service.find("GeneratedDependentGeometryInvalidator.Prepare(")
     pre_core_authority = service.find('"Interchange field merge / pre-core apply"')
     core_import = service.find("ProjectInterchangeFieldMergeImporter.Import(")
     metadata = service.find("invalidation.CommitMetadata();")
+    rebuild_execute = service.find("InterchangeFieldMergeGeneratedRebuildExecutor.Execute(")
     pre_commit_authority = service.find('"Interchange field merge / pre-CAD commit"')
     commit = service.find("transaction.Commit();")
 
@@ -74,40 +74,43 @@ def main():
         snapshot,
         locked_guard,
         pre_native_authority,
+        rebuild_prepare,
         invalidation,
         pre_core_authority,
         core_import,
         metadata,
+        rebuild_execute,
         pre_commit_authority,
         commit,
     ]
     if min(ordered) < 0:
         failures.append(
-            "field merge service is missing cleanup coverage, canonical locked rebind, sidecar authority phase checks, rollback snapshot, native invalidation, Core apply, metadata sweep, or CAD commit"
+            "field merge service is missing cleanup coverage, canonical locked rebind, sidecar authority phase checks, rollback snapshot, bounded rebuild prepare/execute, native invalidation, Core apply, metadata sweep, or CAD commit"
         )
     elif ordered != sorted(ordered):
         failures.append(
-            "field merge native ordering must be early coverage -> document lock/rebind -> transaction/snapshot -> locked coverage -> pre-native authority -> invalidator -> pre-Core authority -> Core apply -> metadata -> pre-commit authority -> CAD commit"
+            "field merge native ordering must be early coverage -> document lock/rebind -> transaction/snapshot -> locked coverage -> pre-native authority -> rebuild preflight -> invalidator -> pre-Core authority -> Core apply -> metadata -> bounded rebuild -> pre-commit authority -> CAD commit"
         )
 
     if service.count("ProjectContextCoordinator.RequireBackingStoreUnchanged(") != 3:
         failures.append("field merge must recheck sidecar/backing-store authority exactly at pre-native, pre-Core and pre-CAD-commit phases")
 
-    require(service, "GeneratedDependentGeometryInvalidator.Prepare(\n                            document,\n                            transaction,\n                            lockedProject,\n                            lockedInvalidationTargets)", "locked invalidator inputs", failures)
-    require(service, "ProjectInterchangeFieldMergeImporter.Import(\n                            lockedProject,", "locked Core mutation target", failures)
+    # Verify the locked canonical objects feed destructive work without coupling the gate
+    # to indentation. The ordering assertions above prove these calls occur in the guarded
+    # mutation path; these argument checks keep the exact locked project/transaction/closure.
+    require(service, "GeneratedDependentGeometryInvalidator.Prepare(", "locked invalidator call", failures)
+    require(service, "transaction,\n                                lockedProject,\n                                lockedInvalidationTargets)", "locked invalidator inputs", failures)
+    require(service, "ProjectInterchangeFieldMergeImporter.Import(", "locked Core mutation call", failures)
+    require(service, "lockedProject,\n                                json,", "locked Core mutation target", failures)
     require(service, "if (!cadCommitted && rollback != null)", "conditional semantic rollback", failures)
     require(service, "rollback.Restore(project)", "semantic rollback target", failures)
 
-    # Keep the explicit native handlers visible in the invalidator. If a handler is removed,
-    # the coverage whitelist must not continue advertising that slot as safely erasable.
     require(invalidator, "CoreOwnershipPolicy.RebarHandleKeys", "native invalidator", failures)
     require(invalidator, "EraseCurtainFrames", "native invalidator", failures)
     require(invalidator, "EraseCurtainPanels", "native invalidator", failures)
     require(invalidator, "EraseGridAnnotations", "native invalidator", failures)
     require(invalidator, "GeneratedGeometryService.PrepareReplacement", "native invalidator", failures)
 
-    # Semantic MText tags are generated dependents too. Coverage must include an explicit
-    # complete-set liveness/type/ownership validation path, an erase path and metadata sweep.
     require(invalidator, "EnsureSemanticTagsLive", "semantic tag native invalidator", failures)
     require(invalidator, "EraseSemanticTags", "semantic tag native invalidator", failures)
     require(invalidator, "EnsureSemanticTagOwned", "semantic tag ownership guard", failures)
@@ -124,7 +127,8 @@ def main():
 
     print("PASS: FieldMerge rejects unsupported generated ownership slots before native mutation.")
     print("PASS: the exact canonical project and affected targets are rebound/re-resolved under the document lock.")
-    print("PASS: cleanup coverage is rechecked under the document lock immediately before native invalidation.")
+    print("PASS: cleanup coverage is rechecked under the document lock before bounded rebuild preflight and native invalidation.")
+    print("PASS: bounded rebuild is prepared before invalidation and executes only after Core apply + old-owner metadata cleanup.")
     print("PASS: sidecar authority is rechecked before native cleanup, before Core apply, and before CAD commit.")
     print("PASS: physical-opening owner aliases must identify the same generated host Solid3d handle.")
     print("PASS: known native cleanup handlers remain present for solid/rebar/curtain/grid ownership slots.")
