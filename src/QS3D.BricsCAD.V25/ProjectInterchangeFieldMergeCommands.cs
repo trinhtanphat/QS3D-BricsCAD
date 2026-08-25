@@ -84,20 +84,18 @@ namespace QS3D.BricsCAD.V25
                     " • target fields kept " + result.CoreResult.TargetFieldsKept.ToString(CultureInfo.InvariantCulture) +
                     " • affected elements " + result.CoreResult.AffectedTargetElementsMarkedDirty.ToString(CultureInfo.InvariantCulture) +
                     " • native invalidated " + result.GeneratedElementsInvalidated.ToString(CultureInfo.InvariantCulture) +
-                    " • native rebuilt " + result.NativeGeometryRebuilt.ToString(CultureInfo.InvariantCulture) +
-                    " • semantic regenerated " + result.SemanticElementsRegenerated.ToString(CultureInfo.InvariantCulture) +
                     " • authorized handles " + result.CoreResult.NativeCleanupHandlesRequired.ToString(CultureInfo.InvariantCulture) +
-                    ". Native+quantity rebuild committed atomically; Workbook/Trace/export/save remain explicit.";
+                    ". Rebuild explicit; chưa tự lưu .qsdb.";
                 try { PaletteCoordinator.SetStatus(status); } catch { }
                 document.Editor.WriteMessage("\nQS3D " + status);
-                document.Editor.WriteMessage("\nQS3D chạy QS3DHEALTHALL trước khi phát hành bản vẽ; không cần rebuild lại native/quantity nếu FieldMerge đã báo thành công.");
+                document.Editor.WriteMessage("\nQS3D chạy QS3DHEALTHALL và rebuild explicit generated outputs cần dùng trước khi phát hành bản vẽ.");
             }
             catch (Exception ex)
             {
                 try { PaletteCoordinator.SetStatus("QS3DINTERCHANGEFIELDMERGE lỗi: " + ex.Message); } catch { }
                 document.Editor.WriteMessage(
                     "\nQS3DINTERCHANGEFIELDMERGE error: " + ex.Message +
-                    " Không claim field merge thành công nếu native/semantic apply + rebuild chưa commit.");
+                    " Không claim field merge thành công nếu native/semantic apply chưa commit.");
             }
         }
 
@@ -197,7 +195,7 @@ namespace QS3D.BricsCAD.V25
                 .ToArray();
 
             return
-                "Áp dụng FIELD-LEVEL semantic precedence + bounded generated rebuild đã review trong MỘT CAD TRANSACTION?\n\n" +
+                "Áp dụng FIELD-LEVEL semantic precedence đã review trong MỘT CAD TRANSACTION?\n\n" +
                 "Source project: " + plan.FieldPlan.SourceProjectId + "\n" +
                 "Colliding identities: " + plan.FieldPlan.CollidingIdentityCount.ToString(CultureInfo.InvariantCulture) + "\n" +
                 "Differing fields: " + plan.FieldPlan.Decisions.Count.ToString(CultureInfo.InvariantCulture) +
@@ -211,10 +209,9 @@ namespace QS3D.BricsCAD.V25
                 "• FieldMerge chỉ xử lý same-ID collisions; source-only identity làm plan bị block.\n" +
                 "• Incoming source CAD ownership không được nhận vào target.\n" +
                 "• Authorization bind ProjectId + drawing fingerprint + ChangeVersion + source snapshot + decisions + exact generated handles.\n" +
-                "• Trước mutation, QS3D preflight bounded rebuild; specialized physical-cut/rebar/curtain/grid/tag/unknown owner slot sẽ fail-closed.\n" +
-                "• Sau Core apply, supported GeneratedSolid được rebuild bằng production builder và affected semantic/quantity được regenerate trước CAD commit.\n" +
-                "• Một native/semantic Undo transition bao trùm invalidate + apply + rebuild; lỗi trước outer commit sẽ abort DWG và rollback ProjectState.\n" +
-                "• Workbook/Trace/export và save không tự chạy; các output đó vẫn explicit.";
+                "• Native erase được prepare khi old target ownership metadata còn nguyên; Core re-plan/authorization chạy trước semantic commit.\n" +
+                "• Nếu Core apply hoặc CAD commit lỗi, DWG transaction abort và semantic ProjectState rollback.\n" +
+                "• Không tự build3D/cut/rebar/curtain/grid/save; rebuild explicit sau health check.";
         }
 
         private static string BuildBlockedText(ProjectInterchangeFieldMergeExecutionPlan plan)

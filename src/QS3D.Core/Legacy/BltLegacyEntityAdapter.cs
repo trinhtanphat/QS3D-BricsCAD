@@ -314,17 +314,51 @@ namespace QS3D.Core.Legacy
         private static bool TryExtractMetric(IDictionary<string, string> metadata, string[] aliases, out double value)
         {
             value = 0d;
+            var found = false;
+            var invalid = false;
+
             foreach (var pair in metadata)
             {
                 var pairValue = pair.Value ?? string.Empty;
-                if (MetricKeyMatches(pair.Key, aliases) && TryFiniteNonNegative(pairValue, out value)) return true;
+                AccumulateMetric(pair.Key, pairValue, aliases, ref found, ref invalid, ref value);
                 foreach (Match match in EmbeddedPair.Matches(pairValue))
                 {
-                    if (!MetricKeyMatches(match.Groups["key"].Value, aliases)) continue;
-                    if (TryFiniteNonNegative(match.Groups["value"].Value, out value)) return true;
+                    AccumulateMetric(
+                        match.Groups["key"].Value,
+                        match.Groups["value"].Value,
+                        aliases,
+                        ref found,
+                        ref invalid,
+                        ref value);
                 }
             }
-            return false;
+
+            return found && !invalid;
+        }
+
+        private static void AccumulateMetric(
+            string? key,
+            string? rawValue,
+            string[] aliases,
+            ref bool found,
+            ref bool invalid,
+            ref double value)
+        {
+            if (!MetricKeyMatches(key, aliases)) return;
+            if (!TryFiniteNonNegative(rawValue, out var parsed))
+            {
+                invalid = true;
+                return;
+            }
+
+            if (!found)
+            {
+                value = parsed;
+                found = true;
+                return;
+            }
+
+            if (value != parsed) invalid = true;
         }
 
         private static string ExtractTextHint(IDictionary<string, string> metadata, params string[] aliases)

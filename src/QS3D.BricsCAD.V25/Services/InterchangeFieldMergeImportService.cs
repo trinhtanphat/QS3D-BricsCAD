@@ -29,35 +29,25 @@ namespace QS3D.BricsCAD.V25.Services
     {
         internal InterchangeFieldMergeNativeResult(
             ProjectInterchangeFieldMergeResult coreResult,
-            int generatedElementsInvalidated,
-            int nativeGeometryRebuilt,
-            int semanticElementsRegenerated)
+            int generatedElementsInvalidated)
         {
             CoreResult = coreResult ?? throw new ArgumentNullException(nameof(coreResult));
             GeneratedElementsInvalidated = generatedElementsInvalidated;
-            NativeGeometryRebuilt = nativeGeometryRebuilt;
-            SemanticElementsRegenerated = semanticElementsRegenerated;
         }
 
         public ProjectInterchangeFieldMergeResult CoreResult { get; }
         public int GeneratedElementsInvalidated { get; }
-        public int NativeGeometryRebuilt { get; }
-        public int SemanticElementsRegenerated { get; }
     }
 
     /// <summary>
     /// BricsCAD-native transaction boundary for a previously reviewed Core field-merge plan.
-    /// Native erasure is prepared while reviewed ownership metadata is intact; Core then re-plans
-    /// and verifies exact authorization. Supported generated outputs are rebuilt before the single
-    /// outer CAD commit. One semantic/native Undo transition covers invalidate + apply + rebuild,
-    /// and an outer ProjectState snapshot restores semantic state if anything fails pre-commit.
+    /// Native erasure is prepared while the reviewed target ownership metadata is still intact;
+    /// the Core importer then re-plans and verifies its exact authorization before semantic mutation.
+    /// CAD commit happens only after the Core apply succeeds. An outer ProjectState snapshot restores
+    /// semantic state when the native transaction aborts or commit fails.
     /// </summary>
     internal static class InterchangeFieldMergeImportService
     {
-        private const InterchangeGeneratedOutputKind AutomaticRebuildKinds =
-            InterchangeGeneratedOutputKind.NativeGeometry |
-            InterchangeGeneratedOutputKind.Quantity;
-
         public static InterchangeFieldMergeNativePlan Plan(
             ProjectState target,
             string json,
@@ -87,10 +77,13 @@ namespace QS3D.BricsCAD.V25.Services
             var project = ExistingProjectMutationContext.Require(document, "Interchange field merge");
             var invalidationTargets = ResolveAffectedTargets(project, reviewedPlan.CorePlan.AffectedTargetElementIds);
 
+            // Core recognizes Generated*Handle(s) owner slots generically, but the native invalidator
+            // can erase only the slots for which BricsCAD liveness/ownership/erase handlers exist.
+            // Refuse an unsupported or split physical-opening owner alias before a CAD transaction
+            // can erase anything or Core can clear the corresponding ownership metadata.
             GeneratedNativeCleanupCoverageGuard.EnsureSupported(invalidationTargets);
 
             ProjectStateSnapshot? rollback = null;
-            SourceReconcileUndoCoordinator.PendingTransition? undoTransition = null;
             var cadCommitted = false;
 
             try
@@ -103,6 +96,8 @@ namespace QS3D.BricsCAD.V25.Services
                         throw new InvalidOperationException(
                             "Interchange field merge target project changed before the native mutation lock was acquired. Re-plan and review the merge.");
 
+                    // Never carry pre-lock element references into destructive native work. Re-resolve
+                    // the reviewed affected ids from the exact canonical project under the document lock.
                     var lockedInvalidationTargets = ResolveAffectedTargets(
                         lockedProject,
                         reviewedPlan.CorePlan.AffectedTargetElementIds);
@@ -111,82 +106,55 @@ namespace QS3D.BricsCAD.V25.Services
                     {
                         EnsureActive(document, "Interchange field merge / native mutation");
                         rollback = ProjectStateSnapshot.Capture(lockedProject);
-                        var rollbackStamp = SourceReconcileUndoCoordinator.ProjectRevisionStamp.Capture(lockedProject);
 
+                        // Repeat the coverage check under the document lock so a modeless/event callback
+                        // cannot swap generated owner-slot metadata between the early precheck and native
+                        // invalidation. This check must remain immediately before destructive preparation.
                         GeneratedNativeCleanupCoverageGuard.EnsureSupported(lockedInvalidationTargets);
                         ProjectContextCoordinator.RequireBackingStoreUnchanged(
                             document,
                             lockedProject,
                             "Interchange field merge / pre-native cleanup");
 
-                        // Build the complete automatic-rebuild manifest while the retiring owner metadata and
-                        // reviewed source handles still exist. This is observational and must fail closed before
-                        // any native entity is erased.
-                        var rebuildPlan = InterchangeFieldMergeGeneratedRebuildPlan.Create(
-                            reviewedPlan.CorePlan.AffectedTargetElementIds,
-                            AutomaticRebuildKinds);
-                        var rebuildManifest = InterchangeFieldMergeGeneratedRebuildExecutor.Prepare(
-                            document,
-                            lockedProject,
-                            lockedInvalidationTargets,
-                            rebuildPlan);
-
-                        // Own one Undo marker for the entire FieldMerge command. Child production builders see
-                        // the external scope below and deliberately suppress their own semantic/native markers.
-                        undoTransition = SourceReconcileUndoCoordinator.BeginTransition(
+                        // Prepare native erasure before Core mutation while the target's reviewed generated
+                        // handle metadata still exists. Prepare is rollback-capable and does not clear semantic
+                        // ownership metadata. Core Import re-plans next and rejects stale target/source/policy/
+                        // handle authorization before any semantic mutation can be accepted.
+                        var invalidation = GeneratedDependentGeometryInvalidator.Prepare(
                             document,
                             transaction,
                             lockedProject,
-                            rollback,
-                            rollbackStamp);
-                        undoTransition.StageNativeMarker();
+                            lockedInvalidationTargets);
 
-                        using (SourceReconcileUndoCoordinator.BeginExternalTransitionScope(document))
-                        {
-                            var invalidation = GeneratedDependentGeometryInvalidator.Prepare(
-                                document,
-                                transaction,
-                                lockedProject,
-                                lockedInvalidationTargets);
+                        // A document lock cannot prevent an external process from replacing the sidecar.
+                        // Recheck after native preparation while CAD erasure is still uncommitted so a changed
+                        // backing store aborts the transaction before any semantic source data is applied.
+                        ProjectContextCoordinator.RequireBackingStoreUnchanged(
+                            document,
+                            lockedProject,
+                            "Interchange field merge / pre-core apply");
 
-                            ProjectContextCoordinator.RequireBackingStoreUnchanged(
-                                document,
-                                lockedProject,
-                                "Interchange field merge / pre-core apply");
+                        var coreResult = ProjectInterchangeFieldMergeImporter.Import(
+                            lockedProject,
+                            json,
+                            policy,
+                            reviewedPlan.Authorization);
 
-                            var coreResult = ProjectInterchangeFieldMergeImporter.Import(
-                                lockedProject,
-                                json,
-                                policy,
-                                reviewedPlan.Authorization);
+                        // Core clears generated/native ownership metadata for the full affected closure after
+                        // authorization succeeds. CommitMetadata is intentionally retained as the native
+                        // invalidator's final parity sweep; after the Core clear it is idempotent.
+                        invalidation.CommitMetadata();
 
-                            // Old owner metadata must be gone before production builders claim replacement
-                            // generated solids. Rebuild-before-CommitMetadata would let this sweep erase the
-                            // newly claimed ownership and create semantic/native divergence.
-                            invalidation.CommitMetadata();
+                        // Core mutation and metadata cleanup are still rollback-capable until CAD commit.
+                        // Refuse to commit against a sidecar revision that changed during either phase.
+                        ProjectContextCoordinator.RequireBackingStoreUnchanged(
+                            document,
+                            lockedProject,
+                            "Interchange field merge / pre-CAD commit");
 
-                            var rebuildResult = InterchangeFieldMergeGeneratedRebuildExecutor.Execute(
-                                document,
-                                lockedProject,
-                                rebuildManifest);
-
-                            ProjectContextCoordinator.RequireBackingStoreUnchanged(
-                                document,
-                                lockedProject,
-                                "Interchange field merge / pre-CAD commit");
-
-                            undoTransition.StageAfter(
-                                lockedProject,
-                                ProjectStateSnapshot.Capture(lockedProject));
-                            transaction.Commit();
-                            undoTransition.ConfirmCommitted();
-                            cadCommitted = true;
-                            return new InterchangeFieldMergeNativeResult(
-                                coreResult,
-                                invalidation.ElementCount,
-                                rebuildResult.NativeGeometryRebuilt,
-                                rebuildResult.SemanticElementsRegenerated);
-                        }
+                        transaction.Commit();
+                        cadCommitted = true;
+                        return new InterchangeFieldMergeNativeResult(coreResult, invalidation.ElementCount);
                     }
                 }
             }
@@ -206,10 +174,6 @@ namespace QS3D.BricsCAD.V25.Services
                     }
                 }
                 throw;
-            }
-            finally
-            {
-                undoTransition?.Dispose();
             }
         }
 
