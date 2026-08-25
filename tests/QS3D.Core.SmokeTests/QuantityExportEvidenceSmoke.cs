@@ -119,6 +119,8 @@ namespace QS3D.Core.SmokeTests
                     FormworkM2 = 0d,
                     DrawingFingerprint = "DWG-LEGACY"
                 };
+                row.ElementIds.Add("LEGACY-E1");
+                row.SourceHandles.Add("1A");
                 var path = Path.Combine(root, "legacy.xlsx");
                 XlsxQuantityExporter.Export(path, new[] { row });
                 var sheet = ReadEntry(path, "xl/worksheets/sheet1.xml");
