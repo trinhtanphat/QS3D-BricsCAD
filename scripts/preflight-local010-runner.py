@@ -7,9 +7,17 @@ runbook = (root / "docs" / "LOCAL-010-PERFORMANCE-UI-QUALIFICATION.md").read_tex
 required_runner = [
     'localItem="LOCAL-010"', 'localPassClaimedByRunner=$false', 'git rev-parse HEAD',
     'git status --porcelain', 'run-local-v25-qualification.ps1', 'runtimeSmokeStatus',
-    'Get-Process -Name bricscad', 'performance.dependency_graph', 'performance.rebar_limits',
-    'ui.start_center_100', 'ui.start_center_200', 'ui.ribbon_100', 'ui.ribbon_200',
-    'ui.workspace_narrow', 'ui.workspace_wide', 'ui.document_switch_cleanup',
+    'Get-Process -Name bricscad',
+    'performance.dependency_graph', 'performance.regeneration', 'performance.rooms',
+    'performance.wall_junctions', 'performance.auto_host', 'performance.curtain',
+    'performance.bq_bbs_ed2_interchange', 'performance.ownership_health',
+    'performance.rebar_limits',
+    'ui.start_center_100', 'ui.start_center_125', 'ui.start_center_150', 'ui.start_center_200',
+    'ui.ribbon_100', 'ui.ribbon_125', 'ui.ribbon_150', 'ui.ribbon_200',
+    'ui.workspace_narrow', 'ui.workspace_normal', 'ui.workspace_wide',
+    'ui.document_switch_cleanup',
+    'baseline\\qualification.json', 'manualRunbook="docs/LOCAL-010-PERFORMANCE-UI-QUALIFICATION.md"',
+    'status=$status', 'cases=$results.ToArray()',
     'exit 1', 'exit 2', 'exit 3'
 ]
 for token in required_runner:
@@ -17,7 +25,8 @@ for token in required_runner:
         raise SystemExit(f"ERROR: LOCAL-010 runner contract missing {token!r}")
 
 required_runbook = [
-    'run-local-v25-local-010.ps1', 'sanitized/disposable', '100%', '125%', '150%', '200%',
+    'run-local-v25-local-010.ps1', 'artifacts/local-v25-local-010/qualification.json',
+    'sanitized/disposable', '100%', '125%', '150%', '200%',
     'narrow', 'normal', 'wide', 'V25 and V26 identities are separate',
     'LOCAL-010-START-CENTER-HANDOFF-2026-08-17.md', '`Dự án`', '`Cấu hình`',
     '`Mô hình`', '`BQ`', 'exactly once', 'no standalone QS3D application/process',
