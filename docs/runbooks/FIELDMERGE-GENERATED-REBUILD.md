@@ -12,9 +12,11 @@ A reviewed `QS3DINTERCHANGEFIELDMERGE` import can invalidate generated dependent
 `InterchangeFieldMergeGeneratedRebuildPlan` is the boundary object for the rebuild phase. The plan:
 
 - accepts only the explicit generated-output kinds `NativeGeometry`, `Quantity`, `Workbook`, and `Trace`;
-- removes `Guid.Empty`, deduplicates element ids, and gives them deterministic ordering;
+- uses the repository's canonical string element identity, removes blank ids, trims lookup-equivalent surrounding whitespace, deduplicates case-insensitively, and gives ids deterministic case-insensitive ordering;
 - represents empty element/output sets as a no-op;
 - fails closed on unknown output flags rather than silently widening scope.
+
+The string-id normalization deliberately matches `ProjectState.FindElement`: semantic element ids are canonical trimmed strings and lookup is case-insensitive. The rebuild boundary must not introduce a parallel `Guid` identity model.
 
 The orchestration layer must construct this plan only after the existing stale-authorization/freshness checks and native invalidation preparation have succeeded. Rebuild execution must remain inside the existing semantic rollback boundary and before final CAD commit. A rebuild failure must therefore abort the import and restore semantic state; it must not leave a partially rebuilt semantic/CAD state.
 
