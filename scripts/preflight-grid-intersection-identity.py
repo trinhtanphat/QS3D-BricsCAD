@@ -31,7 +31,9 @@ if IDENTITY.is_file():
         'group.Points.Sort(ComparePoint)',
         'Near(group.Points[index - 1], group.Points[index], pointTolerance)',
         'pair-token hash collision detected',
-        'OwnerTokenPrefix + group.PairToken.Substring(PairTokenPrefix.Length) + ":" + index',
+        'BuildIntersectionOwner(group.FirstElementId, group.SecondElementId, index)',
+        'var pairToken = BuildPairToken(firstElementId, secondElementId);',
+        'OwnerTokenPrefix + pairToken.Substring(PairTokenPrefix.Length) + ":" + occurrenceIndex',
     ):
         if token not in text:
             errors.append("GridIntersectionIdentityPlanner.cs missing deterministic ownership token: " + token)
