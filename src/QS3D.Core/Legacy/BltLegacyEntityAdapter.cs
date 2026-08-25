@@ -220,7 +220,7 @@ namespace QS3D.Core.Legacy
             foreach (var pair in snapshot.Metadata)
             {
                 var pairValue = pair.Value ?? string.Empty;
-                AddCategoryTextMatch(pair.Key, "metadata-key:" + Bound(pair.Key, 80), matches);
+                AddCategoryMetadataKeyMatch(pair.Key, "metadata-key:" + Bound(pair.Key, 80), matches);
                 AddCategoryTextMatch(pairValue, "metadata-value:" + Bound(pairValue, 120), matches);
                 AddExplicitCategoryCode(pair.Key, pairValue, matches);
                 foreach (Match match in EmbeddedPair.Matches(pairValue))
@@ -259,6 +259,18 @@ namespace QS3D.Core.Legacy
             else if (code == 701) Add(matches, ElementCategory.StructuralWall, "legacy-code:701");
         }
 
+        private static void AddCategoryMetadataKeyMatch(string? raw, string source, IDictionary<ElementCategory, string> matches)
+        {
+            var value = Normalize(raw);
+            if (value.Length == 0) return;
+
+            if (HasCategoryMetadataKeyAlias(value, "bltcolumn", "column", "cot", "cotbtct")) Add(matches, ElementCategory.Column, source);
+            if (HasCategoryMetadataKeyAlias(value, "bltbeam", "beam", "dam", "dambtct")) Add(matches, ElementCategory.Beam, source);
+            if (HasCategoryMetadataKeyAlias(value, "bltslab", "slab", "san", "sanbtct")) Add(matches, ElementCategory.Slab, source);
+            if (HasCategoryMetadataKeyAlias(value, "bltfoundation", "foundation", "footing", "mong", "mongcoc", "daicoc", "dammong", "mongbang", "mongbe")) Add(matches, ElementCategory.Foundation, source);
+            if (HasCategoryMetadataKeyAlias(value, "bltstructuralwall", "structuralwall", "vach", "vachbt", "vachbtct")) Add(matches, ElementCategory.StructuralWall, source);
+        }
+
         private static void AddCategoryTextMatch(string? raw, string source, IDictionary<ElementCategory, string> matches)
         {
             var value = Normalize(raw);
@@ -269,6 +281,27 @@ namespace QS3D.Core.Legacy
             if (HasAlias(value, "bltslab", "slab", "san", "sanbtct")) Add(matches, ElementCategory.Slab, source);
             if (HasAlias(value, "bltfoundation", "foundation", "footing", "mong", "mongcoc", "daicoc", "dammong", "mongbang", "mongbe")) Add(matches, ElementCategory.Foundation, source);
             if (HasAlias(value, "bltstructuralwall", "structuralwall", "vach", "vachbt", "vachbtct")) Add(matches, ElementCategory.StructuralWall, source);
+        }
+
+        private static bool HasCategoryMetadataKeyAlias(string normalizedText, params string[] aliases)
+        {
+            var compact = Compact(normalizedText);
+            foreach (var alias in aliases)
+            {
+                var normalizedAlias = Compact(Normalize(alias));
+                if (normalizedAlias.Length < 3) continue;
+                if (string.Equals(compact, normalizedAlias, StringComparison.Ordinal)) return true;
+                if (HasStandaloneToken(normalizedText, normalizedAlias)) return true;
+                if (normalizedAlias.StartsWith("blt", StringComparison.Ordinal))
+                {
+                    if (compact.StartsWith(normalizedAlias, StringComparison.Ordinal)) return true;
+                }
+                else if (compact.StartsWith("blt" + normalizedAlias, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static bool HasAlias(string normalizedText, params string[] aliases)
