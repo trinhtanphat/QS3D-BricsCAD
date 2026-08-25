@@ -2,6 +2,7 @@
 
 - Status: `LOCAL_FAIL / REMOTE_SOURCE_REQUIRED / DO_NOT_RERUN_UNCHANGED`
 - Lane-Key: `issue-3681-881f-local-evidence`
+- Evidence PR: #3849
 - Supersedes: closed PR #3764 as the current canonical evidence carrier; its historical branch and unresolved local worktree remain preserved
 - Parent local queue: #72
 - Licensed qualification: #3681
