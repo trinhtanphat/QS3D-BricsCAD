@@ -3,12 +3,13 @@
 
 from __future__ import annotations
 
-import re
+import importlib.util
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+CLASSIFIER = ROOT / "scripts" / "ci-validation-scope.py"
 
 REQUIRED_BUILD_ROOTS = {
     ".gitmodules",
@@ -24,33 +25,63 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-def extract_build_root_files(text: str) -> set[str]:
-    match = re.search(
-        r"\$path\s+-in\s+@\((?P<items>[^)]*)\)\)\s*\{\s*\n\s*\$sourceValidation\s*=\s*\$true\s*\n\s*\$buildValidation\s*=\s*\$true",
-        text,
-        flags=re.MULTILINE,
-    )
-    if match is None:
-        fail("could not locate the Shared CI build-root classification block")
-
-    return set(re.findall(r"'([^']+)'", match.group("items")))
+def load_classifier():
+    spec = importlib.util.spec_from_file_location("qs3d_ci_validation_scope_guard", CLASSIFIER)
+    if spec is None or spec.loader is None:
+        fail("could not load the Shared CI validation-scope classifier")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def main() -> int:
-    text = CI_WORKFLOW.read_text(encoding="utf-8")
-    build_roots = extract_build_root_files(text)
+    if not CLASSIFIER.is_file():
+        fail("Shared CI validation-scope classifier is missing")
 
+    workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+    classifier_text = CLASSIFIER.read_text(encoding="utf-8")
+    classifier = load_classifier()
+
+    build_roots = set(classifier.BUILD_EXACT)
     missing = sorted(REQUIRED_BUILD_ROOTS - build_roots)
     if missing:
         fail("build-impact root paths missing from full validation scope: " + ", ".join(missing))
 
-    if LIGHTWEIGHT_CONTROL in build_roots:
+    if LIGHTWEIGHT_CONTROL in build_roots or LIGHTWEIGHT_CONTROL.startswith(tuple(classifier.BUILD_PREFIXES)):
         fail(f"ordinary documentation path unexpectedly forces full build validation: {LIGHTWEIGHT_CONTROL}")
 
-    if "submodules: recursive" not in text:
-        fail("Shared CI no longer checks out recursive submodules in its build-validation path")
+    required_workflow = (
+        "python scripts/ci-validation-scope.py --all --github-output $env:GITHUB_OUTPUT",
+        'python scripts/ci-validation-scope.py --base "origin/$baseBranch" --head HEAD --github-output $env:GITHUB_OUTPUT',
+        'git fetch --no-tags origin "+refs/heads/$baseBranch`:refs/remotes/origin/$baseBranch"',
+        "submodules: recursive",
+    )
+    for snippet in required_workflow:
+        if snippet not in workflow:
+            fail(f"Shared CI validation-scope workflow contract is missing: {snippet}")
 
-    print("PASS: Shared CI build-validation scope covers dependency/build root inputs")
+    required_classifier = (
+        '"--no-ext-diff"',
+        '"--no-textconv"',
+        '"--no-renames"',
+        '"--name-only"',
+        '"-z"',
+        'decode("utf-8", errors="strict")',
+    )
+    for snippet in required_classifier:
+        if snippet not in classifier_text:
+            fail(f"validation-scope classifier lost fail-closed NUL-path contract: {snippet}")
+
+    forbidden_workflow = (
+        "core.quotePath=false diff --no-renames --name-only",
+        "Git returned a C-quoted changed path",
+        "foreach ($rawPath in $changed)",
+    )
+    for snippet in forbidden_workflow:
+        if snippet in workflow:
+            fail(f"Shared CI reverted to line/C-quote path parsing: {snippet}")
+
+    print("PASS: Shared CI build-validation scope uses the lossless classifier and covers dependency/build root inputs")
     return 0
 
 
