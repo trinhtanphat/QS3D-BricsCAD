@@ -75,6 +75,11 @@ def main() -> int:
     )
     require(
         text,
+        "if (-not [string]::IsNullOrEmpty($env:RELEASE_TAG))",
+        "RELEASE_TAG presence check that does not normalize whitespace-only input",
+    )
+    require(
+        text,
         "[string]::Equals($env:RELEASE_TAG, $expectedTag, [StringComparison]::Ordinal)",
         "ordinal exact RELEASE_TAG comparison",
     )
@@ -93,6 +98,11 @@ def main() -> int:
         text,
         "$env:RELEASE_TAG.Trim()",
         "RELEASE_TAG normalization",
+    )
+    forbid(
+        text,
+        "IsNullOrWhiteSpace($env:RELEASE_TAG)",
+        "whitespace-only RELEASE_TAG bypass",
     )
 
     accepted = [
@@ -125,6 +135,7 @@ def main() -> int:
 
     version = "0.1.0-preview.10213"
     bad_tags = [
+        " ",
         f" v{version}",
         f"v{version} ",
         f"v{version}\n",
@@ -137,6 +148,8 @@ def main() -> int:
 
     if not exact_release_tag(version, None):
         fail("unset RELEASE_TAG control was rejected")
+    if not exact_release_tag(version, ""):
+        fail("empty RELEASE_TAG control was rejected")
 
     print("V26 package provenance preflight: PASS")
     return 0
