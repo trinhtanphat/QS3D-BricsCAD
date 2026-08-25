@@ -85,9 +85,9 @@ def main() -> int:
         assert scan_tree(fixture) == [], "fixture cleanup should restore an accepted tree"
 
     # A real repository scan is a source-governance check, not a scan of local
-    # build outputs, caches, artifacts, or other untracked material. Keeping
-    # discovery on Git-tracked paths both preserves complete repository-source
-    # coverage and bounds work independently of workstation residue.
+    # build outputs, caches, or other untracked material. Keeping discovery on
+    # Git-tracked paths both preserves complete repository-source coverage and
+    # bounds work independently of workstation residue.
     with tempfile.TemporaryDirectory() as temp_dir:
         repository = Path(temp_dir)
         subprocess.run(
@@ -106,20 +106,22 @@ def main() -> int:
             stderr=subprocess.DEVNULL,
         )
 
-        write(repository, "artifacts/hourly-control.md", "Local untracked evidence.\n")
+        # Use a directory that the guard does not otherwise exclude. This
+        # isolates repository tracking state as the only reason for inclusion.
+        write(repository, "workspace/hourly-control.md", "Local untracked evidence.\n")
         assert scan_tree(repository) == [], (
             "untracked material must not expand the repository-source scan contract"
         )
 
         subprocess.run(
-            ["git", "add", "artifacts/hourly-control.md"],
+            ["git", "add", "workspace/hourly-control.md"],
             cwd=repository,
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
         failures = scan_tree(repository)
-        assert any("artifacts/hourly-control.md" in failure for failure in failures), failures
+        assert any("workspace/hourly-control.md" in failure for failure in failures), failures
 
     print("PASS: external orchestration alias guard rejects renamed scheduler topology without product false positives.")
     print("PASS: repository discovery is bounded to Git-tracked source and ignores untracked workstation residue.")
