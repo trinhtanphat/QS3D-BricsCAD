@@ -12,7 +12,8 @@ INBOX = ROOT / "docs" / "LOCAL-AGENT-INBOX.md"
 
 WALL_CONTACT_SOURCE_READY_FLOOR_SHA = "c64eb8c1b83761e155da670904a72e64669464b7"
 WALL_CONTACT_TOUCHING_PROBE_FLOOR_SHA = "4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0"
-WALL_CONTACT_EXACT_RUNTIME_SHA = "447ba9805d777a3225827117587d932135cf0959"
+WALL_CONTACT_EXACT_RUNTIME_SHA = "a4f1a53683a9296532a0290fcb79bc49b9d4b892"
+WALL_CONTACT_SUPERSEDED_RUNTIME_SHA = "447ba9805d777a3225827117587d932135cf0959"
 WALL_CONTACT_RUNNER = "scripts/run-local-v25-wall-contact-3681.ps1"
 WALL_CONTACT_RUNNER_NAME = Path(WALL_CONTACT_RUNNER).name
 LOCAL005_SOURCE_MERGE = "ba6e1c7508086beb8ac5db9a4a78d2c43fc09492"
@@ -127,6 +128,8 @@ require_tokens(
         "local worker must not edit production source",
     ),
 )
+if WALL_CONTACT_SUPERSEDED_RUNTIME_SHA in inbox:
+    fail("#3681 canonical inbox reintroduced the superseded pre-#3846 runtime SHA")
 
 require_tokens(
     inbox,
@@ -168,4 +171,4 @@ for stale in (
     if stale in index or stale in dispatch:
         fail(f"stale local scheduling/carrier text reintroduced: {stale}")
 
-print("PASS local source-ready pull-test index with #3681 canonical inbox publication, #3727/#3728 source-ready rows and #3833/#3836 source floor")
+print("PASS local source-ready pull-test index with #3681 exact post-#3846 runtime SHA, canonical inbox publication and #3833/#3836 source floor")
