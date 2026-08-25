@@ -110,12 +110,14 @@ namespace QS3D.Core.Legacy
 
         private static readonly string[] ConcreteMetricAliases =
         {
-            "concretem3", "netconcretem3", "betongm3", "btm3", "thetichm3", "volumem3"
+            "concretem3", "netconcretem3", "betongm3", "btm3", "thetichm3", "volumem3",
+            BltLegacyMetadataKeys.ConcreteM3
         };
 
         private static readonly string[] FormworkMetricAliases =
         {
-            "formworkm2", "coppham2", "dientichcoppham2", "vkm2"
+            "formworkm2", "coppham2", "dientichcoppham2", "vkm2",
+            BltLegacyMetadataKeys.FormworkM2
         };
 
         public static BltLegacyElementCandidate Adapt(EntitySnapshot snapshot)
@@ -247,7 +249,7 @@ namespace QS3D.Core.Legacy
         private static void AddExplicitCategoryCode(string? key, string? value, IDictionary<ElementCategory, string> matches)
         {
             var normalizedKey = NormalizeKey(key);
-            if (!CategoryKeyAliases.Any(alias => normalizedKey.Contains(alias))) return;
+            if (!CategoryKeyAliases.Any(alias => string.Equals(normalizedKey, alias, StringComparison.Ordinal))) return;
             var normalizedValue = (value ?? string.Empty).Trim();
             if (!int.TryParse(normalizedValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var code)) return;
 
@@ -315,10 +317,10 @@ namespace QS3D.Core.Legacy
             foreach (var pair in metadata)
             {
                 var pairValue = pair.Value ?? string.Empty;
-                if (KeyMatches(pair.Key, aliases) && TryFiniteNonNegative(pairValue, out value)) return true;
+                if (MetricKeyMatches(pair.Key, aliases) && TryFiniteNonNegative(pairValue, out value)) return true;
                 foreach (Match match in EmbeddedPair.Matches(pairValue))
                 {
-                    if (!KeyMatches(match.Groups["key"].Value, aliases)) continue;
+                    if (!MetricKeyMatches(match.Groups["key"].Value, aliases)) continue;
                     if (TryFiniteNonNegative(match.Groups["value"].Value, out value)) return true;
                 }
             }
@@ -339,6 +341,12 @@ namespace QS3D.Core.Legacy
                 }
             }
             return string.Empty;
+        }
+
+        private static bool MetricKeyMatches(string? raw, IEnumerable<string> aliases)
+        {
+            var key = NormalizeKey(raw);
+            return aliases.Any(alias => string.Equals(key, NormalizeKey(alias), StringComparison.Ordinal));
         }
 
         private static bool KeyMatches(string? raw, IEnumerable<string> aliases)

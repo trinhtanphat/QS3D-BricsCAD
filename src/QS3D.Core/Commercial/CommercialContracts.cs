@@ -148,6 +148,7 @@ namespace QS3D.Core.Commercial
                 throw new ArgumentException("A non-empty canonical token is required.", paramName);
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new ArgumentException("Token must not contain surrounding whitespace.", paramName);
+            RejectMalformedUtf16(value, paramName, "Token");
             for (var i = 0; i < value.Length; i++)
                 if (char.IsControl(value[i]))
                     throw new ArgumentException("Token must not contain control characters.", paramName);
@@ -174,10 +175,29 @@ namespace QS3D.Core.Commercial
             if (value == null) return string.Empty;
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new ArgumentException("Text must not contain surrounding whitespace.", paramName);
+            RejectMalformedUtf16(value, paramName, "Text");
             for (var i = 0; i < value.Length; i++)
                 if (char.IsControl(value[i]))
                     throw new ArgumentException("Text must not contain control characters.", paramName);
             return value;
+        }
+
+        private static void RejectMalformedUtf16(string value, string paramName, string label)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                var current = value[i];
+                if (char.IsHighSurrogate(current))
+                {
+                    if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1]))
+                        throw new ArgumentException(label + " must contain well-formed UTF-16.", paramName);
+                    i++;
+                    continue;
+                }
+
+                if (char.IsLowSurrogate(current))
+                    throw new ArgumentException(label + " must contain well-formed UTF-16.", paramName);
+            }
         }
 
         internal static DateTime RequireUtc(DateTime value, string paramName)
@@ -280,7 +300,7 @@ namespace QS3D.Core.Commercial
                 throw new OverflowException(label + " overflowed decimal arithmetic.", ex);
             }
 
-            if (right != 0m && result == left)
+            if ((right != 0m && result == left) || (left != 0m && result == -right))
                 throw new OverflowException("Commercial subtraction precision loss: " + label + ".");
 
             return result;

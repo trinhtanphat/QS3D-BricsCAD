@@ -5,6 +5,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 FAMILY_SUBTYPE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.FamilySubtype.cs"
 WORKSPACE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.xaml.cs"
+WORKSPACE_XAML = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.xaml"
 
 
 def fail(message: str) -> None:
@@ -14,6 +15,7 @@ def fail(message: str) -> None:
 
 family_text = FAMILY_SUBTYPE.read_text(encoding="utf-8")
 workspace_text = WORKSPACE.read_text(encoding="utf-8")
+workspace_xaml = WORKSPACE_XAML.read_text(encoding="utf-8")
 
 if "using System.Windows.Threading;" not in family_text:
     fail("Workspace Family reveal must use the WPF Dispatcher deferral path.")
@@ -28,7 +30,7 @@ pending = refresh_method.find("_familyHighlightRefreshPending")
 deferred = refresh_method.find("Dispatcher.BeginInvoke(DispatcherPriority.Loaded")
 reveal_call = refresh_method.find("RevealSelectedFamilyAndRefreshHighlight();")
 if pending < 0:
-    fail("Selected-family highlight requests must be coalesced before dispatcher deferral.")
+    fail("Selected-family reveal requests must be coalesced before dispatcher deferral.")
 if deferred < 0 or reveal_call < 0 or deferred > reveal_call:
     fail("Selected-family reveal must be deferred through DispatcherPriority.Loaded.")
 
@@ -36,16 +38,15 @@ reveal_marker = "private void RevealSelectedFamilyAndRefreshHighlight()"
 reveal_start = family_text.find(reveal_marker)
 if reveal_start < 0:
     fail("RevealSelectedFamilyAndRefreshHighlight() was not found.")
-reveal_method = family_text[reveal_start:reveal_start + 2200]
+reveal_method = family_text[reveal_start:reveal_start + 1200]
 guard = reveal_method.find("GeneratorStatus.GeneratingContainers")
 scroll = reveal_method.find("FamilyList.ScrollIntoView(selected);")
-style_deferred = reveal_method.find("Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle")
 if guard < 0:
     fail("Deferred FamilyList reveal must still guard active container generation.")
 if scroll < 0 or not (guard < scroll):
     fail("Generator guard must run before the centralized FamilyList.ScrollIntoView call.")
-if style_deferred < 0 or style_deferred < scroll:
-    fail("Container styling must be deferred until after the reveal/layout turn.")
+if "DispatcherPriority.ContextIdle" in reveal_method:
+    fail("Selected-family reveal must not schedule a second visual-styling dispatcher turn.")
 
 if "FamilyList.UpdateLayout(" in family_text:
     fail("FamilyList reveal must not force synchronous UpdateLayout during generator-sensitive refresh.")
@@ -54,17 +55,35 @@ if family_text.count("FamilyList.ScrollIntoView(") != 1:
 if "FamilyList.ScrollIntoView(" in workspace_text:
     fail("WorkspacePanel.xaml.cs must not bypass the generator-safe FamilyList reveal path.")
 
-style_marker = "private void ApplySelectedFamilyHighlight(ProjectFamily selected)"
-style_start = family_text.find(style_marker)
-if style_start < 0:
-    fail("ApplySelectedFamilyHighlight(ProjectFamily) was not found.")
-style_method = family_text[style_start:style_start + 1800]
-if "ReferenceEquals(FamilyList.SelectedItem, selected)" not in style_method:
-    fail("Deferred highlight styling must reject stale selections.")
-if "GeneratorStatus.GeneratingContainers" not in style_method:
-    fail("Deferred highlight styling must not touch containers while generation is active.")
-if "ContainerFromItem(selected) as ListBoxItem" not in style_method:
-    fail("Deferred highlight styling must resolve the realized selected Family container.")
+for forbidden in (
+    "_lastHighlightedFamilyItem",
+    "ApplySelectedFamilyHighlight(",
+    "ClearValue(Control.BackgroundProperty)",
+    "ClearValue(Control.ForegroundProperty)",
+    "ClearValue(Control.FontWeightProperty)",
+    "ClearValue(UIElement.OpacityProperty)",
+    "container.Background =",
+    "container.Foreground =",
+    "container.FontWeight =",
+    "container.Opacity =",
+    "ContainerFromItem(selected) as ListBoxItem",
+):
+    if forbidden in family_text:
+        fail("Selected-family visual state must be owned by WPF ItemContainerStyle, not C# mutation: " + forbidden)
+
+style_start = workspace_xaml.find("<ListBox.ItemContainerStyle>")
+style_end = workspace_xaml.find("</ListBox.ItemContainerStyle>", style_start)
+if style_start < 0 or style_end < 0:
+    fail("FamilyList must define an ItemContainerStyle for stable WPF-managed selection visuals.")
+family_style = workspace_xaml[style_start:style_end]
+if '<Trigger Property="IsSelected" Value="True">' not in family_style:
+    fail("FamilyList ItemContainerStyle must render selection from ListBoxItem.IsSelected.")
+if '<Setter Property="Background" Value="{StaticResource AccentBrush}"/>' not in family_style:
+    fail("Selected Family background must be stable AccentBrush styling.")
+if '<Setter Property="Foreground" Value="White"/>' not in family_style:
+    fail("Selected Family foreground must be stable white styling.")
+if "FontWeight" in family_style:
+    fail("FamilyList ItemContainerStyle must not toggle FontWeight; descendant typography must remain stable.")
 
 sync_marker = "private void SyncFamilyFromSelection()"
 sync_start = workspace_text.find(sync_marker)
@@ -76,4 +95,4 @@ refresh = sync_method.find("RefreshSelectedFamilyHighlight();")
 if selected < 0 or refresh < 0 or selected > refresh:
     fail("Selection sync must route selected-family reveal through RefreshSelectedFamilyHighlight().")
 
-print("PASS: Workspace family reveal is dispatcher-deferred and generator-safe.")
+print("PASS: Workspace family reveal stays generator-safe and selection visuals are WPF-managed without typography churn.")

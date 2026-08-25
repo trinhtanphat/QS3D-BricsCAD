@@ -6,21 +6,23 @@ namespace QS3D.Core.Geometry
 {
     public static class PolylineMetrics
     {
+        private const int MaximumPointCount = 1000000;
+
         public static double Length(IReadOnlyList<Point2> points, bool closed)
         {
-            if (points == null) throw new ArgumentNullException(nameof(points));
-            if (points.Count < 2)
+            var snapshot = SnapshotPoints(points);
+            if (snapshot.Length < 2)
             {
-                EnsureFinite(points);
+                EnsureFinite(snapshot);
                 return 0d;
             }
 
             double total = 0d;
             double compensation = 0d;
-            for (var i = 1; i < points.Count; i++)
-                AddLengthCompensated(ref total, ref compensation, points[i - 1].DistanceTo(points[i]));
+            for (var i = 1; i < snapshot.Length; i++)
+                AddLengthCompensated(ref total, ref compensation, snapshot[i - 1].DistanceTo(snapshot[i]));
             if (closed)
-                AddLengthCompensated(ref total, ref compensation, points[points.Count - 1].DistanceTo(points[0]));
+                AddLengthCompensated(ref total, ref compensation, snapshot[snapshot.Length - 1].DistanceTo(snapshot[0]));
 
             var length = AddFinite(total, compensation);
             if (compensation != 0d && length == total)
@@ -30,25 +32,52 @@ namespace QS3D.Core.Geometry
 
         public static double SignedArea(IReadOnlyList<Point2> points)
         {
-            if (points == null) throw new ArgumentNullException(nameof(points));
-            if (points.Count < 3)
+            var snapshot = SnapshotPoints(points);
+            if (snapshot.Length < 3)
             {
-                EnsureFinite(points);
+                EnsureFinite(snapshot);
                 return 0d;
             }
 
-            EnsureFinite(points);
+            EnsureFinite(snapshot);
             try
             {
-                return SignedAreaDirect(points);
+                return SignedAreaDirect(snapshot);
             }
             catch (OverflowException)
             {
-                return SignedAreaScaled(points);
+                return SignedAreaScaled(snapshot);
             }
         }
 
         public static double Area(IReadOnlyList<Point2> points) => Math.Abs(SignedArea(points));
+
+        private static Point2[] SnapshotPoints(IReadOnlyList<Point2> points)
+        {
+            if (points == null) throw new ArgumentNullException(nameof(points));
+
+            var count = points.Count;
+            if (count < 0 || count > MaximumPointCount)
+                throw new InvalidOperationException("Polyline point count exceeds the supported snapshot range.");
+
+            var snapshot = new Point2[count];
+            try
+            {
+                for (var i = 0; i < count; i++) snapshot[i] = points[i];
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                throw new InvalidOperationException("Polyline points changed while the metric snapshot was being captured.", ex);
+            }
+            catch (IndexOutOfRangeException ex)
+            {
+                throw new InvalidOperationException("Polyline points changed while the metric snapshot was being captured.", ex);
+            }
+
+            if (points.Count != count)
+                throw new InvalidOperationException("Polyline point count changed while the metric snapshot was being captured.");
+            return snapshot;
+        }
 
         private static double SignedAreaDirect(IReadOnlyList<Point2> points)
         {

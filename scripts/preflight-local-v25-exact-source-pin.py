@@ -21,6 +21,13 @@ def require(text: str, pattern: str, description: str, *, flags: int = 0) -> Non
         fail(description)
 
 
+def require_before(text: str, first: str, second: str, description: str) -> None:
+    first_index = text.find(first)
+    second_index = text.find(second)
+    if first_index < 0 or second_index < 0 or first_index > second_index:
+        fail(description)
+
+
 def main() -> int:
     if not PINNED_RUNNER.is_file():
         fail("missing scripts/run-local-v25-pinned-qualification.ps1")
@@ -51,7 +58,13 @@ def main() -> int:
     require(
         pinned,
         r"git\s+status\s+--porcelain",
-        "pinned runner must reject a dirty worktree before delegation",
+        "pinned runner must inspect the worktree for dirt before delegation",
+    )
+    require(
+        pinned,
+        r"if\s*\(\$dirty\.Count\s*-gt\s*0\)\s*\{\s*throw\s+\"Working tree is dirty\. Pinned local qualification requires a clean exact handoff SHA\.\"",
+        "pinned runner must fail closed when the worktree is dirty",
+        flags=re.DOTALL,
     )
     require(
         pinned,
@@ -74,10 +87,37 @@ def main() -> int:
         "pinned runner must verify the emitted report exactSha against the requested pin",
     )
 
-    mismatch_guard = pinned.find("Exact source SHA mismatch:")
-    delegate = pinned.find("run-local-v25-qualification.ps1")
-    if mismatch_guard < 0 or delegate < 0 or mismatch_guard > delegate:
-        fail("exact-SHA mismatch check must execute before the delegated expensive qualification runner")
+    delegate_marker = '& (Join-Path $PSScriptRoot "run-local-v25-qualification.ps1") @runnerArgs'
+    require_before(
+        pinned,
+        "Exact source SHA mismatch:",
+        delegate_marker,
+        "exact-SHA mismatch check must execute before the delegated expensive qualification runner",
+    )
+    require_before(
+        pinned,
+        "git status --porcelain",
+        delegate_marker,
+        "dirty-worktree inspection must execute before the delegated expensive qualification runner",
+    )
+    require_before(
+        pinned,
+        "Working tree is dirty. Pinned local qualification requires a clean exact handoff SHA.",
+        delegate_marker,
+        "dirty-worktree refusal must execute before the delegated expensive qualification runner",
+    )
+    require_before(
+        pinned,
+        delegate_marker,
+        'Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json',
+        "qualification.json exact-SHA verification must execute only after delegated qualification",
+    )
+    require_before(
+        pinned,
+        'Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json',
+        "qualification.json exactSha mismatch:",
+        "post-run report identity must be read before its exact-SHA mismatch can be accepted or rejected",
+    )
 
     for optional_name in ("Profile", "ArtifactDir", "PythonPath", "ReleaseTag"):
         require(

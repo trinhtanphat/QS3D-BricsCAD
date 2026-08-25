@@ -76,7 +76,9 @@ namespace QS3D.BricsCAD.V25.Cad
             var pending = new List<PendingHostUpdate>();
             var totalCuts = 0;
             var rollback = ProjectStateSnapshot.Capture(project);
+            var rollbackStamp = SourceReconcileUndoCoordinator.ProjectRevisionStamp.Capture(project);
             var cadCommitted = false;
+            SourceReconcileUndoCoordinator.PendingTransition? undoTransition = null;
             try
             {
                 using (document.LockDocument())
@@ -175,6 +177,15 @@ namespace QS3D.BricsCAD.V25.Cad
                             }
                         }
 
+                        if (cutsToApply.Count > 0)
+                            EnsureUndoTransition(
+                                document,
+                                transaction,
+                                project,
+                                rollback,
+                                rollbackStamp,
+                                ref undoTransition);
+
                         foreach (var item in cutsToApply)
                         {
                             var cutterWidth = CadGeometryGuard.ToDrawingUnits(document, item.Plan.CutterWidthM, item.Opening.Id + "/cutter width");
@@ -203,8 +214,23 @@ namespace QS3D.BricsCAD.V25.Cad
                         });
                     }
 
+                    if (pending.Count > 0)
+                        EnsureUndoTransition(
+                            document,
+                            transaction,
+                            project,
+                            rollback,
+                            rollbackStamp,
+                            ref undoTransition);
+
                     foreach (var update in pending) CommitSemanticUpdate(project, update);
+                    if (undoTransition != null)
+                    {
+                        var afterSnapshot = ProjectStateSnapshot.Capture(project);
+                        undoTransition.StageAfter(project, afterSnapshot);
+                    }
                     transaction.Commit();
+                    undoTransition?.ConfirmCommitted();
                     cadCommitted = true;
                 }
             }
@@ -222,9 +248,31 @@ namespace QS3D.BricsCAD.V25.Cad
                 }
                 throw;
             }
+            finally
+            {
+                undoTransition?.Dispose();
+            }
 
             if (pending.Count > 0) TryRegen(document);
             return totalCuts;
+        }
+
+        private static void EnsureUndoTransition(
+            Document document,
+            Transaction transaction,
+            ProjectState project,
+            ProjectStateSnapshot beforeSnapshot,
+            SourceReconcileUndoCoordinator.ProjectRevisionStamp beforeStamp,
+            ref SourceReconcileUndoCoordinator.PendingTransition? undoTransition)
+        {
+            if (undoTransition != null || SourceReconcileUndoCoordinator.IsExternalTransitionActive(document)) return;
+            undoTransition = SourceReconcileUndoCoordinator.BeginTransition(
+                document,
+                transaction,
+                project,
+                beforeSnapshot,
+                beforeStamp);
+            undoTransition.StageNativeMarker();
         }
 
         private static void CommitSemanticUpdate(ProjectState project, PendingHostUpdate update)
