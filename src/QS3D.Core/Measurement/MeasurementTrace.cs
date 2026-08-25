@@ -181,6 +181,19 @@ namespace QS3D.Core.Measurement
                         "Measurement trace with rounding policy 'none' must reconcile gross value, adjustments, and net value.",
                         nameof(netValue));
                 }
+
+                if (Adjustments.Count > 0 && reconciledNetValue.Equals(GrossValue))
+                {
+                    var adjustmentDelta = ReconcileNetValue(0d, Adjustments);
+                    if (double.IsNaN(adjustmentDelta) ||
+                        double.IsInfinity(adjustmentDelta) ||
+                        adjustmentDelta != 0d)
+                    {
+                        throw new ArgumentException(
+                            "Measurement trace with rounding policy 'none' cannot represent a non-zero net adjustment at the gross-value precision.",
+                            nameof(netValue));
+                    }
+                }
             }
         }
 
