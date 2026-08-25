@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             ConflictingEmbeddedAliasesFailClosed();
             ValidAndMalformedAliasesFailClosedRegardlessOfOrder();
             EqualAliasesRemainDeterministic();
+            MetricKindsRemainIndependent();
             CanonicalReadaptationRemainsCompatible();
         }
 
@@ -85,6 +86,33 @@ namespace QS3D.Core.SmokeTests
                 "equal formwork aliases lost exact quantity evidence");
             Near(2.5d, formworkCandidate.LegacyFormworkM2.GetValueOrDefault(),
                 "equal formwork aliases produced the wrong quantity");
+        }
+
+        private static void MetricKindsRemainIndependent()
+        {
+            var concreteConflict = CreateSnapshot("CONCRETE-CONFLICT-FORMWORK-VALID");
+            concreteConflict.Metadata["ConcreteM3"] = "1";
+            concreteConflict.Metadata["NetConcreteM3"] = "2";
+            concreteConflict.Metadata["FormworkM2"] = "3";
+            var formworkSurvives = BltLegacyEntityAdapter.Adapt(concreteConflict);
+            True(!formworkSurvives.LegacyConcreteM3.HasValue,
+                "concrete conflict unexpectedly produced an exact concrete quantity");
+            Near(3d, formworkSurvives.LegacyFormworkM2.GetValueOrDefault(),
+                "concrete conflict poisoned independent valid formwork evidence");
+            True(formworkSurvives.EvidenceMode == BltLegacyEvidenceMode.ExactLegacyQuantity,
+                "independent valid formwork evidence did not retain ExactLegacyQuantity mode");
+
+            var formworkConflict = CreateSnapshot("FORMWORK-CONFLICT-CONCRETE-VALID");
+            formworkConflict.Metadata["ConcreteM3"] = "4";
+            formworkConflict.Metadata["FormworkM2"] = "5";
+            formworkConflict.Metadata["VKM2"] = "6";
+            var concreteSurvives = BltLegacyEntityAdapter.Adapt(formworkConflict);
+            Near(4d, concreteSurvives.LegacyConcreteM3.GetValueOrDefault(),
+                "formwork conflict poisoned independent valid concrete evidence");
+            True(!concreteSurvives.LegacyFormworkM2.HasValue,
+                "formwork conflict unexpectedly produced an exact formwork quantity");
+            True(concreteSurvives.EvidenceMode == BltLegacyEvidenceMode.ExactLegacyQuantity,
+                "independent valid concrete evidence did not retain ExactLegacyQuantity mode");
         }
 
         private static void CanonicalReadaptationRemainsCompatible()
