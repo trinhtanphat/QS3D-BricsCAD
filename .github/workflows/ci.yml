@@ -47,6 +47,8 @@ jobs:
           python-version: "3.12"
       - name: CI trigger and publishing policy gate
         run: python scripts/preflight-ci-manual-only.py
+      - name: Changed-path tokenization regression
+        run: python scripts/test-ci-changed-path-tokenization.py
       - name: Repository professionalism gate
         run: python scripts/preflight-repository-professionalism.py
       - name: Immutable GitHub Actions supply-chain gate
@@ -69,12 +71,16 @@ jobs:
             }
             & git fetch --no-tags origin "+refs/heads/$baseBranch`:refs/remotes/origin/$baseBranch"
             if ($LASTEXITCODE -ne 0) { throw "Could not fetch validation base $baseBranch." }
-            $changed = @(& git diff --name-only "origin/$baseBranch...HEAD" --)
+            $changed = @(& git -c core.quotePath=false diff --no-renames --name-only "origin/$baseBranch...HEAD" --)
             if ($LASTEXITCODE -ne 0) { throw "Could not classify changed paths against $baseBranch." }
 
             foreach ($rawPath in $changed) {
-              $path = ([string]$rawPath).Trim().Replace('\', '/')
-              if ([string]::IsNullOrWhiteSpace($path)) { continue }
+              $path = [string]$rawPath
+              if ([string]::IsNullOrEmpty($path)) { continue }
+              if ($path.Length -ge 2 -and $path[0] -eq '"' -and $path[$path.Length - 1] -eq '"') {
+                throw "Git returned a C-quoted changed path; refusing ambiguous validation classification: $path"
+              }
+              $path = $path.Replace('\', '/')
 
               if ($path -match '^(src|tests|scripts)/' -or
                   $path -match '^samples/generated/' -or
