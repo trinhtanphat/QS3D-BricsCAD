@@ -3,6 +3,7 @@
 - Status: `COMPLETED / LOCAL_PASS / BOUNDED_EXECUTABLE_SUBMATRIX`
 - Agent: `codex-local-worker` (`/root`)
 - Issue: `#3830`
+- PR: `#3841`
 - Parent: `#74`
 - Canonical local parent: `#72`
 - Lane-Key: `issue-3830`
