@@ -291,7 +291,6 @@ namespace QS3D.Core.Legacy
                 var normalizedAlias = Compact(Normalize(alias));
                 if (normalizedAlias.Length < 3) continue;
                 if (string.Equals(compact, normalizedAlias, StringComparison.Ordinal)) return true;
-                if (HasStandaloneToken(normalizedText, normalizedAlias)) return true;
                 if (normalizedAlias.StartsWith("blt", StringComparison.Ordinal))
                 {
                     if (compact.StartsWith(normalizedAlias, StringComparison.Ordinal)) return true;
