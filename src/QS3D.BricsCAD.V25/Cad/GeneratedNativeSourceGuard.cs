@@ -14,6 +14,7 @@ namespace QS3D.BricsCAD.V25.Cad
             "QS3D_REBAR",
             "QS3D_CURTAIN_FRAME",
             "QS3D_CURTAIN_PANEL",
+            GridIntersectionMarkerService.RegAppName,
             GeneratedWallJunctionNativeOwnershipService.RegAppName,
             "QS3DDOC"
         };

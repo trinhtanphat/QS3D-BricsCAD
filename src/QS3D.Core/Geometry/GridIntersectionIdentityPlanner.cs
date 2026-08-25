@@ -108,7 +108,7 @@ namespace QS3D.Core.Geometry
 
                 for (var index = 0; index < group.Points.Count; index++)
                 {
-                    var ownerToken = OwnerTokenPrefix + group.PairToken.Substring(PairTokenPrefix.Length) + ":" + index;
+                    var ownerToken = BuildIntersectionOwner(group.FirstElementId, group.SecondElementId, index);
                     result.Add(new GridIntersectionIdentity(
                         group.FirstElementId,
                         group.SecondElementId,
@@ -141,6 +141,14 @@ namespace QS3D.Core.Geometry
         public static string BuildPairToken(string firstElementId, string secondElementId)
         {
             return PairTokenPrefix + Sha256Hex(BuildPairKey(firstElementId, secondElementId));
+        }
+
+        public static string BuildIntersectionOwner(string firstElementId, string secondElementId, int occurrenceIndex)
+        {
+            if (occurrenceIndex < 0 || occurrenceIndex >= MaxIntersectionsPerPair)
+                throw new ArgumentOutOfRangeException(nameof(occurrenceIndex), "Grid intersection owner occurrence must be 0 or 1.");
+            var pairToken = BuildPairToken(firstElementId, secondElementId);
+            return OwnerTokenPrefix + pairToken.Substring(PairTokenPrefix.Length) + ":" + occurrenceIndex;
         }
 
         private static string CanonicalElementId(string value, string label)
