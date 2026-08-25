@@ -190,21 +190,16 @@ namespace QS3D.Core.Features
             switch (surface)
             {
                 case InteractionSurface.PrimaryInspector:
-                    if (_primaryInspector == null) return false;
+                    if (!MatchesCloseTarget(_primaryInspector, surface, contentKey)) return false;
                     _primaryInspector = null;
                     return true;
                 case InteractionSurface.SecondaryInspector:
-                    if (_secondaryInspector == null) return false;
+                    if (!MatchesCloseTarget(_secondaryInspector, surface, contentKey)) return false;
                     _secondaryInspector = null;
                     return true;
                 case InteractionSurface.ModalSheet:
                 case InteractionSurface.RecipeChooser:
-                    if (_modal == null) return false;
-                    if (contentKey != null)
-                    {
-                        var canonicalContentKey = InteractionSurfaceKeyPolicy.RequireCanonical(contentKey, nameof(contentKey), "Surface content key");
-                        if (!StringComparer.Ordinal.Equals(_modal.ContentKey, canonicalContentKey)) return false;
-                    }
+                    if (!MatchesCloseTarget(_modal, surface, contentKey)) return false;
                     _modal = null;
                     return true;
                 case InteractionSurface.FloatingTool:
@@ -215,6 +210,15 @@ namespace QS3D.Core.Features
                 default:
                     return false;
             }
+        }
+
+        private static bool MatchesCloseTarget(InteractionSurfaceBinding? binding, InteractionSurface surface, string? contentKey)
+        {
+            if (binding == null || binding.Surface != surface) return false;
+            if (contentKey == null) return true;
+
+            var canonicalContentKey = InteractionSurfaceKeyPolicy.RequireCanonical(contentKey, nameof(contentKey), "Surface content key");
+            return StringComparer.Ordinal.Equals(binding.ContentKey, canonicalContentKey);
         }
 
         private FeatureDescriptor RequireSelectedFeature()
