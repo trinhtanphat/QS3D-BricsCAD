@@ -44,7 +44,9 @@ namespace QS3D.Core.Coordination
         {
             if (profiles == null) throw new ArgumentNullException(nameof(profiles));
 
-            var snapshot = profiles.ToArray();
+            var snapshot = CoordinationRuleCollectionContract.MaterializeBounded(
+                profiles,
+                "Coordination rule profile catalog");
             if (snapshot.Any(profile => profile == null))
                 throw new ArgumentException("Rule-profile catalog cannot contain null profiles.", nameof(profiles));
 
