@@ -190,7 +190,7 @@ namespace QS3D.BricsCAD.V25
         private static void FinalizeUi(Document document, int count, string subtype)
         {
             var label = subtype.Length > 0 ? subtype : "Grid/Trục";
-            var status = label + ": đã capture " + count + " semantic reference(s). Grid hiện là reference/takeoff semantic; chạy QS3DGRIDINTERSECTIONS để materialize giao điểm pair-owned.";
+            var status = label + ": đã capture " + count + " semantic reference(s). Grid hiện là reference/takeoff semantic, không sinh native 3D; chạy QS3DGRIDINTERSECTIONS để materialize giao điểm pair-owned.";
             try
             {
                 PaletteCoordinator.RefreshProject();
