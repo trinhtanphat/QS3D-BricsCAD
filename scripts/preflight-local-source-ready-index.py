@@ -12,7 +12,10 @@ INBOX = ROOT / "docs" / "LOCAL-AGENT-INBOX.md"
 
 WALL_CONTACT_SOURCE_READY_FLOOR_SHA = "c64eb8c1b83761e155da670904a72e64669464b7"
 WALL_CONTACT_TOUCHING_PROBE_FLOOR_SHA = "4d6830a9e2ed315e0d4f8fcec0c708ad27727fb0"
-WALL_CONTACT_EXACT_RUNTIME_SHA = "447ba9805d777a3225827117587d932135cf0959"
+WALL_CONTACT_EXACT_RUNTIME_SHA = "a4f1a53683a9296532a0290fcb79bc49b9d4b892"
+WALL_CONTACT_SUPERSEDED_RUNTIME_SHA = "447ba9805d777a3225827117587d932135cf0959"
+WALL_CONTACT_EVIDENCE_PR = "#3849"
+WALL_CONTACT_EVIDENCE_MERGE = "7fec6f36a7c1181d7113f0e7220ea3dafca66e29"
 WALL_CONTACT_RUNNER = "scripts/run-local-v25-wall-contact-3681.ps1"
 WALL_CONTACT_RUNNER_NAME = Path(WALL_CONTACT_RUNNER).name
 LOCAL005_SOURCE_MERGE = "ba6e1c7508086beb8ac5db9a4a78d2c43fc09492"
@@ -104,42 +107,54 @@ require_tokens(
 
 require_tokens(
     dispatch,
-    "#3681 dispatch",
+    "#3681 completed dispatch history",
     (
-        "Status: `LOCAL_READY / PULL_RUN_ONLY`",
-        "Touching-probe floor source defect/fixes: #3711 / #3716 / #3729",
-        "Harness-minimum correction: #3754 / #3833",
-        "Finite touching-footprint correction: #3770 / #3836",
+        "## Completed bounded references — DO_NOT_RERUN",
+        "#3681 StructuralWall live-BREP concrete-contact/formwork",
+        "accepted licensed V25 `LOCAL_PASS`",
+        WALL_CONTACT_EXACT_RUNTIME_SHA,
+        WALL_CONTACT_EVIDENCE_PR,
+        WALL_CONTACT_EVIDENCE_MERGE,
+        "Status: `COMPLETED / DO_NOT_RERUN`",
         f"Minimum source-ready ancestor: `{WALL_CONTACT_SOURCE_READY_FLOOR_SHA}`",
-        "Exact runnable SHA: published on #3681 and #72 after this carrier's protected branch CI succeeds.",
+        f"Exact runtime source: `{WALL_CONTACT_EXACT_RUNTIME_SHA}`",
+        f"Accepted evidence: PR {WALL_CONTACT_EVIDENCE_PR} / merge `{WALL_CONTACT_EVIDENCE_MERGE}`",
         WALL_CONTACT_RUNNER_NAME,
+        "Do not execute it by default.",
         "touching-only",
-        "0.05 m penetration",
-        "fails fast before the broader matrix",
+        "0.05 m penetration regression",
         "gross 2.6688 - contact 0.3200 = net 2.3488 m²",
-        "LOCAL_PASS",
-        "LOCAL_FAIL",
-        "NO_RESULT",
     ),
 )
 
+wall_heading = "## P0 — #3681 StructuralWall live-BREP concrete-contact/formwork"
+if wall_heading not in inbox:
+    fail("#3681 canonical inbox block is missing")
+wall_block = inbox.split(wall_heading, 1)[1].split("\n## ", 1)[0]
+
 require_tokens(
-    inbox,
+    wall_block,
     "#3681 canonical inbox",
     (
-        "## P0 — #3681 StructuralWall live-BREP concrete-contact/formwork",
         "- Priority: P0",
-        "- Status: OPEN",
-        "- Remote disposition: SOURCE_READY / LOCAL_RUN_ONLY",
+        "- Status: PASS",
+        "- Remote disposition: COMPLETED / NO_RERUN",
         WALL_CONTACT_EXACT_RUNTIME_SHA,
         WALL_CONTACT_SOURCE_READY_FLOOR_SHA,
         WALL_CONTACT_RUNNER,
+        WALL_CONTACT_EVIDENCE_PR,
+        WALL_CONTACT_EVIDENCE_MERGE,
         "LOCAL_PASS",
-        "LOCAL_FAIL",
-        "NO_RESULT",
-        "local worker must not edit production source",
+        "do not rerun",
     ),
 )
+for stale in (
+    "- Status: OPEN",
+    "Evidence: PENDING_LOCAL",
+    WALL_CONTACT_SUPERSEDED_RUNTIME_SHA,
+):
+    if stale in wall_block:
+        fail(f"#3681 canonical inbox reintroduced completed-state stale data: {stale}")
 
 require_local_row_status(inbox, "LOCAL-001", "LOCAL-002", "IN_PROGRESS")
 
@@ -158,17 +173,35 @@ expected = [f"LOCAL-{number:03d}" for number in range(1, 20)]
 if rows != expected:
     fail(f"LOCAL row order/cardinality drifted: expected {expected}, got {rows}")
 
+require_tokens(
+    index,
+    "#3681 completed source-ready history",
+    (
+        "#1744, #3613 and #3681 already have accepted licensed bounded PASS evidence",
+        "## Completed #3681 licensed wall-contact qualification — DO_NOT_RERUN",
+        WALL_CONTACT_EXACT_RUNTIME_SHA,
+        WALL_CONTACT_SOURCE_READY_FLOOR_SHA,
+        WALL_CONTACT_TOUCHING_PROBE_FLOOR_SHA,
+        WALL_CONTACT_EVIDENCE_PR,
+        WALL_CONTACT_EVIDENCE_MERGE,
+        "COMPLETED / DO_NOT_RERUN",
+        "Do not schedule or execute it again",
+    ),
+)
+
 for token in (
-    f"| P0 | #3681 | exact published descendant recorded on #3681 / #72 | must contain `{WALL_CONTACT_SOURCE_READY_FLOOR_SHA}` (#3833 + #3836); this descendant also contains `{WALL_CONTACT_TOUCHING_PROBE_FLOOR_SHA}` (#3729) |",
-    f"fetch the exact published SHA, run `{WALL_CONTACT_RUNNER}` only",
-    f"| LOCAL-005 | P1 / SOURCE_FIX_READY |",
-    f"| LOCAL-006 | P1 / SOURCE_FIX_READY |",
+    "| LOCAL-005 | P1 / SOURCE_FIX_READY |",
+    "| LOCAL-006 | P1 / SOURCE_FIX_READY |",
     "| LOCAL-019 | P0 / PASS |",
 ):
     if token not in index:
         fail(f"canonical dispatch/evidence identity drifted: {token}")
 
 for stale in (
+    f"| P0 | #3681 | exact published descendant recorded on #3681 / #72 | must contain `{WALL_CONTACT_SOURCE_READY_FLOOR_SHA}`",
+    f"fetch the exact published SHA, run `{WALL_CONTACT_RUNNER}` only",
+    "Status: `LOCAL_READY / PULL_RUN_ONLY`",
+    "Exact runnable SHA: published on #3681 and #72 after this carrier's protected branch CI succeeds.",
     "| P0 | #3681 | `agent/chatgpt-gpt56sol/issue-3665-wall-contact-brep` |",
     "| P0 | #3681 | `agent/chatgpt-gpt56sol/issue-3687-structwall-brep-contact-fix` |",
     "| P0 | #3681 | `agent/chatgpt-gpt56sol/issue-3680-local-dispatch-refresh` |",
@@ -183,4 +216,4 @@ for stale in (
     if stale in index or stale in dispatch:
         fail(f"stale local scheduling/carrier text reintroduced: {stale}")
 
-print("PASS local source-ready pull-test index with truthful LOCAL-001 status, #3681 canonical inbox publication, #3727/#3728 source-ready rows and #3833/#3836 source floor")
+print("PASS local source-ready pull-test index with truthful LOCAL-001 status and #3681 completed licensed PASS pinned to exact evidence/no-rerun semantics")
