@@ -115,6 +115,12 @@ namespace QS3D.Core.SmokeTests
             Near(1.25d, exactConcreteCandidate.LegacyConcreteM3.GetValueOrDefault(), "exact ConcreteM3 quantity");
             True(exactConcreteCandidate.EvidenceMode == BltLegacyEvidenceMode.ExactLegacyQuantity,
                 "exact ConcreteM3 alias must retain ExactLegacyQuantity evidence");
+            exactConcrete.Metadata.Remove("Concrete M3");
+            var canonicalConcreteCandidate = BltLegacyEntityAdapter.Adapt(exactConcrete);
+            True(canonicalConcreteCandidate.LegacyConcreteM3.HasValue,
+                "canonical BLT.LegacyConcreteM3 must remain valid exact metric evidence on re-adaptation");
+            Near(1.25d, canonicalConcreteCandidate.LegacyConcreteM3.GetValueOrDefault(),
+                "canonical BLT.LegacyConcreteM3 quantity");
 
             var exactNetConcrete = CreateBltSnapshot("EXACT-NET-CONCRETE");
             exactNetConcrete.Metadata["NetConcreteM3"] = "1.5";
@@ -129,6 +135,12 @@ namespace QS3D.Core.SmokeTests
             True(exactFormworkCandidate.LegacyFormworkM2.HasValue,
                 "exact FormworkM2 alias must remain supported");
             Near(2.5d, exactFormworkCandidate.LegacyFormworkM2.GetValueOrDefault(), "exact FormworkM2 quantity");
+            exactFormwork.Metadata.Remove("FormworkM2");
+            var canonicalFormworkCandidate = BltLegacyEntityAdapter.Adapt(exactFormwork);
+            True(canonicalFormworkCandidate.LegacyFormworkM2.HasValue,
+                "canonical BLT.LegacyFormworkM2 must remain valid exact metric evidence on re-adaptation");
+            Near(2.5d, canonicalFormworkCandidate.LegacyFormworkM2.GetValueOrDefault(),
+                "canonical BLT.LegacyFormworkM2 quantity");
         }
 
         private static EntitySnapshot CreateBltSnapshot(string id)
