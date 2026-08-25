@@ -175,7 +175,7 @@ Sanitized evidence identities:
 
 - interactive report SHA-256: `4B1F193FCC069F9E84F04AD2DAC341718F2B86CAACFA9E4D5D48E060656D3F69`;
 - canonical baseline report SHA-256: `FE44ACC5470D4A0A7D24A554D6C5033E1BDE17DAF6572832CCB51F35627E5FC7`;
-- licensed runtime marker SHA-256: `17631691F2A229B19B87EA1B61F4ABE02CF70DC3346E452F68622240216EB25`.
+- licensed runtime marker SHA-256: `17631691F2A229B19B87EA1B61F4ABE02CF70DC3346E452F68622240216EB25B`.
 
 Raw reports and screenshots remain ignored. No customer/private drawing, path, CAD Handle, ProjectId, user identity, proprietary BricsCAD binary or signing material is committed.
 
