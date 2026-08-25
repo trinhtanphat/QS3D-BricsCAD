@@ -20,15 +20,24 @@ namespace QS3D.Core.Persistence
             var backup = RequireFullPath(backupPath, nameof(backupPath), "Backup path is required.");
             RequireDistinct(temp, nameof(tempPath), backup, nameof(backupPath));
             RequireDistinct(destination, nameof(destinationPath), backup, nameof(backupPath));
+            RequireSafe(temp, "temporary");
+            RequireSafe(destination, "destination");
+            RequireSafe(backup, "backup");
 
             if (!File.Exists(destination))
             {
+                RequireSafe(temp, "temporary");
+                RequireSafe(destination, "destination");
+                RequireSafe(backup, "backup");
                 File.Move(temp, destination);
                 return;
             }
 
             try
             {
+                RequireSafe(temp, "temporary");
+                RequireSafe(destination, "destination");
+                RequireSafe(backup, "backup");
                 File.Replace(temp, destination, backup, true);
             }
             catch (PlatformNotSupportedException)
@@ -42,6 +51,8 @@ namespace QS3D.Core.Persistence
             Validate(tempPath, destinationPath, out var temp, out var destination);
             if (!File.Exists(destination))
             {
+                RequireSafe(temp, "temporary");
+                RequireSafe(destination, "destination");
                 File.Move(temp, destination);
                 return;
             }
@@ -49,6 +60,9 @@ namespace QS3D.Core.Persistence
             var safetyBackup = destination + "." + Guid.NewGuid().ToString("N") + ".replace.bak";
             try
             {
+                RequireSafe(temp, "temporary");
+                RequireSafe(destination, "destination");
+                RequireSafe(safetyBackup, "safety-backup");
                 File.Replace(temp, destination, safetyBackup, true);
                 TryDelete(safetyBackup);
             }
@@ -64,12 +78,18 @@ namespace QS3D.Core.Persistence
             var backup = RequireFullPath(backupPath, nameof(backupPath), "Backup path is required.");
             RequireDistinct(temp, nameof(tempPath), backup, nameof(backupPath));
             RequireDistinct(destination, nameof(destinationPath), backup, nameof(backupPath));
+            RequireSafe(temp, "temporary");
+            RequireSafe(destination, "destination");
+            RequireSafe(backup, "backup");
             if (File.Exists(destination) || Directory.Exists(destination) || File.Exists(backup) || Directory.Exists(backup))
                 throw new IOException("QS3D refused to publish a new project over an existing sidecar pair.");
 
             // File.Move is the create-new conditional commit for the primary. The
             // caller holds ProjectFileLock, so cooperating QS3D writers cannot pass
             // an absence check and then overwrite one another.
+            RequireSafe(temp, "temporary");
+            RequireSafe(destination, "destination");
+            RequireSafe(backup, "backup");
             File.Move(temp, destination);
             if (!File.Exists(backup) && !Directory.Exists(backup)) return;
 
@@ -90,10 +110,16 @@ namespace QS3D.Core.Persistence
 
         private static void MoveWithRecovery(string tempPath, string destinationPath, string backupPath, bool keepBackup)
         {
+            RequireSafe(tempPath, "temporary");
+            RequireSafe(destinationPath, "destination");
+            RequireSafe(backupPath, "backup");
+
             string? previousBackupSafety = null;
             if (File.Exists(backupPath))
             {
                 previousBackupSafety = backupPath + "." + Guid.NewGuid().ToString("N") + ".previous";
+                RequireSafe(previousBackupSafety, "previous-backup safety");
+                RequireSafe(backupPath, "backup");
                 File.Move(backupPath, previousBackupSafety);
             }
 
@@ -101,8 +127,12 @@ namespace QS3D.Core.Persistence
             var installed = false;
             try
             {
+                RequireSafe(destinationPath, "destination");
+                RequireSafe(backupPath, "backup");
                 File.Move(destinationPath, backupPath);
                 destinationStaged = true;
+                RequireSafe(tempPath, "temporary");
+                RequireSafe(destinationPath, "destination");
                 File.Move(tempPath, destinationPath);
                 installed = true;
             }
@@ -114,6 +144,8 @@ namespace QS3D.Core.Persistence
                     {
                         try
                         {
+                            RequireSafe(destinationPath, "destination");
+                            RequireSafe(backupPath, "backup");
                             if (!File.Exists(destinationPath) && File.Exists(backupPath))
                                 File.Move(backupPath, destinationPath);
                         }
@@ -136,6 +168,8 @@ namespace QS3D.Core.Persistence
             if (string.IsNullOrWhiteSpace(previousBackupSafety) || !File.Exists(previousBackupSafety)) return;
             try
             {
+                RequireSafe(previousBackupSafety, "previous-backup safety");
+                RequireSafe(backupPath, "backup");
                 if (!File.Exists(backupPath)) File.Move(previousBackupSafety, backupPath);
             }
             catch (IOException) { }
@@ -147,6 +181,8 @@ namespace QS3D.Core.Persistence
             temp = RequireFullPath(tempPath, nameof(tempPath), "Temporary path is required.");
             destination = RequireFullPath(destinationPath, nameof(destinationPath), "Destination path is required.");
             RequireDistinct(temp, nameof(tempPath), destination, nameof(destinationPath));
+            RequireSafe(temp, "temporary");
+            RequireSafe(destination, "destination");
             if (!File.Exists(temp)) throw new FileNotFoundException("Temporary file was not found.", temp);
         }
 
@@ -160,6 +196,11 @@ namespace QS3D.Core.Persistence
         {
             if (string.Equals(leftPath, rightPath, PathComparison))
                 throw new ArgumentException(leftName + " and " + rightName + " must resolve to distinct paths.", rightName);
+        }
+
+        private static void RequireSafe(string path, string role)
+        {
+            PersistencePathSafety.RequireNonRedirected(path, role);
         }
     }
 }
