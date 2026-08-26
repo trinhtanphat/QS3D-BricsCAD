@@ -18,7 +18,7 @@ For a common rectangular Grid family, vertical Grid LINEs can be ordered left-to
 
 Two LINEs that project to the same coordinate within tolerance are ambiguous and fail closed rather than being silently ordered by semantic ID.
 
-## Reviewed mixed LINE + ARC ordering
+## reviewed mixed LINE + ARC ordering
 
 `OrderReviewedSet(...)` exists for a set that has already been reviewed as one ordering operation. The caller must provide all policy that geometry alone cannot safely infer:
 
