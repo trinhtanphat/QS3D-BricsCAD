@@ -455,6 +455,22 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Related source/docs: `docs/LOCAL-V25-QUALIFICATION.md`; `docs/LOCAL-V26-QUALIFICATION.md`; `src/QS3D.BricsCAD.V25/ReviewWorkbookCommands.cs`; `src/QS3D.BricsCAD.V25/ReviewWorkbookRuntimeProbeCommands.cs`; `src/QS3D.BricsCAD.V25/Services/ExcelLocateResolutionService.cs`; `src/QS3D.Core/Export/Qs3dReviewWorkbook.IssueProjection.cs`; `scripts/test-bricscad-review-workbook-roundtrip.ps1`; issue `#3536`.
 - Updated: 2026-08-24
 
+## P1 — #3480 Quantity Review exact native BREP face highlight
+
+- Priority: P1
+- Status: OPEN
+- Area: Quantity Review / formwork exact native BREP subentity highlight
+- Source-side status: `REMOTE_DONE / MERGED_MAIN`. PR #3487 merged the exact-face implementation at `main@9303fb34109e0b5859d8fc2ff1122afdc3cefa83`; final feature head `977066e1becbf3719a7c6324308288499cc7c57e` passed shared CI run `32557652786` / #12461 (`preflight` + `core`, including V25 compile).
+- Exact source identity: `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.ExactFace.cs` blob `a4e60d3ded1f649bed21ba589c21d855af37ef82`. The 2026-08-26 audit confirmed intended descendant `main@4bf7de082b8a1e6366612b10c69742fd24f5c969` still carries that exact blob.
+- Remote disposition: `PENDING_LOCAL_AGENT / DO_NOT_RETRY_REMOTE`.
+- Runbook: `docs/FEATURE-RUNBOOKS/issue-3480-quantity-exact-face.md`.
+- Local handoff: fetch/sync Git, use a clean checkout/worktree of the exact intended source-containing SHA, then run the licensed BricsCAD V25 matrix in the runbook. At this audit the intended checkout is `4bf7de082b8a1e6366612b10c69742fd24f5c969`. If `main` has advanced, a local agent may qualify the newer exact `main` SHA only after confirming the ExactFace source blob above is unchanged; otherwise refresh this handoff before running.
+- Scenario: prove clicking `SOLID-01/FACE-03` highlights only native BREP face #3 rather than whole-solid implied selection; `S gộp` / `S còn` route to the same exact face; switching faces removes the old face highlight; deduction target+cause/transient-region navigation remains intact; stale topology/fingerprint fails closed; tree/detail/document/panel transitions clear the highlight; save/reopen persists no face color/material/presentation mutation.
+- Evidence required: exact tested QS3D SHA, BricsCAD V25 version, PASS/FAIL for every runbook row, proof no whole Solid3d is selected for exact-face actions, sanitized screenshots/log summary where useful, and no private/customer DWG, raw handle, private path, ProjectId, license data or proprietary binary in committed evidence.
+- Evidence: `PENDING_LOCAL_AGENT`.
+- Related source/docs: `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.ExactFace.cs`; `docs/FEATURE-RUNBOOKS/issue-3480-quantity-exact-face.md`; `docs/agent-work-claims/issue-3480-gpt56sol.md`; issue #3480; PR #3487.
+- Updated: 2026-08-26
+
 ## Close-out rule
 
 Closing all `OPEN` P0/P1 items does not automatically mean the product is commercially released. Release publication still follows `CI_POLICY.md` and requires the owner's separate explicit release authorization. This inbox only records local engineering qualification truth.
