@@ -28,6 +28,7 @@ namespace QS3D.Core.SmokeTests
                         MaterialName = new string('A', 32767),
                         UnitHint = "m3",
                         ElementCount = 1,
+                        ElementIds = { "E-1" },
                         VolumeM3 = 1d
                     }
                 });
@@ -56,6 +57,7 @@ namespace QS3D.Core.SmokeTests
                             MaterialName = new string('B', 32768),
                             UnitHint = "m3",
                             ElementCount = 1,
+                            ElementIds = { "E-1" },
                             VolumeM3 = 1d
                         }
                     });
