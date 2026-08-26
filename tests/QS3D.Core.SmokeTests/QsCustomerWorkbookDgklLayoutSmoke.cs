@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             var path = Path.Combine(Path.GetTempPath(), "qs3d-dgkl-layout-" + Guid.NewGuid().ToString("N") + ".xlsx");
+            var componentOnlyPath = Path.Combine(Path.GetTempPath(), "qs3d-dgkl-component-only-" + Guid.NewGuid().ToString("N") + ".xlsx");
             try
             {
                 var detail1 = CreateRow("E-001", "A1", "Cột C1", 1.2d, 0.1d, 1.1d, 8.5d, 3.0d, 1.2d, 0d);
@@ -79,12 +80,31 @@ namespace QS3D.Core.SmokeTests
                 Equal("E-001", exact.ElementIds[0], "CHI_TIET exact semantic trace");
                 Equal(1, exact.Handles.Count, "CHI_TIET CAD trace cardinality");
                 Equal("A1", exact.Handles[0], "CHI_TIET exact CAD trace");
+
+                var componentOnly = CreateRow("E-003", "C3", "Cột C3", 0.8d, 0d, 0.8d, 0d, 2.5d, 1.1d, 0d);
+                componentOnly.HasFormworkM2Evidence = false;
+                componentOnly.SideAreaM2 = 4.25d;
+                componentOnly.HasSideAreaM2Evidence = true;
+                QsCustomerWorkbookExporter.Export(componentOnlyPath, new[] { componentOnly }, new[] { componentOnly });
+
+                using (var archive = ZipFile.OpenRead(componentOnlyPath))
+                {
+                    var componentOnlyFormwork = LoadEntry(archive, "xl/worksheets/sheet2.xml");
+                    AssertBusinessSheet(
+                        componentOnlyFormwork,
+                        new[] { "STT", "Tầng", "Loại", "Tên cấu kiện", "SL", "CP gộp (m²)", "Trừ giao (m²)", "CP còn (m²)", QsCustomerWorkbookExporter.TraceHeader },
+                        9,
+                        "A1:H1");
+                    Equal(1, componentOnlyFormwork.Descendants(SpreadsheetNs + "row").Count(), "COP_PHA must omit component-area-only business rows");
+                    False(HasCell(componentOnlyFormwork, "F2"), "COP_PHA must not emit blank CP cells without FormworkM2 evidence");
+                }
             }
             finally
             {
                 try
                 {
                     if (File.Exists(path)) File.Delete(path);
+                    if (File.Exists(componentOnlyPath)) File.Delete(componentOnlyPath);
                 }
                 catch
                 {
