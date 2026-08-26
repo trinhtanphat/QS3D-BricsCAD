@@ -86,13 +86,14 @@ for token in (
     if token not in save:
         errors.append("save fail-closed contract missing: " + token)
 
-if "File.Copy(temp, path, true)" in source or "File.Delete(path)" in source:
-    errors.append("last-known-good settings file must not be overwritten/copied or deleted as replacement fallback")
-
 fallback = method(
     "private static bool TryReplacePreservingLastKnownGood(string temp, string path, string backup)",
     "private static void TryRestoreBackup(string path, string backup)",
 )
+for body, label in ((save, "save"), (fallback, "fallback")):
+    if "File.Copy(temp, path, true)" in body or "File.Delete(path)" in body:
+        errors.append(label + " replacement must not overwrite/copy onto or delete the last-known-good settings file")
+
 old_move = fallback.find("File.Move(path, backup);")
 new_move = fallback.find("File.Move(temp, path);")
 restore = fallback.find("TryRestoreBackup(path, backup);")
