@@ -168,7 +168,7 @@ namespace QS3D.Core.Reporting
                 row.GrossConcreteM3 = QuantityReportMath.Add(row.GrossConcreteM3, gross, element.Id + "/GrossConcreteM3");
                 row.NetConcreteM3 = QuantityReportMath.Add(row.NetConcreteM3, net, element.Id + "/NetConcreteM3");
                 row.DeductionM3 = QuantityReportMath.Add(row.DeductionM3, Q(element, "DeductionM3", Math.Max(0d, gross - net)), element.Id + "/DeductionM3");
-                row.GrossFormworkM2 = QuantityReportMath.Add(row.GrossFormworkM2, grossFormwork, element.Id + "/GrossFormworkM2");
+                row.GrossFormworkM2 = QuantityReportMath.Add(row.GrossFormworkM2, grossFormwork, element.Id + "/GrossFormworkM3");
                 row.ConcreteContactDeductionM2 = QuantityReportMath.Add(row.ConcreteContactDeductionM2, formworkDeduction, element.Id + "/ConcreteContactDeductionM2");
                 row.NetFormworkM2 = QuantityReportMath.Add(row.NetFormworkM2, netFormwork, element.Id + "/NetFormworkM2");
                 row.FormworkM2 = QuantityReportMath.Add(row.FormworkM2, netFormwork, element.Id + "/FormworkM2");
@@ -248,8 +248,11 @@ namespace QS3D.Core.Reporting
                 if (observedCount > MaxSelectionElementIds)
                     throw SelectionTooLarge();
 
-                var id = (raw ?? string.Empty).Trim();
-                if (id.Length == 0) throw new ArgumentException("Quantity report element ids must not be blank.", nameof(elementIds));
+                if (string.IsNullOrWhiteSpace(raw))
+                    throw new ArgumentException("Quantity report element ids must not be blank.", nameof(elementIds));
+                if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                    throw new ArgumentException("Quantity report element ids must be canonical and must not contain surrounding whitespace. Non-canonical id: " + raw + ".", nameof(elementIds));
+                var id = raw;
                 if (!selected.Add(id))
                     throw new ArgumentException("Quantity report element ids must be unique. Duplicate id: " + id + ".", nameof(elementIds));
                 var element = project.FindElement(id) ?? throw new KeyNotFoundException("Unknown quantity report element: " + id);
