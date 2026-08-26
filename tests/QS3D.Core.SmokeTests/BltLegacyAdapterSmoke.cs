@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             EmbeddedLegacyQuantitiesArePreserved();
             AdapterMetricUnderflowDoesNotBecomeExactEvidence();
             CategoryAliasesRequireBoundaries();
+            ExactBltWallMarkerMapsWithoutFinishFalsePositive();
             AmbiguousCategoryFailsClosed();
             GenericProxyIsNotClaimedAsBlt();
             LegacyEvidenceSurvivesMeasuredQuantityPass();
@@ -110,6 +111,33 @@ namespace QS3D.Core.SmokeTests
             prefixed.Metadata[BltLegacyMetadataKeys.ProbeMetricEvidence] = BltLegacyEvidenceMode.ExactGeometry.ToString();
             Require(BltLegacyEntityAdapter.Adapt(prefixed).Category == ElementCategory.Beam,
                 "Explicit BLT-prefixed concatenated short alias must remain recognized.");
+        }
+
+        private static void ExactBltWallMarkerMapsWithoutFinishFalsePositive()
+        {
+            var wall = new EntitySnapshot("B27", "ProxyEntity", "LEGACY")
+            {
+                VolumeDrawingUnitsCubed = 1d
+            };
+            wall.Metadata["LegacyProbe.ProxyOriginalClass"] = "BLT_WALL";
+            wall.Metadata[BltLegacyMetadataKeys.ProbeMetricEvidence] = BltLegacyEvidenceMode.ExactGeometry.ToString();
+
+            var candidate = BltLegacyEntityAdapter.Adapt(wall);
+            Require(candidate.HasLegacySignal, "BLT_WALL did not retain explicit BLT provenance.");
+            Require(candidate.Category == ElementCategory.StructuralWall, "Exact BLT_WALL marker did not map to StructuralWall.");
+            Require(candidate.CanImport, "Exact-geometry BLT_WALL should be import-ready.");
+
+            var finish = new EntitySnapshot("B28", "ProxyEntity", "LEGACY")
+            {
+                VolumeDrawingUnitsCubed = 1d
+            };
+            finish.Metadata["LegacyProbe.ProxyOriginalClass"] = "BLT_WALL_FINISH";
+            finish.Metadata[BltLegacyMetadataKeys.ProbeMetricEvidence] = BltLegacyEvidenceMode.ExactGeometry.ToString();
+
+            var rejected = BltLegacyEntityAdapter.Adapt(finish);
+            Require(rejected.HasLegacySignal, "BLT_WALL_FINISH control lost its BLT provenance signal.");
+            Require(!rejected.Category.HasValue, "BLT_WALL_FINISH must not be inferred as StructuralWall.");
+            Require(!rejected.CanImport, "BLT_WALL_FINISH must remain fail-closed.");
         }
 
         private static void AmbiguousCategoryFailsClosed()
