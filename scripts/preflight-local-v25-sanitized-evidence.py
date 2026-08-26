@@ -46,9 +46,9 @@ else:
         "(redacted label)",
         "(redacted non-main branch)",
         "(redacted release tag)",
-        "_same_file_identity",
-        "_ensure_safe_output_parent",
-        "write_summary_atomically",
+        "source.resolve()",
+        "destination.resolve()",
+        "source.samefile(destination)",
         "sanitized summary output must not alias the input qualification report",
     ):
         if needle not in text:
