@@ -471,6 +471,21 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Related source/docs: `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.ExactFace.cs`; `docs/FEATURE-RUNBOOKS/issue-3480-quantity-exact-face.md`; `docs/agent-work-claims/issue-3480-gpt56sol.md`; issue #3480; PR #3487.
 - Updated: 2026-08-26
 
+## P0 — #4083 first published V25 preview containing #4047
+
+- Priority: P0
+- Status: PASS
+- Area: canonical V25 preview package provenance / licensed NETLOAD runtime
+- Source feature: issue #4043 / PR #4047, merged at exact `main@3d13f9f84a33819164beffdc2a90673f31c215c0`.
+- Remote disposition: `LOCAL_PASS / NETLOAD_SMOKE_ONLY / DO_NOT_CARRY_FORWARD`.
+- Canonical lane: issue #4083; branch `agent/codex/issue4083-preview4047-v25-runtime`.
+- Release gate: first eligible preview `v0.1.0-preview.10223` was published by successful workflow run `32962228330` at exact target `1363f9be69ebc8ca8a865ccdd41639346f55f6ee`; Git proves merge #4047 commit `3d13f9f84a33819164beffdc2a90673f31c215c0` is its ancestor.
+- Scenario: Wait for the first canonical published preview after preview.10222 whose exact target contains merge #4047. Verify the official ZIP digest/checksum sidecar, package manifest, ProductVersion, DLL hash, release target and ancestry. With zero pre-existing BricsCAD processes, snapshot the scoped profile/Loader/DemandLoad state, NETLOAD the exact packaged V25 DLL in licensed BricsCAD V25 x64, and verify exact assembly identity plus canonical runtime/Ribbon/Palette smoke. Restore all scoped state and leave zero test-owned process/residue. Report Beam formwork behavior only if it is actually exercised on the exact artifact; do not infer it from generic NETLOAD.
+- Evidence required: exact preview tag, target/source SHA and #4047 ancestry; official asset/sidecar/manifest hashes; ProductVersion and V25 DLL SHA-256; BricsCAD V25/x64 identity; NETLOAD/runtime/Ribbon/Palette result; loaded-assembly identity; profile/Loader/DemandLoad restoration; zero-process/residue proof; sanitized `PASS`, `FAIL` or `NO_RESULT` boundary.
+- Evidence: `LOCAL_PASS / NETLOAD_SMOKE_ONLY` for exact preview.10223. Official ZIP/API/sidecar SHA-256 all matched `A83BC92A1F90B00ADF7DFE0B1C92DF2EF7A3286D7ED99E4307ED8E0B87F22222`; the sidecar asset digest matched `409C5AD2D79202B29C0CA80C6715F5936E37453DB68B39853A61CBE892A5D394`; archive paths were safe and the internal manifest passed exact 17/17 coverage. Metadata recorded the exact target and ProductVersion `0.1.0-preview.10223`; packaged V25 DLL SHA-256 was `3F0156A8DFD9BB31ECE43665D5D8334DA320172A6EAFB929967268218168F22F`. Licensed interactive BricsCAD `25.2.10` x64 NETLOAD produced a PASS marker from that exact DLL with V25 native identity, Ribbon, aggregate/Workspace/Right palette readiness and the canonical hidden Quantity palette state. `PrintWindow(hwnd)` captured only the target host window. Loader, `LoadCtrls=2` and current profile were restored; application registry before/after hashes were identical, full locale export comparison had zero differing lines, nonce profiles were removed and spaced PID samples were `0,0,0`. Beam face-rule behavior, DemandLoad install, signing, customer-DWG and commercial-release qualification were not run or claimed.
+- Related source/docs: `docs/CLOUD-V25-PREVIEW-RELEASE.md`; `docs/LOCAL-V25-QUALIFICATION.md`; `docs/agent-work-claims/2026-08-26-codex-issue4083-preview4047-v25-runtime.md`; issue #4083; issue #72; issue #4043; PR #4047.
+- Updated: 2026-08-26
+
 ## Close-out rule
 
 Closing all `OPEN` P0/P1 items does not automatically mean the product is commercially released. Release publication still follows `CI_POLICY.md` and requires the owner's separate explicit release authorization. This inbox only records local engineering qualification truth.
