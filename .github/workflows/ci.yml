@@ -96,8 +96,14 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $scripts = @(& git ls-files -- 'scripts' | Where-Object { $_ -match '\.ps1$' } | Sort-Object -Unique)
-          if ($LASTEXITCODE -ne 0) { throw 'Could not enumerate tracked PowerShell scripts.' }
+          $scriptJson = & python scripts/list-tracked-powershell.py --root .
+          if ($LASTEXITCODE -ne 0) { throw 'Could not enumerate tracked PowerShell scripts safely.' }
+          try {
+            $scripts = @($scriptJson | ConvertFrom-Json -ErrorAction Stop)
+          }
+          catch {
+            throw "Tracked PowerShell enumeration did not return valid JSON: $($_.Exception.Message)"
+          }
           if ($scripts.Count -eq 0) { throw 'No tracked PowerShell scripts were found below scripts/.' }
           foreach ($script in $scripts) {
             if (-not (Test-Path -LiteralPath $script -PathType Leaf)) {
