@@ -14,6 +14,7 @@ GEOMETRY = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer
 EXACT_FACE = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.ExactFace.cs"
 TRANSIENT = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.TransientGeometry.cs"
 RAFT_HIGHLIGHT = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.RaftHighlight.cs"
+RAFT_SEMANTIC = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.RaftSemanticFaces.cs"
 EVIDENCE = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.QuantityEvidenceExport.cs"
 EXCEL = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.ExcelRoundTrip.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/QuantityEvidenceGraphSmoke.cs"
@@ -47,6 +48,7 @@ def main():
     exact_face = read(EXACT_FACE)
     transient = read(TRANSIENT)
     raft_highlight = read(RAFT_HIGHLIGHT)
+    raft_semantic = read(RAFT_SEMANTIC)
     evidence = read(EVIDENCE)
     excel_bridge = read(EXCEL)
     smoke = read(SMOKE)
@@ -98,9 +100,20 @@ def main():
     require(geometry, "QuantityGeometryExplanationService.Build(document, geometryProject, ids[0])", "canonical BREP explanation", failures)
     require(geometry, '"THỂ TÍCH • GỘP - TRỪ = CÒN"', "concrete gross/deduction/net explanation", failures)
     require(geometry, '"VÁN KHUÔN THEO MẶT • GỘP - TRỪ = CÒN"', "face-level formwork explanation", failures)
-    require(geometry, 'Text = face.FaceId + " • " + face.FaceType', "stable displayed face identity", failures)
+    require(geometry, "face.FaceId", "current-snapshot native face identity remains visible", failures)
+    require(geometry, "face.SemanticKey", "semantic face identity remains visible", failures)
+    require(geometry, "AssignRaftQuantitySemanticFaceKeys(project, _quantityGeometryCurrent)", "initial raft semantic face assignment", failures)
+    require(geometry, "AssignRaftQuantitySemanticFaceKeys(project, fresh)", "fresh raft semantic face assignment", failures)
     require(geometry, "OnQuantityGeometryDeductionClick", "deduction locate action", failures)
     require(geometry, "TryRevalidateQuantityGeometry(document, project, option", "geometry revalidation", failures)
+
+    # Raft face rows expose semantic identity but re-resolve a fresh exact FaceId every time.
+    require(raft_semantic, '"Side:OuterLoop:Edge"', "raft semantic outer-loop edge key", failures)
+    require(raft_semantic, "ResolveFreshRaftQuantityFace", "fresh semantic face resolver", failures)
+    require(raft_semantic, "displayedFace.SemanticKey", "displayed semantic key lookup", failures)
+    require(raft_semantic, "fresh.FormworkFaces", "fresh BREP face candidate set", failures)
+    require(raft_semantic, "semanticMatches.Count == 1", "semantic face uniqueness boundary", failures)
+    forbid(raft_semantic, "SubentityId", "semantic face identity must not persist native subentity ids", failures)
 
     # Face clicks must resolve the same live DB-resident BREP face and never mutate presentation.
     require(exact_face, "TryParseQuantityExactFaceId", "stable SOLID/FACE parser", failures)
@@ -140,6 +153,7 @@ def main():
     # Raft quantity evidence extends the same review loop with colored non-persistent overlays.
     require(raft_highlight, "TryRevalidateQuantityGeometry", "raft highlight freshness revalidation", failures)
     require(raft_highlight, "RaftFoundationPropertySet.IsRaftElement", "raft-only highlight boundary", failures)
+    require(raft_highlight, "ResolveFreshRaftQuantityFace", "raft row re-resolves current BREP face by semantic key", failures)
     require(raft_highlight, "solid.ColorIndex = 2", "ACI yellow included quantity evidence", failures)
     require(raft_highlight, "TransientDrawingMode.DirectTopmost", "yellow colored transient drawing mode", failures)
     require(raft_highlight, "manager.AddTransient", "yellow transient add", failures)
@@ -197,7 +211,7 @@ def main():
             print(" -", failure)
         return 1
 
-    print("PASS: Quantity Review remains one closed loop: CAD/model <-> deterministic quantity tree <-> canonical BREP/evidence explanation <-> exact face/deduction review <-> colored raft evidence overlays <-> ED2 Excel traceback, with current-DWG/project/provenance fail-closed boundaries and BLT-compatible Foundation side-formwork arithmetic.")
+    print("PASS: Quantity Review remains one closed loop: CAD/model <-> deterministic quantity tree <-> canonical BREP/evidence explanation <-> exact face/deduction review <-> semantic raft side-face identity <-> colored raft evidence overlays <-> ED2 Excel traceback, with current-DWG/project/provenance fail-closed boundaries and BLT-compatible Foundation side-formwork arithmetic.")
     print("NOTE: licensed interactive face/transient/save-reopen/multi-DWG acceptance remains LOCAL_ONLY and is tracked separately; this guard does not manufacture LOCAL_PASS.")
     return 0
 
