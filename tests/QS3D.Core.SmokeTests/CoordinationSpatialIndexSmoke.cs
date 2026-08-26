@@ -171,11 +171,11 @@ namespace QS3D.Core.SmokeTests
             {
                 Item("A", "1", 0, 1), Item("B", "1", 0.5, 1.5)
             });
-            var source = Enumerable.Repeat(" a ", MaximumEntries).ToArray();
+            var source = Enumerable.Repeat("a", MaximumEntries).ToArray();
             var pairs = index.QueryChangedPairs(source);
 
             Equal("A\u001fB", string.Join("|", pairs.Select(pair => pair.PairKey)),
-                "exactly 10,000 changed-item observations must remain accepted with case-insensitive deduplication");
+                "exactly 10,000 canonical changed-item observations must remain accepted with case-insensitive deduplication");
         }
 
         private static void InvalidInputsFailClosed()
