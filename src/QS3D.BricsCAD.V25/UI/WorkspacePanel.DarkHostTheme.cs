@@ -50,6 +50,12 @@ namespace QS3D.BricsCAD.V25.UI
                 PinScopeComboStyle(FloorCombo, comboStyle);
             }
 
+            // FamilyList can otherwise inherit the BricsCAD palette's stock ListBox chrome.
+            // Its item containers are intentionally transparent when idle, so a host-white
+            // ListBox surface leaks through the whole Family / Type region. Pin the collection
+            // surface itself to QS3D resources; hover/selection item styling remains unchanged.
+            PinFamilyListChrome();
+
             // TreeViewItem/ListBoxItem/ListViewItem styles in Theme.xaml deliberately keep
             // the stock WPF container templates. Those templates can resolve active/inactive
             // selection brushes through SystemColors. Shadow all four keys at the Workspace
@@ -66,6 +72,14 @@ namespace QS3D.BricsCAD.V25.UI
                 PinWorkspaceSelectionResource(SystemColors.HighlightTextBrushKey, selectionTextBrush);
                 PinWorkspaceSelectionResource(SystemColors.InactiveSelectionHighlightTextBrushKey, selectionTextBrush);
             }
+        }
+
+        private void PinFamilyListChrome()
+        {
+            FamilyList.SetResourceReference(Control.BackgroundProperty, "Bg1Brush");
+            FamilyList.SetResourceReference(Control.ForegroundProperty, "TextBrush");
+            FamilyList.SetResourceReference(Control.BorderBrushProperty, "BorderBrush");
+            FamilyList.BorderThickness = new Thickness(0);
         }
 
         private void PinWorkspaceSelectionResource(object resourceKey, Brush brush)
