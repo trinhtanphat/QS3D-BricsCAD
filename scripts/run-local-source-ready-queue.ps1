@@ -85,10 +85,10 @@ function Get-CanonicalLocalQueue {
 # Execution metadata only. Priority/status always come from the canonical inbox.
 $contracts = [ordered]@{
     '#3681' = [ordered]@{ host = 'V25'; mode = 'COMPLETED_NO_RERUN'; runners = @('run-local-v25-wall-contact-3681.ps1'); note = 'Completed licensed qualification; regression reference only.' }
-    'LOCAL-001' = [ordered]@{ host = 'V25'; mode = 'AUTOMATED_BASELINE'; runners = @('run-local-v25-qualification.ps1'); note = 'Runs the exact-SHA V25 baseline only. Broader interactive/private-DWG rows remain governed by the inbox.' }
+    'LOCAL-001' = [ordered]@{ host = 'V25'; mode = 'AUTOMATED_BASELINE'; runners = @('run-local-v25-pinned-qualification.ps1'); note = 'Runs the exact-SHA V25 baseline only. Broader interactive/private-DWG rows remain governed by the inbox.' }
     'LOCAL-002' = [ordered]@{ host = 'V25'; mode = 'MANUAL_OR_EXTERNAL'; runners = @(); note = 'Completed bounded H.1 rows must not be reconstructed or rerun remotely.' }
-    'LOCAL-003' = [ordered]@{ host = 'V25'; mode = 'AUTOMATED_REGRESSION'; runners = @('run-local-v25-qualification.ps1','test-bricscad-v25-level-z.ps1','test-bricscad-v25-level-z-lifecycle.ps1'); note = 'Representative Level Z regression; broader family/private-DWG breadth remains local.' }
-    'LOCAL-004' = [ordered]@{ host = 'V25'; mode = 'AUTOMATED_REGRESSION'; runners = @('run-local-v25-qualification.ps1','test-bricscad-v25-source-reconcile.ps1'); note = 'Production Source Reconcile base matrix; broader topology/manual-grip breadth remains local.' }
+    'LOCAL-003' = [ordered]@{ host = 'V25'; mode = 'AUTOMATED_REGRESSION'; runners = @('run-local-v25-pinned-qualification.ps1','test-bricscad-v25-level-z.ps1','test-bricscad-v25-level-z-lifecycle.ps1'); note = 'Representative Level Z regression; broader family/private-DWG breadth remains local.' }
+    'LOCAL-004' = [ordered]@{ host = 'V25'; mode = 'AUTOMATED_REGRESSION'; runners = @('run-local-v25-pinned-qualification.ps1','test-bricscad-v25-source-reconcile.ps1'); note = 'Production Source Reconcile base matrix; broader topology/manual-grip breadth remains local.' }
     'LOCAL-005' = [ordered]@{ host = 'V25'; mode = 'MANUAL_OR_EXTERNAL'; runners = @(); note = 'Polygon reinforcement native topology requires the exact local runbook/native matrix.' }
     'LOCAL-006' = [ordered]@{ host = 'V25'; mode = 'MANUAL_OR_EXTERNAL'; runners = @(); note = 'Native documentation/UI/Unicode/HiDPI proof remains local-only.' }
     'LOCAL-007' = [ordered]@{ host = 'V25'; mode = 'COMPLETED_BOUNDED'; runners = @(); note = 'P01/P02/P03 physical wall-junction slice is already licensed-qualified.' }
@@ -97,7 +97,7 @@ $contracts = [ordered]@{
     'LOCAL-010' = [ordered]@{ host = 'V25'; mode = 'MANUAL_OR_EXTERNAL'; runners = @(); note = 'Performance/HiDPI matrix requires representative local hardware.' }
     'LOCAL-011' = [ordered]@{ host = 'V25'; mode = 'INTERACTIVE_RUNBOOK'; runners = @('run-local-v25-local-011.ps1'); minimumMergedCarrier = '07ccc293d1a9cf9ea1524b0fcf38b062bf305431'; note = 'Use the exact merged #3905 pull-and-run carrier. The dedicated runner records PASS/FAIL/BLOCKED/NO_RESULT and never claims LOCAL_PASS.' }
     'LOCAL-012' = [ordered]@{ host = 'V25'; mode = 'MANUAL_OR_EXTERNAL'; runners = @(); note = 'Workspace/Project Browser modeless selection and DPI matrix requires interactive V25.' }
-    'LOCAL-013' = [ordered]@{ host = 'V25'; mode = 'AUTOMATED_WITH_AUTHORIZED_INPUT'; runners = @('run-local-v25-qualification.ps1','test-bricscad-v25-brc-probe.ps1','test-bricscad-v25-brc-quantity-roundtrip.ps1'); note = 'Requires an explicitly authorized disposable BRC/reference copy; never reconstruct a missing private reference.' }
+    'LOCAL-013' = [ordered]@{ host = 'V25'; mode = 'AUTOMATED_WITH_AUTHORIZED_INPUT'; runners = @('run-local-v25-pinned-qualification.ps1','test-bricscad-v25-brc-probe.ps1','test-bricscad-v25-brc-quantity-roundtrip.ps1'); note = 'Requires an explicitly authorized disposable BRC/reference copy; never reconstruct a missing private reference.' }
     'LOCAL-014' = [ordered]@{ host = 'V25'; mode = 'MANUAL_OR_EXTERNAL'; runners = @(); note = 'Remaining Plan-to-3D prompt drift/cancel/rollback breadth is interactive.' }
     'LOCAL-015' = [ordered]@{ host = 'V25'; mode = 'MANUAL_OR_EXTERNAL'; runners = @(); note = 'Default-browser/modeless lifecycle is local desktop behavior.' }
     'LOCAL-016' = [ordered]@{ host = 'V26'; mode = 'COMPLETED_NO_RERUN'; runners = @(); note = 'Issue #3878 lifecycle was licensed-qualified on exact source e90c6aba7ef7bf903042d42dd991f9e7112fe659; do not rerun this bounded lifecycle row.' }
@@ -174,8 +174,14 @@ $ArtifactDir = [IO.Path]::GetFullPath($ArtifactDir)
 New-Item -ItemType Directory -Path $ArtifactDir -Force | Out-Null
 
 function Invoke-V25Baseline {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidatePattern('^[0-9A-Fa-f]{40}$')]
+        [string]$ExpectedSourceSha
+    )
     Require-Value $BricsCadDir '-BricsCadDir'
     $args = @{
+        ExpectedSourceSha = $ExpectedSourceSha
         BricsCadDir = $BricsCadDir
         Profile = $Profile
         ArtifactDir = (Join-Path $ArtifactDir 'baseline')
@@ -184,7 +190,7 @@ function Invoke-V25Baseline {
     if (-not [string]::IsNullOrWhiteSpace($PythonPath)) {
         $args.PythonPath = $PythonPath
     }
-    & (Join-Path $PSScriptRoot 'run-local-v25-qualification.ps1') @args
+    & (Join-Path $PSScriptRoot 'run-local-v25-pinned-qualification.ps1') @args
 }
 
 function Resolve-V25Plugin {
@@ -202,7 +208,7 @@ function Resolve-V25Plugin {
 
 switch ($Lane) {
     'LOCAL-001' {
-        Invoke-V25Baseline
+        Invoke-V25Baseline -ExpectedSourceSha $exactSha
     }
     'LOCAL-003' {
         Require-Value $Profile '-Profile'
@@ -210,7 +216,7 @@ switch ($Lane) {
         if (-not $ConfirmDisposableCopy) {
             throw 'LOCAL-003 requires -ConfirmDisposableCopy.'
         }
-        Invoke-V25Baseline
+        Invoke-V25Baseline -ExpectedSourceSha $exactSha
         $dll = Resolve-V25Plugin
         foreach ($unit in @('Millimeter','Meter')) {
             & (Join-Path $PSScriptRoot 'test-bricscad-v25-level-z.ps1') `
@@ -228,7 +234,7 @@ switch ($Lane) {
         if (-not $ConfirmDisposableCopies) {
             throw 'LOCAL-004 requires -ConfirmDisposableCopies.'
         }
-        Invoke-V25Baseline
+        Invoke-V25Baseline -ExpectedSourceSha $exactSha
         $dll = Resolve-V25Plugin
         & (Join-Path $PSScriptRoot 'test-bricscad-v25-source-reconcile.ps1') `
             -BricsCadDir $BricsCadDir -PluginDll $dll -FixtureDwg $FixtureDwg -Profile $Profile `
@@ -250,7 +256,7 @@ switch ($Lane) {
         if (-not $ConfirmReferenceCopy) {
             throw 'LOCAL-013 requires -ConfirmReferenceCopy for an explicitly authorized disposable reference copy.'
         }
-        Invoke-V25Baseline
+        Invoke-V25Baseline -ExpectedSourceSha $exactSha
         $dll = Resolve-V25Plugin
         & (Join-Path $PSScriptRoot 'test-bricscad-v25-brc-probe.ps1') `
             -BricsCadDir $BricsCadDir -PluginDll $dll -DrawingCopy $ReferenceCopy -Profile $Profile `
