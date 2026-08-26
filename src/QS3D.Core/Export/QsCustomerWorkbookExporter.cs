@@ -256,6 +256,7 @@ namespace QS3D.Core.Export
                 Text(sb, Cell(2, excelRow), DisplayName(row), 0);
                 Text(sb, Cell(3, excelRow), FloorText(row), 0);
                 Evidence(sb, Cell(4, excelRow), row.LengthM, row.HasLengthMEvidence);
+                // Width and height are intentionally blank: QuantityReportRow currently has no real evidence fields for them.
                 Evidence(sb, Cell(7, excelRow), row.GrossConcreteM3, row.HasGrossConcreteM3Evidence);
                 Evidence(sb, Cell(8, excelRow), row.DeductionM3, row.HasDeductionM3Evidence);
                 Evidence(sb, Cell(9, excelRow), row.NetConcreteM3, row.HasNetConcreteM3Evidence);
