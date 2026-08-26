@@ -452,6 +452,19 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Related source/docs: `docs/LOCAL-V25-QUALIFICATION.md`; `docs/LOCAL-V26-QUALIFICATION.md`; `src/QS3D.BricsCAD.V25/ReviewWorkbookCommands.cs`; `src/QS3D.BricsCAD.V25/ReviewWorkbookRuntimeProbeCommands.cs`; `src/QS3D.BricsCAD.V25/Services/ExcelLocateResolutionService.cs`; `src/QS3D.Core/Export/Qs3dReviewWorkbook.IssueProjection.cs`; `scripts/test-bricscad-review-workbook-roundtrip.ps1`; issue `#3536`.
 - Updated: 2026-08-24
 
+## LOCAL-020 — Móng đơn Add/dialog/center-placement runtime
+
+- Priority: P0
+- Status: IN_PROGRESS
+- Area: issue `#4034`; merged feature issue `#4019` / PR `#4021`; Workspace `Móng → Móng đơn → + Add → Vẽ`
+- Why local: Requires licensed interactive BricsCAD V25 and V26, the matching host-major plugin assemblies, real WPF dialog interaction, native point prompts, `Solid3d` creation, semantic ownership inspection and save/reopen behavior. Hosted CI and source guards cannot prove this matrix.
+- Source-side status: The feature is merged on `main` at `0d489713ce3b302845a53d185bd02441a7341a89`; the exact local candidate is `a0e2ba70fdfe5ab1705e0a2534d0cb1d8e961cf9`. V25 and V26 verdicts remain independent and are `PENDING_LOCAL` until this bounded run completes.
+- Scenario: Build the clean exact candidate for each installed licensed host. NETLOAD the matching V25 `net48` or V26 `net8.0-windows` assembly in a disposable repository-owned drawing. In Workspace, select `Móng → Móng đơn`; use `+ Add` to enter all six dimensions. Qualify one `H2=0` box Family and one `H2>0` lower-prism-plus-frustum Family. After each OK, prove the Family is created and active. Use `Vẽ` / `QS3DDRAWACTIVE` to place at least two independent center points, finish with Enter/Esc, and verify one semantic Foundation element plus one uniquely owned live `Solid3d` per accepted point. Confirm persisted `SingleFooting*` dimensions/volume, expected native bounds, no cancellation residue, save/reopen continuity, and that one non-Móng-đơn Foundation subtype retains its prior routing.
+- Evidence required: Exact clean pushed SHA; BricsCAD host version/x64 identity per major; matching assembly name and SHA-256; six dialog values for both cases; Family activation; repeated placement and termination; semantic element counts; live owned Solid3d counts; box/frustum bounds and volume; cancel/no-residue; non-Móng-đơn routing; save/reopen continuity; restored Loader/DemandLoad state; zero BricsCAD process residue. Publish no raw paths, handles, ProjectIds, proprietary DLLs, private drawings or unsanitized screenshots.
+- Evidence: PENDING_LOCAL
+- Related source/docs: `src/QS3D.BricsCAD.V25/SingleFootingCommands.cs`; `src/QS3D.BricsCAD.V25/SingleFootingContract.cs`; `src/QS3D.BricsCAD.V25/UI/SingleFootingDimensionsDialog.cs`; `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.SingleFooting.cs`; `src/QS3D.Core/Geometry/SingleFootingGeometry.cs`; `scripts/preflight-single-footing-workflow.py`; `docs/LOCAL-V25-QUALIFICATION.md`; `docs/LOCAL-V26-QUALIFICATION.md`; issue `#4034`.
+- Updated: 2026-08-26
+
 ## Close-out rule
 
 Closing all `OPEN` P0/P1 items does not automatically mean the product is commercially released. Release publication still follows `CI_POLICY.md` and requires the owner's separate explicit release authorization. This inbox only records local engineering qualification truth.
