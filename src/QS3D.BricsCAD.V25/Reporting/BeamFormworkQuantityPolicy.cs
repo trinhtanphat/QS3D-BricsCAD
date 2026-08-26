@@ -144,7 +144,7 @@ namespace QS3D.BricsCAD.V25.Reporting
                 {
                     FaceId = face.FaceId,
                     SemanticKey = face.SemanticKey ?? string.Empty,
-                    FaceType = kind,
+                    FaceType = kind ?? "Other",
                     GrossArea = face.GrossArea,
                     DeductionArea = deductionArea,
                     NetArea = Math.Max(0d, face.GrossArea - deductionArea),
