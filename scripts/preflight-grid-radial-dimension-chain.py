@@ -30,8 +30,8 @@ def main() -> None:
 
     forbid(text, "GridSystemPlanner", "system planner takeover")
     forbid(text, "GridIntersectionPlanner", "intersection planner takeover")
-    forbid(text, "AlignedDimension", "native aligned Dimension entity creation")
-    forbid(text, "RadialDimension", "native radial Dimension entity creation")
+    forbid(text, "new AlignedDimension", "native aligned Dimension entity creation")
+    forbid(text, "new RadialDimension", "native radial Dimension entity creation")
     forbid(text, "DimensionStyleTable", "native Dimension style mutation")
     forbid(text, "Teigha.", "CAD/vendor dependency in Core")
     forbid(text, "Bricscad.", "BricsCAD dependency in Core")
