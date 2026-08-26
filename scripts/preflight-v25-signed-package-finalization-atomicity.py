@@ -42,25 +42,24 @@ def assert_source_contract() -> None:
 
     metadata_stage = require(source, "$metadataStage = New-SiblingTempPath")
     metadata_backup = require(source, "$metadataBackup = New-SiblingTempPath")
+    temp_zip = require(source, "$tempZip = New-SiblingTempPath")
     metadata_replace = require(
         source, "[IO.File]::Replace($metadataStage, $metadataPath, $metadataBackup, $true)"
     )
     manifest_backup = require(source, "[IO.File]::Move($hashManifest, $manifestBackup)")
     manifest_stage = require(source, "[IO.File]::Move($manifestStage, $hashManifest)")
-    temp_zip = require(source, "$tempZip = New-SiblingTempPath")
     compress = require(source, "Compress-Archive -Path (Join-Path $package '*') -DestinationPath $tempZip")
     verify_zip = require(source, "Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package")
     publish_existing_zip = require(source, "[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)")
     publish_new_zip = require(source, "[IO.File]::Move($tempZip, $zip)")
     committed = require(source, "$transactionCommitted = $true")
 
+    if not (metadata_stage < metadata_backup < temp_zip < metadata_replace):
+        raise AssertionError("all sibling stage/backup paths must be allocated before package mutation")
     if not (
-        metadata_stage
-        < metadata_backup
-        < metadata_replace
+        metadata_replace
         < manifest_backup
         < manifest_stage
-        < temp_zip
         < compress
         < verify_zip
         < publish_existing_zip
