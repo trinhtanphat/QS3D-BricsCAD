@@ -2,7 +2,7 @@
 
 - Carrier issue: `#3936`
 - Lane-Key: `issue-3936`
-- Source-fix issue: `#4027`
+- Source-fix issues: `#4027`, `#4032`
 - Canonical branch: `agent/interactive-20260825-01a03821/issue-3936-local012-workspace-ui`
 - Exact tested source SHA: `fc979ff465873ad3c32507064926292d9f10b3cb`
 - Exact V25 adapter SHA-256: `DA5D2A92F0D65C02449787576D03D4AE512282A5E3A17A78E95EDBDD7DDC3733`
@@ -45,6 +45,12 @@ The serialized semantic element subtree remained byte-equivalent across these pr
 
 Issue `#4027` owns the ordinary source correction. The relevant Workspace/selection paths were unchanged from the tested SHA through the drift-check SHA above, and this local lane made no source patch.
 
+## Hosted Project Browser integration boundary
+
+The exact candidate and the current-source drift checkpoint both contain the deterministic Core `ProjectBrowserWorkspaceCoordinator`, state store, query/grouping, selection-reveal and virtualization/paging planners. Neither revision contains any `ProjectBrowser` reference under the production V25 or V26 hosted adapters. In current source, coordinator usages are limited to its Core declaration and Core smoke tests.
+
+The real loaded V25 Workspace matched that source boundary: it exposed the existing model tree, Family search/list, property search/list and inspector, but no Project Browser query/grouping/page controls or bound visible-row surface. Therefore Browser -> CAD, CAD -> Browser reveal/expand, filter/group/query, paging/large-node and persisted browser-presentation rows are `NOT RUN / SOURCE_FIX_REQUIRED #4032` on this exact candidate, not local runtime failures of the Core planners. Issue `#4032` owns the missing production adapter; this local lane made no source patch.
+
 ## Foundation subtype and native Solid3D cell
 
 - The real modeless Workspace selected `Móng > Móng Bè`.
@@ -61,11 +67,11 @@ Issue `#4027` owns the ordinary source correction. The relevant Workspace/select
 
 The following rows remain `PENDING_LOCAL` and must not be inferred from the bounded evidence above:
 
-- Browser -> CAD selection, zoom/reveal, stale/deleted/ambiguous semantic IDs, and active-DWG affinity;
+- after a source-ready `#4032` candidate, Browser -> CAD selection, CAD -> Browser reveal/expand, zoom, stale/deleted/ambiguous semantic IDs, active-DWG affinity, filter/group/query and bounded paging/virtualization;
 - missing/deleted Family fallback and proof that a previously selected Instance cannot be mutated;
 - live-Family Instance Reset after another modeless writer changes the Family value, removed-property refusal, failed post-commit UI refresh, and post-`QS3DRELOAD` stale-row refusal;
 - unavailable-project activation/recovery, modeless continuity across DWG switches, and stale callback refusal;
-- browser filtering, grouping, large-node paging/virtualization, cancellation, and presentation-only `ChangeVersion` invariants;
+- presentation-only browser-state `ChangeVersion` and quantity/regeneration-preview invariants after the hosted adapter exists;
 - full save/reopen and cache-replacement matrix;
 - unsupported non-native Solid3D refusal before project/bootstrap/audit/version mutation;
 - exact Foundation subtype-family filtering/naming after reselecting `Móng > Móng Bè`;
