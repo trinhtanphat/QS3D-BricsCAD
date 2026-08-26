@@ -27,6 +27,8 @@ def main():
         failures.append("visible Add route must define exactly one explicit WorkspacePanel type initializer")
     if text.count("EventManager.RegisterClassHandler(") != 1:
         failures.append("visible Add route must register exactly one WPF class handler")
+    if text.count("panel.CreateFamilyFromWorkspaceSubtype(false);") != 1:
+        failures.append("visible Add route must dispatch exactly one raft Family creation call")
 
     # A side-effect-only static property initializer can leave the type marked beforefieldinit,
     # so CLR initialization timing is not a safe prerequisite for the first live + Add click.
@@ -39,7 +41,7 @@ def main():
             print(" -", failure)
         return 1
 
-    print("PASS: WorkspacePanel deterministically registers exactly one rendered + Add raft route before live use.")
+    print("PASS: WorkspacePanel deterministically registers exactly one rendered + Add raft route and one Family creation dispatch before live use.")
     return 0
 
 
