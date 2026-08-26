@@ -14,6 +14,7 @@ def main():
     required = {
         "explicit WorkspacePanel type initializer": "static WorkspacePanel()",
         "deterministic visible Add route registration": "RegisterRaftVisibleAddRoute();",
+        "void registration routine": "private static void RegisterRaftVisibleAddRoute()",
         "WPF class-handler registration": "EventManager.RegisterClassHandler(",
         "rendered + Add label": 'RaftVisibleAddLabel = "+ Add"',
         "raft subtype guard": "panel.IsRaftSubtypeFilter()",
