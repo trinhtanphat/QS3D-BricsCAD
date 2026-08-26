@@ -7,6 +7,7 @@ SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "SingleFootingGeometrySmoke.cs
 CONTRACT = ROOT / "src" / "QS3D.BricsCAD.V25" / "SingleFootingContract.cs"
 DIALOG = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "SingleFootingDimensionsDialog.cs"
 WORKSPACE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.SingleFooting.cs"
+BLT_WORKSPACE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.Blt3dFamilyWorkspace.cs"
 COMMAND = ROOT / "src" / "QS3D.BricsCAD.V25" / "SingleFootingCommands.cs"
 DISPATCH = ROOT / "src" / "QS3D.BricsCAD.V25" / "ActiveFamilyQuickDrawCommands.cs"
 V26 = ROOT / "src" / "QS3D.BricsCAD.V26" / "QS3D.BricsCAD.V26.csproj"
@@ -14,6 +15,11 @@ V26 = ROOT / "src" / "QS3D.BricsCAD.V26" / "QS3D.BricsCAD.V26.csproj"
 
 def require(condition, message):
     if not condition:
+        raise SystemExit("ERROR: " + message)
+
+
+def reject(condition, message):
+    if condition:
         raise SystemExit("ERROR: " + message)
 
 
@@ -27,6 +33,7 @@ smoke = read(SMOKE)
 contract = read(CONTRACT)
 dialog = read(DIALOG)
 workspace = read(WORKSPACE)
+blt_workspace = read(BLT_WORKSPACE)
 command = read(COMMAND)
 dispatch = read(DISPATCH)
 v26 = read(V26)
@@ -51,17 +58,28 @@ require("new SingleFootingDimensions(1.6d, 1.6d, 1d, 1d, 1d, 0d)" in smoke,
 require("ExpectInvalid" in smoke and "double.NaN" in smoke,
         "single footing invalid-input smoke coverage is incomplete")
 
-# Family settings are persistent semantic properties, in meters, with the requested defaults.
+# Family settings use the stable subtype identity and canonical persisted keys while retaining
+# the 10221-era shadow keys for backward compatibility.
 for token in (
     'SubtypeName = "Móng đơn"',
+    'CategoryCode = "Foundation.SingleFooting"',
+    'TreeTag = CategoryCode',
+    'CategoryCodeKey = "CategoryCode"',
     'MarkerKey = "SingleFootingSubtype"',
-    'L1Key = "SingleFootingL1M"',
-    'W1Key = "SingleFootingW1M"',
-    'L2Key = "SingleFootingL2M"',
-    'W2Key = "SingleFootingW2M"',
-    'H1Key = "SingleFootingH1M"',
-    'H2Key = "SingleFootingH2M"',
+    'L1Key = "SINGLE_FOOTING_L1"',
+    'W1Key = "SINGLE_FOOTING_W1"',
+    'L2Key = "SINGLE_FOOTING_L2"',
+    'W2Key = "SINGLE_FOOTING_W2"',
+    'H1Key = "SINGLE_FOOTING_H1"',
+    'H2Key = "SINGLE_FOOTING_H2"',
+    'LegacyL1Key = "SingleFootingL1M"',
+    'LegacyW1Key = "SingleFootingW1M"',
+    'LegacyL2Key = "SingleFootingL2M"',
+    'LegacyW2Key = "SingleFootingW2M"',
+    'LegacyH1Key = "SingleFootingH1M"',
+    'LegacyH2Key = "SingleFootingH2M"',
     "new SingleFootingDimensions(1.6d, 1.6d, 1d, 1d, 1d, 0d)",
+    "family.Properties[CategoryCodeKey] = CategoryCode",
     'family.Properties["ThicknessM"]',
 ):
     require(token in contract, "single footing persistent Family contract lost " + token)
@@ -76,16 +94,41 @@ require("IsCancel = true" in dialog, "dimension dialog Cancel path is missing")
 for token in (
     "EnsureSingleFootingTreeNode",
     "foundation.Items.Insert(0, existing)",
-    "OnSingleFootingAwareAddClick",
+    "existing.Tag = SingleFootingContract.CategoryCode;",
     "new SingleFootingDimensionsDialog()",
+    "if (dialog.ShowDialog() != true || dialog.Dimensions == null)",
     "CreateSingleFootingFamily",
     "SingleFootingContract.Apply(family, dimensions)",
     "ProjectFamilyActivationService.SetActive",
-    "OnBlt3dFamilyAddClick(sender, e)",
 ):
     require(token in workspace, "Workspace Móng đơn integration lost " + token)
-require("_singleFootingWorkspaceIntegrated) return" in workspace,
-        "Workspace Móng đơn bootstrap must remain idempotent")
+
+# Móng đơn Add must route synchronously inside the canonical BLT3D Add handler. The older
+# ContextIdle/class-handler rewiring path is forbidden because it can fall through to generic
+# Foundation creation.
+for token in (
+    "DispatcherPriority.ContextIdle",
+    "OnSingleFootingAwareAddClick",
+    "button.Click += OnSingleFootingAwareAddClick",
+):
+    reject(token in workspace, "deferred/rewired SingleFooting Add route returned: " + token)
+
+add_start = blt_workspace.find("private void OnBlt3dFamilyAddClick(object sender, RoutedEventArgs e)")
+add_end = blt_workspace.find("private void ShowBlt3dFamilyModeChooser", add_start)
+add_method = blt_workspace[add_start:add_end] if add_start >= 0 and add_end > add_start else ""
+ordered = (
+    "e.Handled = true;",
+    "if (IsSingleFootingSelected())",
+    "HandleSingleFootingAdd(e);",
+    "return;",
+    "ShowBlt3dFamilyModeChooser();",
+)
+last = -1
+for token in ordered:
+    pos = add_method.find(token)
+    require(pos >= 0, "direct BLT Add route lost " + token)
+    require(pos > last, "direct BLT Add route is out of order at " + token)
+    last = pos
 
 # Quick Draw dispatch is subtype-specific; other Foundation Families keep the existing path.
 require("SingleFootingContract.IsSingleFooting(family)" in dispatch,

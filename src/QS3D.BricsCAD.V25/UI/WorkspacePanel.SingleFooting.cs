@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Threading;
+using System.Windows.Data;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
@@ -14,15 +15,16 @@ using Application = Bricscad.ApplicationServices.Application;
 namespace QS3D.BricsCAD.V25.UI
 {
     /// <summary>
-    /// Dedicated Workspace integration for Móng đơn. This intentionally layers on top of the
-    /// established BLT3D Family workspace instead of changing the generic Foundation workflows.
+    /// Dedicated Workspace state integration for Móng đơn. The canonical BLT3D Add handler owns
+    /// the synchronous Add route; this partial owns stable subtype identity/filtering and delegates
+    /// the six-field editor to WorkspacePanel.SingleFooting.Properties.cs.
     /// </summary>
     public partial class WorkspacePanel
     {
         private static readonly bool SingleFootingWorkspaceBootstrapRegistered =
             RegisterSingleFootingWorkspaceBootstrap();
 
-        private bool _singleFootingWorkspaceIntegrated;
+        private bool _applyingSingleFootingFilter;
 
         private static bool RegisterSingleFootingWorkspaceBootstrap()
         {
@@ -31,55 +33,28 @@ namespace QS3D.BricsCAD.V25.UI
                 FrameworkElement.LoadedEvent,
                 new RoutedEventHandler(OnSingleFootingWorkspaceLoaded),
                 true);
+            EventManager.RegisterClassHandler(
+                typeof(TreeView),
+                TreeView.SelectedItemChangedEvent,
+                new RoutedPropertyChangedEventHandler<object>(OnSingleFootingTreeClassHandler),
+                true);
+            EventManager.RegisterClassHandler(
+                typeof(ListBox),
+                Selector.SelectionChangedEvent,
+                new SelectionChangedEventHandler(OnSingleFootingFamilyClassHandler),
+                true);
+            EventManager.RegisterClassHandler(
+                typeof(TextBox),
+                TextBoxBase.TextChangedEvent,
+                new TextChangedEventHandler(OnSingleFootingSearchClassHandler),
+                true);
             return true;
         }
 
         private static void OnSingleFootingWorkspaceLoaded(object sender, RoutedEventArgs e)
         {
-            if (!(sender is WorkspacePanel panel)) return;
-            panel.Dispatcher.BeginInvoke(
-                DispatcherPriority.ContextIdle,
-                new Action(panel.EnsureSingleFootingWorkspaceIntegration));
-        }
-
-        private void EnsureSingleFootingWorkspaceIntegration()
-        {
-            if (!SingleFootingWorkspaceBootstrapRegistered || _singleFootingWorkspaceIntegrated) return;
-
-            EnsureSingleFootingTreeNode();
-            ModelTree.SelectedItemChanged -= OnSingleFootingTreeSelectionChanged;
-            ModelTree.SelectedItemChanged += OnSingleFootingTreeSelectionChanged;
-
-            // The BLT3D surface rewires Add after the base Workspace initializes. Rewire once more
-            // at ContextIdle so Móng đơn gets the six-parameter dialog while all other categories
-            // retain the existing Tham số / Solid3D chooser.
-            foreach (var button in FindVisualChildren<Button>(this).Where(IsBlt3dFamilyAddButton))
-            {
-                button.Click -= OnAddClick;
-                button.Click -= OnFamilyAddModeClick;
-                button.Click -= OnBlt3dFamilyAddClick;
-                button.Click -= OnSingleFootingAwareAddClick;
-                button.Click += OnSingleFootingAwareAddClick;
-                button.ToolTip = "Add Family — Móng đơn nhập L1/W1/L2/W2/H1/H2; các nhóm khác giữ workflow hiện tại";
-            }
-
-            var menu = FamilyList.ContextMenu;
-            if (menu != null)
-            {
-                foreach (var item in menu.Items.OfType<MenuItem>().Where(item =>
-                             string.Equals(item.Header as string, "Nhân bản Family", StringComparison.OrdinalIgnoreCase) ||
-                             string.Equals(item.Header as string, "Thêm Family…", StringComparison.OrdinalIgnoreCase)))
-                {
-                    item.Click -= OnAddClick;
-                    item.Click -= OnFamilyAddModeClick;
-                    item.Click -= OnBlt3dFamilyAddClick;
-                    item.Click -= OnSingleFootingAwareAddClick;
-                    item.Click += OnSingleFootingAwareAddClick;
-                    item.Header = "Thêm Family…";
-                }
-            }
-
-            _singleFootingWorkspaceIntegrated = true;
+            if (!(sender is WorkspacePanel panel) || !SingleFootingWorkspaceBootstrapRegistered) return;
+            panel.EnsureSingleFootingTreeNode();
         }
 
         private void EnsureSingleFootingTreeNode()
@@ -93,13 +68,14 @@ namespace QS3D.BricsCAD.V25.UI
 
             var existing = foundation.Items
                 .OfType<TreeViewItem>()
-                .FirstOrDefault(item => string.Equals(item.Header as string, SingleFootingContract.SubtypeName, StringComparison.CurrentCultureIgnoreCase));
+                .FirstOrDefault(item =>
+                    string.Equals(item.Tag as string, SingleFootingContract.CategoryCode, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(item.Header as string, SingleFootingContract.SubtypeName, StringComparison.CurrentCultureIgnoreCase));
             if (existing == null)
             {
                 existing = new TreeViewItem
                 {
                     Header = SingleFootingContract.SubtypeName,
-                    Tag = ElementCategory.Foundation.ToString(),
                     ToolTip = "Móng đơn — Add để nhập L1/W1/L2/W2/H1/H2, Vẽ để pick tâm",
                     MinHeight = 22,
                     Padding = new Thickness(2, 1, 2, 1),
@@ -108,17 +84,61 @@ namespace QS3D.BricsCAD.V25.UI
                 foundation.Items.Insert(0, existing);
             }
 
+            // Stable routing identity is never the localized display text or generic Foundation.
+            existing.Tag = SingleFootingContract.CategoryCode;
+            existing.Header = SingleFootingContract.SubtypeName;
             foundation.IsExpanded = true;
             TuneTreeItem(foundation, 0);
         }
 
-        private void OnSingleFootingTreeSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        private static void OnSingleFootingTreeClassHandler(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            if (!(e.NewValue is TreeViewItem item) || !IsSingleFootingTreeItem(item)) return;
+            if (!(sender is TreeView tree) || !(e.NewValue is TreeViewItem item) || !IsSingleFootingTreeItem(item)) return;
+            var panel = FindSingleFootingWorkspace(tree);
+            if (panel == null) return;
+            panel.HandleSingleFootingTreeSelection();
+            e.Handled = true;
+        }
 
+        private static void OnSingleFootingFamilyClassHandler(object sender, SelectionChangedEventArgs e)
+        {
+            if (!(sender is ListBox list)) return;
+            var panel = FindSingleFootingWorkspace(list);
+            if (panel == null || !ReferenceEquals(list, panel.FamilyList) || panel._loadingContext) return;
+            if (!panel.IsSingleFootingSelected() || !(list.SelectedItem is ProjectFamily family) ||
+                !SingleFootingContract.IsSingleFooting(family)) return;
+
+            panel.HandleSingleFootingFamilySelection(family);
+            e.Handled = true;
+        }
+
+        private static void OnSingleFootingSearchClassHandler(object sender, TextChangedEventArgs e)
+        {
+            if (!(sender is TextBox textBox)) return;
+            var panel = FindSingleFootingWorkspace(textBox);
+            if (panel == null || !ReferenceEquals(textBox, panel.FamilySearch) || !panel.IsSingleFootingSelected()) return;
+            panel.ApplySingleFootingFamilyFilter();
+            e.Handled = true;
+        }
+
+        private static WorkspacePanel? FindSingleFootingWorkspace(DependencyObject? source)
+        {
+            var current = source;
+            while (current != null)
+            {
+                if (current is WorkspacePanel panel) return panel;
+                try { current = ParentOf(current); }
+                catch { return null; }
+            }
+            return null;
+        }
+
+        private void HandleSingleFootingTreeSelection()
+        {
+            HideBlt3dFamilyModeChooser();
             _categoryFilter = ElementCategory.Foundation;
             _familySubtypeFilter = SingleFootingContract.SubtypeName;
-            ApplyFamilySubtypeFilter();
+            ApplySingleFootingFamilyFilter();
 
             var first = FamilyList.Items.Cast<object>().OfType<ProjectFamily>().FirstOrDefault();
             _loadingContext = true;
@@ -128,7 +148,7 @@ namespace QS3D.BricsCAD.V25.UI
                 if (first != null)
                 {
                     _viewModel.SetActiveFamily(first);
-                    _viewModel.ShowFamilyProperties();
+                    ShowSingleFootingFamilyProperties(first);
                     SetStatus("Móng đơn • " + first.Name + " • bấm Vẽ rồi pick tâm móng.");
                 }
                 else
@@ -142,16 +162,47 @@ namespace QS3D.BricsCAD.V25.UI
             RefreshSelectedFamilyHighlight();
         }
 
-        private void OnSingleFootingAwareAddClick(object sender, RoutedEventArgs e)
+        private void HandleSingleFootingFamilySelection(ProjectFamily family)
         {
-            if (!IsSingleFootingSelected())
+            try
             {
-                OnBlt3dFamilyAddClick(sender, e);
-                return;
+                _categoryFilter = ElementCategory.Foundation;
+                _familySubtypeFilter = SingleFootingContract.SubtypeName;
+                _viewModel.SetActiveFamily(family);
+                ShowSingleFootingFamilyProperties(family);
+                RefreshSelectedFamilyHighlight();
+                SetStatus("Móng đơn • " + family.Name + " • L1/W1/L2/W2/H1/H2 sẵn sàng chỉnh sửa.");
             }
+            catch (Exception ex)
+            {
+                SetStatus("Chọn Family Móng đơn lỗi: " + ex.Message);
+            }
+        }
 
+        private void ApplySingleFootingFamilyFilter()
+        {
+            if (_applyingSingleFootingFilter) return;
+            _applyingSingleFootingFilter = true;
+            try
+            {
+                var text = FamilySearch?.Text?.Trim() ?? string.Empty;
+                var view = CollectionViewSource.GetDefaultView(FamilyList?.ItemsSource);
+                if (view == null) return;
+                view.Filter = item => item is ProjectFamily family &&
+                    SingleFootingContract.IsSingleFooting(family) &&
+                    (text.Length == 0 ||
+                     family.Name.IndexOf(text, StringComparison.CurrentCultureIgnoreCase) >= 0 ||
+                     SingleFootingContract.CategoryCode.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0);
+                view.Refresh();
+            }
+            finally { _applyingSingleFootingFilter = false; }
+        }
+
+        private void HandleSingleFootingAdd(RoutedEventArgs e)
+        {
             e.Handled = true;
             HideBlt3dFamilyModeChooser();
+
             var dialog = new SingleFootingDimensionsDialog();
             var owner = Window.GetWindow(this);
             if (owner != null) dialog.Owner = owner;
@@ -170,13 +221,8 @@ namespace QS3D.BricsCAD.V25.UI
         private static bool IsSingleFootingTreeItem(TreeViewItem item)
         {
             if (item == null) return false;
-            if (!(item.Tag is string tag) ||
-                !Enum.TryParse(tag, true, out ElementCategory category) ||
-                category != ElementCategory.Foundation) return false;
-            return string.Equals(
-                (item.Header as string ?? string.Empty).Trim(),
-                SingleFootingContract.SubtypeName,
-                StringComparison.CurrentCultureIgnoreCase);
+            return item.Tag is string tag &&
+                   string.Equals(tag.Trim(), SingleFootingContract.CategoryCode, StringComparison.OrdinalIgnoreCase);
         }
 
         private void CreateSingleFootingFamily(SingleFootingDimensions dimensions)
@@ -204,8 +250,9 @@ namespace QS3D.BricsCAD.V25.UI
                     AuditTrail.ForProject(project).Record(
                         "family.create.single-footing",
                         string.Empty,
-                        family.Id + " • " + family.Name + " • L1/W1=" +
-                        dimensions.L1M.ToString("0.###") + "/" + dimensions.W1M.ToString("0.###") + " m");
+                        family.Id + " • " + family.Name + " • " + SingleFootingContract.CategoryCode + " • L1/W1=" +
+                        dimensions.L1M.ToString("0.###", CultureInfo.InvariantCulture) + "/" +
+                        dimensions.W1M.ToString("0.###", CultureInfo.InvariantCulture) + " m");
                     return family;
                 }, "Tạo Family Móng đơn");
 
@@ -217,14 +264,18 @@ namespace QS3D.BricsCAD.V25.UI
                         RefreshProject();
                         _categoryFilter = ElementCategory.Foundation;
                         _familySubtypeFilter = SingleFootingContract.SubtypeName;
-                        ApplyFamilySubtypeFilter();
+                        ApplySingleFootingFamilyFilter();
                         var live = _viewModel.Families.FirstOrDefault(x =>
                             string.Equals(x.Id, created.Id, StringComparison.OrdinalIgnoreCase));
                         FamilyList.SelectedItem = live;
-                        if (live != null) _viewModel.SetActiveFamily(live);
+                        if (live != null)
+                        {
+                            _viewModel.SetActiveFamily(live);
+                            ShowSingleFootingFamilyProperties(live);
+                        }
                         RefreshSelectedFamilyHighlight();
                     },
-                    "Đã tạo " + created.Name + ". Bấm Vẽ rồi pick tâm móng; Esc/Enter để kết thúc.",
+                    "Đã thêm " + created.Name + ". Bấm Vẽ rồi pick tâm móng; Esc/Enter để kết thúc.",
                     "Workspace Móng đơn");
             }
             catch (Exception ex)
