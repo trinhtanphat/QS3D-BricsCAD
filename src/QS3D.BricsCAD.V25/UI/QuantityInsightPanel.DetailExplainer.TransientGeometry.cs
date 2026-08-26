@@ -128,7 +128,7 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
                 }
 
-                _viewModel.Status = "Đã chọn cấu kiện đích + nguyên nhân, highlight vùng giao/contact BREP transient và zoom đúng vùng • " + current[0].RegionKey;
+                _viewModel.Status = "Đỏ = phần khấu trừ giao cắt/contact • " + current[0].RegionKey;
             }
             catch (Exception ex) when (!(ex is OutOfMemoryException) && !(ex is StackOverflowException) && !(ex is AccessViolationException))
             {
@@ -143,7 +143,7 @@ namespace QS3D.BricsCAD.V25.UI
             var manager = TransientManager.CurrentTransientManager;
             var viewports = new IntegerCollection(0);
             var subDrawingMode = 128;
-            if (manager.GetFreeSubDrawingMode(TransientDrawingMode.Highlight, viewports, ref subDrawingMode) == 0)
+            if (manager.GetFreeSubDrawingMode(TransientDrawingMode.DirectTopmost, viewports, ref subDrawingMode) == 0)
             {
                 foreach (var region in regions) region.Dispose();
                 return false;
@@ -155,13 +155,14 @@ namespace QS3D.BricsCAD.V25.UI
                 var added = false;
                 try
                 {
+                    region.ColorIndex = 1; // ACI red: deducted/intersection geometry.
                     var regionExtents = region.GeometricExtents;
                     if (!FiniteQuantityExtents(regionExtents))
                     {
                         region.Dispose();
                         continue;
                     }
-                    if (!manager.AddTransient(region, TransientDrawingMode.Highlight, subDrawingMode, viewports))
+                    if (!manager.AddTransient(region, TransientDrawingMode.DirectTopmost, subDrawingMode, viewports))
                     {
                         region.Dispose();
                         continue;
