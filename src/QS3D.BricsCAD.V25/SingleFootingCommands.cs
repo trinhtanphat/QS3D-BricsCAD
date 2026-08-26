@@ -144,7 +144,7 @@ namespace QS3D.BricsCAD.V25
                         element.Properties["GeneratedSolidMode"] = SingleFootingContract.GeneratedMode;
                         element.Properties[SingleFootingContract.VolumeKey] = dimensions.VolumeM3.ToString("R", CultureInfo.InvariantCulture);
                         element.Properties["VolumeM3"] = dimensions.VolumeM3.ToString("R", CultureInfo.InvariantCulture);
-                        element.MarkClean(ElementDirtyFlags.Geometry | ElementDirtyFlags.Quantity);
+                        element.MarkClean(ElementGeometryPolicy.SemanticCleanFlags(ElementCategory.Foundation));
                         project.Touch();
                         AuditTrail.ForProject(project).Record(
                             "geometry.single-footing.create",
