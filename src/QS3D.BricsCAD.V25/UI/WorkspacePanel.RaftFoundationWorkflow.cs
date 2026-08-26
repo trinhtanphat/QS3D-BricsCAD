@@ -33,8 +33,11 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static bool RegisterRaftFoundationWorkspaceHandlers()
         {
+            // Button class handling runs before the legacy per-button Click handlers. This is what
+            // makes Móng Bè a direct Add/Draw workflow without briefly opening the old mode menu or
+            // dispatching QS3DBUILD3D against an empty selection first.
             EventManager.RegisterClassHandler(
-                typeof(WorkspacePanel),
+                typeof(Button),
                 Button.ClickEvent,
                 new RoutedEventHandler(OnRaftFoundationWorkspaceButtonClick),
                 true);
@@ -48,8 +51,8 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static void OnRaftFoundationWorkspaceButtonClick(object sender, RoutedEventArgs e)
         {
-            var panel = sender as WorkspacePanel;
-            var button = e.Source as Button;
+            var button = sender as Button;
+            var panel = button == null ? null : FindRaftWorkspacePanel(button);
             if (panel == null || button == null) return;
 
             if (IsWorkspaceAddFamilyButton(button) && panel.IsRaftSubtypeFilter())
@@ -81,6 +84,17 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 panel.SetStatus("Không thể bắt đầu Vẽ Móng Bè: " + ex.Message);
             }
+        }
+
+        private static WorkspacePanel? FindRaftWorkspacePanel(DependencyObject source)
+        {
+            DependencyObject? current = source;
+            while (current != null)
+            {
+                if (current is WorkspacePanel panel) return panel;
+                current = ParentOf(current);
+            }
+            return null;
         }
 
         private static void OnRaftFoundationWorkspaceSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -157,14 +171,7 @@ namespace QS3D.BricsCAD.V25.UI
             floorRow.Value = FloorCombo?.SelectedItem as string ?? string.Empty;
             _viewModel.Properties.Add(floorRow);
 
-            AddRaftFamilyPropertyRow(
-                family,
-                "Kích thước",
-                "Dày",
-                "ThicknessM",
-                RaftThicknessUi(family),
-                Array.Empty<string>(),
-                "mm");
+            AddRaftFamilyPropertyRow(family, "Kích thước", "Dày", "ThicknessM", RaftThicknessUi(family), Array.Empty<string>(), "mm");
             AddRaftFamilyPropertyRow(
                 family,
                 "Cao độ",
@@ -243,8 +250,7 @@ namespace QS3D.BricsCAD.V25.UI
                 }, "Cập nhật thuộc tính Family Móng Bè");
 
                 var live = RaftPropertyUiValue(owned, key);
-                SetStatus("Đã cập nhật " + RaftPropertyLabel(key) + " • kế thừa " +
-                          result.InheritedInstancesUpdated + " cấu kiện" +
+                SetStatus("Đã cập nhật " + RaftPropertyLabel(key) + " • kế thừa " + result.InheritedInstancesUpdated + " cấu kiện" +
                           (result.OverridesPreserved > 0 ? " • giữ " + result.OverridesPreserved + " instance override" : string.Empty));
                 return live;
             }
@@ -260,11 +266,7 @@ namespace QS3D.BricsCAD.V25.UI
             var value = (requested ?? string.Empty).Trim();
             if (string.Equals(key, "ThicknessM", StringComparison.Ordinal))
             {
-                var meters = ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters(
-                    "Dày",
-                    value,
-                    CultureInfo.CurrentCulture,
-                    true);
+                var meters = ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Dày", value, CultureInfo.CurrentCulture, true);
                 return meters.ToString("R", CultureInfo.InvariantCulture);
             }
             if (string.Equals(key, RaftFoundationPropertySet.ElevationModeKey, StringComparison.Ordinal))
@@ -293,10 +295,7 @@ namespace QS3D.BricsCAD.V25.UI
         private static string RaftThicknessUi(ProjectFamily family)
         {
             var stored = RaftValue(family, "ThicknessM", "0.5");
-            return ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters(
-                "Dày",
-                stored,
-                CultureInfo.CurrentCulture);
+            return ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters("Dày", stored, CultureInfo.CurrentCulture);
         }
 
         private static double RaftThicknessM(ProjectFamily family)
