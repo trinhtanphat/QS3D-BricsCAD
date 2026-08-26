@@ -34,7 +34,9 @@ namespace QS3D.Core.Export
                 ValidateCellText(row.Material, rowIndex, "Material");
                 ValidateCellText(row.UnitHint, rowIndex, "UnitHint");
                 ValidateJoinedCellText(row.ElementIds, rowIndex, "ElementIds");
+                ValidateProvenanceValues(row.ElementIds, rowIndex, "ElementIds");
                 ValidateJoinedCellText(row.RoomIds, rowIndex, "RoomIds");
+                ValidateProvenanceValues(row.RoomIds, rowIndex, "RoomIds");
                 ValidateProvenanceCellText(row.ProjectId, rowIndex, "ProjectId");
                 ValidateProvenanceCellText(row.DrawingFingerprint, rowIndex, "DrawingFingerprint");
                 ValidateJoinedCellText(row.SourceHandles, rowIndex, "SourceHandles");
@@ -177,7 +179,6 @@ namespace QS3D.Core.Export
                     "rows",
                     "Room-finish XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
         }
-
         private static void ValidateProvenanceCellText(string value, int rowIndex, string fieldName)
         {
             ValidateCellText(value, rowIndex, fieldName);

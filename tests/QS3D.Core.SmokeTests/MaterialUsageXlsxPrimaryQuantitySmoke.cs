@@ -30,6 +30,7 @@ namespace QS3D.Core.SmokeTests
                         Category = "FloorFinish",
                         FamilyName = "Tile floor",
                         ElementCount = 1,
+                        ElementIds = { "E-1" },
                         LengthM = 3d,
                         AreaM2 = 42.25d,
                         VolumeM3 = 99.5d,
