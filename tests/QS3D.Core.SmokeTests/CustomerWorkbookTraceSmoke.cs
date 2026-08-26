@@ -103,8 +103,8 @@ namespace QS3D.Core.SmokeTests
                 }, "COP_PHA");
                 RequireHiddenColumn(formwork, 9, "COP_PHA TRACE_KEY must be a hidden technical column.");
                 RequireAutoFilter(formwork, "A1:H2", "COP_PHA filter must exclude the hidden TRACE_KEY column.");
-                RequireCellValue(formwork, "F2", "30", "Current formwork evidence must map to CP gộp.");
-                RequireCellValue(formwork, "G2", "0", "Current formwork contract must expose zero deduction until a dedicated evidence field exists.");
+                RequireMissingCell(formwork, "F2", "Legacy net-only formwork evidence must not fabricate CP gộp.");
+                RequireMissingCell(formwork, "G2", "Legacy net-only formwork evidence must not fabricate a contact deduction.");
                 RequireCellValue(formwork, "H2", "30", "Current formwork evidence must map to CP còn.");
 
                 var detail = ReadEntry(path, "xl/worksheets/sheet3.xml");
