@@ -23,6 +23,7 @@ def main() -> None:
 
     require(text, '[CommandMethod("QS3DGRIDDRAW", CommandFlags.Modal)]', "dedicated repeated command")
     require(text, 'while (true)', "repeated authoring loop")
+    require(text, 'AllowNone = true', "Enter-to-finish start prompt")
     require(text, 'family.Category != ElementCategory.Grid', "active Grid Family gate")
     require(text, 'FamilyNameHasSubtype(family.Name, "Lưới Cong")', "straight-vs-curved fail-closed gate")
     require(text, 'RequireModelSpace(document);', "Model Space gate")
