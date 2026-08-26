@@ -40,8 +40,8 @@ if CODE.is_file():
         "if (!(QuantityTree.SelectedItem is QuantityInsightItemViewModel item))",
         "!ReferenceEquals(document, _boundDocument)",
         "if (!SameProjectIdentity(project))",
-        "var currentRow = ResolveCurrentRow(item, project);",
-        "var currentRows = BuildPreviewRows(project, out _);",
+        "var currentRow = ResolveCurrentRow(item, document, project);",
+        "var currentRows = BuildPreviewRows(document, project, out _);",
         "SourceHandleResolver.Resolve(project, currentRow.ElementIds)",
         "Cad.CadHandleService.Select(document, handles)",
         zoom_token,
@@ -70,7 +70,7 @@ if CODE.is_file():
     locate = text.find("private void LocateSelected()")
     document_guard = text.find("!ReferenceEquals(document, _boundDocument)", locate)
     project_guard = text.find("if (!SameProjectIdentity(project))", document_guard)
-    current_row = text.find("var currentRow = ResolveCurrentRow(item, project);", project_guard)
+    current_row = text.find("var currentRow = ResolveCurrentRow(item, document, project);", project_guard)
     handles = text.find("SourceHandleResolver.Resolve(project, currentRow.ElementIds)", current_row)
     select = text.find("Cad.CadHandleService.Select(document, handles)", handles)
     positive = text.find("if (count > 0)", select)
