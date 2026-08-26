@@ -9,18 +9,21 @@ namespace QS3D.BricsCAD.V25.UI
         private const string RaftVisibleAddLabel = "+ Add";
 
         // BLT3D relabels the shared Add button after the generic Workspace handlers are wired.
-        // Register one narrow class-level bridge for the rendered label so Móng Bè keeps the
-        // owner-required direct Add route instead of falling through to the generic mode chooser.
-        private static bool RaftVisibleAddRouteRegistered { get; } = RegisterRaftVisibleAddRoute();
+        // An explicit type initializer is required here: a side-effect-only static field/property
+        // initializer may be emitted as beforefieldinit and is not guaranteed to run before the
+        // first routed click. Register the narrow bridge deterministically before WorkspacePanel use.
+        static WorkspacePanel()
+        {
+            RegisterRaftVisibleAddRoute();
+        }
 
-        private static bool RegisterRaftVisibleAddRoute()
+        private static void RegisterRaftVisibleAddRoute()
         {
             EventManager.RegisterClassHandler(
                 typeof(Button),
                 Button.ClickEvent,
                 new RoutedEventHandler(OnRaftVisibleAddButtonClick),
                 true);
-            return true;
         }
 
         private static void OnRaftVisibleAddButtonClick(object sender, RoutedEventArgs e)
