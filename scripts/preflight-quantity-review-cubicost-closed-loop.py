@@ -13,6 +13,7 @@ GEOMETRY_SERVICE = ROOT / "src/QS3D.BricsCAD.V25/Reporting/QuantityGeometryExpla
 GEOMETRY = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.Geometry.cs"
 EXACT_FACE = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.ExactFace.cs"
 TRANSIENT = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.TransientGeometry.cs"
+RAFT_HIGHLIGHT = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.RaftHighlight.cs"
 EVIDENCE = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.QuantityEvidenceExport.cs"
 EXCEL = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.ExcelRoundTrip.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/QuantityEvidenceGraphSmoke.cs"
@@ -45,6 +46,7 @@ def main():
     geometry = read(GEOMETRY)
     exact_face = read(EXACT_FACE)
     transient = read(TRANSIENT)
+    raft_highlight = read(RAFT_HIGHLIGHT)
     evidence = read(EVIDENCE)
     excel_bridge = read(EXCEL)
     smoke = read(SMOKE)
@@ -126,11 +128,30 @@ def main():
     # Deduction review must rebuild and display the exact intersection/contact transient.
     require(transient, "QuantityGeometryRegionPreviewService.Build", "exact deduction/contact region rebuild", failures)
     require(transient, "ShowQuantityRegionPreview", "transient region presentation", failures)
-    require(transient, "TransientDrawingMode.Highlight", "native transient highlight mode", failures)
+    require(transient, "TransientDrawingMode.DirectTopmost", "native colored transient drawing mode", failures)
+    require(transient, "region.ColorIndex = 1", "ACI red deduction/intersection evidence", failures)
     require(transient, "manager.AddTransient", "transient add", failures)
     require(transient, "manager.EraseTransient", "transient cleanup", failures)
     require(transient, "TreeView.SelectedItemChangedEvent", "tree-change transient cleanup", failures)
     require(transient, "FrameworkElement.UnloadedEvent", "panel-unload transient cleanup", failures)
+    forbid(transient, "OpenMode.ForWrite", "deduction transient CAD write", failures)
+    forbid(transient, "AppendEntity", "deduction transient database persistence", failures)
+
+    # Raft quantity evidence extends the same review loop with colored non-persistent overlays.
+    require(raft_highlight, "TryRevalidateQuantityGeometry", "raft highlight freshness revalidation", failures)
+    require(raft_highlight, "RaftFoundationPropertySet.IsRaftElement", "raft-only highlight boundary", failures)
+    require(raft_highlight, "solid.ColorIndex = 2", "ACI yellow included quantity evidence", failures)
+    require(raft_highlight, "TransientDrawingMode.DirectTopmost", "yellow colored transient drawing mode", failures)
+    require(raft_highlight, "manager.AddTransient", "yellow transient add", failures)
+    require(raft_highlight, "manager.EraseTransient", "yellow transient cleanup", failures)
+    require(raft_highlight, "ShowRaftRedDeductions", "net rows route related deductions to red overlay", failures)
+    require(raft_highlight, "QuantityGeometryRegionPreviewService.Build", "red deduction overlay uses canonical exact region builder", failures)
+    require(raft_highlight, "ClearQuantityRegionPreview", "red transient cleanup routing", failures)
+    require(raft_highlight, "TreeView.SelectedItemChangedEvent", "raft tree-change cleanup", failures)
+    require(raft_highlight, "FrameworkElement.UnloadedEvent", "raft panel-unload cleanup", failures)
+    require(raft_highlight, "DocumentToBeDeactivated", "raft document-switch cleanup", failures)
+    forbid(raft_highlight, "OpenMode.ForWrite", "raft highlight CAD write", failures)
+    forbid(raft_highlight, "AppendEntity", "raft highlight database persistence", failures)
 
     # Evidence export consumes the explanation already being reviewed; it must not recalculate via a second engine.
     require(xaml, 'Content="Xuất evidence" Click="OnQuantityEvidenceExportClick"', "evidence export action", failures)
@@ -176,7 +197,7 @@ def main():
             print(" -", failure)
         return 1
 
-    print("PASS: Quantity Review remains one closed loop: CAD/model <-> deterministic quantity tree <-> canonical BREP/evidence explanation <-> exact face/deduction review <-> ED2 Excel traceback, with current-DWG/project/provenance fail-closed boundaries and BLT-compatible Foundation side-formwork arithmetic.")
+    print("PASS: Quantity Review remains one closed loop: CAD/model <-> deterministic quantity tree <-> canonical BREP/evidence explanation <-> exact face/deduction review <-> colored raft evidence overlays <-> ED2 Excel traceback, with current-DWG/project/provenance fail-closed boundaries and BLT-compatible Foundation side-formwork arithmetic.")
     print("NOTE: licensed interactive face/transient/save-reopen/multi-DWG acceptance remains LOCAL_ONLY and is tracked separately; this guard does not manufacture LOCAL_PASS.")
     return 0
 
