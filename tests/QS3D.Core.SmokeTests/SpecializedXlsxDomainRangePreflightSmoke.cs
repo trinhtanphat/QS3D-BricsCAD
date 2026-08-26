@@ -30,6 +30,7 @@ internal static class SpecializedXlsxDomainRangePreflightSmoke
         {
             UnitHint = "m²",
             ElementCount = 1,
+            ElementIds = { "E-1" },
             AreaM2 = -1d
         };
         RejectsBeforePublication(
