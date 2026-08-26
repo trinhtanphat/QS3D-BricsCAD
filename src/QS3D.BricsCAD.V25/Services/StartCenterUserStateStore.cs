@@ -71,8 +71,7 @@ namespace QS3D.BricsCAD.V25.Services
                     if (next.FavoriteCommands.Count >= MaxFavoriteCommands) next.FavoriteCommands.RemoveAt(next.FavoriteCommands.Count - 1);
                     next.FavoriteCommands.Insert(0, item.Command);
                 }
-                _current = Normalize(next);
-                TrySaveCore(_current);
+                TryCommit(next);
             }
         }
 
@@ -85,8 +84,7 @@ namespace QS3D.BricsCAD.V25.Services
                 RemoveCommand(next.RecentCommands, item.Command);
                 next.RecentCommands.Insert(0, item.Command);
                 Trim(next.RecentCommands, MaxRecentCommands);
-                _current = Normalize(next);
-                TrySaveCore(_current);
+                TryCommit(next);
             }
         }
 
@@ -105,9 +103,7 @@ namespace QS3D.BricsCAD.V25.Services
                     IsPinned = pinned,
                     LastOpenedUtc = DateTime.UtcNow
                 });
-                _current = Normalize(next);
-                TrySaveCore(_current);
-                return true;
+                return TryCommit(next);
             }
         }
 
@@ -120,8 +116,7 @@ namespace QS3D.BricsCAD.V25.Services
                 var existing = next.RecentProjects.FirstOrDefault(x => SamePath(x.Path, normalized));
                 if (existing == null) return;
                 existing.IsPinned = !existing.IsPinned;
-                _current = Normalize(next);
-                TrySaveCore(_current);
+                TryCommit(next);
             }
         }
 
@@ -132,8 +127,7 @@ namespace QS3D.BricsCAD.V25.Services
             {
                 var next = Clone(_current);
                 next.RecentProjects = next.RecentProjects.Where(x => !SamePath(x.Path, normalized)).ToList();
-                _current = Normalize(next);
-                TrySaveCore(_current);
+                TryCommit(next);
             }
         }
 
@@ -143,8 +137,7 @@ namespace QS3D.BricsCAD.V25.Services
             {
                 var next = Clone(_current);
                 next.RecentProjects.Clear();
-                _current = Normalize(next);
-                TrySaveCore(_current);
+                TryCommit(next);
             }
         }
 
@@ -173,7 +166,15 @@ namespace QS3D.BricsCAD.V25.Services
             try
             {
                 if (!TrySettingsPath(out var path)) return state;
-                using (var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+                var loadPath = path;
+                if (!File.Exists(loadPath))
+                {
+                    var backup = BackupPath(path);
+                    if (!File.Exists(backup)) return state;
+                    loadPath = backup;
+                }
+
+                using (var stream = File.Open(loadPath, FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
                     if (stream.Length < 0 || stream.Length > MaxFileBytes) return state;
                     using (var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, false))
@@ -261,53 +262,143 @@ namespace QS3D.BricsCAD.V25.Services
             return state;
         }
 
-        private static void TrySaveCore(StartCenterUserStateSnapshot state)
+        private static bool TryCommit(StartCenterUserStateSnapshot state)
+        {
+            var next = Normalize(state);
+            if (!TrySaveCore(next)) return false;
+            _current = next;
+            return true;
+        }
+
+        private static bool TrySaveCore(StartCenterUserStateSnapshot state)
         {
             string? temp = null;
             try
             {
-                if (!TrySettingsPath(out var path)) return;
+                if (!TrySettingsPath(out var path)) return false;
                 var directory = System.IO.Path.GetDirectoryName(path);
-                if (string.IsNullOrWhiteSpace(directory)) return;
+                if (string.IsNullOrWhiteSpace(directory)) return false;
                 var serialized = Serialize(state);
-                if (Encoding.UTF8.GetByteCount(serialized) > MaxFileBytes) return;
+                if (Encoding.UTF8.GetByteCount(serialized) > MaxFileBytes) return false;
+
                 Directory.CreateDirectory(directory);
                 temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-                File.WriteAllText(temp, serialized, new UTF8Encoding(false));
+                WriteDurableTemp(temp, serialized);
+
+                var backup = BackupPath(path);
                 if (!File.Exists(path))
                 {
                     File.Move(temp, path);
                     temp = null;
-                    return;
+                    TryDelete(backup);
+                    return true;
                 }
 
-                var backup = path + ".replace.bak";
                 try
                 {
                     File.Replace(temp, path, backup, true);
                     temp = null;
+                    TryDelete(backup);
+                    return true;
                 }
                 catch (PlatformNotSupportedException)
                 {
-                    File.Copy(temp, path, true);
-                    File.Delete(temp);
+                    if (!TryReplacePreservingLastKnownGood(temp, path, backup)) return false;
                     temp = null;
+                    return true;
                 }
-                finally
+                catch (NotSupportedException)
                 {
-                    TryDelete(backup);
+                    if (!TryReplacePreservingLastKnownGood(temp, path, backup)) return false;
+                    temp = null;
+                    return true;
                 }
+            }
+            catch (IOException) { return false; }
+            catch (UnauthorizedAccessException) { return false; }
+            catch (NotSupportedException) { return false; }
+            catch (ArgumentException) { return false; }
+            catch (System.Security.SecurityException) { return false; }
+            finally
+            {
+                if (!string.IsNullOrWhiteSpace(temp)) TryDelete(temp!);
+            }
+        }
+
+        private static void WriteDurableTemp(string path, string serialized)
+        {
+            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+            {
+                using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 4096, true))
+                {
+                    writer.Write(serialized);
+                    writer.Flush();
+                }
+                stream.Flush(true);
+            }
+        }
+
+        private static bool TryReplacePreservingLastKnownGood(string temp, string path, string backup)
+        {
+            try
+            {
+                TryDelete(backup);
+                if (File.Exists(backup)) return false;
+
+                File.Move(path, backup);
+                try
+                {
+                    File.Move(temp, path);
+                    TryDelete(backup);
+                    return true;
+                }
+                catch (IOException)
+                {
+                    TryRestoreBackup(path, backup);
+                    return false;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    TryRestoreBackup(path, backup);
+                    return false;
+                }
+                catch (NotSupportedException)
+                {
+                    TryRestoreBackup(path, backup);
+                    return false;
+                }
+                catch (ArgumentException)
+                {
+                    TryRestoreBackup(path, backup);
+                    return false;
+                }
+                catch (System.Security.SecurityException)
+                {
+                    TryRestoreBackup(path, backup);
+                    return false;
+                }
+            }
+            catch (IOException) { return false; }
+            catch (UnauthorizedAccessException) { return false; }
+            catch (NotSupportedException) { return false; }
+            catch (ArgumentException) { return false; }
+            catch (System.Security.SecurityException) { return false; }
+        }
+
+        private static void TryRestoreBackup(string path, string backup)
+        {
+            try
+            {
+                if (!File.Exists(path) && File.Exists(backup)) File.Move(backup, path);
             }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
             catch (NotSupportedException) { }
             catch (ArgumentException) { }
             catch (System.Security.SecurityException) { }
-            finally
-            {
-                if (!string.IsNullOrWhiteSpace(temp)) TryDelete(temp!);
-            }
         }
+
+        private static string BackupPath(string path) => path + ".replace.bak";
 
         private static string Serialize(StartCenterUserStateSnapshot state)
         {
