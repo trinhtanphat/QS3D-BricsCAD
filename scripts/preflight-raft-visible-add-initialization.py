@@ -2,8 +2,9 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.RaftFoundationVisibleAddRoute.cs"
-WORKFLOW = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.RaftFoundationWorkflow.cs"
+UI_DIR = ROOT / "src/QS3D.BricsCAD.V25/UI"
+SOURCE = UI_DIR / "WorkspacePanel.RaftFoundationVisibleAddRoute.cs"
+WORKFLOW = UI_DIR / "WorkspacePanel.RaftFoundationWorkflow.cs"
 
 
 def main():
@@ -12,6 +13,11 @@ def main():
         failures.append("missing raft visible Add route source")
     if not WORKFLOW.is_file():
         failures.append("missing raft workflow source")
+
+    workspace_sources = sorted(UI_DIR.glob("WorkspacePanel*.cs"))
+    if not workspace_sources:
+        failures.append("no WorkspacePanel partial sources were found")
+
     if failures:
         print("Raft visible Add initialization preflight FAILED")
         for failure in failures:
@@ -20,10 +26,12 @@ def main():
 
     text = SOURCE.read_text(encoding="utf-8")
     workflow_text = WORKFLOW.read_text(encoding="utf-8")
+    workspace_texts = {path: path.read_text(encoding="utf-8") for path in workspace_sources}
+
     required = {
-        "explicit WorkspacePanel type initializer": "static WorkspacePanel()",
-        "deterministic visible Add route registration": "RegisterRaftVisibleAddRoute();",
-        "void registration routine": "private static void RegisterRaftVisibleAddRoute()",
+        "deterministic field registration": "private static readonly bool _raftVisibleAddRouteRegistered = RegisterRaftVisibleAddRoute();",
+        "bool registration routine": "private static bool RegisterRaftVisibleAddRoute()",
+        "registration completion": "return true;",
         "WPF class-handler registration": "EventManager.RegisterClassHandler(",
         "rendered + Add label": 'RaftVisibleAddLabel = "+ Add"',
         "raft subtype guard": "panel.IsRaftSubtypeFilter()",
@@ -32,8 +40,21 @@ def main():
     }
     failures.extend(label + ": missing " + repr(token) for label, token in required.items() if token not in text)
 
-    if text.count("static WorkspacePanel()") != 1:
-        failures.append("visible Add route must define exactly one explicit WorkspacePanel type initializer")
+    # WorkspacePanel is one partial CLR type. An explicit static constructor anywhere on that
+    # partial type suppresses beforefieldinit and makes all static field initializers run during
+    # type initialization. Count across every partial source so a second cctor cannot false-green
+    # this guard and later fail the V25 compile with CS0111.
+    ctor_token = "static WorkspacePanel()"
+    ctor_locations = [path for path, source_text in workspace_texts.items() if ctor_token in source_text]
+    ctor_count = sum(source_text.count(ctor_token) for source_text in workspace_texts.values())
+    if ctor_count != 1:
+        names = ", ".join(path.name for path in ctor_locations) or "none"
+        failures.append("WorkspacePanel partial type must define exactly one explicit static constructor across all sources; found %d in %s" % (ctor_count, names))
+    if ctor_token in text:
+        failures.append("raft visible Add route must reuse the existing WorkspacePanel type initializer, not define a second static constructor")
+
+    if text.count("_raftVisibleAddRouteRegistered = RegisterRaftVisibleAddRoute();") != 1:
+        failures.append("visible Add route must register exactly once through the type-initialized static field")
     if text.count("EventManager.RegisterClassHandler(") != 1:
         failures.append("visible Add route must register exactly one WPF class handler")
 
@@ -44,18 +65,13 @@ def main():
     if "IsWorkspaceAddFamilyButton(button)" in workflow_text:
         failures.append("legacy raft workflow handler must not own the Add route; visible + Add route is authoritative")
 
-    # A side-effect-only static property initializer can leave the type marked beforefieldinit,
-    # so CLR initialization timing is not a safe prerequisite for the first live + Add click.
-    if "RaftVisibleAddRouteRegistered" in text:
-        failures.append("visible Add route must not depend on side-effect-only static property initialization")
-
     if failures:
         print("Raft visible Add initialization preflight FAILED")
         for failure in failures:
             print(" -", failure)
         return 1
 
-    print("PASS: WorkspacePanel deterministically registers one authoritative rendered + Add route and exactly one raft Family creation dispatch across workflow sources.")
+    print("PASS: WorkspacePanel has one global type initializer, deterministically registers one authoritative rendered + Add route, and dispatches exactly one raft Family creation call.")
     return 0
 
 
