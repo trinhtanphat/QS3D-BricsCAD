@@ -11,11 +11,13 @@ namespace QS3D.Core.Navigation
             ProjectBrowserQueryResult query,
             ProjectBrowserViewport viewport,
             ProjectBrowserSelectionRevealPlan reveal,
+            string primaryTargetNodePath,
             IEnumerable<string> effectiveExpandedPaths)
         {
             Query = query ?? throw new ArgumentNullException(nameof(query));
             Viewport = viewport ?? throw new ArgumentNullException(nameof(viewport));
             Reveal = reveal ?? throw new ArgumentNullException(nameof(reveal));
+            PrimaryTargetNodePath = primaryTargetNodePath ?? string.Empty;
             EffectiveExpandedPaths = (effectiveExpandedPaths ?? Enumerable.Empty<string>())
                 .ToList()
                 .AsReadOnly();
@@ -24,6 +26,7 @@ namespace QS3D.Core.Navigation
         public ProjectBrowserQueryResult Query { get; }
         public ProjectBrowserViewport Viewport { get; }
         public ProjectBrowserSelectionRevealPlan Reveal { get; }
+        public string PrimaryTargetNodePath { get; }
         public IReadOnlyList<string> EffectiveExpandedPaths { get; }
     }
 
@@ -38,7 +41,8 @@ namespace QS3D.Core.Navigation
             ProjectState project,
             ProjectBrowserWorkspaceState state,
             int viewportOffset = 0,
-            int viewportPageSize = 200)
+            int viewportPageSize = 200,
+            bool revealPrimarySelection = false)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -49,12 +53,22 @@ namespace QS3D.Core.Navigation
                 state.SelectedElementIds,
                 state.PrimaryElementId);
             var expanded = MergeExpandedPaths(state.ExpandedPaths, reveal.ExpansionPaths);
+            var primaryTargetNodePath = revealPrimarySelection
+                ? ResolvePrimaryTargetNodePath(query.Root, reveal)
+                : string.Empty;
+            var effectiveViewportOffset = primaryTargetNodePath.Length == 0
+                ? viewportOffset
+                : ProjectBrowserVirtualizationPlanner.ResolveContainingPageOffset(
+                    query.Root,
+                    expanded,
+                    primaryTargetNodePath,
+                    viewportPageSize);
             var viewport = ProjectBrowserVirtualizationPlanner.BuildViewport(
                 query.Root,
                 expanded,
-                viewportOffset,
+                effectiveViewportOffset,
                 viewportPageSize);
-            return new ProjectBrowserWorkspacePlan(query, viewport, reveal, expanded);
+            return new ProjectBrowserWorkspacePlan(query, viewport, reveal, primaryTargetNodePath, expanded);
         }
 
         public static ProjectBrowserWorkspaceState ApplySelection(
@@ -186,6 +200,20 @@ namespace QS3D.Core.Navigation
             foreach (var path in persisted ?? Enumerable.Empty<string>()) merged.Add(path);
             foreach (var path in revealRequired ?? Enumerable.Empty<string>()) merged.Add(path);
             return merged.ToList().AsReadOnly();
+        }
+
+        private static string ResolvePrimaryTargetNodePath(
+            ProjectBrowserNode root,
+            ProjectBrowserSelectionRevealPlan reveal)
+        {
+            if (!reveal.HasSelection || string.IsNullOrEmpty(reveal.PrimaryElementId)) return string.Empty;
+            var primaryReveal = ProjectBrowserSelectionPlanner.PlanReveal(
+                root,
+                new[] { reveal.PrimaryElementId },
+                reveal.PrimaryElementId);
+            if (primaryReveal.TargetNodePaths.Count != 1)
+                throw new InvalidOperationException("Project browser primary selection must resolve to exactly one reveal target node.");
+            return primaryReveal.TargetNodePaths[0];
         }
     }
 }
