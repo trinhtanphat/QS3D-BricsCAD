@@ -28,7 +28,8 @@ def main() -> None:
     state_store = STATE_STORE.read_text(encoding="utf-8")
 
     host_markers = (
-        "static WorkspacePanel()",
+        "BrowserClassHandlersRegistered = RegisterBrowserClassHandlers()",
+        "private static bool RegisterBrowserClassHandlers()",
         "FrameworkElement.LoadedEvent",
         "FrameworkElement.UnloadedEvent",
         "ProjectBrowserWorkspaceCoordinator.Build",
@@ -98,7 +99,7 @@ def main() -> None:
     field_lines = [
         line.strip()
         for line in host.splitlines()
-        if re.match(r"^\s*private\s+(?:readonly\s+)?[^\(]+\s+_[A-Za-z0-9_]+(?:\s*=|\s*;)", line)
+        if re.match(r"^\s*private\s+(?:static\s+)?(?:readonly\s+)?[^\(]+\s+_[A-Za-z0-9_]+(?:\s*=|\s*;)", line)
     ]
     for line in field_lines:
         if re.search(r"\b(?:Document|Database|ObjectId|Handle)\b", line):
@@ -112,9 +113,10 @@ def main() -> None:
         "Handle _browser",
         "Document _browser",
         "Database _browser",
+        "static WorkspacePanel()",
     ):
         if marker in host:
-            fail("host adapter violates presentation/non-creating boundary: " + marker)
+            fail("host adapter violates presentation/composable-lifecycle boundary: " + marker)
 
     # Browser -> CAD: resolve complete live provenance, then re-check active DWG, canonical project
     # instance and semantic version immediately before PICKFIRST is changed.
@@ -156,7 +158,7 @@ def main() -> None:
     ):
         require(persist, marker, "presentation persistence")
 
-    print("PASS hosted Project Browser uses semantic-only modeless state, exact-DWG/project commit revalidation and ChangeVersion-safe presentation persistence")
+    print("PASS hosted Project Browser uses composable Workspace lifecycle, semantic-only modeless state, exact-DWG/project commit revalidation and ChangeVersion-safe presentation persistence")
 
 
 if __name__ == "__main__":
