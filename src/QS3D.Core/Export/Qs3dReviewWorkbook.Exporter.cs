@@ -70,10 +70,28 @@ namespace QS3D.Core.Export
                 if (single && (row.Count != 1 || row.ElementIds.Count != 1)) throw new InvalidDataException("02_CHI_TIET_QTO requires exactly one semantic element per row.");
                 if (row.SourceHandles.Count == 0) throw new InvalidDataException("QS3D Review QTO row requires CAD Handle provenance.");
                 if (!string.Equals((row.DrawingFingerprint ?? string.Empty).Trim(), fingerprint, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("QS3D Review QTO row belongs to a different DrawingFingerprint.");
-                Distinct(row.ElementIds, "QTO ElementId"); Distinct(row.SourceHandles, "QTO CAD Handle"); Evidence(row);
+                CanonicalElementIds(row.ElementIds); Distinct(row.ElementIds, "QTO ElementId"); Distinct(row.SourceHandles, "QTO CAD Handle"); Evidence(row);
                 result.Add(row);
             }
             return result;
+        }
+
+        private static void CanonicalElementIds(IEnumerable<string> values)
+        {
+            foreach (var value in values)
+            {
+                var original = value ?? string.Empty;
+                if (!string.Equals(original, original.Trim(), StringComparison.Ordinal))
+                    throw new InvalidDataException("QTO ElementId must not contain surrounding whitespace.");
+                try
+                {
+                    Qs3dReviewModelInfo.VerifyXml(original, "QTO ElementId");
+                }
+                catch (ArgumentException error)
+                {
+                    throw new InvalidDataException("QTO ElementId contains characters that cannot be stored as provenance identity.", error);
+                }
+            }
         }
 
         private static void Evidence(QuantityReportRow row)

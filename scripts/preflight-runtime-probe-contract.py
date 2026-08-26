@@ -6,8 +6,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBE = ROOT / "src" / "QS3D.BricsCAD.V25" / "RuntimeProbeCommands.cs"
+V25_WRAPPER = ROOT / "scripts" / "test-bricscad-v25-runtime.ps1"
 RUNNERS = (
-    ROOT / "scripts" / "test-bricscad-v25-runtime.ps1",
+    ROOT / "scripts" / "test-bricscad-v25-runtime-core.ps1",
     ROOT / "scripts" / "test-bricscad-v26-runtime.ps1",
 )
 
@@ -60,8 +61,21 @@ def main():
     if '"quantity_palette_visible=true"' in probe_text:
         errors.append("runtime probe reports the quantity insight palette as visible")
 
+    if not V25_WRAPPER.is_file():
+        errors.append("V25 runtime profile-safety wrapper is missing")
+    else:
+        wrapper_text = V25_WRAPPER.read_text(encoding="utf-8")
+        for needle in (
+            "test-bricscad-v25-runtime-core.ps1",
+            "New-Qs3dV25ProfileSandbox",
+            "Restore-Qs3dV25ProfileSandbox",
+            ". $coreScript @coreArgs",
+        ):
+            if needle not in wrapper_text:
+                errors.append("V25 runtime wrapper missing split-contract token: {}".format(needle))
+
     expected_host_identity = {
-        "test-bricscad-v25-runtime.ps1": ("25", "V25"),
+        "test-bricscad-v25-runtime-core.ps1": ("25", "V25"),
         "test-bricscad-v26-runtime.ps1": ("26", "V26"),
     }
     for runner in RUNNERS:
@@ -88,7 +102,7 @@ def main():
             print("[FAIL] {}".format(error))
         return 1
 
-    print("[OK] runtime probe contract: native identity matches; Workspace visible, BIM Right Panel visible, Quantity Insight hidden")
+    print("[OK] runtime probe contract: V25 wrapper delegates to the profile-safe core; native identity matches; Workspace visible, BIM Right Panel visible, Quantity Insight hidden")
     return 0
 
 
