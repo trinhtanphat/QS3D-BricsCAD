@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "scripts" / "v25-profile-sandbox.ps1"
 WRAPPER = ROOT / "scripts" / "test-bricscad-v25-runtime.ps1"
 CORE = ROOT / "scripts" / "test-bricscad-v25-runtime-core.ps1"
+RUNBOOK = ROOT / "docs" / "V25-PROFILE-SANDBOX-CONTRACT.md"
 
 
 def require(text: str, token: str, label: str) -> None:
@@ -61,14 +62,16 @@ class FakeProfiles:
     def restore(self, before: Snapshot, nonce: str) -> None:
         if nonce in before.names or not nonce.startswith("QS3D-AUTO-"):
             raise RuntimeError("not runner-owned")
-        self.names.discard(nonce)
+        # Mirror the production safety order: make the protected pointer safe first,
+        # then remove only the runner-owned nonce profile.
         self.cur = None if not before.cur_exists else (before.cur_kind or "", before.cur_value)
+        self.names.discard(nonce)
         if self.capture() != before:
             raise RuntimeError("protected profile boundary drift")
 
 
 def model_regressions() -> None:
-    # Normal pass / mutation by host: the nonce is removed and exact pointer restored.
+    # Normal pass / mutation by host: exact pointer is restored before nonce removal.
     state = FakeProfiles(["Default", "QS3D-V25-TEST"], ("String", "Default"))
     before = state.capture()
     nonce = state.allocate("QS3D-V25-TEST", ["QS3D-AUTO-a"])
@@ -110,6 +113,7 @@ def source_contract() -> None:
     helper = HELPER.read_text(encoding="utf-8")
     wrapper = WRAPPER.read_text(encoding="utf-8")
     core = CORE.read_text(encoding="utf-8")
+    runbook = RUNBOOK.read_text(encoding="utf-8")
 
     for token, label in [
         ("Software\\Bricsys\\BricsCAD\\V25x64\\en_US\\Profiles", "V25-only registry root"),
@@ -129,6 +133,13 @@ def source_contract() -> None:
     forbid(helper, "V26x64", "cross-major registry mutation")
     forbid(helper, "DeleteSubKeyTree($SourceProfile", "source profile deletion")
 
+    restore_body = helper[helper.index("function Restore-Qs3dV25ProfileSandbox") :]
+    set_pointer = restore_body.index("$profiles.SetValue('CurProfile'")
+    delete_pointer = restore_body.index("$profiles.DeleteValue('CurProfile', $false)")
+    delete_nonce = restore_body.index("$profiles.DeleteSubKeyTree($nonceName, $false)")
+    if max(set_pointer, delete_pointer) > delete_nonce:
+        raise AssertionError("protected CurProfile restoration must precede runner-owned nonce deletion")
+
     for token, label in [
         ("test-bricscad-v25-runtime-core.ps1", "stable runtime core delegation"),
         ("New-Qs3dV25ProfileSandbox", "sandbox allocation before runtime"),
@@ -147,6 +158,16 @@ def source_contract() -> None:
         raise AssertionError("profile sandbox must be allocated before host launch")
     if wrapper.index("Restore-Qs3dV25ProfileSandbox") < wrapper.index("finally {"):
         raise AssertionError("profile restoration must remain in finally")
+
+    for token, label in [
+        (". ./scripts/v25-profile-sandbox.ps1", "dot-source composition example"),
+        ("New-Qs3dV25ProfileSandbox", "allocation contract"),
+        ("Restore-Qs3dV25ProfileSandbox", "finally cleanup contract"),
+        ("QS3D-AUTO-", "runner-owned nonce boundary"),
+        ("restore `CurProfile` before deleting the nonce", "cleanup ordering rule"),
+        ("does not make other `/P` launchers profile-safe", "bounded migration rule"),
+    ]:
+        require(runbook, token, label)
 
     # Preserve the mature runtime validation in an isolated core instead of reimplementing it.
     for token in [
