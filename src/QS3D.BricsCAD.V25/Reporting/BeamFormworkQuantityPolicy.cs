@@ -142,7 +142,7 @@ namespace QS3D.BricsCAD.V25.Reporting
 
                 kept.Add(new QuantityFormworkFaceExplanation
                 {
-                    FaceId = face.FaceId,
+                    FaceId = face.FaceId ?? string.Empty,
                     SemanticKey = face.SemanticKey ?? string.Empty,
                     FaceType = kind ?? "Other",
                     GrossArea = face.GrossArea,
