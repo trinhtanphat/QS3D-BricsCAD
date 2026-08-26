@@ -51,7 +51,7 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
                 }
 
-                var currentRows = BuildPreviewRows(project, out _);
+                var currentRows = BuildPreviewRows(document, project, out _);
                 var elementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var item in selectedItems)
                 {

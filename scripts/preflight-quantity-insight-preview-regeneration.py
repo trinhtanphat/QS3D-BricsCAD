@@ -9,12 +9,12 @@ def main():
     text = SOURCE.read_text(encoding="utf-8")
     required = [
         "using QS3D.Core.Persistence;",
-        "private static IReadOnlyList<QuantityReportRow> BuildPreviewRows(ProjectState project, out int regenerated)",
+        "private static IReadOnlyList<QuantityReportRow> BuildPreviewRows(Document document, ProjectState project, out int regenerated)",
         "var previewProject = ProjectStateSnapshot.CreateDetachedCopy(project);",
         "regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(previewProject);",
         "return ProjectQuantityReportBuilder.Detail(previewProject);",
-        "var rows = BuildPreviewRows(project, out var regenerated);",
-        "var currentRows = BuildPreviewRows(project, out _);",
+        "var rows = BuildPreviewRows(document, project, out var regenerated);",
+        "var currentRows = BuildPreviewRows(document, project, out _);",
         "preview-regenerate ",
         "snapshot tách rời",
     ]
@@ -36,7 +36,7 @@ def main():
         return 1
 
     refresh_pos = text.find("public void RefreshQuantityInsights()")
-    refresh_preview_pos = text.find("BuildPreviewRows(project, out var regenerated)", refresh_pos)
+    refresh_preview_pos = text.find("BuildPreviewRows(document, project, out var regenerated)", refresh_pos)
     totals_pos = text.find("QuantityReportTotals.FromRows(rows)", refresh_preview_pos)
     if min(refresh_pos, refresh_preview_pos, totals_pos) < 0 or not (
         refresh_pos < refresh_preview_pos < totals_pos
@@ -45,7 +45,7 @@ def main():
         return 1
 
     resolve_pos = text.find("private QuantityReportRow ResolveCurrentRow")
-    current_preview_pos = text.find("BuildPreviewRows(project, out _)", resolve_pos)
+    current_preview_pos = text.find("BuildPreviewRows(document, project, out _)", resolve_pos)
     match_pos = text.find("SameElementIdentity(displayedIds, x)", current_preview_pos)
     same_row_pos = text.find("if (!SameRow(displayedRow, matches[0]))", match_pos)
     if min(resolve_pos, current_preview_pos, match_pos, same_row_pos) < 0 or not (

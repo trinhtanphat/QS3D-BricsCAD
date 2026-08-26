@@ -51,13 +51,12 @@ REQUIRED = {
         "OnQuantityGeometryDeductionClick",
         "PrepareQuantityGeometrySnapshot(document, project, ids, out var geometryError)",
         "TryRevalidateQuantityGeometry(",
-        "ProjectStateSnapshot.CreateDetachedCopy(project)",
-        "RegenerateDirty(preview)",
         "var currentElementIds = CanonicalIds(option.Row.ElementIds).ToArray()",
         "elementIds = currentElementIds",
-        "ProjectQuantityReportBuilder.Detail(preview, currentElementIds)",
+        "BuildPreviewRows(document, project, out _)",
         "SameElementIdentity(currentElementIds, x)",
         "SameRow(option.Row, matches[0])",
+        "PrepareQuantityGeometrySnapshot(document, project, currentElementIds, out var geometryError)",
         "ResolveQuantityPreferredLiveHandles(document, project, semanticIds, out var resolutionError)",
         "ViewportCommands.TryZoomSelection(document)",
         "GeometryFingerprint",
@@ -116,11 +115,9 @@ def main():
     face_sort_start = ui.find("private static int FaceSort", revalidate_start)
     revalidate = ui[revalidate_start:face_sort_start] if revalidate_start >= 0 and face_sort_start > revalidate_start else ""
     ordered = (
-        "ProjectStateSnapshot.CreateDetachedCopy(project)",
-        "RegenerateDirty(preview)",
         "var currentElementIds = CanonicalIds(option.Row.ElementIds).ToArray()",
         "elementIds = currentElementIds",
-        "ProjectQuantityReportBuilder.Detail(preview, currentElementIds)",
+        "BuildPreviewRows(document, project, out _)",
         "SameElementIdentity(currentElementIds, x)",
         "SameRow(option.Row, matches[0])",
         "PrepareQuantityGeometrySnapshot(document, project, currentElementIds, out var geometryError)",
@@ -147,7 +144,7 @@ def main():
     print(" - Residual subtraction prevents double volume deduction")
     print(" - Multi-Solid3d face identities are component-scoped")
     print(" - Contact-probe cut planes cannot masquerade as original target faces")
-    print(" - Locate regenerates a detached semantic preview, rebuilds live geometry, and requires the same BREP fingerprint")
+    print(" - Locate reuses the canonical document-aware detached preview, rebuilds live geometry, and requires the same BREP fingerprint")
     print(" - Preferred live handles + direct CAD select/zoom are used for target/deduction locate")
     print(" - BREP compile reference and SI unit normalization")
     return 0

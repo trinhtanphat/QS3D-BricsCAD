@@ -38,7 +38,7 @@ def main():
     require(bridge, "ProjectContextCoordinator.TryGetReadOnly", "existing-project read-only boundary", failures)
     require(bridge, "SameProjectIdentity(project)", "DWG/project refresh identity guard", failures)
     require(bridge, "SelectedScopeItems()", "tree scope projection", failures)
-    require(bridge, "BuildPreviewRows(project, out _)", "canonical detached quantity preview", failures)
+    require(bridge, "BuildPreviewRows(document, project, out _)", "canonical detached quantity preview", failures)
     require(bridge, "SameRow(displayedRow, matches[0])", "stale quantity/provenance rejection", failures)
     require(bridge, "SourceHandleResolver.Resolve(project, elementIds)", "canonical semantic-to-CAD provenance", failures)
     require(bridge, "Cad.CadHandleService.Resolve(document, handles)", "all-live Handle pre-resolution", failures)

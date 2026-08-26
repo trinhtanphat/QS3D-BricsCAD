@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Bricscad.ApplicationServices;
+using QS3D.BricsCAD.V25.Reporting;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI.ViewModels;
 using QS3D.Core.Domain;
@@ -57,7 +58,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             try
             {
-                var rows = BuildPreviewRows(project, out var regenerated);
+                var rows = BuildPreviewRows(document, project, out var regenerated);
                 var rowSnapshots = new Dictionary<QuantityInsightItemViewModel, QuantityReportRow>();
                 var floors = rows
                     .GroupBy(x => DisplayFloor(x.Floor), StringComparer.OrdinalIgnoreCase)
@@ -148,11 +149,47 @@ namespace QS3D.BricsCAD.V25.UI
             RefreshQuantityInsights();
         }
 
-        private static IReadOnlyList<QuantityReportRow> BuildPreviewRows(ProjectState project, out int regenerated)
+        private static IReadOnlyList<QuantityReportRow> BuildPreviewRows(Document document, ProjectState project, out int regenerated)
         {
+            if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
             var previewProject = ProjectStateSnapshot.CreateDetachedCopy(project);
             regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(previewProject);
+
+            var rules = new QuantityCalculationRuleSet(new QuantitySettingsStore().Load());
+            foreach (var beam in previewProject.Elements.Where(x => x.Category == ElementCategory.Beam))
+                BeamFormworkQuantityPolicy.ApplyAnalyticFallback(beam, rules);
+
+            var beamIds = project.Elements
+                .Where(x => x.Category == ElementCategory.Beam)
+                .Select(x => x.Id)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (beamIds.Length > 0)
+            {
+                var geometryProject = PrepareQuantityGeometrySnapshot(document, project, beamIds, out _);
+                if (geometryProject != null)
+                {
+                    foreach (var beamId in beamIds)
+                    {
+                        try
+                        {
+                            var geometry = QuantityGeometryExplanationService.Build(document, geometryProject, beamId);
+                            geometry = BeamFormworkQuantityPolicy.Apply(document, geometryProject, beamId, geometry, rules);
+                            var previewBeam = previewProject.FindElement(beamId);
+                            if (previewBeam != null) BeamFormworkQuantityPolicy.ApplyExactQuantity(previewBeam, geometry);
+                        }
+                        catch (Exception ex) when (!(ex is OutOfMemoryException) && !(ex is StackOverflowException) && !(ex is AccessViolationException))
+                        {
+                            // Keep the rule-aware analytic fallback for this Beam. Exact BREP is
+                            // an enhancement of the detached preview, never a reason to restore
+                            // the old hard-coded Side+Bottom value or fail the whole report.
+                        }
+                    }
+                }
+            }
+
             return ProjectQuantityReportBuilder.Detail(previewProject);
         }
 
@@ -355,7 +392,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             try
             {
-                var currentRow = ResolveCurrentRow(item, project);
+                var currentRow = ResolveCurrentRow(item, document, project);
                 var handles = SourceHandleResolver.Resolve(project, currentRow.ElementIds);
                 if (handles.Count == 0)
                 {
@@ -433,7 +470,7 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
-        private QuantityReportRow ResolveCurrentRow(QuantityInsightItemViewModel item, ProjectState project)
+        private QuantityReportRow ResolveCurrentRow(QuantityInsightItemViewModel item, Document document, ProjectState project)
         {
             if (!_rowSnapshots.TryGetValue(item, out var displayedRow))
                 throw new InvalidOperationException("Dòng khối lượng không còn thuộc snapshot hiện hành của panel. Hãy bấm Làm mới.");
@@ -442,7 +479,7 @@ namespace QS3D.BricsCAD.V25.UI
             if (displayedIds.Length == 0)
                 throw new InvalidOperationException("Dòng khối lượng không có semantic ElementId ổn định để định vị an toàn.");
 
-            var currentRows = BuildPreviewRows(project, out _);
+            var currentRows = BuildPreviewRows(document, project, out _);
             var matches = currentRows.Where(x => x != null && SameElementIdentity(displayedIds, x)).ToList();
             if (matches.Count != 1)
                 throw new InvalidOperationException("Dòng khối lượng đã cũ hoặc không còn định danh duy nhất trong project hiện hành. Hãy bấm Làm mới.");
