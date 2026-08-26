@@ -83,6 +83,14 @@ namespace QS3D.Core.Export
                 var original = value ?? string.Empty;
                 if (!string.Equals(original, original.Trim(), StringComparison.Ordinal))
                     throw new InvalidDataException("QTO ElementId must not contain surrounding whitespace.");
+                try
+                {
+                    Qs3dReviewModelInfo.VerifyXml(original, "QTO ElementId");
+                }
+                catch (ArgumentException error)
+                {
+                    throw new InvalidDataException("QTO ElementId contains characters that cannot be stored as provenance identity.", error);
+                }
             }
         }
 
