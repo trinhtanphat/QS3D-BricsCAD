@@ -8,6 +8,7 @@ namespace QS3D.BricsCAD.V25
     internal static class SingleFootingContract
     {
         public const string SubtypeName = "Móng đơn";
+        public const string TreeTag = "Foundation.SingleFooting";
         public const string MarkerKey = "SingleFootingSubtype";
         public const string MarkerValue = "MongDon";
         public const string L1Key = "SingleFootingL1M";
@@ -17,6 +18,7 @@ namespace QS3D.BricsCAD.V25
         public const string H1Key = "SingleFootingH1M";
         public const string H2Key = "SingleFootingH2M";
         public const string VolumeKey = "SingleFootingVolumeM3";
+        public const string BaseElevationKey = "SingleFootingBaseElevationM";
         public const string GeneratedMode = "SingleFootingLoft";
 
         public static SingleFootingDimensions Defaults =>
@@ -36,6 +38,24 @@ namespace QS3D.BricsCAD.V25
                    char.IsWhiteSpace(name[SubtypeName.Length]);
         }
 
+        public static bool IsSingleFooting(ProjectElement? element)
+        {
+            if (element == null || element.Category != ElementCategory.Foundation) return false;
+            return element.Properties.TryGetValue(MarkerKey, out var marker) &&
+                   string.Equals((marker ?? string.Empty).Trim(), MarkerValue, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsDimensionKey(string? key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return false;
+            return string.Equals(key, L1Key, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, W1Key, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, L2Key, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, W2Key, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, H1Key, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, H2Key, StringComparison.OrdinalIgnoreCase);
+        }
+
         public static SingleFootingDimensions Read(ProjectFamily family)
         {
             if (family == null) throw new ArgumentNullException(nameof(family));
@@ -49,6 +69,20 @@ namespace QS3D.BricsCAD.V25
                 ReadNumber(family, W2Key),
                 ReadNumber(family, H1Key),
                 ReadNumber(family, H2Key));
+        }
+
+        public static SingleFootingDimensions WithDimension(SingleFootingDimensions current, string key, double valueM)
+        {
+            if (current == null) throw new ArgumentNullException(nameof(current));
+            if (!IsDimensionKey(key)) throw new ArgumentException("Unknown Móng đơn dimension key: " + key, nameof(key));
+
+            return new SingleFootingDimensions(
+                string.Equals(key, L1Key, StringComparison.OrdinalIgnoreCase) ? valueM : current.L1M,
+                string.Equals(key, W1Key, StringComparison.OrdinalIgnoreCase) ? valueM : current.W1M,
+                string.Equals(key, L2Key, StringComparison.OrdinalIgnoreCase) ? valueM : current.L2M,
+                string.Equals(key, W2Key, StringComparison.OrdinalIgnoreCase) ? valueM : current.W2M,
+                string.Equals(key, H1Key, StringComparison.OrdinalIgnoreCase) ? valueM : current.H1M,
+                string.Equals(key, H2Key, StringComparison.OrdinalIgnoreCase) ? valueM : current.H2M);
         }
 
         public static void Apply(ProjectFamily family, SingleFootingDimensions dimensions)
@@ -66,6 +100,8 @@ namespace QS3D.BricsCAD.V25
             family.Properties[H1Key] = Encode(dimensions.H1M);
             family.Properties[H2Key] = Encode(dimensions.H2M);
             family.Properties[VolumeKey] = Encode(dimensions.VolumeM3);
+            // Keep ThicknessM as a compatibility/quantity bridge for consumers that have not yet
+            // adopted the dedicated six-dimension schema. The Workspace hides this derived field.
             family.Properties["ThicknessM"] = Encode(dimensions.TotalHeightM);
             if (!family.Properties.ContainsKey("Material")) family.Properties["Material"] = "Bê tông";
         }
