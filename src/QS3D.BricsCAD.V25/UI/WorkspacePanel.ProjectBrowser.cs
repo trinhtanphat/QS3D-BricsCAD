@@ -14,15 +14,14 @@ using QS3D.Core.Domain;
 using QS3D.Core.Navigation;
 using QS3D.Core.Persistence;
 using QS3D.Core.Services;
-using Teigha.DatabaseServices;
 using Application = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
 {
     /// <summary>
-    /// Hosted V25 adapter for the source-safe Core Project Browser.
-    /// Modeless state contains only project/fingerprint/semantic/path identity. Native Handles and
-    /// ObjectIds are resolved from the active DWG at the instant a Browser -> CAD action executes.
+    /// Hosted V25 adapter for the Core Project Browser. Modeless state retains only semantic and
+    /// presentation identity. Native CAD identity is resolved against the exact active DWG at the
+    /// instant a Browser -> CAD action commits.
     /// </summary>
     public partial class WorkspacePanel
     {
@@ -33,6 +32,8 @@ namespace QS3D.BricsCAD.V25.UI
         private ProjectBrowserWorkspaceState _browserState = new ProjectBrowserWorkspaceState();
         private string _browserProjectId = string.Empty;
         private string _browserDrawingFingerprint = string.Empty;
+        private string _browserInspectionProjectId = string.Empty;
+        private string _browserInspectionDrawingFingerprint = string.Empty;
         private string _browserNodePath = string.Empty;
         private int _browserNodeOffset;
         private int _browserElementOffset;
@@ -94,6 +95,7 @@ namespace QS3D.BricsCAD.V25.UI
                 ItemsControl.ItemsSourceProperty,
                 typeof(ListView));
             _browserInspectionSourceDescriptor?.AddValueChanged(InspectionList, OnBrowserInspectionSourceChanged);
+            CaptureBrowserInspectionIdentity();
             QueueBrowserRefresh(true);
         }
 
@@ -106,19 +108,36 @@ namespace QS3D.BricsCAD.V25.UI
             _browserInspectionSourceDescriptor = null;
             _browserProjectId = string.Empty;
             _browserDrawingFingerprint = string.Empty;
+            _browserInspectionProjectId = string.Empty;
+            _browserInspectionDrawingFingerprint = string.Empty;
             _browserRefreshQueued = false;
             _browserForceRebindQueued = false;
         }
 
         private void OnBrowserDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
+            // The inspection list can still contain the old document while modeless Workspace is
+            // being rebound. Do not let that stale snapshot acquire the new document identity.
+            _browserInspectionProjectId = string.Empty;
+            _browserInspectionDrawingFingerprint = string.Empty;
             QueueBrowserRefresh(true);
         }
 
         private void OnBrowserInspectionSourceChanged(object? sender, EventArgs e)
         {
             if (!_browserAttached || _browserUpdating) return;
+            CaptureBrowserInspectionIdentity();
             Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(SyncProjectBrowserFromCad));
+        }
+
+        private void CaptureBrowserInspectionIdentity()
+        {
+            _browserInspectionProjectId = string.Empty;
+            _browserInspectionDrawingFingerprint = string.Empty;
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null || !ProjectContextCoordinator.TryGetReadOnly(document, out var project)) return;
+            _browserInspectionProjectId = project.ProjectId;
+            _browserInspectionDrawingFingerprint = project.DrawingFingerprint;
         }
 
         private void QueueBrowserRefresh(bool forceRebind)
@@ -140,10 +159,8 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void EnsureProjectBrowserSurface()
         {
-            if (_browserTabs != null) return;
-            if (!(ModelTree.Parent is DockPanel modelDock)) return;
+            if (_browserTabs != null || !(ModelTree.Parent is DockPanel modelDock)) return;
             modelDock.Children.Remove(ModelTree);
-
             var tabs = new TabControl
             {
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
@@ -152,9 +169,8 @@ namespace QS3D.BricsCAD.V25.UI
                 BorderBrush = TryFindResource("BorderBrush") as Brush,
                 BorderThickness = new Thickness(0)
             };
-            var modelTab = new TabItem { Header = "Mô hình", Content = ModelTree };
+            tabs.Items.Add(new TabItem { Header = "Mô hình", Content = ModelTree });
             var browserTab = new TabItem { Header = "Project Browser", Content = CreateProjectBrowserSurface() };
-            tabs.Items.Add(modelTab);
             tabs.Items.Add(browserTab);
             tabs.SelectionChanged += OnBrowserTabSelectionChanged;
             modelDock.Children.Add(tabs);
@@ -173,11 +189,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             var controls = new StackPanel { Margin = new Thickness(0, 0, 0, 4) };
             controls.Children.Add(new TextBlock { Text = "Tìm semantic", FontSize = 9 });
-            var query = new TextBox
-            {
-                MinHeight = 23,
-                ToolTip = "Tìm ID, Family, Category, tầng hoặc Zone; Enter để áp dụng."
-            };
+            var query = new TextBox { MinHeight = 23, ToolTip = "Tìm ID, Family, Category, tầng hoặc Zone; Enter để áp dụng." };
             query.KeyDown += OnBrowserQueryKeyDown;
             controls.Children.Add(query);
 
@@ -201,14 +213,14 @@ namespace QS3D.BricsCAD.V25.UI
             dirtyOnly.Click += OnBrowserDirtyOnlyChanged;
             controls.Children.Add(dirtyOnly);
 
-            var buttons = new WrapPanel { Margin = new Thickness(0, 3, 0, 0) };
+            var controlsRow = new WrapPanel { Margin = new Thickness(0, 3, 0, 0) };
             var refresh = new Button { Content = "Làm mới", MinHeight = 22, Margin = new Thickness(0, 0, 3, 0) };
             refresh.Click += OnBrowserRefreshClick;
             var reset = new Button { Content = "Reset", MinHeight = 22, ToolTip = "Xóa presentation state Project Browser." };
             reset.Click += OnBrowserResetClick;
-            buttons.Children.Add(refresh);
-            buttons.Children.Add(reset);
-            controls.Children.Add(buttons);
+            controlsRow.Children.Add(refresh);
+            controlsRow.Children.Add(reset);
+            controls.Children.Add(controlsRow);
             Grid.SetRow(controls, 0);
             root.Children.Add(controls);
 
@@ -239,12 +251,11 @@ namespace QS3D.BricsCAD.V25.UI
             root.Children.Add(elements);
 
             var footer = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
-            var nodePager = BuildPager("‹", "›", out var nodePrev, out var nodeNext, out var nodePage);
+            var nodePager = BuildBrowserPager("‹", "›", out var nodePrev, out var nodeNext, out var nodePage);
             nodePrev.Click += OnBrowserPreviousNodesClick;
             nodeNext.Click += OnBrowserNextNodesClick;
             footer.Children.Add(nodePager);
-
-            var elementPager = BuildPager("‹ id", "id ›", out var elementPrev, out var elementNext, out var elementPage);
+            var elementPager = BuildBrowserPager("‹ id", "id ›", out var elementPrev, out var elementNext, out var elementPage);
             elementPager.Margin = new Thickness(0, 2, 0, 0);
             elementPrev.Click += OnBrowserPreviousElementsClick;
             elementNext.Click += OnBrowserNextElementsClick;
@@ -279,7 +290,7 @@ namespace QS3D.BricsCAD.V25.UI
             return root;
         }
 
-        private static DockPanel BuildPager(
+        private static DockPanel BuildBrowserPager(
             string previousLabel,
             string nextLabel,
             out Button previous,
@@ -307,6 +318,7 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnBrowserRefreshClick(object sender, RoutedEventArgs e)
         {
             RefreshProjectBrowser(true);
+            CaptureBrowserInspectionIdentity();
             SyncProjectBrowserFromCad();
         }
 
@@ -314,10 +326,9 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                if (!TryCurrentBrowserProject(true, out var document, out var readOnlyProject, out var error))
+                if (!TryCurrentBrowserProject(true, out var document, out var expectedProject, out var error))
                     throw new InvalidOperationException(error);
-                var project = ExistingProjectMutationContext.Require(document, "Reset Project Browser presentation state");
-                RequireBrowserIdentity(project, readOnlyProject.ProjectId, readOnlyProject.DrawingFingerprint);
+                var project = RequireCanonicalBrowserMutationProject(document, expectedProject, "Reset Project Browser presentation state");
                 var version = project.ChangeVersion;
                 _browserStateStore.Clear(project);
                 RequireBrowserVersionInvariant(project, version);
@@ -393,7 +404,6 @@ namespace QS3D.BricsCAD.V25.UI
                     ClearProjectBrowser(error);
                     return;
                 }
-
                 if (forceRebind ||
                     !string.Equals(project.ProjectId, _browserProjectId, StringComparison.OrdinalIgnoreCase) ||
                     !string.Equals(project.DrawingFingerprint, _browserDrawingFingerprint, StringComparison.OrdinalIgnoreCase))
@@ -405,7 +415,6 @@ namespace QS3D.BricsCAD.V25.UI
                     _browserNodeOffset = 0;
                     _browserElementOffset = 0;
                 }
-
                 var version = project.ChangeVersion;
                 var plan = ProjectBrowserWorkspaceCoordinator.Build(project, _browserState, _browserNodeOffset, BrowserNodePageSize);
                 RequireBrowserVersionInvariant(project, version);
@@ -421,14 +430,12 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (_browserNodes == null || _browserElements == null || _browserGrouping == null ||
                 _browserQuery == null || _browserDirtyOnly == null) return;
-
             _browserUpdating = true;
             try
             {
                 _browserGrouping.SelectedValue = _browserState.Grouping;
                 if (!_browserQuery.IsKeyboardFocusWithin) _browserQuery.Text = _browserState.Query;
                 _browserDirtyOnly.IsChecked = _browserState.DirtyOnly;
-
                 var nodeRows = plan.Viewport.Rows.Select(row => new BrowserNodeRow(row)).ToList();
                 _browserNodes.ItemsSource = nodeRows;
                 var targetPath = _browserNodePath;
@@ -438,7 +445,6 @@ namespace QS3D.BricsCAD.V25.UI
                 _browserNodes.SelectedItem = selectedNode;
                 if (selectedNode != null) _browserNodes.ScrollIntoView(selectedNode);
                 _browserNodePath = selectedNode?.Path ?? targetPath;
-
                 RenderProjectBrowserElements(project, plan.Query.Root);
                 UpdateBrowserNodePaging(plan.Viewport);
                 SetBrowserEnabled(true);
@@ -446,10 +452,7 @@ namespace QS3D.BricsCAD.V25.UI
                     plan.Viewport.TotalVisibleRows + " node • " + plan.Query.MatchedCount +
                     " / " + plan.Query.TotalCount + " semantic • selection " + plan.Reveal.SelectedElementIds.Count + ".");
             }
-            finally
-            {
-                _browserUpdating = false;
-            }
+            finally { _browserUpdating = false; }
         }
 
         private void RenderProjectBrowserElements(ProjectState project, ProjectBrowserNode root)
@@ -461,7 +464,6 @@ namespace QS3D.BricsCAD.V25.UI
                 UpdateBrowserElementPaging(null);
                 return;
             }
-
             var page = ProjectBrowserVirtualizationPlanner.GetElementPage(root, _browserNodePath, _browserElementOffset, BrowserElementPageSize);
             var rows = page.ElementIds.Select(id => BrowserElementRow.Create(project, id)).ToList();
             _browserElements.ItemsSource = rows;
@@ -484,10 +486,7 @@ namespace QS3D.BricsCAD.V25.UI
                 try { RenderProjectBrowserElements(project, plan.Query.Root); }
                 finally { _browserUpdating = false; }
             }
-            catch (Exception ex)
-            {
-                SetBrowserStatus("Project Browser node bị từ chối: " + ex.Message);
-            }
+            catch (Exception ex) { SetBrowserStatus("Project Browser node bị từ chối: " + ex.Message); }
         }
 
         private void OnBrowserNodeDoubleClick(object sender, MouseButtonEventArgs e)
@@ -502,10 +501,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _browserNodeOffset = 0;
                 RefreshProjectBrowser(false);
             }
-            catch (Exception ex)
-            {
-                SetBrowserStatus("Project Browser expand/collapse bị từ chối: " + ex.Message);
-            }
+            catch (Exception ex) { SetBrowserStatus("Project Browser expand/collapse bị từ chối: " + ex.Message); }
         }
 
         private void OnBrowserElementDoubleClick(object sender, MouseButtonEventArgs e) => SelectBrowserCad(true);
@@ -532,22 +528,19 @@ namespace QS3D.BricsCAD.V25.UI
                 if (ids.Count == 0) throw new InvalidOperationException("Project Browser chưa có semantic element để chọn CAD.");
                 ResolveAndSelectBrowserCad(document, project, ids, zoom);
             }
-            catch (Exception ex)
-            {
-                SetBrowserStatus("Browser → CAD bị từ chối: " + ex.Message);
-            }
+            catch (Exception ex) { SetBrowserStatus("Browser → CAD bị từ chối: " + ex.Message); }
         }
 
         private void ResolveAndSelectBrowserCad(Document document, ProjectState project, IReadOnlyList<string> elementIds, bool zoom)
         {
             RequireBrowserIdentity(project, _browserProjectId, _browserDrawingFingerprint);
+            var sourceVersion = project.ChangeVersion;
             var ids = elementIds
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Select(id => id.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
             if (ids.Count == 0) throw new InvalidOperationException("Project Browser semantic selection is empty.");
-
             foreach (var id in ids)
             {
                 var element = project.FindElement(id)
@@ -563,12 +556,19 @@ namespace QS3D.BricsCAD.V25.UI
                 .OrderBy(handle => handle, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             if (handles.Count == 0) throw new InvalidOperationException("Semantic selection không có CAD provenance có thể Locate.");
-
             var objectIds = CadHandleService.Resolve(document, handles);
             if (objectIds.Count != handles.Count)
                 throw new InvalidOperationException("Không resolve đủ live CAD objects; PICKFIRST được giữ nguyên để tránh partial Locate.");
 
             var state = ProjectBrowserWorkspaceCoordinator.ApplySelection(project, _browserState, ids, ids[0]);
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException("Active DWG changed before Browser → CAD selection commit; PICKFIRST was not changed.");
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject) || !ReferenceEquals(currentProject, project))
+                throw new InvalidOperationException("Project Browser canonical project instance changed before CAD selection; PICKFIRST was not changed.");
+            RequireBrowserIdentity(currentProject, _browserProjectId, _browserDrawingFingerprint);
+            if (project.ChangeVersion != sourceVersion)
+                throw new InvalidOperationException("Project changed before Browser → CAD selection commit; PICKFIRST was not changed.");
+
             document.Editor.SetImpliedSelection(objectIds.ToArray());
             try
             {
@@ -579,7 +579,11 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 SetBrowserStatus("Đã chọn CAD nhưng không lưu được browser presentation state: " + persistenceError.Message);
             }
-            if (zoom) Send("QS3DZOOMSELECTED");
+            if (zoom)
+            {
+                if (ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)) Send("QS3DZOOMSELECTED");
+                else SetBrowserStatus("CAD selection đã commit trên DWG nguồn; active DWG đổi trước Zoom nên Zoom bị bỏ qua.");
+            }
             QueueBrowserRefresh(false);
         }
 
@@ -593,6 +597,10 @@ namespace QS3D.BricsCAD.V25.UI
                     RefreshProjectBrowser(true);
                     if (!TryCurrentBrowserProject(false, out document, out project, out error)) throw new InvalidOperationException(error);
                 }
+                if (string.IsNullOrWhiteSpace(_browserInspectionProjectId) ||
+                    !string.Equals(project.ProjectId, _browserInspectionProjectId, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(project.DrawingFingerprint, _browserInspectionDrawingFingerprint, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("CAD inspection belongs to a stale/other DWG; callback ignored until current selection refresh.");
 
                 IReadOnlyList<ProjectElement> elements;
                 string selectionError;
@@ -605,7 +613,6 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     elements = Array.Empty<ProjectElement>();
                 }
-
                 var ids = elements.Select(element => element.Id).ToList();
                 var state = ProjectBrowserWorkspaceCoordinator.ApplySelection(project, _browserState, ids, ids.Count == 0 ? null : ids[0]);
                 PersistBrowserState(document, project, state);
@@ -617,10 +624,7 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!string.IsNullOrWhiteSpace(selectionError))
                     SetBrowserStatus(selectionError + " Project Browser selection đã clear fail-closed.");
             }
-            catch (Exception ex)
-            {
-                SetBrowserStatus("CAD → Browser bị từ chối: " + ex.Message);
-            }
+            catch (Exception ex) { SetBrowserStatus("CAD → Browser bị từ chối: " + ex.Message); }
         }
 
         private void OnBrowserPreviousNodesClick(object sender, RoutedEventArgs e)
@@ -681,15 +685,23 @@ namespace QS3D.BricsCAD.V25.UI
             return true;
         }
 
-        private void PersistBrowserState(Document document, ProjectState readOnlyProject, ProjectBrowserWorkspaceState state)
+        private void PersistBrowserState(Document document, ProjectState expectedProject, ProjectBrowserWorkspaceState state)
         {
             if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
                 throw new InvalidOperationException("Active DWG changed before Project Browser state could be persisted.");
-            var project = ExistingProjectMutationContext.Require(document, "Project Browser presentation state");
-            RequireBrowserIdentity(project, readOnlyProject.ProjectId, readOnlyProject.DrawingFingerprint);
+            var project = RequireCanonicalBrowserMutationProject(document, expectedProject, "Project Browser presentation state");
             var version = project.ChangeVersion;
             _browserStateStore.Save(project, state);
             RequireBrowserVersionInvariant(project, version);
+        }
+
+        private ProjectState RequireCanonicalBrowserMutationProject(Document document, ProjectState expectedProject, string context)
+        {
+            var project = ExistingProjectMutationContext.Require(document, context);
+            if (!ReferenceEquals(project, expectedProject))
+                throw new InvalidOperationException("Project Browser canonical project instance changed; Refresh required.");
+            RequireBrowserIdentity(project, expectedProject.ProjectId, expectedProject.DrawingFingerprint);
+            return project;
         }
 
         private static void RequireBrowserIdentity(ProjectState project, string projectId, string drawingFingerprint)
