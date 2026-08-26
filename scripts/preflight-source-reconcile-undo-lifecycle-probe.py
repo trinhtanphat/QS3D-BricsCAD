@@ -121,8 +121,10 @@ if RUNNER.is_file():
         'samples\\generated\\QS3D-Sample.dwg',
         'ArtifactDir must stay outside the repository.',
         'requires a clean exact-SHA worktree.',
-        '$expectedRevision = "+" + $gitHead',
-        'ProductVersion',
+        'function Assert-Qs3dExactBuildIdentity',
+        'Get-FileHash -LiteralPath $pair[0] -Algorithm SHA256',
+        'Get-FileHash -LiteralPath $pair[1] -Algorithm SHA256',
+        'Assert-Qs3dExactBuildIdentity -RepoRoot $repoRoot -BricsCadDir $BricsCadDir -PluginDll $PluginDll -CoreDll $coreDll',
         'Get-Process -Name "bricscad"',
         'Start-Process -FilePath $bricscadExe',
         '-WindowStyle Hidden',
@@ -162,6 +164,10 @@ if RUNNER.is_file():
     for token in required:
         if token not in text:
             errors.append("Undo lifecycle runner missing contract token: " + token)
+
+    for forbidden in ('$expectedRevision', '.VersionInfo.ProductVersion', 'EndsWith($expectedRevision'):
+        if forbidden in text:
+            errors.append("Undo lifecycle runner reintroduced retired ProductVersion exact-SHA identity: " + forbidden)
 
     if 'variants = @($results)' in text:
         errors.append("Undo lifecycle runner regressed to Windows PowerShell 5.1-incompatible generic-list array materialization")
