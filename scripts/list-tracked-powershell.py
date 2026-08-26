@@ -180,7 +180,9 @@ def main(argv: list[str] | None = None) -> int:
     except EnumerationError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
-    print(json.dumps(scripts, ensure_ascii=False))
+    # ASCII-only JSON is a stable cross-process wire format on Windows runners whose
+    # redirected stdout encoding may not represent every valid UTF-8 Git pathname.
+    print(json.dumps(scripts, ensure_ascii=True))
     return 0
 
 
