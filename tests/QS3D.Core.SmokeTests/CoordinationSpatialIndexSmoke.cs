@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Coordination;
@@ -18,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             ChangedOnlyMatchesImpactedFullPairs();
             SnapshotDiffTracksLifecycleChanges();
             SnapshotDiffTracksCaseOnlyIdentityDrift();
+            ItemEnumerationIsBounded();
             ChangedItemEnumerationIsBounded();
             InvalidInputsFailClosed();
         }
@@ -90,6 +92,49 @@ namespace QS3D.Core.SmokeTests
 
             Equal("a", string.Join("|", delta.ChangedOrAddedIds), "case-only ItemId drift was not detected");
             Equal(string.Empty, string.Join("|", delta.RemovedIds), "case-only ItemId drift was misclassified as removal");
+        }
+
+        private static void ItemEnumerationIsBounded()
+        {
+            CountedOversizeFailsBeforeEnumeration();
+            StreamingOversizeStopsAtFirstDisallowedEntry();
+            ExactBoundaryIsAccepted();
+        }
+
+        private static void CountedOversizeFailsBeforeEnumeration()
+        {
+            var source = new CountedNeverEnumerated<CoordinationSpatialItem>(MaximumEntries + 1);
+            var error = Capture<InvalidOperationException>(() => new CoordinationSpatialIndex(1d, source));
+
+            Equal(0, source.GetEnumeratorCalls, "oversized counted spatial items must fail before enumeration");
+            Contains("at most 10000", error.Message, "counted spatial-item oversize must report the coordination bound");
+        }
+
+        private static void StreamingOversizeStopsAtFirstDisallowedEntry()
+        {
+            var source = new StreamingItems(MaximumEntries + 2);
+            var error = Capture<InvalidOperationException>(() => new CoordinationSpatialIndex(1d, source));
+
+            Equal(MaximumEntries + 1, source.YieldedCount,
+                "streaming spatial-item ingestion must stop after observing item 10,001");
+            Contains("at most 10000", error.Message, "streaming spatial-item oversize must report the coordination bound");
+        }
+
+        private static void ExactBoundaryIsAccepted()
+        {
+            var items = new CoordinationSpatialItem[MaximumEntries];
+            for (var i = 0; i < items.Length; i++)
+            {
+                var coordinate = i * 2d;
+                items[i] = Item(
+                    "BOUND-" + i.ToString("D5", CultureInfo.InvariantCulture),
+                    "1",
+                    coordinate,
+                    coordinate);
+            }
+
+            var index = new CoordinationSpatialIndex(1d, items);
+            Equal(MaximumEntries, index.Items.Count, "spatial index must accept exactly 10,000 items");
         }
 
         private static void ChangedItemEnumerationIsBounded()
@@ -192,6 +237,34 @@ namespace QS3D.Core.SmokeTests
             {
                 GetEnumeratorCalls++;
                 throw new InvalidOperationException("Oversized counted source must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class StreamingItems : IEnumerable<CoordinationSpatialItem>
+        {
+            private readonly int _count;
+
+            internal StreamingItems(int count)
+            {
+                _count = count;
+            }
+
+            internal int YieldedCount { get; private set; }
+
+            public IEnumerator<CoordinationSpatialItem> GetEnumerator()
+            {
+                for (var i = 0; i < _count; i++)
+                {
+                    YieldedCount++;
+                    var coordinate = i * 2d;
+                    yield return Item(
+                        "STREAM-" + i.ToString("D5", CultureInfo.InvariantCulture),
+                        "1",
+                        coordinate,
+                        coordinate);
+                }
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
