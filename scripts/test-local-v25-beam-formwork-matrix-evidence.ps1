@@ -95,6 +95,10 @@ function Require-Near {
         throw "$Context.$Name must be numeric."
     }
 
+    if ([double]::IsNaN($actual) -or [double]::IsInfinity($actual)) {
+        throw "$Context.$Name must be a finite numeric value."
+    }
+
     if ([Math]::Abs($actual - $Expected) -gt $Tolerance) {
         throw ("{0}.{1} expected {2:R} +/- {3:R}; found {4:R}." -f $Context, $Name, $Expected, $Tolerance, $actual)
     }
@@ -182,8 +186,8 @@ Require-True -Object $environment -Name "interactive" -Context "environment"
 Require-True -Object $environment -Name "licensedBricsCadV25" -Context "environment"
 Require-EqualString -Actual ([string](Require-Property -Object $environment -Name "loadMode" -Context "environment")) -Expected "NETLOAD" -Label "environment.loadMode"
 $productVersion = [string](Require-Property -Object $environment -Name "bricsCadProductVersion" -Context "environment")
-if ($productVersion -notmatch '^25(?:\.|$)') {
-    throw "environment.bricsCadProductVersion must identify BricsCAD V25."
+if ($productVersion -notmatch '^25\.2\.10(?:\D|$)') {
+    throw "environment.bricsCadProductVersion must identify the qualified BricsCAD V25.2.10 host."
 }
 Require-EqualString -Actual ([string](Require-Property -Object $environment -Name "loadedPluginSha256" -Context "environment")) -Expected $ExpectedPluginSha256 -Label "environment.loadedPluginSha256"
 
