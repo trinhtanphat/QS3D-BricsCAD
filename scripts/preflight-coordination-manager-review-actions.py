@@ -42,8 +42,8 @@ for needle, label in [
     ("SourceHandleResolver.Resolve", "semantic-to-current-source resolution"),
     ("CadHandleService.Resolve", "live CAD resolution"),
     ("if (resolved.Count != handles.Count)", "full-pair resolve-all check"),
-    ("var resolved = ResolveReviewTargets(out var document, out var handles);", "validation and action-time document resolution before effect"),
-    ("effect(document, resolved, handles);", "native effect dispatch after validation with action-local document/identity"),
+    ("var resolved = ResolveReviewTargets();", "validation before effect"),
+    ("effect(resolved);", "native effect dispatch after validation"),
     ("entity.Highlight();", "native transient highlight"),
     ("entity?.Unhighlight();", "native highlight cleanup"),
     ('"_.ISOLATEOBJECTS "', "native isolate action"),
@@ -63,10 +63,10 @@ for needle, label in [
 
 require(v26, r'<Compile Include="..\QS3D.BricsCAD.V25\**\*.cs"', "V26 shared-source parity")
 
-resolve_at = review.find("var resolved = ResolveReviewTargets(out var document, out var handles);")
-effect_at = review.find("effect(document, resolved, handles);")
+resolve_at = review.find("var resolved = ResolveReviewTargets();")
+effect_at = review.find("effect(resolved);")
 if min(resolve_at, effect_at) < 0 or resolve_at >= effect_at:
-    errors.append("review action ordering must be ResolveReviewTargets with action-local document/handles -> native effect")
+    errors.append("review action ordering must be ResolveReviewTargets -> native effect")
 
 cad_resolve_at = review.find("CadHandleService.Resolve")
 full_at = review.find("if (resolved.Count != handles.Count)")

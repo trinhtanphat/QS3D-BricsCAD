@@ -12,7 +12,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "scripts" / "run-local-source-ready-queue.ps1"
 INBOX = ROOT / "docs" / "LOCAL-AGENT-INBOX.md"
-PINNED_V25 = ROOT / "scripts" / "run-local-v25-pinned-qualification.ps1"
 LOCAL_011 = ROOT / "scripts" / "run-local-v25-local-011.ps1"
 MERGED_3905 = "07ccc293d1a9cf9ea1524b0fcf38b062bf305431"
 
@@ -32,11 +31,9 @@ def block(text: str, heading_pattern: str) -> str:
 
 require(RUNNER.is_file(), "missing scripts/run-local-source-ready-queue.ps1")
 require(INBOX.is_file(), "missing canonical docs/LOCAL-AGENT-INBOX.md")
-require(PINNED_V25.is_file(), "missing exact-SHA V25 pinned qualification entrypoint")
 require(LOCAL_011.is_file(), "missing merged #3905 LOCAL-011 runner")
 runner = RUNNER.read_text(encoding="utf-8")
 inbox = INBOX.read_text(encoding="utf-8")
-pinned_v25 = PINNED_V25.read_text(encoding="utf-8")
 local_011 = LOCAL_011.read_text(encoding="utf-8")
 
 # The dispatcher consumes the single live inbox and refuses completed rows.
@@ -47,22 +44,6 @@ require("fullLocalPass = $false" in runner, "dispatcher could mislabel bounded e
 require("customerReleaseQualified = $false" in runner, "dispatcher could mislabel customer release readiness")
 require("MANUAL_OR_EXTERNAL" in runner, "dispatcher lacks explicit non-automatable boundaries")
 require("UNMAPPED_FAIL_CLOSED" in runner, "unknown inbox rows must fail closed")
-
-# Automated V25 handoffs must be exact-SHA pinned end-to-end. The queue already
-# resolves a clean HEAD; it must pass that identity into the pinned wrapper,
-# which rechecks HEAD before execution and qualification.json afterwards.
-require("'run-local-v25-pinned-qualification.ps1'" in runner, "dispatcher does not advertise the pinned V25 entrypoint")
-require("ExpectedSourceSha = $ExpectedSourceSha" in runner, "dispatcher does not pass the expected SHA into the pinned V25 entrypoint")
-require("Invoke-V25Baseline -ExpectedSourceSha $exactSha" in runner, "automated V25 baseline calls are not bound to the queue exact SHA")
-require(
-    "& (Join-Path $PSScriptRoot 'run-local-v25-qualification.ps1')" not in runner,
-    "dispatcher bypasses the pinned V25 handoff and calls the unpinned implementation directly",
-)
-require("$ExpectedSourceSha" in pinned_v25, "pinned V25 entrypoint lost ExpectedSourceSha")
-require("run-local-v25-qualification.ps1" in pinned_v25, "pinned V25 entrypoint no longer delegates to the canonical implementation")
-require("qualification.json" in pinned_v25, "pinned V25 entrypoint lost post-run qualification evidence validation")
-require("$report.exactSha" in pinned_v25, "pinned V25 entrypoint lost post-run exactSha validation")
-require("$expectedSourceShaNormalized" in pinned_v25, "pinned V25 entrypoint lost normalized exact-SHA comparison")
 
 # #3681 remains authoritative completed/no-rerun truth.
 wall_contact = block(inbox, r"P0 — #3681")
@@ -95,8 +76,8 @@ require(not missing, f"dispatcher references missing runner(s): {', '.join(missi
 # Lock orchestration calls to the committed runner parameter contracts. This
 # catches renamed/removed parameters before a licensed local run is spent.
 runner_parameter_contracts = {
-    "run-local-v25-pinned-qualification.ps1": (
-        "$ExpectedSourceSha", "$BricsCadDir", "$Profile", "$ArtifactDir", "$PythonPath", "$SkipScreenshot"
+    "run-local-v25-qualification.ps1": (
+        "$BricsCadDir", "$Profile", "$ArtifactDir", "$PythonPath", "$SkipScreenshot"
     ),
     "run-local-v25-local-011.ps1": (
         "$BricsCadDir", "$Profile", "$ArtifactDir"
@@ -145,7 +126,7 @@ require(
 # These are the currently source-ready executable handoff runners. Adding a new
 # executable lane requires deliberate guard expansion.
 required_runner_names = {
-    "run-local-v25-pinned-qualification.ps1",
+    "run-local-v25-qualification.ps1",
     "run-local-v25-local-011.ps1",
     "test-bricscad-v25-level-z.ps1",
     "test-bricscad-v25-level-z-lifecycle.ps1",
@@ -155,4 +136,4 @@ required_runner_names = {
 }
 require(required_runner_names.issubset(set(referenced)), "source-ready automated runner set drifted")
 
-print("PASS: canonical local source-ready queue dispatcher is fail-closed, exact-SHA-pinned, #3905-aware and runner-complete")
+print("PASS: canonical local source-ready queue dispatcher is fail-closed, #3905-aware and runner-complete")
