@@ -3,7 +3,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PROPERTY_SET = ROOT / "src/QS3D.Core/Domain/RaftFoundationPropertySet.cs"
+LEVEL_PLACEMENT = ROOT / "src/QS3D.Core/Domain/RaftFoundationLevelPlacement.cs"
 WORKSPACE = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.RaftFoundationWorkflow.cs"
+FAMILY_SUBTYPE = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.FamilySubtype.cs"
+BLT_WORKSPACE = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dFamilyWorkspace.cs"
+VISIBLE_ADD_ROUTE = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.RaftFoundationVisibleAddRoute.cs"
+CAD_VERTICAL = ROOT / "src/QS3D.BricsCAD.V25/Cad/CadElementVerticalPlacement.cs"
 GEOMETRY_SERVICE = ROOT / "src/QS3D.BricsCAD.V25/Reporting/QuantityGeometryExplanationService.cs"
 HIGHLIGHT = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.RaftHighlight.cs"
 SEMANTIC = ROOT / "src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.RaftSemanticFaces.cs"
@@ -32,30 +37,87 @@ def close(actual, expected, tolerance=1e-9):
 
 def main():
     prop = read(PROPERTY_SET)
+    placement = read(LEVEL_PLACEMENT)
     workspace = read(WORKSPACE)
+    family_subtype = read(FAMILY_SUBTYPE)
+    blt_workspace = read(BLT_WORKSPACE)
+    visible_add = read(VISIBLE_ADD_ROUTE)
+    cad_vertical = read(CAD_VERTICAL)
     geometry = read(GEOMETRY_SERVICE)
     highlight = read(HIGHLIGHT)
     semantic = read(SEMANTIC)
     transient = read(TRANSIENT)
     failures = []
 
-    # Móng -> Móng Bè -> Add is direct and opens the selected Family property surface.
-    require(workspace, "IsWorkspaceAddFamilyButton(button) && panel.IsRaftSubtypeFilter()", "direct raft Add interception", failures)
-    require(workspace, "panel.CreateFamilyFromWorkspaceSubtype(false);", "direct raft Family creation", failures)
-    require(workspace, "ApplyRaftFoundationPropertyForm(family)", "immediate raft property form", failures)
-    require(workspace, 'AddRaftFamilyPropertyRow(family, "Kích thước", "Dày", "ThicknessM"', "raft thickness property", failures)
-    require(workspace, '"Cao độ",\n                "Cao độ",\n                RaftFoundationPropertySet.ElevationModeKey', "raft elevation property", failures)
-    require(workspace, "RaftElevationChoices", "two elevation choices", failures)
-    require(workspace, "ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters", "thickness mm input", failures)
-    require(workspace, 'panel.Send("QS3DDRAWRAFTFOUNDATION")', "raft draw command", failures)
+    # The rendered BLT3D label is + Add. Pin that cross-file label to a direct raft route so
+    # the live click cannot fall through to the generic Family mode chooser.
+    require(blt_workspace, 'RenameBlt3dButton("+ Thêm", "+ Add")', "rendered + Add label", failures)
+    require(blt_workspace, 'string.Equals(text, "+ Add", StringComparison.Ordinal)', "BLT3D Add recognizer", failures)
+    require(visible_add, 'RaftVisibleAddLabel = "+ Add"', "raft visible Add contract", failures)
+    require(visible_add, "panel.IsRaftSubtypeFilter()", "visible Add raft subtype guard", failures)
+    require(visible_add, "e.Handled = true;", "visible Add claims routed click", failures)
+    require(visible_add, "panel.CreateFamilyFromWorkspaceSubtype(false);", "visible Add direct Family creation", failures)
+    require(workspace, "IsWorkspaceAddFamilyButton(button) && panel.IsRaftSubtypeFilter()", "legacy/direct raft Add interception", failures)
 
-    # Elevation mode is a strict two-value contract and resolves to the semantic bottom offset.
+    # Add/select/property must remain in the primary Family render path. A separate selection
+    # handler in the raft file is intentionally not accepted because generic rendering can win.
+    require(family_subtype, "var name = !string.IsNullOrWhiteSpace(subtype)", "deterministic subtype family naming", failures)
+    require(family_subtype, "NextSubtypeFamilyName(subtype, existingNames)", "next unique Móng Bè-n naming", failures)
+    require(family_subtype, "FamilyList.SelectedItem = live;", "new Family auto-selection", failures)
+    require(family_subtype, "RaftFoundationLevelPlacement.EnsureDefaults(project, family);", "Add seeds real raft Level placement", failures)
+    require(family_subtype, "if (family != null && RaftFoundationPropertySet.IsRaftFamily(family))", "primary family renderer raft branch", failures)
+    require(family_subtype, "ApplyRaftFoundationPropertyForm(family);", "primary family renderer dedicated raft form", failures)
+
+    # Owner-required dedicated Móng Bè schema. The generic Foundation Bề dày/Offset đáy schema
+    # is not a valid substitute for a raft Family.
+    require(workspace, 'Name = "Tên Family"', "Information/Tên Family", failures)
+    require(workspace, 'categoryRow.Value = RaftFoundationPropertySet.SubtypeName;', "Information/Loại cấu kiện Móng Bè", failures)
+    require(workspace, 'Name = "Tầng"', "Information/Tầng", failures)
+    require(workspace, 'AddRaftFamilyPropertyRow(family, "Kích thước", "Dày", RaftFoundationPropertySet.ThicknessKey', "Kích thước/Dày", failures)
+    require(workspace, 'AddRaftFamilyPropertyRow(family, "Cao độ", "Cách đặt", RaftFoundationPropertySet.ElevationModeKey', "Cao độ/Cách đặt", failures)
+    require(workspace, 'AddRaftFamilyPropertyRow(family, "Cao độ", "Cao độ đầu", RaftLevelSelectionKey', "Cao độ/Cao độ đầu", failures)
+    require(workspace, 'AddRaftFamilyPropertyRow(family, "Display", "Màu sắc", RaftColorModeKey', "Display/Màu sắc", failures)
+    require(workspace, 'AddRaftFamilyPropertyRow(family, "Display", "Độ trong suốt", RaftTransparencyKey', "Display/Độ trong suốt", failures)
+    require(workspace, '"ByLayer"', "Display/ByLayer", failures)
+    require(workspace, 'AddRaftFamilyPropertyRow(family, "Metadata", "Mark", RaftMarkKey', "Metadata/Mark", failures)
+    require(workspace, 'AddRaftFamilyPropertyRow(family, "Metadata", "Comment", RaftCommentKey', "Metadata/Comment", failures)
+    require(workspace, 'AddRaftFamilyPropertyRow(family, "Metadata", "WBS", RaftWbsKey', "Metadata/WBS", failures)
+    require(workspace, 'AddRaftFamilyPropertyRow(family, "Vật liệu", "Vật liệu", RaftMaterialKey', "Vật liệu/Vật liệu", failures)
+    require(workspace, 'AddRaftFamilyPropertyRow(family, "Vật liệu", "Loại vật liệu", RaftMaterialTypeKey', "Vật liệu/Loại vật liệu", failures)
+    forbid(workspace, '"Bề dày"', "raft dedicated renderer generic thickness label", failures)
+    forbid(workspace, '"Offset đáy"', "raft dedicated renderer generic bottom-offset label", failures)
+
+    # Exactly two semantic modes with one authoritative project-Level binding. Changing mode or
+    # Level clears the opposite binding, and UI choices come from real project Floors/Levels.
     require(prop, 'BottomLevelMode = "bottom_level"', "bottom_level contract", failures)
     require(prop, 'TopLevelMode = "top_level"', "top_level contract", failures)
-    require(prop, "NormalizeElevationMode", "strict elevation normalization", failures)
-    require(prop, "ResolveBottomOffsetM", "bottom-offset resolver", failures)
-    require(prop, "? -thicknessM", "top_level grows downward", failures)
-    require(workspace, "RaftFoundationPropertySet.ResolveBottomOffsetM(mode, thicknessM)", "workspace persists resolved bottom offset", failures)
+    require(prop, "NormalizeElevationMode", "strict two-mode normalization", failures)
+    require(prop, "ActiveLevelKey", "active Level key contract", failures)
+    require(prop, "OppositeLevelKey", "opposite Level key contract", failures)
+    require(workspace, "project.Floors.OrderBy(x => x.ElevationM)", "real project Level choices", failures)
+    require(workspace, "RaftFoundationPropertySet.ActiveLevelKey(mode)", "active Level mutation", failures)
+    require(workspace, "RaftFoundationPropertySet.OppositeLevelKey(mode)", "opposite Level mutation", failures)
+    require(workspace, "matches[0].Id", "persist selected project Level id", failures)
+    require(workspace, "RaftFoundationLevelPlacement.Resolve(project, owned);", "property edit fail-closed placement validation", failures)
+
+    # Core owns the only elevation arithmetic. Missing/invalid active Level or a retained opposite
+    # binding is an error; geometry and element metadata copy the same resolved Family placement.
+    require(placement, "Cao độ đầu chưa chọn Level", "missing active Level fails closed", failures)
+    require(placement, "Móng Bè chỉ được giữ một Level binding", "opposite Level fails closed", failures)
+    require(placement, "top = level.ElevationM;", "top_level top equals Level", failures)
+    require(placement, "bottom = top - thicknessM;", "top_level grows downward", failures)
+    require(placement, "bottom = level.ElevationM;", "bottom_level bottom equals Level", failures)
+    require(placement, "top = bottom + thicknessM;", "bottom_level grows upward", failures)
+    require(placement, "ApplyFamilyPlacementToElement", "Family placement copied to element metadata", failures)
+    require(placement, "element.SetProperty(activeKey, levelId);", "element persists active Level id", failures)
+    require(placement, "element.Properties.Remove(oppositeKey);", "element clears opposite Level id", failures)
+
+    # Native builders consume the Core raft placement rather than legacy source-relative Z.
+    require(cad_vertical, "RaftFoundationLevelPlacement.Resolve(project, element, family)", "native raft placement resolver", failures)
+    require(cad_vertical, "placement.UsesBottomLevel || placement.UsesTopLevel", "native absolute Level bottom", failures)
+    require(cad_vertical, "placement.BottomElevationM", "native bottom uses resolved elevation", failures)
+    require(cad_vertical, "UsesBottomLevel || UsesTopLevel", "fingerprint uses resolved Level bottom", failures)
+    require(workspace, 'panel.Send("QS3DDRAWRAFTFOUNDATION")', "raft native draw command", failures)
 
     # Acceptance arithmetic: a 4 m x 6 m x 0.8 m rectangular raft.
     length = 4.0
@@ -105,7 +167,7 @@ def main():
             print(" -", failure)
         return 1
 
-    print("PASS: Móng Bè direct Add + bottom_level/top_level elevation + side-only concrete/formwork QTO + semantic face keys + yellow/red transient review are pinned; 4x6x0.8 acceptance = 19.20 m3 concrete and 16.00 m2 formwork.")
+    print("PASS: rendered + Add routes directly to Móng Bè-n; primary dedicated Properties, one real Level binding, bottom_level/top_level native placement, and side-only QTO review are pinned. 4x6x0.8 acceptance = 19.20 m3 concrete and 16.00 m2 formwork.")
     return 0
 
 
