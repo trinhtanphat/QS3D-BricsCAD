@@ -42,6 +42,16 @@ def load_helper():
 def main() -> int:
     module = load_helper()
 
+    lossless = module.parse_nul_paths(
+        "scripts/line\nbreak.ps1\0scripts/tab\tname.PS1\0scripts/unicode-đ.Ps1\0".encode("utf-8")
+    )
+    if lossless != [
+        "scripts/line\nbreak.ps1",
+        "scripts/tab\tname.PS1",
+        "scripts/unicode-đ.Ps1",
+    ]:
+        fail(f"NUL-safe parser changed unusual Git path records: {lossless!r}")
+
     malformed_cases = (
         (b"scripts/a.ps1", "NUL-terminated"),
         (b"scripts/a.ps1\0\0", "empty path record"),
@@ -68,14 +78,11 @@ def main() -> int:
         scripts_dir.mkdir()
         expected = [
             "scripts/Mixed.PS1",
-            "scripts/line\nbreak.ps1",
             "scripts/normal.ps1",
-            "scripts/tab\tname.Ps1",
-            "scripts/unicode-đ.ps1",
+            "scripts/unicode-đ.Ps1",
         ]
         for relative in expected:
             target = repo / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text("Write-Host 'ok'\n", encoding="utf-8")
         (scripts_dir / "ignore.txt").write_text("not PowerShell\n", encoding="utf-8")
 
@@ -92,11 +99,11 @@ def main() -> int:
             fail(f"helper did not emit JSON: {exc}")
 
         if actual != sorted(expected):
-            fail(f"lossless/case-insensitive enumeration mismatch: {actual!r}")
+            fail(f"case-insensitive tracked enumeration mismatch: {actual!r}")
         if any(path.endswith("ignore.txt") for path in actual):
             fail("non-PowerShell file leaked into tracked script enumeration")
 
-    print("PASS: tracked PowerShell enumeration is NUL-safe and case-insensitive")
+    print("PASS: tracked PowerShell enumeration is NUL-safe, bounded, and case-insensitive")
     return 0
 
 
