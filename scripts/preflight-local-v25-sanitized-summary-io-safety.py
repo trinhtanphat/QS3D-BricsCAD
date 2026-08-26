@@ -77,6 +77,8 @@ def test_static_contract(source_text: str) -> None:
         "stat.S_ISREG",
         "stat.S_ISDIR",
         "_is_reparse_point",
+        "_require_safe_directory_chain",
+        "os.path.abspath",
         "stream.read(MAX_QUALIFICATION_JSON_BYTES + 1)",
         "payload.decode(\"utf-8-sig\")",
         "before.st_size != after.st_size",
@@ -171,6 +173,22 @@ def test_runtime_contract(module) -> None:
                 fail("symlink output must fail closed")
             if real_output.read_text(encoding="utf-8") != "target-sentinel\n":
                 fail("symlink output failure modified the symlink target")
+
+        real_parent = root / "real-parent"
+        nested_parent = real_parent / "nested"
+        nested_parent.mkdir(parents=True)
+        linked_parent = root / "linked-parent"
+        try:
+            linked_parent.symlink_to(real_parent, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            linked_parent = None
+        if linked_parent is not None:
+            nested_output = linked_parent / "nested" / "qualification-summary.md"
+            code, _stdout, _stderr = run_main(module, source, nested_output)
+            if code != 2:
+                fail("output path with a symlink ancestor must fail closed")
+            if (nested_parent / "qualification-summary.md").exists():
+                fail("unsafe output ancestor failure published through the symlink target")
 
 
 def main() -> int:
