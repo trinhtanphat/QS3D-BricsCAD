@@ -180,6 +180,63 @@ function Wait-Qs3dExit {
     throw "Timed out waiting for the LOCAL-004 Undo lifecycle host to exit."
 }
 
+function Assert-Qs3dExactBuildIdentity {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$BricsCadDir,
+        [Parameter(Mandatory = $true)][string]$PluginDll,
+        [Parameter(Mandatory = $true)][string]$CoreDll
+    )
+
+    $dotnet = Get-Command dotnet -CommandType Application -ErrorAction Stop | Select-Object -First 1
+    $project = Join-Path $RepoRoot "src\QS3D.BricsCAD.V25\QS3D.BricsCAD.V25.csproj"
+    if (-not (Test-Path -LiteralPath $project -PathType Leaf)) {
+        throw "LOCAL-004 Undo lifecycle exact-build project is missing."
+    }
+
+    $identityRoot = Join-Path ([IO.Path]::GetTempPath()) ("qs3d-local004-exact-build-" + [Guid]::NewGuid().ToString("N"))
+    $identityOutput = Join-Path $identityRoot "out"
+    try {
+        New-Item -ItemType Directory -Path $identityOutput -Force | Out-Null
+        $buildArguments = @(
+            "build", $project, "-c", "Release", "--nologo",
+            "-p:Platform=x64",
+            ("-p:BRICSCAD_V25_DIR=" + $BricsCadDir),
+            ("-p:OutputPath=" + $identityOutput),
+            "-p:AppendTargetFrameworkToOutputPath=false",
+            "-p:AppendRuntimeIdentifierToOutputPath=false"
+        )
+        & $dotnet.Source @buildArguments | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "LOCAL-004 Undo lifecycle exact deterministic build failed."
+        }
+
+        $expectedPlugin = Join-Path $identityOutput "QS3D.BricsCAD.V25.dll"
+        $expectedCore = Join-Path $identityOutput "QS3D.Core.dll"
+        foreach ($expectedPath in @($expectedPlugin, $expectedCore)) {
+            if (-not (Test-Path -LiteralPath $expectedPath -PathType Leaf)) {
+                throw "LOCAL-004 Undo lifecycle exact deterministic build output is missing."
+            }
+        }
+
+        foreach ($pair in @(
+            @($PluginDll, $expectedPlugin),
+            @($CoreDll, $expectedCore)
+        )) {
+            $actualHash = (Get-FileHash -LiteralPath $pair[0] -Algorithm SHA256).Hash
+            $expectedHash = (Get-FileHash -LiteralPath $pair[1] -Algorithm SHA256).Hash
+            if (-not [string]::Equals($actualHash, $expectedHash, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "LOCAL-004 Undo lifecycle assembly does not match the exact deterministic build."
+            }
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $identityRoot) {
+            Remove-Item -LiteralPath $identityRoot -Recurse -Force -ErrorAction Stop
+        }
+    }
+}
+
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw "LOCAL-004 Undo lifecycle matrix requires Windows." }
 if (-not [Environment]::UserInteractive) { throw "LOCAL-004 Undo lifecycle matrix requires an interactive Windows session." }
 if (-not $ConfirmDisposableCopies) { throw "Confirm repository-sample disposable copies explicitly." }
@@ -215,13 +272,7 @@ $gitHead = ([string]$gitHeadOutput[0]).Trim().ToLowerInvariant()
 if ($gitHead -notmatch '^[0-9a-f]{40}$') { throw "LOCAL-004 Undo lifecycle SHA is invalid." }
 $gitStatus = @(& $git.Source -C $repoRoot status --porcelain=v1 --untracked-files=all 2>$null)
 if ($LASTEXITCODE -ne 0 -or $gitStatus.Count -ne 0) { throw "LOCAL-004 Undo lifecycle matrix requires a clean exact-SHA worktree." }
-$expectedRevision = "+" + $gitHead
-foreach ($assemblyPath in @($PluginDll, $coreDll)) {
-    $productVersion = [string](Get-Item -LiteralPath $assemblyPath).VersionInfo.ProductVersion
-    if (-not $productVersion.EndsWith($expectedRevision, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "LOCAL-004 Undo lifecycle assembly does not match the exact SHA."
-    }
-}
+Assert-Qs3dExactBuildIdentity -RepoRoot $repoRoot -BricsCadDir $BricsCadDir -PluginDll $PluginDll -CoreDll $coreDll
 if (@(Get-Process -Name "bricscad" -ErrorAction SilentlyContinue).Count -gt 0) {
     throw "Close existing BricsCAD processes before isolated LOCAL-004 Undo lifecycle qualification."
 }
