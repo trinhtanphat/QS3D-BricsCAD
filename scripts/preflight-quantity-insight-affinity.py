@@ -17,11 +17,11 @@ def main():
         "_boundDrawingFingerprint = project.DrawingFingerprint ?? string.Empty;",
         "!ReferenceEquals(document, _boundDocument)",
         "if (!SameProjectIdentity(project))",
-        "var currentRow = ResolveCurrentRow(item, project);",
+        "var currentRow = ResolveCurrentRow(item, document, project);",
         "SourceHandleResolver.Resolve(project, currentRow.ElementIds)",
-        "private QuantityReportRow ResolveCurrentRow(QuantityInsightItemViewModel item, ProjectState project)",
-        "var currentRows = BuildPreviewRows(project, out _);",
-        "private static IReadOnlyList<QuantityReportRow> BuildPreviewRows(ProjectState project, out int regenerated)",
+        "private QuantityReportRow ResolveCurrentRow(QuantityInsightItemViewModel item, Document document, ProjectState project)",
+        "var currentRows = BuildPreviewRows(document, project, out _);",
+        "private static IReadOnlyList<QuantityReportRow> BuildPreviewRows(Document document, ProjectState project, out int regenerated)",
         "ProjectStateSnapshot.CreateDetachedCopy(project)",
         "RegenerateDirty(previewProject)",
         "ProjectQuantityReportBuilder.Detail(previewProject)",
@@ -40,7 +40,7 @@ def main():
     locate_pos = text.find("private void LocateSelected()")
     document_pos = text.find("!ReferenceEquals(document, _boundDocument)", locate_pos)
     project_pos = text.find("if (!SameProjectIdentity(project))", document_pos)
-    resolve_pos = text.find("var currentRow = ResolveCurrentRow(item, project);", project_pos)
+    resolve_pos = text.find("var currentRow = ResolveCurrentRow(item, document, project);", project_pos)
     handles_pos = text.find("SourceHandleResolver.Resolve(project, currentRow.ElementIds)", resolve_pos)
     select_pos = text.find("Cad.CadHandleService.Select(document, handles)", handles_pos)
     if min(locate_pos, document_pos, project_pos, resolve_pos, handles_pos, select_pos) < 0 or not (
@@ -60,7 +60,7 @@ def main():
         return 1
 
     resolve_method = text.find("private QuantityReportRow ResolveCurrentRow")
-    preview_pos = text.find("BuildPreviewRows(project, out _)", resolve_method)
+    preview_pos = text.find("BuildPreviewRows(document, project, out _)", resolve_method)
     match_pos = text.find("SameElementIdentity(displayedIds, x)", preview_pos)
     same_row_pos = text.find("if (!SameRow(displayedRow, matches[0]))", match_pos)
     if min(resolve_method, preview_pos, match_pos, same_row_pos) < 0 or not (

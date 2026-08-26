@@ -59,7 +59,9 @@ namespace QS3D.BricsCAD.V25.UI
                         : geometryError;
                     return null;
                 }
+                var rules = new QuantityCalculationRuleSet(new QuantitySettingsStore().Load());
                 _quantityGeometryCurrent = QuantityGeometryExplanationService.Build(document, geometryProject, ids[0]);
+                _quantityGeometryCurrent = BeamFormworkQuantityPolicy.Apply(document, geometryProject, ids[0], _quantityGeometryCurrent, rules);
                 AssignRaftQuantitySemanticFaceKeys(project, _quantityGeometryCurrent);
                 return _quantityGeometryCurrent;
             }
@@ -391,8 +393,6 @@ namespace QS3D.BricsCAD.V25.UI
             elementIds = Array.Empty<string>();
             error = string.Empty;
 
-            var preview = ProjectStateSnapshot.CreateDetachedCopy(project);
-            new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(preview);
             var currentElementIds = CanonicalIds(option.Row.ElementIds).ToArray();
             elementIds = currentElementIds;
             if (currentElementIds.Length != 1)
@@ -401,7 +401,7 @@ namespace QS3D.BricsCAD.V25.UI
                 return false;
             }
 
-            var matches = ProjectQuantityReportBuilder.Detail(preview, currentElementIds)
+            var matches = BuildPreviewRows(document, project, out _)
                 .Where(x => SameElementIdentity(currentElementIds, x))
                 .ToList();
             if (matches.Count != 1 || !SameRow(option.Row, matches[0]))
@@ -419,7 +419,9 @@ namespace QS3D.BricsCAD.V25.UI
                 return false;
             }
 
+            var rules = new QuantityCalculationRuleSet(new QuantitySettingsStore().Load());
             var fresh = QuantityGeometryExplanationService.Build(document, geometryProject, currentElementIds[0]);
+            fresh = BeamFormworkQuantityPolicy.Apply(document, geometryProject, currentElementIds[0], fresh, rules);
             AssignRaftQuantitySemanticFaceKeys(project, fresh);
             if (_quantityGeometryCurrent == null ||
                 !string.Equals(fresh.GeometryFingerprint, _quantityGeometryCurrent.GeometryFingerprint, StringComparison.Ordinal))
