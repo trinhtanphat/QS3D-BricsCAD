@@ -56,6 +56,7 @@ namespace QS3D.Core.Reporting
         public const string BrepRectangleExtentsMeasurementKind = "brep-rectangle-extents-v1";
 
         public string FaceId { get; set; } = string.Empty;
+        public string SemanticKey { get; set; } = string.Empty;
         public string FaceType { get; set; } = "Other";
         public double GrossArea { get; set; }
         public double DeductionArea { get; set; }
