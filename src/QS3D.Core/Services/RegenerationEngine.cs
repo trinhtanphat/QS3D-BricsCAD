@@ -78,11 +78,9 @@ namespace QS3D.Core.Services
         public int RegenerateDirty(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var sourceElements = project.Elements.ToArray();
-            ValidateProjectElements(sourceElements);
-            _graph.Rebuild(sourceElements);
-            RequireElementStructureFresh(project, sourceElements);
-            return RegenerateTransactional(project, sourceElements, sourceElements.Length, sourceElements);
+            ValidateProjectElements(project.Elements);
+            _graph.Rebuild(project.Elements);
+            return RegenerateTransactional(project, project.Elements, project.Elements.Count);
         }
 
         public int RegenerateDirtySubset(ProjectState project, IEnumerable<string> elementIds)
@@ -120,7 +118,7 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException("Project state changed while materializing regeneration target ids.");
             RequireElementStructureFresh(project, sourceElements);
 
-            return RegenerateTransactional(project, targets, targets.Count, sourceElements);
+            return RegenerateTransactional(project, targets, targets.Count);
         }
 
         private static void ValidateProjectElements(IEnumerable<ProjectElement> elements)
@@ -146,7 +144,7 @@ namespace QS3D.Core.Services
         private static InvalidOperationException StructuralFreshnessError()
         {
             return new InvalidOperationException(
-                "Project element structure changed while preparing regeneration. Retry regeneration against the current project state.");
+                "Project element structure changed while materializing regeneration target ids. Retry targeted regeneration against the current project state.");
         }
 
         private static void RequireRegenerationStructureFresh(ProjectState project, IReadOnlyList<ProjectElement> expectedElements)
@@ -245,12 +243,9 @@ namespace QS3D.Core.Services
                 throw new ArgumentException("Regeneration target ids report an invalid negative known count.", parameterName);
         }
 
-        private int RegenerateTransactional(
-            ProjectState project,
-            IEnumerable<ProjectElement> candidates,
-            int passBasis,
-            IReadOnlyList<ProjectElement> expectedElements)
+        private int RegenerateTransactional(ProjectState project, IEnumerable<ProjectElement> candidates, int passBasis)
         {
+            var expectedElements = project.Elements.ToArray();
             RequireElementStructureFresh(project, expectedElements);
             var snapshot = ProjectStateSnapshot.Capture(project);
             try
@@ -279,6 +274,7 @@ namespace QS3D.Core.Services
         {
             RequireRegenerationStructureFresh(project, expectedElements);
             var candidateList = candidates?.ToList() ?? throw new ArgumentNullException(nameof(candidates));
+            RequireRegenerationStructureFresh(project, expectedElements);
             var total = 0;
             var maxPasses = Math.Max(2, passBasis * 2 + 2);
 
