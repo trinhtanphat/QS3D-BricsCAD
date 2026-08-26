@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
+using System.Xml;
 using QS3D.Core.Persistence;
 using QS3D.Core.Rebar;
 
@@ -85,6 +86,7 @@ namespace QS3D.Core.Export
                 };
 
                 ValidateCellText(row.ElementId, index, "Element");
+                ValidateElementIdProvenance(row.ElementId, index);
                 ValidateCellText(row.BarMark, index, "Bar Mark");
                 ValidateCellText(row.ShapeCode, index, "Shape");
                 ValidateCellText(row.Notation, index, "Notation");
@@ -113,6 +115,22 @@ namespace QS3D.Core.Export
                 "rows",
                 "BBS XLSX worksheet row " + (rowIndex + HeaderRows + 1).ToString(CultureInfo.InvariantCulture) +
                 " field '" + field + "' exceeds Excel's " + MaxCellTextLength.ToString(CultureInfo.InvariantCulture) + "-character cell text limit.");
+        }
+
+        private static void ValidateElementIdProvenance(string value, int rowIndex)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value ?? string.Empty);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException(
+                    "BBS XLSX worksheet row " + (rowIndex + HeaderRows + 1).ToString(CultureInfo.InvariantCulture) +
+                    " field 'Element' contains characters that are invalid in XML provenance.",
+                    "rows",
+                    ex);
+            }
         }
 
         private static void ValidatePositive(double value, int rowIndex, string field)
