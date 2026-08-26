@@ -41,14 +41,22 @@ def main() -> None:
         "SourceHandleResolver.Resolve(project, ids)",
         "CadHandleService.Resolve(document, handles)",
         "document.Editor.SetImpliedSelection(objectIds.ToArray())",
-        "ExistingProjectMutationContext.Require(document, \"Project Browser presentation state\")",
-        "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",
-        "RequireBrowserIdentity(project, _browserProjectId, _browserDrawingFingerprint)",
+        "ExistingProjectMutationContext.Require(document, context)",
+        "RequireCanonicalBrowserMutationProject",
         "RequireBrowserVersionInvariant(project, version)",
+        "_browserInspectionProjectId",
+        "_browserInspectionDrawingFingerprint",
+        "CaptureBrowserInspectionIdentity",
+        "CAD inspection belongs to a stale/other DWG",
+        "Project Browser canonical project instance changed before CAD selection",
+        "Active DWG changed before Browser → CAD selection commit",
+        "Project changed before Browser → CAD selection commit",
+        "Project Browser canonical project instance changed; Refresh required",
         "Active DWG/project đã đổi",
         "callback Project Browser cũ không được phép tác động sang bản vẽ mới",
         "Project Browser chưa bind canonical project",
         "Không resolve đủ live CAD objects",
+        "PICKFIRST was not changed",
         "PICKFIRST được giữ nguyên",
         "Family đã bị xóa/missing",
         "DataContextChanged += OnBrowserDataContextChanged",
@@ -85,8 +93,8 @@ def main() -> None:
     for marker in store_markers:
         require(state_store, marker, "workspace state store")
 
-    # Modeless fields may retain only semantic/presentation identity. Native wrappers must be
-    # short-lived locals resolved at click time, never durable Workspace fields.
+    # Modeless fields may retain semantic/presentation strings and WPF controls only. Native CAD
+    # wrappers or native identity must remain method-local and be re-resolved at action time.
     field_lines = [
         line.strip()
         for line in host.splitlines()
@@ -96,7 +104,7 @@ def main() -> None:
         if re.search(r"\b(?:Document|Database|ObjectId|Handle)\b", line):
             fail("modeless host persists a native CAD wrapper/identity field: " + line)
 
-    forbidden = (
+    for marker in (
         ".Touch(",
         "AuditTrail.ForProject",
         "GetOrCreate(",
@@ -104,34 +112,51 @@ def main() -> None:
         "Handle _browser",
         "Document _browser",
         "Database _browser",
-    )
-    for marker in forbidden:
+    ):
         if marker in host:
             fail("host adapter violates presentation/non-creating boundary: " + marker)
 
-    # Browser -> CAD must resolve every current provenance Handle before PICKFIRST changes.
+    # Browser -> CAD: resolve complete live provenance, then re-check active DWG, canonical project
+    # instance and semantic version immediately before PICKFIRST is changed.
     resolve_pos = host.find("var objectIds = CadHandleService.Resolve(document, handles);")
     parity_pos = host.find("if (objectIds.Count != handles.Count)", resolve_pos)
-    select_pos = host.find("document.Editor.SetImpliedSelection(objectIds.ToArray());", resolve_pos)
-    if not (0 <= resolve_pos < parity_pos < select_pos):
-        fail("Browser -> CAD must require complete live resolution before changing PICKFIRST")
+    active_pos = host.find("if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))", parity_pos)
+    canonical_pos = host.find("!ReferenceEquals(currentProject, project)", active_pos)
+    version_pos = host.find("if (project.ChangeVersion != sourceVersion)", canonical_pos)
+    select_pos = host.find("document.Editor.SetImpliedSelection(objectIds.ToArray());", version_pos)
+    if not (0 <= resolve_pos < parity_pos < active_pos < canonical_pos < version_pos < select_pos):
+        fail("Browser -> CAD must revalidate exact active DWG/project/version after full live resolution and before PICKFIRST")
 
-    # Presentation persistence is allowed only through the dedicated state store and must prove
-    # ChangeVersion invariance around that write.
+    # CAD -> Browser must bind each inspection snapshot to project/fingerprint identity before the
+    # semantic resolver may consume it.
+    sync_start = host.find("private void SyncProjectBrowserFromCad()")
+    sync_end = host.find("private void OnBrowserPreviousNodesClick", sync_start)
+    if sync_start < 0 or sync_end < 0:
+        fail("cannot isolate CAD -> Browser synchronization boundary")
+    sync = host[sync_start:sync_end]
+    identity_pos = sync.find("_browserInspectionProjectId")
+    resolve_selection_pos = sync.find("TryResolveSemanticSelection(project, _inspection")
+    if not (0 <= identity_pos < resolve_selection_pos):
+        fail("CAD -> Browser must validate inspection project/fingerprint before semantic resolution")
+
+    # Presentation persistence must rebind the same canonical project object through the dedicated
+    # existing-project mutation context and prove semantic ChangeVersion invariance.
     persist_start = host.find("private void PersistBrowserState(")
     persist_end = host.find("private static void RequireBrowserIdentity(", persist_start)
     if persist_start < 0 or persist_end < 0:
         fail("cannot isolate presentation persistence boundary")
     persist = host[persist_start:persist_end]
     for marker in (
-        "ExistingProjectMutationContext.Require",
+        "RequireCanonicalBrowserMutationProject(document, expectedProject",
+        "ExistingProjectMutationContext.Require(document, context)",
+        "!ReferenceEquals(project, expectedProject)",
         "_browserStateStore.Save(project, state);",
         "var version = project.ChangeVersion;",
         "RequireBrowserVersionInvariant(project, version);",
     ):
         require(persist, marker, "presentation persistence")
 
-    print("PASS hosted Project Browser uses semantic-only modeless state, current-DWG live CAD resolution and ChangeVersion-safe presentation persistence")
+    print("PASS hosted Project Browser uses semantic-only modeless state, exact-DWG/project commit revalidation and ChangeVersion-safe presentation persistence")
 
 
 if __name__ == "__main__":
