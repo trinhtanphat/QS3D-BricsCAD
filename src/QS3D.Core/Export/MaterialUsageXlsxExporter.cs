@@ -24,6 +24,7 @@ namespace QS3D.Core.Export
             public string Category { get; set; } = string.Empty;
             public string FamilyName { get; set; } = string.Empty;
             public int ElementCount { get; set; }
+            public int ElementIdCount { get; set; }
             public double PrimaryQuantity { get; set; }
             public double LengthM { get; set; }
             public double AreaM2 { get; set; }
@@ -59,6 +60,7 @@ namespace QS3D.Core.Export
                 ValidateProvenanceText(row.ElementIds, rowIndex, "ElementIds");
                 ValidateProvenanceText(row.SourceHandles, rowIndex, "SourceHandles");
                 ValidateCount(row.ElementCount, rowIndex, "ElementCount");
+                ValidateElementCount(row.ElementCount, row.ElementIdCount, rowIndex);
                 ValidateNonNegative(row.PrimaryQuantity, rowIndex, "PrimaryQuantity");
                 ValidateNonNegative(row.LengthM, rowIndex, "LengthM");
                 ValidateNonNegative(row.AreaM2, rowIndex, "AreaM2");
@@ -148,6 +150,8 @@ namespace QS3D.Core.Export
 
         private static ExportRow SnapshotRow(MaterialUsageRow row, int rowIndex)
         {
+            int elementIdCount;
+            var elementIds = SnapshotProvenance(row.ElementIds, rowIndex, "ElementIds", out elementIdCount);
             return new ExportRow
             {
                 Floor = row.Floor ?? string.Empty,
@@ -157,6 +161,7 @@ namespace QS3D.Core.Export
                 Category = row.Category ?? string.Empty,
                 FamilyName = row.FamilyName ?? string.Empty,
                 ElementCount = row.ElementCount,
+                ElementIdCount = elementIdCount,
                 PrimaryQuantity = row.PrimaryQuantity,
                 LengthM = row.LengthM,
                 AreaM2 = row.AreaM2,
@@ -164,17 +169,24 @@ namespace QS3D.Core.Export
                 MassKg = row.MassKg,
                 ProjectId = row.ProjectId ?? string.Empty,
                 DrawingFingerprint = row.DrawingFingerprint ?? string.Empty,
-                ElementIds = SnapshotProvenance(row.ElementIds, rowIndex, "ElementIds"),
+                ElementIds = elementIds,
                 SourceHandles = SnapshotProvenance(row.SourceHandles, rowIndex, "SourceHandles")
             };
         }
 
         private static string SnapshotProvenance(IList<string> values, int rowIndex, string fieldName)
         {
+            int count;
+            return SnapshotProvenance(values, rowIndex, fieldName, out count);
+        }
+
+        private static string SnapshotProvenance(IList<string> values, int rowIndex, string fieldName, out int count)
+        {
             if (values == null)
                 throw new ArgumentException("Material XLSX row " + rowIndex + " field " + fieldName + " cannot be null.", "rows");
 
-            var snapshot = new string[values.Count];
+            count = values.Count;
+            var snapshot = new string[count];
             for (var index = 0; index < snapshot.Length; index++)
             {
                 var value = values[index];
@@ -217,6 +229,14 @@ namespace QS3D.Core.Export
                 throw new ArgumentOutOfRangeException(
                     "rows",
                     "Material XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be non-negative.");
+        }
+
+        private static void ValidateElementCount(int elementCount, int elementIdCount, int rowIndex)
+        {
+            if (elementCount != elementIdCount)
+                throw new ArgumentException(
+                    "Material XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " ElementCount must match ElementIds count.",
+                    "rows");
         }
 
         private static void ValidateNonNegative(double value, int rowIndex, string fieldName)
