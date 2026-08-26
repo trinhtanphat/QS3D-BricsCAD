@@ -1,6 +1,6 @@
 # Work claim — #4093 preview.10223 Beam behavior matrix
 
-- Status: `IN_PROGRESS / NO_RESULT — LOCAL_RUNTIME_PREP`
+- Status: `IN_PROGRESS / PREP_READY / NO_RESULT — LOCAL_RUNTIME_REQUIRED`
 - Issue: `#4093`
 - Parent local qualification issue: `#72`
 - Source issue / PR: `#4043` / `#4047`
@@ -53,9 +53,9 @@ therefore `L=sqrt(50)=7.0710678 m`.
 | M7 | Quantity Insight aggregate vs Detail exact-face ledger | same net `FormworkM2` |
 | M8 | Diagonal 5 m x 5 m Beam classification | End caps stay out of Side; horizontal faces classify Top/Bottom from live Z bounds |
 
-Numeric comparisons must use the repository/runtime quantity tolerance; the
-expected values themselves must not be weakened or recalculated from a
-fallback implementation to make a failing cell pass.
+Numeric comparisons must use the fixed Beam-lane tolerance; the expected values
+themselves must not be weakened or recalculated from a fallback implementation
+to make a failing cell pass.
 
 ## Runtime execution boundary
 
@@ -77,6 +77,24 @@ chain:
 The existing `scripts/test-bricscad-v25-runtime.ps1` / `QS3DRUNTIMEPROBE`
 identity smoke is reusable for exact-host setup and cleanup, but by itself it
 does not exercise M1–M8 and therefore cannot satisfy this lane.
+
+## GitHub-side preparation completed
+
+The carrier now includes two behavior-specific, product-DLL-safe artifacts:
+
+- `docs/LOCAL-V25-BEAM-FORMWORK-MATRIX.md` — exact-artifact runbook for the
+  licensed local M1–M8 execution, evidence hygiene and cleanup boundary.
+- `scripts/test-local-v25-beam-formwork-matrix-evidence.ps1` — strict sanitized
+  evidence verifier pinned to preview.10223, source SHA, ZIP digest and packaged
+  DLL digest. It verifies V25 interactive/NETLOAD identity, the canonical Beam
+  geometry, all M1–M8 expected values/parity, cleanup, zero blockers and a
+  positive attestation that the matrix was actually exercised.
+
+The verifier is intentionally incapable of converting source inspection or the
+existing NETLOAD smoke into a behavior PASS. It requires real local evidence
+and rejects mismatched artifact identity, missing PASS cells, changed regression
+numbers, nonzero Top/End/Other contribution, M7 mismatch, M8 classification
+failure, incomplete cleanup or known blockers.
 
 ## Current evidence and result boundary
 
