@@ -1,93 +1,97 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace QS3D.Core.Geometry
 {
-    public sealed class GridDimensionSpanPlan
+    public sealed class GridDimensionChainSpanPlan
     {
-        public GridDimensionSpanPlan(
+        public GridDimensionChainSpanPlan(
             string firstElementId,
             string secondElementId,
-            double firstCoordinate,
-            double secondCoordinate,
-            double spacing)
+            double firstPosition,
+            double secondPosition,
+            double spacing,
+            Point2 firstWitnessPoint,
+            Point2 secondWitnessPoint,
+            Point2 dimensionLineOrigin)
         {
             FirstElementId = firstElementId ?? throw new ArgumentNullException(nameof(firstElementId));
             SecondElementId = secondElementId ?? throw new ArgumentNullException(nameof(secondElementId));
-            FirstCoordinate = firstCoordinate;
-            SecondCoordinate = secondCoordinate;
+            FirstPosition = firstPosition;
+            SecondPosition = secondPosition;
             Spacing = spacing;
+            FirstWitnessPoint = firstWitnessPoint;
+            SecondWitnessPoint = secondWitnessPoint;
+            DimensionLineOrigin = dimensionLineOrigin;
         }
 
         public string FirstElementId { get; }
         public string SecondElementId { get; }
-        public double FirstCoordinate { get; }
-        public double SecondCoordinate { get; }
+        public double FirstPosition { get; }
+        public double SecondPosition { get; }
         public double Spacing { get; }
+        public Point2 FirstWitnessPoint { get; }
+        public Point2 SecondWitnessPoint { get; }
+        public Point2 DimensionLineOrigin { get; }
     }
 
     /// <summary>
-    /// Vendor-neutral adjacent spacing plan for one reviewed parallel LINE Grid family.
-    /// Native associative Dimension creation/placement remains an adapter/runtime concern.
+    /// Deterministic adjacent dimension-chain plan for one reviewed family of straight Grid references.
+    /// Semantic ordering and bounded input validation are delegated to GridSpatialOrderingPlanner.
+    /// Native Dimension creation and DIMSTYLE ownership remain adapter concerns.
     /// </summary>
     public static class GridDimensionChainPlanner
     {
-        public static IReadOnlyList<GridDimensionSpanPlan> BuildAdjacentSpans(
+        public static IReadOnlyList<GridDimensionChainSpanPlan> BuildAdjacentSpans(
             IEnumerable<GridReferenceCurve> curves,
-            Point2 orderingAxis,
-            bool descending = false,
-            double alignmentTolerance = 1e-6,
-            double coordinateTolerance = 1e-8)
+            Vector2 alongAxis,
+            Point2 dimensionLineOrigin,
+            double positionTolerance = 1e-8)
         {
             if (curves == null) throw new ArgumentNullException(nameof(curves));
+            if (!Finite(dimensionLineOrigin.X) || !Finite(dimensionLineOrigin.Y))
+                throw new ArgumentOutOfRangeException(nameof(dimensionLineOrigin), "Grid dimension-line origin must contain finite coordinates.");
 
-            // Materialize once because the canonical ordering planner also performs bounded
-            // validation over the reviewed set. This class deliberately delegates all
-            // LINE/alignment/identity ambiguity decisions to that existing authority.
-            var materialized = curves.ToList();
-            if (materialized.Count < 2)
-                throw new InvalidOperationException("At least two Grid LINE references are required for an adjacent dimension chain.");
-
-            var ordered = GridSpatialOrderingPlanner.OrderParallelLines(
-                materialized,
-                orderingAxis,
-                descending,
-                alignmentTolerance,
-                coordinateTolerance);
-
+            // Keep the canonical spatial-ordering planner as the single authority for
+            // input cardinality, identity, LINE-only validation and deterministic order.
+            // Do not pre-materialize the sequence here: doing so would defeat its
+            // bounded-enumeration contract for streaming inputs.
+            var ordered = GridSpatialOrderingPlanner.Order(curves, alongAxis, positionTolerance);
             if (ordered.Count < 2)
-                throw new InvalidOperationException("At least two ordered Grid references are required for an adjacent dimension chain.");
+                throw new InvalidOperationException("At least two ordered straight Grid references are required for a dimension chain.");
 
-            var spans = new List<GridDimensionSpanPlan>(ordered.Count - 1);
+            var plans = new List<GridDimensionChainSpanPlan>(ordered.Count - 1);
             for (var i = 1; i < ordered.Count; i++)
             {
                 var first = ordered[i - 1];
                 var second = ordered[i];
-                var signedDelta = second.Coordinate - first.Coordinate;
-                if (!Finite(signedDelta))
+                var signedSpacing = second.Position - first.Position;
+                if (!Finite(signedSpacing))
                     throw new OverflowException(
                         "Grid dimension spacing exceeds the supported numeric range between " +
                         first.ElementId + " and " + second.ElementId + ".");
 
-                var spacing = Math.Abs(signedDelta);
-                if (!Finite(spacing) || !(spacing > coordinateTolerance))
+                var spacing = Math.Abs(signedSpacing);
+                if (!Finite(spacing) || !(spacing > positionTolerance))
                     throw new InvalidOperationException(
                         "Grid dimension spacing is zero/ambiguous within tolerance between " +
                         first.ElementId + " and " + second.ElementId + ".");
 
-                spans.Add(new GridDimensionSpanPlan(
+                plans.Add(new GridDimensionChainSpanPlan(
                     first.ElementId,
                     second.ElementId,
-                    first.Coordinate,
-                    second.Coordinate,
-                    spacing));
+                    first.Position,
+                    second.Position,
+                    spacing,
+                    first.AnchorPoint,
+                    second.AnchorPoint,
+                    dimensionLineOrigin));
             }
 
-            if (spans.Count != ordered.Count - 1)
-                throw new InvalidOperationException("Grid dimension chain cardinality is inconsistent with the ordered Grid family.");
+            if (plans.Count != ordered.Count - 1)
+                throw new InvalidOperationException("Grid dimension-chain cardinality is inconsistent with the ordered Grid family.");
 
-            return spans.AsReadOnly();
+            return plans.AsReadOnly();
         }
 
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
