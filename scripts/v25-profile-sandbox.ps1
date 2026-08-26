@@ -224,17 +224,20 @@ function Restore-Qs3dV25ProfileSandbox {
 
     $profiles = Open-Qs3dV25ProfilesRegistryKey -Writable
     try {
-        $nonceKey = $profiles.OpenSubKey($nonceName, $false)
-        if ($null -ne $nonceKey) {
-            $nonceKey.Dispose()
-            $profiles.DeleteSubKeyTree($nonceName, $false)
-        }
-
+        # Restore the protected pointer first. If this fails, the nonce profile remains
+        # available rather than leaving CurProfile pointing at a deleted profile.
         if ($snapshot.CurProfileExists) {
             $profiles.SetValue('CurProfile', $snapshot.CurProfileValue, $snapshot.CurProfileKind)
         }
         elseif (@($profiles.GetValueNames()) -contains 'CurProfile') {
             $profiles.DeleteValue('CurProfile', $false)
+        }
+
+        # Delete only the runner-owned nonce after the original pointer is safe.
+        $nonceKey = $profiles.OpenSubKey($nonceName, $false)
+        if ($null -ne $nonceKey) {
+            $nonceKey.Dispose()
+            $profiles.DeleteSubKeyTree($nonceName, $false)
         }
     }
     finally {
