@@ -4,7 +4,6 @@ using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI.ViewModels;
 using QS3D.Core.Domain;
@@ -14,12 +13,14 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class WorkspacePanel
     {
+        private const string RaftLevelSelectionKey = "__RaftLevelSelection";
         private const string RaftColorModeKey = "ColorMode";
         private const string RaftTransparencyKey = "TransparencyPercent";
         private const string RaftMarkKey = "Mark";
         private const string RaftCommentKey = "Comment";
         private const string RaftWbsKey = "WBS";
         private const string RaftMaterialKey = "Material";
+        private const string RaftMaterialTypeKey = "MaterialType";
 
         private static readonly string[] RaftElevationChoices =
         {
@@ -27,24 +28,21 @@ namespace QS3D.BricsCAD.V25.UI
             RaftFoundationPropertySet.TopLevelMode
         };
 
-        private static readonly string[] RaftColorModeChoices = { "Theo loại (mặc định)", "Tùy chỉnh" };
+        private static readonly string[] RaftColorModeChoices = { "ByLayer", "Theo loại (mặc định)", "Tùy chỉnh" };
         private static readonly string[] RaftTransparencyChoices = { "0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100" };
+        private static readonly string[] RaftMaterialChoices = { "Bê tông" };
+        private static readonly string[] RaftMaterialTypeChoices = { "Bê tông" };
         private static readonly bool _raftFoundationWorkspaceHandlersRegistered = RegisterRaftFoundationWorkspaceHandlers();
 
         private static bool RegisterRaftFoundationWorkspaceHandlers()
         {
-            // Button class handling runs before the legacy per-button Click handlers. This is what
-            // makes Móng Bè a direct Add/Draw workflow without briefly opening the old mode menu or
-            // dispatching QS3DBUILD3D against an empty selection first.
+            // Visible + Add routing is owned exclusively by WorkspacePanel.RaftFoundationVisibleAddRoute.cs.
+            // This legacy class handler now owns only the Móng Bè Draw command. Family property rendering is
+            // owned by OnFamilySubtypeFamilySelectionChanged in the primary Workspace render path.
             EventManager.RegisterClassHandler(
                 typeof(Button),
                 Button.ClickEvent,
                 new RoutedEventHandler(OnRaftFoundationWorkspaceButtonClick),
-                true);
-            EventManager.RegisterClassHandler(
-                typeof(WorkspacePanel),
-                Selector.SelectionChangedEvent,
-                new SelectionChangedEventHandler(OnRaftFoundationWorkspaceSelectionChanged),
                 true);
             return true;
         }
@@ -54,13 +52,6 @@ namespace QS3D.BricsCAD.V25.UI
             var button = sender as Button;
             var panel = button == null ? null : FindRaftWorkspacePanel(button);
             if (panel == null || button == null) return;
-
-            if (IsWorkspaceAddFamilyButton(button) && panel.IsRaftSubtypeFilter())
-            {
-                e.Handled = true;
-                panel.CreateFamilyFromWorkspaceSubtype(false);
-                return;
-            }
 
             if (!string.Equals(button.Content as string, "Vẽ 3D", StringComparison.Ordinal) ||
                 !panel.IsRaftWorkspaceContext()) return;
@@ -75,9 +66,17 @@ namespace QS3D.BricsCAD.V25.UI
 
             try
             {
-                panel._viewModel.SetActiveFamily(family);
-                panel.SetStatus("Móng Bè: pick closed Polyline/Region để tạo bê tông 3D theo " +
-                                RaftElevationMode(family) + ".");
+                var doc = Application.DocumentManager.MdiActiveDocument;
+                if (doc == null) throw new InvalidOperationException("Không có bản vẽ BricsCAD đang active.");
+                var project = ExistingProjectMutationContext.Require(doc, "Vẽ Móng Bè");
+                var owned = project.FindFamily(family.Id);
+                if (owned == null || !RaftFoundationPropertySet.IsRaftFamily(owned))
+                    throw new InvalidOperationException("Family Móng Bè đang chọn đã stale.");
+                var placement = RaftFoundationLevelPlacement.Resolve(project, owned);
+                panel._viewModel.SetActiveFamily(owned);
+                panel.SetStatus(
+                    "Móng Bè: " + RaftElevationMode(owned) + " • Z đáy=" +
+                    placement.BottomElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m • pick closed Polyline/Region.");
                 panel.Send("QS3DDRAWRAFTFOUNDATION");
             }
             catch (Exception ex)
@@ -95,27 +94,6 @@ namespace QS3D.BricsCAD.V25.UI
                 current = ParentOf(current);
             }
             return null;
-        }
-
-        private static void OnRaftFoundationWorkspaceSelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            var panel = sender as WorkspacePanel;
-            if (panel == null || panel._loadingContext) return;
-
-            if (ReferenceEquals(e.Source, panel.FamilyList))
-            {
-                var family = panel.FamilyList.SelectedItem as ProjectFamily;
-                if (family != null && RaftFoundationPropertySet.IsRaftFamily(family))
-                    panel.ApplyRaftFoundationPropertyForm(family);
-                return;
-            }
-
-            if (ReferenceEquals(e.Source, panel.FloorCombo) &&
-                panel.FamilyList.SelectedItem is ProjectFamily selected &&
-                RaftFoundationPropertySet.IsRaftFamily(selected))
-            {
-                panel.ApplyRaftFoundationPropertyForm(selected);
-            }
         }
 
         private bool IsRaftSubtypeFilter() =>
@@ -143,48 +121,34 @@ namespace QS3D.BricsCAD.V25.UI
             }
             else
             {
-                var fallbackName = new PropertyRowViewModel
-                {
-                    Group = "Information",
-                    Name = "Tên Family",
-                    IsReadOnly = true
-                };
+                var fallbackName = new PropertyRowViewModel { Group = "Information", Name = "Tên Family", IsReadOnly = true };
                 fallbackName.Value = family.Name;
                 _viewModel.Properties.Add(fallbackName);
             }
 
-            var categoryRow = new PropertyRowViewModel
-            {
-                Group = "Information",
-                Name = "Loại cấu kiện",
-                IsReadOnly = true
-            };
+            var categoryRow = new PropertyRowViewModel { Group = "Information", Name = "Loại cấu kiện", IsReadOnly = true };
             categoryRow.Value = RaftFoundationPropertySet.SubtypeName;
             _viewModel.Properties.Add(categoryRow);
 
-            var floorRow = new PropertyRowViewModel
-            {
-                Group = "Information",
-                Name = "Tầng",
-                IsReadOnly = true
-            };
+            var floorRow = new PropertyRowViewModel { Group = "Information", Name = "Tầng", IsReadOnly = true };
             floorRow.Value = FloorCombo?.SelectedItem as string ?? string.Empty;
             _viewModel.Properties.Add(floorRow);
 
-            AddRaftFamilyPropertyRow(family, "Kích thước", "Dày", "ThicknessM", RaftThicknessUi(family), Array.Empty<string>(), "mm");
-            AddRaftFamilyPropertyRow(
-                family,
-                "Cao độ",
-                "Cao độ",
-                RaftFoundationPropertySet.ElevationModeKey,
-                RaftElevationMode(family),
-                RaftElevationChoices);
-            AddRaftFamilyPropertyRow(family, "Display", "Màu sắc", RaftColorModeKey, RaftValue(family, RaftColorModeKey, "Theo loại (mặc định)"), RaftColorModeChoices);
+            var project = TryRaftProject();
+            var levelChoices = project == null
+                ? Array.Empty<string>()
+                : project.Floors.OrderBy(x => x.ElevationM).ThenBy(x => x.Name, StringComparer.CurrentCultureIgnoreCase).Select(x => x.Name).ToArray();
+
+            AddRaftFamilyPropertyRow(family, "Kích thước", "Dày", RaftFoundationPropertySet.ThicknessKey, RaftThicknessUi(family), Array.Empty<string>(), "mm");
+            AddRaftFamilyPropertyRow(family, "Cao độ", "Cách đặt", RaftFoundationPropertySet.ElevationModeKey, RaftElevationMode(family), RaftElevationChoices);
+            AddRaftFamilyPropertyRow(family, "Cao độ", "Cao độ đầu", RaftLevelSelectionKey, RaftLevelUi(family), levelChoices);
+            AddRaftFamilyPropertyRow(family, "Display", "Màu sắc", RaftColorModeKey, RaftValue(family, RaftColorModeKey, "ByLayer"), RaftColorModeChoices);
             AddRaftFamilyPropertyRow(family, "Display", "Độ trong suốt", RaftTransparencyKey, RaftValue(family, RaftTransparencyKey, "0"), RaftTransparencyChoices, "%");
             AddRaftFamilyPropertyRow(family, "Metadata", "Mark", RaftMarkKey, RaftValue(family, RaftMarkKey, string.Empty), Array.Empty<string>());
             AddRaftFamilyPropertyRow(family, "Metadata", "Comment", RaftCommentKey, RaftValue(family, RaftCommentKey, string.Empty), Array.Empty<string>());
             AddRaftFamilyPropertyRow(family, "Metadata", "WBS", RaftWbsKey, RaftValue(family, RaftWbsKey, string.Empty), Array.Empty<string>());
-            AddRaftFamilyPropertyRow(family, "Metadata", "Vật liệu", RaftMaterialKey, RaftValue(family, RaftMaterialKey, "Bê tông"), new[] { "Bê tông" });
+            AddRaftFamilyPropertyRow(family, "Vật liệu", "Vật liệu", RaftMaterialKey, RaftValue(family, RaftMaterialKey, "Bê tông"), RaftMaterialChoices);
+            AddRaftFamilyPropertyRow(family, "Vật liệu", "Loại vật liệu", RaftMaterialTypeKey, RaftValue(family, RaftMaterialTypeKey, "Bê tông"), RaftMaterialTypeChoices);
         }
 
         private void AddRaftFamilyPropertyRow(
@@ -197,6 +161,7 @@ namespace QS3D.BricsCAD.V25.UI
             string unit = "")
         {
             var rowChoices = choices
+                .Concat(new[] { current })
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .Distinct(StringComparer.CurrentCultureIgnoreCase)
                 .ToArray();
@@ -218,7 +183,6 @@ namespace QS3D.BricsCAD.V25.UI
             var previous = RaftPropertyUiValue(family, key);
             try
             {
-                var nextStored = NormalizeRaftPropertyForStorage(key, requested);
                 var doc = Application.DocumentManager.MdiActiveDocument;
                 if (doc == null) throw new InvalidOperationException("Không có bản vẽ BricsCAD đang active.");
                 var project = ExistingProjectMutationContext.Require(doc, "Cập nhật thuộc tính Family Móng Bè");
@@ -228,27 +192,44 @@ namespace QS3D.BricsCAD.V25.UI
 
                 var result = ExecuteAtomic(project, () =>
                 {
-                    var aggregate = ProjectFamilyService.SetProperty(project, owned.Id, key, nextStored);
-                    ProjectFamilyService.SetProperty(project, owned.Id, RaftFoundationPropertySet.WorkspaceSubtypeKey, RaftFoundationPropertySet.SubtypeName);
-                    if (string.Equals(key, "ThicknessM", StringComparison.Ordinal) ||
-                        string.Equals(key, RaftFoundationPropertySet.ElevationModeKey, StringComparison.Ordinal))
+                    var aggregate = ProjectFamilyService.SetProperty(
+                        project, owned.Id, RaftFoundationPropertySet.WorkspaceSubtypeKey, RaftFoundationPropertySet.SubtypeName);
+
+                    if (string.Equals(key, RaftLevelSelectionKey, StringComparison.Ordinal))
                     {
-                        var thicknessM = RaftThicknessM(owned);
-                        var mode = string.Equals(key, RaftFoundationPropertySet.ElevationModeKey, StringComparison.Ordinal)
-                            ? RaftFoundationPropertySet.NormalizeElevationMode(nextStored)
-                            : RaftElevationMode(owned);
-                        var offsetM = RaftFoundationPropertySet.ResolveBottomOffsetM(mode, thicknessM);
-                        var offsetResult = ProjectFamilyService.SetProperty(
-                            project,
-                            owned.Id,
-                            "BottomOffsetM",
-                            offsetM.ToString("R", CultureInfo.InvariantCulture));
-                        aggregate.InheritedInstancesUpdated += offsetResult.InheritedInstancesUpdated;
-                        aggregate.OverridesPreserved += offsetResult.OverridesPreserved;
+                        var floorName = (requested ?? string.Empty).Trim();
+                        var matches = project.Floors.Where(x => string.Equals(x.Name, floorName, StringComparison.CurrentCultureIgnoreCase)).ToList();
+                        if (matches.Count != 1)
+                            throw new InvalidOperationException("Cao độ đầu phải chọn đúng một Level hiện có trong project.");
+                        var mode = RaftElevationMode(owned);
+                        MergeRaftMutation(aggregate, ProjectFamilyService.SetProperty(project, owned.Id, RaftFoundationPropertySet.ActiveLevelKey(mode), matches[0].Id));
+                        MergeRaftMutation(aggregate, ProjectFamilyService.SetProperty(project, owned.Id, RaftFoundationPropertySet.OppositeLevelKey(mode), string.Empty));
                     }
+                    else if (string.Equals(key, RaftFoundationPropertySet.ElevationModeKey, StringComparison.Ordinal))
+                    {
+                        var nextMode = RaftFoundationPropertySet.NormalizeElevationMode(requested);
+                        var oldMode = RaftElevationMode(owned);
+                        var levelId = RaftValue(owned, RaftFoundationPropertySet.ActiveLevelKey(oldMode), string.Empty);
+                        if (levelId.Length == 0) levelId = RaftValue(owned, RaftFoundationPropertySet.OppositeLevelKey(oldMode), string.Empty);
+                        if (levelId.Length == 0) levelId = (project.ActiveFloorId ?? string.Empty).Trim();
+                        if (levelId.Length == 0 || project.FindFloor(levelId) == null)
+                            throw new InvalidOperationException("Cách đặt cần một Cao độ đầu hợp lệ.");
+                        MergeRaftMutation(aggregate, ProjectFamilyService.SetProperty(project, owned.Id, key, nextMode));
+                        MergeRaftMutation(aggregate, ProjectFamilyService.SetProperty(project, owned.Id, RaftFoundationPropertySet.ActiveLevelKey(nextMode), levelId));
+                        MergeRaftMutation(aggregate, ProjectFamilyService.SetProperty(project, owned.Id, RaftFoundationPropertySet.OppositeLevelKey(nextMode), string.Empty));
+                    }
+                    else
+                    {
+                        var nextStored = NormalizeRaftPropertyForStorage(key, requested);
+                        MergeRaftMutation(aggregate, ProjectFamilyService.SetProperty(project, owned.Id, key, nextStored));
+                    }
+
+                    RaftFoundationLevelPlacement.EnsureDefaults(project, owned);
+                    RaftFoundationLevelPlacement.Resolve(project, owned);
                     return aggregate;
                 }, "Cập nhật thuộc tính Family Móng Bè");
 
+                ApplyRaftFoundationPropertyForm(owned);
                 var live = RaftPropertyUiValue(owned, key);
                 SetStatus("Đã cập nhật " + RaftPropertyLabel(key) + " • kế thừa " + result.InheritedInstancesUpdated + " cấu kiện" +
                           (result.OverridesPreserved > 0 ? " • giữ " + result.OverridesPreserved + " instance override" : string.Empty));
@@ -261,16 +242,20 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
+        private static void MergeRaftMutation(ProjectFamilyPropertyMutationResult aggregate, ProjectFamilyPropertyMutationResult next)
+        {
+            aggregate.InheritedInstancesUpdated += next.InheritedInstancesUpdated;
+            aggregate.OverridesPreserved += next.OverridesPreserved;
+        }
+
         private static string NormalizeRaftPropertyForStorage(string key, string requested)
         {
             var value = (requested ?? string.Empty).Trim();
-            if (string.Equals(key, "ThicknessM", StringComparison.Ordinal))
+            if (string.Equals(key, RaftFoundationPropertySet.ThicknessKey, StringComparison.Ordinal))
             {
                 var meters = ProjectFamilyQuickSchemaService.ParseUiMillimetersToMeters("Dày", value, CultureInfo.CurrentCulture, true);
                 return meters.ToString("R", CultureInfo.InvariantCulture);
             }
-            if (string.Equals(key, RaftFoundationPropertySet.ElevationModeKey, StringComparison.Ordinal))
-                return RaftFoundationPropertySet.NormalizeElevationMode(value);
             if (string.Equals(key, RaftTransparencyKey, StringComparison.Ordinal))
             {
                 if ((!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var percent) &&
@@ -280,31 +265,24 @@ namespace QS3D.BricsCAD.V25.UI
                 return percent.ToString("0.##", CultureInfo.InvariantCulture);
             }
             if ((string.Equals(key, RaftColorModeKey, StringComparison.Ordinal) ||
-                 string.Equals(key, RaftMaterialKey, StringComparison.Ordinal)) && value.Length == 0)
+                 string.Equals(key, RaftMaterialKey, StringComparison.Ordinal) ||
+                 string.Equals(key, RaftMaterialTypeKey, StringComparison.Ordinal)) && value.Length == 0)
                 throw new InvalidOperationException(RaftPropertyLabel(key) + " không được để trống.");
             return value;
         }
 
-        private static string RaftPropertyUiValue(ProjectFamily family, string key)
+        private string RaftPropertyUiValue(ProjectFamily family, string key)
         {
-            if (string.Equals(key, "ThicknessM", StringComparison.Ordinal)) return RaftThicknessUi(family);
+            if (string.Equals(key, RaftFoundationPropertySet.ThicknessKey, StringComparison.Ordinal)) return RaftThicknessUi(family);
             if (string.Equals(key, RaftFoundationPropertySet.ElevationModeKey, StringComparison.Ordinal)) return RaftElevationMode(family);
+            if (string.Equals(key, RaftLevelSelectionKey, StringComparison.Ordinal)) return RaftLevelUi(family);
             return RaftValue(family, key, string.Empty);
         }
 
         private static string RaftThicknessUi(ProjectFamily family)
         {
-            var stored = RaftValue(family, "ThicknessM", "0.5");
+            var stored = RaftValue(family, RaftFoundationPropertySet.ThicknessKey, "0.5");
             return ProjectFamilyQuickSchemaService.FormatInternalMetersAsMillimeters("Dày", stored, CultureInfo.CurrentCulture);
-        }
-
-        private static double RaftThicknessM(ProjectFamily family)
-        {
-            var raw = RaftValue(family, "ThicknessM", "0.5");
-            if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
-                double.IsNaN(value) || double.IsInfinity(value) || value <= 0d)
-                throw new InvalidOperationException("Dày Móng Bè không hợp lệ: '" + raw + "'.");
-            return value;
         }
 
         private static string RaftElevationMode(ProjectFamily family)
@@ -313,21 +291,38 @@ namespace QS3D.BricsCAD.V25.UI
             return RaftFoundationPropertySet.NormalizeElevationMode(raw);
         }
 
+        private string RaftLevelUi(ProjectFamily family)
+        {
+            var project = TryRaftProject();
+            if (project == null) return string.Empty;
+            var levelId = RaftValue(family, RaftFoundationPropertySet.ActiveLevelKey(RaftElevationMode(family)), string.Empty);
+            return project.FindFloor(levelId)?.Name ?? string.Empty;
+        }
+
         private static string RaftValue(ProjectFamily family, string key, string fallback) =>
             family.Properties.TryGetValue(key, out var stored) ? (stored ?? string.Empty).Trim() : fallback;
+
+        private ProjectState? TryRaftProject()
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return null;
+            return ProjectContextCoordinator.TryGetReadOnly(doc, out var project) ? project : null;
+        }
 
         private static string RaftPropertyLabel(string key)
         {
             switch (key)
             {
-                case "ThicknessM": return "Dày";
-                case RaftFoundationPropertySet.ElevationModeKey: return "Cao độ";
+                case RaftFoundationPropertySet.ThicknessKey: return "Dày";
+                case RaftFoundationPropertySet.ElevationModeKey: return "Cách đặt";
+                case RaftLevelSelectionKey: return "Cao độ đầu";
                 case RaftColorModeKey: return "Màu sắc";
                 case RaftTransparencyKey: return "Độ trong suốt";
                 case RaftMarkKey: return "Mark";
                 case RaftCommentKey: return "Comment";
                 case RaftWbsKey: return "WBS";
                 case RaftMaterialKey: return "Vật liệu";
+                case RaftMaterialTypeKey: return "Loại vật liệu";
                 default: return key;
             }
         }
