@@ -54,7 +54,7 @@ def main() -> int:
     require(draw, "if (!(h2 > 0d))", "box-only H2=0 path")
     require(draw, "CreateTaperedLoft", "tapered upper geometry path")
     require(draw, "AllowNone = true", "repeat-pick Enter termination")
-    require(quick_draw, "QS3DDRAWSINGLEFOOTING", "active-family quick draw dispatch")
+    require(quick_draw, "new SingleFootingCommands().DrawSingleFooting();", "active-family quick draw dispatch")
 
     print("PASS single-footing workspace complete preflight")
     return 0
