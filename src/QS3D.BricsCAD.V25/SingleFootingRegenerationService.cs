@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
+using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
