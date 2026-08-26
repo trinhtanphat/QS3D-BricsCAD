@@ -194,11 +194,6 @@ namespace QS3D.BricsCAD.V25
                     else new DirectDrawP1Commands().DrawStructuralWall();
                     return;
                 case ElementCategory.Foundation:
-                    if (SingleFootingContract.IsSingleFooting(family))
-                    {
-                        new SingleFootingCommands().DrawSingleFooting();
-                        return;
-                    }
                     if (advanced) new DirectDrawP1Commands().DrawFoundationAdvanced();
                     else new DirectDrawP1Commands().DrawFoundation();
                     return;
