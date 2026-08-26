@@ -154,6 +154,7 @@ namespace QS3D.Core.SmokeTests
                 Category = "ArchitecturalWall",
                 FamilyName = "W1",
                 ElementCount = 1,
+                ElementIds = { "E-1" },
                 LengthM = 1d,
                 AreaM2 = 2d,
                 VolumeM3 = 0.2d,
