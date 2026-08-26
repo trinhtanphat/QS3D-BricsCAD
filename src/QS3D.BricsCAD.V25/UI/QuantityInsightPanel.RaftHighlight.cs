@@ -151,10 +151,10 @@ namespace QS3D.BricsCAD.V25.UI
                 }
                 else
                 {
-                    var face = geometry.FormworkFaces.SingleOrDefault(x => string.Equals(x.FaceId, faceId, StringComparison.Ordinal));
+                    var face = ResolveFreshRaftQuantityFace(_quantityGeometryCurrent, geometry, faceId);
                     if (face == null)
                     {
-                        _viewModel.Status = "Mặt ván khuôn đã thay đổi; bấm Làm mới trước khi highlight.";
+                        _viewModel.Status = "Mặt ván khuôn đã thay đổi hoặc semantic key không còn duy nhất; bấm Làm mới trước khi highlight.";
                         return;
                     }
                     var plate = BuildRaftFacePlate(document, geometry, face.FaceId);
