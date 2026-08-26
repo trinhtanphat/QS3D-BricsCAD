@@ -44,7 +44,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void EnsureSingleFootingWorkspaceIntegration()
         {
-            if (!SingleFootingWorkspaceBootstrapRegistered) return;
+            if (!SingleFootingWorkspaceBootstrapRegistered || _singleFootingWorkspaceIntegrated) return;
 
             EnsureSingleFootingTreeNode();
             ModelTree.SelectedItemChanged -= OnSingleFootingTreeSelectionChanged;
