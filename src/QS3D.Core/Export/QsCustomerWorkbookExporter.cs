@@ -388,6 +388,14 @@ namespace QS3D.Core.Export
             if (!string.Equals(raw, result, StringComparison.Ordinal))
                 throw new InvalidDataException("Customer workbook " + label + " must be canonical without surrounding whitespace.");
             if (result.Length > 32767) throw new InvalidDataException("Customer workbook " + label + " exceeds the Excel cell text limit.");
+            try
+            {
+                System.Xml.XmlConvert.VerifyXmlChars(result);
+            }
+            catch (System.Xml.XmlException ex)
+            {
+                throw new InvalidDataException("Customer workbook " + label + " contains characters that are invalid in XML provenance.", ex);
+            }
             return result;
         }
 
