@@ -31,7 +31,7 @@ namespace QS3D.Core.Geometry
             Point2 candidate,
             IEnumerable<GridReferenceCurve> curves,
             double maxDistance,
-            out GridArcSnapResult result,
+            out GridArcSnapResult? result,
             double ambiguityTolerance = 1e-8,
             double geometryTolerance = 1e-10,
             double angleTolerance = 1e-10)
