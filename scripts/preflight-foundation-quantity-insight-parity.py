@@ -45,7 +45,9 @@ def main():
     require(raft, 'sideFaces[index].SemanticKey = "Side:OuterLoop:Edge"', "raft semantic face authority", failures)
 
     require(presentation, "FrameworkElement.LoadedEvent", "loaded-row presentation mapping", failures)
+    require(presentation, "if (textBlock.Tag is QuantityExactFacePresentationTarget) return;", "idempotent presentation hydration", failures)
     require(presentation, "textBlock.Tag = new QuantityExactFacePresentationTarget(faceId);", "FaceId stored outside display text", failures)
+    require(presentation, "textBlock.Text = displayText;", "friendly display replaces raw technical envelope", failures)
     require(presentation, "TryGetFoundationQuantityExactFaceIdentity", "metadata identity resolver", failures)
     require(presentation, "TryResolveFoundationQuantityExactFaceButton", "exact-face value button metadata resolver", failures)
     require(presentation, "Side:OuterLoop:Edge", "raft semantic label mapping", failures)
@@ -54,6 +56,8 @@ def main():
     require(presentation, "panel.LocateQuantityExactFace(faceId);", "metadata FaceId locate wiring", failures)
     forbid(presentation, "LocateQuantityExactFace(displayText", "display label used as runtime identity", failures)
     forbid(presentation, "LocateQuantityExactFace(semantic", "semantic label used as runtime identity", failures)
+    forbid(presentation, "LocateQuantityExactFace(textBlock.Text", "visible title used as runtime identity", failures)
+    forbid(presentation, "LocateQuantityExactFace(candidate.Text", "adjacent visible text used as runtime identity", failures)
 
     require(exact_face, "TryParseQuantityExactFaceId", "exact native FaceId parser remains authoritative", failures)
     require(exact_face, "TryRevalidateQuantityGeometry", "click-time exact BREP revalidation", failures)
