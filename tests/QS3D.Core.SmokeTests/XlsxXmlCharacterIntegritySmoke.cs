@@ -41,6 +41,7 @@ namespace QS3D.Core.SmokeTests
                     Category = HostileText,
                     FamilyName = HostileText,
                     ElementCount = 1,
+                    ElementIds = { "E-XML-1" },
                     LengthM = 1d
                 }
             });
