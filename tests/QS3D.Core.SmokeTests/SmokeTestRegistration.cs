@@ -83,6 +83,7 @@ namespace QS3D.Core.SmokeTests
             SingleFootingGeometrySmoke.Run();
             PolylineLengthCompensatedSumSmoke.Run();
             AutoRoomLifecycleSmoke.Run();
+            AutoRoomHandleIdentitySmoke.Run();
             AutoRoomStaleSelectionBoundSmoke.Run();
             AutoRoomLookupIdentitySmoke.Run();
             RoomFinishIdentitySmoke.Run();
