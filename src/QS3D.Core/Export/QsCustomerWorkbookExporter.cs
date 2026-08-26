@@ -256,7 +256,6 @@ namespace QS3D.Core.Export
                 Text(sb, Cell(2, excelRow), DisplayName(row), 0);
                 Text(sb, Cell(3, excelRow), FloorText(row), 0);
                 Evidence(sb, Cell(4, excelRow), row.LengthM, row.HasLengthMEvidence);
-                // Width and height are intentionally blank: QuantityReportRow currently has no real evidence fields for them.
                 Evidence(sb, Cell(7, excelRow), row.GrossConcreteM3, row.HasGrossConcreteM3Evidence);
                 Evidence(sb, Cell(8, excelRow), row.DeductionM3, row.HasDeductionM3Evidence);
                 Evidence(sb, Cell(9, excelRow), row.NetConcreteM3, row.HasNetConcreteM3Evidence);
@@ -388,6 +387,14 @@ namespace QS3D.Core.Export
             if (!string.Equals(raw, result, StringComparison.Ordinal))
                 throw new InvalidDataException("Customer workbook " + label + " must be canonical without surrounding whitespace.");
             if (result.Length > 32767) throw new InvalidDataException("Customer workbook " + label + " exceeds the Excel cell text limit.");
+            try
+            {
+                System.Xml.XmlConvert.VerifyXmlChars(result);
+            }
+            catch (System.Xml.XmlException ex)
+            {
+                throw new InvalidDataException("Customer workbook " + label + " contains characters that are invalid in XML provenance.", ex);
+            }
             return result;
         }
 
