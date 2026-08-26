@@ -139,8 +139,12 @@ namespace QS3D.Core.Coordination
             if (items == null) throw new ArgumentNullException(nameof(items));
             CellSize = cellSize;
 
+            var snapshot = CoordinationRuleCollectionContract.MaterializeBounded(
+                items,
+                "Coordination spatial index");
+
             _items = new Dictionary<string, CoordinationSpatialItem>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in items)
+            foreach (var item in snapshot)
             {
                 if (item == null) throw new ArgumentException("Spatial index cannot contain null items.", nameof(items));
                 if (_items.ContainsKey(item.ItemId))

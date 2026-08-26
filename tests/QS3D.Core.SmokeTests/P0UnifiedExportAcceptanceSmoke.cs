@@ -52,8 +52,8 @@ namespace QS3D.Core.SmokeTests
                 Require(!detailXml.Contains("r=\"O9\""), "CHI_TIET sample-layout contract must not reintroduce legacy opening-area columns.");
 
                 var traceXml = ReadEntry(path, "xl/worksheets/sheet4.xml");
-                Require(Count(traceXml, "DWG-P0-EXPORT") == 24,
-                    "TRACE_MODEL must cover 8 DGKL, 8 applicable COP_PHA, and 8 CHI_TIET P0 projections.");
+                Require(Count(traceXml, "DWG-P0-EXPORT") == 22,
+                    "TRACE_MODEL must cover 8 DGKL, 6 FormworkM2-backed COP_PHA, and 8 CHI_TIET P0 projections.");
                 Console.WriteLine("PASS P0 unified export acceptance");
             }
             finally
