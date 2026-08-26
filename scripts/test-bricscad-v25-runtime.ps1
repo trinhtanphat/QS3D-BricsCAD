@@ -101,7 +101,7 @@ finally {
             New-Item -ItemType Directory -Force -Path $evidenceRoot | Out-Null
             $evidencePath = Join-Path $evidenceRoot 'profile-sandbox-metadata.json'
             [ordered]@{
-                status = 'PASS'
+                status = 'CLEANUP_PASS'
                 source_profile_sha256 = Get-Qs3dStringArrayHash -Values @([string]$sandbox.SourceProfile)
                 cur_profile_restored = [bool]$profileEvidence.cur_profile_restored
                 profile_inventory_restored = [bool]$profileEvidence.profile_inventory_restored
