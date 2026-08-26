@@ -1,12 +1,30 @@
 # Local V26 package install/uninstall lifecycle
 
-Status: `PENDING_LOCAL` / `DO_NOT_RETRY_REMOTE`
+Status: `LOCAL_PASS / BOUNDED`
 
 Carrier: #3792  
+Evidence carrier: #3916  
+Canonical status closeout: #3922  
 Lane-Key: `issue-v26-package-install-lifecycle`  
 Parent release qualification: #1462 / `docs/LOCAL-V26-QUALIFICATION.md`
 
-This handoff qualifies only the clean-machine BricsCAD V26 package install/uninstall lifecycle. The remote/source lane prepares and statically guards the production package, generated installer/uninstaller and one-command local runner. It does **not** claim licensed BricsCAD runtime, production signing, update-channel, SECURELOAD or customer/private-DWG acceptance.
+This handoff qualifies only the clean-machine BricsCAD V26 package install/uninstall lifecycle. The remote/source lane prepares and statically guards the production package, generated installer/uninstaller and one-command local runner. The bounded licensed Windows/V26 execution has now passed at one exact source SHA. It does **not** claim production signing, update-channel, SECURELOAD, customer/private-DWG acceptance, interactive native commands or UI/DPI coverage.
+
+## Accepted bounded licensed evidence
+
+The unchanged production lifecycle runner passed on exact clean runtime source `e90c6aba7ef7bf903042d42dd991f9e7112fe659` in licensed BricsCAD V26.2.07 x64 using canonical profile `V26x64/en_US`.
+
+- ProductVersion: `0.1.0-preview.10081`.
+- Generated package SHA-256: `60F5239611B13F424BAE49922E5D34ADF3FC12C3064BF7506FE06CD27B8B3F7C`.
+- V26 `Release|x64` build: `0 warnings / 0 errors`.
+- Runner: unchanged `scripts/test-v26-package-install-lifecycle.ps1 -ConfirmDisposableInstall`.
+- Package identity/hash/runtimeconfig, V26-only disposable registration, installed payload/hash parity, uninstall removal, V25-registration preservation, unrelated-sentinel preservation and cleanup all passed.
+- The runtimeconfig check accepted the real .NET 8 `runtimeOptions.frameworks` array and required `Microsoft.WindowsDesktop.App`; it did not fall back to the obsolete singular `runtimeOptions.framework` shape.
+- Independent post-run readback found zero BricsCAD processes, no qualification V26 registration/install directory/sentinel residue, and unchanged unrelated V25 loader state.
+
+Sanitized evidence is preserved by PR #3916 and `docs/agent-work-claims/2026-08-25-codex-issue3878-v26-package-install-local-pass.md`.
+
+This result is historical exact-SHA evidence. A newer `main` SHA must not be called runtime-tested merely because it contains this claim. A future material change to the package/install lifecycle may require a separate current-candidate requalification; that does not erase this accepted bounded PASS at `e90c6aba7ef7bf903042d42dd991f9e7112fe659`.
 
 ## Source defect closed before local pickup
 
@@ -18,7 +36,7 @@ The install-lifecycle host-identity guard also accepts the canonical initialized
 
 ## Local command
 
-Start from a clean checkout at the exact pushed candidate SHA. Close every BricsCAD process and use a disposable V26 user profile/registry target that has no existing QS3D V26 DemandLoad registration.
+For a future material-change requalification, start from a clean checkout at the exact intended pushed candidate SHA. Close every BricsCAD process and use a disposable V26 user profile/registry target that has no existing QS3D V26 DemandLoad registration.
 
 ```powershell
 .\scripts\test-v26-package-install-lifecycle.ps1 `
@@ -64,11 +82,13 @@ On one exact source SHA the runner must prove all of the following:
 9. Unrelated V25 QS3D registration state and the qualification sentinel remain unchanged through install/uninstall.
 10. Owned disposable registration/files/sentinel are removed in final cleanup.
 
+The accepted #3916 run satisfied all ten assertions at exact runtime source `e90c6aba7ef7bf903042d42dd991f9e7112fe659`.
+
 ## Sanitized evidence
 
 Keep `v26-package-install-lifecycle.json` under ignored `artifacts/`. It may contain only exact source SHA, product version, package SHA-256, host major and bounded boolean results. It must not contain raw registry paths, install paths, private DLL paths, user identity, ProjectId/Handle, customer drawing names, proprietary BricsCAD binaries, signing secrets or unsanitized exceptions.
 
-A successful source/static/CI run is **not** `LOCAL_PASS`. Only the local Windows/V26 execution above can promote this bounded package lifecycle cell. Failure should be returned as sanitized exact-SHA evidence; production/source defects then reopen or continue a source-fix carrier before local retry.
+A successful source/static/CI run is **not** `LOCAL_PASS`. The accepted `LOCAL_PASS / BOUNDED` above comes only from the licensed local Windows/V26 execution recorded by #3916. Future failures after a material source change must be returned as sanitized exact-SHA evidence; production/source defects then reopen or continue a source-fix carrier before local retry.
 
 ## Scope left pending
 

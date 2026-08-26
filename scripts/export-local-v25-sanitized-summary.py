@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import os
 import re
-import stat
 import sys
-import tempfile
 from pathlib import Path
 
 SHA40 = re.compile(r"^[0-9a-fA-F]{40}$")
@@ -40,8 +37,6 @@ SAFE_STEP_NAMES = frozenset(
         "Finalize signed package metadata / hashes / ZIP",
     }
 )
-MAX_QUALIFICATION_JSON_BYTES = 1024 * 1024
-_REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 
 
 def normalized_status(value, fallback="UNKNOWN"):
@@ -118,166 +113,6 @@ def yes_no(value):
 def yes_no_unknown(report, key):
     value = report.get(key)
     return "YES" if value is True else "NO" if value is False else "UNKNOWN"
-
-
-def _is_reparse_point(info):
-    return bool(getattr(info, "st_file_attributes", 0) & _REPARSE_POINT)
-
-
-def _require_ordinary_file(path, label):
-    try:
-        info = path.lstat()
-    except OSError as exc:
-        raise ValueError(f"{label} is unavailable: {exc.__class__.__name__}") from exc
-    if path.is_symlink() or _is_reparse_point(info) or not stat.S_ISREG(info.st_mode):
-        raise ValueError(f"{label} must be an ordinary non-reparse file")
-    return info
-
-
-def _require_ordinary_directory(path, label):
-    try:
-        info = path.lstat()
-    except OSError as exc:
-        raise ValueError(f"{label} is unavailable: {exc.__class__.__name__}") from exc
-    if path.is_symlink() or _is_reparse_point(info) or not stat.S_ISDIR(info.st_mode):
-        raise ValueError(f"{label} must be an ordinary non-reparse directory")
-    return info
-
-
-def _require_safe_directory_chain(path, label):
-    cursor = Path(os.path.abspath(os.fspath(path)))
-    while True:
-        _require_ordinary_directory(cursor, label)
-        next_cursor = cursor.parent
-        if next_cursor == cursor:
-            return
-        cursor = next_cursor
-
-
-def _ensure_safe_output_parent(parent):
-    parent = Path(os.path.abspath(os.fspath(parent)))
-    missing = []
-    cursor = parent
-    while True:
-        try:
-            cursor.lstat()
-            break
-        except FileNotFoundError:
-            missing.append(cursor)
-            next_cursor = cursor.parent
-            if next_cursor == cursor:
-                raise ValueError("sanitized summary output has no safe existing directory ancestor")
-            cursor = next_cursor
-        except OSError as exc:
-            raise ValueError(
-                f"sanitized summary output ancestor is unavailable: {exc.__class__.__name__}"
-            ) from exc
-
-    _require_safe_directory_chain(cursor, "sanitized summary output ancestor")
-
-    for directory in reversed(missing):
-        try:
-            directory.mkdir()
-        except FileExistsError:
-            pass
-        except OSError as exc:
-            raise ValueError(
-                f"sanitized summary output directory could not be created safely: {exc.__class__.__name__}"
-            ) from exc
-        _require_safe_directory_chain(directory, "sanitized summary output directory")
-    _require_safe_directory_chain(parent, "sanitized summary output directory")
-
-
-def _same_file_identity(left, right):
-    try:
-        if right.exists():
-            return left.samefile(right)
-    except OSError as exc:
-        raise ValueError(f"could not compare qualification input/output identities: {exc.__class__.__name__}") from exc
-    left_key = os.path.normcase(os.path.abspath(os.fspath(left)))
-    right_key = os.path.normcase(os.path.abspath(os.fspath(right)))
-    return left_key == right_key
-
-
-def read_bounded_qualification_report(source):
-    path_info = _require_ordinary_file(source, "qualification report")
-    if path_info.st_size > MAX_QUALIFICATION_JSON_BYTES:
-        raise ValueError("qualification report exceeds the 1 MiB input limit")
-
-    try:
-        with source.open("rb", buffering=0) as stream:
-            before = os.fstat(stream.fileno())
-            if _is_reparse_point(before) or not stat.S_ISREG(before.st_mode):
-                raise ValueError("qualification report must be an ordinary non-reparse file")
-            if before.st_size > MAX_QUALIFICATION_JSON_BYTES:
-                raise ValueError("qualification report exceeds the 1 MiB input limit")
-            payload = stream.read(MAX_QUALIFICATION_JSON_BYTES + 1)
-            after = os.fstat(stream.fileno())
-    except ValueError:
-        raise
-    except OSError as exc:
-        raise ValueError(f"could not read qualification report safely: {exc.__class__.__name__}") from exc
-
-    if len(payload) > MAX_QUALIFICATION_JSON_BYTES:
-        raise ValueError("qualification report exceeds the 1 MiB input limit")
-    if before.st_size != after.st_size or after.st_size != len(payload):
-        raise ValueError("qualification report size changed while it was being read")
-
-    try:
-        final_info = source.lstat()
-    except OSError as exc:
-        raise ValueError(f"qualification report changed while it was being read: {exc.__class__.__name__}") from exc
-    if source.is_symlink() or _is_reparse_point(final_info) or not stat.S_ISREG(final_info.st_mode):
-        raise ValueError("qualification report changed to an unsafe file type while it was being read")
-    if final_info.st_size != after.st_size:
-        raise ValueError("qualification report size changed while it was being read")
-    if before.st_dev != final_info.st_dev or before.st_ino != final_info.st_ino:
-        raise ValueError("qualification report identity changed while it was being read")
-
-    try:
-        return payload.decode("utf-8-sig")
-    except UnicodeDecodeError as exc:
-        raise ValueError("qualification report is not strict UTF-8") from exc
-
-
-def write_summary_atomically(destination, text):
-    parent = destination.parent
-    _ensure_safe_output_parent(parent)
-    if destination.exists() or destination.is_symlink():
-        _require_ordinary_file(destination, "sanitized summary output")
-
-    encoded = text.encode("utf-8")
-    descriptor = None
-    temp_path = None
-    try:
-        descriptor, temp_name = tempfile.mkstemp(
-            prefix=f".{destination.name}.",
-            suffix=".tmp",
-            dir=parent,
-        )
-        temp_path = Path(temp_name)
-        with os.fdopen(descriptor, "wb") as stream:
-            descriptor = None
-            stream.write(encoded)
-            stream.flush()
-            os.fsync(stream.fileno())
-        _require_ordinary_file(temp_path, "sanitized summary temporary file")
-        if destination.exists() or destination.is_symlink():
-            _require_ordinary_file(destination, "sanitized summary output")
-        os.replace(temp_path, destination)
-        temp_path = None
-    except ValueError:
-        raise
-    except OSError as exc:
-        raise ValueError(f"could not publish sanitized summary atomically: {exc.__class__.__name__}") from exc
-    finally:
-        if descriptor is not None:
-            os.close(descriptor)
-        if temp_path is not None:
-            try:
-                temp_path.unlink(missing_ok=True)
-            except OSError:
-                pass
 
 
 def build_summary(report):
@@ -392,28 +227,37 @@ def main(argv=None):
 
     source = Path(args.input)
     destination = Path(args.output)
-    try:
-        _require_ordinary_file(source, "qualification report")
-        _ensure_safe_output_parent(destination.parent)
-        if _same_file_identity(source, destination):
-            raise ValueError("sanitized summary output must not alias the input qualification report")
-        if destination.exists() or destination.is_symlink():
-            _require_ordinary_file(destination, "sanitized summary output")
-        report_text = read_bounded_qualification_report(source)
-        report = json.loads(report_text)
-        if not isinstance(report, dict):
-            raise ValueError("qualification report root must be a JSON object")
-        write_summary_atomically(destination, build_summary(report))
-    except json.JSONDecodeError:
-        print("ERROR: qualification report contains invalid JSON.", file=sys.stderr)
-        return 2
-    except ValueError as exc:
-        print(f"ERROR: {exc}.", file=sys.stderr)
+    if not source.is_file():
+        print(f"ERROR: qualification report does not exist: {source}", file=sys.stderr)
         return 2
 
-    print("Sanitized V25 handoff written.")
+    try:
+        source_identity = source.resolve()
+        destination_identity = destination.resolve()
+        aliases_input = source_identity == destination_identity
+        if not aliases_input and destination.exists():
+            aliases_input = source.samefile(destination)
+    except OSError as exc:
+        print(f"ERROR: could not resolve qualification input/output paths safely: {exc}", file=sys.stderr)
+        return 2
+    if aliases_input:
+        print("ERROR: sanitized summary output must not alias the input qualification report.", file=sys.stderr)
+        return 2
+
+    try:
+        report = json.loads(source.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"ERROR: could not read qualification report: {exc}", file=sys.stderr)
+        return 2
+    if not isinstance(report, dict):
+        print("ERROR: qualification report root must be a JSON object.", file=sys.stderr)
+        return 2
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(build_summary(report), encoding="utf-8")
+    print(f"Sanitized V25 handoff written: {destination}")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
