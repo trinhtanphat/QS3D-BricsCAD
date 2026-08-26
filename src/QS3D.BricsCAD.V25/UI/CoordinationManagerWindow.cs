@@ -20,6 +20,10 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly DataGrid _grid;
         private readonly ComboBox _statusFilter;
         private readonly ComboBox _severityFilter;
+        private readonly ComboBox _kindFilter;
+        private readonly TextBox _floorFilter;
+        private readonly TextBox _categoryFilter;
+        private readonly TextBox _ruleFilter;
         private readonly CheckBox _actionableOnly;
         private readonly ComboBox _editStatus;
         private readonly TextBox _assignee;
@@ -63,6 +67,26 @@ namespace QS3D.BricsCAD.V25.UI
                 _severityFilter.Items.Add(severity.ToString());
             _severityFilter.SelectedIndex = 0;
             filters.Children.Add(_severityFilter);
+
+            filters.Children.Add(Label("Loại"));
+            _kindFilter = new ComboBox { Width = 120, Margin = new Thickness(4, 0, 12, 0) };
+            _kindFilter.Items.Add("Tất cả");
+            foreach (CoordinationFindingKind kind in Enum.GetValues(typeof(CoordinationFindingKind)))
+                _kindFilter.Items.Add(kind.ToString());
+            _kindFilter.SelectedIndex = 0;
+            filters.Children.Add(_kindFilter);
+
+            filters.Children.Add(Label("Tầng"));
+            _floorFilter = new TextBox { Width = 105, Margin = new Thickness(4, 0, 12, 0), MaxLength = 256 };
+            filters.Children.Add(_floorFilter);
+
+            filters.Children.Add(Label("Category"));
+            _categoryFilter = new TextBox { Width = 115, Margin = new Thickness(4, 0, 12, 0), MaxLength = 256 };
+            filters.Children.Add(_categoryFilter);
+
+            filters.Children.Add(Label("Rule"));
+            _ruleFilter = new TextBox { Width = 115, Margin = new Thickness(4, 0, 12, 0), MaxLength = 256 };
+            filters.Children.Add(_ruleFilter);
 
             _actionableOnly = new CheckBox
             {
@@ -145,6 +169,10 @@ namespace QS3D.BricsCAD.V25.UI
 
             _statusFilter.SelectionChanged += (_, __) => SafeRefresh();
             _severityFilter.SelectionChanged += (_, __) => SafeRefresh();
+            _kindFilter.SelectionChanged += (_, __) => SafeRefresh();
+            _floorFilter.TextChanged += (_, __) => SafeRefresh();
+            _categoryFilter.TextChanged += (_, __) => SafeRefresh();
+            _ruleFilter.TextChanged += (_, __) => SafeRefresh();
             _actionableOnly.Checked += (_, __) => SafeRefresh();
             _actionableOnly.Unchecked += (_, __) => SafeRefresh();
 
@@ -326,17 +354,14 @@ namespace QS3D.BricsCAD.V25.UI
 
         private CoordinationManagerFilter BuildFilter()
         {
-            var filter = new CoordinationManagerFilter
-            {
-                IncludeNonActionable = _actionableOnly.IsChecked != true
-            };
-            if (_statusFilter.SelectedIndex > 0 &&
-                Enum.TryParse(_statusFilter.SelectedItem?.ToString(), out CoordinationFindingStatus status))
-                filter.Status = status;
-            if (_severityFilter.SelectedIndex > 0 &&
-                Enum.TryParse(_severityFilter.SelectedItem?.ToString(), out CoordinationFindingSeverity severity))
-                filter.MinimumSeverity = severity;
-            return filter;
+            return CoordinationManagerFilterBuilder.Build(
+                _statusFilter.SelectedItem?.ToString() ?? string.Empty,
+                _severityFilter.SelectedItem?.ToString() ?? string.Empty,
+                _actionableOnly.IsChecked == true,
+                _kindFilter.SelectedItem?.ToString() ?? string.Empty,
+                _floorFilter.Text,
+                _categoryFilter.Text,
+                _ruleFilter.Text);
         }
 
         private static CoordinationManagerFinding ToFinding(
