@@ -147,21 +147,6 @@ namespace QS3D.Core.Services
                 "Project element structure changed while materializing regeneration target ids. Retry targeted regeneration against the current project state.");
         }
 
-        private static void RequireRegenerationStructureFresh(ProjectState project, IReadOnlyList<ProjectElement> expectedElements)
-        {
-            if (project.Elements.Count != expectedElements.Count)
-                throw RegenerationStructureFreshnessError();
-            for (var index = 0; index < expectedElements.Count; index++)
-                if (!ReferenceEquals(project.Elements[index], expectedElements[index]))
-                    throw RegenerationStructureFreshnessError();
-        }
-
-        private static InvalidOperationException RegenerationStructureFreshnessError()
-        {
-            return new InvalidOperationException(
-                "Project element structure changed during regeneration. Retry regeneration against a stable project state.");
-        }
-
         private static void ValidateSubsetDependencyExistence(
             IEnumerable<ProjectElement> targets,
             ISet<string> projectIds)
@@ -245,12 +230,10 @@ namespace QS3D.Core.Services
 
         private int RegenerateTransactional(ProjectState project, IEnumerable<ProjectElement> candidates, int passBasis)
         {
-            var expectedElements = project.Elements.ToArray();
-            RequireElementStructureFresh(project, expectedElements);
             var snapshot = ProjectStateSnapshot.Capture(project);
             try
             {
-                return Regenerate(project, candidates, passBasis, expectedElements);
+                return Regenerate(project, candidates, passBasis);
             }
             catch (Exception regenerationError)
             {
@@ -266,22 +249,14 @@ namespace QS3D.Core.Services
             }
         }
 
-        private int Regenerate(
-            ProjectState project,
-            IEnumerable<ProjectElement> candidates,
-            int passBasis,
-            IReadOnlyList<ProjectElement> expectedElements)
+        private int Regenerate(ProjectState project, IEnumerable<ProjectElement> candidates, int passBasis)
         {
-            RequireRegenerationStructureFresh(project, expectedElements);
             var candidateList = candidates?.ToList() ?? throw new ArgumentNullException(nameof(candidates));
-            RequireRegenerationStructureFresh(project, expectedElements);
             var total = 0;
             var maxPasses = Math.Max(2, passBasis * 2 + 2);
 
             for (var pass = 0; pass < maxPasses; pass++)
             {
-                RequireRegenerationStructureFresh(project, expectedElements);
-
                 // TopologicalDirtyOrder derives ordering directly from each candidate's DependsOn
                 // list. Rebuilding the reverse-dependency index here never participates in that
                 // ordering and previously caused a redundant full-project scan on every pass.
@@ -301,18 +276,15 @@ namespace QS3D.Core.Services
                         selected = regenerator;
                         break;
                     }
-                    RequireRegenerationStructureFresh(project, expectedElements);
 
                     var handled = false;
                     if (selected != null)
                     {
                         selected.Regenerate(project, element);
-                        RequireRegenerationStructureFresh(project, expectedElements);
                         handled = true;
                     }
                     if (MeasuredSolidQuantityPolicy.Apply(element)) handled = true;
                     if (_ruleEngine.ApplyMatching(project, element) > 0) handled = true;
-                    RequireRegenerationStructureFresh(project, expectedElements);
                     if (!handled) continue;
 
                     element.MarkClean(ElementGeometryPolicy.SemanticCleanFlags(element.Category));
@@ -320,11 +292,9 @@ namespace QS3D.Core.Services
                     total++;
                 }
 
-                RequireRegenerationStructureFresh(project, expectedElements);
                 if (progress == 0) break;
             }
 
-            RequireRegenerationStructureFresh(project, expectedElements);
             if (total > 0) project.Touch();
             return total;
         }

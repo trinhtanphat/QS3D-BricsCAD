@@ -77,7 +77,9 @@ def main():
     forbid(region, "AppendEntity", "preview database persistence", failures)
 
     require(transient, "TransientManager.CurrentTransientManager", "BricsCAD transient manager", failures)
-    require(transient, "AddTransient(region, TransientDrawingMode.Highlight", "transient exact-region highlight", failures)
+    require(transient, "GetFreeSubDrawingMode(TransientDrawingMode.DirectTopmost", "colored transient drawing mode allocation", failures)
+    require(transient, "region.ColorIndex = 1", "ACI red deduction/intersection evidence", failures)
+    require(transient, "AddTransient(region, TransientDrawingMode.DirectTopmost", "transient exact-region colored overlay", failures)
     require(transient, "EraseTransient(solid", "transient cleanup", failures)
     require(transient, "FrameworkElement.UnloadedEvent", "panel unload cleanup", failures)
     require(transient, "TreeView.SelectedItemChangedEvent", "selection-change cleanup", failures)
@@ -94,7 +96,7 @@ def main():
             print(" -", failure)
         return 1
 
-    print("PASS: Quantity Insight routes BREP/detail/deduction locate through current owned live geometry and transient exact-region display.")
+    print("PASS: Quantity Insight routes BREP/detail/deduction locate through current owned live geometry and transient exact-region colored display.")
     print("NOTE: this is a static source guard; licensed BricsCAD V25 graphics/BREP runtime qualification remains separate.")
     return 0
 
