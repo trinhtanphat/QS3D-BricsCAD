@@ -42,7 +42,7 @@ namespace QS3D.Core.Export
             var summaries = Snapshot(summaryRows, false);
             ValidateScope(details, summaries);
 
-            var formwork = summaries.Where(row => row.HasFormworkM2Evidence).ToList();
+            var formwork = summaries.Where(row => row.HasGrossFormworkM2Evidence || row.HasConcreteContactDeductionM2Evidence || row.HasNetFormworkM2Evidence).ToList();
             if ((long)details.Count + summaries.Count + formwork.Count > MaxRows)
                 throw new InvalidDataException("Customer workbook TRACE_MODEL exceeds the Excel row limit.");
 
@@ -116,7 +116,12 @@ namespace QS3D.Core.Export
                     DeductionM3 = Checked(row.DeductionM3, row.HasDeductionM3Evidence, "DeductionM3"),
                     NetConcreteM3 = Checked(row.NetConcreteM3, row.HasNetConcreteM3Evidence, "NetConcreteM3"),
                     FormworkM2 = Checked(row.FormworkM2, row.HasFormworkM2Evidence, "FormworkM2"),
+                    GrossFormworkM2 = Checked(row.GrossFormworkM2, row.HasGrossFormworkM2Evidence, "GrossFormworkM2"),
+                    ConcreteContactDeductionM2 = Checked(row.ConcreteContactDeductionM2, row.HasConcreteContactDeductionM2Evidence, "ConcreteContactDeductionM2"),
+                    NetFormworkM2 = Checked(row.NetFormworkM2, row.HasNetFormworkM2Evidence, "NetFormworkM2"),
                     LengthM = Checked(row.LengthM, row.HasLengthMEvidence, "LengthM"),
+                    WidthM = Checked(row.WidthM, row.HasWidthMEvidence, "WidthM"),
+                    HeightM = Checked(row.HeightM, row.HasHeightMEvidence, "HeightM"),
                     OuterPerimeterM = Checked(row.OuterPerimeterM, row.HasOuterPerimeterMEvidence, "OuterPerimeterM"),
                     InnerPerimeterM = Checked(row.InnerPerimeterM, row.HasInnerPerimeterMEvidence, "InnerPerimeterM"),
                     DoorAreaM2 = Checked(row.DoorAreaM2, row.HasDoorAreaM2Evidence, "DoorAreaM2"),
@@ -128,7 +133,12 @@ namespace QS3D.Core.Export
                     HasDeductionM3Evidence = row.HasDeductionM3Evidence,
                     HasNetConcreteM3Evidence = row.HasNetConcreteM3Evidence,
                     HasFormworkM2Evidence = row.HasFormworkM2Evidence,
+                    HasGrossFormworkM2Evidence = row.HasGrossFormworkM2Evidence,
+                    HasConcreteContactDeductionM2Evidence = row.HasConcreteContactDeductionM2Evidence,
+                    HasNetFormworkM2Evidence = row.HasNetFormworkM2Evidence,
                     HasLengthMEvidence = row.HasLengthMEvidence,
+                    HasWidthMEvidence = row.HasWidthMEvidence,
+                    HasHeightMEvidence = row.HasHeightMEvidence,
                     HasOuterPerimeterMEvidence = row.HasOuterPerimeterMEvidence,
                     HasInnerPerimeterMEvidence = row.HasInnerPerimeterMEvidence,
                     HasDoorAreaM2Evidence = row.HasDoorAreaM2Evidence,
@@ -236,9 +246,9 @@ namespace QS3D.Core.Export
                 Text(sb, Cell(2, excelRow), row.Category, 0);
                 Text(sb, Cell(3, excelRow), DisplayName(row), 0);
                 Number(sb, Cell(4, excelRow), row.Count, IntegerStyle);
-                Evidence(sb, Cell(5, excelRow), row.FormworkM2, row.HasFormworkM2Evidence);
-                if (row.HasFormworkM2Evidence) Number(sb, Cell(6, excelRow), 0d, DecimalStyle);
-                Evidence(sb, Cell(7, excelRow), row.FormworkM2, row.HasFormworkM2Evidence);
+                Evidence(sb, Cell(5, excelRow), row.GrossFormworkM2, row.HasGrossFormworkM2Evidence);
+                Evidence(sb, Cell(6, excelRow), row.ConcreteContactDeductionM2, row.HasConcreteContactDeductionM2Evidence);
+                Evidence(sb, Cell(7, excelRow), row.NetFormworkM2, row.HasNetFormworkM2Evidence);
                 Text(sb, Cell(8, excelRow), traceKey, WrappedStyle);
             });
         }
@@ -253,11 +263,12 @@ namespace QS3D.Core.Export
                 Text(sb, Cell(2, excelRow), DisplayName(row), 0);
                 Text(sb, Cell(3, excelRow), FloorText(row), 0);
                 Evidence(sb, Cell(4, excelRow), row.LengthM, row.HasLengthMEvidence);
-                // Width and height are intentionally blank: QuantityReportRow currently has no real evidence fields for them.
+                Evidence(sb, Cell(5, excelRow), row.WidthM, row.HasWidthMEvidence);
+                Evidence(sb, Cell(6, excelRow), row.HeightM, row.HasHeightMEvidence);
                 Evidence(sb, Cell(7, excelRow), row.GrossConcreteM3, row.HasGrossConcreteM3Evidence);
                 Evidence(sb, Cell(8, excelRow), row.DeductionM3, row.HasDeductionM3Evidence);
                 Evidence(sb, Cell(9, excelRow), row.NetConcreteM3, row.HasNetConcreteM3Evidence);
-                Evidence(sb, Cell(10, excelRow), row.FormworkM2, row.HasFormworkM2Evidence);
+                Evidence(sb, Cell(10, excelRow), row.NetFormworkM2, row.HasNetFormworkM2Evidence);
                 Text(sb, Cell(11, excelRow), traceKey, WrappedStyle);
             });
         }
