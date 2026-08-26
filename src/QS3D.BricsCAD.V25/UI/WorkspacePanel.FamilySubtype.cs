@@ -159,7 +159,11 @@ namespace QS3D.BricsCAD.V25.UI
                             family.Id + " • " + family.Category + " • " + family.Name + " • Workspace " +
                             (launchSolid3D ? "Solid3D" : "Tham số"));
                     }
+                    if (!string.IsNullOrWhiteSpace(subtype))
+                        family.Properties[RaftFoundationPropertySet.WorkspaceSubtypeKey] = subtype;
                     SeedRoomFamilyDefaults(family);
+                    if (RaftFoundationPropertySet.IsRaftFamily(family))
+                        RaftFoundationLevelPlacement.EnsureDefaults(project, family);
                     ProjectFamilyActivationService.SetActive(project, family.Id);
                     return family;
                 }, launchSolid3D ? "Tạo Family Solid3D từ Workspace" : "Tạo Family tham số từ Workspace");
@@ -174,6 +178,8 @@ namespace QS3D.BricsCAD.V25.UI
                         var live = _viewModel.Families.FirstOrDefault(x =>
                             string.Equals(x.Id, created.Id, StringComparison.OrdinalIgnoreCase));
                         FamilyList.SelectedItem = live;
+                        if (live != null && RaftFoundationPropertySet.IsRaftFamily(live))
+                            ApplyRaftFoundationPropertyForm(live);
                         RefreshSelectedFamilyHighlight();
                         if (launchSolid3D) OnView3DClick(this, new RoutedEventArgs());
                     },
@@ -222,7 +228,6 @@ namespace QS3D.BricsCAD.V25.UI
 
             var familyNameRow = _viewModel.Properties.FirstOrDefault(x =>
                 string.Equals(x.Name, "Tên Family", StringComparison.CurrentCultureIgnoreCase));
-
             _viewModel.Properties.Clear();
             if (familyNameRow != null)
             {
@@ -231,31 +236,14 @@ namespace QS3D.BricsCAD.V25.UI
             }
             else
             {
-                var fallbackName = new PropertyRowViewModel
-                {
-                    Group = "Information",
-                    Name = "Tên Family",
-                    IsReadOnly = true
-                };
+                var fallbackName = new PropertyRowViewModel { Group = "Information", Name = "Tên Family", IsReadOnly = true };
                 fallbackName.Value = family.Name;
                 _viewModel.Properties.Add(fallbackName);
             }
-
-            var categoryRow = new PropertyRowViewModel
-            {
-                Group = "Information",
-                Name = "Loại cấu kiện",
-                IsReadOnly = true
-            };
+            var categoryRow = new PropertyRowViewModel { Group = "Information", Name = "Loại cấu kiện", IsReadOnly = true };
             categoryRow.Value = "Phòng";
             _viewModel.Properties.Add(categoryRow);
-
-            var floorRow = new PropertyRowViewModel
-            {
-                Group = "Information",
-                Name = "Tầng",
-                IsReadOnly = true
-            };
+            var floorRow = new PropertyRowViewModel { Group = "Information", Name = "Tầng", IsReadOnly = true };
             floorRow.Value = FloorCombo?.SelectedItem as string ?? string.Empty;
             _viewModel.Properties.Add(floorRow);
 
@@ -270,20 +258,12 @@ namespace QS3D.BricsCAD.V25.UI
         }
 
         private void AddRoomFamilyPropertyRow(
-            ProjectFamily family,
-            string group,
-            string label,
-            string key,
-            string fallback,
-            IReadOnlyList<string> choices,
-            string unit = "")
+            ProjectFamily family, string group, string label, string key, string fallback,
+            IReadOnlyList<string> choices, string unit = "")
         {
             var current = family.Properties.TryGetValue(key, out var stored) ? (stored ?? string.Empty).Trim() : fallback;
-            var rowChoices = choices
-                .Concat(new[] { current })
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .Distinct(StringComparer.CurrentCultureIgnoreCase)
-                .ToArray();
+            var rowChoices = choices.Concat(new[] { current }).Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.CurrentCultureIgnoreCase).ToArray();
             var row = new PropertyRowViewModel
             {
                 Group = group,
@@ -303,7 +283,6 @@ namespace QS3D.BricsCAD.V25.UI
                 ? (stored ?? string.Empty).Trim()
                 : RoomDefaultValue(key);
             var next = (value ?? string.Empty).Trim();
-
             if (string.Equals(key, RoomTransparencyKey, StringComparison.Ordinal))
             {
                 if ((!double.TryParse(next, NumberStyles.Float, CultureInfo.InvariantCulture, out var percent) &&
@@ -323,9 +302,7 @@ namespace QS3D.BricsCAD.V25.UI
                 SetStatus(RoomPropertyLabel(key) + ": không được để trống.");
                 return previous;
             }
-
             if (string.Equals(previous, next, StringComparison.Ordinal)) return previous;
-
             try
             {
                 var doc = Application.DocumentManager.MdiActiveDocument;
@@ -334,9 +311,7 @@ namespace QS3D.BricsCAD.V25.UI
                 var owned = project.FindFamily(family.Id);
                 if (owned == null || !ReferenceEquals(owned, family))
                     throw new InvalidOperationException("Family Phòng đang chọn đã stale hoặc không thuộc project hiện tại.");
-
-                var result = ExecuteAtomic(
-                    project,
+                var result = ExecuteAtomic(project,
                     () => ProjectFamilyService.SetProperty(project, owned.Id, key, next),
                     "Cập nhật thuộc tính Family Phòng");
                 var live = owned.Properties.TryGetValue(key, out var saved) ? saved ?? next : next;
@@ -383,8 +358,11 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnRoomFloorContextChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_loadingContext) return;
-            if (FamilyList.SelectedItem is ProjectFamily family && family.Category == ElementCategory.Room)
-                ApplyRoomFamilyPropertyForm(family);
+            if (FamilyList.SelectedItem is ProjectFamily family)
+            {
+                if (RaftFoundationPropertySet.IsRaftFamily(family)) ApplyRaftFoundationPropertyForm(family);
+                else if (family.Category == ElementCategory.Room) ApplyRoomFamilyPropertyForm(family);
+            }
         }
 
         private static string NextSubtypeFamilyName(string subtype, ISet<string> existingNames)
@@ -415,7 +393,6 @@ namespace QS3D.BricsCAD.V25.UI
             _familySubtypeFilter = ResolveFoundationSubtype(item);
             ApplyFamilySubtypeFilter();
             if (string.IsNullOrWhiteSpace(_familySubtypeFilter)) return;
-
             var first = FamilyList.Items.Cast<object>().OfType<ProjectFamily>().FirstOrDefault();
             _loadingContext = true;
             try
@@ -425,6 +402,7 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     _viewModel.SetActiveFamily(first);
                     _viewModel.ShowFamilyProperties();
+                    if (RaftFoundationPropertySet.IsRaftFamily(first)) ApplyRaftFoundationPropertyForm(first);
                     SetStatus("Nhóm mô hình: " + _familySubtypeFilter + " • " + first.Name);
                 }
                 else
@@ -458,7 +436,9 @@ namespace QS3D.BricsCAD.V25.UI
                     ApplyFamilySubtypeFilter();
                 }
             }
-            if (family != null && family.Category == ElementCategory.Room)
+            if (family != null && RaftFoundationPropertySet.IsRaftFamily(family))
+                ApplyRaftFoundationPropertyForm(family);
+            else if (family != null && family.Category == ElementCategory.Room)
                 ApplyRoomFamilyPropertyForm(family);
             RefreshSelectedFamilyHighlight();
         }
@@ -496,8 +476,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static string ResolveFoundationSubtype(TreeViewItem item)
         {
-            if (!(item.Tag is string tag) ||
-                !Enum.TryParse(tag, true, out ElementCategory category) ||
+            if (!(item.Tag is string tag) || !Enum.TryParse(tag, true, out ElementCategory category) ||
                 category != ElementCategory.Foundation) return string.Empty;
             var header = (item.Header as string ?? string.Empty).Trim();
             return FoundationFamilySubtypes.FirstOrDefault(x =>
@@ -509,7 +488,10 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static bool FamilyMatchesWorkspaceSubtype(ProjectFamily family, string subtype) =>
             string.IsNullOrWhiteSpace(subtype) ||
-            (family.Category == ElementCategory.Foundation && FamilyNameHasSubtype(family.Name, subtype));
+            (family.Category == ElementCategory.Foundation &&
+             (string.Equals(RaftFoundationPropertySet.SubtypeName, subtype, StringComparison.OrdinalIgnoreCase)
+                 ? RaftFoundationPropertySet.IsRaftFamily(family)
+                 : FamilyNameHasSubtype(family.Name, subtype)));
 
         private static bool FamilyNameHasSubtype(string familyName, string subtype)
         {
@@ -537,7 +519,6 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (!(FamilyList.SelectedItem is ProjectFamily selected)) return;
             if (FamilyList.ItemContainerGenerator.Status == GeneratorStatus.GeneratingContainers) return;
-
             FamilyList.ScrollIntoView(selected);
         }
     }
