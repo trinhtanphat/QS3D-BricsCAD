@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -109,6 +110,92 @@ namespace QS3D.Core.Coordination
         }
     }
 
+    internal static class CoordinationRuleCollectionContract
+    {
+        internal const int MaximumEntries = 10000;
+
+        internal static T[] MaterializeBounded<T>(IEnumerable<T> items, string collectionLabel)
+        {
+            if (items == null) throw new ArgumentNullException(nameof(items));
+
+            var hasKnownCount = TryGetKnownCount(items, out var knownCount);
+            if (hasKnownCount && knownCount > MaximumEntries)
+                ThrowTooManyEntries(collectionLabel);
+
+            var snapshot = hasKnownCount ? new List<T>(knownCount) : new List<T>();
+            var observedCount = 0;
+            foreach (var item in items)
+            {
+                if (observedCount == MaximumEntries)
+                    ThrowTooManyEntries(collectionLabel);
+                snapshot.Add(item);
+                observedCount++;
+            }
+
+            if (hasKnownCount && knownCount != observedCount)
+            {
+                throw new InvalidOperationException(
+                    collectionLabel + " traversal produced " + observedCount +
+                    " entries but its known count reported " + knownCount + ".");
+            }
+
+            return snapshot.ToArray();
+        }
+
+        private static bool TryGetKnownCount<T>(IEnumerable<T> items, out int count)
+        {
+            var counts = new List<int>(3);
+            if (items is ICollection<T> collection)
+                counts.Add(collection.Count);
+            if (items is IReadOnlyCollection<T> readOnlyCollection)
+                counts.Add(readOnlyCollection.Count);
+            if (items is ICollection nonGenericCollection)
+                counts.Add(nonGenericCollection.Count);
+
+            if (counts.Count == 0)
+            {
+                count = 0;
+                return false;
+            }
+
+            count = counts[0];
+            var maximumCount = count;
+            var hasConflict = false;
+            var hasNegative = count < 0;
+            for (var i = 1; i < counts.Count; i++)
+            {
+                if (counts[i] < 0)
+                    hasNegative = true;
+                if (counts[i] != count)
+                    hasConflict = true;
+                if (counts[i] > maximumCount)
+                    maximumCount = counts[i];
+            }
+
+            if (maximumCount > MaximumEntries)
+            {
+                count = maximumCount;
+                return true;
+            }
+
+            if (hasNegative)
+                throw new InvalidOperationException(collectionLabelForCountError + " reports an invalid negative known count.");
+
+            if (hasConflict)
+                throw new InvalidOperationException(collectionLabelForCountError + " reports conflicting known counts.");
+
+            return true;
+        }
+
+        private const string collectionLabelForCountError = "Coordination collection";
+
+        private static void ThrowTooManyEntries(string collectionLabel)
+        {
+            throw new InvalidOperationException(
+                collectionLabel + " supports at most " + MaximumEntries + " entries.");
+        }
+    }
+
     /// <summary>
     /// Immutable profile. Profile and rule versions are carried into every resolution so
     /// downstream issue/workbook projections can retain the exact classification provenance.
@@ -124,7 +211,7 @@ namespace QS3D.Core.Coordination
             ProfileVersion = profileVersion;
             if (rules == null) throw new ArgumentNullException(nameof(rules));
 
-            var snapshot = rules.ToArray();
+            var snapshot = CoordinationRuleCollectionContract.MaterializeBounded(rules, "Coordination rule profile");
             if (snapshot.Any(rule => rule == null))
                 throw new ArgumentException("Rule profile cannot contain null rules.", nameof(rules));
 

@@ -32,16 +32,13 @@ namespace QS3D.Core.Geometry
             IReadOnlyList<IReadOnlyList<Point2>>? holes = null)
         {
             var normalizedOuter = PolygonScanlineClipper.NormalizeAndValidate(outer);
-            var sourceHoles = holes ?? Array.Empty<IReadOnlyList<Point2>>();
-            if (sourceHoles.Count > MaxHoles)
-                throw new ArgumentException("Polygon region exceeds the supported " + MaxHoles + " hole limit.", nameof(holes));
+            var sourceHoles = SnapshotHoleReferences(holes);
 
-            var normalizedHoles = new List<IReadOnlyList<Point2>>(sourceHoles.Count);
+            var normalizedHoles = new List<IReadOnlyList<Point2>>(sourceHoles.Length);
             var totalVertices = normalizedOuter.Count;
-            for (var i = 0; i < sourceHoles.Count; i++)
+            for (var i = 0; i < sourceHoles.Length; i++)
             {
-                var hole = sourceHoles[i] ?? throw new ArgumentException("Polygon region hole cannot be null at index " + i + ".", nameof(holes));
-                var normalized = PolygonScanlineClipper.NormalizeAndValidate(hole);
+                var normalized = PolygonScanlineClipper.NormalizeAndValidate(sourceHoles[i]);
                 totalVertices += normalized.Count;
                 if (totalVertices > MaxTotalVertices)
                     throw new ArgumentException("Polygon region exceeds the supported " + MaxTotalVertices + " total vertex limit.", nameof(holes));
@@ -53,6 +50,34 @@ namespace QS3D.Core.Geometry
             }
 
             return new PolygonRegion2(normalizedOuter, normalizedHoles.AsReadOnly());
+        }
+
+        private static IReadOnlyList<Point2>[] SnapshotHoleReferences(IReadOnlyList<IReadOnlyList<Point2>>? holes)
+        {
+            if (holes == null) return Array.Empty<IReadOnlyList<Point2>>();
+
+            var count = holes.Count;
+            if (count < 0 || count > MaxHoles)
+                throw new ArgumentException("Polygon region exceeds the supported " + MaxHoles + " hole limit.", nameof(holes));
+
+            var snapshot = new IReadOnlyList<Point2>[count];
+            try
+            {
+                for (var i = 0; i < count; i++)
+                    snapshot[i] = holes[i] ?? throw new ArgumentException("Polygon region hole cannot be null at index " + i + ".", nameof(holes));
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                throw new InvalidOperationException("Polygon region holes changed while the topology snapshot was being captured.", ex);
+            }
+            catch (IndexOutOfRangeException ex)
+            {
+                throw new InvalidOperationException("Polygon region holes changed while the topology snapshot was being captured.", ex);
+            }
+
+            if (holes.Count != count)
+                throw new InvalidOperationException("Polygon region hole count changed while the topology snapshot was being captured.");
+            return snapshot;
         }
 
         public static IReadOnlyList<PolygonScanSegment> Clip(PolygonRegion2 region, PolygonScanAxis axis, double coordinate)

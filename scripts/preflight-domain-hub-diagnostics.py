@@ -9,9 +9,10 @@ UI = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "DomainHubWindow.xaml"
 RUNTIME = ROOT / "src" / "QS3D.BricsCAD.V25" / "RuntimeDiagnosticsCommands.cs"
 SUPPORT = ROOT / "src" / "QS3D.BricsCAD.V25" / "SupportBundleCommands.cs"
 HARNESS = ROOT / "scripts" / "test-bricscad-v25-runtime.ps1"
+HARNESS_CORE = ROOT / "scripts" / "test-bricscad-v25-runtime-core.ps1"
 errors = []
 
-for path in (UI, RUNTIME, SUPPORT, HARNESS):
+for path in (UI, RUNTIME, SUPPORT, HARNESS, HARNESS_CORE):
     if not path.is_file():
         errors.append("missing diagnostics wiring source: " + str(path.relative_to(ROOT)))
 
@@ -56,15 +57,26 @@ if SUPPORT.is_file():
             errors.append("SupportBundleCommands.cs missing privacy-safe support contract: " + needle)
 
 if HARNESS.is_file():
-    text = HARNESS.read_text(encoding="utf-8")
+    wrapper_text = HARNESS.read_text(encoding="utf-8")
+    for needle in (
+        "test-bricscad-v25-runtime-core.ps1",
+        "New-Qs3dV25ProfileSandbox",
+        "Restore-Qs3dV25ProfileSandbox",
+        ". $coreScript @coreArgs",
+    ):
+        if needle not in wrapper_text:
+            errors.append("runtime harness wrapper missing split-contract token: " + needle)
+
+if HARNESS_CORE.is_file():
+    text = HARNESS_CORE.read_text(encoding="utf-8")
     for needle in (
         '"QS3DRUNTIMEPROBE"',
         'Require-Qs3dMarkerValue -Marker $marker -Key "command" -Expected "QS3DRUNTIMEPROBE"',
     ):
         if needle not in text:
-            errors.append("runtime harness missing deterministic automation probe contract: " + needle)
+            errors.append("runtime harness core missing deterministic automation probe contract: " + needle)
     if "QS3DRUNTIMECHECK" in text:
-        errors.append("automated NETLOAD marker harness must stay on QS3DRUNTIMEPROBE rather than the human-facing runtime diagnostic")
+        errors.append("automated NETLOAD marker harness core must stay on QS3DRUNTIMEPROBE rather than the human-facing runtime diagnostic")
 
 commands = []
 source_root = ROOT / "src" / "QS3D.BricsCAD.V25"
@@ -83,4 +95,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: customer-facing Domain Hub diagnostics use QS3DRUNTIMECHECK and privacy-safe QS3DSUPPORTBUNDLE exactly once, while the automated NETLOAD marker harness retains uniquely registered QS3DRUNTIMEPROBE as its deterministic automation-only command.")
+print("PASS: customer-facing Domain Hub diagnostics use QS3DRUNTIMECHECK and privacy-safe QS3DSUPPORTBUNDLE exactly once, while the profile-safe V25 wrapper delegates to a core that retains uniquely registered QS3DRUNTIMEPROBE as its deterministic automation-only command.")

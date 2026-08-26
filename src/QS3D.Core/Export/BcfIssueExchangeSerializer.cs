@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -71,7 +72,7 @@ namespace QS3D.Core.Export
                 topicElement.Add(commentsElement);
                 root.Add(topicElement);
             }
-            return new XDocument(root).ToString(SaveOptions.DisableFormatting);
+            return SerializeBounded(root);
         }
 
         public static BcfIssueExchange Deserialize(string payload)
@@ -184,6 +185,23 @@ namespace QS3D.Core.Export
                     EnsureFreeTextBound(comment.Text, "Text");
                 }
             }
+        }
+
+        private static string SerializeBounded(XElement root)
+        {
+            var builder = new StringBuilder(Math.Min(MaxSemanticXmlCharacters, 4096));
+            var writer = new BoundedStringWriter(builder, MaxSemanticXmlCharacters);
+            var settings = new XmlWriterSettings
+            {
+                OmitXmlDeclaration = true,
+                Indent = false,
+                ConformanceLevel = ConformanceLevel.Fragment
+            };
+            using (var xmlWriter = XmlWriter.Create(writer, settings))
+            {
+                root.WriteTo(xmlWriter);
+            }
+            return writer.ToString();
         }
 
         private static XElement Point(string name, BcfPoint3 point) =>
@@ -324,6 +342,42 @@ namespace QS3D.Core.Export
         {
             if (value.Length > MaxFreeTextCharacters)
                 throw new InvalidDataException("BCF free-text value exceeds the bounded scalar size: " + name + ".");
+        }
+
+        private sealed class BoundedStringWriter : StringWriter
+        {
+            private readonly int _maximumCharacters;
+
+            internal BoundedStringWriter(StringBuilder builder, int maximumCharacters)
+                : base(builder, CultureInfo.InvariantCulture)
+            {
+                _maximumCharacters = maximumCharacters;
+            }
+
+            public override void Write(char value)
+            {
+                EnsureCapacity(1);
+                base.Write(value);
+            }
+
+            public override void Write(char[] buffer, int index, int count)
+            {
+                EnsureCapacity(count);
+                base.Write(buffer, index, count);
+            }
+
+            public override void Write(string? value)
+            {
+                if (value == null) return;
+                EnsureCapacity(value.Length);
+                base.Write(value);
+            }
+
+            private void EnsureCapacity(int incomingCharacters)
+            {
+                if (incomingCharacters < 0 || GetStringBuilder().Length > _maximumCharacters - incomingCharacters)
+                    throw new InvalidDataException("BCF payload exceeds the bounded semantic XML size.");
+            }
         }
     }
 }
