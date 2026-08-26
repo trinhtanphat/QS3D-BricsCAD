@@ -16,7 +16,7 @@ namespace QS3D.BricsCAD.V25.UI
             if (!RaftFoundationPropertySet.IsRaftElement(element, family)) return;
 
             // The semantic key is intentionally recomputed from the current exact-BREP snapshot.
-            // Native SubentityId is never persisted as identity. FaceId remains the short-lived
+            // Native BREP subentity identity is never persisted. FaceId remains the short-lived
             // resolver for one snapshot; SemanticKey is the stable row identity used to re-resolve
             // the corresponding current face after a safe refresh/regeneration boundary.
             var sideFaces = geometry.FormworkFaces
