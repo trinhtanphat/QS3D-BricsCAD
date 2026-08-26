@@ -30,7 +30,8 @@ namespace QS3D.Core.SmokeTests
                         MinimumClearPanelWidthM = 0d,
                         MaximumClearPanelWidthM = 0d,
                         MinimumClearPanelHeightM = 0d,
-                        MaximumClearPanelHeightM = 0d
+                        MaximumClearPanelHeightM = 0d,
+                        ElementIds = { "CW-CELL-LIMIT-1" }
                     }
                 });
                 if (!File.Exists(path)) throw new Exception("Curtain XLSX must accept exactly 32,767 text characters.");
@@ -60,7 +61,8 @@ namespace QS3D.Core.SmokeTests
                             MinimumClearPanelWidthM = 0d,
                             MaximumClearPanelWidthM = 0d,
                             MinimumClearPanelHeightM = 0d,
-                            MaximumClearPanelHeightM = 0d
+                            MaximumClearPanelHeightM = 0d,
+                            ElementIds = { "CW-CELL-LIMIT-2" }
                         }
                     });
                 }

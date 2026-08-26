@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             MatchingFamilyCategoryPreservesProjection();
             MissingFamilyFailsClosed();
             LostNonZeroLengthAddendFailsClosed();
+            CurtainWallXlsxSmoke.Run();
         }
 
         private static void MismatchedFamilyCategoryFailsClosed()
