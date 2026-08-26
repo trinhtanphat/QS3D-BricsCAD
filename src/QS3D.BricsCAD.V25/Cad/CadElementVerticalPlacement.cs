@@ -25,7 +25,7 @@ namespace QS3D.BricsCAD.V25.Cad
             Placement = placement ?? throw new ArgumentNullException(nameof(placement));
             LegacyHeightM = legacyHeightM;
             LegacyBottomOffsetM = legacyBottomOffsetM;
-            if (placement.UsesBottomLevel)
+            if (placement.UsesBottomLevel || placement.UsesTopLevel)
             {
                 BottomDrawing = CadGeometryGuard.ToDrawingUnits(document, placement.BottomElevationM, element.Id + "/resolved bottom elevation");
             }
@@ -56,10 +56,7 @@ namespace QS3D.BricsCAD.V25.Cad
         public double HeightDrawing { get; }
         public double CenterDrawing { get; }
 
-        // Existing fingerprints store a source-relative BottomOffsetM. Keep that exact token for
-        // legacy elements, while Level-enabled elements use their absolute Level bottom so Core
-        // health checks can recompute the value without opening the DWG source entity.
-        public double FingerprintBottomM => UsesBottomLevel
+        public double FingerprintBottomM => UsesBottomLevel || UsesTopLevel
             ? BottomElevationM
             : LegacyBottomOffsetM ?? throw new InvalidOperationException("Legacy placement is missing BottomOffsetM.");
 
@@ -80,6 +77,18 @@ namespace QS3D.BricsCAD.V25.Cad
             if (string.IsNullOrWhiteSpace(legacyHeightKey)) throw new ArgumentException("Legacy height key is required.", nameof(legacyHeightKey));
             if (string.IsNullOrWhiteSpace(legacyBottomOffsetKey)) throw new ArgumentException("Legacy bottom-offset key is required.", nameof(legacyBottomOffsetKey));
 
+            if (RaftFoundationPropertySet.IsRaftElement(element, family))
+            {
+                var raft = RaftFoundationLevelPlacement.Resolve(project, element, family);
+                var mode = RaftFoundationLevelPlacement.ResolveMode(element.Properties, family?.Properties);
+                var resolvedRaft = new ElementVerticalPlacement(
+                    string.Equals(mode, RaftFoundationPropertySet.BottomLevelMode, StringComparison.Ordinal),
+                    string.Equals(mode, RaftFoundationPropertySet.TopLevelMode, StringComparison.Ordinal),
+                    raft.BottomElevationM,
+                    raft.TopElevationM);
+                return new CadElementVerticalPlacement(document, element, resolvedRaft, null, null, null);
+            }
+
             // This is the final shared gate before native geometry consumes vertical metadata.
             // Keep imported or hand-edited Level properties fail-closed on unsupported categories.
             LevelReferenceNativeIntegrationPolicy.EnsureQualified(element, "Native 3D Level placement");
@@ -95,8 +104,6 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 if (HasAnyLevelConfiguration(element))
                 {
-                    // Let the Core resolver emit the canonical fail-closed error before touching
-                    // legacy inputs that this malformed Level branch must not consume.
                     resolved = ElementVerticalPlacementService.Resolve(project, element, double.NaN, double.NaN, double.NaN);
                 }
                 else
@@ -112,8 +119,6 @@ namespace QS3D.BricsCAD.V25.Cad
             }
             else if (topLevelId.Length == 0)
             {
-                // First validate the Level reference and Top-offset shape without reading the
-                // legacy height. Missing/ambiguous Levels therefore remain the root error.
                 ElementVerticalPlacementService.Resolve(project, element, double.NaN, 1d, double.NaN);
                 var legacyHeightM = CadGeometryGuard.Number(element, family, legacyHeightKey, legacyHeightFallback);
                 consumedLegacyHeightM = legacyHeightM;
@@ -121,8 +126,6 @@ namespace QS3D.BricsCAD.V25.Cad
             }
             else
             {
-                // A Bottom+Top range owns the effective height and intentionally ignores every
-                // legacy source/height/BottomOffset input.
                 resolved = ElementVerticalPlacementService.Resolve(project, element, double.NaN, double.NaN, double.NaN);
             }
 
@@ -179,9 +182,9 @@ namespace QS3D.BricsCAD.V25.Cad
             element.Properties[key + "VerticalBottomM"] = Number(placement.BottomElevationM);
             element.Properties[key + "VerticalTopM"] = Number(placement.TopElevationM);
             element.Properties[key + "VerticalHeightM"] = Number(placement.HeightM);
-            element.Properties[key + "VerticalMode"] = placement.UsesTopLevel
+            element.Properties[key + "VerticalMode"] = placement.UsesBottomLevel && placement.UsesTopLevel
                 ? "BottomTopLevels"
-                : placement.UsesBottomLevel ? "BottomLevel" : "LegacySourceRelative";
+                : placement.UsesTopLevel ? "TopLevel" : placement.UsesBottomLevel ? "BottomLevel" : "LegacySourceRelative";
         }
 
         public static void ClearSnapshot(ProjectElement element, string prefix)
@@ -249,8 +252,6 @@ namespace QS3D.BricsCAD.V25.Cad
             }
             else if (bottomLevelId.Length > 0 && topLevelId.Length == 0)
             {
-                // Bottom-only placement still consumes legacy height, but never legacy sill or
-                // source Z. Top-only/malformed and Bottom+Top branches consume neither value.
                 legacyHeightM = CadGeometryGuard.Number(opening, family, "HeightM", legacyHeightFallback);
             }
 
@@ -270,9 +271,6 @@ namespace QS3D.BricsCAD.V25.Cad
             element.Properties.TryGetValue(key, out var raw) ? (raw ?? string.Empty).Trim() : string.Empty;
     }
 
-    // Compatibility facade for automation-only legacy/no-Level probes that were merged while the
-    // complete Level chain was being integrated. Product builders use CadElementVerticalPlacement;
-    // this facade forwards to that same implementation and owns no independent Level arithmetic.
     internal sealed class CadVerticalPlacement
     {
         public CadVerticalPlacement(CadElementVerticalPlacement placement)
