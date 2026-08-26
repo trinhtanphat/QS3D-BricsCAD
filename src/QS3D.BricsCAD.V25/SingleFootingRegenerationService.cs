@@ -16,8 +16,8 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Rebuilds the native geometry owned by one Móng đơn Family after a six-dimension edit.
-    /// Project metadata and all owned Solid3d replacements are treated as one operation: any
-    /// native failure aborts the BricsCAD transaction and restores the semantic project snapshot.
+    /// Project metadata and all owned Solid3d replacements are one fail-closed operation: any
+    /// native failure aborts the CAD transaction and restores the semantic project snapshot.
     /// </summary>
     internal static class SingleFootingRegenerationService
     {
@@ -99,6 +99,10 @@ namespace QS3D.BricsCAD.V25
                                 dimensions.VolumeM3.ToString("R", CultureInfo.InvariantCulture);
                             element.Properties["VolumeM3"] = dimensions.VolumeM3.ToString("R", CultureInfo.InvariantCulture);
                             element.MarkClean(ElementGeometryPolicy.SemanticCleanFlags(ElementCategory.Foundation));
+                            AuditTrail.ForProject(project).Record(
+                                "geometry.single-footing.regenerate",
+                                element.Id,
+                                previousHandle + " -> " + generatedHandle + " • " + family.Name);
                             solid = null!;
                         }
                         finally
@@ -115,9 +119,18 @@ namespace QS3D.BricsCAD.V25
                     transaction.Commit();
                 }
             }
-            catch
+            catch (Exception operationError)
             {
-                rollback.Restore(project);
+                try
+                {
+                    rollback.Restore(project);
+                }
+                catch (Exception restoreError)
+                {
+                    throw new InvalidOperationException(
+                        "Regenerate Móng đơn thất bại và rollback project cũng không hoàn tất.",
+                        new AggregateException(operationError, restoreError));
+                }
                 throw;
             }
 
@@ -142,6 +155,9 @@ namespace QS3D.BricsCAD.V25
                 if (candidate == null || candidate.IsErased || !candidate.Closed) continue;
                 if (candidate.NumberOfVertices != 4)
                     throw new InvalidOperationException("Footprint Móng đơn " + sourceHandle + " không còn là rectangle 4 đỉnh.");
+                for (var index = 0; index < candidate.NumberOfVertices; index++)
+                    if (Math.Abs(candidate.GetBulgeAt(index)) > 1e-12d)
+                        throw new InvalidOperationException("Footprint Móng đơn " + sourceHandle + " có cung/bulge; từ chối regenerate mơ hồ.");
                 if (match != null)
                     throw new InvalidOperationException("Móng đơn " + element.Id + " có nhiều footprint nguồn hợp lệ; từ chối regenerate mơ hồ.");
                 match = candidate;
@@ -171,7 +187,7 @@ namespace QS3D.BricsCAD.V25
                 string.IsNullOrWhiteSpace(raw) ||
                 !double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
                 double.IsNaN(value) || double.IsInfinity(value))
-                throw new InvalidOperationException("Móng đơn " + element.Id + " thiếu SingleFootingBaseElevationM hợp lệ.");
+                throw new InvalidOperationException("Móng đơn " + element.Id + " thiếu " + SingleFootingContract.BaseElevationKey + " hợp lệ.");
             return value;
         }
 
