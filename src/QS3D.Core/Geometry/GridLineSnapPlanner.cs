@@ -31,7 +31,7 @@ namespace QS3D.Core.Geometry
             Point2 candidate,
             IEnumerable<GridReferenceCurve> curves,
             double maxDistance,
-            out GridLineSnapResult result,
+            out GridLineSnapResult? result,
             double ambiguityTolerance = 1e-8,
             double geometryTolerance = 1e-10)
         {
