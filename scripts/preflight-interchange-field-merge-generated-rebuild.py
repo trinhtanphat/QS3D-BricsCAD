@@ -22,8 +22,8 @@ if not errors:
     for token in (
         "InterchangeGeneratedOutputKind.NativeGeometry",
         "InterchangeGeneratedOutputKind.Quantity",
-        "InterchangeGeneratedOutputKind.Workbook",
-        "InterchangeGeneratedOutputKind.Trace",
+        "Workbook = 1 << 2",
+        "Trace = 1 << 3",
         "requestedKinds & ~SupportedKinds",
         "Only atomic NativeGeometry and Quantity rebuilds are supported",
         ".Distinct(StringComparer.OrdinalIgnoreCase)",
