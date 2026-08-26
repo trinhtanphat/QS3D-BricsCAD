@@ -28,6 +28,8 @@ namespace QS3D.BricsCAD.V25.UI
         private const int BrowserNodePageSize = 100;
         private const int BrowserElementPageSize = 100;
 
+        private static readonly bool BrowserClassHandlersRegistered = RegisterBrowserClassHandlers();
+
         private readonly ProjectBrowserWorkspaceStateStore _browserStateStore = new ProjectBrowserWorkspaceStateStore();
         private ProjectBrowserWorkspaceState _browserState = new ProjectBrowserWorkspaceState();
         private string _browserProjectId = string.Empty;
@@ -61,7 +63,7 @@ namespace QS3D.BricsCAD.V25.UI
         private Button? _browserZoomCad;
         private Button? _browserReset;
 
-        static WorkspacePanel()
+        private static bool RegisterBrowserClassHandlers()
         {
             EventManager.RegisterClassHandler(
                 typeof(WorkspacePanel),
@@ -73,6 +75,7 @@ namespace QS3D.BricsCAD.V25.UI
                 FrameworkElement.UnloadedEvent,
                 new RoutedEventHandler(OnBrowserWorkspaceUnloaded),
                 true);
+            return true;
         }
 
         private static void OnBrowserWorkspaceLoaded(object sender, RoutedEventArgs e)
@@ -87,6 +90,8 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void AttachProjectBrowser()
         {
+            if (!BrowserClassHandlersRegistered)
+                throw new InvalidOperationException("Project Browser class handlers were not registered.");
             EnsureProjectBrowserSurface();
             if (_browserAttached) return;
             _browserAttached = true;
