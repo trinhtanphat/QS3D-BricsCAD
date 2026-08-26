@@ -144,21 +144,48 @@ def _require_ordinary_directory(path, label):
     return info
 
 
-def _ensure_safe_output_parent(parent):
-    missing = []
-    cursor = parent
-    while not cursor.exists():
-        missing.append(cursor)
+def _require_safe_directory_chain(path, label):
+    cursor = Path(os.path.abspath(os.fspath(path)))
+    while True:
+        _require_ordinary_directory(cursor, label)
         next_cursor = cursor.parent
         if next_cursor == cursor:
-            raise ValueError("sanitized summary output has no safe existing directory ancestor")
+            return
         cursor = next_cursor
-    _require_ordinary_directory(cursor, "sanitized summary output ancestor")
+
+
+def _ensure_safe_output_parent(parent):
+    parent = Path(os.path.abspath(os.fspath(parent)))
+    missing = []
+    cursor = parent
+    while True:
+        try:
+            cursor.lstat()
+            break
+        except FileNotFoundError:
+            missing.append(cursor)
+            next_cursor = cursor.parent
+            if next_cursor == cursor:
+                raise ValueError("sanitized summary output has no safe existing directory ancestor")
+            cursor = next_cursor
+        except OSError as exc:
+            raise ValueError(
+                f"sanitized summary output ancestor is unavailable: {exc.__class__.__name__}"
+            ) from exc
+
+    _require_safe_directory_chain(cursor, "sanitized summary output ancestor")
 
     for directory in reversed(missing):
-        directory.mkdir(exist_ok=True)
-        _require_ordinary_directory(directory, "sanitized summary output directory")
-    _require_ordinary_directory(parent, "sanitized summary output directory")
+        try:
+            directory.mkdir()
+        except FileExistsError:
+            pass
+        except OSError as exc:
+            raise ValueError(
+                f"sanitized summary output directory could not be created safely: {exc.__class__.__name__}"
+            ) from exc
+        _require_safe_directory_chain(directory, "sanitized summary output directory")
+    _require_safe_directory_chain(parent, "sanitized summary output directory")
 
 
 def _same_file_identity(left, right):
