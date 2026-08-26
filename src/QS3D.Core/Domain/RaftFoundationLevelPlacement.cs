@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 
 namespace QS3D.Core.Domain
@@ -44,10 +45,7 @@ namespace QS3D.Core.Domain
             var activeFloorId = (project.ActiveFloorId ?? string.Empty).Trim();
             if (activeFloorId.Length == 0)
                 throw new InvalidOperationException("Móng Bè cần một Tầng/Level đang hoạt động để khởi tạo quan hệ cao độ.");
-            var activeFloor = project.FindFloor(activeFloorId);
-            if (activeFloor == null)
-                throw new InvalidOperationException("Tầng/Level đang hoạt động không còn tồn tại: " + activeFloorId + ".");
-
+            var activeFloor = FindFloor(project, activeFloorId, "Tầng/Level đang hoạt động");
             var thicknessM = RequirePositive(family, RaftFoundationPropertySet.ThicknessKey, "Chiều dày Móng Bè");
             var legacyBottomOffsetM = OptionalFinite(family, RaftFoundationPropertySet.BottomOffsetKey, 0d, "BottomOffsetM");
 
@@ -66,24 +64,44 @@ namespace QS3D.Core.Domain
             if (!RaftFoundationPropertySet.IsRaftFamily(family))
                 throw new InvalidOperationException("Family không phải Móng Bè.");
 
+            ValidateUniqueFloorIds(project);
             var bottomLevelId = RequiredCanonicalText(family, ProjectFloorService.BottomLevelIdKey, "Cốt đáy");
             var topLevelId = RequiredCanonicalText(family, ProjectFloorService.TopLevelIdKey, "Cốt đỉnh");
-            var bottomOffsetM = ProjectFloorService.ResolveOffsetM(null, family, ProjectFloorService.BottomLevelOffsetKey);
-            var topOffsetM = ProjectFloorService.ResolveOffsetM(null, family, ProjectFloorService.TopLevelOffsetKey);
-            var bottomElevationM = ProjectFloorService.ResolveAbsoluteElevationM(project, bottomLevelId, bottomOffsetM, "Cốt đáy Móng Bè");
-            var topElevationM = ProjectFloorService.ResolveAbsoluteElevationM(project, topLevelId, topOffsetM, "Cốt đỉnh Móng Bè");
+            var bottomOffsetM = RequiredFinite(family, ProjectFloorService.BottomLevelOffsetKey, "BottomLevelOffsetM");
+            var topOffsetM = RequiredFinite(family, ProjectFloorService.TopLevelOffsetKey, "TopLevelOffsetM");
+            var bottomFloor = FindFloor(project, bottomLevelId, "Cốt đáy Móng Bè");
+            var topFloor = FindFloor(project, topLevelId, "Cốt đỉnh Móng Bè");
+            var bottomElevationM = AddFinite(bottomFloor.ElevationM, bottomOffsetM, "Cốt đáy Móng Bè");
+            var topElevationM = AddFinite(topFloor.ElevationM, topOffsetM, "Cốt đỉnh Móng Bè");
 
-            if (!IsFinite(bottomElevationM) || !IsFinite(topElevationM) || !(topElevationM > bottomElevationM))
+            if (!(topElevationM > bottomElevationM))
                 throw new InvalidOperationException("Cao độ Móng Bè không hợp lệ: cốt đỉnh phải lớn hơn cốt đáy.");
 
             var thicknessM = RequirePositive(family, RaftFoundationPropertySet.ThicknessKey, "Chiều dày Móng Bè");
             var spanM = topElevationM - bottomElevationM;
-            if (Math.Abs(spanM - thicknessM) > ElevationToleranceM)
+            if (!IsFinite(spanM) || Math.Abs(spanM - thicknessM) > ElevationToleranceM)
                 throw new InvalidOperationException(
                     "Quan hệ cao độ Móng Bè không khớp chiều dày. Span=" + spanM.ToString("R", CultureInfo.InvariantCulture) +
                     " m, ThicknessM=" + thicknessM.ToString("R", CultureInfo.InvariantCulture) + " m.");
 
             return new RaftFoundationVerticalPlacement(bottomElevationM, topElevationM);
+        }
+
+        private static FloorDefinition FindFloor(ProjectState project, string floorId, string caption)
+        {
+            return project.FindFloor(floorId)
+                ?? throw new InvalidOperationException(caption + " tham chiếu Level không tồn tại: " + floorId + ".");
+        }
+
+        private static void ValidateUniqueFloorIds(ProjectState project)
+        {
+            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var floor in project.Floors)
+            {
+                if (floor == null) throw new InvalidOperationException("Project có Floor/Level null.");
+                if (!ids.Add(floor.Id))
+                    throw new InvalidOperationException("Project có Floor/Level id trùng: " + floor.Id + ".");
+            }
         }
 
         private static string RequiredCanonicalText(ProjectFamily family, string key, string caption)
@@ -98,19 +116,37 @@ namespace QS3D.Core.Domain
 
         private static double RequirePositive(ProjectFamily family, string key, string caption)
         {
-            if (!family.Properties.TryGetValue(key, out var raw) ||
-                !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
-                !IsFinite(value) || !(value > 0d))
-                throw new InvalidOperationException(caption + " phải là số hữu hạn > 0.");
+            var value = RequiredFinite(family, key, caption);
+            if (!(value > 0d)) throw new InvalidOperationException(caption + " phải > 0.");
             return value;
+        }
+
+        private static double RequiredFinite(ProjectFamily family, string key, string caption)
+        {
+            if (!family.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw))
+                throw new InvalidOperationException(caption + " chưa được nhập.");
+            if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal) ||
+                !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || !IsFinite(value))
+                throw new InvalidOperationException(caption + " phải là số invariant hữu hạn canonical.");
+            return value == 0d ? 0d : value;
         }
 
         private static double OptionalFinite(ProjectFamily family, string key, double fallback, string caption)
         {
             if (!family.Properties.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) return fallback;
-            if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || !IsFinite(value))
-                throw new InvalidOperationException(caption + " phải là số hữu hạn.");
-            return value;
+            if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal) ||
+                !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || !IsFinite(value))
+                throw new InvalidOperationException(caption + " phải là số invariant hữu hạn canonical.");
+            return value == 0d ? 0d : value;
+        }
+
+        private static double AddFinite(double left, double right, string caption)
+        {
+            var value = left + right;
+            if (!IsFinite(value)) throw new InvalidOperationException(caption + " phải hữu hạn.");
+            if ((right != 0d && value == left) || (left != 0d && value == right))
+                throw new InvalidOperationException(caption + " mất độ chính xác khi cộng Level + offset.");
+            return value == 0d ? 0d : value;
         }
 
         private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
