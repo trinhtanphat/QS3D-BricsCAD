@@ -43,7 +43,7 @@ All rows below used real native PICKFIRST selection and the production `QS3DINSP
 
 The serialized semantic element subtree remained byte-equivalent across these presentation transitions. A no-change control showed that `QS3DSAVE` itself increments project `ChangeVersion` by one, so save-version deltas were not attributed to selection presentation.
 
-Issue `#4027` owns the ordinary source correction. The relevant Workspace/selection paths were unchanged from the tested SHA through the drift-check SHA above, and this local lane made no source patch.
+Issue `#4027` received the ordinary source correction through PR `#4033`, merged as `dd510bad3e56cae241d176764064db6b1c5d8fe6`. That later source does not retroactively change the failed result on the tested candidate; the multi-semantic row remains pending an exact-SHA licensed rerun on a descendant containing the fix. This local lane made no source patch.
 
 ## Hosted Project Browser integration boundary
 
@@ -68,6 +68,7 @@ The real loaded V25 Workspace matched that source boundary: it exposed the exist
 The following rows remain `PENDING_LOCAL` and must not be inferred from the bounded evidence above:
 
 - after a source-ready `#4032` candidate, Browser -> CAD selection, CAD -> Browser reveal/expand, zoom, stale/deleted/ambiguous semantic IDs, active-DWG affinity, filter/group/query and bounded paging/virtualization;
+- on an exact descendant containing merged fix `dd510bad3e56cae241d176764064db6b1c5d8fe6`, rerun same-Family multi-semantic selection and prove the Workspace stays out of Instance scope;
 - missing/deleted Family fallback and proof that a previously selected Instance cannot be mutated;
 - live-Family Instance Reset after another modeless writer changes the Family value, removed-property refusal, failed post-commit UI refresh, and post-`QS3DRELOAD` stale-row refusal;
 - unavailable-project activation/recovery, modeless continuity across DWG switches, and stale callback refusal;
@@ -77,8 +78,16 @@ The following rows remain `PENDING_LOCAL` and must not be inferred from the boun
 - exact Foundation subtype-family filtering/naming after reselecting `Móng > Móng Bè`;
 - dedicated plugin-owned Properties authority, palette recreation/dock/size persistence, Unicode, narrow/normal/wide layouts, and 100/125/150/200% DPI.
 
+## Interrupted R1 live-Family Reset cell
+
+A later disposable R1 attempt reached only the exact hosted runtime marker before the agent turn stopped. No Instance override, Workspace detach, Family mutation, Reset click, save, reopen, or Reset assertion was executed. The disposable DWG and sidecar remained byte-identical to their pre-launch hashes. This cell is therefore `NO_RESULT / INTERRUPTED_BEFORE_ASSERTION`; it is neither a Reset PASS nor a product failure and must be rerun from a fresh disposable copy after explicit shared-host release.
+
+The interrupted cell's raw marker, input hashes and unusable foreground-desktop screenshot remain ignored. A cleanup audit at `2026-08-26 11:11:12 +07:00` found zero `bricscad.exe` processes, the installed AppData Loader restored, `LoadCtrls=2`, and 487 registered command values.
+
 ## Host cleanup and evidence handling
 
 Raw UIAutomation snapshots, native identifiers, disposable fixture paths, registry backups, scripts, and screenshots remain under ignored local `artifacts/`. This committed checkpoint retains only allow-listed product identity and sanitized assertions; it contains no customer drawing, project identifier, raw CAD handle, or machine-specific fixture path.
 
-After gracefully closing the current atomic cell, the owned helper was removed, no profile change remained, the installed DemandLoad Loader and `LoadCtrls=2` were restored, and `bricscad.exe` count was verified as exactly zero at `2026-08-26 08:31:01 +07:00`. The shared licensed host was then yielded to issue `#72`; LOCAL-012 must not start another BricsCAD session until that canonical runtime smoke reports completion and releases the host.
+After gracefully closing the completed atomic cell, the owned helper was removed, the installed DemandLoad Loader and `LoadCtrls=2` were restored, and `bricscad.exe` count was verified as exactly zero at `2026-08-26 08:31:01 +07:00`. The shared licensed host was then yielded to issue `#72`.
+
+Profile evidence correction: those earlier cells did not snapshot the pre-launch `CurProfile` value, so profile-pointer continuity is unproven and this checkpoint makes no claim that it remained unchanged. The later observed pointer was `QS3D-V25-TEST`; LOCAL-012 did not change it during the correction audit. Before any future launch, the runner must snapshot the pointer and profile inventory, use only an owned nonce profile, restore the pointer exactly after graceful quit, and remove only that owned nonce profile. LOCAL-012 must continue to obtain an explicit shared-host release before every later BricsCAD launch or attach.
