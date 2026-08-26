@@ -37,8 +37,12 @@ namespace QS3D.BricsCAD.V25
                     var context = CaptureContext(document);
                     var promptUcs = editor.CurrentUserCoordinateSystem;
 
-                    var start = editor.GetPoint(new PromptPointOptions(
-                        "\nQS3D Grid - chọn điểm đầu (Enter/Esc để kết thúc): "));
+                    var startOptions = new PromptPointOptions(
+                        "\nQS3D Grid - chọn điểm đầu (Enter/Esc để kết thúc): ")
+                    {
+                        AllowNone = true
+                    };
+                    var start = editor.GetPoint(startOptions);
                     if (start.Status != PromptStatus.OK) break;
 
                     var endOptions = new PromptPointOptions(
