@@ -36,7 +36,8 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static bool RegisterRaftFoundationWorkspaceHandlers()
         {
-            // Only Add/Draw command routing is class-level. Family property rendering is intentionally
+            // Visible + Add routing is owned exclusively by WorkspacePanel.RaftFoundationVisibleAddRoute.cs.
+            // This legacy class handler now owns only the Móng Bè Draw command. Family property rendering is
             // owned by OnFamilySubtypeFamilySelectionChanged in the primary Workspace render path.
             EventManager.RegisterClassHandler(
                 typeof(Button),
@@ -51,13 +52,6 @@ namespace QS3D.BricsCAD.V25.UI
             var button = sender as Button;
             var panel = button == null ? null : FindRaftWorkspacePanel(button);
             if (panel == null || button == null) return;
-
-            if (IsWorkspaceAddFamilyButton(button) && panel.IsRaftSubtypeFilter())
-            {
-                e.Handled = true;
-                panel.CreateFamilyFromWorkspaceSubtype(false);
-                return;
-            }
 
             if (!string.Equals(button.Content as string, "Vẽ 3D", StringComparison.Ordinal) ||
                 !panel.IsRaftWorkspaceContext()) return;
