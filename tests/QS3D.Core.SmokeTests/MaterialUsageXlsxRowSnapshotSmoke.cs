@@ -29,6 +29,7 @@ namespace QS3D.Core.SmokeTests
                 Category = "Wall",
                 FamilyName = "W200",
                 ElementCount = 1,
+                ElementIds = { "E-1" },
                 VolumeM3 = 1.25d
             };
             var rows = new SingleReadRowList(row);
