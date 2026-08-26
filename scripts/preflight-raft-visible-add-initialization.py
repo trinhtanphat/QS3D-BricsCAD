@@ -23,6 +23,11 @@ def main():
     }
     failures = [label + ": missing " + repr(token) for label, token in required.items() if token not in text]
 
+    if text.count("static WorkspacePanel()") != 1:
+        failures.append("visible Add route must define exactly one explicit WorkspacePanel type initializer")
+    if text.count("EventManager.RegisterClassHandler(") != 1:
+        failures.append("visible Add route must register exactly one WPF class handler")
+
     # A side-effect-only static property initializer can leave the type marked beforefieldinit,
     # so CLR initialization timing is not a safe prerequisite for the first live + Add click.
     if "RaftVisibleAddRouteRegistered" in text:
@@ -34,7 +39,7 @@ def main():
             print(" -", failure)
         return 1
 
-    print("PASS: WorkspacePanel deterministically registers the rendered + Add raft route before live use.")
+    print("PASS: WorkspacePanel deterministically registers exactly one rendered + Add raft route before live use.")
     return 0
 
 
