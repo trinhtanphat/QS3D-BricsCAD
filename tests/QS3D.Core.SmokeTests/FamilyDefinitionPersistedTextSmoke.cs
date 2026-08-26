@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
         {
             PreservesExistingCanonicalizationAndUnicode();
             RejectsControlCharactersAtConstruction();
+            RejectsEdgeControlCharactersBeforeNormalization();
             RejectsXmlInvalidTextAtConstruction();
             RejectedSetterMutationIsAtomic();
         }
@@ -31,6 +32,20 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => new FamilyDefinition("Door", ElementCategory.Door, "Steel\rGrade"));
         }
 
+        private static void RejectsEdgeControlCharactersBeforeNormalization()
+        {
+            Throws<ArgumentException>(() => new FamilyDefinition("\tDoor 01", ElementCategory.Door));
+            Throws<ArgumentException>(() => new FamilyDefinition("Door 01\r", ElementCategory.Door));
+            Throws<ArgumentException>(() => new FamilyDefinition("\nDoor 01\t", ElementCategory.Door));
+            Throws<ArgumentException>(() => new FamilyDefinition("Door 01", ElementCategory.Door, "\tSteel"));
+            Throws<ArgumentException>(() => new FamilyDefinition("Door 01", ElementCategory.Door, "Steel\n"));
+            Throws<ArgumentException>(() => new FamilyDefinition("Door 01", ElementCategory.Door, "\rSteel\t"));
+
+            var spaced = new FamilyDefinition("  Door 01  ", ElementCategory.Door, "  Steel  ");
+            Equal("Door 01", spaced.Name, "Ordinary surrounding SPACE normalization changed.");
+            Equal("Steel", spaced.Material, "Ordinary material SPACE normalization changed.");
+        }
+
         private static void RejectsXmlInvalidTextAtConstruction()
         {
             Throws<ArgumentException>(() => new FamilyDefinition("Bad" + '\uD800', ElementCategory.Door));
@@ -46,11 +61,17 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => family.Name = "Corrupt\nName");
             Equal("Door 01", family.Name, "Rejected family name mutation changed the previous valid value.");
 
+            Throws<ArgumentException>(() => family.Name = "\tCorrupt Name");
+            Equal("Door 01", family.Name, "Rejected edge-control family name mutation changed the previous valid value.");
+
             Throws<ArgumentException>(() => family.Name = "Corrupt" + '\uD800');
             Equal("Door 01", family.Name, "Rejected XML-invalid family name mutation changed the previous valid value.");
 
             Throws<ArgumentException>(() => family.Material = "Corrupt\tMaterial");
             Equal("Steel", family.Material, "Rejected family material mutation changed the previous valid value.");
+
+            Throws<ArgumentException>(() => family.Material = "Corrupt Material\r");
+            Equal("Steel", family.Material, "Rejected edge-control family material mutation changed the previous valid value.");
 
             Throws<ArgumentException>(() => family.Material = "Corrupt" + '\uFFFF');
             Equal("Steel", family.Material, "Rejected XML-invalid family material mutation changed the previous valid value.");
