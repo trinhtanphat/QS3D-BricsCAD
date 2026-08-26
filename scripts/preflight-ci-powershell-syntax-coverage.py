@@ -28,10 +28,9 @@ def main() -> int:
         fail("could not bound the tracked PowerShell syntax step")
     step = text[start:next_step]
 
-    require(step, "git ls-files -- 'scripts'", "tracked-file discovery")
-    require(step, "Where-Object { $_ -match '\\.ps1$' }", "PowerShell extension filter")
-    require(step, "Sort-Object -Unique", "deterministic unique ordering")
-    require(step, "if ($LASTEXITCODE -ne 0)", "git discovery failure guard")
+    require(step, "$scriptJson = & python scripts/list-tracked-powershell.py --root .", "lossless tracked-file discovery helper")
+    require(step, "if ($LASTEXITCODE -ne 0)", "tracked discovery failure guard")
+    require(step, "$scripts = @($scriptJson | ConvertFrom-Json -ErrorAction Stop)", "strict helper JSON decode")
     require(step, "if ($scripts.Count -eq 0)", "empty-discovery failure guard")
     require(step, "Test-Path -LiteralPath $script -PathType Leaf", "tracked-file existence guard")
     require(step, "[System.Management.Automation.Language.Parser]::ParseFile", "PowerShell AST parser")
@@ -40,6 +39,8 @@ def main() -> int:
 
     if "foreach ($script in @(" in step:
         fail("syntax coverage regressed to a hardcoded script allowlist")
+    if "git ls-files -- 'scripts'" in step or "Where-Object { $_ -match '\\.ps1$' }" in step:
+        fail("syntax coverage regressed to line-oriented or case-sensitive PowerShell discovery")
 
     representatives = (
         ROOT / "scripts" / "package-v25.ps1",
@@ -52,6 +53,10 @@ def main() -> int:
         rel = path.relative_to(ROOT).as_posix()
         if rel in step:
             fail(f"syntax step must cover {rel} through tracked discovery, not a literal allowlist")
+
+    helper = ROOT / "scripts" / "list-tracked-powershell.py"
+    if not helper.is_file():
+        fail("lossless tracked PowerShell discovery helper is missing")
 
     if "Validate release PowerShell syntax" in text:
         fail("legacy partial syntax-step name remains in Shared CI")

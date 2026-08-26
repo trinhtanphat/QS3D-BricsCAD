@@ -154,6 +154,7 @@ namespace QS3D.Core.SmokeTests
                 Category = "ArchitecturalWall",
                 FamilyName = "W1",
                 ElementCount = 1,
+                ElementIds = { "E-1" },
                 LengthM = 1d,
                 AreaM2 = 2d,
                 VolumeM3 = 0.2d,
@@ -163,7 +164,7 @@ namespace QS3D.Core.SmokeTests
 
         private static CurtainWallScheduleRow CurtainRow()
         {
-            return new CurtainWallScheduleRow
+            var row = new CurtainWallScheduleRow
             {
                 Floor = "L1",
                 FamilyName = "CW1",
@@ -182,6 +183,8 @@ namespace QS3D.Core.SmokeTests
                 MinimumClearPanelHeightM = 2.8d,
                 MaximumClearPanelHeightM = 3d
             };
+            row.ElementIds.Add("CW-1");
+            return row;
         }
 
         private static RoomFinishScheduleRow RoomFinishRow()

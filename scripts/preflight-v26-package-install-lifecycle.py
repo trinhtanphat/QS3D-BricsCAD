@@ -73,18 +73,26 @@ require(V26_PROJECT, [
     "<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>",
 ])
 require(RUNBOOK, [
-    "PENDING_LOCAL",
+    "Status: `LOCAL_PASS / BOUNDED`",
     "test-v26-package-install-lifecycle.ps1",
     "V26x64",
     "QS3D.BricsCAD.V26.runtimeconfig.json",
     "unrelated V25",
     "LOCAL_PASS",
+    "e90c6aba7ef7bf903042d42dd991f9e7112fe659",
+    "historical exact-SHA evidence",
+    "Scope left pending",
 ])
 
 runner_text = RUNNER.read_text(encoding="utf-8") if RUNNER.is_file() else ""
 for forbidden in ("Start-Process bricscad", "NETLOAD", "LOCAL_PASS", "private DWG", "$IsWindows"):
     if forbidden in runner_text:
         errors.append(f"runner must not claim/perform licensed runtime boundary or require PowerShell 7-only host detection: {forbidden}")
+
+runbook_text = RUNBOOK.read_text(encoding="utf-8") if RUNBOOK.is_file() else ""
+for stale_status in ("Status: `PENDING_LOCAL`", "Status: `PENDING_LICENSED_V26`"):
+    if stale_status in runbook_text:
+        errors.append(f"runbook must not regress accepted bounded LOCAL-016 evidence to stale pending status: {stale_status}")
 
 # Regression for #3878: generated net8.0-windows runtimeconfig uses the
 # runtimeOptions.frameworks array. The old singular property access must never

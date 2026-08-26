@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
+using System.Xml;
 using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
 
@@ -37,6 +38,11 @@ namespace QS3D.Core.Export
                 ValidateCount(row.PanelCount, rowIndex, "PanelCount");
                 ValidateCount(row.VerticalFrameCount, rowIndex, "VerticalFrameCount");
                 ValidateCount(row.HorizontalFrameCount, rowIndex, "HorizontalFrameCount");
+                ValidateWallCardinality(row, rowIndex);
+                ValidateXmlProvenance(row.ProjectId, rowIndex, "Project ID");
+                ValidateXmlProvenance(row.DrawingFingerprint, rowIndex, "Drawing Fingerprint");
+                ValidateXmlProvenance(row.ElementIds, rowIndex, "Element IDs");
+                ValidateXmlProvenance(row.SourceHandles, rowIndex, "Source Handles");
                 ValidateNonNegative(row.TotalWallLengthM, rowIndex, "TotalWallLengthM");
                 ValidateNonNegative(row.GrossWallAreaM2, rowIndex, "GrossWallAreaM2");
                 ValidateNonNegative(row.OpeningAreaM2, rowIndex, "OpeningAreaM2");
@@ -211,6 +217,39 @@ namespace QS3D.Core.Export
                 throw new ArgumentOutOfRangeException(
                     "rows",
                     "Curtain XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+        }
+
+        private static void ValidateWallCardinality(CurtainWallScheduleRow row, int rowIndex)
+        {
+            if (row.WallCount != row.ElementIds.Count)
+                throw new ArgumentException(
+                    "Curtain XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " WallCount must match Element IDs count.",
+                    "rows");
+        }
+
+        private static void ValidateXmlProvenance(string value, int rowIndex, string fieldName)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value ?? string.Empty);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException(
+                    "Curtain XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " contains characters invalid in XML provenance.",
+                    "rows",
+                    ex);
+            }
+        }
+
+        private static void ValidateXmlProvenance(IEnumerable<string> values, int rowIndex, string fieldName)
+        {
+            var index = 0;
+            foreach (var value in values)
+            {
+                ValidateXmlProvenance(value ?? string.Empty, rowIndex, fieldName + "[" + index.ToString(CultureInfo.InvariantCulture) + "]");
+                index++;
+            }
         }
 
         private static void ValidateCount(int value, int rowIndex, string fieldName)
