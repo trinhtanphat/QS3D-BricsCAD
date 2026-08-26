@@ -46,7 +46,7 @@
                     <DataGridTextColumn Header="Gợi ý" Binding="{Binding SuggestedCategory}" Width="130"/>
                     <DataGridTextColumn Header="Độ tin cậy" Binding="{Binding Confidence, StringFormat=P0}" Width="95"/>
                     <DataGridTextColumn Header="Biên" Binding="{Binding Margin, StringFormat=P0}" Width="70"/>
-                    <DataGridCheckBoxColumn Header="Cần duyệt" Binding="{Binding RequiresReview}" Width="75"/>
+                    <DataGridCheckBoxColumn Header="Cần duyệt" Binding="{Binding RequiresReview, Mode=OneWay}" Width="75"/>
                     <DataGridTextColumn Header="Căn cứ" Binding="{Binding Evidence}" Width="*"/>
                 </DataGrid.Columns>
             </DataGrid>

@@ -11,6 +11,9 @@ namespace QS3D.Core.SmokeTests
         {
             FailedBatchRestoresWholeProjectSnapshot();
             DuplicateCleanEntryBlocksFullRegenerationBeforeMutation();
+            AddedElementDuringRegenerationRollsBack();
+            SameCountReplacementDuringRegenerationRollsBack();
+            StableRegeneratorStillSucceeds();
         }
 
         private static void FailedBatchRestoresWholeProjectSnapshot()
@@ -62,6 +65,65 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Full regeneration changed duplicate-ID project membership before failing closed.");
         }
 
+        private static void AddedElementDuringRegenerationRollsBack()
+        {
+            var project = new ProjectState("regen-add-drift", "Regeneration add drift");
+            var target = new ProjectElement("A", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            target.SetProperty("Stable", "before");
+            project.Elements.Add(target);
+            var beforeUpdated = project.UpdatedUtc;
+            var beforeVersion = project.ChangeVersion;
+
+            var engine = new RegenerationEngine(new DependencyGraph(), new IElementRegenerator[] { new AddElementRegenerator() });
+            Throws<InvalidOperationException>(() => engine.RegenerateDirty(project));
+
+            var restored = project.FindElement("A") ?? throw new Exception("Structural-drift rollback lost the original element.");
+            if (project.Elements.Count != 1 || project.FindElement("Injected") != null)
+                throw new Exception("Structural-drift rollback must remove an element injected during regeneration.");
+            if (!restored.Properties.TryGetValue("Stable", out var stable) || stable != "before" || restored.Properties.ContainsKey("Probe"))
+                throw new Exception("Structural-drift rollback must restore the original element state after an add mutation.");
+            if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdated)
+                throw new Exception("Structural-drift rollback must restore project persistence revision after an add mutation.");
+        }
+
+        private static void SameCountReplacementDuringRegenerationRollsBack()
+        {
+            var project = new ProjectState("regen-replace-drift", "Regeneration replacement drift");
+            var target = new ProjectElement("A", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            target.SetProperty("Stable", "before");
+            project.Elements.Add(target);
+            var beforeUpdated = project.UpdatedUtc;
+            var beforeVersion = project.ChangeVersion;
+
+            var engine = new RegenerationEngine(new DependencyGraph(), new IElementRegenerator[] { new ReplaceElementRegenerator() });
+            Throws<InvalidOperationException>(() => engine.RegenerateDirty(project));
+
+            var restored = project.FindElement("A") ?? throw new Exception("Replacement-drift rollback lost the original element identity.");
+            if (project.Elements.Count != 1 || restored.Category != ElementCategory.ArchitecturalWall)
+                throw new Exception("Replacement-drift rollback must restore the pre-batch element category and membership.");
+            if (!restored.Properties.TryGetValue("Stable", out var stable) || stable != "before" || restored.Properties.ContainsKey("Replacement"))
+                throw new Exception("Replacement-drift rollback must restore the pre-batch element payload.");
+            if (project.ChangeVersion != beforeVersion || project.UpdatedUtc != beforeUpdated)
+                throw new Exception("Replacement-drift rollback must restore project persistence revision.");
+        }
+
+        private static void StableRegeneratorStillSucceeds()
+        {
+            var project = new ProjectState("regen-stable", "Stable regeneration");
+            var target = new ProjectElement("A", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            project.Elements.Add(target);
+            var beforeVersion = project.ChangeVersion;
+
+            var engine = new RegenerationEngine(new DependencyGraph(), new IElementRegenerator[] { new StableRegenerator() });
+            var regenerated = engine.RegenerateDirty(project);
+
+            var current = project.FindElement("A") ?? throw new Exception("Stable regeneration lost its semantic element.");
+            if (regenerated != 1 || !current.Properties.TryGetValue("Probe", out var probe) || probe != "stable")
+                throw new Exception("Stable regeneration must preserve valid property mutation behavior.");
+            if (project.Elements.Count != 1 || project.ChangeVersion <= beforeVersion)
+                throw new Exception("Stable regeneration must retain the existing successful revision semantics.");
+        }
+
         private sealed class MutateThenFailRegenerator : IElementRegenerator
         {
             public bool CanRegenerate(ElementCategory category) => category == ElementCategory.ArchitecturalWall;
@@ -73,6 +135,39 @@ namespace QS3D.Core.SmokeTests
                 project.Touch();
                 if (string.Equals(element.Id, "B", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("synthetic regeneration failure");
+            }
+        }
+
+        private sealed class AddElementRegenerator : IElementRegenerator
+        {
+            public bool CanRegenerate(ElementCategory category) => category == ElementCategory.ArchitecturalWall;
+
+            public void Regenerate(ProjectState project, ProjectElement element)
+            {
+                element.SetProperty("Probe", "mutated-before-add");
+                project.Elements.Add(new ProjectElement("Injected", ElementCategory.Beam, string.Empty, string.Empty, string.Empty));
+            }
+        }
+
+        private sealed class ReplaceElementRegenerator : IElementRegenerator
+        {
+            public bool CanRegenerate(ElementCategory category) => category == ElementCategory.ArchitecturalWall;
+
+            public void Regenerate(ProjectState project, ProjectElement element)
+            {
+                var replacement = new ProjectElement(element.Id, ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
+                replacement.SetProperty("Replacement", "true");
+                project.Elements[0] = replacement;
+            }
+        }
+
+        private sealed class StableRegenerator : IElementRegenerator
+        {
+            public bool CanRegenerate(ElementCategory category) => category == ElementCategory.ArchitecturalWall;
+
+            public void Regenerate(ProjectState project, ProjectElement element)
+            {
+                element.SetProperty("Probe", "stable");
             }
         }
 
