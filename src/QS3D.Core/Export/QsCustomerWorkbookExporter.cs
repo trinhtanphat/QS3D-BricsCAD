@@ -42,10 +42,7 @@ namespace QS3D.Core.Export
             var summaries = Snapshot(summaryRows, false);
             ValidateScope(details, summaries);
 
-            var formwork = summaries.Where(row => row.HasFormworkM2Evidence || row.HasSideAreaM2Evidence ||
-                                                  row.HasBottomAreaM2Evidence || row.HasTopAreaM2Evidence ||
-                                                  row.HasOtherAreaM2Evidence || row.HasDoorAreaM2Evidence)
-                                    .ToList();
+            var formwork = summaries.Where(row => row.HasFormworkM2Evidence).ToList();
             if ((long)details.Count + summaries.Count + formwork.Count > MaxRows)
                 throw new InvalidDataException("Customer workbook TRACE_MODEL exceeds the Excel row limit.");
 
