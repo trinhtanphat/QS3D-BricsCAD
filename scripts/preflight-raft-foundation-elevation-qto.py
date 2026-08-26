@@ -49,15 +49,17 @@ def main():
     transient = read(TRANSIENT)
     failures = []
 
-    # The rendered BLT3D label is + Add. Pin that cross-file label to a direct raft route so
-    # the live click cannot fall through to the generic Family mode chooser.
+    # The rendered BLT3D label is + Add. Pin that cross-file label to the one authoritative
+    # raft route so the live click cannot fall through to the generic Family mode chooser or
+    # be dispatched a second time by the legacy Draw handler.
     require(blt_workspace, 'RenameBlt3dButton("+ Thêm", "+ Add")', "rendered + Add label", failures)
     require(blt_workspace, 'string.Equals(text, "+ Add", StringComparison.Ordinal)', "BLT3D Add recognizer", failures)
     require(visible_add, 'RaftVisibleAddLabel = "+ Add"', "raft visible Add contract", failures)
     require(visible_add, "panel.IsRaftSubtypeFilter()", "visible Add raft subtype guard", failures)
     require(visible_add, "e.Handled = true;", "visible Add claims routed click", failures)
     require(visible_add, "panel.CreateFamilyFromWorkspaceSubtype(false);", "visible Add direct Family creation", failures)
-    require(workspace, "IsWorkspaceAddFamilyButton(button) && panel.IsRaftSubtypeFilter()", "legacy/direct raft Add interception", failures)
+    forbid(workspace, "IsWorkspaceAddFamilyButton(button)", "legacy raft Add interception must be absent", failures)
+    require(workspace, 'if (!string.Equals(button.Content as string, "Vẽ 3D", StringComparison.Ordinal) ||', "legacy raft workflow Draw-only routing", failures)
 
     # Add/select/property must remain in the primary Family render path. A separate selection
     # handler in the raft file is intentionally not accepted because generic rendering can win.
