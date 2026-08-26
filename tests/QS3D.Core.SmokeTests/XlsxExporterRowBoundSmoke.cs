@@ -38,7 +38,8 @@ namespace QS3D.Core.SmokeTests
                             Component = "Material",
                             Category = "Wall",
                             FamilyName = "Standard",
-                            ElementCount = 1
+                            ElementCount = 1,
+                            ElementIds = { "E-WHITESPACE-1" }
                         }
                     });
 
