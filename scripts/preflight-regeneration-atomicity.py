@@ -21,11 +21,16 @@ if ENGINE.is_file():
         "ProjectStateSnapshot.Capture(project)",
         "snapshot.Restore(project);",
         "throw new AggregateException(\"Semantic regeneration failed and project rollback also failed.\"",
-        "private int Regenerate(ProjectState project, IEnumerable<ProjectElement> candidates, int passBasis)",
+        "var expectedElements = project.Elements.ToArray();",
+        "RequireElementStructureFresh(project, expectedElements);",
+        "return Regenerate(project, candidates, passBasis, expectedElements);",
+        "private static void RequireRegenerationStructureFresh",
+        "Project element structure changed during regeneration.",
+        "RequireRegenerationStructureFresh(project, expectedElements);",
         "var candidateList = candidates?.ToList()",
     ):
         if token not in text:
-            errors.append("RegenerationEngine.cs missing atomic/type-safe token: " + token)
+            errors.append("RegenerationEngine.cs missing atomic/type-safe/structure-safe token: " + token)
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -36,9 +41,16 @@ if SMOKE.is_file():
         'project.Metadata["Transient"] = element.Id;',
         "restoredFirst.Properties.ContainsKey(\"Probe\")",
         "project.UpdatedUtc != beforeUpdated",
+        "AddedElementDuringRegenerationRollsBack();",
+        "SameCountReplacementDuringRegenerationRollsBack();",
+        "StableRegeneratorStillSucceeds();",
+        "AddElementRegenerator",
+        "ReplaceElementRegenerator",
+        "project.Elements.Add(new ProjectElement(\"Injected\"",
+        "project.Elements[0] = replacement;",
     ):
         if token not in text:
-            errors.append("RegenerationAtomicitySmoke.cs missing rollback regression token: " + token)
+            errors.append("RegenerationAtomicitySmoke.cs missing rollback/structure-drift regression token: " + token)
 
 if REG.is_file() and "RegenerationAtomicitySmoke.Run();" not in REG.read_text(encoding="utf-8"):
     errors.append("regeneration atomicity smoke is not registered")
@@ -48,4 +60,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] semantic regeneration is statically guarded for type-safe candidate enumeration and whole-project rollback on mid-batch failure")
+print("[PASS] semantic regeneration is statically guarded for type-safe candidate enumeration, stable element membership/order/reference structure, and whole-project rollback on mid-batch failure")
