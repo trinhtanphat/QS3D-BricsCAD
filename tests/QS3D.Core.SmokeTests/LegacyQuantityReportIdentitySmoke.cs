@@ -85,6 +85,31 @@ namespace QS3D.Core.SmokeTests
             if (totals.Count != 2 || Math.Abs(totals.LengthM - 5d) > 1e-12 || Math.Abs(totals.GrossConcreteM3 - 3d) > 1e-12)
                 throw new Exception("Legacy quantity totals must remain unchanged for valid rows.");
 
+            var countRowA = new QuantityReportRow { Count = 1, LengthM = 2d, GrossConcreteM3 = 1d };
+            var countRowB = new QuantityReportRow { Count = 2, LengthM = 3d, GrossConcreteM3 = 2d };
+            var honestRowCount = QuantityReportTotals.FromRows(new ReadOnlyRowCountSequence(2, new[] { countRowA, countRowB }));
+            if (honestRowCount.Count != 3 || Math.Abs(honestRowCount.LengthM - 5d) > 1e-12 || Math.Abs(honestRowCount.GrossConcreteM3 - 3d) > 1e-12)
+                throw new Exception("Legacy quantity totals must preserve valid known-Count row enumeration semantics.");
+
+            ExpectThrows<InvalidOperationException>(() =>
+                QuantityReportTotals.FromRows(new ReadOnlyRowCountSequence(2, new[] { countRowA })));
+            ExpectThrows<InvalidOperationException>(() =>
+                QuantityReportTotals.FromRows(new ReadOnlyRowCountSequence(1, new[] { countRowA, countRowB })));
+
+            var negativeRowCount = new NonGenericRowCountSequence(-1);
+            ExpectThrows<InvalidOperationException>(() => QuantityReportTotals.FromRows(negativeRowCount));
+            if (negativeRowCount.EnumeratorEntered)
+                throw new Exception("Legacy quantity totals must reject a negative known row Count before enumeration.");
+
+            var conflictingRowCounts = new ConflictingRowCountSequence();
+            ExpectThrows<InvalidOperationException>(() => QuantityReportTotals.FromRows(conflictingRowCounts));
+            if (conflictingRowCounts.EnumeratorEntered)
+                throw new Exception("Legacy quantity totals must reject conflicting known row Counts before enumeration.");
+
+            var pureRowStream = QuantityReportTotals.FromRows(YieldRows(countRowA, countRowB));
+            if (pureRowStream.Count != 3 || Math.Abs(pureRowStream.LengthM - 5d) > 1e-12 || Math.Abs(pureRowStream.GrossConcreteM3 - 3d) > 1e-12)
+                throw new Exception("Legacy quantity totals must preserve pure IEnumerable row semantics without a known Count contract.");
+
             ExpectArgumentException(
                 () => QuantityReportTotals.FromRows(new QuantityReportRow[] { valid, null! }),
                 "rows",
@@ -121,6 +146,12 @@ namespace QS3D.Core.SmokeTests
         {
             foreach (var element in elements)
                 yield return element;
+        }
+
+        private static IEnumerable<QuantityReportRow> YieldRows(params QuantityReportRow[] rows)
+        {
+            foreach (var row in rows)
+                yield return row;
         }
 
         private static void ExpectArgumentException(Action action, string paramName, string messagePart)
@@ -199,6 +230,64 @@ namespace QS3D.Core.SmokeTests
             bool ICollection<ElementInstance>.Contains(ElementInstance item) => false;
             void ICollection<ElementInstance>.CopyTo(ElementInstance[] array, int arrayIndex) => throw new NotSupportedException();
             bool ICollection<ElementInstance>.Remove(ElementInstance item) => throw new NotSupportedException();
+        }
+
+        private sealed class NonGenericRowCountSequence : IEnumerable<QuantityReportRow>, ICollection
+        {
+            internal NonGenericRowCountSequence(int count)
+            {
+                Count = count;
+            }
+
+            public int Count { get; }
+            public bool IsSynchronized => false;
+            public object SyncRoot => this;
+            internal bool EnumeratorEntered { get; private set; }
+
+            public IEnumerator<QuantityReportRow> GetEnumerator()
+            {
+                EnumeratorEntered = true;
+                throw new EnumerationEnteredException();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
+        private sealed class ReadOnlyRowCountSequence : IReadOnlyCollection<QuantityReportRow>
+        {
+            private readonly IReadOnlyList<QuantityReportRow> _items;
+
+            internal ReadOnlyRowCountSequence(int count, IReadOnlyList<QuantityReportRow> items)
+            {
+                Count = count;
+                _items = items;
+            }
+
+            public int Count { get; }
+            public IEnumerator<QuantityReportRow> GetEnumerator() => _items.GetEnumerator();
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class ConflictingRowCountSequence : ICollection<QuantityReportRow>, IReadOnlyCollection<QuantityReportRow>
+        {
+            int ICollection<QuantityReportRow>.Count => 1;
+            int IReadOnlyCollection<QuantityReportRow>.Count => 2;
+            bool ICollection<QuantityReportRow>.IsReadOnly => true;
+            internal bool EnumeratorEntered { get; private set; }
+
+            public IEnumerator<QuantityReportRow> GetEnumerator()
+            {
+                EnumeratorEntered = true;
+                throw new EnumerationEnteredException();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            void ICollection<QuantityReportRow>.Add(QuantityReportRow item) => throw new NotSupportedException();
+            void ICollection<QuantityReportRow>.Clear() => throw new NotSupportedException();
+            bool ICollection<QuantityReportRow>.Contains(QuantityReportRow item) => false;
+            void ICollection<QuantityReportRow>.CopyTo(QuantityReportRow[] array, int arrayIndex) => throw new NotSupportedException();
+            bool ICollection<QuantityReportRow>.Remove(QuantityReportRow item) => throw new NotSupportedException();
         }
 
         private sealed class EnumerationEnteredException : Exception

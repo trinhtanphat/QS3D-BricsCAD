@@ -14,6 +14,7 @@ namespace QS3D.Core.Persistence
         private const string ProjectBrowserWorkspaceStateKey = "QS3D.ProjectBrowser.WorkspaceState";
         private readonly ProjectState _project;
         private long _savedChangeVersion;
+        private int _savedSchemaVersion;
         private string _savedDrawingPath;
         private string _savedDrawingFingerprint;
         private string _savedActiveZoneId;
@@ -25,6 +26,7 @@ namespace QS3D.Core.Persistence
         {
             _project = project ?? throw new ArgumentNullException(nameof(project));
             _savedChangeVersion = project.ChangeVersion;
+            _savedSchemaVersion = project.SchemaVersion;
             _savedDrawingPath = project.DrawingPath;
             _savedDrawingFingerprint = project.DrawingFingerprint;
             _savedActiveZoneId = project.ActiveZoneId;
@@ -52,6 +54,7 @@ namespace QS3D.Core.Persistence
             EnsureSameProject(project);
 
             var savedChangeVersion = project.ChangeVersion;
+            var savedSchemaVersion = project.SchemaVersion;
             var savedDrawingPath = project.DrawingPath;
             var savedDrawingFingerprint = project.DrawingFingerprint;
             var savedActiveZoneId = project.ActiveZoneId;
@@ -60,6 +63,7 @@ namespace QS3D.Core.Persistence
             var savedNestedPersistedContent = SnapshotNestedPersistedContent(project);
 
             _savedChangeVersion = savedChangeVersion;
+            _savedSchemaVersion = savedSchemaVersion;
             _savedDrawingPath = savedDrawingPath;
             _savedDrawingFingerprint = savedDrawingFingerprint;
             _savedActiveZoneId = savedActiveZoneId;
@@ -77,7 +81,8 @@ namespace QS3D.Core.Persistence
 
         private bool PersistedScalarsMatch(ProjectState project)
         {
-            return string.Equals(project.DrawingPath, _savedDrawingPath, StringComparison.Ordinal) &&
+            return project.SchemaVersion == _savedSchemaVersion &&
+                   string.Equals(project.DrawingPath, _savedDrawingPath, StringComparison.Ordinal) &&
                    string.Equals(project.DrawingFingerprint, _savedDrawingFingerprint, StringComparison.Ordinal) &&
                    string.Equals(project.ActiveZoneId, _savedActiveZoneId, StringComparison.Ordinal) &&
                    string.Equals(project.ActiveFloorId, _savedActiveFloorId, StringComparison.Ordinal);

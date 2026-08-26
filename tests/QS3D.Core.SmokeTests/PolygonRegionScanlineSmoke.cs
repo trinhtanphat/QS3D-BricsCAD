@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             OverlappingHolesFailClosed();
             NestedHolesFailClosed();
             WindingDirectionDoesNotChangeRegion();
+            PolygonRegionHoleSnapshotSmoke.Run();
         }
 
         private static void HoleSplitsHorizontalAndVerticalScanlines()
