@@ -24,6 +24,7 @@ namespace QS3D.Core.SmokeTests
                 WallJunctionSnapPreviewRevisionSmoke.Run();
                 ProjectElementKeyControlSmoke.Run();
                 ProjectMeasurementWorkItemMappingIdentitySmoke.Run();
+                InteroperabilityAdmissionEnumerationBoundSmoke.Run();
                 WallFormworkContactSmoke.Run();
 
                 var legacyMain = typeof(Program).GetMethod(
