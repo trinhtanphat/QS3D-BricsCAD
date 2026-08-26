@@ -15,6 +15,19 @@ Close the last Model ↔ Quantity gap for Cubicost-like formwork review: clickin
 7. Previous face highlight is removed when another face/action is chosen, tree/detail selection changes, the panel unloads, or the active document switches.
 8. Existing deduction buttons keep their target+cause locate behavior and exact transient intersection/contact preview.
 
+## Source landing / deferred-local handoff
+
+- Feature PR: #3487 — merged.
+- Final exact feature head: `977066e1becbf3719a7c6324308288499cc7c57e`.
+- Feature merge commit: `9303fb34109e0b5859d8fc2ff1122afdc3cefa83`.
+- Exact implementation blob: `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.ExactFace.cs` = `a4e60d3ded1f649bed21ba589c21d855af37ef82`.
+- 2026-08-26 audit: current `main@4bf7de082b8a1e6366612b10c69742fd24f5c969` still carries that exact source blob.
+- `SOURCE/CI: PASS` for the merged implementation.
+- `LOCAL_RUNTIME: PENDING_LOCAL_AGENT`.
+- Remote disposition: `DO_NOT_RETRY_REMOTE`.
+
+A later local agent must begin from `docs/LOCAL-AGENT-INBOX.md`, fetch/sync Git, and use a clean exact checkout/worktree before running the matrix below. The intended source-containing checkout recorded by this audit is `4bf7de082b8a1e6366612b10c69742fd24f5c969`. If `main` has advanced, the local agent may validate a newer exact `main` SHA only after confirming the exact-face source blob above is unchanged; otherwise refresh this handoff before runtime qualification. The evidence must always name the exact SHA that actually ran.
+
 ## Automated validation
 
 - `python scripts/preflight-quantity-insight-exact-native-face.py`
@@ -24,9 +37,11 @@ Close the last Model ↔ Quantity gap for Cubicost-like formwork review: clickin
 - BricsCAD V25 plugin Release compile
 - protected PR `preflight` + `core` on the exact current candidate SHA
 
+Final merged-feature evidence: shared CI run `32557652786` / run number `12461` completed `SUCCESS` on exact head `977066e1becbf3719a7c6324308288499cc7c57e`; protected `preflight` and `core` both passed before PR #3487 merged.
+
 ## Licensed V25 interactive acceptance — LOCAL_ONLY
 
-Use a clean checkout of the exact merged candidate SHA and a licensed BricsCAD V25 x64 environment. Do not claim this section PASS from source review, cloud compile, mocks, screenshots without host execution, or `-SkipRuntime`.
+Use a clean checkout of the exact intended SHA and a licensed BricsCAD V25 x64 environment. Do not claim this section PASS from source review, cloud compile, mocks, screenshots without host execution, or `-SkipRuntime`.
 
 Required matrix:
 
@@ -46,4 +61,4 @@ Evidence must include the exact tested QS3D SHA, BricsCAD V25 version, PASS/FAIL
 
 ## Status boundary
 
-Source/CI success means **implementation + compile qualification only**. Product/runtime completion for `click Face #3 → only native BREP face #3 highlights` remains `PENDING_LOCAL` until the licensed matrix above is executed on the exact candidate SHA.
+Source/CI success means **implementation + compile qualification only**. Product/runtime completion for `click Face #3 → only native BREP face #3 highlights` remains `PENDING_LOCAL_AGENT` until the licensed matrix above is executed on a real compatible local agent against the exact recorded checkout SHA. Equivalent remote agents must not rerun or simulate this acceptance while it is pending.

@@ -181,8 +181,12 @@ namespace QS3D.Core.Coordination
         public IReadOnlyList<CoordinationCandidatePair> QueryChangedPairs(IEnumerable<string> changedItemIds)
         {
             if (changedItemIds == null) throw new ArgumentNullException(nameof(changedItemIds));
+            var snapshot = CoordinationRuleCollectionContract.MaterializeBounded(
+                changedItemIds,
+                "Coordination changed-item IDs");
+
             var changed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var raw in changedItemIds)
+            foreach (var raw in snapshot)
             {
                 var id = (raw ?? string.Empty).Trim();
                 if (id.Length == 0) throw new ArgumentException("Changed item ID is required.", nameof(changedItemIds));
