@@ -93,20 +93,13 @@ namespace QS3D.BricsCAD.V25.UI
             if (inspection.Count != elements.Count || inspection.Count < 2)
                 throw new InvalidOperationException("Multi-selection presentation requires an exact semantic selection of at least two elements.");
 
-            var scopeAnchor = elements.FirstOrDefault(element =>
-                !string.IsNullOrWhiteSpace(element.FamilyId) && project.FindFamily(element.FamilyId) != null);
-            _viewModel.SetSelectedElement(scopeAnchor);
+            // Multi-selection may preserve a common Family row for presentation, but it must
+            // never retain a mutable single-instance context. Clear the selected semantic owner
+            // before rendering read-only/common aggregates and expose Family/Type scope only.
+            _viewModel.SetSelectedElement(null);
             _viewModel.PropertyScopes.Clear();
-            if (scopeAnchor != null)
-            {
-                _viewModel.PropertyScopes.Add(WorkspaceViewModel.InstanceScope);
-                _viewModel.SelectedPropertyScope = WorkspaceViewModel.InstanceScope;
-            }
-            else
-            {
-                _viewModel.PropertyScopes.Add(WorkspaceViewModel.FamilyScope);
-                _viewModel.SelectedPropertyScope = WorkspaceViewModel.FamilyScope;
-            }
+            _viewModel.PropertyScopes.Add(WorkspaceViewModel.FamilyScope);
+            _viewModel.SelectedPropertyScope = WorkspaceViewModel.FamilyScope;
 
             _loadingContext = true;
             try
