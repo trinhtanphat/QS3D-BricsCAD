@@ -42,6 +42,7 @@ namespace QS3D.Core.SmokeTests
             QuantityEvidenceCollectionBoundSmoke.Run();
             QuantityMeasurementTraceSmoke.Run();
             CustomerWorkbookTraceSmoke.Run();
+            CustomerWorkbookProvenanceIdentitySmoke.Run();
             QsWorkbookTemplateEngineSmoke.Run();
             P0UnifiedExportAcceptanceSmoke.Run();
             QuantityReportRevisionReviewSmoke.Run();
@@ -78,6 +79,7 @@ namespace QS3D.Core.SmokeTests
             ColumnTieQuantityUnderflowSmoke.Run();
             RoomBoundaryRegressionSmoke.Run();
             GeometryCompletionSmoke.Run();
+            SingleFootingGeometrySmoke.Run();
             PolylineLengthCompensatedSumSmoke.Run();
             AutoRoomLifecycleSmoke.Run();
             AutoRoomStaleSelectionBoundSmoke.Run();

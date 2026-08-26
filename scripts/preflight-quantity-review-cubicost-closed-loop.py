@@ -178,7 +178,7 @@ def main():
     require(xaml, 'Content="Xuất Excel" Click="OnExcelExportClick"', "Excel export action", failures)
     require(xaml, 'Content="Truy ngược Excel" Click="OnExcelTracebackClick"', "Excel traceback action", failures)
     require(excel_bridge, "SelectedScopeItems()", "tree scope -> element projection", failures)
-    require(excel_bridge, "BuildPreviewRows(project, out _)", "fresh canonical preview before export", failures)
+    require(excel_bridge, "BuildPreviewRows(document, project, out _)", "fresh canonical preview before export", failures)
     require(excel_bridge, "SameRow(displayedRow, matches[0])", "stale quantity/provenance refusal", failures)
     require(excel_bridge, "SourceHandleResolver.Resolve(project, elementIds)", "semantic -> CAD provenance before export", failures)
     require(excel_bridge, "Cad.CadHandleService.Resolve(document, handles)", "all-live handle pre-resolution", failures)

@@ -44,7 +44,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             try
             {
-                var currentRow = ResolveCurrentRow(item, project);
+                var currentRow = ResolveCurrentRow(item, document, project);
                 var preview = ProjectStateSnapshot.CreateDetachedCopy(project);
                 new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(preview);
                 var details = ProjectQuantityReportBuilder.Detail(preview, currentRow.ElementIds)

@@ -115,8 +115,13 @@ namespace QS3D.Core.Reporting
                 var hasGrossEvidence = HasAnyQuantity(element, "GrossConcreteM3", "GrossVolumeM3");
                 var hasNetEvidence = HasAnyQuantity(element, "NetConcreteM3", "NetVolumeM3");
                 var hasDeductionEvidence = element.Quantities.ContainsKey("DeductionM3") || (hasGrossEvidence && hasNetEvidence);
-                var hasFormworkEvidence = element.Quantities.ContainsKey("FormworkM2");
+                var hasGrossFormworkEvidence = element.Quantities.ContainsKey("GrossFormworkM2");
+                var hasFormworkDeductionEvidence = HasAnyQuantity(element, "ConcreteContactDeductionM2", "FormworkDeductionM2");
+                var hasNetFormworkEvidence = HasAnyQuantity(element, "NetFormworkM2", "FormworkM2");
+                var hasFormworkEvidence = hasNetFormworkEvidence;
                 var hasLengthEvidence = element.Quantities.ContainsKey("LengthM");
+                var hasWidthEvidence = element.Quantities.ContainsKey("WidthM");
+                var hasHeightEvidence = element.Quantities.ContainsKey("HeightM");
                 var hasOuterPerimeterEvidence = element.Category == ElementCategory.Room
                     ? HasAnyQuantity(element, "OuterPerimeterM", "PerimeterM")
                     : element.Quantities.ContainsKey("OuterPerimeterM");
@@ -140,8 +145,13 @@ namespace QS3D.Core.Reporting
                 row.HasGrossConcreteM3Evidence = AggregateEvidence(row.HasGrossConcreteM3Evidence, hasGrossEvidence, created);
                 row.HasDeductionM3Evidence = AggregateEvidence(row.HasDeductionM3Evidence, hasDeductionEvidence, created);
                 row.HasNetConcreteM3Evidence = AggregateEvidence(row.HasNetConcreteM3Evidence, hasNetEvidence, created);
+                row.HasGrossFormworkM2Evidence = AggregateEvidence(row.HasGrossFormworkM2Evidence, hasGrossFormworkEvidence, created);
+                row.HasConcreteContactDeductionM2Evidence = AggregateEvidence(row.HasConcreteContactDeductionM2Evidence, hasFormworkDeductionEvidence, created);
+                row.HasNetFormworkM2Evidence = AggregateEvidence(row.HasNetFormworkM2Evidence, hasNetFormworkEvidence, created);
                 row.HasFormworkM2Evidence = AggregateEvidence(row.HasFormworkM2Evidence, hasFormworkEvidence, created);
                 row.HasLengthMEvidence = AggregateEvidence(row.HasLengthMEvidence, hasLengthEvidence, created);
+                row.HasWidthMEvidence = AggregateEvidence(row.HasWidthMEvidence, hasWidthEvidence, created);
+                row.HasHeightMEvidence = AggregateEvidence(row.HasHeightMEvidence, hasHeightEvidence, created);
                 row.HasOuterPerimeterMEvidence = AggregateEvidence(row.HasOuterPerimeterMEvidence, hasOuterPerimeterEvidence, created);
                 row.HasInnerPerimeterMEvidence = AggregateEvidence(row.HasInnerPerimeterMEvidence, hasInnerPerimeterEvidence, created);
                 row.HasDoorAreaM2Evidence = AggregateEvidence(row.HasDoorAreaM2Evidence, hasDoorAreaEvidence, created);
@@ -152,11 +162,19 @@ namespace QS3D.Core.Reporting
 
                 var gross = QFirst(element, "GrossConcreteM3", "GrossVolumeM3");
                 var net = QFirstOrFallback(element, gross, "NetConcreteM3", "NetVolumeM3");
+                var grossFormwork = Q(element, "GrossFormworkM2");
+                var formworkDeduction = QFirst(element, "ConcreteContactDeductionM2", "FormworkDeductionM2");
+                var netFormwork = QFirst(element, "NetFormworkM2", "FormworkM2");
                 row.GrossConcreteM3 = QuantityReportMath.Add(row.GrossConcreteM3, gross, element.Id + "/GrossConcreteM3");
                 row.NetConcreteM3 = QuantityReportMath.Add(row.NetConcreteM3, net, element.Id + "/NetConcreteM3");
                 row.DeductionM3 = QuantityReportMath.Add(row.DeductionM3, Q(element, "DeductionM3", Math.Max(0d, gross - net)), element.Id + "/DeductionM3");
-                row.FormworkM2 = QuantityReportMath.Add(row.FormworkM2, Q(element, "FormworkM2"), element.Id + "/FormworkM2");
+                row.GrossFormworkM2 = QuantityReportMath.Add(row.GrossFormworkM2, grossFormwork, element.Id + "/GrossFormworkM2");
+                row.ConcreteContactDeductionM2 = QuantityReportMath.Add(row.ConcreteContactDeductionM2, formworkDeduction, element.Id + "/ConcreteContactDeductionM2");
+                row.NetFormworkM2 = QuantityReportMath.Add(row.NetFormworkM2, netFormwork, element.Id + "/NetFormworkM2");
+                row.FormworkM2 = QuantityReportMath.Add(row.FormworkM2, netFormwork, element.Id + "/FormworkM2");
                 row.LengthM = QuantityReportMath.Add(row.LengthM, Q(element, "LengthM"), element.Id + "/LengthM");
+                row.WidthM = QuantityReportMath.Add(row.WidthM, Q(element, "WidthM"), element.Id + "/WidthM");
+                row.HeightM = QuantityReportMath.Add(row.HeightM, Q(element, "HeightM"), element.Id + "/HeightM");
                 row.OuterPerimeterM = QuantityReportMath.Add(row.OuterPerimeterM,
                     element.Category == ElementCategory.Room ? QFirst(element, "OuterPerimeterM", "PerimeterM") : Q(element, "OuterPerimeterM"),
                     element.Id + "/OuterPerimeterM");
