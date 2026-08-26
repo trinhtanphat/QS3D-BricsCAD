@@ -20,7 +20,12 @@ namespace QS3D.Core.Reporting
         public double DeductionM3 { get; set; }
         public double NetConcreteM3 { get; set; }
         public double FormworkM2 { get; set; }
+        public double GrossFormworkM2 { get; set; }
+        public double ConcreteContactDeductionM2 { get; set; }
+        public double NetFormworkM2 { get; set; }
         public double LengthM { get; set; }
+        public double WidthM { get; set; }
+        public double HeightM { get; set; }
         public double OuterPerimeterM { get; set; }
         public double InnerPerimeterM { get; set; }
         public double DoorAreaM2 { get; set; }
@@ -32,7 +37,12 @@ namespace QS3D.Core.Reporting
         public bool HasDeductionM3Evidence { get; set; } = true;
         public bool HasNetConcreteM3Evidence { get; set; } = true;
         public bool HasFormworkM2Evidence { get; set; } = true;
+        public bool HasGrossFormworkM2Evidence { get; set; }
+        public bool HasConcreteContactDeductionM2Evidence { get; set; }
+        public bool HasNetFormworkM2Evidence { get; set; }
         public bool HasLengthMEvidence { get; set; } = true;
+        public bool HasWidthMEvidence { get; set; }
+        public bool HasHeightMEvidence { get; set; }
         public bool HasOuterPerimeterMEvidence { get; set; } = true;
         public bool HasInnerPerimeterMEvidence { get; set; } = true;
         public bool HasDoorAreaM2Evidence { get; set; } = true;
