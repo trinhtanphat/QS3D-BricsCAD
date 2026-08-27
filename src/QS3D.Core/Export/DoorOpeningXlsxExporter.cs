@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -19,8 +20,7 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            var rowCount = rows.Count;
-            if (rowCount > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Door/opening XLSX export supports at most " + MaxDataRows + " data rows.");
+            var rowCount = RequireConsistentKnownCount(rows, rows.Count, MaxDataRows, "export rows");
 
             var snapshot = new List<DoorOpeningScheduleRow>(rowCount);
             for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
@@ -88,7 +88,7 @@ namespace QS3D.Core.Export
             if (source == null)
                 throw new ArgumentException("Door/opening XLSX " + label + " collection is required.", "rows");
 
-            var count = source.Count;
+            var count = RequireConsistentKnownCount(source, source.Count, MaxCellTextLength + 1, label);
             long joinedLength = 0L;
             for (var index = 0; index < count; index++)
             {
@@ -103,6 +103,30 @@ namespace QS3D.Core.Export
             }
             if (source.Count != count)
                 throw new InvalidOperationException("Door/opening XLSX " + label + " count changed during snapshot.");
+        }
+
+        private static int RequireConsistentKnownCount<T>(object source, int primaryCount, int maximum, string label)
+        {
+            int? expected = null;
+            Action<int> bind = count =>
+            {
+                if (count < 0)
+                    throw new ArgumentOutOfRangeException("rows", "Door/opening XLSX " + label + " count must be non-negative.");
+                if (count > maximum)
+                    throw new ArgumentOutOfRangeException("rows", "Door/opening XLSX " + label + " count exceeds the supported maximum of " + maximum + ".");
+                if (expected.HasValue && expected.Value != count)
+                    throw new InvalidOperationException("Door/opening XLSX " + label + " exposes conflicting known collection counts.");
+                expected = count;
+            };
+
+            bind(primaryCount);
+            var readOnly = source as IReadOnlyCollection<T>;
+            if (readOnly != null) bind(readOnly.Count);
+            var generic = source as ICollection<T>;
+            if (generic != null) bind(generic.Count);
+            var nonGeneric = source as ICollection;
+            if (nonGeneric != null) bind(nonGeneric.Count);
+            return expected.GetValueOrDefault();
         }
 
         private static void ValidateCellText(IReadOnlyList<DoorOpeningScheduleRow> rows)
@@ -146,13 +170,9 @@ namespace QS3D.Core.Export
                 var row = rows[rowIndex];
                 var label = "worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " ";
                 if (row.Count != row.ElementIds.Count)
-                    throw new ArgumentException(
-                        "Door/opening XLSX " + label + "Count must match Element IDs count.",
-                        "rows");
+                    throw new ArgumentException("Door/opening XLSX " + label + "Count must match Element IDs count.", "rows");
                 if (row.HostCount != row.HostIds.Count)
-                    throw new ArgumentException(
-                        "Door/opening XLSX " + label + "HostCount must match Host IDs count.",
-                        "rows");
+                    throw new ArgumentException("Door/opening XLSX " + label + "HostCount must match Host IDs count.", "rows");
 
                 RequireXmlProvenance(row.ProjectId, label + "Project ID");
                 RequireXmlProvenance(row.DrawingFingerprint, label + "Drawing Fingerprint");
@@ -164,16 +184,10 @@ namespace QS3D.Core.Export
 
         private static void RequireXmlProvenance(string value, string label)
         {
-            try
-            {
-                XmlConvert.VerifyXmlChars(value ?? string.Empty);
-            }
+            try { XmlConvert.VerifyXmlChars(value ?? string.Empty); }
             catch (XmlException ex)
             {
-                throw new ArgumentException(
-                    "Door/opening XLSX " + label + " contains characters that are invalid in XML provenance.",
-                    "rows",
-                    ex);
+                throw new ArgumentException("Door/opening XLSX " + label + " contains characters that are invalid in XML provenance.", "rows", ex);
             }
         }
 
@@ -182,17 +196,14 @@ namespace QS3D.Core.Export
             var index = 0;
             foreach (var value in values)
             {
-                RequireXmlProvenance(
-                    value ?? string.Empty,
-                    label + "[" + index.ToString(CultureInfo.InvariantCulture) + "]");
+                RequireXmlProvenance(value ?? string.Empty, label + "[" + index.ToString(CultureInfo.InvariantCulture) + "]");
                 index++;
             }
         }
 
         private static void RequireCount(int value, string label)
         {
-            if (value < 0)
-                throw new ArgumentOutOfRangeException("rows", "Door/opening XLSX " + label + " must be non-negative.");
+            if (value < 0) throw new ArgumentOutOfRangeException("rows", "Door/opening XLSX " + label + " must be non-negative.");
         }
 
         private static void RequirePositive(double value, string label)
@@ -210,16 +221,12 @@ namespace QS3D.Core.Export
         private static void RequireCellTextLength(string value, string label)
         {
             if ((value ?? string.Empty).Length > MaxCellTextLength)
-                throw new ArgumentOutOfRangeException(
-                    "rows",
-                    "Door/opening XLSX " + label + " exceeds Excel's " + MaxCellTextLength + "-character cell text limit.");
+                throw new ArgumentOutOfRangeException("rows", "Door/opening XLSX " + label + " exceeds Excel's " + MaxCellTextLength + "-character cell text limit.");
         }
 
         private static void RequireJoinedCellTextLength(IEnumerable<string> values, string label)
         {
-            if (values == null)
-                throw new ArgumentException("Door/opening XLSX " + label + " collection is required.", "rows");
-
+            if (values == null) throw new ArgumentException("Door/opening XLSX " + label + " collection is required.", "rows");
             long length = 0L;
             var index = 0;
             foreach (var value in values)
@@ -227,21 +234,14 @@ namespace QS3D.Core.Export
                 if (index > 0) length++;
                 length += (value ?? string.Empty).Length;
                 if (length > MaxCellTextLength)
-                    throw new ArgumentOutOfRangeException(
-                        "rows",
-                        "Door/opening XLSX " + label + " exceeds Excel's " + MaxCellTextLength + "-character cell text limit.");
+                    throw new ArgumentOutOfRangeException("rows", "Door/opening XLSX " + label + " exceeds Excel's " + MaxCellTextLength + "-character cell text limit.");
                 index++;
             }
         }
 
         private static string BuildSheet(IReadOnlyList<DoorOpeningScheduleRow> rows)
         {
-            var headers = new[]
-            {
-                "Tầng", "Loại", "Family / Loại", "Vật liệu", "Rộng (m)", "Cao (m)",
-                "Cao bậu (m)", "Dày (m)", "SL", "DT mở (m²)", "SL host", "Element IDs", "Host IDs",
-                "Project ID", "Drawing Fingerprint", "Source Handles"
-            };
+            var headers = new[] { "Tầng", "Loại", "Family / Loại", "Vật liệu", "Rộng (m)", "Cao (m)", "Cao bậu (m)", "Dày (m)", "SL", "DT mở (m²)", "SL host", "Element IDs", "Host IDs", "Project ID", "Drawing Fingerprint", "Source Handles" };
             var lastRow = Math.Max(1, rows.Count + 1);
             var range = "A1:P" + lastRow.ToString(CultureInfo.InvariantCulture);
             var sb = new StringBuilder();
@@ -258,22 +258,9 @@ namespace QS3D.Core.Export
                 var row = rows[index];
                 var r = index + 2;
                 sb.Append("<row r=\"").Append(r).Append("\">");
-                StringCell(sb, CellRef(0, r), row.Floor, 0);
-                StringCell(sb, CellRef(1, r), row.Category, 0);
-                StringCell(sb, CellRef(2, r), row.FamilyName, 0);
-                StringCell(sb, CellRef(3, r), row.Material, 0);
-                NumberCell(sb, CellRef(4, r), row.WidthM);
-                NumberCell(sb, CellRef(5, r), row.HeightM);
-                NumberCell(sb, CellRef(6, r), row.SillHeightM);
-                NumberCell(sb, CellRef(7, r), row.ThicknessM);
-                NumberCell(sb, CellRef(8, r), row.Count);
-                NumberCell(sb, CellRef(9, r), row.OpeningAreaM2);
-                NumberCell(sb, CellRef(10, r), row.HostCount);
-                StringCell(sb, CellRef(11, r), string.Join(";", row.ElementIds), 0);
-                StringCell(sb, CellRef(12, r), string.Join(";", row.HostIds), 0);
-                StringCell(sb, CellRef(13, r), row.ProjectId, 0);
-                StringCell(sb, CellRef(14, r), row.DrawingFingerprint, 0);
-                StringCell(sb, CellRef(15, r), string.Join(";", row.SourceHandles), 0);
+                StringCell(sb, CellRef(0, r), row.Floor, 0); StringCell(sb, CellRef(1, r), row.Category, 0); StringCell(sb, CellRef(2, r), row.FamilyName, 0); StringCell(sb, CellRef(3, r), row.Material, 0);
+                NumberCell(sb, CellRef(4, r), row.WidthM); NumberCell(sb, CellRef(5, r), row.HeightM); NumberCell(sb, CellRef(6, r), row.SillHeightM); NumberCell(sb, CellRef(7, r), row.ThicknessM); NumberCell(sb, CellRef(8, r), row.Count); NumberCell(sb, CellRef(9, r), row.OpeningAreaM2); NumberCell(sb, CellRef(10, r), row.HostCount);
+                StringCell(sb, CellRef(11, r), string.Join(";", row.ElementIds), 0); StringCell(sb, CellRef(12, r), string.Join(";", row.HostIds), 0); StringCell(sb, CellRef(13, r), row.ProjectId, 0); StringCell(sb, CellRef(14, r), row.DrawingFingerprint, 0); StringCell(sb, CellRef(15, r), string.Join(";", row.SourceHandles), 0);
                 sb.Append("</row>");
             }
             sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
@@ -282,21 +269,12 @@ namespace QS3D.Core.Export
 
         private static void Validate(string path)
         {
-            XlsxPackageValidator.Validate(
-                path,
-                "[Content_Types].xml",
-                "_rels/.rels",
-                "xl/workbook.xml",
-                "xl/_rels/workbook.xml.rels",
-                "xl/styles.xml",
-                "xl/worksheets/sheet1.xml");
+            XlsxPackageValidator.Validate(path, "[Content_Types].xml", "_rels/.rels", "xl/workbook.xml", "xl/_rels/workbook.xml.rels", "xl/styles.xml", "xl/worksheets/sheet1.xml");
         }
 
         private static void StringCell(StringBuilder sb, string cellRef, string value, int style)
         {
-            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is>");
-            XlsxXmlText.AppendTextElement(sb, value);
-            sb.Append("</is></c>");
+            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is>"); XlsxXmlText.AppendTextElement(sb, value); sb.Append("</is></c>");
         }
 
         private static void NumberCell(StringBuilder sb, string cellRef, double value)
@@ -307,16 +285,12 @@ namespace QS3D.Core.Export
 
         private static string CellRef(int columnZeroBased, int row)
         {
-            var n = columnZeroBased + 1;
-            var name = string.Empty;
-            while (n > 0) { n--; name = (char)('A' + (n % 26)) + name; n /= 26; }
-            return name + row.ToString(CultureInfo.InvariantCulture);
+            var n = columnZeroBased + 1; var name = string.Empty; while (n > 0) { n--; name = (char)('A' + (n % 26)) + name; n /= 26; } return name + row.ToString(CultureInfo.InvariantCulture);
         }
 
         private static void Write(ZipArchive archive, string name, string content)
         {
-            var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
-            using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false))) writer.Write(content);
+            var entry = archive.CreateEntry(name, CompressionLevel.Optimal); using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false))) writer.Write(content);
         }
 
         private const string ContentTypesXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/></Types>";
