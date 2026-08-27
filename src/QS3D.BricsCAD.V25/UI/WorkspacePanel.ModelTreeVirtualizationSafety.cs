@@ -34,7 +34,7 @@ namespace QS3D.BricsCAD.V25.UI
         private static void OnModelTreeVirtualizationSafetyLoaded(object sender, RoutedEventArgs e)
         {
             if (sender is WorkspacePanel panel)
-                ApplyModelTreeVirtualizationSafety(panel);
+                ApplyModelTreeLoadedVirtualizationSafety(panel);
         }
 
         private static void ApplyModelTreeVirtualizationSafety(WorkspacePanel panel)
@@ -42,9 +42,20 @@ namespace QS3D.BricsCAD.V25.UI
             if (panel.ModelTree == null)
                 return;
 
-            // The constructor calls this immediately after InitializeComponent, before the Workspace
-            // can enter the host visual tree. The Loaded class handler repeats the same idempotent
-            // local values after reparenting/reload as a defensive fallback.
+            // The constructor calls this immediately after InitializeComponent, before Workspace
+            // enters the host visual tree. VirtualizationMode must be pinned here: WPF forbids a
+            // mode transition after the ItemsHost has completed its first Measure.
+            VirtualizingPanel.SetVirtualizationMode(panel.ModelTree, VirtualizationMode.Standard);
+            ApplyModelTreeLoadedVirtualizationSafety(panel);
+        }
+
+        private static void ApplyModelTreeLoadedVirtualizationSafety(WorkspacePanel panel)
+        {
+            if (panel.ModelTree == null)
+                return;
+
+            // Reparenting preserves the pre-layout Standard local value. The Loaded fallback must
+            // never rewrite VirtualizationMode because it may execute after an ItemsHost Measure.
             VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);
             ScrollViewer.SetCanContentScroll(panel.ModelTree, false);
         }
