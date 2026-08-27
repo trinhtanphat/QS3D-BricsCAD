@@ -74,6 +74,15 @@ function Assert-ManagedIdentity {
     }
 }
 
+function Add-CommandMethodsFromSource {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "V26 command source was not found: $Path" }
+    $text = Get-Content -LiteralPath $Path -Raw
+    [regex]::Matches($text, '\[CommandMethod\("([^\"]+)"') | ForEach-Object {
+        $script:commands += $_.Groups[1].Value.ToUpperInvariant()
+    }
+}
+
 $pluginProject = Join-Path $root 'src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj'
 $coreProject = Join-Path $root 'src/QS3D.Core/QS3D.Core.csproj'
 $productVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $pluginProject) -Label 'QS3D V26 plugin product version'
@@ -126,17 +135,36 @@ if (Test-Path -LiteralPath $sampleDwg -PathType Leaf) {
     Copy-Item -LiteralPath $sampleDwg -Destination (Join-Path $sampleDestination 'QS3D-Sample.dwg')
 }
 
+# COMMANDS.txt must describe the source files actually compiled by the V26 project.
+# The project links most V25 adapter source but deliberately excludes V25 PluginEntry
+# and V25 Updates/**, then opts a small host-neutral updater subset back in. Scanning
+# the entire V25 tree would advertise commands from excluded V25-only files.
 $commands = @()
-Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V25') -Recurse -Filter '*.cs' | ForEach-Object {
-    $text = Get-Content -LiteralPath $_.FullName -Raw
-    [regex]::Matches($text, '\[CommandMethod\("([^\"]+)"') | ForEach-Object { $commands += $_.Groups[1].Value.ToUpperInvariant() }
+$v25Root = Join-Path $root 'src/QS3D.BricsCAD.V25'
+Get-ChildItem $v25Root -Recurse -Filter '*.cs' | Where-Object {
+    $_.Name -ne 'PluginEntry.cs' -and
+    -not $_.FullName.StartsWith((Join-Path $v25Root 'Updates') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
+} | ForEach-Object { Add-CommandMethodsFromSource -Path $_.FullName }
+
+foreach ($linkedUpdateSource in @(
+    'SemanticReleaseVersion.cs',
+    'UpdateBootstrapper.cs',
+    'UpdateCenterWindow.cs',
+    'UpdateCoordinator.cs',
+    'UpdatePreferences.cs',
+    'UpdateSettingsCommands.cs'
+)) {
+    Add-CommandMethodsFromSource -Path (Join-Path $v25Root ('Updates/' + $linkedUpdateSource))
 }
+
 Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V26') -Recurse -Filter '*.cs' | ForEach-Object {
-    $text = Get-Content -LiteralPath $_.FullName -Raw
-    [regex]::Matches($text, '\[CommandMethod\("([^\"]+)"') | ForEach-Object { $commands += $_.Groups[1].Value.ToUpperInvariant() }
+    Add-CommandMethodsFromSource -Path $_.FullName
 }
 $commands = @($commands | Sort-Object -Unique)
 if ($commands.Count -eq 0 -or -not ($commands -contains 'QS3D')) { throw 'No QS3D CommandMethod entries were discovered for V26.' }
+foreach ($requiredCommand in @('QS3DUPDATE', 'QSUPDATE', 'QS3DVER', 'QSVER')) {
+    if (-not ($commands -contains $requiredCommand)) { throw "Required V26 command was not discovered from compiled source: $requiredCommand" }
+}
 $commands | Set-Content -LiteralPath (Join-Path $dist 'COMMANDS.txt') -Encoding ASCII
 
 $pluginPath = Join-Path $dist 'QS3D.BricsCAD.V26.dll'
