@@ -50,7 +50,7 @@ namespace QS3D.Core.Export
                     throw new ArgumentOutOfRangeException(nameof(rows), "BBS CSV exceeds the supported row bound of " + MaxRowCount + ".");
                 rowCount++;
                 ValidateRow(row ?? throw new ArgumentException("BBS row cannot be null.", nameof(rows)));
-                sb.Append(Q(row.ElementId)).Append(',')
+                sb.Append(QIdentity(row.ElementId, "element id")).Append(',')
                     .Append(Q(row.BarMark)).Append(',')
                     .Append(Q(row.ShapeCode)).Append(',')
                     .Append(Q(row.Notation)).Append(',')
@@ -104,6 +104,15 @@ namespace QS3D.Core.Export
         private static string F(double value)
         {
             return value == 0d ? "0" : value.ToString("R", CultureInfo.InvariantCulture);
+        }
+
+        private static string QIdentity(string value, string label)
+        {
+            var safe = value ?? string.Empty;
+            var probe = safe.TrimStart();
+            if (probe.Length > 0 && (probe[0] == '=' || probe[0] == '+' || probe[0] == '-' || probe[0] == '@'))
+                throw new InvalidDataException("BBS CSV " + label + " cannot begin with a spreadsheet formula prefix because semantic identity must be preserved exactly.");
+            return "\"" + safe.Replace("\"", "\"\"") + "\"";
         }
 
         private static string Q(string value)

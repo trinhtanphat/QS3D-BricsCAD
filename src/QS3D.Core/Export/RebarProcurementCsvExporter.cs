@@ -51,7 +51,7 @@ namespace QS3D.Core.Export
                 rowCount++;
                 if (row == null) throw new ArgumentException("Rebar procurement CSV cannot contain a null row.", nameof(rows));
                 sb.Append(Q(row.AlgorithmId)).Append(',')
-                    .Append(Q(row.GroupId)).Append(',')
+                    .Append(QIdentity(row.GroupId, "group id")).Append(',')
                     .Append(Q(row.Grade)).Append(',')
                     .Append(F(row.DiameterMm)).Append(',')
                     .Append(F(row.StockLengthM)).Append(',')
@@ -80,6 +80,15 @@ namespace QS3D.Core.Export
             if (double.IsNaN(value) || double.IsInfinity(value))
                 throw new ArgumentOutOfRangeException(nameof(value), "Rebar procurement CSV numeric value must be finite.");
             return value.ToString("R", CultureInfo.InvariantCulture);
+        }
+
+        private static string QIdentity(string value, string label)
+        {
+            var safe = value ?? string.Empty;
+            var probe = safe.TrimStart();
+            if (probe.Length > 0 && (probe[0] == '=' || probe[0] == '+' || probe[0] == '-' || probe[0] == '@'))
+                throw new InvalidDataException("Rebar procurement CSV " + label + " cannot begin with a spreadsheet formula prefix because semantic identity must be preserved exactly.");
+            return "\"" + safe.Replace("\"", "\"\"") + "\"";
         }
 
         private static string Q(string value)
