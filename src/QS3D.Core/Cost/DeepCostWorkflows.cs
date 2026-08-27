@@ -349,8 +349,9 @@ namespace QS3D.Core.Cost
         {
             ItemCode = RateBookContract.RequireToken(itemCode, nameof(itemCode));
             if (cost < 0m) throw new ArgumentOutOfRangeException(nameof(cost));
-            var normalizedTradeCode = tradeCode?.Trim();
-            TradeCode = normalizedTradeCode == null || normalizedTradeCode.Length == 0 ? "Unclassified" : normalizedTradeCode;
+            TradeCode = string.IsNullOrWhiteSpace(tradeCode)
+                ? "Unclassified"
+                : AdvancedCostTextContract.RequireCanonicalText(tradeCode, nameof(tradeCode), "Trade code");
             Cost = cost;
         }
 
@@ -448,13 +449,15 @@ namespace QS3D.Core.Cost
             decimal? referenceUnitRate = null)
         {
             ItemCode = RateBookContract.RequireToken(itemCode, nameof(itemCode));
-            if (string.IsNullOrWhiteSpace(description))
-                throw new ArgumentException("BQ library description is required.", nameof(description));
-            Description = description.Trim();
+            Description = AdvancedCostTextContract.RequireCanonicalText(
+                description,
+                nameof(description),
+                "BQ library description");
             Unit = RateBookContract.RequireLowerToken(unit, nameof(unit));
-            if (string.IsNullOrWhiteSpace(categoryPath))
-                throw new ArgumentException("BQ library category path is required.", nameof(categoryPath));
-            CategoryPath = categoryPath.Trim();
+            CategoryPath = AdvancedCostTextContract.RequireCanonicalText(
+                categoryPath,
+                nameof(categoryPath),
+                "BQ library category path");
             if (referenceUnitRate.HasValue && referenceUnitRate.Value < 0m)
                 throw new ArgumentOutOfRangeException(nameof(referenceUnitRate));
             ReferenceUnitRate = referenceUnitRate;
