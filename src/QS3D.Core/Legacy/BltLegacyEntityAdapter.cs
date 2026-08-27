@@ -268,7 +268,7 @@ namespace QS3D.Core.Legacy
             if (HasCategoryMetadataKeyAlias(value, "bltbeam", "beam", "dam", "dambtct")) Add(matches, ElementCategory.Beam, source);
             if (HasCategoryMetadataKeyAlias(value, "bltslab", "slab", "san", "sanbtct")) Add(matches, ElementCategory.Slab, source);
             if (HasCategoryMetadataKeyAlias(value, "bltfoundation", "foundation", "footing", "mong", "mongcoc", "daicoc", "dammong", "mongbang", "mongbe")) Add(matches, ElementCategory.Foundation, source);
-            if (HasCategoryMetadataKeyAlias(value, "bltstructuralwall", "structuralwall", "vach", "vachbt", "vachbtct")) Add(matches, ElementCategory.StructuralWall, source);
+            if (HasExactCompactAlias(value, "bltwall") || HasCategoryMetadataKeyAlias(value, "bltstructuralwall", "structuralwall", "vach", "vachbt", "vachbtct")) Add(matches, ElementCategory.StructuralWall, source);
         }
 
         private static void AddCategoryTextMatch(string? raw, string source, IDictionary<ElementCategory, string> matches)
@@ -280,7 +280,12 @@ namespace QS3D.Core.Legacy
             if (HasAlias(value, "bltbeam", "beam", "dam", "dambtct")) Add(matches, ElementCategory.Beam, source);
             if (HasAlias(value, "bltslab", "slab", "san", "sanbtct")) Add(matches, ElementCategory.Slab, source);
             if (HasAlias(value, "bltfoundation", "foundation", "footing", "mong", "mongcoc", "daicoc", "dammong", "mongbang", "mongbe")) Add(matches, ElementCategory.Foundation, source);
-            if (HasAlias(value, "bltstructuralwall", "structuralwall", "vach", "vachbt", "vachbtct")) Add(matches, ElementCategory.StructuralWall, source);
+            if (HasExactCompactAlias(value, "bltwall") || HasAlias(value, "bltstructuralwall", "structuralwall", "vach", "vachbt", "vachbtct")) Add(matches, ElementCategory.StructuralWall, source);
+        }
+
+        private static bool HasExactCompactAlias(string normalizedText, string alias)
+        {
+            return string.Equals(Compact(normalizedText), Compact(Normalize(alias)), StringComparison.Ordinal);
         }
 
         private static bool HasCategoryMetadataKeyAlias(string normalizedText, params string[] aliases)

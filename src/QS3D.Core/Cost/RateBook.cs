@@ -288,7 +288,17 @@ namespace QS3D.Core.Cost
 
             for (var i = 0; i < value.Length; i++)
             {
-                if (char.IsControl(value[i]) || char.IsWhiteSpace(value[i]))
+                var current = value[i];
+                if (char.IsHighSurrogate(current))
+                {
+                    if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1]))
+                        throw new ArgumentException("Rate identity token contains malformed UTF-16.", parameterName);
+                    i++;
+                    continue;
+                }
+                if (char.IsLowSurrogate(current))
+                    throw new ArgumentException("Rate identity token contains malformed UTF-16.", parameterName);
+                if (char.IsControl(current) || char.IsWhiteSpace(current))
                     throw new ArgumentException("Rate identity token must not contain whitespace or control characters.", parameterName);
             }
             return value;

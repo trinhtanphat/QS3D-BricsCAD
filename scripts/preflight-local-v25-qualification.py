@@ -6,14 +6,15 @@ ROOT = Path(__file__).resolve().parents[1]
 errors = []
 
 runner = ROOT / "scripts/run-local-v25-qualification.ps1"
-runtime_helper = ROOT / "scripts/test-bricscad-v25-runtime.ps1"
+runtime_wrapper = ROOT / "scripts/test-bricscad-v25-runtime.ps1"
+runtime_helper = ROOT / "scripts/test-bricscad-v25-runtime-core.ps1"
 runbook = ROOT / "docs/LOCAL-V25-QUALIFICATION.md"
 wpf_runbook = ROOT / "docs/LOCAL-V25-WPF-SMOKE.md"
 wpf_wrapper = ROOT / "scripts/run-local-v25-wpf-smoke.ps1"
 agents = ROOT / "AGENTS.md"
 gitignore = ROOT / ".gitignore"
 
-for path in (runner, runtime_helper, runbook, wpf_runbook, wpf_wrapper, agents, gitignore):
+for path in (runner, runtime_wrapper, runtime_helper, runbook, wpf_runbook, wpf_wrapper, agents, gitignore):
     if not path.is_file():
         errors.append("missing local V25 qualification contract file: " + str(path.relative_to(ROOT)))
 
@@ -93,6 +94,20 @@ if runner.is_file():
         if needle.lower() in text.lower():
             errors.append("local V25 runner must not accept or reference persisted private-key material/passwords: " + needle)
 
+if runtime_wrapper.is_file():
+    wrapper_text = runtime_wrapper.read_text(encoding="utf-8")
+    for needle in (
+        "v25-profile-sandbox.ps1",
+        "test-bricscad-v25-runtime-core.ps1",
+        "New-Qs3dV25ProfileSandbox",
+        "Restore-Qs3dV25ProfileSandbox",
+        ". $coreScript @coreArgs",
+        "Assert-Qs3dNoBricsCadProcess",
+        "status = 'CLEANUP_PASS'",
+    ):
+        if needle not in wrapper_text:
+            errors.append("local V25 runtime wrapper missing profile-safety token: " + needle)
+
 if runtime_helper.is_file():
     text = runtime_helper.read_text(encoding="utf-8")
     required = (
@@ -110,9 +125,9 @@ if runtime_helper.is_file():
     )
     for needle in required:
         if needle not in text:
-            errors.append("local V25 runtime helper missing privacy/cleanup token: " + needle)
+            errors.append("local V25 runtime core missing privacy/cleanup token: " + needle)
     if "CopyFromScreen" in text:
-        errors.append("local V25 runtime helper must not capture a desktop rectangle that can include unrelated windows")
+        errors.append("local V25 runtime core must not capture a desktop rectangle that can include unrelated windows")
 
     process_null = text.find("$process = $null")
     try_pos = text.find("try {", process_null)
@@ -120,7 +135,7 @@ if runtime_helper.is_file():
     finally_pos = text.rfind("finally {")
     cleanup_pos = text.find("Remove-Item Env:QS3D_RUNTIME_RESULT", finally_pos)
     if min(process_null, try_pos, launch_pos, finally_pos, cleanup_pos) < 0 or not process_null < try_pos < launch_pos < finally_pos < cleanup_pos:
-        errors.append("local V25 runtime process launch and environment cleanup must share one try/finally boundary")
+        errors.append("local V25 runtime core process launch and environment cleanup must share one try/finally boundary")
 
 if wpf_wrapper.is_file():
     text = wpf_wrapper.read_text(encoding="utf-8")
@@ -188,4 +203,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: local V25 work is exact-SHA/clean-tree gated, runs source/Core/adapter/offline-WPF/runtime checks, optionally signs/verifies/finalizes the exact package with a Windows-store certificate plus HTTPS timestamp, records evidence outside Git, and hands interactive/private-DWG scenarios to local-capable agents without weakening manual-only CI policy.")
+print("PASS: local V25 work is exact-SHA/clean-tree gated, runs source/Core/adapter/offline-WPF/runtime checks, wraps the stable runtime core in a profile-safe sandbox, optionally signs/verifies/finalizes the exact package with a Windows-store certificate plus HTTPS timestamp, records evidence outside Git, and hands interactive/private-DWG scenarios to local-capable agents without weakening manual-only CI policy.")

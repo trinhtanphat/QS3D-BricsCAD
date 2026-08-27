@@ -53,9 +53,18 @@ namespace QS3D.Core.Services
             var gross = QuantityMath.Multiply(crossSection, length, element.Id + "/beam gross volume");
             var deduction = QuantityMath.Clamp(SemanticNumber.Get(element, "DeductionM3"), 0d, gross, element.Id + "/beam deduction");
             var net = QuantityMath.SubtractFloorZero(gross, deduction, element.Id + "/beam net volume");
-            var doubleHeight = QuantityMath.Multiply(2d, height, element.Id + "/beam formwork height");
-            var exposedPerimeter = QuantityMath.Add(doubleHeight, width, element.Id + "/beam exposed perimeter");
-            var formwork = QuantityMath.Multiply(exposedPerimeter, length, element.Id + "/beam formwork");
+            var doubleHeight = QuantityMath.Multiply(2d, height, element.Id + "/beam side height");
+            var sideArea = QuantityMath.Multiply(doubleHeight, length, element.Id + "/beam side area");
+            var bottomArea = QuantityMath.Multiply(width, length, element.Id + "/beam bottom area");
+
+            // Core regeneration has no QuantityCalculationRuleSet context. Publish only
+            // rule-neutral face candidates here and fail closed for rule-projected totals.
+            // V25 BeamFormworkQuantityPolicy is the canonical layer that applies
+            // ExtractSide/ExtractBottom, directed deductions and writes FormworkM2.
+            element.Quantities.Remove("FormworkM2");
+            element.Quantities.Remove("NetFormworkM2");
+            element.Quantities.Remove("GrossFormworkM2");
+            element.Quantities.Remove("ConcreteContactDeductionM2");
 
             element.SetQuantity("LengthM", length);
             element.SetQuantity("HeightM", height);
@@ -63,7 +72,9 @@ namespace QS3D.Core.Services
             element.SetQuantity("GrossVolumeM3", gross);
             element.SetQuantity("DeductionM3", deduction);
             element.SetQuantity("NetVolumeM3", net);
-            element.SetQuantity("FormworkM2", formwork);
+            element.SetQuantity("SideAreaM2", sideArea);
+            element.SetQuantity("BottomAreaM2", bottomArea);
+            element.SetQuantity("TopAreaM2", 0d);
         }
 
         private static void RegenerateSlab(ProjectState project, ProjectElement element)

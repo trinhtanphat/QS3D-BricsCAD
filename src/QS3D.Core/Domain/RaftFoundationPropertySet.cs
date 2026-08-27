@@ -6,12 +6,14 @@ namespace QS3D.Core.Domain
     /// Canonical Family/instance contract for the Móng Bè workflow.
     /// ElevationMode is deliberately separate from BottomLevelId/TopLevelId: those keys
     /// remain real Floor/Level identities, while this property describes which face of
-    /// the raft is anchored to the working level/source plane.
+    /// the raft is anchored to the selected project Level.
     /// </summary>
     public static class RaftFoundationPropertySet
     {
         public const string SubtypeName = "Móng Bè";
         public const string WorkspaceSubtypeKey = "WorkspaceSubtype";
+        public const string ThicknessKey = "ThicknessM";
+        public const string BottomOffsetKey = "BottomOffsetM";
         public const string ElevationModeKey = "ElevationMode";
         public const string BottomLevelMode = "bottom_level";
         public const string TopLevelMode = "top_level";
@@ -23,8 +25,18 @@ namespace QS3D.Core.Domain
             if (string.Equals(text, BottomLevelMode, StringComparison.OrdinalIgnoreCase)) return BottomLevelMode;
             if (string.Equals(text, TopLevelMode, StringComparison.OrdinalIgnoreCase)) return TopLevelMode;
             throw new InvalidOperationException(
-                "Cao độ Móng Bè chỉ nhận '" + BottomLevelMode + "' hoặc '" + TopLevelMode + "'.");
+                "Cách đặt Móng Bè chỉ nhận '" + BottomLevelMode + "' hoặc '" + TopLevelMode + "'.");
         }
+
+        public static string ActiveLevelKey(string? elevationMode) =>
+            string.Equals(NormalizeElevationMode(elevationMode), TopLevelMode, StringComparison.Ordinal)
+                ? ProjectFloorService.TopLevelIdKey
+                : ProjectFloorService.BottomLevelIdKey;
+
+        public static string OppositeLevelKey(string? elevationMode) =>
+            string.Equals(NormalizeElevationMode(elevationMode), TopLevelMode, StringComparison.Ordinal)
+                ? ProjectFloorService.BottomLevelIdKey
+                : ProjectFloorService.TopLevelIdKey;
 
         public static double ResolveBottomOffsetM(string? elevationMode, double thicknessM)
         {

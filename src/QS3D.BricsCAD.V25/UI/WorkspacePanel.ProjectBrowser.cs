@@ -399,7 +399,7 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
-        private void RefreshProjectBrowser(bool forceRebind)
+        private void RefreshProjectBrowser(bool forceRebind, bool revealPrimarySelection = false)
         {
             if (_browserNodes == null || _browserElements == null) return;
             try
@@ -421,7 +421,12 @@ namespace QS3D.BricsCAD.V25.UI
                     _browserElementOffset = 0;
                 }
                 var version = project.ChangeVersion;
-                var plan = ProjectBrowserWorkspaceCoordinator.Build(project, _browserState, _browserNodeOffset, BrowserNodePageSize);
+                var plan = ProjectBrowserWorkspaceCoordinator.Build(
+                    project,
+                    _browserState,
+                    _browserNodeOffset,
+                    BrowserNodePageSize,
+                    revealPrimarySelection);
                 RequireBrowserVersionInvariant(project, version);
                 RenderProjectBrowser(project, plan);
             }
@@ -443,8 +448,9 @@ namespace QS3D.BricsCAD.V25.UI
                 _browserDirtyOnly.IsChecked = _browserState.DirtyOnly;
                 var nodeRows = plan.Viewport.Rows.Select(row => new BrowserNodeRow(row)).ToList();
                 _browserNodes.ItemsSource = nodeRows;
+                _browserNodeOffset = plan.Viewport.Offset;
                 var targetPath = _browserNodePath;
-                if (targetPath.Length == 0 && plan.Reveal.TargetNodePaths.Count > 0) targetPath = plan.Reveal.TargetNodePaths[0];
+                if (plan.PrimaryTargetNodePath.Length > 0) targetPath = plan.PrimaryTargetNodePath;
                 var selectedNode = nodeRows.FirstOrDefault(row => string.Equals(row.Path, targetPath, StringComparison.Ordinal));
                 if (selectedNode == null && targetPath.Length == 0 && nodeRows.Count > 0) selectedNode = nodeRows[0];
                 _browserNodes.SelectedItem = selectedNode;
@@ -622,10 +628,12 @@ namespace QS3D.BricsCAD.V25.UI
                 var state = ProjectBrowserWorkspaceCoordinator.ApplySelection(project, _browserState, ids, ids.Count == 0 ? null : ids[0]);
                 PersistBrowserState(document, project, state);
                 _browserState = state;
-                _browserNodePath = string.Empty;
-                _browserNodeOffset = 0;
-                _browserElementOffset = 0;
-                RefreshProjectBrowser(false);
+                if (ids.Count > 0)
+                {
+                    _browserNodePath = string.Empty;
+                    _browserElementOffset = 0;
+                }
+                RefreshProjectBrowser(false, ids.Count > 0);
                 if (!string.IsNullOrWhiteSpace(selectionError))
                     SetBrowserStatus(selectionError + " Project Browser selection đã clear fail-closed.");
             }

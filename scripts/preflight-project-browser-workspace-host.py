@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HOST = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.ProjectBrowser.cs"
 COORDINATOR = ROOT / "src" / "QS3D.Core" / "Navigation" / "ProjectBrowserWorkspaceCoordinator.cs"
 STATE_STORE = ROOT / "src" / "QS3D.Core" / "Navigation" / "ProjectBrowserWorkspaceStateStore.cs"
+SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "ProjectBrowserWorkspaceCoordinatorSmoke.cs"
 
 
 def fail(message: str) -> None:
@@ -19,13 +20,14 @@ def require(text: str, marker: str, label: str) -> None:
 
 
 def main() -> None:
-    for path in (HOST, COORDINATOR, STATE_STORE):
+    for path in (HOST, COORDINATOR, STATE_STORE, SMOKE):
         if not path.exists():
             fail("missing source file " + str(path.relative_to(ROOT)))
 
     host = HOST.read_text(encoding="utf-8")
     coordinator = COORDINATOR.read_text(encoding="utf-8")
     state_store = STATE_STORE.read_text(encoding="utf-8")
+    smoke = SMOKE.read_text(encoding="utf-8")
 
     host_markers = (
         "BrowserClassHandlersRegistered = RegisterBrowserClassHandlers()",
@@ -69,6 +71,8 @@ def main() -> None:
         "Zone > Category",
         "BrowserNodePageSize",
         "BrowserElementPageSize",
+        "_browserNodeOffset = plan.Viewport.Offset",
+        "plan.PrimaryTargetNodePath",
     )
     for marker in host_markers:
         require(host, marker, "host adapter")
@@ -79,6 +83,9 @@ def main() -> None:
         "ProjectBrowserQueryPlanner.Build",
         "ProjectBrowserSelectionPlanner.PlanReveal",
         "ProjectBrowserVirtualizationPlanner.BuildViewport",
+        "ProjectBrowserVirtualizationPlanner.ResolveContainingPageOffset",
+        "PrimaryTargetNodePath",
+        "bool revealPrimarySelection = false",
         "RequireSelectionFreshness",
     )
     for marker in coordinator_markers:
@@ -140,6 +147,30 @@ def main() -> None:
     resolve_selection_pos = sync.find("TryResolveSemanticSelection(project, _inspection")
     if not (0 <= identity_pos < resolve_selection_pos):
         fail("CAD -> Browser must validate inspection project/fingerprint before semantic resolution")
+    if "_browserNodeOffset = 0" in sync:
+        fail("CAD -> Browser must preserve the user page when no reveal target exists")
+    require(sync, "RefreshProjectBrowser(false, ids.Count > 0)", "CAD -> Browser one-shot reveal")
+
+    render_start = host.find("private void RenderProjectBrowser(")
+    render_end = host.find("private void RenderProjectBrowserElements(", render_start)
+    if render_start < 0 or render_end < 0:
+        fail("cannot isolate Project Browser render boundary")
+    render = host[render_start:render_end]
+    consume_offset_pos = render.find("_browserNodeOffset = plan.Viewport.Offset")
+    consume_target_pos = render.find("plan.PrimaryTargetNodePath", consume_offset_pos)
+    if not (0 <= consume_offset_pos < consume_target_pos):
+        fail("host adapter must consume the coordinator-computed reveal page and primary target")
+
+    for marker in (
+        "RevealRepagesAtAndBeyondPageBoundary",
+        'AssertRevealPage(project, "B-099", 100, 0)',
+        'AssertRevealPage(project, "B-100", 100, 1)',
+        'AssertRevealPage(project, "B-150", 100, 51)',
+        "NoRevealPreservesExplicitPage",
+        "True(plan.Reveal.HasSelection)",
+        "Equal(version, project.ChangeVersion)",
+    ):
+        require(smoke, marker, "Core reveal paging smoke")
 
     # Presentation persistence must rebind the same canonical project object through the dedicated
     # existing-project mutation context and prove semantic ChangeVersion invariance.
@@ -158,7 +189,7 @@ def main() -> None:
     ):
         require(persist, marker, "presentation persistence")
 
-    print("PASS hosted Project Browser uses composable Workspace lifecycle, semantic-only modeless state, exact-DWG/project commit revalidation and ChangeVersion-safe presentation persistence")
+    print("PASS hosted Project Browser uses composable Workspace lifecycle, bounded primary-target reveal paging, semantic-only modeless state, exact-DWG/project commit revalidation and ChangeVersion-safe presentation persistence")
 
 
 if __name__ == "__main__":
