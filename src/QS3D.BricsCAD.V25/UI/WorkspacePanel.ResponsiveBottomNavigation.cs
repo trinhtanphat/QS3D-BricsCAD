@@ -34,8 +34,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static void OnResponsiveWorkspaceLoaded(object sender, RoutedEventArgs e)
         {
-            WorkspacePanel panel = sender as WorkspacePanel;
-            if (panel == null || !ResponsiveBottomNavigationRegistered)
+            if (!(sender is WorkspacePanel panel) || !ResponsiveBottomNavigationRegistered)
                 return;
 
             if (!panel._responsiveWorkspaceSizeWired && panel.WorkspaceOverflow != null)
@@ -66,7 +65,7 @@ namespace QS3D.BricsCAD.V25.UI
             WorkspaceOverflow.PanningMode = PanningMode.None;
             WorkspaceContentRoot.MinWidth = 0d;
 
-            Grid body = WorkspaceContentRoot.Children
+            Grid? body = WorkspaceContentRoot.Children
                 .OfType<Grid>()
                 .FirstOrDefault(candidate =>
                     Grid.GetRow(candidate) == 1 && candidate.ColumnDefinitions.Count >= 5);
@@ -95,13 +94,13 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void EnsureResponsiveBottomNavigation()
         {
-            Border footer = WorkspaceContentRoot.Children
+            Border? footer = WorkspaceContentRoot.Children
                 .OfType<Border>()
                 .FirstOrDefault(candidate => Grid.GetRow(candidate) == 2);
             if (footer == null)
                 return;
 
-            Grid existing = footer.Child as Grid;
+            Grid? existing = footer.Child as Grid;
             if (existing != null && string.Equals(existing.Tag as string, ResponsiveFooterTag, StringComparison.Ordinal))
                 return;
 
@@ -142,7 +141,7 @@ namespace QS3D.BricsCAD.V25.UI
                 VerticalAlignment = VerticalAlignment.Stretch
             };
 
-            Style style = TryFindResource(accent ? "AccentButton" : "DenseButton") as Style;
+            Style? style = TryFindResource(accent ? "AccentButton" : "DenseButton") as Style;
             if (style != null)
                 button.Style = style;
 
@@ -165,8 +164,8 @@ namespace QS3D.BricsCAD.V25.UI
                 MinWidth = 155d
             };
 
-            Brush background = TryFindResource("Bg1Brush") as Brush;
-            Brush foreground = TryFindResource("TextBrush") as Brush;
+            Brush? background = TryFindResource("Bg1Brush") as Brush;
+            Brush? foreground = TryFindResource("TextBrush") as Brush;
             if (background != null)
                 menu.Background = background;
             if (foreground != null)
@@ -192,13 +191,13 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnResponsiveComponentsClick(object sender, RoutedEventArgs e)
         {
             FamilyList.Focus();
-            SetStatus("Đã chuyển đến danh sách cấu kiện.", true);
+            SetStatus("Đã chuyển đến danh sách cấu kiện.");
         }
 
         private void OnResponsiveFinishClick(object sender, RoutedEventArgs e)
         {
             ModelTree.Focus();
-            SetStatus("Đã chuyển đến cây mô hình / hoàn thiện.", true);
+            SetStatus("Đã chuyển đến cây mô hình / hoàn thiện.");
         }
 
         private void OnResponsiveQuantityClick(object sender, RoutedEventArgs e)
@@ -218,8 +217,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnResponsiveMoreClick(object sender, RoutedEventArgs e)
         {
-            Button button = sender as Button;
-            if (button == null || button.ContextMenu == null)
+            if (!(sender is Button button) || button.ContextMenu == null)
                 return;
 
             button.ContextMenu.PlacementTarget = button;
