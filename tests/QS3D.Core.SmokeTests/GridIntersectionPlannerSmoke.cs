@@ -19,6 +19,8 @@ namespace QS3D.Core.SmokeTests
             DuplicateElementIdsFailClosed();
             ElementIdsAreCanonicalizedBeforeDuplicateCheck();
             OverflowingDerivedGeometryFailsClosed();
+            PairOwnedMarkerIdentityIsCanonicalAndOccurrenceScoped();
+            PairOwnedMarkerIdentityIsOrderInvariant();
         }
 
         private static void CrossingLinesProduceOneDeterministicPoint()
@@ -176,6 +178,38 @@ namespace QS3D.Core.SmokeTests
                 GridReferenceCurve.Line("G-HUGE", new Point2(double.MaxValue, 0), new Point2(-double.MaxValue, 0)),
                 GridReferenceCurve.Line("G-Y", new Point2(0, -1), new Point2(0, 1))
             }));
+        }
+
+        private static void PairOwnedMarkerIdentityIsCanonicalAndOccurrenceScoped()
+        {
+            var result = GridIntersectionMarkerPlanner.Plan(new[]
+            {
+                new GridIntersection("GRID-B", "GRID-A", new Point2(1, 2)),
+                new GridIntersection("GRID-A", "GRID-B", new Point2(3, 4))
+            });
+
+            Equal(2, result.Count);
+            Equal("GRID-A", result[0].FirstElementId);
+            Equal("GRID-B", result[0].SecondElementId);
+            Equal(result[0].PairToken, result[1].PairToken);
+            Equal(0, result[0].Occurrence);
+            Equal(1, result[1].Occurrence);
+            Equal(GridIntersectionIdentityPlanner.BuildIntersectionOwner("GRID-A", "GRID-B", 0), result[0].OwnerToken);
+            Equal(GridIntersectionIdentityPlanner.BuildIntersectionOwner("GRID-A", "GRID-B", 1), result[1].OwnerToken);
+        }
+
+        private static void PairOwnedMarkerIdentityIsOrderInvariant()
+        {
+            var first = GridIntersectionMarkerPlanner.Plan(new[]
+            {
+                new GridIntersection("G-2", "G-1", new Point2(0, 0))
+            })[0];
+            var second = GridIntersectionMarkerPlanner.Plan(new[]
+            {
+                new GridIntersection("G-1", "G-2", new Point2(0, 0))
+            })[0];
+            Equal(first.PairToken, second.PairToken);
+            Equal(first.OwnerToken, second.OwnerToken);
         }
 
         private static void Near(double expected, double actual)

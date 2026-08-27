@@ -113,7 +113,7 @@ namespace QS3D.Core.SmokeTests
             var beam = new ProjectElement("B1", ElementCategory.Beam, "", "f", "z");
             beam.Properties["LengthM"] = "5"; beam.Properties["WidthM"] = "0.3"; beam.Properties["HeightM"] = "0.5";
             regenerator.Regenerate(project, beam);
-            Near(0.75, beam.Quantities["NetVolumeM3"]); Near(6.5, beam.Quantities["FormworkM2"]);
+            Near(0.75, beam.Quantities["NetVolumeM3"]); Near(5, beam.Quantities["SideAreaM2"]); Near(1.5, beam.Quantities["BottomAreaM2"]); Near(0, beam.Quantities["TopAreaM2"]); True(!beam.Quantities.ContainsKey("FormworkM2"));
 
             var slab = new ProjectElement("S1", ElementCategory.Slab, "", "f", "z");
             slab.Properties["AreaM2"] = "20"; slab.Properties["OpeningAreaM2"] = "2"; slab.Properties["ThicknessM"] = "0.12"; slab.Properties["PerimeterM"] = "18";
