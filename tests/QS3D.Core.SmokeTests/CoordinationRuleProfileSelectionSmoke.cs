@@ -92,6 +92,9 @@ namespace QS3D.Core.SmokeTests
         private static void InvalidBindingFailsClosed()
         {
             Throws<ArgumentException>(() => new CoordinationRuleProfileBinding(" ", 1));
+            Throws<ArgumentException>(() => new CoordinationRuleProfileBinding(" PROJECT-MEP", 1));
+            Throws<ArgumentException>(() => new CoordinationRuleProfileBinding("PROJECT-MEP ", 1));
+            Throws<ArgumentException>(() => new CoordinationRuleProfileBinding("PRO\tJECT-MEP", 1));
             Throws<ArgumentOutOfRangeException>(() => new CoordinationRuleProfileBinding("PROJECT-MEP", 0));
             var catalog = new CoordinationRuleProfileCatalog(new CoordinationRuleProfile[0]);
             Throws<ArgumentNullException>(() => catalog.Resolve(null!, "Pipe", "Beam"));
