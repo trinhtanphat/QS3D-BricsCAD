@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             var root = Path.Combine(Path.GetTempPath(), "qs3d-door-opening-known-count-" + Guid.NewGuid().ToString("N"));
             try
             {
+                // One public object can expose several deterministic collection Count contracts at once.
                 var rows = new ConflictingKnownCountRows(ValidRow());
                 try
                 {
