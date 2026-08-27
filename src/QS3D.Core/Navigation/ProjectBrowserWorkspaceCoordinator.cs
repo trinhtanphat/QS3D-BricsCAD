@@ -84,8 +84,9 @@ namespace QS3D.Core.Navigation
             var sourceChangeVersion = project.ChangeVersion;
             var sourceElements = project.Elements.ToArray();
             var query = ProjectBrowserQueryPlanner.Build(project, current.Grouping, current.ToQueryOptions());
+            var sourceQueryState = SelectionQueryState.Capture(project);
             var reveal = ProjectBrowserSelectionPlanner.PlanReveal(query.Root, selectedElementIds, primaryElementId);
-            RequireSelectionFreshness(project, sourceChangeVersion, sourceElements);
+            RequireSelectionFreshness(project, sourceChangeVersion, sourceElements, sourceQueryState);
             var expanded = MergeExpandedPaths(current.ExpandedPaths, reveal.ExpansionPaths);
             return Copy(
                 current,
@@ -157,7 +158,8 @@ namespace QS3D.Core.Navigation
         private static void RequireSelectionFreshness(
             ProjectState project,
             long expectedChangeVersion,
-            IReadOnlyList<ProjectElement> expectedElements)
+            IReadOnlyList<ProjectElement> expectedElements,
+            SelectionQueryState expectedQueryState)
         {
             if (project.ChangeVersion != expectedChangeVersion)
                 throw new InvalidOperationException("Project changed while Project Browser selection ids were being enumerated; recompute the selection against the current project state.");
@@ -166,12 +168,200 @@ namespace QS3D.Core.Navigation
             for (var index = 0; index < expectedElements.Count; index++)
                 if (!ReferenceEquals(project.Elements[index], expectedElements[index]))
                     throw StructuralFreshnessError();
+            if (!expectedQueryState.Matches(project))
+                throw new InvalidOperationException(
+                    "Project Browser query inputs changed while Project Browser selection ids were being enumerated; recompute the selection against the current project state.");
         }
 
         private static InvalidOperationException StructuralFreshnessError()
         {
             return new InvalidOperationException(
                 "Project element structure changed while Project Browser selection ids were being enumerated; recompute the selection against the current project state.");
+        }
+
+        private sealed class SelectionQueryState
+        {
+            private readonly IReadOnlyList<ElementQueryState> _elements;
+            private readonly IReadOnlyList<FamilyQueryState> _families;
+            private readonly IReadOnlyList<FloorQueryState> _floors;
+            private readonly IReadOnlyList<ZoneQueryState> _zones;
+
+            private SelectionQueryState(
+                IReadOnlyList<ElementQueryState> elements,
+                IReadOnlyList<FamilyQueryState> families,
+                IReadOnlyList<FloorQueryState> floors,
+                IReadOnlyList<ZoneQueryState> zones)
+            {
+                _elements = elements;
+                _families = families;
+                _floors = floors;
+                _zones = zones;
+            }
+
+            internal static SelectionQueryState Capture(ProjectState project)
+            {
+                return new SelectionQueryState(
+                    project.Elements.Select(ElementQueryState.Capture).ToArray(),
+                    project.Families
+                        .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => x.Id, StringComparer.Ordinal)
+                        .Select(FamilyQueryState.Capture)
+                        .ToArray(),
+                    project.Floors
+                        .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => x.Id, StringComparer.Ordinal)
+                        .Select(FloorQueryState.Capture)
+                        .ToArray(),
+                    project.Zones
+                        .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => x.Id, StringComparer.Ordinal)
+                        .Select(ZoneQueryState.Capture)
+                        .ToArray());
+            }
+
+            internal bool Matches(ProjectState project)
+            {
+                if (project.Elements.Count != _elements.Count) return false;
+                for (var index = 0; index < _elements.Count; index++)
+                    if (!_elements[index].Matches(project.Elements[index])) return false;
+
+                return FamiliesMatch(project) && FloorsMatch(project) && ZonesMatch(project);
+            }
+
+            private bool FamiliesMatch(ProjectState project)
+            {
+                if (project.Families.Count != _families.Count || project.Families.Any(x => x == null)) return false;
+                var current = project.Families
+                    .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(x => x.Id, StringComparer.Ordinal)
+                    .ToArray();
+                for (var index = 0; index < _families.Count; index++)
+                    if (!_families[index].Matches(current[index])) return false;
+                return true;
+            }
+
+            private bool FloorsMatch(ProjectState project)
+            {
+                if (project.Floors.Count != _floors.Count || project.Floors.Any(x => x == null)) return false;
+                var current = project.Floors
+                    .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(x => x.Id, StringComparer.Ordinal)
+                    .ToArray();
+                for (var index = 0; index < _floors.Count; index++)
+                    if (!_floors[index].Matches(current[index])) return false;
+                return true;
+            }
+
+            private bool ZonesMatch(ProjectState project)
+            {
+                if (project.Zones.Count != _zones.Count || project.Zones.Any(x => x == null)) return false;
+                var current = project.Zones
+                    .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(x => x.Id, StringComparer.Ordinal)
+                    .ToArray();
+                for (var index = 0; index < _zones.Count; index++)
+                    if (!_zones[index].Matches(current[index])) return false;
+                return true;
+            }
+        }
+
+        private sealed class ElementQueryState
+        {
+            private readonly ElementCategory _category;
+            private readonly string _familyId;
+            private readonly string _floorId;
+            private readonly string _zoneId;
+            private readonly ElementDirtyFlags _dirty;
+
+            private ElementQueryState(ProjectElement element)
+            {
+                _category = element.Category;
+                _familyId = element.FamilyId;
+                _floorId = element.FloorId;
+                _zoneId = element.ZoneId;
+                _dirty = element.Dirty;
+            }
+
+            internal static ElementQueryState Capture(ProjectElement element) => new ElementQueryState(element);
+
+            internal bool Matches(ProjectElement element)
+            {
+                return element != null &&
+                       element.Category == _category &&
+                       string.Equals(element.FamilyId, _familyId, StringComparison.Ordinal) &&
+                       string.Equals(element.FloorId, _floorId, StringComparison.Ordinal) &&
+                       string.Equals(element.ZoneId, _zoneId, StringComparison.Ordinal) &&
+                       element.Dirty == _dirty;
+            }
+        }
+
+        private sealed class FamilyQueryState
+        {
+            private readonly string _id;
+            private readonly string _name;
+            private readonly ElementCategory _category;
+
+            private FamilyQueryState(ProjectFamily family)
+            {
+                _id = family.Id;
+                _name = family.Name;
+                _category = family.Category;
+            }
+
+            internal static FamilyQueryState Capture(ProjectFamily family) => new FamilyQueryState(family);
+
+            internal bool Matches(ProjectFamily family)
+            {
+                return family != null &&
+                       string.Equals(family.Id, _id, StringComparison.Ordinal) &&
+                       string.Equals(family.Name, _name, StringComparison.Ordinal) &&
+                       family.Category == _category;
+            }
+        }
+
+        private sealed class FloorQueryState
+        {
+            private readonly string _id;
+            private readonly string _name;
+            private readonly double _elevationM;
+
+            private FloorQueryState(FloorDefinition floor)
+            {
+                _id = floor.Id;
+                _name = floor.Name;
+                _elevationM = floor.ElevationM;
+            }
+
+            internal static FloorQueryState Capture(FloorDefinition floor) => new FloorQueryState(floor);
+
+            internal bool Matches(FloorDefinition floor)
+            {
+                return floor != null &&
+                       string.Equals(floor.Id, _id, StringComparison.Ordinal) &&
+                       string.Equals(floor.Name, _name, StringComparison.Ordinal) &&
+                       floor.ElevationM.Equals(_elevationM);
+            }
+        }
+
+        private sealed class ZoneQueryState
+        {
+            private readonly string _id;
+            private readonly string _name;
+
+            private ZoneQueryState(ZoneDefinition zone)
+            {
+                _id = zone.Id;
+                _name = zone.Name;
+            }
+
+            internal static ZoneQueryState Capture(ZoneDefinition zone) => new ZoneQueryState(zone);
+
+            internal bool Matches(ZoneDefinition zone)
+            {
+                return zone != null &&
+                       string.Equals(zone.Id, _id, StringComparison.Ordinal) &&
+                       string.Equals(zone.Name, _name, StringComparison.Ordinal);
+            }
         }
 
         private static ProjectBrowserWorkspaceState Copy(
