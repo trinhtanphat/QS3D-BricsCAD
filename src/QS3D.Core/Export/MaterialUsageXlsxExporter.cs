@@ -215,12 +215,26 @@ namespace QS3D.Core.Export
             for (var index = 0; index < text.Length; index++)
             {
                 var ch = text[index];
+                if (char.IsHighSurrogate(ch))
+                {
+                    if (index + 1 >= text.Length || !char.IsLowSurrogate(text[index + 1]))
+                        throw InvalidProvenanceText(rowIndex, fieldName, "contains an unpaired high surrogate.");
+                    index++;
+                    continue;
+                }
+                if (char.IsLowSurrogate(ch))
+                    throw InvalidProvenanceText(rowIndex, fieldName, "contains an unpaired low surrogate.");
                 if (ch == '\t' || ch == '\n' || ch == '\r') continue;
                 if (ch < 0x20)
-                    throw new InvalidDataException(
-                        "Material XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) +
-                        " field " + fieldName + " contains an invalid XML control character.");
+                    throw InvalidProvenanceText(rowIndex, fieldName, "contains an invalid XML control character.");
             }
+        }
+
+        private static InvalidDataException InvalidProvenanceText(int rowIndex, string fieldName, string reason)
+        {
+            return new InvalidDataException(
+                "Material XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) +
+                " field " + fieldName + " " + reason);
         }
 
         private static void ValidateCount(int value, int rowIndex, string fieldName)

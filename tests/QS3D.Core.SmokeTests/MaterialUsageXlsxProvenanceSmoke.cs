@@ -14,6 +14,9 @@ namespace QS3D.Core.SmokeTests
             RejectsElementCountMismatchBeforeReplacingDestination();
             RejectsOversizedProvenanceBeforeReplacingDestination();
             RejectsInvalidXmlControlCharacterBeforeReplacingDestination();
+            RejectsUnpairedHighSurrogateBeforeCreatingDirectory();
+            RejectsUnpairedLowSurrogateBeforeReplacingDestination();
+            PreservesSupplementaryUnicodeProvenance();
             AcceptsExactExcelTextBoundary();
         }
 
@@ -97,6 +100,72 @@ namespace QS3D.Core.SmokeTests
 
                 Throws<InvalidDataException>(() => MaterialUsageXlsxExporter.Export(path, new[] { row }));
                 Equal("existing-destination", File.ReadAllText(path));
+            }
+            finally
+            {
+                Delete(path);
+            }
+        }
+
+        private static void RejectsUnpairedHighSurrogateBeforeCreatingDirectory()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-material-usage-utf16-" + Guid.NewGuid().ToString("N"));
+            var path = Path.Combine(directory, "material-usage.xlsx");
+            try
+            {
+                var row = NewRow();
+                row.ProjectId = "PROJECT-\uD800";
+
+                Throws<InvalidDataException>(() => MaterialUsageXlsxExporter.Export(path, new[] { row }));
+                if (Directory.Exists(directory))
+                    throw new Exception("Invalid provenance must fail before creating the destination directory.");
+            }
+            finally
+            {
+                try { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+                catch { }
+            }
+        }
+
+        private static void RejectsUnpairedLowSurrogateBeforeReplacingDestination()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-material-usage-utf16-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "material-usage.xlsx");
+            try
+            {
+                File.WriteAllText(path, "existing-destination");
+                var row = NewRow();
+                row.DrawingFingerprint = "DRAWING-\uDC00";
+
+                Throws<InvalidDataException>(() => MaterialUsageXlsxExporter.Export(path, new[] { row }));
+                Equal("existing-destination", File.ReadAllText(path));
+                var files = Directory.GetFiles(directory);
+                if (files.Length != 1 || !string.Equals(files[0], path, StringComparison.Ordinal))
+                    throw new Exception("Invalid provenance must not leave a temporary workbook package.");
+            }
+            finally
+            {
+                try { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+                catch { }
+            }
+        }
+
+        private static void PreservesSupplementaryUnicodeProvenance()
+        {
+            var path = TempPath();
+            try
+            {
+                var row = NewRow();
+                row.ProjectId = "PROJECT-\U0001F680";
+                row.ElementIds[0] = "E-\U0001F680";
+
+                MaterialUsageXlsxExporter.Export(path, new[] { row });
+                var sheet = ReadSheet(path);
+                Contains(sheet, "PROJECT-\U0001F680");
+                Contains(sheet, "E-\U0001F680 | E-001");
+                if (sheet.IndexOf('\uFFFD') >= 0)
+                    throw new Exception("Valid supplementary Unicode provenance must not be replaced.");
             }
             finally
             {
