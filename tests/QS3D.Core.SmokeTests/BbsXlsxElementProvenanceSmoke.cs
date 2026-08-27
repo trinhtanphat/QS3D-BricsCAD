@@ -11,9 +11,52 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
+            RejectsPaddedElementIdBeforeFilesystemMutation();
+            RejectsControlElementIdBeforePublication();
             RejectsXmlInvalidElementIdBeforePublication();
             RejectsMalformedSurrogateBeforeFilesystemMutation();
             AcceptsValidUnicodeElementId();
+        }
+
+        private static void RejectsPaddedElementIdBeforeFilesystemMutation()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-bbs-xlsx-canonical-" + Guid.NewGuid().ToString("N"));
+            var destination = Path.Combine(root, "nested", "bbs.xlsx");
+            try
+            {
+                AssertInvalidElementId(destination, " E-1 ");
+                if (Directory.Exists(root))
+                    throw new InvalidOperationException("BBS XLSX padded ElementId validation mutated the filesystem before failing.");
+            }
+            finally
+            {
+                try { if (Directory.Exists(root)) Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
+        private static void RejectsControlElementIdBeforePublication()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-bbs-xlsx-control-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var destination = Path.Combine(root, "bbs.xlsx");
+                const string sentinel = "preserve-existing-bbs-control-destination";
+                File.WriteAllText(destination, sentinel);
+
+                AssertInvalidElementId(destination, "E\t1");
+
+                if (!string.Equals(File.ReadAllText(destination), sentinel, StringComparison.Ordinal))
+                    throw new InvalidOperationException("BBS XLSX control-character ElementId validation replaced an existing destination file.");
+                if (Directory.GetFiles(root).Length != 1)
+                    throw new InvalidOperationException("BBS XLSX control-character ElementId validation left temporary package residue.");
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
         }
 
         private static void RejectsXmlInvalidElementIdBeforePublication()
@@ -107,7 +150,7 @@ namespace QS3D.Core.SmokeTests
                 return;
             }
 
-            throw new InvalidOperationException("BBS XLSX exporter accepted an XML-invalid ElementId and silently rewrote provenance.");
+            throw new InvalidOperationException("BBS XLSX exporter accepted a non-canonical or XML-invalid ElementId and silently rewrote provenance.");
         }
 
         private static RebarScheduleRow ValidRow(string elementId)
