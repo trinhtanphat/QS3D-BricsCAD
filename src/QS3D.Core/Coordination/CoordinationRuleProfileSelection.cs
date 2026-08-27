@@ -25,10 +25,14 @@ namespace QS3D.Core.Coordination
         private static string Required(string value, string parameterName)
         {
             var raw = value ?? string.Empty;
-            if (raw.Any(char.IsControl)) throw new ArgumentException("Control characters are not allowed.", parameterName);
-            var normalized = raw.Trim();
-            if (normalized.Length == 0) throw new ArgumentException("Value is required.", parameterName);
-            return normalized;
+            if (raw.Any(char.IsControl))
+                throw new ArgumentException("Control characters are not allowed.", parameterName);
+            var trimmed = raw.Trim();
+            if (trimmed.Length == 0)
+                throw new ArgumentException("Value is required.", parameterName);
+            if (!string.Equals(raw, trimmed, StringComparison.Ordinal))
+                throw new ArgumentException("Coordination rule-profile identity must not contain leading or trailing whitespace.", parameterName);
+            return raw;
         }
     }
 
@@ -44,7 +48,9 @@ namespace QS3D.Core.Coordination
         {
             if (profiles == null) throw new ArgumentNullException(nameof(profiles));
 
-            var snapshot = profiles.ToArray();
+            var snapshot = CoordinationRuleCollectionContract.MaterializeBounded(
+                profiles,
+                "Coordination rule profile catalog");
             if (snapshot.Any(profile => profile == null))
                 throw new ArgumentException("Rule-profile catalog cannot contain null profiles.", nameof(profiles));
 

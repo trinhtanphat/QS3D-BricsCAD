@@ -79,9 +79,6 @@ def discovery_regressions(runner):
             assert_raises_runtime(lambda: runner.validate_candidates([symlink_candidate]), "symlink")
         symlink_candidate.unlink()
 
-        # A symlink-like candidate whose resolved target is the aggregate runner
-        # must not be silently excluded as SELF before validation. This models the
-        # bypass without requiring Windows symlink privileges in CI.
         self_alias = scripts / "preflight-self-alias.py"
         self_alias.write_text("", encoding="utf-8")
         original_resolve = Path.resolve
@@ -110,6 +107,28 @@ def discovery_regressions(runner):
         discovered = runner.discover()
         assert_true(self_gate not in discovered, "aggregate runner must never recursively discover itself")
 
+        legacy_overflow_count = 1025
+        capacity_candidates = [
+            scripts / ("preflight-capacity-" + str(index).zfill(4) + ".py")
+            for index in range(legacy_overflow_count)
+        ]
+        with mock.patch.object(runner.os, "lstat", return_value=regular_mode), \
+             mock.patch.object(Path, "is_symlink", return_value=False):
+            validated = runner.validate_candidates(capacity_candidates)
+        assert_true(
+            len(validated) == legacy_overflow_count,
+            "aggregate discovery must accept the repository's 1025-gate scale",
+        )
+
+        over_capacity = [
+            scripts / ("preflight-over-capacity-" + str(index).zfill(4) + ".py")
+            for index in range(runner.MAX_FEATURE_GATES + 1)
+        ]
+        assert_raises_runtime(
+            lambda: runner.validate_candidates(over_capacity),
+            "exceeds maximum " + str(runner.MAX_FEATURE_GATES),
+        )
+
 
 def execution_regressions(runner):
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -133,19 +152,66 @@ def execution_regressions(runner):
 
         fail.unlink()
         slow = scripts / "preflight-b-slow.py"
-        write_gate(slow, "import time\ntime.sleep(1)\n")
-        runner.CHILD_TIMEOUT_SECONDS = 0.05
+        write_gate(slow, "raise SystemExit(0)\n")
         output = StringIO()
-        with redirect_stdout(output):
+        with mock.patch.object(
+                runner,
+                "run_gate",
+                side_effect=[0, runner.GateTimeoutError(0.05)],
+             ), mock.patch.object(
+                runner,
+                "remaining_child_timeout",
+                return_value=0.05,
+             ), redirect_stdout(output):
             result = runner.main()
         text = output.getvalue()
         assert_true(result == 1, "timed-out child must fail aggregate runner")
         assert_true("preflight-b-slow.py timeout" in text, "timeout reason must remain visible")
 
-        runner.CHILD_TIMEOUT_SECONDS = 180
+        output = StringIO()
+        with mock.patch.object(
+                runner,
+                "run_gate",
+                side_effect=[0, runner.GateTimeoutError(0.05, "synthetic-cleanup-error")],
+             ), mock.patch.object(
+                runner,
+                "remaining_child_timeout",
+                return_value=0.05,
+             ), redirect_stdout(output):
+            result = runner.main()
+        text = output.getvalue()
+        assert_true(result == 1, "cleanup failure after child timeout must fail aggregate runner")
+        assert_true(
+            "preflight-b-slow.py timeout-cleanup-failed" in text,
+            "cleanup-failure timeout reason must remain visible",
+        )
+        assert_true(
+            "owned process-tree cleanup failed: synthetic-cleanup-error" in text,
+            "cleanup failure detail must remain visible",
+        )
+
+        output = StringIO()
+        timeout_budget = iter([0.05, 0.05, 0.0])
+        with mock.patch.object(
+                runner,
+                "run_gate",
+                side_effect=[0, runner.GateTimeoutError(0.05)],
+             ), mock.patch.object(
+                runner,
+                "remaining_child_timeout",
+                side_effect=lambda started_at: next(timeout_budget),
+             ), redirect_stdout(output):
+            result = runner.main()
+        text = output.getvalue()
+        assert_true(result == 1, "aggregate timeout during child execution must fail aggregate runner")
+        assert_true(
+            "preflight-b-slow.py aggregate-timeout" in text,
+            "aggregate-timeout reason must remain visible",
+        )
+
         slow.unlink()
         output = StringIO()
-        with mock.patch.object(runner.subprocess, "run", side_effect=OSError("synthetic launch failure")), \
+        with mock.patch.object(runner, "run_gate", side_effect=OSError("synthetic launch failure")), \
              redirect_stdout(output):
             result = runner.main()
         text = output.getvalue()
@@ -153,11 +219,11 @@ def execution_regressions(runner):
         assert_true("preflight-a-ok.py launch" in text, "launch failure reason must remain visible")
 
         calls = []
-        with mock.patch.object(runner.subprocess, "run", side_effect=lambda args, **kwargs: calls.append(args) or mock.Mock(returncode=0)), \
+        with mock.patch.object(runner, "run_gate", side_effect=lambda path, child_env, timeout: calls.append(path) or 0), \
              redirect_stdout(StringIO()):
             result = runner.main()
         assert_true(result == 0, "all-success child execution must pass")
-        assert_true(len(calls) == 1 and calls[0][1].endswith("preflight-a-ok.py"),
+        assert_true(len(calls) == 1 and calls[0].name == "preflight-a-ok.py",
                     "each discovered gate must execute exactly once")
 
 

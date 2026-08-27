@@ -40,7 +40,7 @@ for token in [
     "ProjectStateSnapshot.Capture(project)",
     "GeneratedRebarOwnershipGuard.Build(project)",
     "ErasePrevious(document, transaction, project, element, ownership)",
-    "GeneratedRebarNativeOwnershipService.MarkFreshGeneratedHandles(document, transaction, project, element, HandlesKey",
+    "GeneratedRebarNativeOwnershipService.MarkGenerated(document, transaction, bar, update.Project, element, HandlesKey",
     "CommitSemanticUpdate(project, update)",
     "transaction.Commit()",
     "rollback.Restore(project)",

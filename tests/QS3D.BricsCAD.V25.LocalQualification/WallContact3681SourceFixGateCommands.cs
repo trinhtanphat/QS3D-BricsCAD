@@ -156,7 +156,9 @@ namespace QS3D.BricsCAD.V25.LocalQualification
                 var solid = new Solid3d();
                 solid.SetDatabaseDefaults();
                 solid.CreateBox(dx, dy, dz);
-                solid.TransformBy(Matrix3d.Displacement(new Vector3d(x, y, z)));
+                var extents = solid.GeometricExtents;
+                var desiredMin = new Point3d(x, y, z);
+                solid.TransformBy(Matrix3d.Displacement(desiredMin - extents.MinPoint));
                 var id = space.AppendEntity(solid);
                 transaction.AddNewlyCreatedDBObject(solid, true);
                 var handle = solid.Handle.ToString();

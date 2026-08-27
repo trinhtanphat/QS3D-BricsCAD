@@ -110,12 +110,14 @@ namespace QS3D.Core.Legacy
 
         private static readonly string[] ConcreteMetricAliases =
         {
-            "concretem3", "netconcretem3", "betongm3", "btm3", "thetichm3", "volumem3"
+            "concretem3", "netconcretem3", "betongm3", "btm3", "thetichm3", "volumem3",
+            BltLegacyMetadataKeys.ConcreteM3
         };
 
         private static readonly string[] FormworkMetricAliases =
         {
-            "formworkm2", "coppham2", "dientichcoppham2", "vkm2"
+            "formworkm2", "coppham2", "dientichcoppham2", "vkm2",
+            BltLegacyMetadataKeys.FormworkM2
         };
 
         public static BltLegacyElementCandidate Adapt(EntitySnapshot snapshot)
@@ -218,7 +220,7 @@ namespace QS3D.Core.Legacy
             foreach (var pair in snapshot.Metadata)
             {
                 var pairValue = pair.Value ?? string.Empty;
-                AddCategoryTextMatch(pair.Key, "metadata-key:" + Bound(pair.Key, 80), matches);
+                AddCategoryMetadataKeyMatch(pair.Key, "metadata-key:" + Bound(pair.Key, 80), matches);
                 AddCategoryTextMatch(pairValue, "metadata-value:" + Bound(pairValue, 120), matches);
                 AddExplicitCategoryCode(pair.Key, pairValue, matches);
                 foreach (Match match in EmbeddedPair.Matches(pairValue))
@@ -247,7 +249,7 @@ namespace QS3D.Core.Legacy
         private static void AddExplicitCategoryCode(string? key, string? value, IDictionary<ElementCategory, string> matches)
         {
             var normalizedKey = NormalizeKey(key);
-            if (!CategoryKeyAliases.Any(alias => normalizedKey.Contains(alias))) return;
+            if (!CategoryKeyAliases.Any(alias => string.Equals(normalizedKey, alias, StringComparison.Ordinal))) return;
             var normalizedValue = (value ?? string.Empty).Trim();
             if (!int.TryParse(normalizedValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var code)) return;
 
@@ -255,6 +257,18 @@ namespace QS3D.Core.Legacy
             // QuantityCalculationRuleSet. Do not guess the remaining BLT integer codes.
             if (code == 601) Add(matches, ElementCategory.Column, "legacy-code:601");
             else if (code == 701) Add(matches, ElementCategory.StructuralWall, "legacy-code:701");
+        }
+
+        private static void AddCategoryMetadataKeyMatch(string? raw, string source, IDictionary<ElementCategory, string> matches)
+        {
+            var value = Normalize(raw);
+            if (value.Length == 0) return;
+
+            if (HasCategoryMetadataKeyAlias(value, "bltcolumn", "column", "cot", "cotbtct")) Add(matches, ElementCategory.Column, source);
+            if (HasCategoryMetadataKeyAlias(value, "bltbeam", "beam", "dam", "dambtct")) Add(matches, ElementCategory.Beam, source);
+            if (HasCategoryMetadataKeyAlias(value, "bltslab", "slab", "san", "sanbtct")) Add(matches, ElementCategory.Slab, source);
+            if (HasCategoryMetadataKeyAlias(value, "bltfoundation", "foundation", "footing", "mong", "mongcoc", "daicoc", "dammong", "mongbang", "mongbe")) Add(matches, ElementCategory.Foundation, source);
+            if (HasExactCompactAlias(value, "bltwall") || HasCategoryMetadataKeyAlias(value, "bltstructuralwall", "structuralwall", "vach", "vachbt", "vachbtct")) Add(matches, ElementCategory.StructuralWall, source);
         }
 
         private static void AddCategoryTextMatch(string? raw, string source, IDictionary<ElementCategory, string> matches)
@@ -266,7 +280,32 @@ namespace QS3D.Core.Legacy
             if (HasAlias(value, "bltbeam", "beam", "dam", "dambtct")) Add(matches, ElementCategory.Beam, source);
             if (HasAlias(value, "bltslab", "slab", "san", "sanbtct")) Add(matches, ElementCategory.Slab, source);
             if (HasAlias(value, "bltfoundation", "foundation", "footing", "mong", "mongcoc", "daicoc", "dammong", "mongbang", "mongbe")) Add(matches, ElementCategory.Foundation, source);
-            if (HasAlias(value, "bltstructuralwall", "structuralwall", "vach", "vachbt", "vachbtct")) Add(matches, ElementCategory.StructuralWall, source);
+            if (HasExactCompactAlias(value, "bltwall") || HasAlias(value, "bltstructuralwall", "structuralwall", "vach", "vachbt", "vachbtct")) Add(matches, ElementCategory.StructuralWall, source);
+        }
+
+        private static bool HasExactCompactAlias(string normalizedText, string alias)
+        {
+            return string.Equals(Compact(normalizedText), Compact(Normalize(alias)), StringComparison.Ordinal);
+        }
+
+        private static bool HasCategoryMetadataKeyAlias(string normalizedText, params string[] aliases)
+        {
+            var compact = Compact(normalizedText);
+            foreach (var alias in aliases)
+            {
+                var normalizedAlias = Compact(Normalize(alias));
+                if (normalizedAlias.Length < 3) continue;
+                if (string.Equals(compact, normalizedAlias, StringComparison.Ordinal)) return true;
+                if (normalizedAlias.StartsWith("blt", StringComparison.Ordinal))
+                {
+                    if (compact.StartsWith(normalizedAlias, StringComparison.Ordinal)) return true;
+                }
+                else if (compact.StartsWith("blt" + normalizedAlias, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static bool HasAlias(string normalizedText, params string[] aliases)
@@ -312,17 +351,51 @@ namespace QS3D.Core.Legacy
         private static bool TryExtractMetric(IDictionary<string, string> metadata, string[] aliases, out double value)
         {
             value = 0d;
+            var found = false;
+            var invalid = false;
+
             foreach (var pair in metadata)
             {
                 var pairValue = pair.Value ?? string.Empty;
-                if (KeyMatches(pair.Key, aliases) && TryFiniteNonNegative(pairValue, out value)) return true;
+                AccumulateMetric(pair.Key, pairValue, aliases, ref found, ref invalid, ref value);
                 foreach (Match match in EmbeddedPair.Matches(pairValue))
                 {
-                    if (!KeyMatches(match.Groups["key"].Value, aliases)) continue;
-                    if (TryFiniteNonNegative(match.Groups["value"].Value, out value)) return true;
+                    AccumulateMetric(
+                        match.Groups["key"].Value,
+                        match.Groups["value"].Value,
+                        aliases,
+                        ref found,
+                        ref invalid,
+                        ref value);
                 }
             }
-            return false;
+
+            return found && !invalid;
+        }
+
+        private static void AccumulateMetric(
+            string? key,
+            string? rawValue,
+            string[] aliases,
+            ref bool found,
+            ref bool invalid,
+            ref double value)
+        {
+            if (!MetricKeyMatches(key, aliases)) return;
+            if (!TryFiniteNonNegative(rawValue, out var parsed))
+            {
+                invalid = true;
+                return;
+            }
+
+            if (!found)
+            {
+                value = parsed;
+                found = true;
+                return;
+            }
+
+            if (value != parsed) invalid = true;
         }
 
         private static string ExtractTextHint(IDictionary<string, string> metadata, params string[] aliases)
@@ -339,6 +412,12 @@ namespace QS3D.Core.Legacy
                 }
             }
             return string.Empty;
+        }
+
+        private static bool MetricKeyMatches(string? raw, IEnumerable<string> aliases)
+        {
+            var key = NormalizeKey(raw);
+            return aliases.Any(alias => string.Equals(key, NormalizeKey(alias), StringComparison.Ordinal));
         }
 
         private static bool KeyMatches(string? raw, IEnumerable<string> aliases)

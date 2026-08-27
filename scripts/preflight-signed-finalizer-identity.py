@@ -6,43 +6,46 @@ ROOT = Path(__file__).resolve().parents[1]
 FINALIZER = ROOT / "scripts" / "finalize-v25-signed-package.ps1"
 
 
-def require(condition: bool, message: str) -> None:
-    if not condition:
+def check(ok: bool, message: str) -> None:
+    if not ok:
         raise AssertionError(message)
 
 
-def identity_valid(metadata, plugin, core) -> bool:
-    if metadata.get("product") != "QS3D" or metadata.get("target") != "BricsCAD V25 x64":
-        return False
-    version = str(metadata.get("version") or "").strip()
-    product_version = str(metadata.get("productVersion") or "").strip()
-    if not version or not product_version:
-        return False
-    for dll in (plugin, core):
-        if dll.get("assemblyVersion") != version or dll.get("productVersion") != product_version:
-            return False
-    return True
+def isolated(package: str, output: str) -> bool:
+    package = ntpath.normcase(ntpath.normpath(package)).rstrip("\\/")
+    output = ntpath.normcase(ntpath.normpath(output))
+    return ntpath.splitext(output)[1].lower() == ".zip" and output != package and not output.startswith(package + "\\")
 
 
-def output_isolated(package_directory: str, package_zip: str) -> bool:
-    package = ntpath.normcase(ntpath.normpath(package_directory)).rstrip("\\/")
-    output = ntpath.normcase(ntpath.normpath(package_zip))
-    if ntpath.splitext(output)[1].lower() != ".zip":
-        return False
-    package_root = package + "\\"
-    return output != package and not output.startswith(package_root)
+def first(text: str, tokens: tuple[str, ...]) -> int:
+    values = [text.find(token) for token in tokens if text.find(token) >= 0]
+    return min(values) if values else -1
 
 
 def main() -> int:
-    if not FINALIZER.is_file():
-        raise AssertionError("missing scripts/finalize-v25-signed-package.ps1")
+    check(FINALIZER.is_file(), "missing scripts/finalize-v25-signed-package.ps1")
     text = FINALIZER.read_text(encoding="utf-8")
+    atomic = all(token in text for token in (
+        "function Read-BoundedUtf8Text",
+        "$metadataStage = New-SiblingTempPath",
+        "$manifestStage = New-SiblingTempPath",
+        "$tempZip = New-SiblingTempPath",
+        "Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package",
+    ))
 
-    required_tokens = (
-        "$SignedPayloadNames = @(",
+    package_tokens = (
         "$packagePath = Assert-SafeContainedDirectory -Path $PackageDirectory -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'",
-        "$package = $packagePath",
+        "$package = Assert-SafeContainedDirectory -Path $PackageDirectory -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'",
+    )
+    root_tokens = (
         "$packageRoot = $packagePath + [IO.Path]::DirectorySeparatorChar",
+        "$packageRoot = $package + [IO.Path]::DirectorySeparatorChar",
+    )
+    check(any(token in text for token in package_tokens), "missing contained package initialization")
+    check(any(token in text for token in root_tokens), "missing isolated package-root initialization")
+
+    common = (
+        "$SignedPayloadNames = @(",
         "[IO.Path]::GetExtension($zip), '.zip', [StringComparison]::OrdinalIgnoreCase",
         "$zip.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)",
         "PackageZip must be outside PackageDirectory",
@@ -59,114 +62,69 @@ def main() -> int:
         "does not match signed $name assembly version",
         "does not match signed $name product version",
         "[StringComparison]::Ordinal",
-        "$metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8",
-        "Remove-Item -LiteralPath $hashManifest -Force",
-        "Compress-Archive -Path (Join-Path $package '*') -DestinationPath $zip -CompressionLevel Optimal",
+        "if (-not $PSCmdlet.ShouldProcess($zip, 'Finalize signed QS3D V25 package and rebuild ZIP'))",
     )
-    for token in required_tokens:
-        require(token in text, "signed finalizer guard missing token: " + token)
+    for token in common:
+        check(token in text, "signed finalizer guard missing token: " + token)
 
-    identity_cases = (
-        (
-            {"product": "QS3D", "target": "BricsCAD V25 x64", "version": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            {"assemblyVersion": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            {"assemblyVersion": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            True,
-            "canonical identity",
-        ),
-        (
-            {"product": "OTHER", "target": "BricsCAD V25 x64", "version": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            {"assemblyVersion": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            {"assemblyVersion": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            False,
-            "product substitution",
-        ),
-        (
-            {"product": "QS3D", "target": "BricsCAD V26 x64", "version": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            {"assemblyVersion": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            {"assemblyVersion": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            False,
-            "target substitution",
-        ),
-        (
-            {"product": "QS3D", "target": "BricsCAD V25 x64", "version": "0.2.0.0", "productVersion": "0.1.0-preview.2"},
-            {"assemblyVersion": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            {"assemblyVersion": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            False,
-            "assembly metadata substitution",
-        ),
-        (
-            {"product": "QS3D", "target": "BricsCAD V25 x64", "version": "0.1.0.0", "productVersion": "0.1.0-preview.3"},
-            {"assemblyVersion": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            {"assemblyVersion": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            False,
-            "product-version metadata substitution",
-        ),
-        (
-            {"product": "QS3D", "target": "BricsCAD V25 x64", "version": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            {"assemblyVersion": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            {"assemblyVersion": "0.2.0.0", "productVersion": "0.1.0-preview.2"},
-            False,
-            "Core assembly mismatch",
-        ),
-        (
-            {"product": "QS3D", "target": "BricsCAD V25 x64", "version": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            {"assemblyVersion": "0.1.0.0", "productVersion": "0.1.0-preview.2"},
-            {"assemblyVersion": "0.1.0.0", "productVersion": "0.1.0-PREVIEW.2"},
-            False,
-            "Core product-version case mismatch",
-        ),
-    )
-    for metadata, plugin, core, expected, label in identity_cases:
-        actual = identity_valid(metadata, plugin, core)
-        require(actual is expected, f"signed finalizer identity model mismatch for {label}: expected {expected}, got {actual}")
+    for package, output, expected in (
+        (r"C:\release\pkg", r"C:\release\pkg.zip", True),
+        (r"C:\release\pkg", r"C:\release\pkg\nested.zip", False),
+        (r"C:\release\pkg", r"C:\release\output.bin", False),
+        (r"C:\release\pkg", r"C:\release\pkg-copy\x.zip", True),
+    ):
+        check(isolated(package, output) is expected, "signed finalizer output-isolation model drift")
 
-    output_cases = (
-        (r"C:\release\QS3D-BricsCAD-V25", r"C:\release\QS3D-BricsCAD-V25.zip", True, "sibling ZIP"),
-        (r"C:\release\QS3D-BricsCAD-V25", r"C:\release\QS3D-BricsCAD-V25\release.zip", False, "nested ZIP"),
-        (r"C:\release\QS3D-BricsCAD-V25", r"C:\release\QS3D-BricsCAD-V25\QS3D.Core.dll", False, "payload-file output"),
-        (r"C:\release\QS3D-BricsCAD-V25", r"C:\release\output.bin", False, "non-ZIP output"),
-        (r"C:\release\QS3D-BricsCAD-V25", r"C:\release\QS3D-BricsCAD-V25-copy\release.zip", True, "similarly-prefixed sibling tree"),
-    )
-    for package, output, expected, label in output_cases:
-        actual = output_isolated(package, output)
-        require(actual is expected, f"signed finalizer output model mismatch for {label}: expected {expected}, got {actual}")
+    package = first(text, package_tokens)
+    extension = text.find("[IO.Path]::GetExtension($zip), '.zip', [StringComparison]::OrdinalIgnoreCase")
+    outside = text.find("$zip.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)")
+    signer = text.find("Assert-AuthenticodeSigner -Path $path -ExpectedSigner $expectedSigner")
+    product = text.find("PACKAGE-METADATA product must be QS3D.")
+    managed = text.find("$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')")
+    product_version = text.find("does not match signed $name product version")
+    approval = text.find("if (-not $PSCmdlet.ShouldProcess($zip, 'Finalize signed QS3D V25 package and rebuild ZIP'))")
+    identity_order = (package, extension, outside, signer, product, managed, product_version, approval)
+    check(min(identity_order) >= 0 and list(identity_order) == sorted(identity_order), "containment/signer/managed identity must all precede approval")
 
-    package_guard_pos = text.find("$packagePath = Assert-SafeContainedDirectory -Path $PackageDirectory -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'")
-    extension_guard_pos = text.find("[IO.Path]::GetExtension($zip), '.zip', [StringComparison]::OrdinalIgnoreCase")
-    output_guard_pos = text.find("$zip.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)")
-    signature_pos = text.find("Assert-AuthenticodeSigner -Path $path -ExpectedSigner $expectedSigner")
-    product_pos = text.find("PACKAGE-METADATA product must be QS3D.")
-    managed_loop_pos = text.find("$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')")
-    product_version_compare_pos = text.find("does not match signed $name product version")
-    should_process_pos = text.find("if (-not $PSCmdlet.ShouldProcess($zip, 'Finalize signed QS3D V25 package and rebuild ZIP'))")
-    metadata_write_pos = text.find("$metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8")
-    hash_remove_pos = text.find("Remove-Item -LiteralPath $hashManifest -Force")
-    output_remove_pos = text.find("Remove-Item -LiteralPath $zip -Force")
-    zip_pos = text.find("Compress-Archive -Path (Join-Path $package '*') -DestinationPath $zip -CompressionLevel Optimal")
-    positions = (
-        package_guard_pos,
-        extension_guard_pos,
-        output_guard_pos,
-        signature_pos,
-        product_pos,
-        managed_loop_pos,
-        product_version_compare_pos,
-        should_process_pos,
-        metadata_write_pos,
-        hash_remove_pos,
-        output_remove_pos,
-        zip_pos,
-    )
-    require(min(positions) >= 0, "signed finalizer output/identity/publication ordering token is missing")
-    require(
-        package_guard_pos < extension_guard_pos < output_guard_pos < signature_pos < product_pos < managed_loop_pos < product_version_compare_pos < should_process_pos < metadata_write_pos < hash_remove_pos < output_remove_pos < zip_pos,
-        "signed finalizer must validate the package root, isolate output, verify signatures/identity, then gate mutations before output cleanup/compression",
-    )
+    if atomic:
+        tokens = (
+            "$metadataStage = New-SiblingTempPath",
+            "Write-Utf8NoBomText -Path $metadataStage",
+            "[IO.File]::Replace($metadataStage, $metadataPath, $metadataBackup, $true)",
+            "[IO.File]::Move($hashManifest, $manifestBackup)",
+            "[IO.File]::WriteAllLines($manifestStage",
+            "[IO.File]::Move($manifestStage, $hashManifest)",
+            "Compress-Archive -Path (Join-Path $package '*') -DestinationPath $tempZip -CompressionLevel Optimal",
+            "Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package",
+            "[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)",
+            "[IO.File]::Move($tempZip, $zip)",
+            "$transactionCommitted = $true",
+            "restore original manifest",
+            "restore original metadata",
+            "Rollback also failed",
+        )
+        for token in tokens:
+            check(token in text, "atomic signed-finalizer contract missing: " + token)
+        check("Remove-Item -LiteralPath $zip -Force" not in text, "atomic publication must not delete the published ZIP")
+        existing = (approval,) + tuple(text.find(token) for token in tokens[:9:1] if token != "[IO.File]::Move($tempZip, $zip)")
+        check(min(existing) >= 0 and list(existing) == sorted(existing), "atomic publication order drift")
+        verify = text.find("Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package")
+        move_new = text.find("[IO.File]::Move($tempZip, $zip)")
+        committed = text.find("$transactionCommitted = $true")
+        check(verify < move_new < committed, "new ZIP must publish only after staged verification")
+    else:
+        legacy = (
+            "$metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8",
+            "Remove-Item -LiteralPath $hashManifest -Force",
+            "Remove-Item -LiteralPath $zip -Force",
+            "Compress-Archive -Path (Join-Path $package '*') -DestinationPath $zip -CompressionLevel Optimal",
+        )
+        for token in legacy:
+            check(token in text, "legacy signed-finalizer contract missing: " + token)
+        order = (approval,) + tuple(text.find(token) for token in legacy)
+        check(min(order) >= 0 and list(order) == sorted(order), "legacy publication order drift")
 
-    print(
-        "PASS: signed V25 finalization validates a safe package root, requires an external .zip output, binds canonical product/target/version/productVersion to both signed managed DLLs, and performs output cleanup/compression only after isolation, signer, identity and ShouldProcess gates."
-    )
+    print("PASS: signed V25 finalizer identity/containment precedes " + ("failure-atomic" if atomic else "legacy") + " publication")
     return 0
 
 

@@ -180,7 +180,17 @@ namespace QS3D.Core.Cost
 
             for (var i = 0; i < reason.Length; i++)
             {
-                if (char.IsControl(reason[i]))
+                var current = reason[i];
+                if (char.IsHighSurrogate(current))
+                {
+                    if (i + 1 >= reason.Length || !char.IsLowSurrogate(reason[i + 1]))
+                        throw new ArgumentException("Commercial adjustment reason contains malformed UTF-16.", nameof(reason));
+                    i++;
+                    continue;
+                }
+                if (char.IsLowSurrogate(current))
+                    throw new ArgumentException("Commercial adjustment reason contains malformed UTF-16.", nameof(reason));
+                if (char.IsControl(current))
                     throw new ArgumentException("Commercial adjustment reason must not contain control characters.", nameof(reason));
             }
 

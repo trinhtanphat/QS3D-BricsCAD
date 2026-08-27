@@ -80,6 +80,9 @@ namespace QS3D.Core.SmokeTests
             Reject("qs3d://coordination/issue?v=1&project=P&drawing=D&issue=I&revision=1&handle=AB");
             Reject("qs3d://coordination/issue?v=1&project=P%ZZ&drawing=D&issue=I&revision=1");
             Reject("qs3d://coordination/issue?v=1&project=P%0A&drawing=D&issue=I&revision=1");
+            Reject("qs3d://coordination/issue?v=1&project=%20P&drawing=D&issue=I&revision=1");
+            Reject("qs3d://coordination/issue?v=1&project=P&drawing=D%20&issue=I&revision=1");
+            Reject("qs3d://coordination/issue?v=1&project=P&drawing=D&issue=%20I%20&revision=1");
             Reject("qs3d://coordination/issue?v=1&project=P&drawing=D&issue=I&revision=0");
             Reject("qs3d://coordination/issue?v=2&project=P&drawing=D&issue=I&revision=1");
             Reject("qs3d://coordination/issue?v=1&project=P&drawing=D&issue=I&revision=1#fragment");
@@ -87,7 +90,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void ConstructorIdentityControlsFailClosed()
         {
-            var controlPadded = new[]
+            var malformedIdentities = new[]
             {
                 "\tPROJECT",
                 "PROJECT\t",
@@ -95,24 +98,18 @@ namespace QS3D.Core.SmokeTests
                 "\rPROJECT",
                 "PROJECT\r",
                 "\nPROJECT",
-                "PROJECT\n"
+                "PROJECT\n",
+                " PROJECT",
+                "PROJECT ",
+                "  PROJECT  "
             };
 
-            foreach (var malformed in controlPadded)
+            foreach (var malformed in malformedIdentities)
             {
                 RejectConstructor(() => new CoordinationIssueDeepLink(malformed, "DRAWING", "ISSUE", 1L));
                 RejectConstructor(() => new CoordinationIssueDeepLink("PROJECT", malformed, "ISSUE", 1L));
                 RejectConstructor(() => new CoordinationIssueDeepLink("PROJECT", "DRAWING", malformed, 1L));
             }
-
-            var spaced = new CoordinationIssueDeepLink("  PROJECT  ", "  DRAWING  ", "  ISSUE  ", 1L);
-            Equal("PROJECT", spaced.ProjectId, "Ordinary project-ID surrounding spaces stopped canonicalizing.");
-            Equal("DRAWING", spaced.DrawingFingerprint, "Ordinary drawing surrounding spaces stopped canonicalizing.");
-            Equal("ISSUE", spaced.IssueId, "Ordinary issue-ID surrounding spaces stopped canonicalizing.");
-            Equal(
-                "qs3d://coordination/issue?v=1&project=PROJECT&drawing=DRAWING&issue=ISSUE&revision=1",
-                spaced.ToCanonicalUri(),
-                "Control-free surrounding-space canonical URI changed.");
         }
 
         private static void QueryOrderCanCanonicalize()
@@ -183,7 +180,7 @@ namespace QS3D.Core.SmokeTests
             {
                 return;
             }
-            throw new InvalidOperationException("CoordinationIssueDeepLinkSmoke: raw constructor identity control was accepted.");
+            throw new InvalidOperationException("CoordinationIssueDeepLinkSmoke: raw constructor identity was accepted.");
         }
 
         private static void Blocked(

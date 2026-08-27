@@ -63,7 +63,8 @@ namespace QS3D.Core.Domain
                         "Auto Room source handles cannot exceed " + MaxSourceHandleInputCount + " input entries.");
                 inputCount++;
                 if (string.IsNullOrWhiteSpace(raw)) continue;
-                normalized.Add(raw.Trim().ToUpperInvariant());
+                var canonical = GeneratedHandleIdentity.Normalize(raw);
+                if (canonical.Length > 0) normalized.Add(canonical);
             }
 
             return string.Join(";", normalized.OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
@@ -154,7 +155,8 @@ namespace QS3D.Core.Domain
                         "Auto Room source handles cannot exceed " + MaxSourceHandleInputCount + " input entries.");
                 selectedInputCount++;
                 if (string.IsNullOrWhiteSpace(raw)) continue;
-                selected.Add(raw.Trim());
+                var canonical = GeneratedHandleIdentity.Normalize(raw);
+                if (canonical.Length > 0) selected.Add(canonical);
             }
             RequireKnownCountMatchesTraversal("Auto Room selected source handle set", knownSelectedSourceHandleCount, selectedInputCount);
             if (project.ChangeVersion != inputVersion)

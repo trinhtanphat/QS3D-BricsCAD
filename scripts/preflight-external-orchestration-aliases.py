@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import os
 import re
+import subprocess
 import sys
 
 
@@ -59,9 +61,45 @@ def is_external_orchestration(relative: str, text: str) -> bool:
     )
 
 
+def scan_paths(root: Path) -> list[Path]:
+    """Return repository source paths without letting untracked residue expand work."""
+    try:
+        probe = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            text=True,
+        )
+    except OSError:
+        # Non-Git fixtures and environments without Git retain the historical
+        # filesystem fallback so the guard remains fail-closed rather than
+        # silently skipping source.
+        return [path for path in root.rglob("*") if path.is_file()]
+
+    if probe.returncode != 0 or probe.stdout.strip().lower() != "true":
+        return [path for path in root.rglob("*") if path.is_file()]
+
+    tracked = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-z"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if tracked.returncode != 0:
+        detail = tracked.stderr.decode(errors="replace").strip()
+        raise RuntimeError(f"git ls-files failed while discovering repository source: {detail}")
+
+    return [
+        root / os.fsdecode(relative)
+        for relative in tracked.stdout.split(b"\0")
+        if relative
+    ]
+
+
 def scan_tree(root: Path) -> list[str]:
     failures: list[str] = []
-    for path in root.rglob("*"):
+    for path in scan_paths(root):
         if not path.is_file() or ".git" in path.parts:
             continue
 

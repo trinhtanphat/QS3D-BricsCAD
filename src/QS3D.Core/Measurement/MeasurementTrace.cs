@@ -181,6 +181,19 @@ namespace QS3D.Core.Measurement
                         "Measurement trace with rounding policy 'none' must reconcile gross value, adjustments, and net value.",
                         nameof(netValue));
                 }
+
+                if (Adjustments.Count > 0 && reconciledNetValue.Equals(GrossValue))
+                {
+                    var adjustmentDelta = ReconcileNetValue(0d, Adjustments);
+                    if (double.IsNaN(adjustmentDelta) ||
+                        double.IsInfinity(adjustmentDelta) ||
+                        adjustmentDelta != 0d)
+                    {
+                        throw new ArgumentException(
+                            "Measurement trace with rounding policy 'none' cannot represent a non-zero net adjustment at the gross-value precision.",
+                            nameof(netValue));
+                    }
+                }
             }
         }
 
@@ -389,7 +402,17 @@ namespace QS3D.Core.Measurement
                 throw new ArgumentException("Measurement trace text must be canonical without surrounding whitespace.", parameterName);
             for (var i = 0; i < value.Length; i++)
             {
-                if (char.IsControl(value[i]))
+                var current = value[i];
+                if (char.IsHighSurrogate(current))
+                {
+                    if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1]))
+                        throw new ArgumentException("Measurement trace text contains malformed UTF-16.", parameterName);
+                    i++;
+                    continue;
+                }
+                if (char.IsLowSurrogate(current))
+                    throw new ArgumentException("Measurement trace text contains malformed UTF-16.", parameterName);
+                if (char.IsControl(current))
                     throw new ArgumentException("Measurement trace text cannot contain control characters.", parameterName);
             }
             return value;

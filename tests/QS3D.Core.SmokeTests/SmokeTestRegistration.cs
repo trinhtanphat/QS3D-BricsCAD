@@ -8,6 +8,7 @@ namespace QS3D.Core.SmokeTests
             GoldenProjectE2ERegressionSmoke.Run();
             P0QuantityContractRegressionSmoke.Run();
             QuantityReportSelectionCountIntegritySmoke.Run();
+            QuantityReportProjectRevisionGuardSmoke.Run();
             QuantityRuleCanonicalNumericKeySmoke.Run();
             QuantityRuleTokenCanonicalitySmoke.Run();
             QuantityReportDistinctNoteSmoke.Run();
@@ -27,6 +28,7 @@ namespace QS3D.Core.SmokeTests
             WallOpeningHostCanonicalitySmoke.Run();
             WallQuantityMeasurementTraceSmoke.Run();
             QuantityCalculationBltCompatibilityPresetSmoke.Run();
+            BltLegacyMetricConflictSmoke.Run();
             QuantityFormworkCalculationEngineSmoke.Run();
             LegacyQuantityReportIdentitySmoke.Run();
             ScheduleReportingIdentitySmoke.Run();
@@ -37,13 +39,17 @@ namespace QS3D.Core.SmokeTests
             XlsxHandleReaderCoordinateSmoke.Run();
             XlsxExporterRowBoundSmoke.Run();
             QuantityExportEvidenceSmoke.Run();
+            QuantityEvidenceCollectionBoundSmoke.Run();
             QuantityMeasurementTraceSmoke.Run();
             CustomerWorkbookTraceSmoke.Run();
+            CustomerWorkbookProvenanceIdentitySmoke.Run();
+            Qs3dReviewWorkbookQtoIdentitySmoke.Run();
             QsWorkbookTemplateEngineSmoke.Run();
             P0UnifiedExportAcceptanceSmoke.Run();
             QuantityReportRevisionReviewSmoke.Run();
             QuantityRevisionProjectIdentitySmoke.Run();
             PersistenceHardeningSmoke.Run();
+            QsdbStructuralCardinalitySmoke.Run();
             LicenseVerifierSmoke.Run();
             AdvancedDomainSmoke.Run();
             EstimatingPortfolioCountIntegritySmoke.Run();
@@ -57,6 +63,7 @@ namespace QS3D.Core.SmokeTests
             ContinuationRegressionSmoke.Run();
             LogicRegressionSmoke.Run();
             RevisionRegressionSmoke.Run();
+            RevisionSnapshotConsistencySmoke.Run();
             RevisionSnapshotStoreIntegritySmoke.Run();
             WorkflowPersistenceSmoke.Run();
             BbsRegressionSmoke.Run();
@@ -73,8 +80,10 @@ namespace QS3D.Core.SmokeTests
             ColumnTieQuantityUnderflowSmoke.Run();
             RoomBoundaryRegressionSmoke.Run();
             GeometryCompletionSmoke.Run();
+            SingleFootingGeometrySmoke.Run();
             PolylineLengthCompensatedSumSmoke.Run();
             AutoRoomLifecycleSmoke.Run();
+            AutoRoomHandleIdentitySmoke.Run();
             AutoRoomStaleSelectionBoundSmoke.Run();
             AutoRoomLookupIdentitySmoke.Run();
             RoomFinishIdentitySmoke.Run();
@@ -158,7 +167,9 @@ namespace QS3D.Core.SmokeTests
             IfcRoundTripQuantityEvidenceNullFailFastSmoke.Run();
             InteroperabilityContractsSmoke.Run();
             BcfIssueExchangeSmoke.Run();
+            BcfSemanticOutputBoundSmoke.Run();
             BcfZipPackageSmoke.Run();
+            BcfZipNestedCardinalitySmoke.Run();
             RegenerationSubsetSmoke.Run();
             PhysicalOpeningCutTargetKnownCountSmoke.Run();
             GeneratedHandleOwnershipIndexSmoke.Run();
@@ -212,6 +223,7 @@ namespace QS3D.Core.SmokeTests
             MepRecognitionSmoke.Run();
             ClashDetectionKnownCountContractSmoke.Run();
             ClashDetectionResultBoundSmoke.Run();
+            CoordinationSpatialIdentitySmoke.Run();
             FeatureInteractionContractsSmoke.Run();
             WorkspaceFeatureSessionSmoke.Run();
             WorkspaceSchemaFormsSmoke.Run();

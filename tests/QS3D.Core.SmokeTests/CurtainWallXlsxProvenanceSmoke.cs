@@ -26,8 +26,10 @@ namespace QS3D.Core.SmokeTests
                 var row = ValidRow();
                 row.ProjectId = "project-curtain";
                 row.DrawingFingerprint = "drawing-fingerprint-curtain";
+                row.ElementIds.Clear();
                 row.ElementIds.Add("CW-01");
                 row.ElementIds.Add("CW-02");
+                row.WallCount = row.ElementIds.Count;
                 row.SourceHandles.Add("AB12");
                 row.SourceHandles.Add("CD34");
 
@@ -61,7 +63,11 @@ namespace QS3D.Core.SmokeTests
         {
             AssertOversizedListFailsBeforeFilesystemCreation(
                 "element-ids",
-                row => row.ElementIds.Add(new string('E', 32768)),
+                row =>
+                {
+                    row.ElementIds.Add(new string('E', 32768));
+                    row.WallCount = row.ElementIds.Count;
+                },
                 "Element IDs");
             AssertOversizedListFailsBeforeFilesystemCreation(
                 "source-handles",
@@ -122,7 +128,8 @@ namespace QS3D.Core.SmokeTests
                 MinimumClearPanelWidthM = 1d,
                 MaximumClearPanelWidthM = 2d,
                 MinimumClearPanelHeightM = 2d,
-                MaximumClearPanelHeightM = 3d
+                MaximumClearPanelHeightM = 3d,
+                ElementIds = { "CW-BASE" }
             };
         }
 

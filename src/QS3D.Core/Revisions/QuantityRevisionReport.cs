@@ -32,9 +32,11 @@ namespace QS3D.Core.Revisions
         {
             if (before == null) throw new ArgumentNullException(nameof(before));
             if (after == null) throw new ArgumentNullException(nameof(after));
-            ValidateProjectIdentityCompatibility(before, after);
-            var left = Index(before, "before");
-            var right = Index(after, "after");
+            var beforeSnapshot = RevisionSnapshotDetacher.Capture(before, "before");
+            var afterSnapshot = RevisionSnapshotDetacher.Capture(after, "after");
+            ValidateProjectIdentityCompatibility(beforeSnapshot, afterSnapshot);
+            var left = Index(beforeSnapshot, "before");
+            var right = Index(afterSnapshot, "after");
             var rows = new List<QuantityRevisionRow>();
             foreach (var id in left.Keys.Union(right.Keys, StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
             {
