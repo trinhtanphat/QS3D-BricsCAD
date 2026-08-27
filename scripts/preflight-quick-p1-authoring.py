@@ -53,7 +53,7 @@ if SOURCE.is_file():
         ),
         "QS3DDRAWWALLPIER": (
             "QS3DDRAWWALLPIERADV",
-            'AcquireFixedPath(document, "Trụ Tường nhanh", 2)',
+            'AcquirePath(document, "Trụ Tường nhanh", 2, false)',
             'FamilyNumber(defaultsProject!, ElementCategory.WallPier, "ThicknessM", 0.2d)',
             'FamilyNumber(defaultsProject!, ElementCategory.WallPier, "HeightM", 3.6d)',
             'FamilyFiniteNumber(defaultsProject!, ElementCategory.WallPier, "BottomOffsetM", 0d)',
@@ -101,9 +101,18 @@ if SOURCE.is_file():
 
     wallpier_quick = command_slice("QS3DDRAWWALLPIER", "QS3DDRAWWALLPIERADV")
     wallpier_adv = command_slice("QS3DDRAWWALLPIERADV", "QS3DDRAWSTRUCTWALL")
-    for body, label in ((wallpier_quick, "quick WallPier"), (wallpier_adv, "advanced WallPier")):
-        if "CreateLine(document, points[0], points[1])" not in body or "CreatePolyline(document, points, false)" in body:
-            errors.append(label + " must remain specialized two-point LINE-only")
+    wallpier_source = "() => points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false)"
+    wallpier_paths = (
+        (wallpier_quick, "quick WallPier", 'AcquirePath(document, "Trụ Tường nhanh", 2, false)'),
+        (wallpier_adv, "advanced WallPier", 'AcquirePath(document, "Trụ Tường", 2, false)'),
+    )
+    for body, label, acquire_token in wallpier_paths:
+        if acquire_token not in body:
+            errors.append(label + " must acquire an open path with at least two points")
+        if wallpier_source not in body:
+            errors.append(label + " must emit LINE for two points and open POLYLINE for multi-segment paths")
+        if "AcquireFixedPath(document, \"Trụ Tường" in body:
+            errors.append(label + " must not regress to the legacy fixed two-point path")
 
 if RIBBON.is_file():
     text = RIBBON.read_text(encoding="utf-8")
