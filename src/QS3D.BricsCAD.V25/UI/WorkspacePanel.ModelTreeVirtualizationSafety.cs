@@ -1,3 +1,4 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -31,14 +32,26 @@ namespace QS3D.BricsCAD.V25.UI
             return true;
         }
 
+        protected override void OnInitialized(EventArgs e)
+        {
+            base.OnInitialized(e);
+            ApplyModelTreeVirtualizationSafety(this);
+        }
+
         private static void OnModelTreeVirtualizationSafetyLoaded(object sender, RoutedEventArgs e)
         {
-            if (!(sender is WorkspacePanel panel) || panel.ModelTree == null)
+            if (sender is WorkspacePanel panel)
+                ApplyModelTreeVirtualizationSafety(panel);
+        }
+
+        private static void ApplyModelTreeVirtualizationSafety(WorkspacePanel panel)
+        {
+            if (panel.ModelTree == null)
                 return;
 
-            // A local value wins over Theme.xaml's implicit TreeView style before the host's next
-            // layout/WM_SIZE pass. Physical scrolling also prevents a virtualizing items host from
-            // being selected for this small, explicit navigation tree.
+            // Apply as soon as the Workspace XAML has initialized so the first measure/layout pass
+            // already sees the local non-virtualizing contract. Loaded remains a defensive fallback
+            // for later reparenting/reload paths.
             VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);
             ScrollViewer.SetCanContentScroll(panel.ModelTree, false);
         }
