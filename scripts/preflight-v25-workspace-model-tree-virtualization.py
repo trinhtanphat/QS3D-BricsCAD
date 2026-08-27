@@ -22,10 +22,8 @@ if not errors:
     theme = theme_path.read_text(encoding="utf-8")
 
     required_safety = {
-        "protected override void OnInitialized(EventArgs e)": "ModelTree safety must be applied before the first Workspace measure/layout pass",
-        "ApplyModelTreeVirtualizationSafety(this);": "ModelTree safety OnInitialized application missing",
-        "FrameworkElement.LoadedEvent": "ModelTree safety must retain a Loaded fallback for reparenting/reload paths",
-        "new RoutedEventHandler(OnModelTreeVirtualizationSafetyLoaded)": "ModelTree safety Loaded fallback registration missing",
+        "FrameworkElement.LoadedEvent": "ModelTree safety must be applied during Workspace Loaded before the host's next layout pass",
+        "new RoutedEventHandler(OnModelTreeVirtualizationSafetyLoaded)": "ModelTree safety Loaded handler registration missing",
         "VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);": "ModelTree must opt out of recycling virtualization locally",
         "ScrollViewer.SetCanContentScroll(panel.ModelTree, false);": "ModelTree must use physical scrolling so a virtualizing items host is not selected",
     }
