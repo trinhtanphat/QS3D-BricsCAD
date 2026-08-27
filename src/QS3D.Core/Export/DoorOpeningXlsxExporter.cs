@@ -20,7 +20,7 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            var rowCount = RequireConsistentKnownCount(rows, rows.Count, MaxDataRows, "export rows");
+            var rowCount = RequireConsistentKnownCount(rows, MaxDataRows, "export rows");
 
             var snapshot = new List<DoorOpeningScheduleRow>(rowCount);
             for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
@@ -88,7 +88,7 @@ namespace QS3D.Core.Export
             if (source == null)
                 throw new ArgumentException("Door/opening XLSX " + label + " collection is required.", "rows");
 
-            var count = RequireConsistentKnownCount(source, source.Count, MaxCellTextLength + 1, label);
+            var count = RequireConsistentKnownCount(source, MaxCellTextLength + 1, label);
             long joinedLength = 0L;
             for (var index = 0; index < count; index++)
             {
@@ -105,7 +105,7 @@ namespace QS3D.Core.Export
                 throw new InvalidOperationException("Door/opening XLSX " + label + " count changed during snapshot.");
         }
 
-        private static int RequireConsistentKnownCount<T>(IEnumerable<T> source, int primaryCount, int maximum, string label)
+        private static int RequireConsistentKnownCount<T>(IEnumerable<T> source, int maximum, string label)
         {
             int? expected = null;
             Action<int> bind = count =>
@@ -119,14 +119,15 @@ namespace QS3D.Core.Export
                 expected = count;
             };
 
-            bind(primaryCount);
             var readOnly = source as IReadOnlyCollection<T>;
             if (readOnly != null) bind(readOnly.Count);
             var generic = source as ICollection<T>;
             if (generic != null) bind(generic.Count);
             var nonGeneric = source as ICollection;
             if (nonGeneric != null) bind(nonGeneric.Count);
-            return expected.GetValueOrDefault();
+            if (!expected.HasValue)
+                throw new ArgumentException("Door/opening XLSX " + label + " must expose a deterministic collection count.", "rows");
+            return expected.Value;
         }
 
         private static void ValidateCellText(IReadOnlyList<DoorOpeningScheduleRow> rows)
