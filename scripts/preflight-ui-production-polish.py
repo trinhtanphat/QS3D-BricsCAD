@@ -75,6 +75,8 @@ def main() -> int:
         require_setter(styles, target_type, "UseLayoutRounding", "True")
         require_setter(styles, target_type, "TextOptions.TextFormattingMode", "Display")
 
+    # Virtualization belongs to declarative/pre-layout styles. ProductionUiPolish runs
+    # from Loaded and must never switch VirtualizationMode after an ItemsHost Measure.
     for target_type in (
         "{x:Type ListBox}",
         "{x:Type ListView}",
@@ -94,27 +96,34 @@ def main() -> int:
         "typeof(Window)",
         "typeof(UserControl)",
         "HasQs3dRootAncestor(root)",
-        "ApplyVirtualizationDefaults(root)",
-        "current is DataGrid",
-        "current is ListBox",
-        "current is TreeView",
         "DependencyPropertyHelper.GetValueSource",
         "BaseValueSource.Default",
         "FrameworkElement.UseLayoutRoundingProperty",
         "UIElement.SnapsToDevicePixelsProperty",
         "TextOptions.TextFormattingModeProperty",
-        "ScrollViewer.CanContentScrollProperty",
-        "VirtualizingPanel.IsVirtualizingProperty",
-        "VirtualizingPanel.VirtualizationModeProperty",
-        "VirtualizationMode.Recycling",
-        "VirtualizingPanel.IsVirtualizingWhenGroupingProperty",
-        "DataGrid.EnableRowVirtualizationProperty",
-        "DataGrid.EnableColumnVirtualizationProperty",
         "element.GetType().Assembly == typeof(ProductionUiPolish).Assembly",
     )
     for token in required_polish_tokens:
         if token not in polish:
             fail(f"ProductionUiPolish.cs: required production contract missing: {token}")
+
+    forbidden_polish_tokens = (
+        "ApplyVirtualizationDefaults(root)",
+        "ApplyItemVirtualizationDefaults(",
+        "VirtualizingPanel.VirtualizationModeProperty",
+        "VirtualizingPanel.IsVirtualizingProperty",
+        "VirtualizingPanel.IsVirtualizingWhenGroupingProperty",
+        "ScrollViewer.CanContentScrollProperty",
+        "DataGrid.EnableRowVirtualizationProperty",
+        "DataGrid.EnableColumnVirtualizationProperty",
+        "VirtualizationMode.Recycling",
+    )
+    for token in forbidden_polish_tokens:
+        if token in polish:
+            fail(
+                "ProductionUiPolish.cs: Loaded-time polish must not mutate item virtualization "
+                f"state after ItemsHost Measure: {token}"
+            )
 
     for forbidden_token in ("typeof(DataGrid),", "typeof(ListBox),", "typeof(TreeView),"):
         if forbidden_token in polish:

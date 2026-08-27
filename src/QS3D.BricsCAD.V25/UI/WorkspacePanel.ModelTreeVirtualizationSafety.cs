@@ -43,8 +43,15 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
 
             // The constructor calls this immediately after InitializeComponent, before the Workspace
-            // can enter the host visual tree. The Loaded class handler repeats the same idempotent
-            // local values after reparenting/reload as a defensive fallback.
+            // can enter the host visual tree. Pin VirtualizationMode only on that first pre-layout
+            // call. The later Loaded fallback may safely reassert non-virtualized/physical scrolling,
+            // but it must never mutate VirtualizationMode after an ItemsHost has been measured.
+            if (panel.ModelTree.ReadLocalValue(VirtualizingPanel.VirtualizationModeProperty)
+                == DependencyProperty.UnsetValue)
+            {
+                VirtualizingPanel.SetVirtualizationMode(panel.ModelTree, VirtualizationMode.Standard);
+            }
+
             VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);
             ScrollViewer.SetCanContentScroll(panel.ModelTree, false);
         }
