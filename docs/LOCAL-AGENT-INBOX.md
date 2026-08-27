@@ -462,6 +462,21 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Related source/docs: `docs/LOCAL-V25-QUALIFICATION.md`; `docs/LOCAL-V26-QUALIFICATION.md`; `src/QS3D.BricsCAD.V25/ReviewWorkbookCommands.cs`; `src/QS3D.BricsCAD.V25/ReviewWorkbookRuntimeProbeCommands.cs`; `src/QS3D.BricsCAD.V25/Services/ExcelLocateResolutionService.cs`; `src/QS3D.Core/Export/Qs3dReviewWorkbook.IssueProjection.cs`; `scripts/test-bricscad-review-workbook-roundtrip.ps1`; issue `#3536`.
 - Updated: 2026-08-24
 
+## LOCAL-020 — Grid pair-owned intersection marker native lifecycle
+
+- Priority: P1
+- Status: OPEN
+- Area: Grid / pair-owned native intersection markers (#3771)
+- Source/runner status: `SOURCE_READY / MERGED_MAIN`; minimum source/guard ancestor `707ba4f2991e6ab47a81d9de80a32c19e55fca79`. PR #4109 passed fresh protected `preflight` + `core` on final task head `75810a0154cdb345395469bd19e17b6e009e6119` and merged as `3a0e9e06f70b11bffb323df2d205bd94c05ed71d`.
+- Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
+- Runbook: `docs/LOCAL-GRID-INTERSECTION-MARKER-QUALIFICATION.md`
+- Why local: Final acceptance requires licensed BricsCAD V25/V26 native Circle/XData/object ownership, Undo/Redo, save/cold-reopen and multi-DWG/document/owner-space behavior; hosted/static CI is not `LOCAL_PASS`.
+- Scenario: Run P01-P06 from the runbook on one clean exact intended source-containing SHA. Prove deterministic canonical pair/occurrence ownership, selected/all refresh and cancellation/freshness boundaries, malformed/missing/duplicate/foreign ownership fail-closed replacement, geometry refresh with Undo/Redo and save/cold-reopen, document/owner-space/multi-DWG isolation, and V26 parity where the linked source applies.
+- Evidence required: exact tested QS3D SHA and matching V25/V26 plugin/host identity; pair/owner/XData/native entity assertions; before/after replacement and Health results; Undo/Redo/save/reopen/multi-DWG results; sanitized cleanup evidence. Record only sanitized evidence; no private paths, raw Handles/ProjectIds, proprietary DLLs or customer drawings.
+- Evidence: `PENDING_LOCAL`
+- Related docs/source: `docs/LOCAL-GRID-INTERSECTION-MARKER-QUALIFICATION.md`; `scripts/preflight-grid-intersection-marker-lifecycle.py`; issue #3771; PR #4109.
+- Updated: 2026-08-27
+
 ## P1 — #3480 Quantity Review exact native BREP face highlight
 
 - Priority: P1
