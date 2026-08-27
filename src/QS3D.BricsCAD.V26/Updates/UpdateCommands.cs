@@ -39,8 +39,7 @@ namespace QS3D.BricsCAD.V25.Updates
             }
             catch (Exception ex)
             {
-                var document = Application.DocumentManager.MdiActiveDocument;
-                document?.Editor.WriteMessage("\n" + commandName + " V26 error: " + ex.Message);
+                WriteCommandError(commandName, ex);
             }
         }
 
@@ -70,9 +69,18 @@ namespace QS3D.BricsCAD.V25.Updates
             }
             catch (Exception ex)
             {
-                var document = Application.DocumentManager.MdiActiveDocument;
-                document?.Editor.WriteMessage("\n" + commandName + " V26 error: " + ex.Message);
+                WriteCommandError(commandName, ex);
             }
+        }
+
+        private static void WriteCommandError(string commandName, Exception ex)
+        {
+            // Preserve the canonical QS3DUPDATE diagnostic contract while aliases identify themselves.
+            var prefix = string.Equals(commandName, "QS3DUPDATE", StringComparison.Ordinal)
+                ? "QS3DUPDATE V26 error"
+                : commandName + " V26 error";
+            var document = Application.DocumentManager.MdiActiveDocument;
+            document?.Editor.WriteMessage("\n" + prefix + ": " + ex.Message);
         }
 
         private static string ProductVersionText(Assembly assembly)
