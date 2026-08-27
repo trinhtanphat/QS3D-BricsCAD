@@ -273,11 +273,13 @@ namespace QS3D.Core.SmokeTests
             try
             {
                 action();
-                throw new InvalidOperationException("Expected " + typeof(T).Name + ".");
             }
             catch (T)
             {
+                return;
             }
+
+            throw new InvalidOperationException("Expected " + typeof(T).Name + ".");
         }
     }
 }
