@@ -24,6 +24,7 @@ namespace QS3D.Core.Export
         public const string IssuesSheet = "ISSUES";
         public const string SchemaVersion = "QS3D_COORDINATION_ISSUES_V1";
         private const int MaxRows = 1048576;
+        private const int MaxColumns = 16384;
         private const long MaxWorkbookBytes = 128L * 1024L * 1024L;
         private const long MaxXmlCharacters = 64L * 1024L * 1024L;
         private static readonly XNamespace SpreadsheetNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -283,13 +284,26 @@ namespace QS3D.Core.Export
             var result = new List<IReadOnlyList<string>>();
             foreach (var row in document.Descendants(SpreadsheetNs + "row"))
             {
+                var rowReference = (string)row.Attribute("r");
+                int expectedRowIndex;
+                if (!int.TryParse(rowReference, NumberStyles.None, CultureInfo.InvariantCulture, out expectedRowIndex)
+                    || expectedRowIndex <= 0
+                    || expectedRowIndex > MaxRows
+                    || !string.Equals(rowReference, expectedRowIndex.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
+                    throw new InvalidDataException($"Malformed XLSX row reference '{rowReference ?? "<null>"}'.");
+
                 var cells = new SortedDictionary<int, string>();
                 foreach (var cell in row.Elements(SpreadsheetNs + "c"))
                 {
-                    var reference = (string)cell.Attribute("r");
-                    var column = ColumnIndex(reference);
-                    if (cells.ContainsKey(column)) throw new InvalidDataException("Coordination issue workbook row contains duplicate cell references.");
-                    cells.Add(column, CellText(cell, sharedStrings));
+                    var cellReference = (string)cell.Attribute("r");
+                    int columnIndex;
+                    int parsedRowIndex;
+                    if (!TryParseA1CellReference(cellReference, out columnIndex, out parsedRowIndex))
+                        throw new InvalidDataException($"Malformed XLSX cell reference '{cellReference ?? "<null>"}'.");
+                    if (parsedRowIndex != expectedRowIndex)
+                        throw new InvalidDataException($"XLSX cell reference '{cellReference}' targets row {parsedRowIndex}, but appears inside worksheet row {expectedRowIndex}.");
+                    if (cells.ContainsKey(columnIndex)) throw new InvalidDataException("Coordination issue workbook row contains duplicate cell references.");
+                    cells.Add(columnIndex, CellText(cell, sharedStrings));
                 }
                 if (cells.Count == 0)
                 {
@@ -350,18 +364,46 @@ namespace QS3D.Core.Export
             return index < row.Count ? row[index] ?? string.Empty : string.Empty;
         }
 
-        private static int ColumnIndex(string reference)
+        private static bool TryParseA1CellReference(string reference, out int columnIndex, out int parsedRowIndex)
         {
-            if (string.IsNullOrWhiteSpace(reference)) throw new InvalidDataException("Coordination issue workbook contains a cell without a reference.");
-            var value = 0;
-            var count = 0;
-            for (var i = 0; i < reference.Length && char.IsLetter(reference[i]); i++)
+            columnIndex = -1;
+            parsedRowIndex = -1;
+            if (string.IsNullOrEmpty(reference)) return false;
+
+            var columnNumber = 0;
+            var index = 0;
+            while (index < reference.Length)
             {
-                value = checked(value * 26 + (char.ToUpperInvariant(reference[i]) - 'A' + 1));
-                count++;
+                var character = reference[index];
+                if (character >= 'a' && character <= 'z') character = (char)(character - ('a' - 'A'));
+                if (character < 'A' || character > 'Z') break;
+                try
+                {
+                    columnNumber = checked(columnNumber * 26 + (character - 'A' + 1));
+                }
+                catch (OverflowException)
+                {
+                    return false;
+                }
+                index++;
             }
-            if (count == 0 || value <= 0) throw new InvalidDataException("Coordination issue workbook contains an invalid cell reference: " + reference + ".");
-            return value - 1;
+
+            if (index == 0 || index == reference.Length || columnNumber <= 0 || columnNumber > MaxColumns) return false;
+            if (reference[index] == '0') return false;
+            for (var i = index; i < reference.Length; i++)
+            {
+                if (reference[i] < '0' || reference[i] > '9') return false;
+            }
+
+            var rowToken = reference.Substring(index);
+            if (!int.TryParse(rowToken, NumberStyles.None, CultureInfo.InvariantCulture, out parsedRowIndex)
+                || parsedRowIndex <= 0
+                || parsedRowIndex > MaxRows
+                || !string.Equals(rowToken, parsedRowIndex.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
+                return false;
+
+            columnIndex = columnNumber - 1;
+            return true;
         }
 
         private static XDocument LoadXml(ZipArchiveEntry entry)
