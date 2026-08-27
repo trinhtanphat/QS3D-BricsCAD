@@ -197,6 +197,24 @@ namespace QS3D.Core.Export
             for (var index = 0; index < text.Length; index++)
             {
                 var current = text[index];
+                if (char.IsHighSurrogate(current))
+                {
+                    if (index + 1 < text.Length && char.IsLowSurrogate(text[index + 1]))
+                    {
+                        index++;
+                        continue;
+                    }
+
+                    throw new ArgumentException(
+                        "Room-finish XLSX row " + rowIndex + " field " + fieldName + " contains malformed UTF-16 provenance.",
+                        "rows");
+                }
+
+                if (char.IsLowSurrogate(current))
+                    throw new ArgumentException(
+                        "Room-finish XLSX row " + rowIndex + " field " + fieldName + " contains malformed UTF-16 provenance.",
+                        "rows");
+
                 if (current == '\t' || current == '\n' || current == '\r' || current >= '\u0020') continue;
                 throw new ArgumentException(
                     "Room-finish XLSX row " + rowIndex + " field " + fieldName + " contains an XML control character.",

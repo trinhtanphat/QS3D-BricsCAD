@@ -11,8 +11,9 @@ workspace_path = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs"
 browser_path = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ProjectBrowser.cs"
 augmenter_path = ROOT / "src/QS3D.BricsCAD.V25/UI/ReferenceWorkspaceTreeAugmenter.cs"
 theme_path = ROOT / "src/QS3D.BricsCAD.V25/UI/Theme.xaml"
+polish_path = ROOT / "src/QS3D.BricsCAD.V25/UI/ProductionUiPolish.cs"
 
-for path in (safety_path, workspace_path, browser_path, augmenter_path, theme_path):
+for path in (safety_path, workspace_path, browser_path, augmenter_path, theme_path, polish_path):
     if not path.is_file():
         errors.append("missing Workspace virtualization contract file: " + str(path.relative_to(ROOT)))
 
@@ -22,11 +23,15 @@ if not errors:
     browser = browser_path.read_text(encoding="utf-8")
     augmenter = augmenter_path.read_text(encoding="utf-8")
     theme = theme_path.read_text(encoding="utf-8")
+    polish = polish_path.read_text(encoding="utf-8")
 
     required_safety = {
         "FrameworkElement.LoadedEvent": "ModelTree safety must retain a Loaded fallback for reparenting/reload paths",
         "new RoutedEventHandler(OnModelTreeVirtualizationSafetyLoaded)": "ModelTree safety Loaded handler registration missing",
         "private static void ApplyModelTreeVirtualizationSafety(WorkspacePanel panel)": "ModelTree safety helper missing",
+        "ReadLocalValue(VirtualizingPanel.VirtualizationModeProperty)": "ModelTree must detect whether the pre-layout local mode pin already exists",
+        "== DependencyProperty.UnsetValue": "ModelTree must only establish VirtualizationMode before the first local pin",
+        "VirtualizingPanel.SetVirtualizationMode(panel.ModelTree, VirtualizationMode.Standard);": "ModelTree must pin Standard mode before first host layout",
         "VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);": "ModelTree must opt out of recycling virtualization locally",
         "ScrollViewer.SetCanContentScroll(panel.ModelTree, false);": "ModelTree must use physical scrolling so a virtualizing items host is not selected",
     }
@@ -39,6 +44,22 @@ if not errors:
 
     if "protected override void OnInitialized" in safety:
         errors.append("ModelTree safety must not introduce a second WorkspacePanel.OnInitialized override")
+
+    # The Loaded fallback is allowed to reassert IsVirtualizing/CanContentScroll, but the
+    # mode setter must stay behind the local-value guard so a measured ItemsHost cannot
+    # transition Standard -> Recycling/Standard during Loaded traversal.
+    local_guard_index = safety.find("ReadLocalValue(VirtualizingPanel.VirtualizationModeProperty)")
+    mode_set_index = safety.find("VirtualizingPanel.SetVirtualizationMode(panel.ModelTree, VirtualizationMode.Standard);")
+    is_virtualizing_index = safety.find("VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);")
+    if local_guard_index < 0 or mode_set_index < local_guard_index:
+        errors.append("ModelTree VirtualizationMode setter must remain guarded by the pre-layout local-value check")
+    if is_virtualizing_index >= 0 and mode_set_index >= is_virtualizing_index:
+        errors.append("ModelTree Standard mode must be established before IsVirtualizing is disabled")
+
+    if "ApplyVirtualizationDefaults(root)" in polish:
+        errors.append("ProductionUiPolish Loaded path must not traverse item controls to apply virtualization defaults")
+    if "VirtualizingPanel.VirtualizationModeProperty" in polish:
+        errors.append("ProductionUiPolish Loaded path must not mutate VirtualizationMode after ItemsHost Measure")
 
     browser_tokens = (
         "modelDock.Children.Remove(ModelTree);",
