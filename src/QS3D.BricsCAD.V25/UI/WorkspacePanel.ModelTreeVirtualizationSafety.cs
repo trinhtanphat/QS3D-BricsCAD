@@ -18,7 +18,7 @@ namespace QS3D.BricsCAD.V25.UI
     /// </summary>
     public partial class WorkspacePanel
     {
-        private static readonly bool ModelTreeVirtualizationSafetyRegistered =
+        internal static readonly bool ModelTreeVirtualizationSafetyRegistered =
             RegisterModelTreeVirtualizationSafety();
 
         private static bool RegisterModelTreeVirtualizationSafety()
