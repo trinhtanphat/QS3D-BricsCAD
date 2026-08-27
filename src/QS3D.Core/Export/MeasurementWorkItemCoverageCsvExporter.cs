@@ -104,7 +104,8 @@ namespace QS3D.Core.Export
                 RequireLiteralCsvIdentity(cell.MappingId, "mapping id");
                 RequireLiteralCsvIdentity(cell.ClassificationId, "classification id");
                 RequireLiteralCsvIdentity(cell.WorkItemId, "work-item id");
-                RequireLiteralCsvIdentity(string.Join("|", cell.AffectedElementIds), "affected element ids");
+                for (var elementIndex = 0; elementIndex < cell.AffectedElementIds.Count; elementIndex++)
+                    RequireLiteralCsvIdentity(cell.AffectedElementIds[elementIndex], "affected element id");
             }
         }
 
