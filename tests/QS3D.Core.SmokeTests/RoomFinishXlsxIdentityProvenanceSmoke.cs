@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Export;
 using QS3D.Core.Reporting;
@@ -13,6 +14,8 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsInvalidElementIdBeforeReplace();
             RejectsInvalidRoomIdBeforeReplace();
+            RejectsMalformedUtf16AcrossProvenanceBeforeReplace();
+            PreservesValidSupplementaryUnicode();
         }
 
         private static void RejectsInvalidElementIdBeforeReplace()
@@ -44,6 +47,91 @@ namespace QS3D.Core.SmokeTests
 
                 Equal(original, File.ReadAllText(path), "Room Finish XLSX replaced the destination before rejecting the invalid Room ID");
             });
+        }
+
+        private static void RejectsMalformedUtf16AcrossProvenanceBeforeReplace()
+        {
+            foreach (var malformed in new[] { "\uD800", "\uDC00" })
+            {
+                RejectsMalformedUtf16(
+                    row => row.ProjectId = "PROJECT-" + malformed,
+                    "ProjectId");
+                RejectsMalformedUtf16(
+                    row => row.DrawingFingerprint = "DRAWING-" + malformed,
+                    "DrawingFingerprint");
+                RejectsMalformedUtf16(
+                    row => row.ElementIds.Add("ELEMENT-" + malformed),
+                    "ElementIds");
+                RejectsMalformedUtf16(
+                    row => row.RoomIds.Add("ROOM-" + malformed),
+                    "RoomIds");
+                RejectsMalformedUtf16(
+                    row =>
+                    {
+                        row.SourceHandles.Clear();
+                        row.SourceHandles.Add("HANDLE-" + malformed);
+                    },
+                    "SourceHandles");
+            }
+        }
+
+        private static void RejectsMalformedUtf16(Action<RoomFinishScheduleRow> mutate, string label)
+        {
+            WithDestination((path, original) =>
+            {
+                var row = ValidRow();
+                mutate(row);
+
+                ExpectArgument(
+                    () => RoomFinishXlsxExporter.Export(path, new[] { row }),
+                    "Room Finish XLSX accepted malformed UTF-16 in " + label);
+
+                Equal(original, File.ReadAllText(path), "Room Finish XLSX replaced the destination before rejecting malformed UTF-16 in " + label);
+            });
+        }
+
+        private static void PreservesValidSupplementaryUnicode()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-room-finish-unicode-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "room-finish.xlsx");
+            try
+            {
+                var row = ValidRow();
+                row.ProjectId = "PROJECT-\U0001F680";
+                row.DrawingFingerprint = "DRAWING-\U0001F4A1";
+                row.ElementIds.Add("ELEMENT-\U0001F680");
+                row.RoomIds.Add("ROOM-\U0001F4A1");
+                row.SourceHandles.Clear();
+                row.SourceHandles.Add("HANDLE-\U0001F680");
+
+                RoomFinishXlsxExporter.Export(path, new[] { row });
+
+                using (var archive = ZipFile.OpenRead(path))
+                {
+                    var entry = archive.GetEntry("xl/worksheets/sheet1.xml");
+                    if (entry == null)
+                        throw new InvalidOperationException("RoomFinishXlsxIdentityProvenanceSmoke: generated workbook is missing xl/worksheets/sheet1.xml.");
+
+                    using (var reader = new StreamReader(entry.Open()))
+                    {
+                        var xml = reader.ReadToEnd();
+                        Contains(xml, row.ProjectId, "ProjectId supplementary Unicode changed");
+                        Contains(xml, row.DrawingFingerprint, "DrawingFingerprint supplementary Unicode changed");
+                        Contains(xml, row.ElementIds[0], "ElementId supplementary Unicode changed");
+                        Contains(xml, row.RoomIds[0], "RoomId supplementary Unicode changed");
+                        Contains(xml, row.SourceHandles[0], "SourceHandle supplementary Unicode changed");
+                        if (xml.IndexOf('\uFFFD') >= 0)
+                            throw new InvalidOperationException("RoomFinishXlsxIdentityProvenanceSmoke: valid supplementary Unicode was replaced with U+FFFD.");
+                    }
+                }
+            }
+            finally
+            {
+                try { Directory.Delete(directory, true); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
         }
 
         private static RoomFinishScheduleRow ValidRow()
@@ -98,6 +186,12 @@ namespace QS3D.Core.SmokeTests
                 catch (IOException) { }
                 catch (UnauthorizedAccessException) { }
             }
+        }
+
+        private static void Contains(string actual, string expected, string message)
+        {
+            if (actual.IndexOf(expected, StringComparison.Ordinal) < 0)
+                throw new InvalidOperationException("RoomFinishXlsxIdentityProvenanceSmoke: " + message + ".");
         }
 
         private static void Equal(string expected, string actual, string message)
