@@ -43,9 +43,9 @@ def main() -> int:
     nested_failure = require(exporter, 'throw new InvalidOperationException("Door/opening XLSX " + label + " count changed during snapshot.");', "nested count-drift failure")
 
     helper = require(exporter, "private static int RequireConsistentKnownCount<T>", "known-count consistency helper")
-    read_only = require(exporter, "source as IReadOnlyCollection<T>", "IReadOnlyCollection known count")
-    generic = require(exporter, "source as ICollection<T>", "generic ICollection known count")
-    non_generic = require(exporter, "source as ICollection", "non-generic ICollection known count")
+    read_only = require(exporter, "var readOnly = source as IReadOnlyCollection<T>;", "IReadOnlyCollection known count")
+    generic = require(exporter, "var generic = source as ICollection<T>;", "generic ICollection known count")
+    non_generic = require(exporter, "var nonGeneric = source as ICollection;", "non-generic ICollection known count")
     conflict = require(exporter, "exposes conflicting known collection counts", "known-count conflict rejection")
     negative = require(exporter, "count must be non-negative", "known-count negative rejection")
     maximum = require(exporter, "count exceeds the supported maximum", "known-count maximum rejection")
