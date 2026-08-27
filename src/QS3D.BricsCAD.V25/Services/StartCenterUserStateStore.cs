@@ -272,7 +272,7 @@ namespace QS3D.BricsCAD.V25.Services
 
         private static bool TrySaveCore(StartCenterUserStateSnapshot state)
         {
-            string? temp = null;
+            string temp = string.Empty;
             try
             {
                 if (!TrySettingsPath(out var path)) return false;
@@ -289,7 +289,7 @@ namespace QS3D.BricsCAD.V25.Services
                 if (!File.Exists(path))
                 {
                     File.Move(temp, path);
-                    temp = null;
+                    temp = string.Empty;
                     TryDelete(backup);
                     return true;
                 }
@@ -297,20 +297,20 @@ namespace QS3D.BricsCAD.V25.Services
                 try
                 {
                     File.Replace(temp, path, backup, true);
-                    temp = null;
+                    temp = string.Empty;
                     TryDelete(backup);
                     return true;
                 }
                 catch (PlatformNotSupportedException)
                 {
                     if (!TryReplacePreservingLastKnownGood(temp, path, backup)) return false;
-                    temp = null;
+                    temp = string.Empty;
                     return true;
                 }
                 catch (NotSupportedException)
                 {
                     if (!TryReplacePreservingLastKnownGood(temp, path, backup)) return false;
-                    temp = null;
+                    temp = string.Empty;
                     return true;
                 }
             }
@@ -321,7 +321,7 @@ namespace QS3D.BricsCAD.V25.Services
             catch (System.Security.SecurityException) { return false; }
             finally
             {
-                if (!string.IsNullOrWhiteSpace(temp)) TryDelete(temp!);
+                if (!string.IsNullOrWhiteSpace(temp)) TryDelete(temp);
             }
         }
 
