@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             ProjectedRowCapacityAcceptsExactBoundaryAndRejectsOverflow();
+            MalformedUtf16FailsClosedAndValidSupplementaryTextSurvives();
             WorkbookPreservesDeterministicEvidenceOrderAndProvenance();
             PublicationFailurePreservesExistingDestination();
         }
@@ -62,6 +63,59 @@ namespace QS3D.Core.SmokeTests
             }
 
             Require(rejected, "Quantity evidence XLSX accepted a projected row count above Excel's data-row ceiling.");
+        }
+
+        private static void MalformedUtf16FailsClosedAndValidSupplementaryTextSurvives()
+        {
+            var root = TempDirectory("quantity-evidence-xlsx-utf16");
+            try
+            {
+                RequireMalformedUtf16Rejected(root, "ELEMENT-\uD800", "high surrogate");
+                RequireMalformedUtf16Rejected(root, "ELEMENT-\uDC00", "low surrogate");
+
+                var supplementarySubject = "ELEMENT-\U0001F642";
+                var supplementaryPath = Path.Combine(root, "supplementary.xlsx");
+                XlsxQuantityEvidenceExporter.Export(
+                    supplementaryPath,
+                    new[] { CreateExplanation(supplementarySubject) });
+
+                var sheet = ReadEntry(supplementaryPath, "xl/worksheets/sheet1.xml");
+                Require(sheet.IndexOf(supplementarySubject, StringComparison.Ordinal) >= 0,
+                    "Quantity evidence XLSX did not preserve a valid supplementary Unicode scalar.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
+        private static void RequireMalformedUtf16Rejected(string root, string subjectKey, string label)
+        {
+            var path = Path.Combine(root, label.Replace(' ', '-') + ".xlsx");
+            var rejected = false;
+            try
+            {
+                XlsxQuantityEvidenceExporter.Export(path, new[] { CreateExplanation(subjectKey) });
+            }
+            catch (InvalidDataException ex)
+            {
+                rejected = ex.Message.IndexOf("UTF-16", StringComparison.Ordinal) >= 0;
+            }
+
+            Require(rejected, "Quantity evidence XLSX accepted an unpaired " + label + ".");
+            Require(!File.Exists(path), "Quantity evidence XLSX published output after rejecting malformed UTF-16.");
+        }
+
+        private static QuantityExplanation CreateExplanation(string subjectKey)
+        {
+            return QuantityExplanation.Create(
+                subjectKey,
+                "Beam",
+                "Length",
+                "m",
+                1m,
+                1m,
+                Array.Empty<QuantityContribution>());
         }
 
         private static void WorkbookPreservesDeterministicEvidenceOrderAndProvenance()
