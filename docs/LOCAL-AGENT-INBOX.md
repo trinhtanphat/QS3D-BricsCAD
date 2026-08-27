@@ -508,6 +508,22 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Related docs/source: `docs/LOCAL-GRID-INTERSECTION-MARKER-QUALIFICATION.md`; `scripts/preflight-grid-intersection-marker-lifecycle.py`; issue #3771; PR #4109.
 - Updated: 2026-08-27
 
+## LOCAL-023 — Beam formwork behavior matrix on preview.10223
+
+- Priority: P1
+- Status: OPEN
+- Area: issue `#4093`; BricsCAD V25 Beam formwork M1–M8 behavior matrix
+- Source/harness status: `PREP_READY / CI_GREEN / NO_RESULT / LOCAL_RUNTIME_REQUIRED`
+- Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
+- Exact runtime artifact: `v0.1.0-preview.10223`; source `1363f9be69ebc8ca8a865ccdd41639346f55f6ee`; licensed host boundary BricsCAD V25.2.10 x64.
+- Artifact hashes: ZIP `A83BC92A1F90B00ADF7DFE0B1C92DF2EF7A3286D7ED99E4307ED8E0B87F22222`; packaged V25 DLL `3F0156A8DFD9BB31ECE43665D5D8334DA320172A6EAFB929967268218168F22F`.
+- Canonical runtime carrier: draft PR #4094 / branch `agent/gpt56sol/issue-4093-beam-preview10223-matrix`. Keep that carrier draft; do not rebase or merge it merely for freshness while licensed runtime evidence is pending.
+- Scenario: execute M1–M8 from `docs/LOCAL-V25-BEAM-FORMWORK-MATRIX.md` against the exact packaged DLL: Side/Bottom rule toggles, Top and End/Other exclusion, directed Side/Bottom deductions, aggregate/detail `FormworkM2` parity, and diagonal-axis face classification.
+- Runtime gate: licensed interactive V25 only. Do not rebuild, substitute, instrument, or relabel the pinned preview. Verify sanitized evidence with `scripts/test-local-v25-beam-formwork-matrix-evidence.ps1` and restore profile/Loader/DemandLoad state with zero test-owned process residue.
+- Evidence: `NO_RESULT / LOCAL_RUNTIME_REQUIRED`; prepared carrier CI is green but hosted/source evidence is not `LOCAL_PASS`.
+- Evidence required: exact preview/source/ZIP/DLL/host identity; M1–M8 gross/net/classification/parity results; verifier result; sanitized cleanup/no-residue evidence.
+- Updated: 2026-08-27
+
 ## P1 — #3480 Quantity Review exact native BREP face highlight
 
 - Priority: P1
