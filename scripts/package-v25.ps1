@@ -125,14 +125,21 @@ function Read-ProjectProductVersion {
     [xml]$project = Get-Content -LiteralPath $ProjectPath -Raw
     $versions = @($project.Project.PropertyGroup | ForEach-Object { [string]$_.Version } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     if ($versions.Count -ne 1) { throw "Project must declare exactly one Version value: $ProjectPath" }
-    return $versions[0].Trim()
+    $version = $versions[0]
+    if (-not [string]::Equals($version, $version.Trim(), [StringComparison]::Ordinal)) {
+        throw "Project Version must be canonical without surrounding whitespace: $ProjectPath"
+    }
+    return $version
 }
 
 function Convert-ToStrictSemVerText {
     param([string]$Value, [string]$Label)
 
     if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Label is missing." }
-    $text = $Value.Trim()
+    $text = $Value
+    if (-not [string]::Equals($text, $text.Trim(), [StringComparison]::Ordinal)) {
+        throw "$Label must be canonical without surrounding whitespace."
+    }
     $match = [regex]::Match(
         $text,
         '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
@@ -171,7 +178,7 @@ if (-not [string]::Equals($productVersion, $coreProductVersion, [StringCompariso
 }
 if (-not [string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
     $expectedTag = 'v' + $productVersion
-    if (-not [string]::Equals($env:RELEASE_TAG.Trim(), $expectedTag, [StringComparison]::Ordinal)) {
+    if (-not [string]::Equals($env:RELEASE_TAG, $expectedTag, [StringComparison]::Ordinal)) {
         throw "RELEASE_TAG must exactly match the source product version. Expected $expectedTag, got $env:RELEASE_TAG."
     }
 }
