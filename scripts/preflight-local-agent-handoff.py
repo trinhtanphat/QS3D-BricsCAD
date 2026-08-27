@@ -32,7 +32,14 @@ def fail(message: str) -> None:
 
 
 def field(section: str, name: str) -> str | None:
-    aliases = (name, "Related source/docs") if name == "Related docs" else (name,)
+    if name == "Related docs":
+        aliases = (name, "Related source/docs")
+    elif name == "Evidence":
+        # Runtime handoff rows may preserve a more explicit label while still
+        # carrying the concrete evidence required by the canonical contract.
+        aliases = (name, "Consumed runtime verdicts")
+    else:
+        aliases = (name,)
     for candidate in aliases:
         match = re.search(rf"^- {re.escape(candidate)}:\s*(.*?)\s*$", section, re.MULTILINE)
         if match:
