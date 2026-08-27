@@ -274,7 +274,7 @@ try {
                 }
                 $oldReleaseTag = $env:RELEASE_TAG
                 try {
-                    $env:RELEASE_TAG = $ReleaseTag.Trim()
+                    $env:RELEASE_TAG = $ReleaseTag
                     & (Join-Path $PSScriptRoot "package-v25.ps1")
                 }
                 finally {
