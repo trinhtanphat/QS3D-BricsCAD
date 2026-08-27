@@ -351,7 +351,7 @@ namespace QS3D.Core.Cost
             if (cost < 0m) throw new ArgumentOutOfRangeException(nameof(cost));
             TradeCode = string.IsNullOrWhiteSpace(tradeCode)
                 ? "Unclassified"
-                : AdvancedCostTextContract.RequireCanonicalText(tradeCode, nameof(tradeCode), "Trade code");
+                : AdvancedCostTextContract.RequireCanonicalText(tradeCode!, nameof(tradeCode), "Trade code");
             Cost = cost;
         }
 
