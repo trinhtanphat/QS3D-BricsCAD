@@ -1,6 +1,6 @@
 # LOCAL-021 Móng Bè V25 runtime qualification claim
 
-- Status: IN_PROGRESS / LOCAL_ONLY / OWNER_REPOINTED / OFFLINE_READY / WAITING_FRESH_HOST_HANDOFF / RUNTIME_NOT_PROVEN
+- Status: IN_PROGRESS / LOCAL_ONLY / OFFICIAL_10228_NO_RESULT / STARTUP_WPF_VIRTUALIZATION_EXCEPTION / SOURCE_FIX_ACTIVE_4173 / WAITING_DESCENDANT_PREVIEW
 - Lane-Key: `issue-4041-raft-foundation-v25-runtime`
 - Owner/session: historical `codex-01a03c3f`; offline harness handoff from `codex-01a03d89`; owner-directed continuation `interactive-01a04259`
 - Issue: `#4041`
@@ -11,7 +11,7 @@
 - Historical tested runtime candidate: release `v0.1.0-preview.10222` at `3de0221bbda90957b801796a1ec3a8d726dddcc3`
 - Published V25 ZIP SHA-256: `9313921C076719E107DF658906F98B68E52E9F7F39CED0058F5F95727B5FD5BE`
 - Historical adapter/Core SHA-256: `9F1418DA42C23E3987F18B7EC6562F84EFDAE939B162678A01223A0638A43A0E` / `61E35FE7C678EFF725B9432C4145CCD60DF077994E21CDC5851D23CF8F5C449E`
-- Required next candidate: resolved by the owner to exact published `v0.1.0-preview.10228`; the release contains the accepted #4078/#4129 corrections and is an ancestor of the recorded current-main baseline
+- Required next candidate: a newly published descendant preview containing the landed #4173 Workspace virtualization correction; official `.10228` has now been attempted and must not be rerun
 - Superseded historical candidate: `c3282420909100332c03885e8acc7079d7fdb780` (must not be launched)
 - Source feature: issue `#4023`, merged PR `#4026`, merge commit `e646712222797c297c6f7543882aa6c49c789615`
 
@@ -35,9 +35,14 @@ Raw drawings, sidecars, screenshots, Handles, ProjectIds and machine paths remai
 
 ## Host queue
 
-Prior #4041 cells completed before feature assertions and returned literal `HOST_RELEASED` after exact cleanup. The current owner prompt repoints the same canonical carrier to `.10228`; #4041 must not launch/attach BricsCAD or mutate CurProfile, profile subtrees, DemandLoad, registry or QS3D UI layout until #72 records a fresh literal allocation naming #4041 and exact `10228@7dacdce17a6403d19681732ca7bad22cdb6f1499`.
+The exact `.10228` allocation completed as `NO_RESULT / STARTUP_WPF_VIRTUALIZATION_EXCEPTION_BEFORE_BASELINE`; #72 records protected cleanup and literal `HOST_RELEASED`. Do not launch the same binary again. After #4173 lands and a descendant preview is published, #4041 must obtain a new literal allocation naming that exact preview/source identity before touching BricsCAD, CurProfile, profile subtrees, DemandLoad, registry or QS3D UI layout.
 
 ## Runtime checkpoint
+
+- Official `v0.1.0-preview.10228` / source `7dacdce17a6403d19681732ca7bad22cdb6f1499` passed package integrity and matching ProductVersion/source identity. Licensed BricsCAD V25 reached script-started, product-NETLOAD-complete and probe-NETLOAD-complete sentinels.
+- During `QS3D`, before the baseline marker and before Workspace/Móng Bè/geometry/QTO/highlight assertions, the owned host exited with an unhandled `System.InvalidOperationException`. Windows .NET Runtime event 1026 begins at `VirtualizingStackPanel.SetVirtualizationState`, `GetOwners`, and `MeasureOverrideImpl`; WER classified `CLR20r3 / PresentationFramework`. Exact disposition is `NO_RESULT / STARTUP_WPF_VIRTUALIZATION_EXCEPTION_BEFORE_BASELINE`, not a Móng Bè product verdict.
+- Dump/crash-report SHA-256 values are `D93279A8E48B47EFD7CBC59515106AFC4BA5A674480FD86387A9B6C95D38DE08` / `7D2613185DFDD0C4EE4528D2F443DFEDBE7CA45209E229CD6DB65C767A219571`; raw files remain ignored/private. Protected cleanup passed: the owned PID exited, BricsCAD stayed zero for ten samples, the source profile and profile inventory were restored, the nonce was removed, and the exact DemandLoad/UI-layout fingerprints were restored.
+- Issue #4173 owns the non-overlapping source correction. Its current implementation locally passes the focused ModelTree virtualization guard; its latest observed CI failure is an outdated-baseline LOCAL-AGENT-INBOX guard, so the canonical source owner must reconcile current main and obtain normal green branch/PR CI before landing. This runtime lane made no production-source write.
 
 - Release `v0.1.0-preview.10222` / exact source `3de0221bbda90957b801796a1ec3a8d726dddcc3` launched exactly one owned licensed BricsCAD V25 process.
 - The cell timed out waiting for the exact baseline marker before any registered feature stage. Exact disposition: `NO_RESULT / BASELINE_MARKER_TIMEOUT`; `stages=[]`; `one_atomic_session=false`. Workspace, `+ Add`, property form, boundary authoring, QTO and yellow/red viewport behavior are all `NOT_RUN`, not failed and not passed.
