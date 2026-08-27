@@ -75,6 +75,8 @@ def main() -> int:
         require_setter(styles, target_type, "UseLayoutRounding", "True")
         require_setter(styles, target_type, "TextOptions.TextFormattingMode", "Display")
 
+    # Virtualization must remain declarative/pre-layout. Data-heavy surfaces keep Recycling in
+    # Theme.xaml, but the Loaded polish path must never transition an already-measured ItemsHost.
     for target_type in (
         "{x:Type ListBox}",
         "{x:Type ListView}",
@@ -94,27 +96,43 @@ def main() -> int:
         "typeof(Window)",
         "typeof(UserControl)",
         "HasQs3dRootAncestor(root)",
-        "ApplyVirtualizationDefaults(root)",
-        "current is DataGrid",
-        "current is ListBox",
-        "current is TreeView",
+        "ApplyDpiDefaults(root)",
+        "UiLocalization.RegisterAndApply(root)",
         "DependencyPropertyHelper.GetValueSource",
         "BaseValueSource.Default",
         "FrameworkElement.UseLayoutRoundingProperty",
         "UIElement.SnapsToDevicePixelsProperty",
         "TextOptions.TextFormattingModeProperty",
-        "ScrollViewer.CanContentScrollProperty",
-        "VirtualizingPanel.IsVirtualizingProperty",
-        "VirtualizingPanel.VirtualizationModeProperty",
-        "VirtualizationMode.Recycling",
-        "VirtualizingPanel.IsVirtualizingWhenGroupingProperty",
-        "DataGrid.EnableRowVirtualizationProperty",
-        "DataGrid.EnableColumnVirtualizationProperty",
         "element.GetType().Assembly == typeof(ProductionUiPolish).Assembly",
     )
     for token in required_polish_tokens:
         if token not in polish:
             fail(f"ProductionUiPolish.cs: required production contract missing: {token}")
+
+    # WPF records VirtualizationMode during the ItemsHost's first Measure and throws when a later
+    # layout observes a different value. ProductionUiPolish is invoked from Loaded, so it must not
+    # write any item-virtualization attached state there. Theme.xaml owns those pre-layout defaults.
+    forbidden_loaded_virtualization_tokens = (
+        "ApplyVirtualizationDefaults(",
+        "ApplyItemVirtualizationDefaults(",
+        "VirtualizingPanel.VirtualizationModeProperty",
+        "VirtualizingPanel.IsVirtualizingProperty",
+        "VirtualizingPanel.IsVirtualizingWhenGroupingProperty",
+        "ScrollViewer.CanContentScrollProperty",
+        "DataGrid.EnableRowVirtualizationProperty",
+        "DataGrid.EnableColumnVirtualizationProperty",
+        "VirtualizingPanel.SetVirtualizationMode(",
+        "VirtualizingPanel.SetIsVirtualizing(",
+        "ScrollViewer.SetCanContentScroll(",
+        "VirtualizationMode.Recycling",
+        "VirtualizationMode.Standard",
+    )
+    for token in forbidden_loaded_virtualization_tokens:
+        if token in polish:
+            fail(
+                "ProductionUiPolish.cs: Loaded-time item virtualization mutation is forbidden; "
+                f"found {token}"
+            )
 
     for forbidden_token in ("typeof(DataGrid),", "typeof(ListBox),", "typeof(TreeView),"):
         if forbidden_token in polish:
@@ -171,7 +189,11 @@ def main() -> int:
             print(f" - {error}", file=sys.stderr)
         return 1
 
-    print(f"UI_PRODUCTION_POLISH_PREFLIGHT=PASS files_scanned={len(xaml_files)} host_entries={len(PLUGIN_ENTRIES)}")
+    print(
+        "UI_PRODUCTION_POLISH_PREFLIGHT=PASS "
+        f"files_scanned={len(xaml_files)} host_entries={len(PLUGIN_ENTRIES)} "
+        "virtualization_owner=pre-layout"
+    )
     return 0
 
 
