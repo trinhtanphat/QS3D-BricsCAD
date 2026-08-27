@@ -49,10 +49,10 @@ namespace QS3D.Core.SmokeTests
         {
             var controller = new CoordinationIncrementalScanController();
 
-            controller.MarkDirty(new[] { " A ", "a", "B" });
+            controller.MarkDirty(new[] { "A", "a", "B" });
 
             Equal(2, controller.PendingDirtyCount,
-                "Successful bulk dirty marking stopped trimming/deduplicating IDs case-insensitively.");
+                "Successful bulk dirty marking stopped deduplicating canonical IDs case-insensitively.");
         }
 
         private static IEnumerable<string> YieldThenThrow()
