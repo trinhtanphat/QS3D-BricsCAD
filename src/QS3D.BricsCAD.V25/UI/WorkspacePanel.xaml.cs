@@ -27,6 +27,7 @@ namespace QS3D.BricsCAD.V25.UI
         public WorkspacePanel()
         {
             InitializeComponent();
+            ApplyModelTreeVirtualizationSafety(this);
             BindViewModel();
             ConfigureWorkspaceInteractions();
             AttachQuickDrawInteractions();
