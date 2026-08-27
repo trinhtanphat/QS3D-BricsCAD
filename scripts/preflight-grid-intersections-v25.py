@@ -15,7 +15,7 @@ for path in (COMMAND, PLANNER, DOC):
 if COMMAND.is_file():
     text = COMMAND.read_text(encoding="utf-8")
     required = (
-        '[CommandMethod("QS3DGRIDINTERSECTIONS", CommandFlags.UsePickSet)]',
+        '[CommandMethod("QS3DGRIDINTERSECTIONSINSPECT", CommandFlags.UsePickSet)]',
         'EntitySnapshotReader.ReadCurrentSelection(document)',
         'selected.Count < 2',
         'MaxGridBatch = 2000',
@@ -52,7 +52,7 @@ if COMMAND.is_file():
         'AuditTrail.',
     ):
         if forbidden in text:
-            errors.append("QS3DGRIDINTERSECTIONS must remain read-only CAD + semantic state: " + forbidden)
+            errors.append("QS3DGRIDINTERSECTIONSINSPECT must remain read-only CAD + semantic state: " + forbidden)
 
 if PLANNER.is_file():
     text = PLANNER.read_text(encoding="utf-8")
@@ -71,7 +71,7 @@ if PLANNER.is_file():
 if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")
     for token in (
-        'QS3DGRIDINTERSECTIONS',
+        'QS3DGRIDINTERSECTIONSINSPECT',
         'read-only',
         'WCS-XY',
         'normal +Z',

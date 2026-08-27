@@ -1,12 +1,14 @@
 # QS3D Grid intersections — BricsCAD V25 read-only adapter
 
-Updated: 2026-08-10 (UTC+7)
+Updated: 2026-08-27 (UTC+7)
 
 ## Command
 
-`QS3DGRIDINTERSECTIONS`
+`QS3DGRIDINTERSECTIONSINSPECT`
 
-This command is a V25 extraction/inspection layer over the existing Core `GridIntersectionPlanner`. It is intentionally **read-only**: it does not rename Grid elements, create CAD markers, write constraints, modify semantic state or move source geometry.
+This command is the V25 extraction/inspection layer over the existing Core `GridIntersectionPlanner`. It is intentionally **read-only**: it does not rename Grid elements, create CAD markers, write constraints, modify semantic state or move source geometry.
+
+The mutating pair-owned marker lifecycle is now a separate command surface: `QS3DGRIDINTERSECTIONS` materializes the reviewed pair-owned markers, while `QS3DGRIDINTERSECTIONSINSPECT` remains the bounded diagnostic/read-only path documented here. Keeping those command names separate prevents the inspection preflight from accidentally validating the mutating route.
 
 ## Selection and ownership contract
 
@@ -47,13 +49,11 @@ After extraction, `GridIntersectionPlanner.FindIntersections` owns finite geomet
 
 The command prints the count and WCS Z elevation, then prints at most the first 100 intersections using `G17` invariant coordinates and semantic Grid label/id pairs. The output cap prevents very large models from flooding the BricsCAD command line while Core still maintains its own bounded intersection limit.
 
-## Why this command does not create markers
+## Why this inspect command does not create markers
 
-`QS3DGRIDINTERSECTIONS` **does not create markers** or constraints by design.
+`QS3DGRIDINTERSECTIONSINSPECT` **does not create markers** or constraints by design.
 
-A physical intersection belongs to a **pair of Grid semantic IDs**, while the current generated-geometry ownership helper is centered on one `ProjectElement` owner. Assigning a marker arbitrarily to one of the two Grid elements would make replacement, health, delete and ownership conflict behavior asymmetric.
-
-Native intersection markers should therefore wait for a reviewed **pair ownership** contract (for example, a deterministic Grid-pair semantic relation or dedicated intersection owner record). Only then should a generated POINT/block/symbol carry stable pair-owned XData and replacement metadata.
+A physical intersection belongs to a **pair of Grid semantic IDs**. Marker creation therefore follows the reviewed deterministic **pair ownership** contract in the separate marker lifecycle rather than assigning a marker arbitrarily to only one Grid element. The read-only inspect command does not participate in replacement, health, delete or XData mutation.
 
 ## Mutation contract
 
