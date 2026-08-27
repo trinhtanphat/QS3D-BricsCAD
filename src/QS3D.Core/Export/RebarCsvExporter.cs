@@ -108,11 +108,25 @@ namespace QS3D.Core.Export
 
         private static string QIdentity(string value, string label)
         {
-            var safe = value ?? string.Empty;
+            var safe = RequireCanonicalIdentity(value, label);
             var probe = safe.TrimStart();
             if (probe.Length > 0 && (probe[0] == '=' || probe[0] == '+' || probe[0] == '-' || probe[0] == '@'))
                 throw new InvalidDataException("BBS CSV " + label + " cannot begin with a spreadsheet formula prefix because semantic identity must be preserved exactly.");
             return "\"" + safe.Replace("\"", "\"\"") + "\"";
+        }
+
+        private static string RequireCanonicalIdentity(string value, string label)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidDataException("BBS CSV " + label + " is required.");
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("BBS CSV " + label + " must not contain leading or trailing whitespace.");
+            foreach (var ch in value)
+            {
+                if (char.IsControl(ch))
+                    throw new InvalidDataException("BBS CSV " + label + " must not contain control characters.");
+            }
+            return value;
         }
 
         private static string Q(string value)
