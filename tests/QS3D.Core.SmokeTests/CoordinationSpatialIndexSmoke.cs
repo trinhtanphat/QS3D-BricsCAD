@@ -19,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             ChangedOnlyMatchesImpactedFullPairs();
             SnapshotDiffTracksLifecycleChanges();
             SnapshotDiffTracksCaseOnlyIdentityDrift();
+            Utf16IdentityValidationFailsClosed();
             ItemEnumerationIsBounded();
             ChangedItemEnumerationIsBounded();
             InvalidInputsFailClosed();
@@ -92,6 +93,30 @@ namespace QS3D.Core.SmokeTests
 
             Equal("a", string.Join("|", delta.ChangedOrAddedIds), "case-only ItemId drift was not detected");
             Equal(string.Empty, string.Join("|", delta.RemovedIds), "case-only ItemId drift was misclassified as removal");
+        }
+
+        private static void Utf16IdentityValidationFailsClosed()
+        {
+            Throws<ArgumentException>(() => Item("BAD\uD800", "1", 0, 1));
+            Throws<ArgumentException>(() => Item("BAD\uDC00", "1", 0, 1));
+            Throws<ArgumentException>(() => Item("A", "REV\uD800", 0, 1));
+            Throws<ArgumentException>(() => Item("A", "REV\uDC00", 0, 1));
+
+            const string validId = "E-😀";
+            const string validRevision = "R-🚀";
+            var index = new CoordinationSpatialIndex(1d, new[]
+            {
+                Item(validId, validRevision, 0, 1),
+                Item("B", "1", 0.5, 1.5)
+            });
+            var valid = index.Items.Single(item => item.ItemId == validId);
+            Equal(validId, valid.ItemId, "valid supplementary ItemId was not preserved");
+            Equal(validRevision, valid.Revision, "valid supplementary revision was not preserved");
+            Equal(1, index.QueryChangedPairs(new[] { validId }).Count,
+                "valid supplementary changed ItemId did not resolve its impacted pair");
+
+            Throws<ArgumentException>(() => index.QueryChangedPairs(new[] { "BAD\uD800" }));
+            Throws<ArgumentException>(() => index.QueryChangedPairs(new[] { "BAD\uDC00" }));
         }
 
         private static void ItemEnumerationIsBounded()
