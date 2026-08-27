@@ -67,6 +67,7 @@ namespace QS3D.Core.SmokeTests
             RevisionSnapshotStoreIntegritySmoke.Run();
             WorkflowPersistenceSmoke.Run();
             BbsRegressionSmoke.Run();
+            BbsXlsxElementProvenanceSmoke.Run();
             RebarCsvStrictUtf8Smoke.Run();
             WorkflowSafetySmoke.Run();
             CompletionRegressionSmoke.Run();
