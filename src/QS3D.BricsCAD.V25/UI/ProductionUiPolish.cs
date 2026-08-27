@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -7,9 +6,12 @@ using System.Windows.Media;
 namespace QS3D.BricsCAD.V25.UI
 {
     /// <summary>
-    /// Applies production-safe WPF defaults only when a QS3D control has not
-    /// explicitly selected a different value through a style, binding, template,
-    /// animation, or local value.
+    /// Applies production-safe WPF defaults that remain safe after the host has started layout.
+    ///
+    /// Virtualization policy is intentionally not mutated here. This class runs from a Loaded
+    /// handler, and WPF forbids changing VirtualizationMode after an ItemsHost has measured.
+    /// Item virtualization therefore belongs to Theme.xaml or to explicit pre-layout construction
+    /// for dynamically created controls.
     /// </summary>
     internal static class ProductionUiPolish
     {
@@ -53,9 +55,8 @@ namespace QS3D.BricsCAD.V25.UI
             }
 
             // A QS3D Window/UserControl can contain many nested QS3D UserControls.
-            // Only the outermost loaded QS3D root traverses its visual tree for polish,
-            // while nested roots still get a localization refresh because their content
-            // may have been materialized after the outer root's first Loaded event.
+            // Only the outermost loaded QS3D root applies visual polish, while nested roots still
+            // get a localization refresh because their content may have been materialized later.
             if (HasQs3dRootAncestor(root))
             {
                 UiLocalization.Apply(root);
@@ -63,7 +64,6 @@ namespace QS3D.BricsCAD.V25.UI
             }
 
             ApplyDpiDefaults(root);
-            ApplyVirtualizationDefaults(root);
             UiLocalization.RegisterAndApply(root);
         }
 
@@ -72,66 +72,6 @@ namespace QS3D.BricsCAD.V25.UI
             SetIfDefault(root, FrameworkElement.UseLayoutRoundingProperty, true);
             SetIfDefault(root, UIElement.SnapsToDevicePixelsProperty, true);
             SetIfDefault(root, TextOptions.TextFormattingModeProperty, TextFormattingMode.Display);
-        }
-
-        private static void ApplyVirtualizationDefaults(DependencyObject root)
-        {
-            var pending = new Stack<DependencyObject>();
-            pending.Push(root);
-
-            while (pending.Count > 0)
-            {
-                DependencyObject current = pending.Pop();
-                ApplyControlDefaults(current);
-
-                int childCount = VisualTreeHelper.GetChildrenCount(current);
-                for (int index = childCount - 1; index >= 0; index--)
-                {
-                    pending.Push(VisualTreeHelper.GetChild(current, index));
-                }
-            }
-        }
-
-        private static void ApplyControlDefaults(DependencyObject current)
-        {
-            if (current is DataGrid grid)
-            {
-                SetIfDefault(grid, DataGrid.EnableRowVirtualizationProperty, true);
-                SetIfDefault(grid, DataGrid.EnableColumnVirtualizationProperty, true);
-                ApplyItemVirtualizationDefaults(grid, virtualizeWhenGrouping: true);
-                return;
-            }
-
-            if (current is ListBox listBox)
-            {
-                ApplyItemVirtualizationDefaults(listBox, virtualizeWhenGrouping: true);
-                return;
-            }
-
-            if (current is TreeView treeView)
-            {
-                ApplyItemVirtualizationDefaults(treeView, virtualizeWhenGrouping: false);
-            }
-        }
-
-        private static void ApplyItemVirtualizationDefaults(
-            ItemsControl control,
-            bool virtualizeWhenGrouping)
-        {
-            SetIfDefault(control, ScrollViewer.CanContentScrollProperty, true);
-            SetIfDefault(control, VirtualizingPanel.IsVirtualizingProperty, true);
-            SetIfDefault(
-                control,
-                VirtualizingPanel.VirtualizationModeProperty,
-                VirtualizationMode.Recycling);
-
-            if (virtualizeWhenGrouping)
-            {
-                SetIfDefault(
-                    control,
-                    VirtualizingPanel.IsVirtualizingWhenGroupingProperty,
-                    true);
-            }
         }
 
         private static bool IsQs3dRoot(FrameworkElement element)
