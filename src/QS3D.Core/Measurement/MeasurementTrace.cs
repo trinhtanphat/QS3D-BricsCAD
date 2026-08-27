@@ -402,7 +402,17 @@ namespace QS3D.Core.Measurement
                 throw new ArgumentException("Measurement trace text must be canonical without surrounding whitespace.", parameterName);
             for (var i = 0; i < value.Length; i++)
             {
-                if (char.IsControl(value[i]))
+                var current = value[i];
+                if (char.IsHighSurrogate(current))
+                {
+                    if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1]))
+                        throw new ArgumentException("Measurement trace text contains malformed UTF-16.", parameterName);
+                    i++;
+                    continue;
+                }
+                if (char.IsLowSurrogate(current))
+                    throw new ArgumentException("Measurement trace text contains malformed UTF-16.", parameterName);
+                if (char.IsControl(current))
                     throw new ArgumentException("Measurement trace text cannot contain control characters.", parameterName);
             }
             return value;
