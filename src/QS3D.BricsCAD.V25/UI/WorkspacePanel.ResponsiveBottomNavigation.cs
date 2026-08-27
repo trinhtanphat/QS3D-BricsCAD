@@ -19,27 +19,36 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class WorkspacePanel
     {
         private const string ResponsiveFooterTag = "QS3D_RESPONSIVE_BOTTOM_NAV";
+        private static readonly bool ResponsiveBottomNavigationRegistered = RegisterResponsiveBottomNavigation();
         private bool _responsiveWorkspaceSizeWired;
 
-        protected override void OnInitialized(EventArgs e)
+        private static bool RegisterResponsiveBottomNavigation()
         {
-            base.OnInitialized(e);
-            Loaded += OnResponsiveWorkspaceLoaded;
+            EventManager.RegisterClassHandler(
+                typeof(WorkspacePanel),
+                FrameworkElement.LoadedEvent,
+                new RoutedEventHandler(OnResponsiveWorkspaceLoaded),
+                true);
+            return true;
         }
 
-        private void OnResponsiveWorkspaceLoaded(object sender, RoutedEventArgs e)
+        private static void OnResponsiveWorkspaceLoaded(object sender, RoutedEventArgs e)
         {
-            if (!_responsiveWorkspaceSizeWired && WorkspaceOverflow != null)
+            WorkspacePanel panel = sender as WorkspacePanel;
+            if (panel == null || !ResponsiveBottomNavigationRegistered)
+                return;
+
+            if (!panel._responsiveWorkspaceSizeWired && panel.WorkspaceOverflow != null)
             {
-                WorkspaceOverflow.SizeChanged += OnResponsiveWorkspaceSizeChanged;
-                _responsiveWorkspaceSizeWired = true;
+                panel.WorkspaceOverflow.SizeChanged += panel.OnResponsiveWorkspaceSizeChanged;
+                panel._responsiveWorkspaceSizeWired = true;
             }
 
             // BLT3D pixel parity runs at ContextIdle. Apply this shell one priority later so
             // its 42 px navigation row remains the final presentation contract.
-            Dispatcher.BeginInvoke(
+            panel.Dispatcher.BeginInvoke(
                 DispatcherPriority.ApplicationIdle,
-                new Action(ApplyResponsiveWorkspaceShell));
+                new Action(panel.ApplyResponsiveWorkspaceShell));
         }
 
         private void OnResponsiveWorkspaceSizeChanged(object sender, SizeChangedEventArgs e)
