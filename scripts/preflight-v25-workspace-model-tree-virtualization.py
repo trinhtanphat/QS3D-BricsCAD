@@ -26,7 +26,9 @@ if not errors:
     required_safety = {
         "FrameworkElement.LoadedEvent": "ModelTree safety must retain a Loaded fallback for reparenting/reload paths",
         "new RoutedEventHandler(OnModelTreeVirtualizationSafetyLoaded)": "ModelTree safety Loaded handler registration missing",
-        "private static void ApplyModelTreeVirtualizationSafety(WorkspacePanel panel)": "ModelTree safety helper missing",
+        "private static void ApplyModelTreeVirtualizationSafety(WorkspacePanel panel)": "ModelTree pre-layout safety helper missing",
+        "private static void ApplyModelTreeLoadedVirtualizationSafety(WorkspacePanel panel)": "ModelTree Loaded safety helper missing",
+        "VirtualizingPanel.SetVirtualizationMode(panel.ModelTree, VirtualizationMode.Standard);": "ModelTree must pin Standard mode before first ItemsHost Measure",
         "VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);": "ModelTree must opt out of recycling virtualization locally",
         "ScrollViewer.SetCanContentScroll(panel.ModelTree, false);": "ModelTree must use physical scrolling so a virtualizing items host is not selected",
     }
@@ -35,7 +37,31 @@ if not errors:
             errors.append(message)
 
     if not re.search(r"InitializeComponent\(\);\s*ApplyModelTreeVirtualizationSafety\(this\);", workspace):
-        errors.append("ModelTree safety must be applied immediately after InitializeComponent and before first host layout")
+        errors.append("ModelTree Standard-mode safety must be applied immediately after InitializeComponent and before first host layout")
+
+    loaded_handler = re.search(
+        r"private static void OnModelTreeVirtualizationSafetyLoaded\([^)]*\)\s*\{(?P<body>.*?)\n\s*\}",
+        safety,
+        flags=re.DOTALL,
+    )
+    if not loaded_handler:
+        errors.append("ModelTree Loaded safety handler body could not be verified")
+    else:
+        loaded_body = loaded_handler.group("body")
+        if "ApplyModelTreeLoadedVirtualizationSafety(panel);" not in loaded_body:
+            errors.append("ModelTree Loaded handler must use the post-measure-safe fallback")
+        if "ApplyModelTreeVirtualizationSafety(panel);" in loaded_body:
+            errors.append("ModelTree Loaded handler must not reapply the pre-layout VirtualizationMode pin")
+
+    loaded_helper = re.search(
+        r"private static void ApplyModelTreeLoadedVirtualizationSafety\([^)]*\)\s*\{(?P<body>.*?)\n\s*\}",
+        safety,
+        flags=re.DOTALL,
+    )
+    if not loaded_helper:
+        errors.append("ModelTree Loaded safety helper body could not be verified")
+    elif "SetVirtualizationMode" in loaded_helper.group("body") or "VirtualizationMode." in loaded_helper.group("body"):
+        errors.append("ModelTree Loaded fallback must never mutate VirtualizationMode after ItemsHost Measure")
 
     if "protected override void OnInitialized" in safety:
         errors.append("ModelTree safety must not introduce a second WorkspacePanel.OnInitialized override")
@@ -73,4 +99,4 @@ if errors:
         print(" - " + error)
     sys.exit(1)
 
-print("V25 Workspace ModelTree virtualization containment guard passed")
+print("V25 Workspace ModelTree virtualization containment guard passed with pre-layout Standard pin")
