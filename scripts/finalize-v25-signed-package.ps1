@@ -11,6 +11,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$MaxMetadataBytes = 1MB
 $SignedPayloadNames = @(
     'QS3D.BricsCAD.V25.dll',
     'QS3D.Core.dll',
@@ -165,6 +166,136 @@ function Get-SafePackageFiles {
     return @($files | Sort-Object FullName)
 }
 
+function Read-BoundedUtf8Text {
+    param(
+        [string]$Path,
+        [int64]$MaxBytes,
+        [string]$Label
+    )
+
+    $safePath = Assert-SafeFile -Path $Path -Label $Label
+    $stream = $null
+    try {
+        $stream = [IO.FileStream]::new(
+            $safePath,
+            [IO.FileMode]::Open,
+            [IO.FileAccess]::Read,
+            [IO.FileShare]::Read
+        )
+        $length = $stream.Length
+        if ($length -gt $MaxBytes) {
+            throw "$Label exceeds the $MaxBytes-byte input limit: $length bytes."
+        }
+        if ($length -gt [int]::MaxValue) {
+            throw "$Label is too large to materialize safely: $length bytes."
+        }
+
+        $bytes = New-Object byte[] ([int]$length)
+        $offset = 0
+        while ($offset -lt $bytes.Length) {
+            $read = $stream.Read($bytes, $offset, $bytes.Length - $offset)
+            if ($read -le 0) { throw "$Label changed or ended during bounded read." }
+            $offset += $read
+        }
+        if ($stream.Length -ne $length) {
+            throw "$Label changed size during bounded read."
+        }
+
+        try {
+            $utf8 = [Text.UTF8Encoding]::new($false, $true)
+            return $utf8.GetString($bytes)
+        }
+        catch {
+            throw "$Label is not valid UTF-8: $($_.Exception.Message)"
+        }
+        finally {
+            if ($bytes) { [Array]::Clear($bytes, 0, $bytes.Length) }
+        }
+    }
+    finally {
+        if ($stream) { $stream.Dispose() }
+    }
+}
+
+function New-SiblingTempPath {
+    param(
+        [string]$TargetPath,
+        [string]$Suffix
+    )
+
+    $target = Get-CanonicalFullPath -Path $TargetPath -Label 'temporary target'
+    $parent = [IO.Path]::GetDirectoryName($target)
+    Assert-NoReparseDirectoryChain -Path $parent -Label 'temporary target parent'
+    $leaf = [IO.Path]::GetFileName($target)
+    return Join-Path $parent (".$leaf.$([Guid]::NewGuid().ToString('N'))$Suffix")
+}
+
+function Write-Utf8NoBomText {
+    param([string]$Path, [string]$Text)
+    $encoding = [Text.UTF8Encoding]::new($false, $true)
+    [IO.File]::WriteAllText($Path, $Text, $encoding)
+}
+
+function Get-PackageRelativePath {
+    param([IO.FileInfo]$File, [string]$PackageRoot)
+
+    $relative = $File.FullName.Substring($PackageRoot.Length).TrimStart('\', '/').Replace([IO.Path]::DirectorySeparatorChar, '/')
+    if ([string]::IsNullOrWhiteSpace($relative) -or [IO.Path]::IsPathRooted($relative) -or $relative.Contains(':') -or $relative.Contains('\')) {
+        throw "Unsafe package-relative path while hashing: $relative"
+    }
+    $segments = @($relative.Split('/'))
+    if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
+        throw "Unsafe package-relative path while hashing: $relative"
+    }
+    return $relative
+}
+
+function Assert-ZipMatchesPackage {
+    param([string]$ZipPath, [string]$PackageRoot)
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
+    $expected = @(
+        Get-SafePackageFiles -PackageRoot $PackageRoot |
+            ForEach-Object { Get-PackageRelativePath -File $_ -PackageRoot $PackageRoot } |
+            Sort-Object
+    )
+    $archive = $null
+    try {
+        $archive = [IO.Compression.ZipFile]::OpenRead($ZipPath)
+        $actual = New-Object 'System.Collections.Generic.List[string]'
+        $seen = @{}
+        foreach ($entry in $archive.Entries) {
+            if ([string]::IsNullOrEmpty($entry.Name)) { continue }
+            $name = $entry.FullName.Replace('\', '/')
+            if ($name.StartsWith('/') -or $name.Contains(':')) {
+                throw "Staged ZIP contains an unsafe entry: $name"
+            }
+            $segments = @($name.Split('/'))
+            if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
+                throw "Staged ZIP contains an unsafe entry: $name"
+            }
+            $key = $name.ToUpperInvariant()
+            if ($seen.ContainsKey($key)) {
+                throw "Staged ZIP contains a case-insensitive duplicate entry: $name"
+            }
+            $seen[$key] = $true
+            $actual.Add($name)
+        }
+        $actualSorted = @($actual | Sort-Object)
+        if ($expected.Count -ne $actualSorted.Count) {
+            throw "Staged ZIP file-count mismatch. Expected $($expected.Count), got $($actualSorted.Count)."
+        }
+        for ($i = 0; $i -lt $expected.Count; $i++) {
+            if (-not [string]::Equals($expected[$i], $actualSorted[$i], [StringComparison]::Ordinal)) {
+                throw "Staged ZIP entry mismatch at index $i. Expected '$($expected[$i])', got '$($actualSorted[$i])'."
+            }
+        }
+    }
+    finally {
+        if ($archive) { $archive.Dispose() }
+    }
+}
+
 function Assert-AuthenticodeSigner {
     param([string]$Path, [string]$ExpectedSigner, [string]$Label)
     $signature = Get-AuthenticodeSignature -FilePath $Path
@@ -201,14 +332,13 @@ function Read-ManagedProductVersion {
 }
 
 $repositoryRoot = Assert-SafeDirectory -Path (Split-Path -Parent $PSScriptRoot) -Label 'repository root'
-$packagePath = Assert-SafeContainedDirectory -Path $PackageDirectory -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'
-$package = $packagePath
-$packageRoot = $packagePath + [IO.Path]::DirectorySeparatorChar
+$package = Assert-SafeContainedDirectory -Path $PackageDirectory -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'
+$packageRoot = $package + [IO.Path]::DirectorySeparatorChar
 $zip = Get-CanonicalFullPath -Path $PackageZip -Label 'PackageZip'
 if (-not [string]::Equals([IO.Path]::GetExtension($zip), '.zip', [StringComparison]::OrdinalIgnoreCase)) {
     throw "PackageZip must use the .zip extension: $zip"
 }
-if ([string]::Equals($zip, $packagePath, [StringComparison]::OrdinalIgnoreCase) -or
+if ([string]::Equals($zip, $package, [StringComparison]::OrdinalIgnoreCase) -or
     $zip.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'PackageZip must be outside PackageDirectory so finalization cannot delete or overwrite package payload.'
 }
@@ -216,12 +346,15 @@ $zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $reposi
 $null = @(Get-SafePackageFiles -PackageRoot $package)
 $expectedSigner = Normalize-Thumbprint $ExpectedSignerThumbprint
 $metadataPath = Assert-SafeFile -Path (Join-Path $package 'PACKAGE-METADATA.json') -Label 'PACKAGE-METADATA.json'
+
 foreach ($name in $SignedPayloadNames) {
     $path = Assert-SafeFile -Path (Join-Path $package $name) -Label ("signed-package artifact " + $name)
     Assert-AuthenticodeSigner -Path $path -ExpectedSigner $expectedSigner -Label ("QS3D executable payload " + $name)
 }
 
-$metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+$metadataText = Read-BoundedUtf8Text -Path $metadataPath -MaxBytes $MaxMetadataBytes -Label 'PACKAGE-METADATA.json'
+try { $metadata = $metadataText | ConvertFrom-Json -ErrorAction Stop }
+catch { throw "PACKAGE-METADATA.json is invalid JSON: $($_.Exception.Message)" }
 if ([string]$metadata.product -ne 'QS3D') { throw 'PACKAGE-METADATA product must be QS3D.' }
 if ([string]$metadata.target -ne 'BricsCAD V25 x64') { throw 'PACKAGE-METADATA target must be BricsCAD V25 x64.' }
 if (-not $metadata.PSObject.Properties['version']) { throw 'PACKAGE-METADATA is missing version.' }
@@ -253,56 +386,137 @@ $signedPluginVersion = $managedIdentities['QS3D.BricsCAD.V25.dll'].AssemblyVersi
 if (-not $PSCmdlet.ShouldProcess($zip, 'Finalize signed QS3D V25 package and rebuild ZIP')) { return }
 
 $package = Assert-SafeContainedDirectory -Path $package -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'
+$zipParent = [IO.Path]::GetDirectoryName($zip)
+Assert-NoReparseDirectoryChain -Path $zipParent -Label 'PackageZip parent'
+if (-not (Test-Path -LiteralPath $zipParent -PathType Container)) {
+    New-Item -ItemType Directory -Path $zipParent -Force | Out-Null
+}
+Assert-NoReparseDirectoryChain -Path $zipParent -Label 'PackageZip parent'
 $zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'
 $metadataPath = Assert-SafeFile -Path (Join-Path $package 'PACKAGE-METADATA.json') -Label 'PACKAGE-METADATA.json'
+$hashManifest = Assert-SafeOptionalFileTarget -Path (Join-Path $package 'SHA256SUMS.txt') -Label 'SHA256SUMS.txt'
+
 $metadata | Add-Member -NotePropertyName pluginSignatureStatus -NotePropertyValue 'Valid' -Force
 $metadata | Add-Member -NotePropertyName pluginSignerThumbprint -NotePropertyValue $expectedSigner -Force
 $metadata | Add-Member -NotePropertyName signedExecutablePayload -NotePropertyValue @($SignedPayloadNames) -Force
 $metadata | Add-Member -NotePropertyName signedPayloadSignerThumbprint -NotePropertyValue $expectedSigner -Force
 $metadata | Add-Member -NotePropertyName signedPluginAssemblyVersion -NotePropertyValue $signedPluginVersion.ToString() -Force
 $metadata | Add-Member -NotePropertyName signedPackageFinalizedUtc -NotePropertyValue ([DateTime]::UtcNow.ToString('o')) -Force
-$metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
 
-$package = Assert-SafeContainedDirectory -Path $package -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'
-$hashManifest = Join-Path $package 'SHA256SUMS.txt'
-if (Test-Path -LiteralPath $hashManifest) {
-    $hashManifest = Assert-SafeFile -Path $hashManifest -Label 'SHA256SUMS.txt'
-    Remove-Item -LiteralPath $hashManifest -Force
-}
-$hashLines = foreach ($file in Get-SafePackageFiles -PackageRoot $package) {
-    if ([string]::Equals($file.FullName, $hashManifest, [StringComparison]::OrdinalIgnoreCase)) { continue }
-    $relative = $file.FullName.Substring($package.Length).TrimStart('\', '/').Replace([IO.Path]::DirectorySeparatorChar, '/')
-    if ([string]::IsNullOrWhiteSpace($relative) -or [IO.Path]::IsPathRooted($relative) -or $relative.Contains(':') -or $relative.Contains('\')) {
-        throw "Unsafe package-relative path while hashing: $relative"
+$metadataStage = New-SiblingTempPath -TargetPath $metadataPath -Suffix '.stage.json'
+$metadataBackup = New-SiblingTempPath -TargetPath $zip -Suffix '.metadata.backup.json'
+$metadataRollbackDiscard = New-SiblingTempPath -TargetPath $zip -Suffix '.metadata.rollback-discard'
+$manifestStage = New-SiblingTempPath -TargetPath $hashManifest -Suffix '.stage.txt'
+$manifestBackup = New-SiblingTempPath -TargetPath $zip -Suffix '.manifest.backup.txt'
+$tempZip = New-SiblingTempPath -TargetPath $zip -Suffix '.stage.zip'
+$zipBackup = New-SiblingTempPath -TargetPath $zip -Suffix '.backup.zip'
+
+foreach ($transactionBackup in @($metadataBackup, $manifestBackup, $metadataRollbackDiscard, $zipBackup)) {
+    if (Test-PathEqualOrContained -Path $transactionBackup -Container $package) {
+        throw "Signed-package transaction backup must stay outside PackageDirectory: $transactionBackup"
     }
-    $segments = @($relative.Split('/'))
-    if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
-        throw "Unsafe package-relative path while hashing: $relative"
+}
+
+$metadataPublished = $false
+$manifestDetached = $false
+$manifestPublished = $false
+$transactionCommitted = $false
+
+try {
+    $metadataJson = $metadata | ConvertTo-Json -Depth 8
+    Write-Utf8NoBomText -Path $metadataStage -Text ($metadataJson + [Environment]::NewLine)
+    $null = Assert-SafeFile -Path $metadataStage -Label 'staged PACKAGE-METADATA.json'
+
+    [IO.File]::Replace($metadataStage, $metadataPath, $metadataBackup, $true)
+    $metadataPublished = $true
+
+    if (Test-Path -LiteralPath $hashManifest) {
+        $hashManifest = Assert-SafeFile -Path $hashManifest -Label 'SHA256SUMS.txt'
+        [IO.File]::Move($hashManifest, $manifestBackup)
+        $manifestDetached = $true
     }
-    $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
-    "$hash  $relative"
-}
-if (@($hashLines).Count -eq 0) { throw 'Signed package contains no payload files to hash.' }
-$package = Assert-SafeContainedDirectory -Path $package -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'
-$hashManifest = Assert-SafeOptionalFileTarget -Path (Join-Path $package 'SHA256SUMS.txt') -Label 'SHA256SUMS.txt'
-$hashLines | Set-Content -LiteralPath $hashManifest -Encoding ASCII
 
-$zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'
-$zipParent = Split-Path -Parent $zip
-if (-not [string]::IsNullOrWhiteSpace($zipParent)) {
-    Assert-NoReparseDirectoryChain -Path $zipParent -Label 'PackageZip parent'
-    New-Item -ItemType Directory -Path $zipParent -Force | Out-Null
-    Assert-NoReparseDirectoryChain -Path $zipParent -Label 'PackageZip parent'
-}
-$zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'
-if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
-$package = Assert-SafeContainedDirectory -Path $package -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'
-$zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'
-Compress-Archive -Path (Join-Path $package '*') -DestinationPath $zip -CompressionLevel Optimal
-$zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'
+    $hashLines = foreach ($file in Get-SafePackageFiles -PackageRoot $package) {
+        if ([string]::Equals($file.FullName, $hashManifest, [StringComparison]::OrdinalIgnoreCase)) { continue }
+        $relative = Get-PackageRelativePath -File $file -PackageRoot $package
+        $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+        "$hash  $relative"
+    }
+    if (@($hashLines).Count -eq 0) { throw 'Signed package contains no payload files to hash.' }
 
-Write-Host "FINALIZED: $zip"
-Write-Host "Signer: $expectedSigner"
-Write-Host "Signed plugin version: $($signedPluginVersion.ToString())"
-Write-Host "Signed executable payloads: $($SignedPayloadNames.Count)"
-Write-Host "ZIP SHA256: $((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant())"
+    [IO.File]::WriteAllLines($manifestStage, [string[]]$hashLines, [Text.Encoding]::ASCII)
+    $null = Assert-SafeFile -Path $manifestStage -Label 'staged SHA256SUMS.txt'
+    [IO.File]::Move($manifestStage, $hashManifest)
+    $manifestPublished = $true
+
+    $package = Assert-SafeContainedDirectory -Path $package -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'
+    $zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'
+    if (Test-Path -LiteralPath $tempZip) { throw "Staged ZIP path unexpectedly exists: $tempZip" }
+    Compress-Archive -Path (Join-Path $package '*') -DestinationPath $tempZip -CompressionLevel Optimal
+    $tempZip = Assert-SafeOptionalFileTarget -Path $tempZip -Label 'staged PackageZip'
+    if (-not (Test-Path -LiteralPath $tempZip -PathType Leaf)) {
+        throw "Staged ZIP was not created: $tempZip"
+    }
+    if ((Get-Item -LiteralPath $tempZip -Force).Length -le 0) {
+        throw 'Staged ZIP is empty.'
+    }
+    Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package
+    $stagedZipHash = (Get-FileHash -LiteralPath $tempZip -Algorithm SHA256).Hash.ToUpperInvariant()
+
+    if (Test-Path -LiteralPath $zip) {
+        $zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'
+        [IO.File]::Replace($tempZip, $zip, $zipBackup, $true)
+    }
+    else {
+        [IO.File]::Move($tempZip, $zip)
+    }
+    $transactionCommitted = $true
+
+    Write-Host "FINALIZED: $zip"
+    Write-Host "Signer: $expectedSigner"
+    Write-Host "Signed plugin version: $($signedPluginVersion.ToString())"
+    Write-Host "Signed executable payloads: $($SignedPayloadNames.Count)"
+    Write-Host "ZIP SHA256: $stagedZipHash"
+}
+catch {
+    $originalError = $_
+    $rollbackErrors = New-Object 'System.Collections.Generic.List[string]'
+
+    if ($manifestPublished -and (Test-Path -LiteralPath $hashManifest)) {
+        try { Remove-Item -LiteralPath $hashManifest -Force -ErrorAction Stop }
+        catch { $rollbackErrors.Add("remove staged manifest: $($_.Exception.Message)") }
+    }
+    if ($manifestDetached -and (Test-Path -LiteralPath $manifestBackup)) {
+        try { [IO.File]::Move($manifestBackup, $hashManifest) }
+        catch { $rollbackErrors.Add("restore original manifest: $($_.Exception.Message)") }
+    }
+    if ($metadataPublished -and (Test-Path -LiteralPath $metadataBackup)) {
+        try {
+            [IO.File]::Replace($metadataBackup, $metadataPath, $metadataRollbackDiscard, $true)
+            if (Test-Path -LiteralPath $metadataRollbackDiscard) {
+                Remove-Item -LiteralPath $metadataRollbackDiscard -Force -ErrorAction Stop
+            }
+        }
+        catch { $rollbackErrors.Add("restore original metadata: $($_.Exception.Message)") }
+    }
+
+    if ($rollbackErrors.Count -gt 0) {
+        throw "Signed-package finalization failed: $($originalError.Exception.Message). Rollback also failed: $($rollbackErrors -join '; ')"
+    }
+    throw $originalError
+}
+finally {
+    foreach ($temporary in @($metadataStage, $manifestStage, $tempZip, $metadataRollbackDiscard)) {
+        if (Test-Path -LiteralPath $temporary) {
+            Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    if ($transactionCommitted) {
+        foreach ($backup in @($metadataBackup, $manifestBackup, $zipBackup)) {
+            if (Test-Path -LiteralPath $backup) {
+                Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}

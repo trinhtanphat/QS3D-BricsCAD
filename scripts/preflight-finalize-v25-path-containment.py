@@ -68,11 +68,14 @@ if atomic_mode:
     atomic_required = (
         "function New-SiblingTempPath",
         "$metadataStage = New-SiblingTempPath -TargetPath $metadataPath",
-        "$metadataBackup = New-SiblingTempPath -TargetPath $metadataPath",
+        "$metadataBackup = New-SiblingTempPath -TargetPath $zip -Suffix '.metadata.backup.json'",
+        "$metadataRollbackDiscard = New-SiblingTempPath -TargetPath $zip -Suffix '.metadata.rollback-discard'",
         "$manifestStage = New-SiblingTempPath -TargetPath $hashManifest",
-        "$manifestBackup = New-SiblingTempPath -TargetPath $hashManifest",
+        "$manifestBackup = New-SiblingTempPath -TargetPath $zip -Suffix '.manifest.backup.txt'",
         "$tempZip = New-SiblingTempPath -TargetPath $zip",
         "$zipBackup = New-SiblingTempPath -TargetPath $zip",
+        "foreach ($transactionBackup in @($metadataBackup, $manifestBackup, $metadataRollbackDiscard, $zipBackup))",
+        "Signed-package transaction backup must stay outside PackageDirectory",
         "[IO.File]::Replace($metadataStage, $metadataPath, $metadataBackup, $true)",
         "[IO.File]::Move($hashManifest, $manifestBackup)",
         "[IO.File]::Move($manifestStage, $hashManifest)",
@@ -87,6 +90,17 @@ if atomic_mode:
     )
     for token in atomic_required:
         require(token, "atomic containment/finalizer contract token")
+
+    for forbidden_backup in (
+        "$metadataBackup = New-SiblingTempPath -TargetPath $metadataPath",
+        "$manifestBackup = New-SiblingTempPath -TargetPath $hashManifest",
+    ):
+        if forbidden_backup in source:
+            errors.append(
+                "atomic transaction backup must not be staged inside PackageDirectory: "
+                + forbidden_backup
+            )
+
     if "Remove-Item -LiteralPath $zip -Force" in source:
         errors.append("atomic finalizer must not delete the published ZIP before staged verification")
 
