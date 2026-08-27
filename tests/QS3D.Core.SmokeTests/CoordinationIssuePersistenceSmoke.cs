@@ -87,6 +87,18 @@ namespace QS3D.Core.SmokeTests
             var snapshot = CoordinationIssuePersistence.Load(project)
                 ?? throw new InvalidOperationException("Coordination snapshot was not restored.");
 
+            var canonicalLookup = snapshot.Find(issue.IssueId);
+            if (canonicalLookup == null || !string.Equals(canonicalLookup.IssueId, issue.IssueId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Canonical coordination IssueId lookup failed.");
+
+            var paddedIssueId = " " + issue.IssueId + " ";
+            if (snapshot.Find(paddedIssueId) != null)
+                throw new InvalidOperationException("Padded coordination IssueId must not alias a canonical persisted issue.");
+
+            var paddedRelink = snapshot.EvaluateRelink(project, paddedIssueId, _ => true);
+            if (paddedRelink.Status != CoordinationRelinkStatus.IssueNotFound || paddedRelink.IsActionable || paddedRelink.Issue != null)
+                throw new InvalidOperationException("Padded coordination IssueId must fail closed as IssueNotFound during relink.");
+
             var ready = snapshot.EvaluateRelink(project, issue.IssueId);
             if (ready.Status != CoordinationRelinkStatus.ReadyForHostValidation || ready.IsActionable)
                 throw new InvalidOperationException("Coordination relink became actionable before host CAD validation.");
