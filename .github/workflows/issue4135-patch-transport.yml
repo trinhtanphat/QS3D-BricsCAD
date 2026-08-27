@@ -1,0 +1,51 @@
+name: TEMP issue-4135 exact-line patch transport
+
+on:
+  push:
+    branches:
+      - agent/chatgpt-gpt56sol/issue-4135-coordination-issue-id-boundary
+    paths:
+      - .github/workflows/issue4135-patch-transport.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: agent/chatgpt-gpt56sol/issue-4135-coordination-issue-id-boundary
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          dotnet-version: 8.0.x
+      - name: Apply minimal IssueId boundary fix
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = 'src/QS3D.Core/Coordination/CoordinationIssuePersistence.cs'
+          $old = 'var normalized = (issueId ?? string.Empty).Trim();'
+          $new = 'var normalized = issueId ?? string.Empty;'
+          $text = [IO.File]::ReadAllText($path)
+          $count = ([regex]::Matches($text, [regex]::Escape($old))).Count
+          if ($count -ne 1) { throw "Expected exactly one target expression, found $count." }
+          [IO.File]::WriteAllText($path, $text.Replace($old, $new), [Text.UTF8Encoding]::new($false))
+          git diff --check
+          git diff -- $path
+      - name: Verify Core build
+        shell: pwsh
+        run: dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
+      - name: Verify deterministic smoke
+        shell: pwsh
+        run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
+      - name: Commit verified production fix
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/QS3D.Core/Coordination/CoordinationIssuePersistence.cs
+          git diff --cached --check
+          git commit -m 'fix(core): preserve coordination issue id boundary (#4135)'
+          git push origin HEAD:agent/chatgpt-gpt56sol/issue-4135-coordination-issue-id-boundary
