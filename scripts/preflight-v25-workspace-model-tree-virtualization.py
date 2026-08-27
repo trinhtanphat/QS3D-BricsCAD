@@ -7,29 +7,38 @@ ROOT = Path(__file__).resolve().parents[1]
 errors = []
 
 safety_path = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ModelTreeVirtualizationSafety.cs"
+workspace_path = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs"
 browser_path = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ProjectBrowser.cs"
 augmenter_path = ROOT / "src/QS3D.BricsCAD.V25/UI/ReferenceWorkspaceTreeAugmenter.cs"
 theme_path = ROOT / "src/QS3D.BricsCAD.V25/UI/Theme.xaml"
 
-for path in (safety_path, browser_path, augmenter_path, theme_path):
+for path in (safety_path, workspace_path, browser_path, augmenter_path, theme_path):
     if not path.is_file():
         errors.append("missing Workspace virtualization contract file: " + str(path.relative_to(ROOT)))
 
 if not errors:
     safety = safety_path.read_text(encoding="utf-8")
+    workspace = workspace_path.read_text(encoding="utf-8")
     browser = browser_path.read_text(encoding="utf-8")
     augmenter = augmenter_path.read_text(encoding="utf-8")
     theme = theme_path.read_text(encoding="utf-8")
 
     required_safety = {
-        "FrameworkElement.LoadedEvent": "ModelTree safety must be applied during Workspace Loaded before the host's next layout pass",
+        "FrameworkElement.LoadedEvent": "ModelTree safety must retain a Loaded fallback for reparenting/reload paths",
         "new RoutedEventHandler(OnModelTreeVirtualizationSafetyLoaded)": "ModelTree safety Loaded handler registration missing",
+        "private static void ApplyModelTreeVirtualizationSafety(WorkspacePanel panel)": "ModelTree safety helper missing",
         "VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);": "ModelTree must opt out of recycling virtualization locally",
         "ScrollViewer.SetCanContentScroll(panel.ModelTree, false);": "ModelTree must use physical scrolling so a virtualizing items host is not selected",
     }
     for token, message in required_safety.items():
         if token not in safety:
             errors.append(message)
+
+    if not re.search(r"InitializeComponent\(\);\s*ApplyModelTreeVirtualizationSafety\(this\);", workspace):
+        errors.append("ModelTree safety must be applied immediately after InitializeComponent and before first host layout")
+
+    if "protected override void OnInitialized" in safety:
+        errors.append("ModelTree safety must not introduce a second WorkspacePanel.OnInitialized override")
 
     browser_tokens = (
         "modelDock.Children.Remove(ModelTree);",
