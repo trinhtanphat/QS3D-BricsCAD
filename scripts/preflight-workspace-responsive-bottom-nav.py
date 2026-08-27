@@ -19,7 +19,10 @@ if not RUNTIME.is_file():
 source = RUNTIME.read_text(encoding="utf-8")
 
 required = (
-    "protected override void OnInitialized(EventArgs e)",
+    "private static readonly bool ResponsiveBottomNavigationRegistered = RegisterResponsiveBottomNavigation();",
+    "EventManager.RegisterClassHandler(",
+    "FrameworkElement.LoadedEvent",
+    "DispatcherPriority.ApplicationIdle",
     "ApplyResponsiveWorkspaceShell();",
     "WorkspaceOverflow.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;",
     "WorkspaceOverflow.PanningMode = PanningMode.None;",
@@ -49,7 +52,11 @@ for token in required:
     if token not in source:
         fail("responsive workspace source is missing: " + token)
 
-if "HorizontalScrollBarVisibility = ScrollBarVisibility.Auto" in source:
-    fail("responsive source must not restore automatic horizontal overflow")
+for forbidden in (
+    "protected override void OnInitialized(EventArgs e)",
+    "HorizontalScrollBarVisibility = ScrollBarVisibility.Auto",
+):
+    if forbidden in source:
+        fail("responsive workspace source contains forbidden lifecycle/overflow contract: " + forbidden)
 
 print("PASS workspace responsive bottom navigation source contract")
