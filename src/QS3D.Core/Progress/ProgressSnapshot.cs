@@ -351,6 +351,7 @@ namespace QS3D.Core.Progress
                 throw new ArgumentException("Progress identity token is required.", parameterName);
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new ArgumentException("Progress identity token must not contain surrounding whitespace.", parameterName);
+            RequireValidUtf16(value, parameterName, "Progress identity token");
             for (var i = 0; i < value.Length; i++)
             {
                 if (char.IsControl(value[i]) || char.IsWhiteSpace(value[i]))
@@ -365,12 +366,30 @@ namespace QS3D.Core.Progress
                 throw new ArgumentException("Progress text is required.", parameterName);
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new ArgumentException("Progress text must not contain surrounding whitespace.", parameterName);
+            RequireValidUtf16(value, parameterName, "Progress text");
             for (var i = 0; i < value.Length; i++)
             {
                 if (char.IsControl(value[i]))
                     throw new ArgumentException("Progress text must not contain control characters.", parameterName);
             }
             return value;
+        }
+
+        private static void RequireValidUtf16(string value, string parameterName, string label)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                if (char.IsHighSurrogate(value[i]))
+                {
+                    if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1]))
+                        throw new ArgumentException(label + " must not contain malformed UTF-16.", parameterName);
+                    i++;
+                    continue;
+                }
+
+                if (char.IsLowSurrogate(value[i]))
+                    throw new ArgumentException(label + " must not contain malformed UTF-16.", parameterName);
+            }
         }
 
         internal static string RequireCurrency(string value, string parameterName)
