@@ -404,12 +404,18 @@ $metadata | Add-Member -NotePropertyName signedPluginAssemblyVersion -NoteProper
 $metadata | Add-Member -NotePropertyName signedPackageFinalizedUtc -NotePropertyValue ([DateTime]::UtcNow.ToString('o')) -Force
 
 $metadataStage = New-SiblingTempPath -TargetPath $metadataPath -Suffix '.stage.json'
-$metadataBackup = New-SiblingTempPath -TargetPath $metadataPath -Suffix '.backup.json'
-$metadataRollbackDiscard = New-SiblingTempPath -TargetPath $metadataPath -Suffix '.rollback-discard'
+$metadataBackup = New-SiblingTempPath -TargetPath $zip -Suffix '.metadata.backup.json'
+$metadataRollbackDiscard = New-SiblingTempPath -TargetPath $zip -Suffix '.metadata.rollback-discard'
 $manifestStage = New-SiblingTempPath -TargetPath $hashManifest -Suffix '.stage.txt'
-$manifestBackup = New-SiblingTempPath -TargetPath $hashManifest -Suffix '.backup.txt'
+$manifestBackup = New-SiblingTempPath -TargetPath $zip -Suffix '.manifest.backup.txt'
 $tempZip = New-SiblingTempPath -TargetPath $zip -Suffix '.stage.zip'
 $zipBackup = New-SiblingTempPath -TargetPath $zip -Suffix '.backup.zip'
+
+foreach ($transactionBackup in @($metadataBackup, $manifestBackup, $metadataRollbackDiscard, $zipBackup)) {
+    if (Test-PathEqualOrContained -Path $transactionBackup -Container $package) {
+        throw "Signed-package transaction backup must stay outside PackageDirectory: $transactionBackup"
+    }
+}
 
 $metadataPublished = $false
 $manifestDetached = $false
