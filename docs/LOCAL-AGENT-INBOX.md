@@ -1,6 +1,6 @@
 # QS3D local-agent inbox
 
-**Updated:** 2026-08-26 (UTC+7)
+**Updated:** 2026-08-27 (UTC+7)
 
 This file is the **single live queue for LOCAL_ONLY work**. Detailed runbooks remain in the linked local qualification/handoff documents, but a local agent should start here before opening those longer files.
 
@@ -461,6 +461,37 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Evidence: `LOCAL_PASS` on the same exact clean pushed source SHA `9cfff87262d7a7117c5ef1f03b486271a0723fa3`. Licensed BricsCAD V25.2.10 x64 loaded `QS3D.BricsCAD.V25` (SHA-256 `0CDEB3FD5545EFBFA4B63A07856857A41A2D313115B5A940842898F2D92A34AD`) and licensed BricsCAD V26.2.07 x64 loaded `QS3D.BricsCAD.V26` (SHA-256 `B5B548E9BF99E009B14B4D188CA47366707C00254A2C87D57215177186045F1B`); both resolved the same candidate `QS3D.Core` (SHA-256 `97EDEC75303642D4568D3707E973CAC4E8FD0CE9F71E60E22036B6DDE3E93494`). Each host exported the exact ordered six-sheet workbook with QTO summary/detail, clash and duplicate counts `3/3/1/1`; production Excel-to-Model Locate established PICKFIRST counts `1/2/2`; and all four wrong-fingerprint, wrong-revision, stale-handle and partial-resolution cases refused without changing PICKFIRST or authoritative semantic state. Both source drawing hashes were unchanged, no QSDB sidecar or matching BricsCAD process remained, and the isolated V25 startup DemandLoad state was restored. Read-only workbook inspection rendered all six sheets from both hosts and found zero formula-error tokens. Raw workbooks, markers and metadata remain under ignored `artifacts/`.
 - Related source/docs: `docs/LOCAL-V25-QUALIFICATION.md`; `docs/LOCAL-V26-QUALIFICATION.md`; `src/QS3D.BricsCAD.V25/ReviewWorkbookCommands.cs`; `src/QS3D.BricsCAD.V25/ReviewWorkbookRuntimeProbeCommands.cs`; `src/QS3D.BricsCAD.V25/Services/ExcelLocateResolutionService.cs`; `src/QS3D.Core/Export/Qs3dReviewWorkbook.IssueProjection.cs`; `scripts/test-bricscad-review-workbook-roundtrip.ps1`; issue `#3536`.
 - Updated: 2026-08-24
+
+## LOCAL-021 — Móng Bè workflow and Quantity Insight viewport highlight
+
+- Priority: P0
+- Status: IN_PROGRESS
+- Area: issue `#4041`; BricsCAD V25 Móng Bè Add/Edit/native 3D/Quantity Insight viewport highlight
+- Source/artifact status: `SOURCE_FIX_LANDED / ARTIFACT_FROZEN / PENDING_LOCAL`
+- Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
+- Eligible artifact: `v0.1.0-preview.10225`; source `50a6b05280c48c706907273c83c0cdee0be52ab2`; ProductVersion `0.1.0-preview.10225`.
+- Frozen hashes: ZIP `B8C90D13B8C59D82A458B4F2FA4BCF8F2D90DFC42E88A1594AFAA42D71076583`; V25 adapter `945E72B58C298C7A8FD79DD8E284607A357DB473B6D427BB955AEB1BDF38E743`; Core `18BF61875D2ECC54E72F58EE0F9BCF2B13F95B0687A573A4F643D319A57EF0F6`.
+- Source basis: source correction #4078 landed via merged PR #4111. This LOCAL_ONLY lane must not patch production source unless a fresh runtime defect is handed off separately.
+- Runtime gate: wait for a fresh literal `HOST_RELEASED` from #72 naming #4041 and the frozen artifact before any BricsCAD/shared-host access. Hosted/static/source evidence is not `LOCAL_PASS`.
+- Scenario: qualify `Móng > Móng Bè > Add/Edit`, closed-boundary native 3D creation, expected 4 m × 6 m × 0.8 m quantity evidence, yellow included-row and red deduction-row transient viewport highlights, highlight clearing/non-persistence, and cleanup on licensed V25.
+- Evidence: historical `v0.1.0-preview.10222` = `NO_RESULT / BASELINE_MARKER_TIMEOUT`; the frozen `.10225` artifact has no licensed runtime verdict yet.
+- Evidence required: exact artifact/source/host identity; Family/native geometry/quantity/highlight results; save/reopen where specified by #4041; sanitized cleanup evidence with zero owned host residue.
+- Updated: 2026-08-27
+
+## LOCAL-022 — Móng đơn placement/edit/save-reopen on V25/V26
+
+- Priority: P0
+- Status: IN_PROGRESS
+- Area: issue `#4034`; BricsCAD V25/V26 Móng đơn Add/placement/edit/regenerate/save-reopen
+- Source/artifact status: `OFFLINE_FROZEN / D_ONLY / PENDING_RUNTIME`
+- Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
+- OFFLINE_FREEZE exact SHA: `28e48e6dbd4e8976b31ab16f344ce0f76d7a7bf5`
+- Source basis: #4019 / merged PR #4021, restored/finalized by #4058. No production source fix belongs in this runtime-only lane.
+- Scenario: independently qualify V25 and V26 Cancel, `H2=0`, repeated placement, edit/regenerate, `H2>0`, semantic/native geometry, a generic Foundation control, `QS3DSAVE`/`QSAVE`, and cold reopen on one exact frozen source identity.
+- Evidence: previous exact candidate `1ecf5532f924fe63826c37f099f86b194e1f69b9` ended `NO_RESULT / HARNESS_MODAL_READINESS_UNCLASSIFIED`; no V25 or V26 `LOCAL_PASS` exists.
+- Runtime gate: the current freeze permits D-only build/hash/harness preparation; it is not `HOST_RELEASED`. Wait for a fresh literal named host allocation before any BricsCAD/shared-host access. Later `main` drift alone does not repoint or invalidate this frozen target.
+- Evidence required: exact source/ProductVersion/hash identities for matching V25/V26 adapters and dependencies; per-host matrix verdicts; ownership/geometry/persistence checks; sanitized cleanup/no-residue evidence.
+- Updated: 2026-08-27
 
 ## LOCAL-020 — Grid pair-owned intersection marker native lifecycle
 
