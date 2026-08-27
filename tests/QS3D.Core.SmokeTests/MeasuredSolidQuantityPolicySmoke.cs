@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             RejectsPaddedPersistedMetricsAtomically();
             PreservesCanonicalPersistedMetrics();
             RejectsNumericLiteralUnderflowAtomically();
+            RejectsNegativeZeroPersistedMetricsAtomically();
             PreservesZeroAndRepresentableSubnormalMetrics();
             NoRemovalLeavesCleanElementClean();
         }
@@ -149,6 +150,54 @@ namespace QS3D.Core.SmokeTests
             Missing(element, "NetVolumeM3");
             if (element.Dirty != ElementDirtyFlags.None)
                 throw new Exception("Rejected measured literal underflow must not mutate dirty state.");
+        }
+
+        private static void RejectsNegativeZeroPersistedMetricsAtomically()
+        {
+            RejectsNegativeZeroMetricAtomically(
+                "B-negative-zero-volume",
+                MeasuredSolidQuantityPolicy.VolumeProperty,
+                "-0",
+                MeasuredSolidQuantityPolicy.SurfaceAreaProperty,
+                "25");
+            RejectsNegativeZeroMetricAtomically(
+                "B-negative-zero-surface",
+                MeasuredSolidQuantityPolicy.SurfaceAreaProperty,
+                "-0.0",
+                MeasuredSolidQuantityPolicy.VolumeProperty,
+                "12.5");
+            RejectsNegativeZeroMetricAtomically(
+                "B-negative-zero-exponent",
+                MeasuredSolidQuantityPolicy.VolumeProperty,
+                "-0e-4000",
+                MeasuredSolidQuantityPolicy.SurfaceAreaProperty,
+                "25");
+        }
+
+        private static void RejectsNegativeZeroMetricAtomically(
+            string id,
+            string negativeZeroKey,
+            string negativeZeroValue,
+            string otherKey,
+            string otherValue)
+        {
+            var element = new ProjectElement(id, ElementCategory.Beam);
+            element.SetProperty(negativeZeroKey, negativeZeroValue);
+            element.SetProperty(otherKey, otherValue);
+            element.SetQuantity("MeasuredSurfaceAreaM2", 7d);
+            element.SetQuantity("MeasuredSolidVolumeM3", 8d);
+            element.SetQuantity("GrossVolumeM3", 9d);
+            element.SetQuantity("NetVolumeM3", 10d);
+            element.MarkClean(ElementDirtyFlags.All);
+
+            var error = Capture<InvalidOperationException>(() => MeasuredSolidQuantityPolicy.Apply(element));
+            Contains(id + "/" + negativeZeroKey + " must not be negative zero.", error.Message);
+            Exact(7d, element.Quantities["MeasuredSurfaceAreaM2"]);
+            Exact(8d, element.Quantities["MeasuredSolidVolumeM3"]);
+            Exact(9d, element.Quantities["GrossVolumeM3"]);
+            Exact(10d, element.Quantities["NetVolumeM3"]);
+            if (element.Dirty != ElementDirtyFlags.None)
+                throw new Exception("Rejected negative-zero measured metric must not mutate dirty state.");
         }
 
         private static void PreservesZeroAndRepresentableSubnormalMetrics()

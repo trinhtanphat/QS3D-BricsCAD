@@ -1,14 +1,12 @@
 # QS3D Grid spatial ordering Core contract
 
-Updated: 2026-08-10 (UTC+7)
+Updated: 2026-08-26 (UTC+7)
 
-`GridSpatialOrderingPlanner` provides a CAD-independent ordering rule for one **parallel LINE Grid family** after a caller has already resolved tracked semantic Grid geometry into `GridReferenceCurve` values.
+`GridSpatialOrderingPlanner` provides CAD-independent deterministic ordering after a caller has already resolved tracked semantic Grid geometry into `GridReferenceCurve` values. The original contract remains the one **parallel LINE Grid family** rule; the reviewed extension adds an explicit mixed/radial policy without guessing architectural intent from selection order.
 
-It exists to remove arbitrary pick-order dependence from future automatic Grid renumbering without pretending that Core can infer every architectural Grid-system convention.
+## Existing parallel LINE contract
 
-## Supported contract
-
-The caller supplies:
+`OrderParallelLines(...)` is compatibility-preserved. The caller supplies:
 
 - a bounded set of unique semantic Grid IDs represented as `GridReferenceCurveKind.Line`;
 - one explicit non-zero 2D ordering axis;
@@ -16,71 +14,67 @@ The caller supplies:
 - a projected-coordinate tolerance;
 - optional ascending/descending direction.
 
-For a common rectangular Grid family:
+For a common rectangular Grid family, vertical Grid LINEs can be ordered left-to-right with axis `(1, 0)` and horizontal Grid LINEs bottom-to-top with axis `(0, 1)`. Each LINE must be perpendicular to the ordering axis within tolerance. The planner projects both endpoints onto the normalized axis and uses their average projected coordinate, so different LINE extents do not change the coordinate for a valid parallel family.
 
-- vertical Grid LINEs can be ordered left-to-right with axis `(1, 0)`;
-- horizontal Grid LINEs can be ordered bottom-to-top with axis `(0, 1)`.
+Two LINEs that project to the same coordinate within tolerance are ambiguous and fail closed rather than being silently ordered by semantic ID.
 
-Each input LINE must be perpendicular to the ordering axis within the supplied alignment tolerance. The planner projects both endpoints onto the normalized axis and uses the average projected coordinate. Different LINE extents therefore do not change the ordering coordinate for a valid parallel family.
+## reviewed mixed LINE + ARC ordering
 
-The result is a deterministic ordered list of semantic Grid IDs plus their resolved scalar coordinate.
+`OrderReviewedSet(...)` exists for a set that has already been reviewed as one ordering operation. The caller must provide all policy that geometry alone cannot safely infer:
+
+- the explicit LINE ordering axis;
+- the explicit reviewed radial center for every ARC in the set;
+- an explicit group precedence of `LinesThenArcs` or `ArcsThenLines`;
+- explicit ascending/descending choices for the LINE and ARC groups;
+- alignment and coordinate tolerances.
+
+The method first validates semantic IDs across the complete mixed set case-insensitively. LINEs are then delegated back through the canonical `OrderParallelLines(...)` implementation. ARCs must contain finite geometry, a positive radius above tolerance, a sweep in `(0, 2π]`, and a center matching the explicit reviewed radial center within tolerance. ARC ordering is by radius. Equal/near-equal radii within tolerance are ambiguous and fail closed.
+
+Group precedence is never inferred from CAD pick order. For supported inputs, selection order does not define output order: permutations of the same reviewed set produce the same semantic-ID sequence for the same explicit policy.
+
+`GridReviewedOrderingEntry` reports semantic ID, curve kind, explicit group index, and the spatial scalar used inside that group. This is planning evidence only; it is not a second Grid store or numbering engine.
 
 ## Fail-closed behavior
 
 The planner rejects instead of guessing when:
 
-- the ordering axis is zero, non-finite or cannot be normalized safely;
-- the input is empty or exceeds the bounded curve count;
-- semantic Grid IDs are duplicate case-insensitively;
-- an input curve is not a LINE;
-- a LINE is degenerate or has non-finite coordinates;
-- a LINE is not perpendicular to the explicit ordering axis within tolerance;
-- two LINEs project to the same coordinate within tolerance;
-- derived projection/delta arithmetic leaves the supported finite numeric range.
+- an ordering axis, reviewed ARC center, tolerance, endpoint or ARC parameter is non-finite/invalid;
+- the input is empty or exceeds the 2,000-curve bound;
+- semantic Grid IDs are duplicate case-insensitively, including across LINE/ARC groups;
+- a LINE is degenerate, not perpendicular to the explicit axis, or collides with another projected coordinate within tolerance;
+- an ARC has zero/near-zero radius, invalid sweep, a center inconsistent with the reviewed radial center, or a radius tie within tolerance;
+- the requested mixed group precedence is unsupported;
+- derived geometry/projection arithmetic exceeds the supported finite numeric range.
 
-The projected-coordinate tie is intentionally an error rather than an element-ID tie-break. Near-duplicate/overlapping Grid lines need review because silently choosing one label order would hide model ambiguity.
+The planner intentionally refuses arbitrary spatial tie-breaks. Duplicate/overlapping Grid sources or unclear radial families require review rather than silent renumbering.
 
-## What this does not solve
+## Architecture boundary
 
-This Core slice does **not** claim:
+This capability reuses `GridReferenceCurve` and `GridSpatialOrderingPlanner`; it does not create a second Grid catalog, semantic store, numbering engine, intersection engine or native annotation ownership layer. Pair-owned native intersection-marker lifecycle remains outside this lane (#3771).
 
-- native BricsCAD LINE/ARC extraction;
-- choosing the ordering axis automatically from CAD;
-- mixed LINE + ARC ordering;
-- radial Grid ordering;
-- rectangular/radial Grid-system grouping;
-- native bubble placement;
-- automatic renumber command/UI;
-- structure movement/snapping/constraints;
-- exact V25 runtime qualification.
-
-ARC/radial ordering needs a separate reviewed policy. A radial system may reasonably order by angle or radius depending on user intent, so Core must not invent that convention from geometry alone.
-
-## Intended native integration
-
-A future V25 automatic renumber command should:
-
-1. resolve only tracked `ElementCategory.Grid` source entities;
-2. convert native geometry into the existing `GridReferenceCurve` contract;
-3. let the user choose or visibly confirm the ordering axis/family;
-4. call `GridSpatialOrderingPlanner`;
-5. present/review the ordered semantic IDs;
-6. call the existing atomic `GridNamingService.Renumber(...)` path;
-7. update owned Grid annotations only through the canonical annotation ownership/replacement layer;
-8. preserve project/CAD rollback and post-commit UI boundaries.
-
-Do not combine automatic spatial ordering with structural relocation or engineering constraints.
+The Core contract does **not** claim that an arbitrary CAD drawing can be auto-classified into architectural Grid families. A native caller must first resolve tracked semantic Grid sources and obtain/confirm the explicit axis, radial center and mixed group precedence. Any later renumber mutation must continue through the existing atomic Grid naming/annotation ownership path.
 
 ## Source checks
 
 ```text
 python scripts/preflight-grid-spatial-ordering.py
+dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
 ```
 
-`GridSpatialOrderingSmoke` covers ascending/descending order plus fail-closed non-parallel, ARC, duplicate-ID, ambiguous-coordinate and invalid-axis cases. The repository-wide smoke-registration preflight must continue to discover and register this smoke.
+`GridSpatialOrderingSmoke` preserves the previous parallel-LINE cases and adds reviewed mixed-set permutation invariance, explicit group precedence, radial-center mismatch, radius ambiguity, cross-kind duplicate ID and invalid-ARC regressions.
 
-## Local/runtime boundary
+## Native/runtime handoff
 
-The Core planner is source-safe. Real automatic renumbering still needs exact-SHA licensed BricsCAD V25 proof for native geometry extraction, UCS/drawing coordinates, user axis selection, annotation refresh, UNDO, save/reopen and multi-DWG behavior.
+Hosted evidence can establish the Core deterministic ordering contract but cannot establish licensed BricsCAD behavior. A future reviewed native command/UI route must, on one exact integrated source SHA:
 
-Until that adapter/runtime work exists and passes, describe this capability as **Core spatial-order planning**, not completed automatic CAD Grid renumbering.
+1. resolve only tracked `ElementCategory.Grid` authoritative LINE/ARC sources;
+2. show or explicitly obtain the LINE axis, radial center and group precedence before applying any order;
+3. prove cancel/no-confirmation performs no semantic or CAD mutation;
+4. prove permutations of native selection produce the same reviewed plan;
+5. reject duplicate/ambiguous/non-finite sources without partial renumbering;
+6. route any approved renumber through the canonical atomic Grid naming + annotation ownership path;
+7. qualify UNDO/REDO, save/reopen and multi-DWG isolation in licensed V25/V26 as applicable.
+
+Until that host qualification is produced from the exact integrated SHA, runtime status is **PENDING_LOCAL**. No hosted build, smoke test or source guard may be promoted to `LOCAL_PASS`.
+
+Describe the merged source capability as **Core spatial-order planning** with an explicit reviewed mixed/radial ordering policy, not as autonomous CAD Grid renumbering.

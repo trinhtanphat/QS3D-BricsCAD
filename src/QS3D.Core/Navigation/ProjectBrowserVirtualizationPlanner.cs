@@ -112,6 +112,28 @@ namespace QS3D.Core.Navigation
                 rows);
         }
 
+        public static int ResolveContainingPageOffset(
+            ProjectBrowserNode root,
+            IEnumerable<string> expandedPaths,
+            string targetPath,
+            int pageSize = 200)
+        {
+            ValidatePaging(0, pageSize);
+            if (string.IsNullOrWhiteSpace(targetPath))
+                throw new ArgumentException("Project browser reveal target path is required.", nameof(targetPath));
+            if (!string.Equals(targetPath, targetPath.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Project browser reveal target path must not contain surrounding whitespace.", nameof(targetPath));
+
+            var index = BuildIndex(root);
+            if (!index.ContainsKey(targetPath))
+                throw new InvalidOperationException("Project browser reveal target path does not exist: " + targetPath + ".");
+            var expanded = NormalizeExpanded(expandedPaths, index);
+            var rowIndex = 0;
+            if (!TryFindVisibleRowIndex(root, Segment(root.Key), expanded, targetPath, ref rowIndex, out var targetRowIndex))
+                throw new InvalidOperationException("Project browser reveal target path is not visible after applying required expansion paths: " + targetPath + ".");
+            return targetRowIndex - (targetRowIndex % pageSize);
+        }
+
         public static ProjectBrowserElementPage GetElementPage(
             ProjectBrowserNode root,
             string nodePath,
@@ -245,6 +267,36 @@ namespace QS3D.Core.Navigation
                 var childPath = path + "/" + Segment(child.Key);
                 AppendVisibleWindow(child, childPath, depth + 1, expanded, offset, pageSize, rows, ref totalVisibleRows);
             }
+        }
+
+        private static bool TryFindVisibleRowIndex(
+            ProjectBrowserNode node,
+            string path,
+            ISet<string> expanded,
+            string targetPath,
+            ref int rowIndex,
+            out int targetRowIndex)
+        {
+            var currentRowIndex = rowIndex;
+            rowIndex++;
+            if (string.Equals(path, targetPath, StringComparison.Ordinal))
+            {
+                targetRowIndex = currentRowIndex;
+                return true;
+            }
+
+            if (expanded.Contains(path))
+            {
+                foreach (var child in node.Children)
+                {
+                    var childPath = path + "/" + Segment(child.Key);
+                    if (TryFindVisibleRowIndex(child, childPath, expanded, targetPath, ref rowIndex, out targetRowIndex))
+                        return true;
+                }
+            }
+
+            targetRowIndex = -1;
+            return false;
         }
 
         private static string Segment(string key) => Uri.EscapeDataString(key ?? string.Empty);

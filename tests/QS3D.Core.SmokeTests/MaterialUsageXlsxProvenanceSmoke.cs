@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             ExportsProvenanceAfterStableQuantityColumns();
+            RejectsElementCountMismatchBeforeReplacingDestination();
             RejectsOversizedProvenanceBeforeReplacingDestination();
             RejectsInvalidXmlControlCharacterBeforeReplacingDestination();
             AcceptsExactExcelTextBoundary();
@@ -24,8 +25,6 @@ namespace QS3D.Core.SmokeTests
                 var row = NewRow();
                 row.ProjectId = "P<&1";
                 row.DrawingFingerprint = "DWG&<fingerprint>";
-                row.ElementIds.Add("E-002");
-                row.ElementIds.Add("E-001");
                 row.SourceHandles.Add("BB2");
                 row.SourceHandles.Add("AA1");
 
@@ -44,6 +43,24 @@ namespace QS3D.Core.SmokeTests
                 Contains(sheet, "BB2 | AA1");
                 Contains(sheet, "<c r=\"H2\" s=\"2\"><v>2.5</v></c>");
                 Contains(sheet, "<c r=\"K2\" s=\"2\"><v>2.5</v></c>");
+            }
+            finally
+            {
+                Delete(path);
+            }
+        }
+
+        private static void RejectsElementCountMismatchBeforeReplacingDestination()
+        {
+            var path = TempPath();
+            try
+            {
+                File.WriteAllText(path, "existing-destination");
+                var row = NewRow();
+                row.ElementIds.RemoveAt(row.ElementIds.Count - 1);
+
+                Throws<ArgumentException>(() => MaterialUsageXlsxExporter.Export(path, new[] { row }));
+                Equal("existing-destination", File.ReadAllText(path));
             }
             finally
             {
@@ -105,7 +122,7 @@ namespace QS3D.Core.SmokeTests
 
         private static MaterialUsageRow NewRow()
         {
-            return new MaterialUsageRow
+            var row = new MaterialUsageRow
             {
                 Floor = "Floor 1",
                 MaterialName = "Concrete",
@@ -121,6 +138,9 @@ namespace QS3D.Core.SmokeTests
                 ProjectId = "PROJECT-1",
                 DrawingFingerprint = "DRAWING-1"
             };
+            row.ElementIds.Add("E-002");
+            row.ElementIds.Add("E-001");
+            return row;
         }
 
         private static string ReadSheet(string path)

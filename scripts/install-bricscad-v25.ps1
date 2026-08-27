@@ -2,6 +2,8 @@ param(
     [Parameter(Mandatory = $true)][string]$MsiPath,
     [string]$InstallDir = "",
     [string]$ExpectedSha256 = "",
+    [ValidateRange(60, 7200)][int]$InstallTimeoutSeconds = 1800,
+    [ValidateRange(1, 60)][int]$CleanupTimeoutSeconds = 10,
     [switch]$AllowUntrustedPublisher
 )
 
@@ -16,6 +18,43 @@ $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal($identity)
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw "Run this installer helper from an elevated PowerShell session."
+}
+
+function Stop-OwnedInstallerTree {
+    param(
+        [Parameter(Mandatory = $true)][System.Diagnostics.Process]$InstallerProcess,
+        [Parameter(Mandatory = $true)][int]$TimeoutSeconds
+    )
+
+    if ($InstallerProcess.HasExited) {
+        return
+    }
+
+    $cleanup = $null
+    try {
+        $cleanup = Start-Process -FilePath "taskkill.exe" -ArgumentList @(
+            '/PID',
+            $InstallerProcess.Id.ToString([Globalization.CultureInfo]::InvariantCulture),
+            '/T',
+            '/F'
+        ) -WindowStyle Hidden -PassThru
+
+        if (-not $cleanup.WaitForExit($TimeoutSeconds * 1000)) {
+            try { $cleanup.Kill() } catch { }
+            throw "Timed out while cleaning up BricsCAD installer process tree rooted at PID $($InstallerProcess.Id)."
+        }
+        if ($cleanup.ExitCode -ne 0 -and -not $InstallerProcess.HasExited) {
+            throw "Failed to clean up BricsCAD installer process tree rooted at PID $($InstallerProcess.Id). taskkill exit code: $($cleanup.ExitCode)."
+        }
+        if (-not $InstallerProcess.WaitForExit([Math]::Min($TimeoutSeconds, 5) * 1000)) {
+            throw "BricsCAD installer root process PID $($InstallerProcess.Id) remained active after bounded tree cleanup."
+        }
+    }
+    finally {
+        if ($null -ne $cleanup) {
+            $cleanup.Dispose()
+        }
+    }
 }
 
 $MsiPath = [IO.Path]::GetFullPath($MsiPath)
@@ -89,10 +128,24 @@ Write-Host "Verified MSI SHA-256: $actualSha256"
 if (-not [string]::IsNullOrWhiteSpace($publisher)) { Write-Host "Verified MSI signer: $publisher" }
 Write-Host "Verified MSI identity: $productName $productVersion"
 Write-Host "Installing BricsCAD V25 silently from: $MsiPath"
-$process = Start-Process -FilePath "msiexec.exe" -ArgumentList ([string]::Join(' ', $arguments)) -Wait -PassThru
-if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 3010) {
-    throw "BricsCAD installer failed with msiexec exit code $($process.ExitCode)."
+Write-Host "Installer timeout budget: $InstallTimeoutSeconds seconds; cleanup budget: $CleanupTimeoutSeconds seconds"
+
+$process = Start-Process -FilePath "msiexec.exe" -ArgumentList ([string]::Join(' ', $arguments)) -PassThru
+try {
+    if (-not $process.WaitForExit($InstallTimeoutSeconds * 1000)) {
+        $installerPid = $process.Id
+        Stop-OwnedInstallerTree -InstallerProcess $process -TimeoutSeconds $CleanupTimeoutSeconds
+        throw "BricsCAD installer exceeded the $InstallTimeoutSeconds-second timeout. Owned installer process tree rooted at PID $installerPid was terminated."
+    }
+
+    if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 3010) {
+        throw "BricsCAD installer failed with msiexec exit code $($process.ExitCode)."
+    }
+
+    Write-Host "BricsCAD V25 installation completed. msiexec exit code: $($process.ExitCode)"
+}
+finally {
+    $process.Dispose()
 }
 
-Write-Host "BricsCAD V25 installation completed. msiexec exit code: $($process.ExitCode)"
 Write-Host "Licensing is intentionally not automated by this repository. Activate a valid BricsCAD V25 license/trial for the dedicated runner account, launch BricsCAD once interactively, choose the desired interface/workspace, then configure BRICSCAD_V25_DIR."

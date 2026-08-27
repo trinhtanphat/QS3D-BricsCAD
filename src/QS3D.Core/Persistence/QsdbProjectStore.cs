@@ -48,6 +48,7 @@ namespace QS3D.Core.Persistence
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
             if (maximumBytes <= 0L) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
 
+            QsdbProjectStructuralCardinality.Validate(project);
             ValidateProject(project);
             ValidateSerializedXmlText(project);
             var fullPath = Path.GetFullPath(path);
@@ -207,6 +208,7 @@ namespace QS3D.Core.Persistence
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
             var fullPath = Path.GetFullPath(path);
+            PersistencePathSafety.RequireNonRedirected(fullPath, "project read");
             try
             {
                 return new ProjectLoadResult(Load(fullPath), fullPath, false, string.Empty);
@@ -214,6 +216,7 @@ namespace QS3D.Core.Persistence
             catch (Exception primary) when (IsRecoverableDataFailure(primary))
             {
                 var backupPath = fullPath + ".bak";
+                PersistencePathSafety.RequireNonRedirected(backupPath, "project backup read");
                 if (!File.Exists(backupPath)) throw;
                 try
                 {
@@ -294,6 +297,7 @@ namespace QS3D.Core.Persistence
         private static XDocument LoadDocument(string path)
         {
             var fullPath = Path.GetFullPath(path);
+            PersistencePathSafety.RequireNonRedirected(fullPath, "project read");
             var settings = new XmlReaderSettings
             {
                 DtdProcessing = DtdProcessing.Prohibit,
@@ -303,6 +307,7 @@ namespace QS3D.Core.Persistence
 
             using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
+                PersistencePathSafety.RequireNonRedirected(fullPath, "project read");
                 if (stream.Length > MaxProjectFileBytes)
                     throw new InvalidDataException("QSDB project exceeds the maximum supported file size of 64 MiB.");
 

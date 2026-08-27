@@ -64,30 +64,27 @@ def test_main_passes_one_sanitized_environment_to_every_child():
         original_scripts = module.SCRIPTS
         original_self = module.SELF
         original_discover = module.discover
-        original_run = module.subprocess.run
+        original_run_gate = module.run_gate
         original_environ = os.environ.copy()
         calls = []
 
-        class Completed:
-            returncode = 0
-
-        def fake_run(args, **kwargs):
-            calls.append((args, kwargs))
-            return Completed()
+        def fake_run_gate(path, child_env, timeout_seconds):
+            calls.append((path, child_env, timeout_seconds))
+            return 0
 
         try:
             module.ROOT = root
             module.SCRIPTS = scripts
             module.SELF = scripts / "preflight-all.py"
             module.discover = lambda: gates
-            module.subprocess.run = fake_run
+            module.run_gate = fake_run_gate
             os.environ["PYTHONPATH"] = "/tmp/poison"
             os.environ["PYTHONHOME"] = "/tmp/fake-home"
             os.environ["PYTHONWARNINGS"] = "error"
             os.environ["QS3D_SENTINEL"] = "keep-me"
             assert module.main() == 0
         finally:
-            module.subprocess.run = original_run
+            module.run_gate = original_run_gate
             module.discover = original_discover
             module.ROOT = original_root
             module.SCRIPTS = original_scripts
@@ -96,8 +93,8 @@ def test_main_passes_one_sanitized_environment_to_every_child():
             os.environ.update(original_environ)
 
         assert len(calls) == 2
-        first_env = calls[0][1]["env"]
-        assert calls[1][1]["env"] is first_env
+        first_env = calls[0][1]
+        assert calls[1][1] is first_env
         for name in module.PYTHON_ENVIRONMENT_CONTROLS:
             assert name not in first_env, name
         assert first_env["QS3D_SENTINEL"] == "keep-me"
@@ -105,11 +102,10 @@ def test_main_passes_one_sanitized_environment_to_every_child():
         assert first_env["PYTHONIOENCODING"] == "utf-8"
         assert first_env["PYTHONNOUSERSITE"] == "1"
         assert first_env["PYTHONDONTWRITEBYTECODE"] == "1"
-        for args, kwargs in calls:
-            assert args[0] == module.sys.executable
-            assert kwargs["cwd"] == str(root)
-            assert kwargs["check"] is False
-            assert kwargs["timeout"] == module.CHILD_TIMEOUT_SECONDS
+        for index, (path, child_env, timeout_seconds) in enumerate(calls):
+            assert path == gates[index]
+            assert child_env is first_env
+            assert timeout_seconds == module.CHILD_TIMEOUT_SECONDS
 
 
 def test_real_child_cannot_observe_hostile_python_controls():

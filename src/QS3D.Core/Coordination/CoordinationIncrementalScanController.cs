@@ -150,10 +150,15 @@ namespace QS3D.Core.Coordination
 
         private static string RequiredId(string value, string parameterName)
         {
-            var id = (value ?? string.Empty).Trim();
-            if (id.Length == 0) throw new ArgumentException("Coordination dirty ItemId is required.", parameterName);
-            if (id.Any(char.IsControl)) throw new ArgumentException("Control characters are not allowed.", parameterName);
-            return id;
+            var raw = value ?? string.Empty;
+            if (raw.Any(char.IsControl))
+                throw new ArgumentException("Control characters are not allowed.", parameterName);
+            var trimmed = raw.Trim();
+            if (trimmed.Length == 0)
+                throw new ArgumentException("Coordination dirty ItemId is required.", parameterName);
+            if (!string.Equals(raw, trimmed, StringComparison.Ordinal))
+                throw new ArgumentException("Coordination dirty ItemId must not contain leading or trailing whitespace.", parameterName);
+            return raw;
         }
     }
 

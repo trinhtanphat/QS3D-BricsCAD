@@ -96,13 +96,13 @@ namespace QS3D.Core.SmokeTests
 
                 var blankHandleRow = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "$12510 cost note", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1 };
                 blankHandleRow.ElementIds.Add("WF-2");
-                XlsxQuantityExporter.Export(qs3dBlankHandlePath, new[] { blankHandleRow });
-                Throws<InvalidDataException>(() => XlsxHandleReader.ReadHandleLookup(qs3dBlankHandlePath, 2));
+                Throws<InvalidDataException>(() => XlsxQuantityExporter.Export(qs3dBlankHandlePath, new[] { blankHandleRow }));
+                True(!File.Exists(qs3dBlankHandlePath));
 
                 var invalidHandle = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "Finish", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1 };
                 invalidHandle.ElementIds.Add("WF-BAD"); invalidHandle.SourceHandles.Add("NOT-HEX");
-                XlsxQuantityExporter.Export(invalidHandlePath, new[] { invalidHandle });
-                Throws<InvalidDataException>(() => XlsxHandleReader.ReadHandleLookup(invalidHandlePath, 2));
+                Throws<InvalidDataException>(() => XlsxQuantityExporter.Export(invalidHandlePath, new[] { invalidHandle }));
+                True(!File.Exists(invalidHandlePath));
 
                 var secondDetail = new QuantityReportRow { Floor = "F", Category = "WallFinish", FamilyName = "Finish", DrawingFingerprint = "DWG-FINGERPRINT-1", Count = 1 };
                 secondDetail.ElementIds.Add("WF-2"); secondDetail.SourceHandles.Add("40AA");
@@ -291,16 +291,14 @@ namespace QS3D.Core.SmokeTests
             try
             {
                 File.WriteAllText(quantityPath, "quantity-sentinel");
-                Throws<ArgumentOutOfRangeException>(() => XlsxQuantityExporter.Export(quantityPath, new[]
-                {
-                    new QuantityReportRow { Floor = "F", Category = "Beam", FamilyName = "B", Count = 1, GrossConcreteM3 = double.NaN }
-                }));
+                var invalidQuantityRow = new QuantityReportRow { Floor = "F", Category = "Beam", FamilyName = "B", DrawingFingerprint = "DWG-ATOMIC", Count = 1, GrossConcreteM3 = double.NaN };
+                invalidQuantityRow.ElementIds.Add("ATOMIC-1"); invalidQuantityRow.SourceHandles.Add("AB12");
+                Throws<ArgumentOutOfRangeException>(() => XlsxQuantityExporter.Export(quantityPath, new[] { invalidQuantityRow }));
                 Equal("quantity-sentinel", File.ReadAllText(quantityPath));
 
-                XlsxQuantityExporter.Export(quantityPath, new[]
-                {
-                    new QuantityReportRow { Floor = "F", Category = "Beam", FamilyName = "Bad\u0001Name", Count = 1 }
-                });
+                var sanitizedQuantityRow = new QuantityReportRow { Floor = "F", Category = "Beam", FamilyName = "Bad\u0001Name", DrawingFingerprint = "DWG-ATOMIC", Count = 1 };
+                sanitizedQuantityRow.ElementIds.Add("ATOMIC-2"); sanitizedQuantityRow.SourceHandles.Add("AB13");
+                XlsxQuantityExporter.Export(quantityPath, new[] { sanitizedQuantityRow });
                 using (var archive = ZipFile.OpenRead(quantityPath))
                 {
                     var worksheet = archive.GetEntry("xl/worksheets/sheet1.xml") ?? throw new Exception("Sanitized quantity worksheet is missing.");

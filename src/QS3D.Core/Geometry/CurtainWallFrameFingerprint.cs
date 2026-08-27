@@ -23,23 +23,36 @@ namespace QS3D.Core.Geometry
         public static string Compute(CurtainWallFrameFingerprintInput input)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
-            Validate(input.LengthM, nameof(input.LengthM), true);
-            Validate(input.HeightM, nameof(input.HeightM), true);
-            Validate(input.BottomOffsetM, nameof(input.BottomOffsetM), false);
-            Validate(input.MaxPanelWidthM, nameof(input.MaxPanelWidthM), true);
-            Validate(input.MaxPanelHeightM, nameof(input.MaxPanelHeightM), true);
-            Validate(input.PerimeterFrameWidthM, nameof(input.PerimeterFrameWidthM), false, true);
-            Validate(input.MullionWidthM, nameof(input.MullionWidthM), false, true);
-            Validate(input.TransomWidthM, nameof(input.TransomWidthM), false, true);
-            Validate(input.FrameDepthM, nameof(input.FrameDepthM), true);
-            ValidateRepresentableEnvelope(input);
+
+            // Snapshot every caller-mutable scalar exactly once. Validation and hashing must
+            // describe one logical input state rather than re-reading a mutable property bag.
+            var lengthM = input.LengthM;
+            var heightM = input.HeightM;
+            var bottomOffsetM = input.BottomOffsetM;
+            var maxPanelWidthM = input.MaxPanelWidthM;
+            var maxPanelHeightM = input.MaxPanelHeightM;
+            var perimeterFrameWidthM = input.PerimeterFrameWidthM;
+            var mullionWidthM = input.MullionWidthM;
+            var transomWidthM = input.TransomWidthM;
+            var frameDepthM = input.FrameDepthM;
+
+            Validate(lengthM, nameof(input.LengthM), true);
+            Validate(heightM, nameof(input.HeightM), true);
+            Validate(bottomOffsetM, nameof(input.BottomOffsetM), false);
+            Validate(maxPanelWidthM, nameof(input.MaxPanelWidthM), true);
+            Validate(maxPanelHeightM, nameof(input.MaxPanelHeightM), true);
+            Validate(perimeterFrameWidthM, nameof(input.PerimeterFrameWidthM), false, true);
+            Validate(mullionWidthM, nameof(input.MullionWidthM), false, true);
+            Validate(transomWidthM, nameof(input.TransomWidthM), false, true);
+            Validate(frameDepthM, nameof(input.FrameDepthM), true);
+            ValidateRepresentableEnvelope(lengthM, heightM, bottomOffsetM);
 
             var canonical = string.Join("|", new[]
             {
                 "CURTAIN_FRAME_V1",
-                R(input.LengthM), R(input.HeightM), R(input.BottomOffsetM),
-                R(input.MaxPanelWidthM), R(input.MaxPanelHeightM),
-                R(input.PerimeterFrameWidthM), R(input.MullionWidthM), R(input.TransomWidthM), R(input.FrameDepthM)
+                R(lengthM), R(heightM), R(bottomOffsetM),
+                R(maxPanelWidthM), R(maxPanelHeightM),
+                R(perimeterFrameWidthM), R(mullionWidthM), R(transomWidthM), R(frameDepthM)
             });
             using (var sha = SHA256.Create())
             {
@@ -50,18 +63,18 @@ namespace QS3D.Core.Geometry
             }
         }
 
-        private static void ValidateRepresentableEnvelope(CurtainWallFrameFingerprintInput input)
+        private static void ValidateRepresentableEnvelope(double lengthM, double heightM, double bottomOffsetM)
         {
-            var top = input.BottomOffsetM + input.HeightM;
+            var top = bottomOffsetM + heightM;
             if (double.IsNaN(top) || double.IsInfinity(top))
                 throw new OverflowException("Curtain frame fingerprint top elevation must remain finite.");
-            if (!(top > input.BottomOffsetM))
+            if (!(top > bottomOffsetM))
                 throw new OverflowException("Curtain frame fingerprint height is below the representable elevation resolution.");
 
-            var grossArea = input.LengthM * input.HeightM;
+            var grossArea = lengthM * heightM;
             if (double.IsNaN(grossArea) || double.IsInfinity(grossArea))
                 throw new OverflowException("Curtain frame fingerprint gross area must remain finite.");
-            if (grossArea == 0d && input.LengthM != 0d && input.HeightM != 0d)
+            if (grossArea == 0d && lengthM != 0d && heightM != 0d)
                 throw new OverflowException("Curtain frame fingerprint gross area underflowed to zero.");
         }
 

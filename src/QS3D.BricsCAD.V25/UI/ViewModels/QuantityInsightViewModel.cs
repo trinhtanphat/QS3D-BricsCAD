@@ -73,7 +73,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public string Name { get; }
         public ObservableCollection<QuantityInsightItemViewModel> Items { get; }
         public int Count => Items.Sum(x => x.Count);
-        public string Header => "Tên: " + Name + " • " + Count.ToString("N0", CultureInfo.CurrentCulture);
+        public string Header => "Name: " + Name + " • " + Count.ToString("N0", CultureInfo.CurrentCulture);
     }
 
     public sealed class QuantityInsightTypeViewModel
@@ -93,7 +93,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public string Name { get; }
         public ObservableCollection<QuantityInsightNameViewModel> Names { get; }
         public int Count { get; }
-        public string Header => "Loại: " + Name + " • " + Count.ToString("N0", CultureInfo.CurrentCulture);
+        public string Header => "Type: " + Name + " • " + Count.ToString("N0", CultureInfo.CurrentCulture);
     }
 
     public sealed class QuantityInsightFloorViewModel
@@ -114,7 +114,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         public ObservableCollection<QuantityInsightItemViewModel> Items { get; }
         public ObservableCollection<QuantityInsightTypeViewModel> Types { get; }
         public int Count => Items.Sum(x => x.Count);
-        public string Header => "Tầng: " + Name + " • " + Count.ToString("N0", CultureInfo.CurrentCulture) + " cấu kiện";
+        public string Header => "Floor: " + Name + " • " + Count.ToString("N0", CultureInfo.CurrentCulture) + " cấu kiện";
     }
 
     public sealed class QuantityInsightViewModel : INotifyPropertyChanged
