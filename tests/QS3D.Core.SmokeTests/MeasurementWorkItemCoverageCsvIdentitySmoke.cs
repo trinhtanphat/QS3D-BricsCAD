@@ -27,6 +27,7 @@ namespace QS3D.Core.SmokeTests
             AssertInvalidData(() => MeasurementWorkItemCoverageCsvExporter.ToCsv(BuildMatrix(projectId: "=project")));
             AssertInvalidData(() => MeasurementWorkItemCoverageCsvExporter.ToCsv(BuildMatrix(drawingFingerprint: "+drawing")));
             AssertInvalidData(() => MeasurementWorkItemCoverageCsvExporter.ToCsv(BuildMatrix(elementId: "-E-1")));
+            AssertInvalidData(() => MeasurementWorkItemCoverageCsvExporter.ToCsv(BuildMatrix(elementId: "E-1", secondElementId: "=E-2")));
             AssertInvalidData(() => MeasurementWorkItemCoverageCsvExporter.ToCsv(BuildMatrix(measurementItemId: "@NetVolumeM3")));
             AssertInvalidData(() => MeasurementWorkItemCoverageCsvExporter.ToCsv(BuildMatrix(mappingId: "=mapping")));
             AssertInvalidData(() => MeasurementWorkItemCoverageCsvExporter.ToCsv(BuildMatrix(classificationId: "+classification")));
@@ -100,6 +101,7 @@ namespace QS3D.Core.SmokeTests
             string projectId = "coverage-project",
             string drawingFingerprint = "coverage-drawing",
             string elementId = "E-1",
+            string? secondElementId = null,
             string measurementItemId = "NetVolumeM3",
             string mappingId = "mapping-volume",
             string classificationId = "classification-volume",
@@ -108,10 +110,8 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState(projectId, "Coverage CSV identity");
             project.DrawingFingerprint = drawingFingerprint;
 
-            var element = new ProjectElement(elementId, ElementCategory.Slab);
-            element.SetQuantity(measurementItemId, 2d);
-            element.MarkClean(ElementDirtyFlags.All);
-            project.Elements.Add(element);
+            AddElement(project, elementId, measurementItemId);
+            if (secondElementId != null) AddElement(project, secondElementId, measurementItemId);
 
             var catalog = new MeasurementWorkItemMappingCatalog(new[]
             {
@@ -125,6 +125,14 @@ namespace QS3D.Core.SmokeTests
             var report = MeasurementWorkItemCoverageReport.Create(
                 MeasurementWorkItemCoverageEvaluator.Evaluate(project, catalog));
             return MeasurementWorkItemCoverageMatrix.Create(project, report);
+        }
+
+        private static void AddElement(ProjectState project, string elementId, string measurementItemId)
+        {
+            var element = new ProjectElement(elementId, ElementCategory.Slab);
+            element.SetQuantity(measurementItemId, 2d);
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
         }
 
         private static void AssertInvalidData(Action action)
