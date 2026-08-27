@@ -46,8 +46,8 @@ namespace QS3D.Core.SmokeTests
             Equal("Beam", rule.RightCategory, "right category trim");
             Equal("High", rule.Severity, "severity trim");
 
-            var profile = new CoordinationRuleProfile("  PROFILE-1  ", 1, new[] { rule });
-            Equal("PROFILE-1", profile.ProfileId, "profile id trim");
+            var profile = new CoordinationRuleProfile("PROFILE-1", 1, new[] { rule });
+            Equal("PROFILE-1", profile.ProfileId, "canonical profile id");
 
             Throws<ArgumentException>(
                 () => new CoordinationRuleProfileBinding("  PROFILE-1  ", 1),
