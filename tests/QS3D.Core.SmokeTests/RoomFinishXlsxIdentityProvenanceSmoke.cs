@@ -108,16 +108,22 @@ namespace QS3D.Core.SmokeTests
                 RoomFinishXlsxExporter.Export(path, new[] { row });
 
                 using (var archive = ZipFile.OpenRead(path))
-                using (var reader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml").Open()))
                 {
-                    var xml = reader.ReadToEnd();
-                    Contains(xml, row.ProjectId, "ProjectId supplementary Unicode changed");
-                    Contains(xml, row.DrawingFingerprint, "DrawingFingerprint supplementary Unicode changed");
-                    Contains(xml, row.ElementIds[0], "ElementId supplementary Unicode changed");
-                    Contains(xml, row.RoomIds[0], "RoomId supplementary Unicode changed");
-                    Contains(xml, row.SourceHandles[0], "SourceHandle supplementary Unicode changed");
-                    if (xml.IndexOf('\uFFFD') >= 0)
-                        throw new InvalidOperationException("RoomFinishXlsxIdentityProvenanceSmoke: valid supplementary Unicode was replaced with U+FFFD.");
+                    var entry = archive.GetEntry("xl/worksheets/sheet1.xml");
+                    if (entry == null)
+                        throw new InvalidOperationException("RoomFinishXlsxIdentityProvenanceSmoke: generated workbook is missing xl/worksheets/sheet1.xml.");
+
+                    using (var reader = new StreamReader(entry.Open()))
+                    {
+                        var xml = reader.ReadToEnd();
+                        Contains(xml, row.ProjectId, "ProjectId supplementary Unicode changed");
+                        Contains(xml, row.DrawingFingerprint, "DrawingFingerprint supplementary Unicode changed");
+                        Contains(xml, row.ElementIds[0], "ElementId supplementary Unicode changed");
+                        Contains(xml, row.RoomIds[0], "RoomId supplementary Unicode changed");
+                        Contains(xml, row.SourceHandles[0], "SourceHandle supplementary Unicode changed");
+                        if (xml.IndexOf('\uFFFD') >= 0)
+                            throw new InvalidOperationException("RoomFinishXlsxIdentityProvenanceSmoke: valid supplementary Unicode was replaced with U+FFFD.");
+                    }
                 }
             }
             finally
