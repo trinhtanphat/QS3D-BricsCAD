@@ -145,7 +145,7 @@ def main():
     require(state, "if (!TryDecode(parts[2], out var decoded)) continue;", "recent-project corrupt-line isolation")
     require(state, "private static bool TrySettingsPath(out string path)", "optional local-state path resolver")
     require(state, "if (!TrySettingsPath(out var path)) return state;", "load fail-soft local-state path")
-    require(state, "if (!TrySettingsPath(out var path)) return;", "save fail-soft local-state path")
+    require(state, "if (!TrySettingsPath(out var path)) return false;", "save fail-soft local-state path")
     require(state, "Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)", "local state root")
     require(state, "ex is System.Security.SecurityException", "DWG/path security fail-soft guard")
     require(state, "catch (System.Security.SecurityException) { }", "local-state security fail-soft handling")
@@ -156,7 +156,7 @@ def main():
         "private static StartCenterUserStateSnapshot LoadCore()",
         "private static StartCenterUserStateSnapshot Normalize",
         "bounded local-state load")
-    require(state_load, "File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read)", "single opened state stream")
+    require(state_load, "File.Open(loadPath, FileMode.Open, FileAccess.Read, FileShare.Read)", "single opened state stream")
     require(state_load, "if (stream.Length < 0 || stream.Length > MaxFileBytes) return state;", "opened-stream state size guard")
     require(state_load, "new StreamReader(stream, Encoding.UTF8, true, 4096, false)", "streaming state reader")
     require(state_load, "while ((raw = reader.ReadLine()) != null)", "line-by-line state parsing")
@@ -165,15 +165,15 @@ def main():
 
     state_save = section(
         state,
-        "private static void TrySaveCore(StartCenterUserStateSnapshot state)",
+        "private static bool TrySaveCore(StartCenterUserStateSnapshot state)",
         "private static string Serialize",
         "bounded local-state save")
     save_tokens = (
         "var serialized = Serialize(state);",
-        "if (Encoding.UTF8.GetByteCount(serialized) > MaxFileBytes) return;",
+        "if (Encoding.UTF8.GetByteCount(serialized) > MaxFileBytes) return false;",
         "Directory.CreateDirectory(directory);",
         'temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";',
-        "File.WriteAllText(temp, serialized, new UTF8Encoding(false));",
+        "WriteDurableTemp(temp, serialized);",
     )
     save_positions = []
     for token in save_tokens:
@@ -181,7 +181,7 @@ def main():
         save_positions.append(state_save.find(token))
     if save_positions != sorted(save_positions):
         raise AssertionError("bounded local-state save must size-check serialized bytes before directory/temp creation and publish")
-    forbid(state_save, "File.WriteAllText(temp, Serialize(state)", "unbounded serialized state publish")
+    forbid(state_save, "File.WriteAllText(", "non-durable serialized state publish")
     forbid(state, "Process.Start", "Start Center state store")
 
     # Keep launcher catalog bounded and registration-backed even though the compact embedded
