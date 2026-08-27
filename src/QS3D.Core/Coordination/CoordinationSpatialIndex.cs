@@ -78,10 +78,15 @@ namespace QS3D.Core.Coordination
 
         private static string Required(string value, string parameterName)
         {
-            var normalized = (value ?? string.Empty).Trim();
-            if (normalized.Length == 0) throw new ArgumentException("Value is required.", parameterName);
-            if (normalized.Any(char.IsControl)) throw new ArgumentException("Control characters are not allowed.", parameterName);
-            return normalized;
+            var raw = value ?? string.Empty;
+            if (raw.Any(char.IsControl))
+                throw new ArgumentException("Control characters are not allowed.", parameterName);
+            var trimmed = raw.Trim();
+            if (trimmed.Length == 0)
+                throw new ArgumentException("Value is required.", parameterName);
+            if (!string.Equals(raw, trimmed, StringComparison.Ordinal))
+                throw new ArgumentException("Coordination identity text must not contain leading or trailing whitespace.", parameterName);
+            return raw;
         }
     }
 
@@ -192,8 +197,7 @@ namespace QS3D.Core.Coordination
             var changed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var raw in snapshot)
             {
-                var id = (raw ?? string.Empty).Trim();
-                if (id.Length == 0) throw new ArgumentException("Changed item ID is required.", nameof(changedItemIds));
+                var id = RequiredChangedId(raw, nameof(changedItemIds));
                 if (!_items.ContainsKey(id)) throw new KeyNotFoundException("Changed ItemId is not present in the current spatial snapshot: " + id + ".");
                 changed.Add(id);
             }
@@ -296,6 +300,19 @@ namespace QS3D.Core.Coordination
             if (count <= 0m || count > MaxCellsPerItem)
                 throw new InvalidOperationException("Spatial item spans too many grid cells.");
             return decimal.ToInt64(count);
+        }
+
+        private static string RequiredChangedId(string value, string parameterName)
+        {
+            var raw = value ?? string.Empty;
+            if (raw.Any(char.IsControl))
+                throw new ArgumentException("Control characters are not allowed.", parameterName);
+            var trimmed = raw.Trim();
+            if (trimmed.Length == 0)
+                throw new ArgumentException("Changed item ID is required.", parameterName);
+            if (!string.Equals(raw, trimmed, StringComparison.Ordinal))
+                throw new ArgumentException("Changed item ID must not contain leading or trailing whitespace.", parameterName);
+            return raw;
         }
 
         private struct CellKey : IEquatable<CellKey>
