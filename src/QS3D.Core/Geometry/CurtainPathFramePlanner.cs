@@ -250,16 +250,13 @@ namespace QS3D.Core.Geometry
 
         private static PathData BuildPath(IReadOnlyList<Point2> centerline)
         {
-            if (centerline == null) throw new ArgumentNullException(nameof(centerline));
-            if (centerline.Count < 2) throw new ArgumentException("Curtain host path requires at least two points.", nameof(centerline));
-            if (centerline.Count > MaxPathPoints) throw new InvalidOperationException("Curtain host path exceeds the supported point budget of " + MaxPathPoints + ".");
-
-            var segments = new List<PathSegment>(centerline.Count - 1);
+            var points = SnapshotCenterline(centerline);
+            var segments = new List<PathSegment>(points.Length - 1);
             var station = 0d;
-            for (var index = 0; index < centerline.Count - 1; index++)
+            for (var index = 0; index < points.Length - 1; index++)
             {
-                var start = centerline[index];
-                var end = centerline[index + 1];
+                var start = points[index];
+                var end = points[index + 1];
                 Finite(start.X, "curtain path start X");
                 Finite(start.Y, "curtain path start Y");
                 Finite(end.X, "curtain path end X");
@@ -273,6 +270,21 @@ namespace QS3D.Core.Geometry
                 station = endStation;
             }
             return new PathData(station, segments);
+        }
+
+        private static Point2[] SnapshotCenterline(IReadOnlyList<Point2> centerline)
+        {
+            if (centerline == null) throw new ArgumentNullException(nameof(centerline));
+            var count = centerline.Count;
+            if (count < 2) throw new ArgumentException("Curtain host path requires at least two points.", nameof(centerline));
+            if (count > MaxPathPoints) throw new InvalidOperationException("Curtain host path exceeds the supported point budget of " + MaxPathPoints + ".");
+
+            var snapshot = new Point2[count];
+            for (var index = 0; index < count; index++)
+                snapshot[index] = centerline[index];
+            if (centerline.Count != count)
+                throw new InvalidOperationException("Curtain host path Count changed while it was being snapshotted.");
+            return snapshot;
         }
 
         private sealed class PathData

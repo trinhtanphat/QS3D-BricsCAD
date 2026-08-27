@@ -32,7 +32,7 @@ checks = {
         "ReadPolygonFootprint", "ValidateCommonFootprint", "polygonal Foundation mesh chưa hỗ trợ bulge/curved boundary",
         "polyline.Normal.Z < 1d - 1e-9d", "ClearGeneratedFoundationMeshStale",
         "ErasePrevious(document, transaction, project, element, ownership)",
-        "GeneratedRebarNativeOwnershipService.MarkFreshGeneratedHandles(document, transaction, project, element, HandlesKey",
+        "GeneratedRebarNativeOwnershipService.MarkGenerated(document, transaction, bar, update.Project, element, HandlesKey",
         'AuditTrail.ForProject(project).Record('
     ],
     "src/QS3D.BricsCAD.V25/FoundationMeshCommands.cs": [

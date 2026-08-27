@@ -8,6 +8,8 @@ namespace QS3D.Core.Persistence
 {
     public sealed class ProjectStateSnapshot
     {
+        private const int MaximumSnapshotTopLevelEntries = 100000;
+        private const int MaximumSnapshotNestedEntries = 10000;
         private readonly ProjectState _snapshot;
         private readonly ProjectState _capturedProject;
         private readonly IReadOnlyDictionary<string, ZoneDefinition> _capturedZones;
@@ -34,6 +36,7 @@ namespace QS3D.Core.Persistence
         public static ProjectStateSnapshot Capture(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            ValidateCollectionEntries(project);
             var capturedZones = CaptureZoneReferences(project);
             var capturedFloors = CaptureFloorReferences(project);
             var capturedFamilies = CaptureFamilyReferences(project);
@@ -237,6 +240,14 @@ namespace QS3D.Core.Persistence
 
         private static void ValidateCollectionEntries(ProjectState source)
         {
+            RequireSupportedCount(source.Metadata.Count, "metadata", MaximumSnapshotNestedEntries);
+            RequireSupportedCount(source.Zones.Count, "zones", MaximumSnapshotTopLevelEntries);
+            RequireSupportedCount(source.Floors.Count, "floors", MaximumSnapshotTopLevelEntries);
+            RequireSupportedCount(source.Families.Count, "families", MaximumSnapshotTopLevelEntries);
+            RequireSupportedCount(source.Elements.Count, "elements", MaximumSnapshotTopLevelEntries);
+            RequireSupportedCount(source.QuantityRules.Count, "quantity rules", MaximumSnapshotTopLevelEntries);
+            RequireSupportedCount(source.AuditEvents.Count, "audit events", MaximumSnapshotTopLevelEntries);
+
             RequireNoNullEntries(source.Zones, "zone");
             RequireNoNullEntries(source.Floors, "floor");
             RequireNoNullEntries(source.Families, "family");
@@ -249,6 +260,24 @@ namespace QS3D.Core.Persistence
             RequireUniqueIds(source.Families, x => x.Id, "family");
             RequireUniqueIds(source.Elements, x => x.Id, "element");
             RequireUniqueIds(source.QuantityRules, x => x.Id, "quantity rule");
+
+            foreach (var family in source.Families)
+                RequireSupportedCount(family.Properties.Count, "family " + family.Id + " properties", MaximumSnapshotNestedEntries);
+
+            foreach (var element in source.Elements)
+            {
+                RequireSupportedCount(element.SourceHandles.Count, "element " + element.Id + " source handles", MaximumSnapshotNestedEntries);
+                RequireSupportedCount(element.DependsOn.Count, "element " + element.Id + " dependencies", MaximumSnapshotNestedEntries);
+                RequireSupportedCount(element.Properties.Count, "element " + element.Id + " properties", MaximumSnapshotNestedEntries);
+                RequireSupportedCount(element.Quantities.Count, "element " + element.Id + " quantities", MaximumSnapshotNestedEntries);
+            }
+        }
+
+        private static void RequireSupportedCount(int count, string label, int maximum)
+        {
+            if (count <= maximum) return;
+            throw new InvalidOperationException(
+                "Cannot snapshot a project whose " + label + " contains more than " + maximum + " entries.");
         }
 
         private static void RequireNoNullEntries<T>(IEnumerable<T> values, string label) where T : class

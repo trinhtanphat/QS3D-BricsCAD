@@ -47,7 +47,8 @@ namespace QS3D.Core.Domain
             if (string.IsNullOrWhiteSpace(value))
                 throw new ArgumentException("Family name is required.", nameof(value));
 
-            return ValidatePersistedText(value.Trim(), nameof(value), "Family name");
+            ValidatePersistedText(value, nameof(value), "Family name");
+            return value.Trim();
         }
 
         private static string NormalizeMaterial(string value)
@@ -55,7 +56,8 @@ namespace QS3D.Core.Domain
             if (string.IsNullOrWhiteSpace(value))
                 return "Khác";
 
-            return ValidatePersistedText(value.Trim(), nameof(value), "Family material");
+            ValidatePersistedText(value, nameof(value), "Family material");
+            return value.Trim();
         }
 
         private static string ValidatePersistedText(string value, string parameterName, string label)

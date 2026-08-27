@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Xml.Linq;
 using QS3D.Core.Export;
@@ -22,6 +23,8 @@ namespace QS3D.Core.SmokeTests
             BuildingSmartIdentityAndCameraShapesFailClosed();
             DanglingAndDuplicateReferencesFailClosed();
             MalformedPayloadFailsClosed();
+            OversizedSemanticPayloadFailsBeforeXmlParse();
+            OversizedFreeTextFailsAtSerializerBoundary();
             AmbiguousXmlStructureFailsClosed();
         }
 
@@ -73,7 +76,6 @@ namespace QS3D.Core.SmokeTests
             ThrowsArgument(() => new BcfOrthogonalCamera(new BcfPoint3(0d, 0d, 0d), new BcfPoint3(1d, 2d, 3d), new BcfPoint3(-2d, -4d, -6d), 1d, 1d), "Anti-parallel BCF camera direction/up vectors must fail closed.");
             ThrowsArgument(() => new BcfOrthogonalCamera(new BcfPoint3(0d, 0d, 0d), new BcfPoint3(double.MaxValue, double.MaxValue, 0d), new BcfPoint3(double.MaxValue, double.MaxValue, 0d), 1d, 1d), "Overflow-prone collinear BCF camera vectors must fail closed.");
 
-            // Keep a tiny non-collinear basis valid so the guard remains exact rather than epsilon-based.
             var tinyNonCollinear = new BcfOrthogonalCamera(
                 new BcfPoint3(0d, 0d, 0d),
                 new BcfPoint3(double.Epsilon, 0d, 0d),
@@ -122,6 +124,58 @@ namespace QS3D.Core.SmokeTests
         {
             ThrowsInvalidData(() => BcfIssueExchangeSerializer.Deserialize("<BcfIssueExchange schemaVersion=\"2.1\"></BcfIssueExchange>"), "Unsupported BCF schema versions must fail closed.");
             ThrowsInvalidData(() => BcfIssueExchangeSerializer.Deserialize("<broken"), "Malformed BCF XML must fail closed.");
+        }
+
+        private static void OversizedSemanticPayloadFailsBeforeXmlParse()
+        {
+            var oversized = new string('<', BcfIssueExchangeSerializer.MaxSemanticXmlCharacters + 1);
+            try
+            {
+                BcfIssueExchangeSerializer.Deserialize(oversized);
+            }
+            catch (InvalidDataException exception)
+            {
+                if (!string.Equals(exception.Message, "BCF payload exceeds the bounded semantic XML size.", StringComparison.Ordinal))
+                    throw new Exception("Oversized BCF semantic XML must fail at the pre-parse size guard, not inside the XML parser.");
+                return;
+            }
+            throw new Exception("Oversized BCF semantic XML must fail closed before XML parsing.");
+        }
+
+        private static void OversizedFreeTextFailsAtSerializerBoundary()
+        {
+            var oversizedTitle = new string('T', BcfIssueExchangeSerializer.MaxFreeTextCharacters + 1);
+            var topic = new BcfTopic(
+                TopicA,
+                oversizedTitle,
+                "Open",
+                "Coordination",
+                string.Empty,
+                "qa@qs3d",
+                Utc(9),
+                Array.Empty<BcfComment>(),
+                Array.Empty<BcfViewpoint>());
+            var exchange = BcfIssueExchange.Create(new[] { topic });
+            try
+            {
+                BcfIssueExchangeSerializer.Serialize(exchange);
+            }
+            catch (InvalidDataException exception)
+            {
+                if (!string.Equals(exception.Message, "BCF free-text value exceeds the bounded scalar size: Title.", StringComparison.Ordinal))
+                    throw new Exception("Oversized BCF free text must fail at the serializer scalar guard before XML materialization.");
+            }
+            catch (Exception exception)
+            {
+                throw new Exception("Oversized BCF free text failed through an unexpected boundary.", exception);
+            }
+
+            var valid = BcfIssueExchangeSerializer.Serialize(BuildFixture(false));
+            var title = new string('T', BcfIssueExchangeSerializer.MaxFreeTextCharacters + 1);
+            var oversizedPayload = valid.Replace("<Title>Canonical ordering</Title>", "<Title>" + title + "</Title>");
+            ThrowsInvalidData(
+                () => BcfIssueExchangeSerializer.Deserialize(oversizedPayload),
+                "Oversized BCF free text must fail closed on semantic XML input.");
         }
 
         private static void AmbiguousXmlStructureFailsClosed()
@@ -211,7 +265,7 @@ namespace QS3D.Core.SmokeTests
         private static void ThrowsInvalidData(Action action, string message)
         {
             try { action(); }
-            catch (System.IO.InvalidDataException) { return; }
+            catch (InvalidDataException) { return; }
             throw new Exception(message);
         }
 

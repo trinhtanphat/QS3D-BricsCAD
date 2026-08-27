@@ -20,13 +20,20 @@ function Read-ProjectProductVersion {
     [xml]$project = Get-Content -LiteralPath $ProjectPath -Raw
     $versions = @($project.Project.PropertyGroup | ForEach-Object { [string]$_.Version } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     if ($versions.Count -ne 1) { throw "Project must declare exactly one Version value: $ProjectPath" }
-    return $versions[0].Trim()
+    $value = [string]$versions[0]
+    if (-not [string]::Equals($value, $value.Trim(), [StringComparison]::Ordinal)) {
+        throw "Project Version must not contain leading or trailing whitespace: $ProjectPath"
+    }
+    return $value
 }
 
 function Convert-ToStrictSemVerText {
     param([Parameter(Mandatory = $true)][string]$Value, [Parameter(Mandatory = $true)][string]$Label)
     if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Label is missing." }
-    $text = $Value.Trim()
+    $text = [string]$Value
+    if (-not [string]::Equals($text, $text.Trim(), [StringComparison]::Ordinal)) {
+        throw "$Label must not contain leading or trailing whitespace."
+    }
     $match = [regex]::Match(
         $text,
         '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
@@ -83,9 +90,9 @@ $coreProductVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVers
 if (-not [string]::Equals($productVersion, $coreProductVersion, [StringComparison]::Ordinal)) {
     throw "QS3D V26 plugin/Core product versions differ: plugin=$productVersion core=$coreProductVersion"
 }
-if (-not [string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
+if (-not [string]::IsNullOrEmpty($env:RELEASE_TAG)) {
     $expectedTag = 'v' + $productVersion
-    if (-not [string]::Equals($env:RELEASE_TAG.Trim(), $expectedTag, [StringComparison]::Ordinal)) {
+    if (-not [string]::Equals($env:RELEASE_TAG, $expectedTag, [StringComparison]::Ordinal)) {
         throw "RELEASE_TAG must exactly match the V26 source product version. Expected $expectedTag, got $env:RELEASE_TAG."
     }
 }

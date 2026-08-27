@@ -34,15 +34,25 @@ namespace QS3D.Core.Reporting
             ReportingProjectIdentityGuard.RequireUniqueElementIds(project, detail ? "Quantity detail report" : "Quantity report");
             RoomFinishIdentityService.ValidateProject(project);
             var selectedIds = ResolveSelection(project, elementIds);
-            var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
-            var zones = project.Zones.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
-            var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+
+            var reportVersion = project.ChangeVersion;
+            var elements = project.Elements.ToList();
+            var floorInstances = project.Floors.ToList();
+            var zoneInstances = project.Zones.ToList();
+            var familyInstances = project.Families.ToList();
+            var drawingFingerprint = project.DrawingFingerprint;
+            EnsureProjectRevision(project, reportVersion, elements, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
+
+            var floors = floorInstances.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
+            var zones = zoneInstances.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
+            var families = familyInstances.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var rows = new Dictionary<string, QuantityReportRow>(StringComparer.OrdinalIgnoreCase);
             var noteValues = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
             var order = new List<string>();
 
-            foreach (var element in project.Elements)
+            foreach (var element in elements)
             {
+                EnsureProjectRevision(project, reportVersion, elements, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
                 var elementId = element.Id.Trim();
                 if (selectedIds != null && !selectedIds.Contains(elementId)) continue;
                 if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
@@ -82,7 +92,7 @@ namespace QS3D.Core.Reporting
                         Note = note,
                         DensityKgM3 = densityKgM3,
                         MassKg = massKg,
-                        DrawingFingerprint = project.DrawingFingerprint
+                        DrawingFingerprint = drawingFingerprint
                     };
                     rows[key] = row;
                     var distinctNotes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -105,8 +115,13 @@ namespace QS3D.Core.Reporting
                 var hasGrossEvidence = HasAnyQuantity(element, "GrossConcreteM3", "GrossVolumeM3");
                 var hasNetEvidence = HasAnyQuantity(element, "NetConcreteM3", "NetVolumeM3");
                 var hasDeductionEvidence = element.Quantities.ContainsKey("DeductionM3") || (hasGrossEvidence && hasNetEvidence);
-                var hasFormworkEvidence = element.Quantities.ContainsKey("FormworkM2");
+                var hasGrossFormworkEvidence = element.Quantities.ContainsKey("GrossFormworkM2");
+                var hasFormworkDeductionEvidence = HasAnyQuantity(element, "ConcreteContactDeductionM2", "FormworkDeductionM2");
+                var hasNetFormworkEvidence = HasAnyQuantity(element, "NetFormworkM2", "FormworkM2");
+                var hasFormworkEvidence = hasNetFormworkEvidence;
                 var hasLengthEvidence = element.Quantities.ContainsKey("LengthM");
+                var hasWidthEvidence = element.Quantities.ContainsKey("WidthM");
+                var hasHeightEvidence = element.Quantities.ContainsKey("HeightM");
                 var hasOuterPerimeterEvidence = element.Category == ElementCategory.Room
                     ? HasAnyQuantity(element, "OuterPerimeterM", "PerimeterM")
                     : element.Quantities.ContainsKey("OuterPerimeterM");
@@ -130,8 +145,13 @@ namespace QS3D.Core.Reporting
                 row.HasGrossConcreteM3Evidence = AggregateEvidence(row.HasGrossConcreteM3Evidence, hasGrossEvidence, created);
                 row.HasDeductionM3Evidence = AggregateEvidence(row.HasDeductionM3Evidence, hasDeductionEvidence, created);
                 row.HasNetConcreteM3Evidence = AggregateEvidence(row.HasNetConcreteM3Evidence, hasNetEvidence, created);
+                row.HasGrossFormworkM2Evidence = AggregateEvidence(row.HasGrossFormworkM2Evidence, hasGrossFormworkEvidence, created);
+                row.HasConcreteContactDeductionM2Evidence = AggregateEvidence(row.HasConcreteContactDeductionM2Evidence, hasFormworkDeductionEvidence, created);
+                row.HasNetFormworkM2Evidence = AggregateEvidence(row.HasNetFormworkM2Evidence, hasNetFormworkEvidence, created);
                 row.HasFormworkM2Evidence = AggregateEvidence(row.HasFormworkM2Evidence, hasFormworkEvidence, created);
                 row.HasLengthMEvidence = AggregateEvidence(row.HasLengthMEvidence, hasLengthEvidence, created);
+                row.HasWidthMEvidence = AggregateEvidence(row.HasWidthMEvidence, hasWidthEvidence, created);
+                row.HasHeightMEvidence = AggregateEvidence(row.HasHeightMEvidence, hasHeightEvidence, created);
                 row.HasOuterPerimeterMEvidence = AggregateEvidence(row.HasOuterPerimeterMEvidence, hasOuterPerimeterEvidence, created);
                 row.HasInnerPerimeterMEvidence = AggregateEvidence(row.HasInnerPerimeterMEvidence, hasInnerPerimeterEvidence, created);
                 row.HasDoorAreaM2Evidence = AggregateEvidence(row.HasDoorAreaM2Evidence, hasDoorAreaEvidence, created);
@@ -142,11 +162,19 @@ namespace QS3D.Core.Reporting
 
                 var gross = QFirst(element, "GrossConcreteM3", "GrossVolumeM3");
                 var net = QFirstOrFallback(element, gross, "NetConcreteM3", "NetVolumeM3");
+                var grossFormwork = Q(element, "GrossFormworkM2");
+                var formworkDeduction = QFirst(element, "ConcreteContactDeductionM2", "FormworkDeductionM2");
+                var netFormwork = QFirst(element, "NetFormworkM2", "FormworkM2");
                 row.GrossConcreteM3 = QuantityReportMath.Add(row.GrossConcreteM3, gross, element.Id + "/GrossConcreteM3");
                 row.NetConcreteM3 = QuantityReportMath.Add(row.NetConcreteM3, net, element.Id + "/NetConcreteM3");
                 row.DeductionM3 = QuantityReportMath.Add(row.DeductionM3, Q(element, "DeductionM3", Math.Max(0d, gross - net)), element.Id + "/DeductionM3");
-                row.FormworkM2 = QuantityReportMath.Add(row.FormworkM2, Q(element, "FormworkM2"), element.Id + "/FormworkM2");
+                row.GrossFormworkM2 = QuantityReportMath.Add(row.GrossFormworkM2, grossFormwork, element.Id + "/GrossFormworkM2");
+                row.ConcreteContactDeductionM2 = QuantityReportMath.Add(row.ConcreteContactDeductionM2, formworkDeduction, element.Id + "/ConcreteContactDeductionM2");
+                row.NetFormworkM2 = QuantityReportMath.Add(row.NetFormworkM2, netFormwork, element.Id + "/NetFormworkM2");
+                row.FormworkM2 = QuantityReportMath.Add(row.FormworkM2, netFormwork, element.Id + "/FormworkM2");
                 row.LengthM = QuantityReportMath.Add(row.LengthM, Q(element, "LengthM"), element.Id + "/LengthM");
+                row.WidthM = QuantityReportMath.Add(row.WidthM, Q(element, "WidthM"), element.Id + "/WidthM");
+                row.HeightM = QuantityReportMath.Add(row.HeightM, Q(element, "HeightM"), element.Id + "/HeightM");
                 row.OuterPerimeterM = QuantityReportMath.Add(row.OuterPerimeterM,
                     element.Category == ElementCategory.Room ? QFirst(element, "OuterPerimeterM", "PerimeterM") : Q(element, "OuterPerimeterM"),
                     element.Id + "/OuterPerimeterM");
@@ -168,9 +196,38 @@ namespace QS3D.Core.Reporting
                 row.OtherAreaM2 = QuantityReportMath.Add(row.OtherAreaM2, QFirst(element, "OtherAreaM2", "MeasuredSurfaceAreaM2"), element.Id + "/OtherAreaM2");
                 if (created && row.MassKg.HasValue)
                     row.MassKg = QuantityReportMath.NonNegative(row.MassKg.Value, element.Id + "/MassKg");
+                EnsureProjectRevision(project, reportVersion, elements, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
             }
 
+            EnsureProjectRevision(project, reportVersion, elements, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
             return order.Select(x => rows[x]).ToList().AsReadOnly();
+        }
+
+        private static void EnsureProjectRevision(
+            ProjectState project,
+            long expectedVersion,
+            IReadOnlyList<ProjectElement> elements,
+            IReadOnlyList<FloorDefinition> floors,
+            IReadOnlyList<ZoneDefinition> zones,
+            IReadOnlyList<ProjectFamily> families,
+            string drawingFingerprint)
+        {
+            if (project.ChangeVersion != expectedVersion ||
+                !string.Equals(project.DrawingFingerprint, drawingFingerprint, StringComparison.Ordinal) ||
+                !SameInstances(project.Elements, elements) ||
+                !SameInstances(project.Floors, floors) ||
+                !SameInstances(project.Zones, zones) ||
+                !SameInstances(project.Families, families))
+                throw new InvalidOperationException(
+                    "Project changed while the quantity report was being built; recompute the report against the current project state.");
+        }
+
+        private static bool SameInstances<T>(IList<T> current, IReadOnlyList<T> snapshot) where T : class
+        {
+            if (current.Count != snapshot.Count) return false;
+            for (var index = 0; index < current.Count; index++)
+                if (!ReferenceEquals(current[index], snapshot[index])) return false;
+            return true;
         }
 
         private static HashSet<string>? ResolveSelection(ProjectState project, IEnumerable<string>? elementIds)
@@ -191,8 +248,11 @@ namespace QS3D.Core.Reporting
                 if (observedCount > MaxSelectionElementIds)
                     throw SelectionTooLarge();
 
-                var id = (raw ?? string.Empty).Trim();
-                if (id.Length == 0) throw new ArgumentException("Quantity report element ids must not be blank.", nameof(elementIds));
+                if (string.IsNullOrWhiteSpace(raw))
+                    throw new ArgumentException("Quantity report element ids must not be blank.", nameof(elementIds));
+                if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                    throw new ArgumentException("Quantity report element ids must be canonical and must not contain surrounding whitespace. Non-canonical id: " + raw + ".", nameof(elementIds));
+                var id = raw;
                 if (!selected.Add(id))
                     throw new ArgumentException("Quantity report element ids must be unique. Duplicate id: " + id + ".", nameof(elementIds));
                 var element = project.FindElement(id) ?? throw new KeyNotFoundException("Unknown quantity report element: " + id);

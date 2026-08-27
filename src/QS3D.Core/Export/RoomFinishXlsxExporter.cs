@@ -34,7 +34,13 @@ namespace QS3D.Core.Export
                 ValidateCellText(row.Material, rowIndex, "Material");
                 ValidateCellText(row.UnitHint, rowIndex, "UnitHint");
                 ValidateJoinedCellText(row.ElementIds, rowIndex, "ElementIds");
+                ValidateProvenanceValues(row.ElementIds, rowIndex, "ElementIds");
                 ValidateJoinedCellText(row.RoomIds, rowIndex, "RoomIds");
+                ValidateProvenanceValues(row.RoomIds, rowIndex, "RoomIds");
+                ValidateProvenanceCellText(row.ProjectId, rowIndex, "ProjectId");
+                ValidateProvenanceCellText(row.DrawingFingerprint, rowIndex, "DrawingFingerprint");
+                ValidateJoinedCellText(row.SourceHandles, rowIndex, "SourceHandles");
+                ValidateProvenanceValues(row.SourceHandles, rowIndex, "SourceHandles");
                 ValidateNonNegativeCount(row.Count, rowIndex);
                 ValidateNonNegativeFinite(row.PrimaryQuantity, rowIndex, "PrimaryQuantity");
                 ValidateNonNegativeFinite(row.LengthM, rowIndex, "LengthM");
@@ -69,6 +75,8 @@ namespace QS3D.Core.Export
         {
             var row = new RoomFinishScheduleRow
             {
+                ProjectId = source.ProjectId ?? string.Empty,
+                DrawingFingerprint = source.DrawingFingerprint ?? string.Empty,
                 Floor = source.Floor ?? string.Empty,
                 Room = source.Room ?? string.Empty,
                 Category = source.Category ?? string.Empty,
@@ -82,6 +90,7 @@ namespace QS3D.Core.Export
             };
             SnapshotJoinedCellValues(source.ElementIds, row.ElementIds, rowIndex, "ElementIds");
             SnapshotJoinedCellValues(source.RoomIds, row.RoomIds, rowIndex, "RoomIds");
+            SnapshotJoinedCellValues(source.SourceHandles, row.SourceHandles, rowIndex, "SourceHandles");
             return row;
         }
 
@@ -109,14 +118,18 @@ namespace QS3D.Core.Export
 
         private static string BuildSheet(IReadOnlyList<RoomFinishScheduleRow> rows)
         {
-            var headers = new[] { "Tầng", "Phòng", "Loại hoàn thiện", "Family / Loại", "Vật liệu", "Đơn vị", "SL", "KL chính", "Dài (m)", "Diện tích (m²)", "Element IDs", "Room IDs" };
+            var headers = new[]
+            {
+                "Tầng", "Phòng", "Loại hoàn thiện", "Family / Loại", "Vật liệu", "Đơn vị", "SL", "KL chính", "Dài (m)", "Diện tích (m²)",
+                "Element IDs", "Room IDs", "Project ID", "Drawing fingerprint", "Source Handles"
+            };
             var lastRow = Math.Max(1, rows.Count + 1);
-            var range = "A1:L" + lastRow.ToString(CultureInfo.InvariantCulture);
+            var range = "A1:O" + lastRow.ToString(CultureInfo.InvariantCulture);
             var sb = new StringBuilder();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><dimension ref=\"").Append(range).Append("\"/>");
             sb.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
-            sb.Append("<cols><col min=\"1\" max=\"6\" width=\"20\" customWidth=\"1\"/><col min=\"7\" max=\"10\" width=\"15\" customWidth=\"1\"/><col min=\"11\" max=\"12\" width=\"36\" customWidth=\"1\"/></cols><sheetData>");
+            sb.Append("<cols><col min=\"1\" max=\"6\" width=\"20\" customWidth=\"1\"/><col min=\"7\" max=\"10\" width=\"15\" customWidth=\"1\"/><col min=\"11\" max=\"12\" width=\"36\" customWidth=\"1\"/><col min=\"13\" max=\"15\" width=\"36\" customWidth=\"1\"/></cols><sheetData>");
             sb.Append("<row r=\"1\">");
             for (var c = 0; c < headers.Length; c++) StringCell(sb, CellRef(c, 1), headers[c], 1);
             sb.Append("</row>");
@@ -137,6 +150,9 @@ namespace QS3D.Core.Export
                 NumberCell(sb, CellRef(9, r), row.AreaM2);
                 StringCell(sb, CellRef(10, r), string.Join(";", row.ElementIds), 0);
                 StringCell(sb, CellRef(11, r), string.Join(";", row.RoomIds), 0);
+                StringCell(sb, CellRef(12, r), row.ProjectId, 0);
+                StringCell(sb, CellRef(13, r), row.DrawingFingerprint, 0);
+                StringCell(sb, CellRef(14, r), string.Join(";", row.SourceHandles), 0);
                 sb.Append("</row>");
             }
             sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
@@ -162,6 +178,30 @@ namespace QS3D.Core.Export
                 throw new ArgumentOutOfRangeException(
                     "rows",
                     "Room-finish XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
+        }
+        private static void ValidateProvenanceCellText(string value, int rowIndex, string fieldName)
+        {
+            ValidateCellText(value, rowIndex, fieldName);
+            ValidateXmlControls(value, rowIndex, fieldName);
+        }
+
+        private static void ValidateProvenanceValues(IList<string> values, int rowIndex, string fieldName)
+        {
+            for (var index = 0; index < values.Count; index++)
+                ValidateXmlControls(values[index], rowIndex, fieldName + "[" + index.ToString(CultureInfo.InvariantCulture) + "]");
+        }
+
+        private static void ValidateXmlControls(string value, int rowIndex, string fieldName)
+        {
+            var text = value ?? string.Empty;
+            for (var index = 0; index < text.Length; index++)
+            {
+                var current = text[index];
+                if (current == '\t' || current == '\n' || current == '\r' || current >= '\u0020') continue;
+                throw new ArgumentException(
+                    "Room-finish XLSX row " + rowIndex + " field " + fieldName + " contains an XML control character.",
+                    "rows");
+            }
         }
 
         private static void ValidateJoinedCellText(IList<string> values, int rowIndex, string fieldName)

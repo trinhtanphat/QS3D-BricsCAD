@@ -1,6 +1,6 @@
 # QS3D project rollback failure matrix
 
-Updated: 2026-08-11
+Updated: 2026-08-25
 
 Status: `REMOTE_DONE` for the bounded test-only rollback regression infrastructure in this batch. Native BricsCAD transaction rollback and exact-SHA runtime qualification remain `LOCAL_ONLY`.
 
@@ -85,3 +85,13 @@ Still `LOCAL_ONLY` / separate validation:
 - exact-SHA NETLOAD/runtime qualification.
 
 Those scenarios should reuse the same principle—capture the authoritative pre-operation state and assert exact restoration—but they cannot be claimed from this Core smoke matrix alone.
+
+## LOCAL-011 executable handoff
+
+Issue `#3905` closes the repository-side orchestration gap for the existing `LOCAL-011` queue item. A compatible local agent should **pull/sync the newest intended SHA and run one command**:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-local-v25-local-011.ps1
+```
+
+The runner verifies a clean exact checkout, all four source-ready LOCAL-011 ancestors, and the canonical licensed V25 runtime baseline before starting one dedicated BricsCAD session. It records the 21 native/modeless/generated-replacement rows defined in `docs/LOCAL-011-NATIVE-QUALIFICATION.md`, writes fail-closed JSON evidence, never terminates an existing BricsCAD session, and never claims `LOCAL_PASS` on behalf of the local agent. Missing runtime capability/evidence remains `BLOCKED`/`NO_RESULT`; a product defect remains `FAIL` and returns to a normal source lane.

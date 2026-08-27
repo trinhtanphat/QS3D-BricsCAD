@@ -24,10 +24,14 @@ if SOURCE.is_file():
         "if (!File.Exists(destinationPath) && File.Exists(backupPath))",
         "File.Move(backupPath, destinationPath);",
         "RestorePreviousBackup(previousBackupSafety, backupPath);",
-        "if (!File.Exists(backupPath)) File.Move(previousBackupSafety, backupPath);",
+        'RequireSafe(previousBackupPath, "previous-backup safety");',
+        'RequireSafe(backupPath, "backup");',
+        "if (!File.Exists(backupPath)) File.Move(previousBackupPath, backupPath);",
+        'RequireSafe(tempPath, "temporary");',
+        'RequireSafe(destination, "destination");',
     ):
         if token not in text:
-            errors.append("AtomicFileCommit.cs missing recovery/prior-backup token: " + token)
+            errors.append("AtomicFileCommit.cs missing recovery/path-safety token: " + token)
     if "if (File.Exists(backupPath)) File.Delete(backupPath);" in text:
         errors.append("Atomic fallback must not delete an existing backup before the previous destination has been safely staged.")
     if "File.Copy(tempPath, destinationPath, true)" in text:
@@ -55,4 +59,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: atomic file fallback validates normalized paths before move-based replacement, restores the previous destination on install failure, preserves any pre-existing backup until commit succeeds, and does not delete recovery state on failed commit.")
+print("PASS: atomic file fallback validates normalized and non-redirected paths before move-based replacement, restores the previous destination on install failure, preserves any pre-existing backup until commit succeeds, and does not delete recovery state on failed commit.")

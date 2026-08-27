@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
-using System.Security;
 using System.Text;
 using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
@@ -14,6 +13,28 @@ namespace QS3D.Core.Export
     {
         private const int MaxDataRows = 1048575;
         private const int MaxCellTextCharacters = 32767;
+        private const string ProvenanceSeparator = " | ";
+
+        private sealed class ExportRow
+        {
+            public string Floor { get; set; } = string.Empty;
+            public string MaterialName { get; set; } = string.Empty;
+            public string UnitHint { get; set; } = string.Empty;
+            public string Component { get; set; } = string.Empty;
+            public string Category { get; set; } = string.Empty;
+            public string FamilyName { get; set; } = string.Empty;
+            public int ElementCount { get; set; }
+            public int ElementIdCount { get; set; }
+            public double PrimaryQuantity { get; set; }
+            public double LengthM { get; set; }
+            public double AreaM2 { get; set; }
+            public double VolumeM3 { get; set; }
+            public double MassKg { get; set; }
+            public string ProjectId { get; set; } = string.Empty;
+            public string DrawingFingerprint { get; set; } = string.Empty;
+            public string ElementIds { get; set; } = string.Empty;
+            public string SourceHandles { get; set; } = string.Empty;
+        }
 
         public static void Export(string path, IReadOnlyList<MaterialUsageRow> rows)
         {
@@ -21,20 +42,25 @@ namespace QS3D.Core.Export
             if (rows == null) throw new ArgumentNullException(nameof(rows));
             var rowCount = rows.Count;
             if (rowCount > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Material XLSX export supports at most " + MaxDataRows + " data rows.");
-            var snapshot = new List<MaterialUsageRow>(rowCount);
+            var snapshot = new List<ExportRow>(rowCount);
             for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
             {
                 var sourceRow = rows[rowIndex];
                 if (sourceRow == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
-                var row = SnapshotRow(sourceRow);
+                var row = SnapshotRow(sourceRow, rowIndex);
                 ValidateCellText(row.Floor, rowIndex, "Floor");
                 ValidateCellText(row.MaterialName, rowIndex, "MaterialName");
                 ValidateCellText(row.UnitHint, rowIndex, "UnitHint");
                 ValidateCellText(row.Component, rowIndex, "Component");
                 ValidateCellText(row.Category, rowIndex, "Category");
                 ValidateCellText(row.FamilyName, rowIndex, "FamilyName");
+                ValidateProvenanceText(row.ProjectId, rowIndex, "ProjectId");
+                ValidateProvenanceText(row.DrawingFingerprint, rowIndex, "DrawingFingerprint");
+                ValidateProvenanceText(row.ElementIds, rowIndex, "ElementIds");
+                ValidateProvenanceText(row.SourceHandles, rowIndex, "SourceHandles");
                 ValidateCount(row.ElementCount, rowIndex, "ElementCount");
+                ValidateElementCount(row.ElementCount, row.ElementIdCount, rowIndex);
                 ValidateNonNegative(row.PrimaryQuantity, rowIndex, "PrimaryQuantity");
                 ValidateNonNegative(row.LengthM, rowIndex, "LengthM");
                 ValidateNonNegative(row.AreaM2, rowIndex, "AreaM2");
@@ -64,21 +90,22 @@ namespace QS3D.Core.Export
             finally { AtomicFileCommit.TryDelete(tempPath); }
         }
 
-        private static string BuildSheet(IReadOnlyList<MaterialUsageRow> rows)
+        private static string BuildSheet(IReadOnlyList<ExportRow> rows)
         {
             var headers = new[]
             {
                 "Tầng", "Vật liệu", "Đơn vị", "Thành phần", "Loại cấu kiện", "Family / Loại",
-                "SL cấu kiện", "KL chính", "Dài (m)", "Diện tích (m²)", "Thể tích (m³)", "Khối lượng (kg)"
+                "SL cấu kiện", "KL chính", "Dài (m)", "Diện tích (m²)", "Thể tích (m³)", "Khối lượng (kg)",
+                "Project ID", "Drawing fingerprint", "Element IDs", "Source Handles"
             };
             var lastRow = Math.Max(1, rows.Count + 1);
-            var range = "A1:L" + lastRow.ToString(CultureInfo.InvariantCulture);
+            var range = "A1:P" + lastRow.ToString(CultureInfo.InvariantCulture);
             var sb = new StringBuilder();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
             sb.Append("<dimension ref=\"").Append(range).Append("\"/>");
             sb.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
-            sb.Append("<cols><col min=\"1\" max=\"6\" width=\"20\" customWidth=\"1\"/><col min=\"7\" max=\"12\" width=\"16\" customWidth=\"1\"/></cols><sheetData>");
+            sb.Append("<cols><col min=\"1\" max=\"6\" width=\"20\" customWidth=\"1\"/><col min=\"7\" max=\"12\" width=\"16\" customWidth=\"1\"/><col min=\"13\" max=\"16\" width=\"28\" customWidth=\"1\"/></cols><sheetData>");
             sb.Append("<row r=\"1\">");
             for (var c = 0; c < headers.Length; c++) StringCell(sb, CellRef(c, 1), headers[c], 1);
             sb.Append("</row>");
@@ -99,6 +126,10 @@ namespace QS3D.Core.Export
                 NumberCell(sb, CellRef(9, r), row.AreaM2);
                 NumberCell(sb, CellRef(10, r), row.VolumeM3);
                 NumberCell(sb, CellRef(11, r), row.MassKg);
+                StringCell(sb, CellRef(12, r), row.ProjectId, 0);
+                StringCell(sb, CellRef(13, r), row.DrawingFingerprint, 0);
+                StringCell(sb, CellRef(14, r), row.ElementIds, 0);
+                StringCell(sb, CellRef(15, r), row.SourceHandles, 0);
                 sb.Append("</row>");
             }
             sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
@@ -117,9 +148,11 @@ namespace QS3D.Core.Export
                 "xl/worksheets/sheet1.xml");
         }
 
-        private static MaterialUsageRow SnapshotRow(MaterialUsageRow row)
+        private static ExportRow SnapshotRow(MaterialUsageRow row, int rowIndex)
         {
-            return new MaterialUsageRow
+            int elementIdCount;
+            var elementIds = SnapshotProvenance(row.ElementIds, rowIndex, "ElementIds", out elementIdCount);
+            return new ExportRow
             {
                 Floor = row.Floor ?? string.Empty,
                 MaterialName = row.MaterialName ?? string.Empty,
@@ -128,11 +161,42 @@ namespace QS3D.Core.Export
                 Category = row.Category ?? string.Empty,
                 FamilyName = row.FamilyName ?? string.Empty,
                 ElementCount = row.ElementCount,
+                ElementIdCount = elementIdCount,
+                PrimaryQuantity = row.PrimaryQuantity,
                 LengthM = row.LengthM,
                 AreaM2 = row.AreaM2,
                 VolumeM3 = row.VolumeM3,
-                MassKg = row.MassKg
+                MassKg = row.MassKg,
+                ProjectId = row.ProjectId ?? string.Empty,
+                DrawingFingerprint = row.DrawingFingerprint ?? string.Empty,
+                ElementIds = elementIds,
+                SourceHandles = SnapshotProvenance(row.SourceHandles, rowIndex, "SourceHandles")
             };
+        }
+
+        private static string SnapshotProvenance(IList<string> values, int rowIndex, string fieldName)
+        {
+            int count;
+            return SnapshotProvenance(values, rowIndex, fieldName, out count);
+        }
+
+        private static string SnapshotProvenance(IList<string> values, int rowIndex, string fieldName, out int count)
+        {
+            if (values == null)
+                throw new ArgumentException("Material XLSX row " + rowIndex + " field " + fieldName + " cannot be null.", "rows");
+
+            count = values.Count;
+            var snapshot = new string[count];
+            for (var index = 0; index < snapshot.Length; index++)
+            {
+                var value = values[index];
+                if (value == null)
+                    throw new ArgumentException(
+                        "Material XLSX row " + rowIndex + " field " + fieldName + " contains a null provenance entry at index " + index + ".",
+                        "rows");
+                snapshot[index] = value;
+            }
+            return string.Join(ProvenanceSeparator, snapshot);
         }
 
         private static void ValidateCellText(string value, int rowIndex, string fieldName)
@@ -144,12 +208,35 @@ namespace QS3D.Core.Export
                     "Material XLSX row " + rowIndex + " field " + fieldName + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
         }
 
+        private static void ValidateProvenanceText(string value, int rowIndex, string fieldName)
+        {
+            ValidateCellText(value, rowIndex, fieldName);
+            var text = value ?? string.Empty;
+            for (var index = 0; index < text.Length; index++)
+            {
+                var ch = text[index];
+                if (ch == '\t' || ch == '\n' || ch == '\r') continue;
+                if (ch < 0x20)
+                    throw new InvalidDataException(
+                        "Material XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) +
+                        " field " + fieldName + " contains an invalid XML control character.");
+            }
+        }
+
         private static void ValidateCount(int value, int rowIndex, string fieldName)
         {
             if (value < 0)
                 throw new ArgumentOutOfRangeException(
                     "rows",
                     "Material XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " field " + fieldName + " must be non-negative.");
+        }
+
+        private static void ValidateElementCount(int elementCount, int elementIdCount, int rowIndex)
+        {
+            if (elementCount != elementIdCount)
+                throw new ArgumentException(
+                    "Material XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " ElementCount must match ElementIds count.",
+                    "rows");
         }
 
         private static void ValidateNonNegative(double value, int rowIndex, string fieldName)

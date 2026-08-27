@@ -17,19 +17,31 @@ if PLANNER.is_file():
     text = PLANNER.read_text(encoding="utf-8")
     required = (
         "public static IReadOnlyList<GridSpatialOrderingEntry> OrderParallelLines(",
+        "public static IReadOnlyList<GridReviewedOrderingEntry> OrderReviewedSet(",
+        "public enum GridReviewedGroupPrecedence",
+        "LinesThenArcs",
+        "ArcsThenLines",
         "private const int MaxCurves = 2000",
         "GridReferenceCurveKind.Line",
+        "GridReferenceCurveKind.Arc",
         "Grid alignment tolerance must be finite and in (0, 1)",
         "Grid ordering axis must be finite and non-zero",
         "Grid spatial ordering input contains duplicate element id",
         "currently supports parallel LINE references only",
+        "Grid reviewed ordering input contains duplicate element id",
+        "explicit reviewed radial center",
+        "same radius within tolerance",
         "is not perpendicular to the explicit ordering axis within tolerance",
         "project to the same ordering coordinate within tolerance",
         "if (descending) entries.Reverse();",
+        "if (descendingArcs) arcEntries.Reverse();",
     )
     for token in required:
         if token not in text:
             errors.append("GridSpatialOrderingPlanner.cs missing bounded/fail-closed token: " + token)
+
+    if "OrderParallelLines(lines, lineOrderingAxis, descendingLines, alignmentTolerance, coordinateTolerance)" not in text:
+        errors.append("reviewed mixed ordering must reuse the canonical parallel-LINE planner")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -41,6 +53,12 @@ if SMOKE.is_file():
         "DuplicateIdsFailClosed",
         "AmbiguousProjectedCoordinateFailsClosed",
         "InvalidAxisFailsClosed",
+        "ReviewedMixedOrderIsPermutationInvariant",
+        "ReviewedGroupPrecedenceIsExplicit",
+        "ReviewedArcCenterMismatchFailsClosed",
+        "ReviewedArcRadiusTieFailsClosed",
+        "ReviewedCrossKindDuplicateIdFailsClosed",
+        "ReviewedInvalidArcSweepFailsClosed",
     ):
         if token not in text:
             errors.append("GridSpatialOrderingSmoke.cs missing regression scenario: " + token)
@@ -54,8 +72,13 @@ if DOC.is_file():
         "parallel LINE Grid family",
         "explicit non-zero 2D ordering axis",
         "project to the same coordinate within tolerance",
-        "ARC/radial ordering needs a separate reviewed policy",
+        "reviewed mixed LINE + ARC ordering",
+        "explicit reviewed radial center",
+        "LinesThenArcs",
+        "ArcsThenLines",
+        "selection order does not define output order",
         "Core spatial-order planning",
+        "PENDING_LOCAL",
     ):
         if token not in text:
             errors.append("GRID-SPATIAL-ORDERING.md missing ordering/runtime boundary: " + token)
@@ -67,4 +90,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: parallel LINE Grid ordering is explicit-axis, bounded and fail-closed; radial/mixed/native automatic renumbering remains separately reviewed and runtime-gated.")
+print("PASS: parallel LINE ordering remains compatible and reviewed mixed LINE/ARC ordering is explicit-policy, permutation-invariant, bounded and fail-closed.")

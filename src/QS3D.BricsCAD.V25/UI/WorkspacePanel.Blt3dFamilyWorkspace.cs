@@ -453,6 +453,11 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnBlt3dFamilyAddClick(object sender, RoutedEventArgs e)
         {
             e.Handled = true;
+            if (IsSingleFootingSelected())
+            {
+                HandleSingleFootingAdd(e);
+                return;
+            }
             ShowBlt3dFamilyModeChooser();
         }
 

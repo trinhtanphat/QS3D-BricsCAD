@@ -12,7 +12,7 @@ namespace QS3D.Core.SmokeTests
             RejectsRuleTokenControlsBeforeTrim();
             RejectsProfileTokenControlsBeforeTrim();
             RejectsBindingTokenControlsBeforeTrim();
-            PreservesOrdinarySpaceNormalization();
+            PreservesEditableSpaceNormalizationAndRejectsBindingPadding();
         }
 
         private static void RejectsRuleTokenControlsBeforeTrim()
@@ -38,7 +38,7 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => new CoordinationRuleProfileBinding("PROFILE-1\t", 1), "trailing-tab binding id");
         }
 
-        private static void PreservesOrdinarySpaceNormalization()
+        private static void PreservesEditableSpaceNormalizationAndRejectsBindingPadding()
         {
             var rule = Rule("  RULE-1  ", "  Pipe  ", " Beam ", "  High  ");
             Equal("RULE-1", rule.RuleId, "rule id trim");
@@ -49,8 +49,9 @@ namespace QS3D.Core.SmokeTests
             var profile = new CoordinationRuleProfile("  PROFILE-1  ", 1, new[] { rule });
             Equal("PROFILE-1", profile.ProfileId, "profile id trim");
 
-            var binding = new CoordinationRuleProfileBinding("  PROFILE-1  ", 1);
-            Equal("PROFILE-1", binding.ProfileId, "binding id trim");
+            Throws<ArgumentException>(
+                () => new CoordinationRuleProfileBinding("  PROFILE-1  ", 1),
+                "padded exact binding id");
 
             var resolution = profile.Resolve(" Pipe ", " Beam ");
             Equal("RULE-1", resolution?.RuleId, "ordinary-space resolution");

@@ -21,7 +21,7 @@ namespace QS3D.BricsCAD.V25
         private const double NormalTolerance = 1e-8d;
         private const double TwoPi = Math.PI * 2d;
 
-        [CommandMethod("QS3DGRIDINTERSECTIONS", CommandFlags.UsePickSet)]
+        [CommandMethod("QS3DGRIDINTERSECTIONSINSPECT", CommandFlags.UsePickSet)]
         public void InspectIntersections()
         {
             var document = Application.DocumentManager.MdiActiveDocument;
@@ -50,7 +50,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                ReportFailure(document, "QS3DGRIDINTERSECTIONS lỗi: " + ex.Message);
+                ReportFailure(document, "QS3DGRIDINTERSECTIONSINSPECT lỗi: " + ex.Message);
             }
         }
 
@@ -105,7 +105,7 @@ namespace QS3D.BricsCAD.V25
                     else
                     {
                         throw new InvalidOperationException(
-                            "QS3DGRIDINTERSECTIONS chỉ hỗ trợ semantic Grid source kiểu LINE/ARC; nhận " + entity.GetType().Name + " tại " + snapshot.Handle + ".");
+                            "QS3DGRIDINTERSECTIONSINSPECT chỉ hỗ trợ semantic Grid source kiểu LINE/ARC; nhận " + entity.GetType().Name + " tại " + snapshot.Handle + ".");
                     }
                 }
                 transaction.Commit();

@@ -15,12 +15,15 @@ namespace QS3D.BricsCAD.V25.UI
 {
     internal sealed class CoordinationManagerWindow : Window
     {
-        private readonly Document _document;
         private readonly string _projectId;
         private readonly string _drawingFingerprint;
         private readonly DataGrid _grid;
         private readonly ComboBox _statusFilter;
         private readonly ComboBox _severityFilter;
+        private readonly ComboBox _kindFilter;
+        private readonly TextBox _floorFilter;
+        private readonly TextBox _categoryFilter;
+        private readonly TextBox _ruleFilter;
         private readonly CheckBox _actionableOnly;
         private readonly ComboBox _editStatus;
         private readonly TextBox _assignee;
@@ -31,7 +34,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         public CoordinationManagerWindow(Document document, string projectId, string drawingFingerprint)
         {
-            _document = document ?? throw new ArgumentNullException(nameof(document));
+            if (document == null) throw new ArgumentNullException(nameof(document));
             _projectId = RequireToken(projectId, nameof(projectId));
             _drawingFingerprint = RequireToken(drawingFingerprint, nameof(drawingFingerprint));
 
@@ -64,6 +67,26 @@ namespace QS3D.BricsCAD.V25.UI
                 _severityFilter.Items.Add(severity.ToString());
             _severityFilter.SelectedIndex = 0;
             filters.Children.Add(_severityFilter);
+
+            filters.Children.Add(Label("Loại"));
+            _kindFilter = new ComboBox { Width = 120, Margin = new Thickness(4, 0, 12, 0) };
+            _kindFilter.Items.Add("Tất cả");
+            foreach (CoordinationFindingKind kind in Enum.GetValues(typeof(CoordinationFindingKind)))
+                _kindFilter.Items.Add(kind.ToString());
+            _kindFilter.SelectedIndex = 0;
+            filters.Children.Add(_kindFilter);
+
+            filters.Children.Add(Label("Tầng"));
+            _floorFilter = new TextBox { Width = 105, Margin = new Thickness(4, 0, 12, 0), MaxLength = 256 };
+            filters.Children.Add(_floorFilter);
+
+            filters.Children.Add(Label("Category"));
+            _categoryFilter = new TextBox { Width = 115, Margin = new Thickness(4, 0, 12, 0), MaxLength = 256 };
+            filters.Children.Add(_categoryFilter);
+
+            filters.Children.Add(Label("Rule"));
+            _ruleFilter = new TextBox { Width = 115, Margin = new Thickness(4, 0, 12, 0), MaxLength = 256 };
+            filters.Children.Add(_ruleFilter);
 
             _actionableOnly = new CheckBox
             {
@@ -146,6 +169,10 @@ namespace QS3D.BricsCAD.V25.UI
 
             _statusFilter.SelectionChanged += (_, __) => SafeRefresh();
             _severityFilter.SelectionChanged += (_, __) => SafeRefresh();
+            _kindFilter.SelectionChanged += (_, __) => SafeRefresh();
+            _floorFilter.TextChanged += (_, __) => SafeRefresh();
+            _categoryFilter.TextChanged += (_, __) => SafeRefresh();
+            _ruleFilter.TextChanged += (_, __) => SafeRefresh();
             _actionableOnly.Checked += (_, __) => SafeRefresh();
             _actionableOnly.Unchecked += (_, __) => SafeRefresh();
 
@@ -156,7 +183,7 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                var project = RequireCurrentProject(false);
+                var project = RequireCurrentProject(false, out _);
                 var snapshot = CoordinationIssuePersistence.Load(project);
                 if (snapshot == null)
                 {
@@ -202,7 +229,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 var selected = SelectedRow();
-                var project = RequireCurrentProject(false);
+                var project = RequireCurrentProject(false, out var document);
                 var snapshot = CoordinationIssuePersistence.Load(project)
                     ?? throw new InvalidOperationException("Coordination persistence không còn tồn tại.");
                 var issue = RequireFreshIssue(snapshot, selected);
@@ -220,12 +247,12 @@ namespace QS3D.BricsCAD.V25.UI
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                     .ToList();
-                var resolved = CadHandleService.Resolve(_document, handles);
+                var resolved = CadHandleService.Resolve(document, handles);
                 if (resolved.Count != handles.Count)
                     throw new InvalidOperationException("Không resolve đủ toàn bộ source Handle hiện hành; selection không đổi.");
 
-                _document.Editor.SetImpliedSelection(resolved.ToArray());
-                var zoomed = global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(_document);
+                document.Editor.SetImpliedSelection(resolved.ToArray());
+                var zoomed = global::QS3D.BricsCAD.V25.ViewportCommands.TryZoomSelection(document);
                 SetMessage(zoomed
                     ? "Đã định vị issue " + issue.IssueId + " bằng " + resolved.Count + " CAD object sau khi revalidate toàn bộ provenance."
                     : "Đã chọn issue " + issue.IssueId + " bằng " + resolved.Count + " CAD object sau khi revalidate toàn bộ provenance nhưng chưa thể zoom vùng chọn hiện hành.");
@@ -241,7 +268,7 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 var selected = SelectedRow();
-                var project = RequireCurrentProject(true);
+                var project = RequireCurrentProject(true, out var document);
                 var snapshot = CoordinationIssuePersistence.Load(project)
                     ?? throw new InvalidOperationException("Coordination persistence không còn tồn tại.");
                 var issue = RequireFreshIssue(snapshot, selected);
@@ -289,7 +316,7 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     var nextRevision = checked(snapshot.Revision + 1L);
                     CoordinationIssuePersistence.Save(project, snapshot.Issues, nextRevision);
-                    ProjectContextCoordinator.Save(_document);
+                    ProjectContextCoordinator.Save(document);
                 }
                 catch
                 {
@@ -308,36 +335,33 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
-        private ProjectState RequireCurrentProject(bool mutation)
+        private ProjectState RequireCurrentProject(bool mutation, out Document document)
         {
-            if (!ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document))
-                throw new InvalidOperationException("DWG đã đổi; Coordination Manager này không được phép tác động lên document khác.");
+            document = Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument
+                ?? throw new InvalidOperationException("Không có DWG đang active; Coordination Manager không được phép thao tác.");
 
             ProjectState project;
             if (mutation)
-                project = ExistingProjectMutationContext.Require(_document, "Coordination Manager");
-            else if (!ProjectContextCoordinator.TryGetReadOnly(_document, out project))
+                project = ExistingProjectMutationContext.Require(document, "Coordination Manager");
+            else if (!ProjectContextCoordinator.TryGetReadOnly(document, out project))
                 throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng.");
 
             if (!string.Equals(project.ProjectId, _projectId, StringComparison.Ordinal) ||
                 !string.Equals(project.DrawingFingerprint, _drawingFingerprint, StringComparison.Ordinal))
-                throw new InvalidOperationException("Project/Drawing Fingerprint đã đổi; đóng cửa sổ và mở lại Coordination Manager.");
+                throw new InvalidOperationException("DWG hoặc Project/Drawing Fingerprint đã đổi; Coordination Manager này không được phép tác động lên document khác.");
             return project;
         }
 
         private CoordinationManagerFilter BuildFilter()
         {
-            var filter = new CoordinationManagerFilter
-            {
-                IncludeNonActionable = _actionableOnly.IsChecked != true
-            };
-            if (_statusFilter.SelectedIndex > 0 &&
-                Enum.TryParse(_statusFilter.SelectedItem?.ToString(), out CoordinationFindingStatus status))
-                filter.Status = status;
-            if (_severityFilter.SelectedIndex > 0 &&
-                Enum.TryParse(_severityFilter.SelectedItem?.ToString(), out CoordinationFindingSeverity severity))
-                filter.MinimumSeverity = severity;
-            return filter;
+            return CoordinationManagerFilterBuilder.Build(
+                _statusFilter.SelectedItem?.ToString() ?? string.Empty,
+                _severityFilter.SelectedItem?.ToString() ?? string.Empty,
+                _actionableOnly.IsChecked == true,
+                _kindFilter.SelectedItem?.ToString() ?? string.Empty,
+                _floorFilter.Text,
+                _categoryFilter.Text,
+                _ruleFilter.Text);
         }
 
         private static CoordinationManagerFinding ToFinding(

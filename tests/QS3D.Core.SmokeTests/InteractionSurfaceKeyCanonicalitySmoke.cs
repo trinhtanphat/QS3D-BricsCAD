@@ -8,6 +8,8 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             BindingIdentityRejectsEdgeWhitespace();
+            PersistentCloseTargetsExactContent();
+            ModalCloseTargetsExactSurface();
             ModalCloseRejectsPaddedKeysWithoutMutation();
             FloatingCloseRejectsPaddedKeysWithoutMutation();
         }
@@ -44,6 +46,54 @@ namespace QS3D.Core.SmokeTests
                 ExpectArgument(
                     () => new InteractionSurfaceBinding(featureId, InteractionSurface.FloatingTool, "quantity.review", paddedContext),
                     "Nonblank padded interaction context keys must fail closed instead of being silently trimmed.");
+            }
+        }
+
+        private static void PersistentCloseTargetsExactContent()
+        {
+            var feature = CreateFeature("model.persistent-close", allowsModal: false, allowsFloating: false);
+            var coordinator = new InteractionSurfaceCoordinator();
+            coordinator.SelectFeature(feature);
+
+            coordinator.Open(new InteractionSurfaceBinding(feature.Id, InteractionSurface.PrimaryInspector, "properties.old"));
+            coordinator.Open(new InteractionSurfaceBinding(feature.Id, InteractionSurface.PrimaryInspector, "properties.current"));
+
+            if (coordinator.Close(InteractionSurface.PrimaryInspector, "properties.old"))
+                throw new Exception("A stale primary-inspector callback must not close replacement content.");
+            if (coordinator.Snapshot.PrimaryInspector?.ContentKey != "properties.current")
+                throw new Exception("Rejected stale primary-inspector close must preserve the current binding.");
+            if (!coordinator.Close(InteractionSurface.PrimaryInspector, "properties.current") || coordinator.Snapshot.PrimaryInspector != null)
+                throw new Exception("Exact primary-inspector content identity must close the current binding.");
+
+            coordinator.Open(new InteractionSurfaceBinding(feature.Id, InteractionSurface.SecondaryInspector, "insight.old"));
+            coordinator.Open(new InteractionSurfaceBinding(feature.Id, InteractionSurface.SecondaryInspector, "insight.current"));
+
+            if (coordinator.Close(InteractionSurface.SecondaryInspector, "insight.old"))
+                throw new Exception("A stale secondary-inspector callback must not close replacement content.");
+            if (coordinator.Snapshot.SecondaryInspector?.ContentKey != "insight.current")
+                throw new Exception("Rejected stale secondary-inspector close must preserve the current binding.");
+            if (!coordinator.Close(InteractionSurface.SecondaryInspector) || coordinator.Snapshot.SecondaryInspector != null)
+                throw new Exception("Untargeted persistent close must remain available for intentional coordinator teardown.");
+        }
+
+        private static void ModalCloseTargetsExactSurface()
+        {
+            foreach (var openSurface in new[] { InteractionSurface.ModalSheet, InteractionSurface.RecipeChooser })
+            {
+                var mismatchedSurface = openSurface == InteractionSurface.ModalSheet
+                    ? InteractionSurface.RecipeChooser
+                    : InteractionSurface.ModalSheet;
+                var feature = CreateFeature("model.modal-surface-" + openSurface, allowsModal: true, allowsFloating: false);
+                var coordinator = new InteractionSurfaceCoordinator();
+                coordinator.SelectFeature(feature);
+                coordinator.Open(new InteractionSurfaceBinding(feature.Id, openSurface, "modal.action", "context-a"));
+
+                if (coordinator.Close(mismatchedSurface, "modal.action"))
+                    throw new Exception("A modal close request must not close a different interaction-surface kind sharing the same content key.");
+                if (coordinator.Snapshot.Modal?.Surface != openSurface)
+                    throw new Exception("Rejected modal surface mismatch must preserve the active modal binding.");
+                if (!coordinator.Close(openSurface, "modal.action") || coordinator.Snapshot.Modal != null)
+                    throw new Exception("Exact modal surface and content identity must close the active modal.");
             }
         }
 
@@ -101,7 +151,7 @@ namespace QS3D.Core.SmokeTests
                     FeatureOnSelectBehavior.SelectContext,
                     Array.Empty<CreateRecipeDescriptor>(),
                     null,
-                    new[] { InteractionSurface.PrimaryInspector },
+                    new[] { InteractionSurface.PrimaryInspector, InteractionSurface.SecondaryInspector },
                     FeatureCapability.EditParameters,
                     allowsModal: allowsModal,
                     allowsFloatingTool: allowsFloating));
