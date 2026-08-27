@@ -257,7 +257,9 @@ namespace QS3D.Core.Coordination
             if (raw.Any(char.IsControl)) throw new ArgumentException("Control characters are not allowed.", parameterName);
             var normalized = raw.Trim();
             if (normalized.Length == 0) throw new ArgumentException("Value is required.", parameterName);
-            return normalized;
+            if (!string.Equals(raw, normalized, StringComparison.Ordinal))
+                throw new ArgumentException("Value must not contain leading or trailing whitespace.", parameterName);
+            return raw;
         }
     }
 
