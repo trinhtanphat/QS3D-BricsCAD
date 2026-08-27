@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 
 namespace QS3D.BricsCAD.V25.UI
 {
@@ -12,6 +13,8 @@ namespace QS3D.BricsCAD.V25.UI
     /// </summary>
     public partial class WorkspacePanel
     {
+        private const string ReferenceQuickActionsTag = "QS3D_REFERENCE_QUICK_ACTIONS";
+
         internal static readonly bool ReferenceQuickActionsRegistrationReady = RegisterReferenceQuickActions();
 
         private bool _referenceQuickActionsApplied;
@@ -38,7 +41,14 @@ namespace QS3D.BricsCAD.V25.UI
         private static void OnReferenceQuickActionsLoaded(object sender, RoutedEventArgs e)
         {
             if (sender is WorkspacePanel panel)
-                panel.ApplyReferenceQuickActions();
+            {
+                // Project Browser and this presentation bridge are independent class handlers.
+                // Defer until the Loaded route is complete so either registration order converges
+                // on the final ModelTree parent before we choose the quick-actions host.
+                panel.Dispatcher.BeginInvoke(
+                    DispatcherPriority.Loaded,
+                    new Action(panel.ApplyReferenceQuickActions));
+            }
         }
 
         private void ApplyReferenceQuickActions()
@@ -46,11 +56,12 @@ namespace QS3D.BricsCAD.V25.UI
             if (_referenceQuickActionsApplied || ModelTree == null)
                 return;
 
-            if (!(ModelTree.Parent is DockPanel modelDock))
+            var modelDock = ResolveReferenceQuickActionsHost();
+            if (modelDock == null)
                 return;
 
             if (modelDock.Children.OfType<FrameworkElement>().Any(element =>
-                    string.Equals(element.Tag as string, "QS3D_REFERENCE_QUICK_ACTIONS", StringComparison.Ordinal)))
+                    string.Equals(element.Tag as string, ReferenceQuickActionsTag, StringComparison.Ordinal)))
             {
                 _referenceQuickActionsApplied = true;
                 return;
@@ -58,7 +69,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             var band = new Border
             {
-                Tag = "QS3D_REFERENCE_QUICK_ACTIONS",
+                Tag = ReferenceQuickActionsTag,
                 Margin = new Thickness(0, 0, 0, 6),
                 Padding = new Thickness(5)
             };
@@ -155,6 +166,23 @@ namespace QS3D.BricsCAD.V25.UI
                 modelDock.Children.Insert(modelTreeIndex, band);
 
             _referenceQuickActionsApplied = true;
+        }
+
+        private DockPanel? ResolveReferenceQuickActionsHost()
+        {
+            if (ModelTree.Parent is DockPanel modelDock)
+                return modelDock;
+
+            if (!(ModelTree.Parent is TabItem modelTab) || !ReferenceEquals(modelTab.Content, ModelTree))
+                return null;
+
+            // Project Browser owns the tab; this presentation bridge only normalizes the tab content
+            // so the existing ModelTree and quick-actions band share one model-scoped DockPanel.
+            modelTab.Content = null;
+            var modelHost = new DockPanel { LastChildFill = true };
+            modelHost.Children.Add(ModelTree);
+            modelTab.Content = modelHost;
+            return modelHost;
         }
 
         private static ComboBoxItem CreateReferenceDrawMode(string label, string mode)
