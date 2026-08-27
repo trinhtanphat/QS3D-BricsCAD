@@ -97,6 +97,7 @@ Expected: both stop before BricsCAD launch and create no PASS evidence.
 **Files:**
 - Generate ignored: `artifacts/issue4093/preview10228/runtime/raw-matrix.json`
 - Generate ignored: `artifacts/issue4093/preview10228/runtime/sanitized-beam-matrix.json`
+- Publish sanitized: `docs/evidence/2026-08-27-issue4093-preview10228-beam-matrix.json`
 
 **Interfaces:**
 - Consumes: exact `.10228` package and ignored companion probe.
@@ -127,7 +128,8 @@ Expected: all five cleanup booleans are true and `knownBlockers` is empty.
 
 **Files:**
 - Modify: `docs/agent-work-claims/2026-08-26-gpt56sol-issue4093-preview10223-beam-matrix.md`
-- Optionally modify: `docs/LOCAL-V25-BEAM-FORMWORK-MATRIX.md` with sanitized exact-run evidence.
+- Modify: `docs/LOCAL-V25-BEAM-FORMWORK-MATRIX.md` with sanitized exact-run evidence.
+- Create: `docs/evidence/2026-08-27-issue4093-preview10228-beam-matrix.json`
 
 **Interfaces:**
 - Consumes: sanitized runtime JSON and cleanup read-back.

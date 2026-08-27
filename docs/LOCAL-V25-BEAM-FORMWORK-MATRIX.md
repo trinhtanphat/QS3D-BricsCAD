@@ -157,13 +157,17 @@ The strict verifier returned
 `LOCAL_PASS / BEAM_BEHAVIOR_MATRIX` with `cells=8` and zero blockers. Cleanup
 restored the protected profile and exact DemandLoad tree, removed the nonce
 profile, and ended with ten stable zero-`bricscad.exe` samples. Raw host paths,
-registry exports, crash diagnostics and runtime JSON remain ignored/local.
+registry exports, crash diagnostics and raw runtime JSON remain ignored/local.
+At the owner's request, the allow-listed sanitized evidence is tracked at
+`docs/evidence/2026-08-27-issue4093-preview10228-beam-matrix.json`; its SHA-256
+is `21762D455DDCD56CBC493592D829D661FDF3B483D104194824A86EBE18171D1D`.
 
 ## Evidence hygiene and close-out
 
-Do not commit the raw evidence file by default. Commit only a sanitized summary
-that preserves exact tag/SHA/digests, host major/version, per-cell PASS/FAIL
-facts, relevant numeric values, verifier result and cleanup result. Keep PR
-#4094 draft until real M1–M8 evidence exists. This lane does not qualify
+Do not commit raw matrices, private markers, machine paths, registry exports,
+crash diagnostics, runtime binaries or licensed/proprietary host material.
+Commit only an allow-listed sanitized JSON/summary that preserves exact
+tag/SHA/digests, host major/version, per-cell PASS/FAIL facts, relevant numeric
+values, verifier result and cleanup result. This lane does not qualify
 DemandLoad installation, signing, customer DWGs, V26, or a commercial release,
 and it grants no authority to merge `main`.

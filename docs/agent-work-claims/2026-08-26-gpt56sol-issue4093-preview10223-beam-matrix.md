@@ -115,6 +115,9 @@ released `BeamFormworkQuantityPolicy` on a live native diagonal `Solid3d`.
   `FF4801217E123275D1F2E92313C6FFF4A95DECCF3BBF656ACF5AB1FC580A1F86`.
 - Ignored companion DLL SHA-256:
   `6AF2BD95E18B0DCB73DAAFB09D1A359AAC390FC5A72C4E670A89320B58942DF7`.
+- Tracked sanitized evidence:
+  `docs/evidence/2026-08-27-issue4093-preview10228-beam-matrix.json`, SHA-256
+  `21762D455DDCD56CBC493592D829D661FDF3B483D104194824A86EBE18171D1D`.
 - M1 gross: `7.07106781186549 m²` — `PASS`.
 - M2 gross: `9.19238815542513 m²` — `PASS`.
 - M3 Top: `0 m²` — `PASS`.
@@ -139,6 +142,9 @@ attempts invoked the UI-oriented `QS3DRUNTIMEPROBE` and failed before the Beam
 command in BricsCAD/WPF palette layout; they produced no Beam PASS evidence and
 were excluded. The qualifying command-only run re-established exact NETLOAD
 identity inside the in-host companion without opening the unrelated palette.
+The raw matrix, private marker/script, runner metadata, registry exports, crash
+diagnostics, release binaries and companion binary remain ignored/local; only
+the verifier-accepted allow-listed JSON and textual summary are published.
 
 Therefore the final behavior result is:
 
