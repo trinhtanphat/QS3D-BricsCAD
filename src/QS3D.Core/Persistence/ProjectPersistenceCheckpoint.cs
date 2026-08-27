@@ -80,6 +80,17 @@ namespace QS3D.Core.Persistence
                 project.ChangeVersion != projectChangeVersion)
                 throw new InvalidOperationException("Cannot capture a persistence checkpoint while the project revision is changing.");
 
+            // ProjectElement persistence state can change independently of the project-level
+            // revision (for example MarkDirty/MarkClean). Re-check every captured owner after
+            // caller-controlled enumeration so the checkpoint cannot return a mixed-time
+            // element snapshot under an unchanged ProjectState revision.
+            foreach (var pair in elements)
+            {
+                var element = project.FindElement(pair.Key);
+                if (element == null || !pair.Value.Matches(element))
+                    throw new InvalidOperationException("Cannot capture a persistence checkpoint while captured element persistence state is changing.");
+            }
+
             return new ProjectPersistenceCheckpoint(
                 projectId,
                 projectUpdatedUtc,
