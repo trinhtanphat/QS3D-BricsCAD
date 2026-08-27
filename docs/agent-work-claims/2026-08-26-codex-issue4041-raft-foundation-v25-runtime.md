@@ -5,7 +5,7 @@
 - Owner/session: historical `codex-01a03c3f`; offline harness handoff from `codex-01a03d89`; owner-directed continuation `interactive-01a04259`
 - Issue: `#4041`
 - Branch: `agent/codex/issue4041-raft-v25-runtime`
-- Current coordination baseline: `origin/main@2601121d1ae6489c1e150f943bec45bc1f464ecf`
+- Current coordination baseline: `origin/main@a4a7e4d756934093661b3cfe659d2745fb9b687e`
 - Owner-repointed runtime candidate: release `v0.1.0-preview.10228` at exact source/tag commit `7dacdce17a6403d19681732ca7bad22cdb6f1499`
 - Owner-repointed ZIP/adapter/Core SHA-256: `EC7385FC6085A838B94F84FC20B77E61E728952CC3A580FEC695031280FBC39E` / `010F729470B0644CD0ECBFF7395F4DCFAE39E81AA1B230C7219AC18C11C1340A` / `FF4801217E123275D1F2E92313C6FFF4A95DECCF3BBF656ACF5AB1FC580A1F86`
 - Historical tested runtime candidate: release `v0.1.0-preview.10222` at `3de0221bbda90957b801796a1ec3a8d726dddcc3`
