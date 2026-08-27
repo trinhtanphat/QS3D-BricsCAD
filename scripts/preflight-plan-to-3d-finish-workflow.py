@@ -41,25 +41,31 @@ def local_section(local_id):
 
 
 def evidence_remains_pending(section):
+    # LOCAL rows can accumulate bounded LOCAL_PASS receipts while the wider row remains pending.
+    # Treat any current Evidence line that explicitly retains PENDING_LOCAL as pending; do not
+    # require one historical literal sentence shape. Status: PASS is rejected separately below.
     for line in section.splitlines():
         stripped = line.strip()
         if not stripped.startswith("- Evidence:"):
             continue
         evidence = stripped.split(":", 1)[1].replace("`", "").strip()
-        return evidence == "PENDING_LOCAL" or "overall PENDING_LOCAL" in evidence
+        if "PENDING_LOCAL" in evidence:
+            return True
     return False
 
 
 for fixture, expected in (
     ("- Evidence: PENDING_LOCAL", True),
     ("- Evidence: P01 / Sheet row 2 `LOCAL_PASS`; overall `PENDING_LOCAL`", True),
+    ("- Evidence: P01/P03/P04/P05 bounded `LOCAL_PASS`; remaining matrix remains `PENDING_LOCAL`", True),
+    ("- Evidence: P01-P04 bounded `LOCAL_PASS`; overall LOCAL-014 remains `PENDING_LOCAL`", True),
     ("- Evidence: P01 / Sheet row 2 `LOCAL_PASS`", False),
     ("- Evidence: PASS", False),
 ):
     actual = evidence_remains_pending(fixture)
     if actual != expected:
         errors.append(
-            "LOCAL-008 pending-evidence matcher regression: "
+            "local pending-evidence matcher regression: "
             + fixture
             + " expected="
             + str(expected)
@@ -156,9 +162,11 @@ for token in ('Status: OPEN', 'QS3DDRAWWINDOW', 'OpeningUsage=Window', 'Auto Hos
         errors.append("LOCAL-008 must own Window/finish runtime qualification: " + token)
 if not evidence_remains_pending(local_008):
     errors.append("LOCAL-008 must keep Window/finish runtime qualification overall PENDING_LOCAL")
-for token in ('Status: OPEN', 'Evidence: PENDING_LOCAL', 'QS3DCONVERT2D', 'QS3DPLAN2WALLS', 'QS3DCONVERT2DADV', 'PENDING_LOCAL / DO_NOT_RETRY_REMOTE'):
+for token in ('Status: OPEN', 'QS3DCONVERT2D', 'QS3DPLAN2WALLS', 'QS3DCONVERT2DADV', 'PENDING_LOCAL / DO_NOT_RETRY_REMOTE'):
     if token not in local_014:
         errors.append("LOCAL-014 must own Plan-to-3D runtime qualification: " + token)
+if not evidence_remains_pending(local_014):
+    errors.append("LOCAL-014 must keep Plan-to-3D runtime qualification overall PENDING_LOCAL")
 if 'Status: PASS' in local_008 or 'Status: PASS' in local_014:
     errors.append("LOCAL-008/LOCAL-014 must not be promoted by a static workflow preflight")
 
