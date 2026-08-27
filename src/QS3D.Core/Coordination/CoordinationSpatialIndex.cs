@@ -5,6 +5,27 @@ using System.Linq;
 
 namespace QS3D.Core.Coordination
 {
+    internal static class CoordinationSpatialTextValidation
+    {
+        internal static void RequireWellFormedUtf16(string value, string parameterName)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                var current = value[i];
+                if (char.IsHighSurrogate(current))
+                {
+                    if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1]))
+                        throw new ArgumentException("Malformed UTF-16 is not allowed.", parameterName);
+                    i++;
+                    continue;
+                }
+
+                if (char.IsLowSurrogate(current))
+                    throw new ArgumentException("Malformed UTF-16 is not allowed.", parameterName);
+            }
+        }
+    }
+
     public struct CoordinationBounds : IEquatable<CoordinationBounds>
     {
         public CoordinationBounds(double minX, double minY, double minZ, double maxX, double maxY, double maxZ)
@@ -79,6 +100,7 @@ namespace QS3D.Core.Coordination
         private static string Required(string value, string parameterName)
         {
             var raw = value ?? string.Empty;
+            CoordinationSpatialTextValidation.RequireWellFormedUtf16(raw, parameterName);
             if (raw.Any(char.IsControl))
                 throw new ArgumentException("Control characters are not allowed.", parameterName);
             var trimmed = raw.Trim();
@@ -305,6 +327,7 @@ namespace QS3D.Core.Coordination
         private static string RequiredChangedId(string value, string parameterName)
         {
             var raw = value ?? string.Empty;
+            CoordinationSpatialTextValidation.RequireWellFormedUtf16(raw, parameterName);
             if (raw.Any(char.IsControl))
                 throw new ArgumentException("Control characters are not allowed.", parameterName);
             var trimmed = raw.Trim();
