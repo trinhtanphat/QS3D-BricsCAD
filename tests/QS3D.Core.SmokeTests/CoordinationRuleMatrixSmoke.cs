@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             EquallySpecificRulesFailClosed();
             DisabledRulesAreIgnored();
             RuleValidationFailsClosed();
+            ProfileIdentityRejectsNonCanonicalWhitespace();
             ActualCategoriesRejectWildcardButRuleWildcardsRemainValid();
             ResolutionCarriesProfileAndRuleVersion();
         }
@@ -79,6 +80,21 @@ namespace QS3D.Core.SmokeTests
                         new CoordinationRule("RULE", 1, "Pipe", "Beam", CoordinationRuleKind.HardClash, "Error", 0d),
                         new CoordinationRule("rule", 2, "Pipe", "Wall", CoordinationRuleKind.HardClash, "Error", 0d)
                     }));
+        }
+
+        private static void ProfileIdentityRejectsNonCanonicalWhitespace()
+        {
+            var rule = new CoordinationRule(
+                "PROFILE-ID-BOUNDARY",
+                1,
+                "Pipe",
+                "Beam",
+                CoordinationRuleKind.HardClash,
+                "Error",
+                0d);
+
+            Throws<ArgumentException>(() =>
+                new CoordinationRuleProfile(" PROJECT-A ", 1, new[] { rule }));
         }
 
         private static void ActualCategoriesRejectWildcardButRuleWildcardsRemainValid()

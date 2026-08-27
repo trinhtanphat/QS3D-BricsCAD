@@ -34,6 +34,7 @@ for token in (
     "public static bool IsPropertiesVisible",
     'new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)',
     '_properties.AddVisual("Thuộc tính", _propertiesVisual, true);',
+    "_properties.StateChanged += OnPropertiesPaletteStateChanged;",
     "_workspacePanel.CreatePropertiesPaletteVisual()",
     "_properties.Dock = DockSides.Left;",
     "PropertiesPaletteMinWidth",
@@ -43,6 +44,10 @@ for token in (
     "propertiesVisible = IsPropertiesVisible",
     "_workspacePanel?.SetDedicatedPropertiesPaletteActive(propertiesVisible);",
     "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
+    "properties.StateChanged -= OnPropertiesPaletteStateChanged;",
+    "private static void OnPropertiesPaletteStateChanged(object sender, PaletteSetStateEventArgs e)",
+    "e.NewState != StateEventIndex.Show && e.NewState != StateEventIndex.Hide",
+    "_workspacePanel?.SetDedicatedPropertiesPaletteActive(e.NewState == StateEventIndex.Show);",
 ):
     if token not in palette:
         errors.append("PaletteCoordinator optional dedicated Properties contract missing: " + token)
@@ -127,4 +132,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: the dedicated QS3D Properties PaletteSet remains an optional single-editor host with persisted sizing, while default BIM keeps the same authoritative editor embedded under Family to match the owner BLT3D reference.")
+print("PASS: the dedicated QS3D Properties PaletteSet remains an optional lifecycle-owned single-editor host: default BIM embeds the editor, explicit host Show reparents it immediately, and Hide returns it without a second view/model/editor.")

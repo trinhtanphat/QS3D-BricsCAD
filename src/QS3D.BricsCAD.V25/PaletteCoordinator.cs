@@ -26,6 +26,7 @@ namespace QS3D.BricsCAD.V25
         private static RightPanel? _rightPanel;
         private static QuantityInsightPanel? _quantityInsightPanel;
         private static bool _preserveInspectionStatusOnNextShow;
+        private static bool _propertiesVisibilityTransitionActive;
 
         public static bool IsWorkspaceVisible => _workspace != null && _workspace.Visible;
         public static bool IsPropertiesVisible => _properties != null && _properties.Visible;
@@ -66,6 +67,7 @@ namespace QS3D.BricsCAD.V25
                 };
                 _properties.DeviceIndependentSize = new WpfSize(layout.PropertiesPaletteWidth, layout.PropertiesPaletteHeight);
                 _properties.AddVisual("Thuộc tính", _propertiesVisual, true);
+                _properties.StateChanged += OnPropertiesPaletteStateChanged;
 
                 _right = new PaletteSet("QS3D — Bản vẽ & Lớp", RightGuid)
                 {
@@ -264,6 +266,7 @@ namespace QS3D.BricsCAD.V25
         private static void DisposeCore(bool persistLayout)
         {
             if (persistLayout) PersistPaletteLayout();
+            UnsubscribeFromPropertiesPaletteStateChanges();
             DisposePalette(ref _properties);
             DisposePalette(ref _workspace);
             DisposePalette(ref _right);
@@ -273,6 +276,40 @@ namespace QS3D.BricsCAD.V25
             _rightPanel = null;
             _quantityInsightPanel = null;
             _preserveInspectionStatusOnNextShow = false;
+            _propertiesVisibilityTransitionActive = false;
+        }
+
+        private static void UnsubscribeFromPropertiesPaletteStateChanges()
+        {
+            var properties = _properties;
+            if (properties == null) return;
+
+            try { properties.StateChanged -= OnPropertiesPaletteStateChanged; }
+            catch
+            {
+                // The native host may already be tearing the PaletteSet down. DisposePalette still
+                // owns the exact instance, and a replacement PaletteSet will install a fresh hook.
+            }
+        }
+
+        private static void OnPropertiesPaletteStateChanged(object sender, PaletteSetStateEventArgs e)
+        {
+            if (!ReferenceEquals(sender, _properties) || _propertiesVisibilityTransitionActive) return;
+            if (e.NewState != StateEventIndex.Show && e.NewState != StateEventIndex.Hide) return;
+
+            try
+            {
+                _propertiesVisibilityTransitionActive = true;
+                _workspacePanel?.SetDedicatedPropertiesPaletteActive(e.NewState == StateEventIndex.Show);
+            }
+            catch (Exception)
+            {
+                ReportPaletteFailure("Thuộc tính");
+            }
+            finally
+            {
+                _propertiesVisibilityTransitionActive = false;
+            }
         }
 
         private static void DisposePalette(ref PaletteSet? palette)

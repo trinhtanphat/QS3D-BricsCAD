@@ -1,6 +1,6 @@
 # QS3D local-agent inbox
 
-**Updated:** 2026-08-26 (UTC+7)
+**Updated:** 2026-08-27 (UTC+7)
 
 This file is the **single live queue for LOCAL_ONLY work**. Detailed runbooks remain in the linked local qualification/handoff documents, but a local agent should start here before opening those longer files.
 
@@ -462,18 +462,73 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Related source/docs: `docs/LOCAL-V25-QUALIFICATION.md`; `docs/LOCAL-V26-QUALIFICATION.md`; `src/QS3D.BricsCAD.V25/ReviewWorkbookCommands.cs`; `src/QS3D.BricsCAD.V25/ReviewWorkbookRuntimeProbeCommands.cs`; `src/QS3D.BricsCAD.V25/Services/ExcelLocateResolutionService.cs`; `src/QS3D.Core/Export/Qs3dReviewWorkbook.IssueProjection.cs`; `scripts/test-bricscad-review-workbook-roundtrip.ps1`; issue `#3536`.
 - Updated: 2026-08-24
 
-## LOCAL-021 — Móng Bè intersection/QTO exact-face viewport-highlight runtime
+## LOCAL-021 — Móng Bè workflow and Quantity Insight viewport highlight
 
 - Priority: P0
 - Status: IN_PROGRESS
-- Area: issue `#4041`; historical tested release `v0.1.0-preview.10222`; next tracker-eligible post-`#4078` release descendant; Workspace `Móng → Móng Bè → + Add → Vẽ 3D`; `Định Lượng → Tính khối lượng → Xem diễn giải`; exact-face and deduction transient highlights
-- Why local: Requires licensed BricsCAD V25 x64, the real modeless Workspace/Right Panel, native boundary selection and intersecting Solid3d geometry, plus direct viewport observation of yellow included geometry and red deducted intersection geometry. Hosted CI cannot prove these UI/native behaviors.
-- Source/runner status: Release `v0.1.0-preview.10222` at `3de0221bbda90957b801796a1ec3a8d726dddcc3` is a historical tested candidate only; published V25 ZIP/adapter/Core SHA-256 values are `9313921C076719E107DF658906F98B68E52E9F7F39CED0058F5F95727B5FD5BE` / `9F1418DA42C23E3987F18B7EC6562F84EFDAE939B162678A01223A0638A43A0E` / `61E35FE7C678EFF725B9432C4145CCD60DF077994E21CDC5851D23CF8F5C449E`. Its single licensed cell produced `NO_RESULT / BASELINE_MARKER_TIMEOUT`, not a feature verdict, and it must not be rerun or relabeled. Issue `#4078` owns the required visible `+ Add` route, dedicated property/Level-binding and source-guard corrections. Refreshed source-lane head `87e04938498ff5e00c6fe9d46cd7d2480642501d` contains those source/guard changes and passes fresh focused preflight plus Core and V25 `Release|x64` builds at `0/0`, but remains source-ready rather than merged/released runtime evidence. The next runtime candidate must be an exact tracker-eligible published descendant containing the accepted fix. The ignored retry harness is hardened to a `900 s` startup bound, explicit ProductVersion/source-SHA binding, owned-process early-exit detection, optional strict `Cách đặt` / `Cao độ đầu` Level assertions and `60/60` stage parity; its probe builds `0/0` with SHA-256 `47FD4342019835645549BD99EF6A3DE50F0239C5CC43EDD04617B7AB6D4EC98B`. This item owns only the bounded V25 interaction matrix; LOCAL-012/#3936 and P1/#3480 broader matrices remain separately owned.
-- Scenario: From the exact eligible post-`#4078` release candidate, create one disposable Móng Bè target with a validated intersecting counterpart. Run `Định Lượng → Tính khối lượng → Xem diễn giải`, then click `V gộp`, `Trừ giao`, and `V còn`; click every exposed `S gộp`/`S còn` exact-face pair and the total `Ván khuôn` row. Included/gross/net geometry must highlight yellow at the intended whole-solid or exact native face only; the validated deduction/intersection region must highlight red. Switching the selected semantic element, switching to another DWG, closing/changing the detail selection, or closing the panel must clear the prior transient. No click may persistently change the real entity color, material, semantic project state, drawing bytes, or save/reopen presentation state.
-- Evidence required: Exact release/source SHA and asset hash; BricsCAD V25/x64/CLR identity; loaded `QS3D.BricsCAD.V25.dll` ProductVersion/path binding and SHA-256; semantic/native ownership counts for the target and intersection cause; displayed `V gộp`/`Trừ giao`/`V còn`, every `S gộp`/`S còn`, and total formwork values; direct yellow/red viewport observations; exact-face versus whole-solid routing; stale selection, element-switch, DWG-switch and panel-close cleanup; before/after proof that model color/material, semantic change/audit state, disposable DWG/sidecar, Loader/DemandLoad/profile state and unrelated UI layout are restored; stable zero BricsCAD process residue. Publish no raw paths, Handles, ProjectIds, private/customer drawings, proprietary DLLs or unsanitized screenshots.
-- Evidence: `NO_RESULT / BASELINE_MARKER_TIMEOUT` on historical release `v0.1.0-preview.10222` / `3de0221bbda90957b801796a1ec3a8d726dddcc3`; `stages=[]`, so Workspace, `+ Add`, property form, boundary, QTO and yellow/red highlight remain `NOT_RUN`. The owned process exited; CurProfile/profile inventory and content, nonce removal, installed Loader/`LoadCtrls=2`, UI layout and stable zero-process state were restored and independently accepted by #72, which then reclaimed the shared host. Current disposition is `SOURCE_FIX_REQUIRED / WAITING_ELIGIBLE_RELEASE / WAITING_FRESH_HOST_HANDOFF / RUNTIME_NOT_PROVEN`. #4041 remains offline and must not launch/attach or touch shared profile/DemandLoad/registry/UI state until #72 sends a new literal handoff naming #4041.
-- Related source/docs: `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.RaftFoundationWorkflow.cs`; `src/QS3D.BricsCAD.V25/RaftFoundationCommands.cs`; `src/QS3D.BricsCAD.V25/RaftFoundationBoundaryAuthoring.cs`; `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.RaftSemanticFaces.cs`; `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.RaftHighlight.cs`; `src/QS3D.BricsCAD.V25/UI/QuantityInsightPanel.DetailExplainer.ExactFace.cs`; `src/QS3D.Core/Domain/RaftFoundationPropertySet.cs`; `scripts/preflight-raft-foundation-elevation-qto.py`; `docs/FEATURE-RUNBOOKS/issue-3480-quantity-exact-face.md`; `docs/LOCAL-V25-QUALIFICATION.md`; issues `#4041`, `#1669`, and `#3480`.
-- Updated: 2026-08-26
+- Area: issue `#4041`; BricsCAD V25 Móng Bè Add/Edit/native 3D/Quantity Insight viewport highlight
+- Why local: Acceptance requires the licensed interactive BricsCAD V25 host, real modeless Workspace/Properties rendering, native `Solid3d` geometry, direct viewport highlighting, and fresh-process DWG reopen; hosted/static evidence cannot establish these behaviors.
+- Source/artifact status: `OWNER_REPOINTED / OFFLINE_READY / WAITING_FRESH_HOST_HANDOFF / RUNTIME_NOT_PROVEN`
+- Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
+- Successor artifact: `v0.1.0-preview.10228`; source `7dacdce17a6403d19681732ca7bad22cdb6f1499`; ProductVersion `0.1.0-preview.10228`.
+- Successor hashes: V25 ZIP `EC7385FC6085A838B94F84FC20B77E61E728952CC3A580FEC695031280FBC39E`; packaged V25 adapter `010F729470B0644CD0ECBFF7395F4DCFAE39E81AA1B230C7219AC18C11C1340A`; packaged Core `FF4801217E123275D1F2E92313C6FFF4A95DECCF3BBF656ACF5AB1FC580A1F86`.
+- Source basis: the production Workspace quick-action host-order defect found by the `.10225` licensed cell was tracked as #4127 and fixed through merged PR #4129 (`1c55ed101d6058e37253cd4888341cfb983700ec`); `.10228` contains that merge ancestor. The exact release source is an ancestor of `origin/main@2601121d1ae6489c1e150f943bec45bc1f464ecf`, and the current-main comparison found no later change in the Móng Bè Add/property/Level/native-geometry/Quantity Insight acceptance surfaces.
+- Runtime gate: admission remains closed until #72 records a fresh literal `HOST_RELEASED` allocation naming #4041 and exact `10228@7dacdce17a6403d19681732ca7bad22cdb6f1499`. Hosted/static/source/offline evidence is not `LOCAL_PASS`.
+- Scenario: qualify `Móng > Móng Bè > Add` creating and auto-selecting `Móng Bè-N`; prove the dedicated schema (`Tên Family`, `Loại=Móng Bè`, `Tầng`, `Dày`, `Cách đặt`, `Cao độ đầu` with strict `bottom_level`/`top_level`, Display, Mark/Comment/WBS and material fields) without generic Foundation/`Bề dày`/`Offset đáy`; create a 4 m × 6 m × 0.8 m native raft with `19.2 m³`, correct Z bounds, thickness edit/regeneration, Quantity Insight/highlight, save plus fresh-process cold reopen, and complete cleanup on licensed V25.
+- Evidence: `v0.1.0-preview.10222` = `NO_RESULT / BASELINE_MARKER_TIMEOUT`; `v0.1.0-preview.10225@50a6b05280c48c706907273c83c0cdee0be52ab2` = `NO_RESULT / UI_DRAW_BUTTON_PROBE_ASSERTION`, which exposed #4127 and did not reach Móng Bè/QTO/highlight assertions. Later startup-WPF failure evidence also remained before every Móng Bè assertion. `.10228` is the owner-repointed exact candidate and has no licensed Móng Bè runtime verdict yet.
+- Evidence required: exact artifact/source/host identity; exact visible property labels and auto-selected Family; semantic/native ownership and 4×6×0.8 m geometry; `19.2 m³`; bottom/top Z and thickness-regeneration values; Quantity Insight/highlight observations; save/fresh-process cold reopen; sanitized Loader/DemandLoad/profile/UI restoration and stable zero owned-host residue.
+- Related docs: `docs/LOCAL-V25-QUALIFICATION.md`; `scripts/preflight-raft-visible-add-initialization.py`; `scripts/preflight-raft-foundation-elevation-qto.py`; issue #4041; draft PR #4042.
+- Updated: 2026-08-27
+
+## LOCAL-022 — Móng đơn placement/edit/save-reopen on V25/V26
+
+- Priority: P0
+- Status: IN_PROGRESS
+- Area: issue `#4034`; BricsCAD V25/V26 Móng đơn Add/placement/edit/regenerate/save-reopen
+- Why local: The remaining gate requires licensed BricsCAD V25/V26 hosts, matching major-specific assemblies, native placement/regeneration, and fresh-process save/reopen behavior that remote/static checks cannot prove.
+- Source/artifact status: `OFFLINE_FROZEN / D_ONLY / PENDING_RUNTIME`
+- Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
+- OFFLINE_FREEZE exact SHA: `28e48e6dbd4e8976b31ab16f344ce0f76d7a7bf5`
+- Source basis: #4019 / merged PR #4021, restored/finalized by #4058. No production source fix belongs in this runtime-only lane.
+- Scenario: independently qualify V25 and V26 Cancel, `H2=0`, repeated placement, edit/regenerate, `H2>0`, semantic/native geometry, a generic Foundation control, `QS3DSAVE`/`QSAVE`, and cold reopen on one exact frozen source identity.
+- Evidence: previous exact candidate `1ecf5532f924fe63826c37f099f86b194e1f69b9` ended `NO_RESULT / HARNESS_MODAL_READINESS_UNCLASSIFIED`; no V25 or V26 `LOCAL_PASS` exists.
+- Runtime gate: the current freeze permits D-only build/hash/harness preparation; it is not `HOST_RELEASED`. Wait for a fresh literal named host allocation before any BricsCAD/shared-host access. Later `main` drift alone does not repoint or invalidate this frozen target.
+- Evidence required: exact source/ProductVersion/hash identities for matching V25/V26 adapters and dependencies; per-host matrix verdicts; ownership/geometry/persistence checks; sanitized cleanup/no-residue evidence.
+- Related docs: `docs/LOCAL-V25-QUALIFICATION.md`; `docs/LOCAL-V26-QUALIFICATION.md`; issue #4034.
+- Updated: 2026-08-27
+
+## LOCAL-020 — Grid pair-owned intersection marker native lifecycle
+
+- Priority: P1
+- Status: OPEN
+- Area: Grid / pair-owned native intersection markers (#3771)
+- Source/runner status: `SOURCE_READY / MERGED_MAIN`; minimum source/guard ancestor `707ba4f2991e6ab47a81d9de80a32c19e55fca79`. PR #4109 passed fresh protected `preflight` + `core` on final task head `75810a0154cdb345395469bd19e17b6e009e6119` and merged as `3a0e9e06f70b11bffb323df2d205bd94c05ed71d`.
+- Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
+- Runbook: `docs/LOCAL-GRID-INTERSECTION-MARKER-QUALIFICATION.md`
+- Why local: Final acceptance requires licensed BricsCAD V25/V26 native Circle/XData/object ownership, Undo/Redo, save/cold-reopen and multi-DWG/document/owner-space behavior; hosted/static CI is not `LOCAL_PASS`.
+- Scenario: Run P01-P06 from the runbook on one clean exact intended source-containing SHA. Prove deterministic canonical pair/occurrence ownership, selected/all refresh and cancellation/freshness boundaries, malformed/missing/duplicate/foreign ownership fail-closed replacement, geometry refresh with Undo/Redo and save/cold-reopen, document/owner-space/multi-DWG isolation, and V26 parity where the linked source applies.
+- Evidence required: exact tested QS3D SHA and matching V25/V26 plugin/host identity; pair/owner/XData/native entity assertions; before/after replacement and Health results; Undo/Redo/save/reopen/multi-DWG results; sanitized cleanup evidence. Record only sanitized evidence; no private paths, raw Handles/ProjectIds, proprietary DLLs or customer drawings.
+- Evidence: `PENDING_LOCAL`
+- Related docs: `docs/LOCAL-GRID-INTERSECTION-MARKER-QUALIFICATION.md`; `scripts/preflight-grid-intersection-marker-lifecycle.py`; issue #3771; PR #4109.
+- Updated: 2026-08-27
+
+## LOCAL-023 — Beam formwork behavior matrix on preview.10228
+
+- Priority: P1
+- Status: PASS
+- Area: issue `#4093`; BricsCAD V25 Beam formwork M1–M8 behavior matrix
+- Why local: The result depends on licensed in-host BricsCAD V25 `NETLOAD`, native diagonal `Solid3d` face classification, and exact runtime values; build/static evidence cannot establish the matrix.
+- Source/harness status: `COMPLETE / 100% / LOCAL_PASS / BEAM_BEHAVIOR_MATRIX`
+- Remote disposition: `TERMINAL / DO_NOT_RETRY_REMOTE`
+- Exact runtime artifact: `v0.1.0-preview.10228`; source `7dacdce17a6403d19681732ca7bad22cdb6f1499`; licensed host boundary BricsCAD V25.2.10 x64.
+- Artifact hashes: ZIP `EC7385FC6085A838B94F84FC20B77E61E728952CC3A580FEC695031280FBC39E`; packaged V25 DLL `010F729470B0644CD0ECBFF7395F4DCFAE39E81AA1B230C7219AC18C11C1340A`.
+- Canonical runtime carrier: draft PR #4094 / branch `agent/gpt56sol/issue-4093-beam-preview10223-matrix`. The existing branch name remains historical; the owner's 2026-08-27 direct runtime assignment retargeted its immutable qualification pin to `.10228` without creating a duplicate carrier.
+- Scenario exercised: M1–M8 from `docs/LOCAL-V25-BEAM-FORMWORK-MATRIX.md` against the exact packaged DLL: Side/Bottom rule toggles, Top and End/Other exclusion, directed Side/Bottom deductions, aggregate/detail `FormworkM2` parity, and diagonal-axis face classification.
+- Runtime gate: licensed interactive V25 only. Do not rebuild, substitute, instrument, or relabel the pinned preview. Verify sanitized evidence with `scripts/test-local-v25-beam-formwork-matrix-evidence.ps1` and restore profile/Loader/DemandLoad state with zero test-owned process residue.
+- Evidence: `100% / LOCAL_PASS / BEAM_BEHAVIOR_MATRIX`; gross `7.07106781186549 / 9.19238815542513 m²`; Top/End/Other `0 / 0 / 0 m²`; net `6.77106781186549 / 8.80238815542513 m²`; Aggregate equals Detail `8.80238815542513 m²`; M8 `Side=2`, `End=2`, `Top=1`, `Bottom=1`, `Other=0`.
+- Cleanup: protected profile and exact DemandLoad tree restored; nonce removed; ten stable zero-process samples; verifier `cells=8`; blockers empty.
+- Related docs: `docs/LOCAL-V25-BEAM-FORMWORK-MATRIX.md`; `scripts/test-local-v25-beam-formwork-matrix-evidence.ps1`; issue #4093.
+- Updated: 2026-08-27
 
 ## P1 — #3480 Quantity Review exact native BREP face highlight
 

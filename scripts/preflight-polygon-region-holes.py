@@ -6,11 +6,12 @@ ROOT = Path(__file__).resolve().parents[1]
 REGION = ROOT / "src/QS3D.Core/Geometry/PolygonRegionScanlineClipper.cs"
 BASE = ROOT / "src/QS3D.Core/Geometry/PolygonScanlineClipper.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/PolygonRegionScanlineSmoke.cs"
+SNAPSHOT_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/PolygonRegionHoleSnapshotSmoke.cs"
 REG = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 DOC = ROOT / "docs/POLYGON-REGION-HOLES.md"
 errors = []
 
-for path in (REGION, BASE, SMOKE, REG, DOC):
+for path in (REGION, BASE, SMOKE, SNAPSHOT_SMOKE, REG, DOC):
     if not path.is_file(): errors.append("missing polygon-region contract file: " + str(path.relative_to(ROOT)))
 
 if REGION.is_file():
@@ -44,8 +45,25 @@ if SMOKE.is_file():
     ):
         if token not in text: errors.append("PolygonRegionScanlineSmoke.cs missing regression scenario: " + token)
 
-if REG.is_file() and "PolygonRegionScanlineSmoke.Run();" not in REG.read_text(encoding="utf-8"):
-    errors.append("polygon-region smoke is not registered")
+if SNAPSHOT_SMOKE.is_file():
+    text = SNAPSHOT_SMOKE.read_text(encoding="utf-8")
+    for token in (
+        "UsesInitialHoleReferenceWhenSameCountSourceReplacesItem",
+        "RejectsHoleCollectionGrowthDuringSnapshot",
+        "RejectsHoleCollectionShrinkDuringSnapshot",
+        "RejectsOversizedHoleCollectionBeforeIndexing",
+        "PreservesStableRegionAndClipSemantics",
+    ):
+        if token not in text: errors.append("PolygonRegionHoleSnapshotSmoke.cs missing snapshot regression scenario: " + token)
+
+if REG.is_file():
+    text = REG.read_text(encoding="utf-8")
+    for token, label in (
+        ("PolygonRegionScanlineSmoke.Run();", "polygon-region smoke"),
+        ("PolygonRegionHoleSnapshotSmoke.Run();", "polygon-region hole snapshot smoke"),
+    ):
+        if text.count(token) != 1:
+            errors.append(label + " must be registered exactly once")
 
 if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")
@@ -63,4 +81,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: one-outer-loop polygon regions subtract bounded validated holes fail-closed; hole-aware mesh clearance, multi-region ownership and native V25 wiring remain explicit separate gates.")
+print("PASS: one-outer-loop polygon regions subtract bounded validated holes fail-closed; hole snapshot regression is registered exactly once; hole-aware mesh clearance, multi-region ownership and native V25 wiring remain explicit separate gates.")

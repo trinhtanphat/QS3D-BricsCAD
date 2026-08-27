@@ -123,6 +123,37 @@ namespace QS3D.Core.Cost
         }
     }
 
+    internal static class AdvancedCostTextContract
+    {
+        internal static string RequireCanonicalText(string value, string parameterName, string label)
+        {
+            if (value == null)
+                throw new ArgumentNullException(parameterName);
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException(label + " is required.", parameterName);
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException(label + " must not contain surrounding whitespace.", parameterName);
+
+            for (var i = 0; i < value.Length; i++)
+            {
+                var current = value[i];
+                if (char.IsHighSurrogate(current))
+                {
+                    if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1]))
+                        throw new ArgumentException(label + " contains malformed UTF-16.", parameterName);
+                    i++;
+                    continue;
+                }
+                if (char.IsLowSurrogate(current))
+                    throw new ArgumentException(label + " contains malformed UTF-16.", parameterName);
+                if (char.IsControl(current))
+                    throw new ArgumentException(label + " must not contain control characters.", parameterName);
+            }
+
+            return value;
+        }
+    }
+
     public sealed class CostResourceComponent
     {
         public CostResourceComponent(
@@ -133,9 +164,7 @@ namespace QS3D.Core.Cost
             decimal unitRate)
         {
             ResourceCode = RateBookContract.RequireToken(resourceCode, nameof(resourceCode));
-            if (string.IsNullOrWhiteSpace(description))
-                throw new ArgumentException("Resource description is required.", nameof(description));
-            Description = description.Trim();
+            Description = AdvancedCostTextContract.RequireCanonicalText(description, nameof(description), "Resource description");
             Unit = RateBookContract.RequireLowerToken(unit, nameof(unit));
             if (quantityPerBillUnit < 0m)
                 throw new ArgumentOutOfRangeException(nameof(quantityPerBillUnit));
@@ -490,9 +519,7 @@ namespace QS3D.Core.Cost
         public TenderRequirement(string itemCode, string description, string unit, decimal quantity)
         {
             ItemCode = RateBookContract.RequireToken(itemCode, nameof(itemCode));
-            if (string.IsNullOrWhiteSpace(description))
-                throw new ArgumentException("Tender item description is required.", nameof(description));
-            Description = description.Trim();
+            Description = AdvancedCostTextContract.RequireCanonicalText(description, nameof(description), "Tender item description");
             Unit = RateBookContract.RequireLowerToken(unit, nameof(unit));
             if (quantity < 0m) throw new ArgumentOutOfRangeException(nameof(quantity));
             Quantity = quantity;
@@ -522,8 +549,7 @@ namespace QS3D.Core.Cost
         public TenderBid(string bidId, string bidder, string currency, IEnumerable<TenderQuoteLine> lines)
         {
             BidId = RateBookContract.RequireToken(bidId, nameof(bidId));
-            if (string.IsNullOrWhiteSpace(bidder)) throw new ArgumentException("Bidder is required.", nameof(bidder));
-            Bidder = bidder.Trim();
+            Bidder = AdvancedCostTextContract.RequireCanonicalText(bidder, nameof(bidder), "Bidder");
             Currency = RateBookContract.RequireCurrency(currency, nameof(currency));
             if (lines == null) throw new ArgumentNullException(nameof(lines));
             var hasKnownLineCount = AdvancedCostCollectionContract.TryGetKnownCount(lines, out var knownLineCount);

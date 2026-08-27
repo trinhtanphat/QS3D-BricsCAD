@@ -248,8 +248,11 @@ namespace QS3D.Core.Reporting
                 if (observedCount > MaxSelectionElementIds)
                     throw SelectionTooLarge();
 
-                var id = (raw ?? string.Empty).Trim();
-                if (id.Length == 0) throw new ArgumentException("Quantity report element ids must not be blank.", nameof(elementIds));
+                if (string.IsNullOrWhiteSpace(raw))
+                    throw new ArgumentException("Quantity report element ids must not be blank.", nameof(elementIds));
+                if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                    throw new ArgumentException("Quantity report element ids must be canonical and must not contain surrounding whitespace. Non-canonical id: " + raw + ".", nameof(elementIds));
+                var id = raw;
                 if (!selected.Add(id))
                     throw new ArgumentException("Quantity report element ids must be unique. Duplicate id: " + id + ".", nameof(elementIds));
                 var element = project.FindElement(id) ?? throw new KeyNotFoundException("Unknown quantity report element: " + id);

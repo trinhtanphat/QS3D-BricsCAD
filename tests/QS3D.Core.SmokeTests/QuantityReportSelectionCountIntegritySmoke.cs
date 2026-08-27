@@ -17,7 +17,12 @@ namespace QS3D.Core.SmokeTests
             ConflictingKnownCountsFailBeforeEnumeration();
             UnderTraversalFailsClosed();
             OverTraversalFailsClosed();
-            HonestKnownCountPreservesSelectionSemantics();
+            NonCanonicalDetailSelectionFailsClosed();
+            NonCanonicalGroupSelectionFailsClosed();
+            NonCanonicalDuplicateAliasFailsClosed();
+            BlankAndNullSelectionIdsFailClosed();
+            CanonicalCaseInsensitiveSelectionStillWorks();
+            CanonicalCaseInsensitiveDuplicateStillFailsClosed();
             PureStreamRejectsItem10001();
             ExactKnownCountEntersEnumeration();
         }
@@ -60,13 +65,52 @@ namespace QS3D.Core.SmokeTests
             ExpectInvalidOperation(() => ProjectQuantityReportBuilder.Detail(project, source));
         }
 
-        private static void HonestKnownCountPreservesSelectionSemantics()
+        private static void NonCanonicalDetailSelectionFailsClosed()
         {
-            var project = ProjectWithElements("honest", "E1");
+            var project = ProjectWithElements("noncanonical-detail", "E1");
             var source = new ReadOnlyCountSequence(1, new[] { " e1 " });
+            ExpectArgumentException(() => ProjectQuantityReportBuilder.Detail(project, source));
+        }
+
+        private static void NonCanonicalGroupSelectionFailsClosed()
+        {
+            var project = ProjectWithElements("noncanonical-group", "E1");
+            var source = new ReadOnlyCountSequence(1, new[] { "E1 " });
+            ExpectArgumentException(() => ProjectQuantityReportBuilder.Group(project, source));
+        }
+
+        private static void NonCanonicalDuplicateAliasFailsClosed()
+        {
+            var project = ProjectWithElements("noncanonical-alias", "E1");
+            var source = new ReadOnlyCountSequence(2, new[] { "E1", " E1" });
+            ExpectArgumentException(() => ProjectQuantityReportBuilder.Detail(project, source));
+        }
+
+        private static void BlankAndNullSelectionIdsFailClosed()
+        {
+            var project = ProjectWithElements("blank-null", "E1");
+            ExpectArgumentException(() => ProjectQuantityReportBuilder.Detail(
+                project,
+                new ReadOnlyCountSequence(1, new[] { "   " })));
+            ExpectArgumentException(() => ProjectQuantityReportBuilder.Detail(
+                project,
+                new ReadOnlyCountSequence(1, new[] { (string)null! })));
+        }
+
+        private static void CanonicalCaseInsensitiveSelectionStillWorks()
+        {
+            var project = ProjectWithElements("canonical-case", "E1");
+            var source = new ReadOnlyCountSequence(1, new[] { "e1" });
             var rows = ProjectQuantityReportBuilder.Detail(project, source);
             if (rows.Count != 1 || rows[0].ElementIds.Count != 1 || rows[0].ElementIds[0] != "E1")
-                throw new Exception("Quantity report honest Count control must preserve case-insensitive, trimmed selected-element lookup.");
+                throw new Exception("Quantity report canonical selection must preserve case-insensitive semantic lookup without rewriting the input token.");
+        }
+
+        private static void CanonicalCaseInsensitiveDuplicateStillFailsClosed()
+        {
+            var project = ProjectWithElements("canonical-duplicate", "E1");
+            var source = new ReadOnlyCountSequence(2, new[] { "E1", "e1" });
+            ExpectArgumentException(() => ProjectQuantityReportBuilder.Detail(project, source));
         }
 
         private static void PureStreamRejectsItem10001()
@@ -141,6 +185,20 @@ namespace QS3D.Core.SmokeTests
             }
 
             throw new Exception("Expected InvalidOperationException.");
+        }
+
+        private static void ExpectArgumentException(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (ArgumentException)
+            {
+                return;
+            }
+
+            throw new Exception("Expected ArgumentException.");
         }
 
         private sealed class EnumerationEnteredException : Exception

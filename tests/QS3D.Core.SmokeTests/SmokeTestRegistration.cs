@@ -67,6 +67,7 @@ namespace QS3D.Core.SmokeTests
             RevisionSnapshotStoreIntegritySmoke.Run();
             WorkflowPersistenceSmoke.Run();
             BbsRegressionSmoke.Run();
+            BbsXlsxElementProvenanceSmoke.Run();
             RebarCsvStrictUtf8Smoke.Run();
             WorkflowSafetySmoke.Run();
             CompletionRegressionSmoke.Run();
@@ -134,6 +135,7 @@ namespace QS3D.Core.SmokeTests
             GridSystemPlannerSmoke.Run();
             PolygonScanlineClipperSmoke.Run();
             PolygonRegionScanlineSmoke.Run();
+            PolygonRegionHoleSnapshotSmoke.Run();
             PolygonalSlabMeshHolesSmoke.Run();
             BulgedPolygonFootprintSmoke.Run();
             SemanticTagRendererSmoke.Run();
@@ -180,6 +182,7 @@ namespace QS3D.Core.SmokeTests
             ProjectStateSnapshotElementIdentitySmoke.Run();
             ProjectStateSnapshotFamilyIdentitySmoke.Run();
             ProjectPersistenceCheckpointSmoke.Run();
+            ProjectPersistenceCheckpointRevisionDriftSmoke.Run();
             ProjectMetadataBoundSmoke.Run();
             ProjectZoneAssignmentBoundSmoke.Run();
             ProjectFamilyAssignmentBoundSmoke.Run();
@@ -223,6 +226,7 @@ namespace QS3D.Core.SmokeTests
             MepRecognitionSmoke.Run();
             ClashDetectionKnownCountContractSmoke.Run();
             ClashDetectionResultBoundSmoke.Run();
+            CoordinationSpatialIdentitySmoke.Run();
             FeatureInteractionContractsSmoke.Run();
             WorkspaceFeatureSessionSmoke.Run();
             WorkspaceSchemaFormsSmoke.Run();
