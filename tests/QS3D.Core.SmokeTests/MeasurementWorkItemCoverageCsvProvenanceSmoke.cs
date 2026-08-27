@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
@@ -17,7 +18,7 @@ namespace QS3D.Core.SmokeTests
         {
             LegacyCsvContractRemainsStable();
             ProvenanceIsDetachedAndDeterministic();
-            ProvenanceCsvPreservesInjectionGuard();
+            FormulaLeadingProvenanceIdentityFailsClosed();
             InvalidProvenanceInputFailsClosed();
         }
 
@@ -65,14 +66,15 @@ namespace QS3D.Core.SmokeTests
                 "Coverage CSV row must carry exact source provenance.");
         }
 
-        private static void ProvenanceCsvPreservesInjectionGuard()
+        private static void FormulaLeadingProvenanceIdentityFailsClosed()
         {
-            var project = BuildProject("=project-formula", "+fingerprint-formula");
-            var csv = MeasurementWorkItemCoverageCsvExporter.ToCsv(
-                MeasurementWorkItemCoverageMatrix.Create(project, Report(project)));
+            var projectId = BuildProject("=project-formula", "fingerprint-formula");
+            Throws<InvalidDataException>(() => MeasurementWorkItemCoverageCsvExporter.ToCsv(
+                MeasurementWorkItemCoverageMatrix.Create(projectId, Report(projectId))));
 
-            True(csv.Contains("\"'=project-formula\""), "Project id provenance must preserve CSV formula-injection hardening.");
-            True(csv.Contains("\"'+fingerprint-formula\""), "Drawing fingerprint provenance must preserve CSV formula-injection hardening.");
+            var drawing = BuildProject("project-formula", "+fingerprint-formula");
+            Throws<InvalidDataException>(() => MeasurementWorkItemCoverageCsvExporter.ToCsv(
+                MeasurementWorkItemCoverageMatrix.Create(drawing, Report(drawing))));
         }
 
         private static void InvalidProvenanceInputFailsClosed()
