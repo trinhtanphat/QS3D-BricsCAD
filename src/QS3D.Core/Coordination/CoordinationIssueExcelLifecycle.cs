@@ -57,8 +57,8 @@ namespace QS3D.Core.Coordination
     {
         public CoordinationIssueExcelEdit(string issueId, string issueRevision, string status, string severity, string assignee, string commentAuthor = "", string comment = "")
         {
-            IssueId = Required(issueId, nameof(issueId));
-            IssueRevision = Required(issueRevision, nameof(issueRevision));
+            IssueId = RequiredIdentity(issueId, nameof(issueId));
+            IssueRevision = RequiredIdentity(issueRevision, nameof(issueRevision));
             Status = Required(status, nameof(status));
             Severity = Required(severity, nameof(severity));
             Assignee = Optional(assignee, nameof(assignee));
@@ -77,6 +77,21 @@ namespace QS3D.Core.Coordination
         public string Assignee { get; }
         public string CommentAuthor { get; }
         public string Comment { get; }
+
+        private static string RequiredIdentity(string value, string parameter)
+        {
+            var raw = value ?? string.Empty;
+            if (raw.Length > 32767) throw new ArgumentException("Value exceeds the Excel text limit.", parameter);
+            for (var i = 0; i < raw.Length; i++)
+            {
+                if (char.IsControl(raw[i])) throw new ArgumentException("Control characters are not allowed in coordination identity text.", parameter);
+            }
+            var trimmed = raw.Trim();
+            if (trimmed.Length == 0) throw new ArgumentException("Value is required.", parameter);
+            if (!string.Equals(raw, trimmed, StringComparison.Ordinal))
+                throw new ArgumentException("Coordination identity text must not contain leading or trailing whitespace.", parameter);
+            return raw;
+        }
 
         private static string Required(string value, string parameter)
         {
@@ -142,9 +157,11 @@ namespace QS3D.Core.Coordination
             if (edits == null) throw new ArgumentNullException(nameof(edits));
             if (changedAtUtc.Kind != DateTimeKind.Utc)
                 throw new ArgumentException("Coordination Excel import timestamp must be UTC.", nameof(changedAtUtc));
-            if (!string.Equals(current.ProjectId, (workbookProjectId ?? string.Empty).Trim(), StringComparison.Ordinal))
+            var canonicalWorkbookProjectId = CanonicalWorkbookIdentity(workbookProjectId, "project id");
+            var canonicalWorkbookDrawingFingerprint = CanonicalWorkbookIdentity(workbookDrawingFingerprint, "drawing fingerprint");
+            if (!string.Equals(current.ProjectId, canonicalWorkbookProjectId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Coordination workbook belongs to a different project id.");
-            if (!string.Equals(current.DrawingFingerprint, (workbookDrawingFingerprint ?? string.Empty).Trim(), StringComparison.Ordinal))
+            if (!string.Equals(current.DrawingFingerprint, canonicalWorkbookDrawingFingerprint, StringComparison.Ordinal))
                 throw new InvalidOperationException("Coordination workbook belongs to a different drawing fingerprint.");
             if (workbookRevision != current.Revision)
                 throw new InvalidOperationException("Coordination workbook revision is stale. Re-export before importing edits.");
@@ -236,6 +253,20 @@ namespace QS3D.Core.Coordination
                 (issue.Assignee ?? string.Empty) + "\u001f" +
                 issue.UpdatedAtUtc.ToString("O", CultureInfo.InvariantCulture) + "\u001f" +
                 issue.Comments.Count.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static string CanonicalWorkbookIdentity(string value, string label)
+        {
+            var raw = value ?? string.Empty;
+            for (var i = 0; i < raw.Length; i++)
+            {
+                if (char.IsControl(raw[i]))
+                    throw new InvalidOperationException("Coordination workbook " + label + " contains control characters.");
+            }
+            var trimmed = raw.Trim();
+            if (trimmed.Length == 0 || !string.Equals(raw, trimmed, StringComparison.Ordinal))
+                throw new InvalidOperationException("Coordination workbook " + label + " must be canonical without surrounding whitespace.");
+            return raw;
         }
 
         private static T ParseCanonical<T>(string value, string field, string issueId) where T : struct
