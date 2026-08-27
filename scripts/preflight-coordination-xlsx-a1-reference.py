@@ -23,28 +23,38 @@ def main() -> None:
 
     require(
         text,
-        "ParseCellReference(reference)",
+        "TryParseA1CellReference(cellReference, out columnIndex, out parsedRowIndex)",
         "Coordination XLSX import must parse the complete A1 cell reference, not only its column prefix.",
     )
     require(
         text,
-        "ParseWorksheetRowReference",
-        "Coordination XLSX import must validate the containing worksheet row identity.",
+        "int.TryParse(rowReference, NumberStyles.None, CultureInfo.InvariantCulture, out expectedRowIndex)",
+        "Coordination XLSX import must validate the containing worksheet row identity using invariant decimal parsing.",
     )
     require(
         text,
-        "cellReference.Row != rowNumber",
+        "parsedRowIndex != expectedRowIndex",
         "Coordination XLSX import must reject a cell whose encoded row disagrees with its containing worksheet row.",
     )
     require(
         text,
-        "reference[index] >= 'A' && reference[index] <= 'Z'",
-        "Coordination XLSX A1 parsing must use canonical ASCII uppercase column letters.",
+        "if (character < 'A' || character > 'Z') break;",
+        "Coordination XLSX A1 parsing must constrain column letters to ASCII A-Z.",
     )
     require(
         text,
-        "reference[index] >= '0' && reference[index] <= '9'",
+        "if (reference[i] < '0' || reference[i] > '9') return false;",
         "Coordination XLSX A1 parsing must validate the complete decimal row suffix.",
+    )
+    require(
+        text,
+        "columnNumber > MaxColumns",
+        "Coordination XLSX A1 parsing must reject columns beyond the XLSX XFD boundary.",
+    )
+    require(
+        text,
+        "parsedRowIndex > MaxRows",
+        "Coordination XLSX A1 parsing must reject rows beyond the XLSX 1,048,576 boundary.",
     )
     forbid(
         text,
