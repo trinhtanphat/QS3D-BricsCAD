@@ -467,14 +467,14 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Priority: P0
 - Status: IN_PROGRESS
 - Area: issue `#4041`; BricsCAD V25 Móng Bè Add/Edit/native 3D/Quantity Insight viewport highlight
-- Source/artifact status: `SOURCE_FIX_LANDED / ARTIFACT_FROZEN / PENDING_LOCAL`
+- Source/artifact status: `SOURCE_FIX_LANDED / OFFLINE_READY / WAITING_FRESH_HOST_HANDOFF / RUNTIME_NOT_PROVEN`
 - Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
-- Eligible artifact: `v0.1.0-preview.10225`; source `50a6b05280c48c706907273c83c0cdee0be52ab2`; ProductVersion `0.1.0-preview.10225`.
-- Frozen hashes: ZIP `B8C90D13B8C59D82A458B4F2FA4BCF8F2D90DFC42E88A1594AFAA42D71076583`; V25 adapter `945E72B58C298C7A8FD79DD8E284607A357DB473B6D427BB955AEB1BDF38E743`; Core `18BF61875D2ECC54E72F58EE0F9BCF2B13F95B0687A573A4F643D319A57EF0F6`.
-- Source basis: source correction #4078 landed via merged PR #4111. This LOCAL_ONLY lane must not patch production source unless a fresh runtime defect is handed off separately.
-- Runtime gate: wait for a fresh literal `HOST_RELEASED` from #72 naming #4041 and the frozen artifact before any BricsCAD/shared-host access. Hosted/static/source evidence is not `LOCAL_PASS`.
+- Successor artifact: `v0.1.0-preview.10227`; source `8cc71973feff95d109f97d610196dbcd801ba208`; ProductVersion `0.1.0-preview.10227`.
+- Successor ZIP SHA-256: `8118890208A0448BCB7743875EE09F5F07C267FAFA32F3549C851900D663D233`.
+- Source basis: the production Workspace quick-action host-order defect found by the `.10225` licensed cell was tracked as #4127 and fixed through merged PR #4129 (`1c55ed101d6058e37253cd4888341cfb983700ec`); `.10227` contains that merge ancestor. This LOCAL_ONLY lane must not patch production source unless a fresh runtime defect is handed off separately.
+- Runtime gate: admission remains closed until #72 issues a fresh literal `HOST_RELEASED` naming #4041 and exact `10227@8cc71973feff95d109f97d610196dbcd801ba208`. Hosted/static/source/offline evidence is not `LOCAL_PASS`.
 - Scenario: qualify `Móng > Móng Bè > Add/Edit`, closed-boundary native 3D creation, expected 4 m × 6 m × 0.8 m quantity evidence, yellow included-row and red deduction-row transient viewport highlights, highlight clearing/non-persistence, and cleanup on licensed V25.
-- Evidence: historical `v0.1.0-preview.10222` = `NO_RESULT / BASELINE_MARKER_TIMEOUT`; the frozen `.10225` artifact has no licensed runtime verdict yet.
+- Evidence: `v0.1.0-preview.10222` = `NO_RESULT / BASELINE_MARKER_TIMEOUT`; `v0.1.0-preview.10225@50a6b05280c48c706907273c83c0cdee0be52ab2` = `NO_RESULT / UI_DRAW_BUTTON_PROBE_ASSERTION`, which exposed #4127 and did not reach Móng Bè/QTO/highlight assertions. The successor `.10227` artifact is `OFFLINE_READY` only and has no licensed runtime verdict yet.
 - Evidence required: exact artifact/source/host identity; Family/native geometry/quantity/highlight results; save/reopen where specified by #4041; sanitized cleanup evidence with zero owned host residue.
 - Updated: 2026-08-27
 
@@ -506,6 +506,22 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Evidence required: exact tested QS3D SHA and matching V25/V26 plugin/host identity; pair/owner/XData/native entity assertions; before/after replacement and Health results; Undo/Redo/save/reopen/multi-DWG results; sanitized cleanup evidence. Record only sanitized evidence; no private paths, raw Handles/ProjectIds, proprietary DLLs or customer drawings.
 - Evidence: `PENDING_LOCAL`
 - Related docs/source: `docs/LOCAL-GRID-INTERSECTION-MARKER-QUALIFICATION.md`; `scripts/preflight-grid-intersection-marker-lifecycle.py`; issue #3771; PR #4109.
+- Updated: 2026-08-27
+
+## LOCAL-023 — Beam formwork behavior matrix on preview.10223
+
+- Priority: P1
+- Status: OPEN
+- Area: issue `#4093`; BricsCAD V25 Beam formwork M1–M8 behavior matrix
+- Source/harness status: `PREP_READY / CI_GREEN / NO_RESULT / LOCAL_RUNTIME_REQUIRED`
+- Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
+- Exact runtime artifact: `v0.1.0-preview.10223`; source `1363f9be69ebc8ca8a865ccdd41639346f55f6ee`; licensed host boundary BricsCAD V25.2.10 x64.
+- Artifact hashes: ZIP `A83BC92A1F90B00ADF7DFE0B1C92DF2EF7A3286D7ED99E4307ED8E0B87F22222`; packaged V25 DLL `3F0156A8DFD9BB31ECE43665D5D8334DA320172A6EAFB929967268218168F22F`.
+- Canonical runtime carrier: draft PR #4094 / branch `agent/gpt56sol/issue-4093-beam-preview10223-matrix`. Keep that carrier draft; do not rebase or merge it merely for freshness while licensed runtime evidence is pending.
+- Scenario: execute M1–M8 from `docs/LOCAL-V25-BEAM-FORMWORK-MATRIX.md` against the exact packaged DLL: Side/Bottom rule toggles, Top and End/Other exclusion, directed Side/Bottom deductions, aggregate/detail `FormworkM2` parity, and diagonal-axis face classification.
+- Runtime gate: licensed interactive V25 only. Do not rebuild, substitute, instrument, or relabel the pinned preview. Verify sanitized evidence with `scripts/test-local-v25-beam-formwork-matrix-evidence.ps1` and restore profile/Loader/DemandLoad state with zero test-owned process residue.
+- Evidence: `NO_RESULT / LOCAL_RUNTIME_REQUIRED`; prepared carrier CI is green but hosted/source evidence is not `LOCAL_PASS`.
+- Evidence required: exact preview/source/ZIP/DLL/host identity; M1–M8 gross/net/classification/parity results; verifier result; sanitized cleanup/no-residue evidence.
 - Updated: 2026-08-27
 
 ## P1 — #3480 Quantity Review exact native BREP face highlight
