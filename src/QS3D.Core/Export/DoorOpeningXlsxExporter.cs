@@ -105,7 +105,7 @@ namespace QS3D.Core.Export
                 throw new InvalidOperationException("Door/opening XLSX " + label + " count changed during snapshot.");
         }
 
-        private static int RequireConsistentKnownCount<T>(object source, int primaryCount, int maximum, string label)
+        private static int RequireConsistentKnownCount<T>(IEnumerable<T> source, int primaryCount, int maximum, string label)
         {
             int? expected = null;
             Action<int> bind = count =>
