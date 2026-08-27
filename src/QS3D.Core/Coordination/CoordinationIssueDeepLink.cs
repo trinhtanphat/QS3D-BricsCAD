@@ -193,10 +193,14 @@ namespace QS3D.Core.Coordination
         private static string RequiredToken(string value, string parameterName)
         {
             var raw = value ?? string.Empty;
-            if (raw.Any(char.IsControl)) throw new ArgumentException("Control characters are not allowed.", parameterName);
-            var normalized = raw.Trim();
-            if (normalized.Length == 0) throw new ArgumentException("Value is required.", parameterName);
-            return normalized;
+            if (raw.Any(char.IsControl))
+                throw new ArgumentException("Control characters are not allowed.", parameterName);
+            var trimmed = raw.Trim();
+            if (trimmed.Length == 0)
+                throw new ArgumentException("Value is required.", parameterName);
+            if (!string.Equals(raw, trimmed, StringComparison.Ordinal))
+                throw new ArgumentException("Coordination deep-link identity must not contain leading or trailing whitespace.", parameterName);
+            return raw;
         }
 
         private static void ValidatePercentEncoding(string encoded, string key)
