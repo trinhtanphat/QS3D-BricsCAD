@@ -1,0 +1,58 @@
+name: Temporary LOCAL-023 registration
+
+on:
+  push:
+    branches:
+      - agent/chatgpt/issue-4170-beam-local-inbox
+
+permissions:
+  contents: write
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Register Beam LOCAL-023 and remove temporary workflow
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/LOCAL-AGENT-INBOX.md')
+          text = path.read_text(encoding='utf-8')
+          if '## LOCAL-023 —' in text:
+              raise SystemExit('LOCAL-023 already exists; refusing duplicate registration')
+          anchor = '## P1 — #3480 Quantity Review exact native BREP face highlight\n'
+          if text.count(anchor) != 1:
+              raise SystemExit(f'expected exactly one insertion anchor, found {text.count(anchor)}')
+          block = '''## LOCAL-023 — Beam formwork behavior matrix on preview.10223
+
+          - Priority: P1
+          - Status: OPEN
+          - Area: issue `#4093`; BricsCAD V25 Beam formwork M1–M8 behavior matrix
+          - Source/harness status: `PREP_READY / CI_GREEN / NO_RESULT / LOCAL_RUNTIME_REQUIRED`
+          - Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
+          - Exact runtime artifact: `v0.1.0-preview.10223`; source `1363f9be69ebc8ca8a865ccdd41639346f55f6ee`; licensed host boundary BricsCAD V25.2.10 x64.
+          - Artifact hashes: ZIP `A83BC92A1F90B00ADF7DFE0B1C92DF2EF7A3286D7ED99E4307ED8E0B87F22222`; packaged V25 DLL `3F0156A8DFD9BB31ECE43665D5D8334DA320172A6EAFB929967268218168F22F`.
+          - Canonical runtime carrier: draft PR #4094 / branch `agent/gpt56sol/issue-4093-beam-preview10223-matrix`. Keep that carrier draft; do not rebase or merge it merely for freshness while licensed runtime evidence is pending.
+          - Scenario: execute M1–M8 from `docs/LOCAL-V25-BEAM-FORMWORK-MATRIX.md` against the exact packaged DLL: Side/Bottom rule toggles, Top and End/Other exclusion, directed Side/Bottom deductions, aggregate/detail `FormworkM2` parity, and diagonal-axis face classification.
+          - Runtime gate: licensed interactive V25 only. Do not rebuild, substitute, instrument, or relabel the pinned preview. Verify sanitized evidence with `scripts/test-local-v25-beam-formwork-matrix-evidence.ps1` and restore profile/Loader/DemandLoad state with zero test-owned process residue.
+          - Evidence: `NO_RESULT / LOCAL_RUNTIME_REQUIRED`; prepared carrier CI is green but hosted/source evidence is not `LOCAL_PASS`.
+          - Evidence required: exact preview/source/ZIP/DLL/host identity; M1–M8 gross/net/classification/parity results; verifier result; sanitized cleanup/no-residue evidence.
+          - Updated: 2026-08-27
+
+          '''
+          block = '\n'.join(line[10:] if line.startswith('          ') else line for line in block.splitlines()) + '\n'
+          path.write_text(text.replace(anchor, block + anchor), encoding='utf-8')
+          PY
+          rm .github/workflows/temporary-local023-registration.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/LOCAL-AGENT-INBOX.md .github/workflows/temporary-local023-registration.yml
+          git diff --cached --quiet && { echo "No registration generated"; exit 1; }
+          git commit -m "docs(local): register Beam runtime matrix"
+          git push origin HEAD:agent/chatgpt/issue-4170-beam-local-inbox
