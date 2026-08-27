@@ -119,9 +119,19 @@ namespace QS3D.Core.Export
 
         private static void ValidateElementIdProvenance(string value, int rowIndex)
         {
+            var safe = value ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(safe))
+                throw InvalidElementId(rowIndex, "is required.");
+            if (!string.Equals(safe, safe.Trim(), StringComparison.Ordinal))
+                throw InvalidElementId(rowIndex, "must not contain leading or trailing whitespace.");
+            foreach (var ch in safe)
+            {
+                if (char.IsControl(ch))
+                    throw InvalidElementId(rowIndex, "must not contain control characters.");
+            }
             try
             {
-                XmlConvert.VerifyXmlChars(value ?? string.Empty);
+                XmlConvert.VerifyXmlChars(safe);
             }
             catch (XmlException ex)
             {
@@ -131,6 +141,14 @@ namespace QS3D.Core.Export
                     "rows",
                     ex);
             }
+        }
+
+        private static ArgumentException InvalidElementId(int rowIndex, string reason)
+        {
+            return new ArgumentException(
+                "BBS XLSX worksheet row " + (rowIndex + HeaderRows + 1).ToString(CultureInfo.InvariantCulture) +
+                " field 'Element' " + reason,
+                "rows");
         }
 
         private static void ValidatePositive(double value, int rowIndex, string field)
