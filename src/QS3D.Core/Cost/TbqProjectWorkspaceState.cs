@@ -58,12 +58,7 @@ namespace QS3D.Core.Cost
 
         private static string RequireText(string value, string parameterName, string label)
         {
-            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException(label + " is required.", parameterName);
-            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
-                throw new ArgumentException(label + " must not contain surrounding whitespace.", parameterName);
-            for (var i = 0; i < value.Length; i++)
-                if (char.IsControl(value[i])) throw new ArgumentException(label + " must not contain control characters.", parameterName);
-            return value;
+            return AdvancedCostTextContract.RequireCanonicalText(value, parameterName, label);
         }
     }
 
