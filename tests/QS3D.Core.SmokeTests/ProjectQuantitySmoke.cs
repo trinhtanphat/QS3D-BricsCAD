@@ -159,7 +159,7 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("ED2 detail provenance/order failed.");
             if (detail[0].Zone != "Zone A") throw new Exception("ED2 detail must expose the semantic Zone.");
 
-            var selectedDetail = ProjectQuantityReportBuilder.Detail(project, new[] { " w2 " });
+            var selectedDetail = ProjectQuantityReportBuilder.Detail(project, new[] { "w2" });
             var selectedSummary = ProjectQuantityReportBuilder.Group(project, new[] { "W2" });
             if (selectedDetail.Count != 1 || selectedDetail[0].ElementIds.Single() != "W2" || selectedSummary.Single().Count != 1)
                 throw new Exception("ED2 selected semantic scope failed.");

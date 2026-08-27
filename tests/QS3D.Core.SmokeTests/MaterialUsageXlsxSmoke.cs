@@ -30,6 +30,8 @@ namespace QS3D.Core.SmokeTests
                     VolumeM3 = 0.27d,
                     MassKg = 0d
                 };
+                row.ElementIds.Add("element-1");
+                row.ElementIds.Add("element-2");
                 MaterialUsageXlsxExporter.Export(path, new List<MaterialUsageRow> { row });
                 if (!File.Exists(path)) throw new Exception("Material XLSX was not created.");
                 using (var archive = ZipFile.OpenRead(path))

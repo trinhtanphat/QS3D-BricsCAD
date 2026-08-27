@@ -40,8 +40,13 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static string RequireToken(string value, string parameterName)
         {
-            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Value is required.", parameterName);
-            return value.Trim();
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("Value is required.", parameterName);
+            if (char.IsWhiteSpace(value[0]) || char.IsWhiteSpace(value[value.Length - 1]))
+                throw new ArgumentException("Value must use canonical identity without surrounding whitespace.", parameterName);
+            if (value.Any(char.IsControl))
+                throw new ArgumentException("Value must not contain control characters.", parameterName);
+            return value;
         }
 
         private sealed class Controller : IDisposable

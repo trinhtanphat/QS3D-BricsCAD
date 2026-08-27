@@ -76,10 +76,12 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (string.IsNullOrWhiteSpace(contentKey))
                 throw new ArgumentException("Floating tool key cannot be blank.", nameof(contentKey));
-            if (!_tools.TryGetValue(contentKey.Trim(), out var hosted)) return false;
+            if (!StringComparer.Ordinal.Equals(contentKey, contentKey.Trim()))
+                throw new ArgumentException("Floating tool key must not contain leading or trailing whitespace.", nameof(contentKey));
+            if (!_tools.TryGetValue(contentKey, out var hosted)) return false;
 
-            RememberBounds(contentKey.Trim(), hosted.Window);
-            _tools.Remove(contentKey.Trim());
+            RememberBounds(contentKey, hosted.Window);
+            _tools.Remove(contentKey);
             hosted.Window.Close();
             return true;
         }

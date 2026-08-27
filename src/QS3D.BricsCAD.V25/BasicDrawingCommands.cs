@@ -162,19 +162,38 @@ namespace QS3D.BricsCAD.V25
             var family = ProjectFamilyActivationService.GetActive(project);
             if (family == null)
                 throw new InvalidOperationException(operation + ": chưa có Family / Type active. Chọn Family trong Workspace trước khi vẽ.");
-            if (string.IsNullOrWhiteSpace(project.ProjectId))
-                throw new InvalidOperationException(operation + ": QS3D project không có identity hợp lệ.");
-            if (string.IsNullOrWhiteSpace(family.Id))
-                throw new InvalidOperationException(operation + ": Family active không có identity hợp lệ.");
+
+            var projectId = RequireCanonicalIdentity(
+                project.ProjectId,
+                operation + ": QS3D project không có identity canonical hợp lệ.");
+            var familyId = RequireCanonicalIdentity(
+                family.Id,
+                operation + ": Family active không có identity canonical hợp lệ.");
 
             return new BasicDrawingContext(
-                project.ProjectId,
+                projectId,
                 project.ChangeVersion,
-                family.Id,
+                familyId,
                 family.Name,
                 family.Category,
                 project.ActiveFloorId,
                 project.ActiveZoneId);
+        }
+
+        private static string RequireCanonicalIdentity(string value, string message)
+        {
+            if (string.IsNullOrWhiteSpace(value) ||
+                !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
+                ContainsControlCharacter(value))
+                throw new InvalidOperationException(message);
+            return value;
+        }
+
+        private static bool ContainsControlCharacter(string value)
+        {
+            foreach (var character in value)
+                if (char.IsControl(character)) return true;
+            return false;
         }
 
         private static void RequireFreshContext(
@@ -266,8 +285,8 @@ namespace QS3D.BricsCAD.V25
             using (var marker = new ResultBuffer(
                 new TypedValue((int)DxfCode.ExtendedDataRegAppName, RegAppName),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, MarkerVersion),
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, IdentityToken("p1:", context.ProjectId)),
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, IdentityToken("f1:", context.FamilyId)),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, RequiredIdentityToken("p1:", context.ProjectId)),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, RequiredIdentityToken("f1:", context.FamilyId)),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, context.Category.ToString()),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, IdentityToken("l1:", context.FloorId)),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, IdentityToken("z1:", context.ZoneId)),
@@ -275,13 +294,24 @@ namespace QS3D.BricsCAD.V25
                 entity.XData = marker;
         }
 
+        private static string RequiredIdentityToken(string prefix, string value)
+        {
+            var canonical = RequireCanonicalIdentity(value, "QS3D basic draw marker identity không canonical.");
+            return HashIdentity(prefix, canonical);
+        }
+
         private static string IdentityToken(string prefix, string value)
         {
             var normalized = (value ?? string.Empty).Trim();
             if (normalized.Length == 0) return prefix + "none";
+            return HashIdentity(prefix, normalized);
+        }
+
+        private static string HashIdentity(string prefix, string value)
+        {
             using (var sha = SHA256.Create())
             {
-                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(normalized));
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(value));
                 var builder = new StringBuilder(prefix.Length + hash.Length * 2);
                 builder.Append(prefix);
                 foreach (var item in hash)

@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
-using System.Security;
 using System.Text;
+using System.Xml;
 using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
 
@@ -34,6 +34,7 @@ namespace QS3D.Core.Export
                 throw new InvalidOperationException("Door/opening XLSX export row count changed during snapshot.");
             ValidateCellText(snapshot);
             ValidateNumericValues(snapshot);
+            ValidateProvenanceIntegrity(snapshot);
 
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
@@ -135,6 +136,56 @@ namespace QS3D.Core.Export
                 RequireNonNegative(row.SillHeightM, label + "SillHeightM");
                 RequireNonNegative(row.ThicknessM, label + "ThicknessM");
                 RequireNonNegative(row.OpeningAreaM2, label + "OpeningAreaM2");
+            }
+        }
+
+        private static void ValidateProvenanceIntegrity(IReadOnlyList<DoorOpeningScheduleRow> rows)
+        {
+            for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+            {
+                var row = rows[rowIndex];
+                var label = "worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " ";
+                if (row.Count != row.ElementIds.Count)
+                    throw new ArgumentException(
+                        "Door/opening XLSX " + label + "Count must match Element IDs count.",
+                        "rows");
+                if (row.HostCount != row.HostIds.Count)
+                    throw new ArgumentException(
+                        "Door/opening XLSX " + label + "HostCount must match Host IDs count.",
+                        "rows");
+
+                RequireXmlProvenance(row.ProjectId, label + "Project ID");
+                RequireXmlProvenance(row.DrawingFingerprint, label + "Drawing Fingerprint");
+                RequireXmlProvenance(row.ElementIds, label + "Element IDs");
+                RequireXmlProvenance(row.HostIds, label + "Host IDs");
+                RequireXmlProvenance(row.SourceHandles, label + "Source Handles");
+            }
+        }
+
+        private static void RequireXmlProvenance(string value, string label)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value ?? string.Empty);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException(
+                    "Door/opening XLSX " + label + " contains characters that are invalid in XML provenance.",
+                    "rows",
+                    ex);
+            }
+        }
+
+        private static void RequireXmlProvenance(IEnumerable<string> values, string label)
+        {
+            var index = 0;
+            foreach (var value in values)
+            {
+                RequireXmlProvenance(
+                    value ?? string.Empty,
+                    label + "[" + index.ToString(CultureInfo.InvariantCulture) + "]");
+                index++;
             }
         }
 

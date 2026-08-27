@@ -60,13 +60,14 @@ namespace QS3D.Core.Coordination
 
         public CoordinationIssue? Find(string issueId)
         {
-            var normalized = (issueId ?? string.Empty).Trim();
-            if (normalized.Length == 0) return null;
+            var candidate = issueId ?? string.Empty;
+            if (candidate.Length == 0) return null;
+            if (!string.Equals(candidate, candidate.Trim(), StringComparison.Ordinal)) return null;
             CoordinationIssue? match = null;
             for (var i = 0; i < _issues.Count; i++)
             {
-                if (!string.Equals(_issues[i].IssueId, normalized, StringComparison.OrdinalIgnoreCase)) continue;
-                if (match != null) throw new InvalidOperationException("Coordination persistence snapshot contains duplicate issue id: " + normalized + ".");
+                if (!string.Equals(_issues[i].IssueId, candidate, StringComparison.OrdinalIgnoreCase)) continue;
+                if (match != null) throw new InvalidOperationException("Coordination persistence snapshot contains duplicate issue id: " + candidate + ".");
                 match = _issues[i];
             }
             return match;

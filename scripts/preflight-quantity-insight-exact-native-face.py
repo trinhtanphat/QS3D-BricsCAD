@@ -48,7 +48,9 @@ def main():
         return fail("exact native BREP face contract is incomplete", ["missing: " + token for token in missing])
 
     geometry_required = [
-        'Text = face.FaceId + " • " + face.FaceType',
+        "Text = face.FaceId +",
+        "string.IsNullOrWhiteSpace(face.SemanticKey)",
+        '" • " + face.FaceType',
         'AddQuantityGeometryValue("S gộp"',
         'AddQuantityGeometryValue("S còn"',
         "TryRevalidateQuantityGeometry(",
