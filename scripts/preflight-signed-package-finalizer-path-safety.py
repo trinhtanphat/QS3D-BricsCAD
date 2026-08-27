@@ -80,18 +80,34 @@ def main() -> None:
         "$metadata | ConvertTo-Json",
         "package-tree validation must precede metadata mutation",
     )
-    require_before(
+
+    zip_parent_pos = require(
         v25,
         "Assert-NoReparseDirectoryChain -Path $zipParent",
-        "Remove-Item -LiteralPath $zip -Force",
-        "ZIP parent validation must precede ZIP removal",
+        "ZIP parent validation",
     )
-    require_before(
+    zip_target_pos = require(
         v25,
         "$zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'",
-        "Remove-Item -LiteralPath $zip -Force",
-        "ZIP target containment validation must precede ZIP removal",
+        "ZIP target containment validation",
     )
+    zip_mutations = (
+        ("Remove-Item -LiteralPath $zip -Force", "legacy ZIP removal"),
+        ("[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)", "atomic ZIP replacement"),
+        ("[IO.File]::Move($tempZip, $zip)", "atomic ZIP publication"),
+    )
+    present_mutations = [
+        (token, label, v25.find(token))
+        for token, label in zip_mutations
+        if token in v25
+    ]
+    if not present_mutations:
+        raise SystemExit("FAIL: missing recognized ZIP mutation/publication path")
+    for token, label, mutation_pos in present_mutations:
+        if zip_parent_pos >= mutation_pos:
+            raise SystemExit(f"FAIL: ZIP parent validation must precede {label}: {token}")
+        if zip_target_pos >= mutation_pos:
+            raise SystemExit(f"FAIL: ZIP target containment validation must precede {label}: {token}")
 
     if "Get-ChildItem -LiteralPath $package -Recurse -File" in v25:
         raise SystemExit("FAIL: finalizer still recursively enumerates package files without the safe traversal helper")
@@ -104,7 +120,7 @@ def main() -> None:
     ):
         require(v26, token, label)
 
-    print("PASS: signed-package finalizer validates reparse/path/root/containment boundaries before destructive mutation")
+    print("PASS: signed-package finalizer validates reparse/path/root/containment boundaries before ZIP mutation/publication")
 
 
 if __name__ == "__main__":

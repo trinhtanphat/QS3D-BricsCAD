@@ -9,6 +9,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
+using System.Windows.Threading;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.Updates;
 using Application = Bricscad.ApplicationServices.Application;
@@ -33,6 +34,11 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly TextBlock _floorText = new TextBlock();
         private readonly TextBlock _elevationText = new TextBlock();
         private readonly TextBlock _statusText = new TextBlock();
+        private bool _hostLifecycleSubscribed;
+        private bool _hostRefreshQueued;
+        private bool _hostRefreshInProgress;
+        private bool _queuedRecordActiveDrawing;
+        private bool _windowClosed;
 
         public BltStartCenterWindow()
         {
@@ -44,8 +50,126 @@ namespace QS3D.BricsCAD.V25.UI
             Background = ShellBrush;
             Content = BuildShell();
 
-            Loaded += (_, __) => RefreshHomeShell(recordActiveDrawing: true);
-            Activated += (_, __) => RefreshHomeShell(recordActiveDrawing: true);
+            Loaded += OnWindowLoaded;
+            Activated += OnWindowActivated;
+            Closed += OnWindowClosed;
+        }
+
+        private void OnWindowLoaded(object sender, RoutedEventArgs e)
+        {
+            SubscribeToHostLifecycle();
+            QueueHomeRefresh(recordActiveDrawing: true);
+        }
+
+        private void OnWindowActivated(object sender, EventArgs e)
+        {
+            QueueHomeRefresh(recordActiveDrawing: true);
+        }
+
+        private void OnWindowClosed(object sender, EventArgs e)
+        {
+            _windowClosed = true;
+            _queuedRecordActiveDrawing = false;
+            UnsubscribeFromHostLifecycle();
+        }
+
+        private void SubscribeToHostLifecycle()
+        {
+            if (_hostLifecycleSubscribed || _windowClosed)
+                return;
+
+            Application.DocumentManager.DocumentActivated += OnHostDocumentActivated;
+            Application.DocumentManager.DocumentToBeDestroyed += OnHostDocumentToBeDestroyed;
+            _hostLifecycleSubscribed = true;
+        }
+
+        private void UnsubscribeFromHostLifecycle()
+        {
+            if (!_hostLifecycleSubscribed)
+                return;
+
+            try
+            {
+                Application.DocumentManager.DocumentActivated -= OnHostDocumentActivated;
+            }
+            catch
+            {
+                // Host teardown may already be disposing the document collection.
+            }
+
+            try
+            {
+                Application.DocumentManager.DocumentToBeDestroyed -= OnHostDocumentToBeDestroyed;
+            }
+            catch
+            {
+                // Host teardown may already be disposing the document collection.
+            }
+
+            _hostLifecycleSubscribed = false;
+        }
+
+        private void OnHostDocumentActivated(object sender, Bricscad.ApplicationServices.DocumentCollectionEventArgs e)
+        {
+            QueueHomeRefresh(recordActiveDrawing: true);
+        }
+
+        private void OnHostDocumentToBeDestroyed(object sender, Bricscad.ApplicationServices.DocumentCollectionEventArgs e)
+        {
+            // Defer until the host transition completes. Do not retain e.Document or record a drawing that is closing.
+            QueueHomeRefresh(recordActiveDrawing: false);
+        }
+
+        private void QueueHomeRefresh(bool recordActiveDrawing)
+        {
+            if (_windowClosed || Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+                return;
+
+            _queuedRecordActiveDrawing |= recordActiveDrawing;
+            if (_hostRefreshQueued)
+                return;
+
+            _hostRefreshQueued = true;
+            try
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(DrainQueuedHomeRefresh));
+            }
+            catch
+            {
+                _hostRefreshQueued = false;
+            }
+        }
+
+        private void DrainQueuedHomeRefresh()
+        {
+            _hostRefreshQueued = false;
+            if (_windowClosed)
+            {
+                _queuedRecordActiveDrawing = false;
+                return;
+            }
+
+            if (_hostRefreshInProgress)
+            {
+                QueueHomeRefresh(recordActiveDrawing: false);
+                return;
+            }
+
+            var recordActiveDrawing = _queuedRecordActiveDrawing;
+            _queuedRecordActiveDrawing = false;
+            _hostRefreshInProgress = true;
+            try
+            {
+                RefreshHomeShell(recordActiveDrawing);
+            }
+            catch (Exception ex)
+            {
+                _statusText.Text = "Không thể làm mới Khởi đầu: " + ex.Message;
+            }
+            finally
+            {
+                _hostRefreshInProgress = false;
+            }
         }
 
         private UIElement BuildShell()
@@ -604,7 +728,7 @@ namespace QS3D.BricsCAD.V25.UI
                 Application.DocumentManager.Open(normalized, false);
                 StartCenterUserStateStore.RecordProject(normalized);
                 _statusText.Text = "Đã mở " + Path.GetFileName(normalized) + ".";
-                RefreshRecentProjects();
+                QueueHomeRefresh(recordActiveDrawing: true);
             }
             catch (Exception ex)
             {
@@ -618,6 +742,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 action();
                 _statusText.Text = string.Empty;
+                QueueHomeRefresh(recordActiveDrawing: true);
             }
             catch (Exception ex)
             {
