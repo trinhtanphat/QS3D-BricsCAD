@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             AcceptedEditReturnsClonedNextRevisionPlan();
             StaleWorkbookAndIssueRevisionFailClosed();
             UnknownInvalidAndPartialBatchesFailClosed();
+            NonCanonicalIdentityFailsClosed();
             Console.WriteLine("PASS coordination Excel issue lifecycle conflict guard");
         }
 
@@ -167,6 +168,63 @@ namespace QS3D.Core.SmokeTests
                 snapshot.Revision,
                 new[] { duplicateRow, duplicateRow },
                 changedAt));
+        }
+
+        private static void NonCanonicalIdentityFailsClosed()
+        {
+            var snapshot = CreateSnapshot(15L, CreateIssue("issue-e", "left-e", "right-e"));
+            var row = CoordinationIssueExcelLifecycle.Project(snapshot).Single();
+
+            Expect<ArgumentException>(() => new CoordinationIssueExcelEdit(
+                " " + row.IssueId,
+                row.IssueRevision,
+                row.Status.ToString(),
+                row.Severity.ToString(),
+                row.Assignee));
+            Expect<ArgumentException>(() => new CoordinationIssueExcelEdit(
+                row.IssueId + " ",
+                row.IssueRevision,
+                row.Status.ToString(),
+                row.Severity.ToString(),
+                row.Assignee));
+            Expect<ArgumentException>(() => new CoordinationIssueExcelEdit(
+                row.IssueId,
+                " " + row.IssueRevision,
+                row.Status.ToString(),
+                row.Severity.ToString(),
+                row.Assignee));
+            Expect<ArgumentException>(() => new CoordinationIssueExcelEdit(
+                row.IssueId,
+                row.IssueRevision + " ",
+                row.Status.ToString(),
+                row.Severity.ToString(),
+                row.Assignee));
+
+            var edit = new CoordinationIssueExcelEdit(
+                row.IssueId,
+                row.IssueRevision,
+                " " + row.Status + " ",
+                " " + row.Severity + " ",
+                "  Lead  ");
+            if (!string.Equals(edit.Status, row.Status.ToString(), StringComparison.Ordinal) ||
+                !string.Equals(edit.Severity, row.Severity.ToString(), StringComparison.Ordinal) ||
+                !string.Equals(edit.Assignee, "Lead", StringComparison.Ordinal))
+                throw new InvalidOperationException("Coordination Excel editable presentation fields stopped normalizing as intended.");
+
+            Expect<InvalidOperationException>(() => CoordinationIssueExcelLifecycle.PlanImport(
+                snapshot,
+                " " + snapshot.ProjectId,
+                snapshot.DrawingFingerprint,
+                snapshot.Revision,
+                new[] { edit },
+                row.UpdatedAtUtc));
+            Expect<InvalidOperationException>(() => CoordinationIssueExcelLifecycle.PlanImport(
+                snapshot,
+                snapshot.ProjectId,
+                snapshot.DrawingFingerprint + " ",
+                snapshot.Revision,
+                new[] { edit },
+                row.UpdatedAtUtc));
         }
 
         private static CoordinationIssuePersistenceSnapshot CreateSnapshot(long revision, params CoordinationIssue[] issues)
