@@ -53,11 +53,13 @@ namespace QS3D.Core.SmokeTests
             try
             {
                 var row = ValidRow();
-                row.ElementId = "=SUM(A1:A2)";
-                row.BarMark = "Thép-Đ1";
+                row.ElementId = "E-SUM";
+                row.BarMark = "=SUM(A1:A2)";
+                row.FabricationStatus = "Thép-Đ1";
                 row.CuttingLengthM = 1.5d;
 
                 var csv = RebarCsvExporter.ToCsv(new[] { row });
+                Contains(csv, "\"E-SUM\"");
                 Contains(csv, "\"'=SUM(A1:A2)\"");
                 Contains(csv, "\"Thép-Đ1\"");
                 Contains(csv, ",1.5,");
