@@ -165,7 +165,23 @@ namespace QS3D.BricsCAD.V25.UI
         private void EnsureProjectBrowserSurface()
         {
             if (_browserTabs != null || !(ModelTree.Parent is DockPanel modelDock)) return;
+
+            var existingQuickActionsBand = modelDock.Children
+                .OfType<FrameworkElement>()
+                .FirstOrDefault(element =>
+                    string.Equals(element.Tag as string, ReferenceQuickActionsTag, StringComparison.Ordinal));
+            if (existingQuickActionsBand != null)
+                modelDock.Children.Remove(existingQuickActionsBand);
             modelDock.Children.Remove(ModelTree);
+
+            var modelTabHost = new DockPanel { LastChildFill = true };
+            if (existingQuickActionsBand != null)
+            {
+                DockPanel.SetDock(existingQuickActionsBand, Dock.Top);
+                modelTabHost.Children.Add(existingQuickActionsBand);
+            }
+            modelTabHost.Children.Add(ModelTree);
+
             var tabs = new TabControl
             {
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
@@ -174,13 +190,14 @@ namespace QS3D.BricsCAD.V25.UI
                 BorderBrush = TryFindResource("BorderBrush") as Brush,
                 BorderThickness = new Thickness(0)
             };
-            tabs.Items.Add(new TabItem { Header = "Mô hình", Content = ModelTree });
+            tabs.Items.Add(new TabItem { Header = "Mô hình", Content = modelTabHost });
             var browserTab = new TabItem { Header = "Project Browser", Content = CreateProjectBrowserSurface() };
             tabs.Items.Add(browserTab);
             tabs.SelectionChanged += OnBrowserTabSelectionChanged;
             modelDock.Children.Add(tabs);
             _browserTabs = tabs;
             _browserTab = browserTab;
+            ApplyReferenceQuickActions();
         }
 
         private FrameworkElement CreateProjectBrowserSurface()

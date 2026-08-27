@@ -12,6 +12,7 @@ namespace QS3D.BricsCAD.V25.UI
     /// </summary>
     public partial class WorkspacePanel
     {
+        internal const string ReferenceQuickActionsTag = "QS3D_REFERENCE_QUICK_ACTIONS";
         internal static readonly bool ReferenceQuickActionsRegistrationReady = RegisterReferenceQuickActions();
 
         private bool _referenceQuickActionsApplied;
@@ -50,7 +51,7 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
 
             if (modelDock.Children.OfType<FrameworkElement>().Any(element =>
-                    string.Equals(element.Tag as string, "QS3D_REFERENCE_QUICK_ACTIONS", StringComparison.Ordinal)))
+                    string.Equals(element.Tag as string, ReferenceQuickActionsTag, StringComparison.Ordinal)))
             {
                 _referenceQuickActionsApplied = true;
                 return;
@@ -58,7 +59,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             var band = new Border
             {
-                Tag = "QS3D_REFERENCE_QUICK_ACTIONS",
+                Tag = ReferenceQuickActionsTag,
                 Margin = new Thickness(0, 0, 0, 6),
                 Padding = new Thickness(5)
             };
