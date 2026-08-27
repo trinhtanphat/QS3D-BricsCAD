@@ -506,8 +506,19 @@ namespace QS3D.Core.Scheduling
                 throw new ArgumentException("Schedule text must be canonical without surrounding whitespace.", parameterName);
             for (var i = 0; i < value.Length; i++)
             {
-                if (char.IsControl(value[i]))
+                var character = value[i];
+                if (char.IsControl(character))
                     throw new ArgumentException("Schedule text cannot contain control characters.", parameterName);
+                if (char.IsHighSurrogate(character))
+                {
+                    if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1]))
+                        throw new ArgumentException("Schedule text must contain well-formed UTF-16.", parameterName);
+                    i++;
+                }
+                else if (char.IsLowSurrogate(character))
+                {
+                    throw new ArgumentException("Schedule text must contain well-formed UTF-16.", parameterName);
+                }
             }
             return value;
         }
