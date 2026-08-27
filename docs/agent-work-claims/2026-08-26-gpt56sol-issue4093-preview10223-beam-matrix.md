@@ -1,39 +1,42 @@
-# Work claim — #4093 preview.10223 Beam behavior matrix
+# Work claim — #4093 preview.10228 Beam behavior matrix
 
-- Status: `IN_PROGRESS / PREP_READY / NO_RESULT — LOCAL_RUNTIME_REQUIRED`
+- Status: `COMPLETE / 100% / LOCAL_PASS / BEAM_BEHAVIOR_MATRIX`
 - Issue: `#4093`
 - Parent local qualification issue: `#72`
 - Source issue / PR: `#4043` / `#4047`
-- Related NETLOAD smoke: `#4083` / `#4085`
+- Historical NETLOAD smoke only: `#4083` / `#4085` on `.10223`; not transferable
 - Lane-Key: `issue-4093`
 - Canonical owner/session: `gpt56sol / owner-requested GitHub session`
 - Canonical branch: `agent/gpt56sol/issue-4093-beam-preview10223-matrix`
-- Exact registration baseline: `origin/main@32dbdab8847087a6efc2be48ef5a94f4c37bb783`
+- Retarget baseline: `origin/main@305daec904d9ae93ade1e0d907a3ec8269e5b105`
+- Final pre-push sync: `origin/main@02ff7806738de2738ae978ce5c5bdce700c3a269`
+- Carrier note: the canonical branch name retains `preview10223` to avoid a duplicate carrier; its current immutable runtime pin is `.10228`.
 
 ## Reserved scope
 
 Qualify the Beam formwork behavior merged by PR #4047 on the exact published
-BricsCAD V25 preview package that already passed the separate #4083/#4085
-NETLOAD/runtime identity smoke.
+BricsCAD V25 preview package selected by the owner's 2026-08-27 runtime
+repoint. The `.10228` run must re-establish NETLOAD/runtime identity because
+the separate #4083/#4085 smoke belongs only to `.10223`.
 
-This lane is behavior-only. It must not modify the #4085 smoke claim, and it
-must not turn source/preflight coverage into a runtime PASS.
+This lane keeps the #4085 `.10223` smoke claim historical and unchanged. It
+must not turn source/preflight coverage into a `.10228` runtime PASS.
 
 ## Exact artifact pin
 
-- Preview: `v0.1.0-preview.10223`.
-- Exact release target/source: `1363f9be69ebc8ca8a865ccdd41639346f55f6ee`.
+- Preview: `v0.1.0-preview.10228`.
+- Exact release target/source: `7dacdce17a6403d19681732ca7bad22cdb6f1499`.
 - Required source ancestor: PR #4047 merge
   `3d13f9f84a33819164beffdc2a90673f31c215c0`.
 - Official V25 ZIP SHA-256:
-  `A83BC92A1F90B00ADF7DFE0B1C92DF2EF7A3286D7ED99E4307ED8E0B87F22222`.
+  `EC7385FC6085A838B94F84FC20B77E61E728952CC3A580FEC695031280FBC39E`.
 - Exact packaged `QS3D.BricsCAD.V25.dll` SHA-256:
-  `3F0156A8DFD9BB31ECE43665D5D8334DA320172A6EAFB929967268218168F22F`.
+  `010F729470B0644CD0ECBFF7395F4DCFAE39E81AA1B230C7219AC18C11C1340A`.
 - Required host: licensed interactive BricsCAD `25.2.10` x64.
 
 The product DLL is immutable for this qualification. A companion harness may
 drive or inspect the exact loaded product assembly, but rebuilding, replacing,
-or instrumenting `QS3D.BricsCAD.V25.dll` invalidates the preview.10223 runtime
+or instrumenting `QS3D.BricsCAD.V25.dll` invalidates the preview.10228 runtime
 claim. The lane must fail closed on package, assembly-path, version, hash, or
 native-host identity mismatch.
 
@@ -85,7 +88,7 @@ The carrier now includes two behavior-specific, product-DLL-safe artifacts:
 - `docs/LOCAL-V25-BEAM-FORMWORK-MATRIX.md` — exact-artifact runbook for the
   licensed local M1–M8 execution, evidence hygiene and cleanup boundary.
 - `scripts/test-local-v25-beam-formwork-matrix-evidence.ps1` — strict sanitized
-  evidence verifier pinned to preview.10223, source SHA, ZIP digest and packaged
+  evidence verifier pinned to preview.10228, source SHA, ZIP digest and packaged
   DLL digest. It verifies V25 interactive/NETLOAD identity, the canonical Beam
   geometry, all M1–M8 expected values/parity, cleanup, zero blockers and a
   positive attestation that the matrix was actually exercised.
@@ -98,21 +101,48 @@ failure, incomplete cleanup or known blockers.
 
 ## Current evidence and result boundary
 
-#4083/#4085 already prove `LOCAL_PASS / NETLOAD_SMOKE_ONLY` for the exact
-preview.10223 package and exact packaged V25 DLL above. That evidence is
-accepted only for package/runtime identity and cleanup provenance.
+#4083/#4085 prove `LOCAL_PASS / NETLOAD_SMOKE_ONLY` only for historical
+preview.10223. They are useful procedure precedent but provide no identity or
+behavior evidence for the exact preview.10228 package pinned above.
 
-No M1–M8 cell has been exercised in a licensed interactive V25 host by this
-GitHub-only preparation session. The repository connector can create and review
-GitHub carriers, source and sanitized evidence, but it does not control the
-licensed local BricsCAD process. Therefore the current behavior result is:
+On 2026-08-27 the owner-directed local session exercised M1–M8 against the
+exact `.10228` package in licensed interactive BricsCAD V25.2.10 x64. The
+released adapter was NETLOADed unchanged, and an ignored companion verified
+the loaded assembly path, ProductVersion and SHA-256 before invoking the
+released `BeamFormworkQuantityPolicy` on a live native diagonal `Solid3d`.
 
-`NO_RESULT / LOCAL_RUNTIME_REQUIRED`
+- Core DLL SHA-256:
+  `FF4801217E123275D1F2E92313C6FFF4A95DECCF3BBF656ACF5AB1FC580A1F86`.
+- Ignored companion DLL SHA-256:
+  `6AF2BD95E18B0DCB73DAAFB09D1A359AAC390FC5A72C4E670A89320B58942DF7`.
+- M1 gross: `7.07106781186549 m²` — `PASS`.
+- M2 gross: `9.19238815542513 m²` — `PASS`.
+- M3 Top: `0 m²` — `PASS`.
+- M4 End / Other: `0 / 0 m²` — `PASS`.
+- M5 Side deduction / net: `0.30 / 6.77106781186549 m²` — `PASS`.
+- M6 Side deduction / Bottom deduction / net:
+  `0.30 / 0.09 / 8.80238815542513 m²` — `PASS`.
+- M7 Aggregate / Detail:
+  `8.80238815542513 / 8.80238815542513 m²` — exact parity, `PASS`.
+- M8 native classes: `Side=2`, `End=2`, `Top=1`, `Bottom=1`, `Other=0`;
+  diagonal axis resolved, End caps are not Side, and horizontal classes use
+  live Z bounds — `PASS`.
 
-This status is intentional and fail-closed. Do not report
-`LOCAL_PASS / BEAM_BEHAVIOR_MATRIX` from CI, source inspection, deterministic
-preflight, the existing NETLOAD marker, or an analytically recomputed expected
-value.
+The strict verifier returned:
+
+`LOCAL_PASS / BEAM_BEHAVIOR_MATRIX: preview=v0.1.0-preview.10228, source=7dacdce17a6403d19681732ca7bad22cdb6f1499, pluginSha256=010F729470B0644CD0ECBFF7395F4DCFAE39E81AA1B230C7219AC18C11C1340A, BricsCAD=25.2.10, cells=8`
+
+Cleanup restored the protected profile and exact QS3D DemandLoad tree, removed
+the nonce profile, and completed ten stable zero-process samples. The sanitized
+evidence had all cleanup booleans true and `knownBlockers=[]`. Two earlier
+attempts invoked the UI-oriented `QS3DRUNTIMEPROBE` and failed before the Beam
+command in BricsCAD/WPF palette layout; they produced no Beam PASS evidence and
+were excluded. The qualifying command-only run re-established exact NETLOAD
+identity inside the in-host companion without opening the unrelated palette.
+
+Therefore the final behavior result is:
+
+**`100% / LOCAL_PASS / BEAM_BEHAVIOR_MATRIX`**
 
 ## Result vocabulary
 
@@ -129,7 +159,7 @@ value.
 ## Exclusions
 
 - no production-source patch in this behavior-evidence lane;
-- no rebuild or replacement of the preview.10223 product DLL;
+- no rebuild or replacement of the preview.10228 product DLL;
 - no DemandLoad-install qualification;
 - no signing qualification;
 - no customer/private DWG qualification;
@@ -140,7 +170,7 @@ value.
 ## Completion condition
 
 The lane may move to COMPLETE only after sanitized evidence demonstrates that
-M1–M8 were actually exercised against the exact preview.10223 packaged V25 DLL
+M1–M8 were actually exercised against the exact preview.10228 packaged V25 DLL
 in licensed interactive BricsCAD V25.2.10 x64, all cells meet the fixed
 contract, scoped state is restored, and zero test-owned host processes/residue
 remain. Any real behavior mismatch is a LOCAL_FAIL, not a reason to relax the

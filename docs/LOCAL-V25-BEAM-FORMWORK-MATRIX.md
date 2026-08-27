@@ -1,8 +1,9 @@
 # Local V25 Beam formwork behavior matrix — issue #4093
 
 This runbook qualifies the Beam formwork behavior merged by PR #4047 on the
-**exact released preview bytes** that already passed the separate #4083/#4085
-NETLOAD smoke.
+**exact released preview bytes** selected by the owner's 2026-08-27 runtime
+repoint. Earlier #4083/#4085 evidence is historical `.10223` smoke only and is
+not carried forward; this `.10228` run must establish NETLOAD identity again.
 
 This is a `LOCAL_ONLY` licensed-host qualification. GitHub Actions, source
 inspection, deterministic preflight, or a rebuilt product DLL cannot replace
@@ -10,21 +11,20 @@ the interactive BricsCAD V25 execution required here.
 
 ## Immutable candidate
 
-- Preview: `v0.1.0-preview.10223`
-- Exact release target/source: `1363f9be69ebc8ca8a865ccdd41639346f55f6ee`
+- Preview: `v0.1.0-preview.10228`
+- Exact release target/source: `7dacdce17a6403d19681732ca7bad22cdb6f1499`
 - Required #4047 merge ancestor:
   `3d13f9f84a33819164beffdc2a90673f31c215c0`
 - Official V25 ZIP SHA-256:
-  `A83BC92A1F90B00ADF7DFE0B1C92DF2EF7A3286D7ED99E4307ED8E0B87F22222`
+  `EC7385FC6085A838B94F84FC20B77E61E728952CC3A580FEC695031280FBC39E`
 - Packaged `QS3D.BricsCAD.V25.dll` SHA-256:
-  `3F0156A8DFD9BB31ECE43665D5D8334DA320172A6EAFB929967268218168F22F`
-- Required host: licensed interactive BricsCAD V25 x64; #4085 qualified
-  V25.2.10 x64.
+  `010F729470B0644CD0ECBFF7395F4DCFAE39E81AA1B230C7219AC18C11C1340A`
+- Required host: licensed interactive BricsCAD V25.2.10 x64.
 
 If any package/source/plugin/native-host identity differs, stop with
 `NO_RESULT / LOCAL_RUNTIME_BLOCKED`. Do not rebuild, replace, instrument or
 copy a different QS3D product DLL into the candidate and carry the result back
-to preview.10223.
+to preview.10228.
 
 ## Host boundary
 
@@ -34,7 +34,7 @@ runtime qualification:
 1. require zero pre-existing BricsCAD processes before the owned run;
 2. snapshot the scoped profile, QS3D Loader/LoadCtrls and DemandLoad state;
 3. prevent an installed QS3D registration from preloading a different DLL;
-4. NETLOAD the exact packaged preview.10223 V25 DLL and verify its loaded
+4. NETLOAD the exact packaged preview.10228 V25 DLL and verify its loaded
    assembly hash before the matrix;
 5. keep all raw host paths, registry data, license material and screenshots
    containing unrelated/private content outside git;
@@ -129,6 +129,35 @@ If an exercised matrix cell violates the contract, record
 `LOCAL_FAIL / BEAM_BEHAVIOR_MATRIX` with the first concrete mismatch. If the
 host/artifact boundary cannot be established, record
 `NO_RESULT / LOCAL_RUNTIME_BLOCKED`.
+
+## Recorded exact-release result — 2026-08-27
+
+Verdict: **`100% / LOCAL_PASS / BEAM_BEHAVIOR_MATRIX`**.
+
+The licensed Windows x64 run NETLOADed the immutable
+`v0.1.0-preview.10228` V25 adapter in BricsCAD `25.2.10`. The in-host
+companion verified the loaded product assembly path, ProductVersion and
+SHA-256 before invoking the released Beam policy against the live native
+diagonal `Solid3d`. The released adapter remained unmodified; the ignored
+companion DLL SHA-256 was
+`6AF2BD95E18B0DCB73DAAFB09D1A359AAC390FC5A72C4E670A89320B58942DF7`.
+
+| Cell | Sanitized observed result | Verdict |
+| --- | --- | --- |
+| M1 | Side ON / Bottom OFF gross `7.07106781186549 m²` | `PASS` |
+| M2 | Side ON / Bottom ON gross `9.19238815542513 m²` | `PASS` |
+| M3 | Top contribution `0 m²` | `PASS` |
+| M4 | End contribution `0 m²`; Other contribution `0 m²` | `PASS` |
+| M5 | Side deduction `0.30 m²`; net `6.77106781186549 m²` | `PASS` |
+| M6 | Side deduction `0.30 m²`; Bottom deduction `0.09 m²`; net `8.80238815542513 m²` | `PASS` |
+| M7 | Aggregate `8.80238815542513 m²`; Detail `8.80238815542513 m²` | `PASS` |
+| M8 | `Side=2`, `End=2`, `Top=1`, `Bottom=1`, `Other=0`; diagonal axis and live-Z checks true; End caps not Side | `PASS` |
+
+The strict verifier returned
+`LOCAL_PASS / BEAM_BEHAVIOR_MATRIX` with `cells=8` and zero blockers. Cleanup
+restored the protected profile and exact DemandLoad tree, removed the nonce
+profile, and ended with ten stable zero-`bricscad.exe` samples. Raw host paths,
+registry exports, crash diagnostics and runtime JSON remain ignored/local.
 
 ## Evidence hygiene and close-out
 

@@ -7,10 +7,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$ExpectedPreviewTag = "v0.1.0-preview.10223"
-$ExpectedSourceSha = "1363f9be69ebc8ca8a865ccdd41639346f55f6ee"
-$ExpectedZipSha256 = "A83BC92A1F90B00ADF7DFE0B1C92DF2EF7A3286D7ED99E4307ED8E0B87F22222"
-$ExpectedPluginSha256 = "3F0156A8DFD9BB31ECE43665D5D8334DA320172A6EAFB929967268218168F22F"
+$ExpectedPreviewTag = "v0.1.0-preview.10228"
+$ExpectedSourceSha = "7dacdce17a6403d19681732ca7bad22cdb6f1499"
+$ExpectedZipSha256 = "EC7385FC6085A838B94F84FC20B77E61E728952CC3A580FEC695031280FBC39E"
+$ExpectedPluginSha256 = "010F729470B0644CD0ECBFF7395F4DCFAE39E81AA1B230C7219AC18C11C1340A"
 $MaxEvidenceBytes = 1048576
 $Tolerance = 0.000001d
 $StrictUtf8 = New-Object System.Text.UTF8Encoding($false, $true)
@@ -260,7 +260,11 @@ Require-True -Object $cleanup -Name "demandLoadRestored" -Context "cleanup"
 Require-True -Object $cleanup -Name "zeroTestOwnedProcesses" -Context "cleanup"
 Require-True -Object $cleanup -Name "noScopedResidue" -Context "cleanup"
 
-$blockers = Require-Property -Object $evidence -Name "knownBlockers" -Context "evidence"
+$blockerProperty = $evidence.PSObject.Properties["knownBlockers"]
+if ($null -eq $blockerProperty) {
+    throw "evidence is missing required property 'knownBlockers'."
+}
+$blockers = $blockerProperty.Value
 if ($blockers -isnot [System.Array]) {
     throw "knownBlockers must be a JSON array."
 }
