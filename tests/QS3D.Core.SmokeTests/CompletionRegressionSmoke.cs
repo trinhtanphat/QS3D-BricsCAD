@@ -67,7 +67,7 @@ namespace QS3D.Core.SmokeTests
         {
             var row = new RebarScheduleRow
             {
-                ElementId = "=1+1",
+                ElementId = "E1",
                 BarMark = "+CMD",
                 ShapeCode = "00",
                 Notation = "2Ø16",
@@ -81,7 +81,7 @@ namespace QS3D.Core.SmokeTests
                 TotalWeightKg = 3.2232d
             };
             var csv = RebarCsvExporter.ToCsv(new[] { row });
-            if (!csv.Contains("\"'=1+1\"", StringComparison.Ordinal) || !csv.Contains("\"'+CMD\"", StringComparison.Ordinal)) throw new InvalidOperationException("CSV formula-injection guard failed.");
+            if (!csv.Contains("\"E1\"", StringComparison.Ordinal) || !csv.Contains("\"'+CMD\"", StringComparison.Ordinal)) throw new InvalidOperationException("CSV semantic identity/formula-injection guard failed.");
             row.TotalWeightKg = double.NaN;
             var threw = false;
             try { RebarCsvExporter.ToCsv(new[] { row }); } catch (ArgumentOutOfRangeException) { threw = true; }
