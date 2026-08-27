@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Security;
 using System.Text;
+using System.Xml;
 using QS3D.Core.Persistence;
 using QS3D.Core.Reporting;
 
@@ -115,6 +116,17 @@ namespace QS3D.Core.Export
                 if (ch < 0x20)
                     throw new InvalidDataException(
                         "Quantity evidence XLSX field " + field + " contains an invalid XML control character.");
+            }
+
+            try
+            {
+                XmlConvert.VerifyXmlChars(text);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidDataException(
+                    "Quantity evidence XLSX field " + field + " contains malformed XML text or UTF-16.",
+                    ex);
             }
         }
 

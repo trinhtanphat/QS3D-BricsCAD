@@ -35,6 +35,8 @@ def field(section: str, name: str) -> str | None:
     if name == "Related docs":
         aliases = (name, "Related source/docs")
     elif name == "Evidence":
+        # Runtime handoff rows may preserve a more explicit label while still
+        # carrying the concrete evidence required by the canonical contract.
         aliases = (name, "Consumed runtime verdicts")
     else:
         aliases = (name,)
