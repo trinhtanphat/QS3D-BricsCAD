@@ -508,20 +508,20 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Related docs/source: `docs/LOCAL-GRID-INTERSECTION-MARKER-QUALIFICATION.md`; `scripts/preflight-grid-intersection-marker-lifecycle.py`; issue #3771; PR #4109.
 - Updated: 2026-08-27
 
-## LOCAL-023 — Beam formwork behavior matrix on preview.10223
+## LOCAL-023 — Beam formwork behavior matrix on preview.10228
 
 - Priority: P1
-- Status: OPEN
+- Status: PASS
 - Area: issue `#4093`; BricsCAD V25 Beam formwork M1–M8 behavior matrix
-- Source/harness status: `PREP_READY / CI_GREEN / NO_RESULT / LOCAL_RUNTIME_REQUIRED`
-- Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
-- Exact runtime artifact: `v0.1.0-preview.10223`; source `1363f9be69ebc8ca8a865ccdd41639346f55f6ee`; licensed host boundary BricsCAD V25.2.10 x64.
-- Artifact hashes: ZIP `A83BC92A1F90B00ADF7DFE0B1C92DF2EF7A3286D7ED99E4307ED8E0B87F22222`; packaged V25 DLL `3F0156A8DFD9BB31ECE43665D5D8334DA320172A6EAFB929967268218168F22F`.
-- Canonical runtime carrier: draft PR #4094 / branch `agent/gpt56sol/issue-4093-beam-preview10223-matrix`. Keep that carrier draft; do not rebase or merge it merely for freshness while licensed runtime evidence is pending.
-- Scenario: execute M1–M8 from `docs/LOCAL-V25-BEAM-FORMWORK-MATRIX.md` against the exact packaged DLL: Side/Bottom rule toggles, Top and End/Other exclusion, directed Side/Bottom deductions, aggregate/detail `FormworkM2` parity, and diagonal-axis face classification.
+- Source/harness status: `COMPLETE / 100% / LOCAL_PASS / BEAM_BEHAVIOR_MATRIX`
+- Remote disposition: `TERMINAL / DO_NOT_RETRY_REMOTE`
+- Exact runtime artifact: `v0.1.0-preview.10228`; source `7dacdce17a6403d19681732ca7bad22cdb6f1499`; licensed host boundary BricsCAD V25.2.10 x64.
+- Artifact hashes: ZIP `EC7385FC6085A838B94F84FC20B77E61E728952CC3A580FEC695031280FBC39E`; packaged V25 DLL `010F729470B0644CD0ECBFF7395F4DCFAE39E81AA1B230C7219AC18C11C1340A`.
+- Canonical runtime carrier: draft PR #4094 / branch `agent/gpt56sol/issue-4093-beam-preview10223-matrix`. The existing branch name remains historical; the owner's 2026-08-27 direct runtime assignment retargeted its immutable qualification pin to `.10228` without creating a duplicate carrier.
+- Scenario exercised: M1–M8 from `docs/LOCAL-V25-BEAM-FORMWORK-MATRIX.md` against the exact packaged DLL: Side/Bottom rule toggles, Top and End/Other exclusion, directed Side/Bottom deductions, aggregate/detail `FormworkM2` parity, and diagonal-axis face classification.
 - Runtime gate: licensed interactive V25 only. Do not rebuild, substitute, instrument, or relabel the pinned preview. Verify sanitized evidence with `scripts/test-local-v25-beam-formwork-matrix-evidence.ps1` and restore profile/Loader/DemandLoad state with zero test-owned process residue.
-- Evidence: `NO_RESULT / LOCAL_RUNTIME_REQUIRED`; prepared carrier CI is green but hosted/source evidence is not `LOCAL_PASS`.
-- Evidence required: exact preview/source/ZIP/DLL/host identity; M1–M8 gross/net/classification/parity results; verifier result; sanitized cleanup/no-residue evidence.
+- Evidence: `100% / LOCAL_PASS / BEAM_BEHAVIOR_MATRIX`; gross `7.07106781186549 / 9.19238815542513 m²`; Top/End/Other `0 / 0 / 0 m²`; net `6.77106781186549 / 8.80238815542513 m²`; Aggregate equals Detail `8.80238815542513 m²`; M8 `Side=2`, `End=2`, `Top=1`, `Bottom=1`, `Other=0`.
+- Cleanup: protected profile and exact DemandLoad tree restored; nonce removed; ten stable zero-process samples; verifier `cells=8`; blockers empty.
 - Updated: 2026-08-27
 
 ## P1 — #3480 Quantity Review exact native BREP face highlight
