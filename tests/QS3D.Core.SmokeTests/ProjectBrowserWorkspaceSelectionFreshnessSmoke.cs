@@ -15,6 +15,9 @@ namespace QS3D.Core.SmokeTests
         {
             SemanticMutationDuringSelectionEnumerationFailsFreshness();
             StructuralReplacementDuringSelectionEnumerationFailsFreshness();
+            RelationMutationDuringSelectionEnumerationFailsFreshness();
+            CatalogMutationDuringSelectionEnumerationFailsFreshness();
+            DirtyStateMutationDuringSelectionEnumerationFailsFreshness();
             StableSelectionRemainsPresentationOnly();
         }
 
@@ -57,6 +60,65 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("ProjectBrowserWorkspaceSelectionFreshnessSmoke replacement fixture did not change element ownership.");
         }
 
+        private static void RelationMutationDuringSelectionEnumerationFailsFreshness()
+        {
+            var project = BuildProject(out var selected);
+            var state = State();
+            var beforeVersion = project.ChangeVersion;
+
+            IEnumerable<string> Selection()
+            {
+                selected.FloorId = "F-03";
+                yield return selected.Id;
+            }
+
+            ThrowsContaining(
+                () => ProjectBrowserWorkspaceCoordinator.ApplySelection(project, state, Selection(), selected.Id),
+                "Project Browser query inputs changed while Project Browser selection ids were being enumerated");
+            Equal(beforeVersion, project.ChangeVersion, "relation mutation revision");
+            Equal("F-03", selected.FloorId, "relation mutation fixture");
+        }
+
+        private static void CatalogMutationDuringSelectionEnumerationFailsFreshness()
+        {
+            var project = BuildProject(out var selected);
+            var state = State();
+            var beforeVersion = project.ChangeVersion;
+
+            IEnumerable<string> Selection()
+            {
+                project.Floors[0].Name = "L02-renamed";
+                yield return selected.Id;
+            }
+
+            ThrowsContaining(
+                () => ProjectBrowserWorkspaceCoordinator.ApplySelection(project, state, Selection(), selected.Id),
+                "Project Browser query inputs changed while Project Browser selection ids were being enumerated");
+            Equal(beforeVersion, project.ChangeVersion, "catalog mutation revision");
+            Equal("L02-renamed", project.Floors[0].Name, "catalog mutation fixture");
+        }
+
+        private static void DirtyStateMutationDuringSelectionEnumerationFailsFreshness()
+        {
+            var project = BuildProject(out var selected);
+            var state = new ProjectBrowserWorkspaceState(
+                ProjectBrowserGrouping.FloorThenCategory,
+                dirtyOnly: true);
+            var beforeVersion = project.ChangeVersion;
+
+            IEnumerable<string> Selection()
+            {
+                selected.MarkClean(ElementDirtyFlags.All);
+                yield return selected.Id;
+            }
+
+            ThrowsContaining(
+                () => ProjectBrowserWorkspaceCoordinator.ApplySelection(project, state, Selection(), selected.Id),
+                "Project Browser query inputs changed while Project Browser selection ids were being enumerated");
+            Equal(beforeVersion, project.ChangeVersion, "dirty mutation revision");
+            Equal(ElementDirtyFlags.None, selected.Dirty, "dirty mutation fixture");
+        }
+
         private static void StableSelectionRemainsPresentationOnly()
         {
             var project = BuildProject(out _);
@@ -79,6 +141,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("P-BROWSER-SELECTION-FRESHNESS", "Browser selection freshness");
             project.Floors.Add(new FloorDefinition("F-02", "L02", 3.6d));
+            project.Floors.Add(new FloorDefinition("F-03", "L03", 7.2d));
             project.Zones.Add(new ZoneDefinition("Z-A", "Zone A"));
             selected = Beam("B-001");
             project.Elements.Add(selected);
