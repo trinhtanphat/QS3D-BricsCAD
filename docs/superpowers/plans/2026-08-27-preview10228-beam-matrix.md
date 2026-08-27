@@ -147,6 +147,6 @@ Run: `git fetch origin main`, `git diff --check`, focused verifier/preflight tes
 
 Expected: only the current issue-4093 plan/runbook/verifier/claim summary is tracked; raw runtime artifacts remain ignored.
 
-- [ ] **Step 3: Push/update PR #4094 and stop before merge**
+- [x] **Step 3: Push/update PR #4094 and stop before merge**
 
 Push only `agent/gpt56sol/issue-4093-beam-preview10223-matrix`, update Issue #4093/PR #4094 with the sanitized verdict, and do not merge.
