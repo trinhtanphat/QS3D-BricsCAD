@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "previewTag": "v0.1.0-preview.10228",
+  "sourceSha": "7dacdce17a6403d19681732ca7bad22cdb6f1499",
+  "zipSha256": "EC7385FC6085A838B94F84FC20B77E61E728952CC3A580FEC695031280FBC39E",
+  "pluginSha256": "010F729470B0644CD0ECBFF7395F4DCFAE39E81AA1B230C7219AC18C11C1340A",
+  "environment": {
+    "windowsX64": true,
+    "interactive": true,
+    "licensedBricsCadV25": true,
+    "bricsCadProductVersion": "25.2.10",
+    "loadMode": "NETLOAD",
+    "loadedPluginSha256": "010F729470B0644CD0ECBFF7395F4DCFAE39E81AA1B230C7219AC18C11C1340A"
+  },
+  "attestation": {
+    "executedOnLicensedV25": true,
+    "sameExactReleasedPlugin": true,
+    "matrixActuallyExercised": true,
+    "sanitized": true
+  },
+  "beam": {
+    "widthM": 0.3,
+    "heightM": 0.5,
+    "deltaXM": 5.0,
+    "deltaYM": 5.0,
+    "lengthM": 7.0710678118654755
+  },
+  "cells": {
+    "M1": {
+      "status": "PASS",
+      "sideEnabled": true,
+      "bottomEnabled": false,
+      "grossM2": 7.071067811865486
+    },
+    "M2": {
+      "status": "PASS",
+      "sideEnabled": true,
+      "bottomEnabled": true,
+      "grossM2": 9.192388155425126
+    },
+    "M3": {
+      "status": "PASS",
+      "topContributionM2": 0.0
+    },
+    "M4": {
+      "status": "PASS",
+      "endContributionM2": 0.0,
+      "otherContributionM2": 0.0
+    },
+    "M5": {
+      "status": "PASS",
+      "sideDeductionM2": 0.3,
+      "bottomDeductionM2": 0.0,
+      "netM2": 6.771067811865486
+    },
+    "M6": {
+      "status": "PASS",
+      "sideDeductionM2": 0.3,
+      "bottomDeductionM2": 0.09,
+      "netM2": 8.802388155425126
+    },
+    "M7": {
+      "status": "PASS",
+      "aggregateFormworkM2": 8.802388155425126,
+      "detailNetFormworkM2": 8.802388155425126
+    },
+    "M8": {
+      "status": "PASS",
+      "diagonalAxisResolved": true,
+      "endCapsClassifiedAsSide": false,
+      "horizontalClassificationUsesLiveZBounds": true
+    }
+  },
+  "cleanup": {
+    "profileRestored": true,
+    "loaderRestored": true,
+    "demandLoadRestored": true,
+    "zeroTestOwnedProcesses": true,
+    "noScopedResidue": true
+  },
+  "knownBlockers": []
+}
