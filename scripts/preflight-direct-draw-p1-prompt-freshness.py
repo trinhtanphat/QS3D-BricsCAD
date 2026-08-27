@@ -52,7 +52,7 @@ else:
 
     workflows = (
         ("DrawGlassWallAdvanced", "QS3DDRAWGLASSWALLADV", "AcquirePath(document, \"Vách Kính\""),
-        ("DrawWallPierAdvanced", "QS3DDRAWWALLPIERADV", "AcquireFixedPath(document, \"Trụ Tường\""),
+        ("DrawWallPierAdvanced", "QS3DDRAWWALLPIERADV", "AcquirePath(document, \"Trụ Tường\""),
         ("DrawStructuralWallAdvanced", "QS3DDRAWSTRUCTWALLADV", "AcquireFixedPath(document, \"Vách BTCT\""),
         ("DrawFoundationAdvanced", "QS3DDRAWFOUNDATIONADV", "AcquirePath(document, \"Móng\""),
     )

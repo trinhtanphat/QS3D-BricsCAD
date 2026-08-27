@@ -13,7 +13,8 @@ required = {
         'CommandMethod("QS3DDRAWWALLPIER"',
         'CommandMethod("QS3DDRAWSTRUCTWALL"',
         'CommandMethod("QS3DDRAWFOUNDATION"',
-        'AcquireFixedPath(document, "Trụ Tường", 2)',
+        'AcquirePath(document, "Trụ Tường nhanh", 2, false)',
+        'AcquirePath(document, "Trụ Tường", 2, false)',
         "SemanticCaptureService.Capture(document, category)",
         "ProjectStateSnapshot.Capture(project)",
         "GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(createdElement)",
@@ -89,8 +90,8 @@ required = {
         "QS3DDRAWFOUNDATION",
         "BricsCAD V25 x64 .NET plugin",
         "QS3DBUILD3D",
-        "exactly a two-point **LINE**",
-        "WallPierProfileSolidBuilder",
+        "two or more plan-view points",
+        "WallPierPathProfilePlanner",
         "Door / Opening Direct Draw extension",
         "QS3DDRAWDOOR",
         "QS3DDRAWOPENING",
@@ -158,12 +159,19 @@ if source.is_file():
         errors.append("Door/Opening Direct Draw belongs in the separate host-aware DirectDrawOpeningCommands lifecycle, not the native P1 builder wrapper")
 
     wallpier_body = text.split('[CommandMethod("QS3DDRAWWALLPIER"', 1)[-1].split('[CommandMethod("QS3DDRAWSTRUCTWALL"', 1)[0]
-    if 'AcquireFixedPath(document, "Trụ Tường", 2)' not in wallpier_body:
-        errors.append("WallPier Direct Draw must acquire exactly two points")
-    if "() => CreateLine(document, points[0], points[1])" not in wallpier_body:
-        errors.append("WallPier Direct Draw must persist a LINE source")
-    if 'AcquirePath(document, "Trụ Tường"' in wallpier_body or "CreatePolyline(document, points, false)" in wallpier_body:
-        errors.append("WallPier Direct Draw must not accept open-POLYLINE paths until a deterministic profile-around-corners contract exists")
+    for acquisition in (
+        'AcquirePath(document, "Trụ Tường nhanh", 2, false)',
+        'AcquirePath(document, "Trụ Tường", 2, false)',
+    ):
+        if acquisition not in wallpier_body:
+            errors.append("WallPier Direct Draw must accept a bounded open path from two or more plan-view points: " + acquisition)
+    if 'AcquireFixedPath(document, "Trụ Tường' in wallpier_body:
+        errors.append("WallPier Direct Draw must not regress to the legacy fixed two-point acquisition contract")
+    route = "() => points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false)"
+    if wallpier_body.count(route) != 2:
+        errors.append("Quick and Advanced WallPier Direct Draw must persist LINE for two points and open POLYLINE for multi-segment paths")
+    if "CreatePolyline(document, points, true)" in wallpier_body:
+        errors.append("WallPier Direct Draw path must remain open; closed POLYLINE authoring is not part of the WallPier path-profile contract")
 
     create = text.find("sourceId = createSource();")
     capture = text.find("SemanticCaptureService.Capture(document, category)")
@@ -194,4 +202,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Native Direct Draw P1 compiles its project snapshot rollback contract, keeps WallPier Direct Draw on the two-point specialized LINE profile path, reuses canonical QS3DBUILD3D and preserves ownership-safe lifecycle invariants; the separately implemented Door/Opening extension is present, uniquely registered, host-aware and guarded with physical boolean kept explicit.")
+print("PASS: Native Direct Draw P1 compiles its project snapshot rollback contract, exposes WallPier two-point LINE and multi-segment open-POLYLINE authoring through the canonical path-profile builder, reuses canonical QS3DBUILD3D and preserves ownership-safe lifecycle invariants; the separately implemented Door/Opening extension is present, uniquely registered, host-aware and guarded with physical boolean kept explicit.")
