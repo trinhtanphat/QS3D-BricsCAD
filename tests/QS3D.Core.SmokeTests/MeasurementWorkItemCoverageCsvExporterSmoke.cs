@@ -30,8 +30,8 @@ namespace QS3D.Core.SmokeTests
                 "Coverage CSV header mismatch.");
             Contains(csv, "\"Slab\",\"NetVolumeM3\",\"map-slab-volume\",\"class-slab\",\"work-slab-volume\",true,\"\",2,2,\"A,ready|B\"\"ready\"",
                 "Ready coverage CSV row must preserve compact matrix truth and RFC4180 quoting.");
-            Contains(csv, "\"OtherVolumeM3\",\"\",\"\",\"\",false,\"UnmappedWorkItem\",1,1,\"'=D-unmapped\"",
-                "Unmapped coverage CSV row must preserve empty mapping identities and neutralize spreadsheet formulas.");
+            Contains(csv, "\"OtherVolumeM3\",\"\",\"\",\"\",false,\"UnmappedWorkItem\",1,1,\"D-unmapped\"",
+                "Unmapped coverage CSV row must preserve empty mapping identities and canonical element identity.");
             Contains(csv, "\"Column\",\"\",\"\",\"\",\"\",false,\"MissingQuantity\",1,1,\"E-missing\"",
                 "Missing-quantity coverage CSV row must not invent measurement or mapping identities.");
         }
@@ -66,7 +66,7 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("coverage-csv", "Coverage CSV");
             project.Elements.Add(CleanQuantityElement("A,ready", ElementCategory.Slab, "NetVolumeM3", 2d));
             project.Elements.Add(CleanQuantityElement("B\"ready", ElementCategory.Slab, "NetVolumeM3", 4d));
-            project.Elements.Add(CleanQuantityElement("=D-unmapped", ElementCategory.Slab, "OtherVolumeM3", 5d));
+            project.Elements.Add(CleanQuantityElement("D-unmapped", ElementCategory.Slab, "OtherVolumeM3", 5d));
 
             var missing = new ProjectElement("E-missing", ElementCategory.Column);
             missing.MarkClean(ElementDirtyFlags.All);

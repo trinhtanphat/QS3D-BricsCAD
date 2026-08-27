@@ -44,6 +44,7 @@ namespace QS3D.Core.Export
         public static string ToCsv(MeasurementWorkItemCoverageMatrix matrix)
         {
             if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+            ValidateSemanticIdentities(matrix);
 
             var provenance = matrix.Provenance;
             var sb = new StringBuilder();
@@ -84,11 +85,47 @@ namespace QS3D.Core.Export
             return content;
         }
 
+        private static void ValidateSemanticIdentities(MeasurementWorkItemCoverageMatrix matrix)
+        {
+            var provenance = matrix.Provenance;
+            if (provenance != null)
+            {
+                RequireLiteralCsvIdentity(provenance.ProjectId, "source project id");
+                RequireLiteralCsvIdentity(provenance.DrawingFingerprint, "source drawing fingerprint");
+            }
+
+            for (var i = 0; i < matrix.Cells.Count; i++)
+            {
+                var cell = matrix.Cells[i];
+                if (cell == null)
+                    throw new ArgumentException("Coverage matrix contains a null cell at index " + i + ".", nameof(matrix));
+
+                RequireLiteralCsvIdentity(cell.MeasurementItemId, "measurement item id");
+                RequireLiteralCsvIdentity(cell.MappingId, "mapping id");
+                RequireLiteralCsvIdentity(cell.ClassificationId, "classification id");
+                RequireLiteralCsvIdentity(cell.WorkItemId, "work-item id");
+                for (var elementIndex = 0; elementIndex < cell.AffectedElementIds.Count; elementIndex++)
+                    RequireLiteralCsvIdentity(cell.AffectedElementIds[elementIndex], "affected element id");
+            }
+        }
+
+        private static void RequireLiteralCsvIdentity(string? value, string label)
+        {
+            if (RequiresSpreadsheetFormulaEscape(value))
+                throw new InvalidDataException(
+                    "Coverage CSV " + label + " cannot begin with a spreadsheet formula prefix because semantic identity must be preserved exactly.");
+        }
+
+        private static bool RequiresSpreadsheetFormulaEscape(string? value)
+        {
+            var probe = (value ?? string.Empty).TrimStart();
+            return probe.Length > 0 && (probe[0] == '=' || probe[0] == '+' || probe[0] == '-' || probe[0] == '@');
+        }
+
         private static string Q(string? value)
         {
             var safe = value ?? string.Empty;
-            var probe = safe.TrimStart();
-            if (probe.Length > 0 && (probe[0] == '=' || probe[0] == '+' || probe[0] == '-' || probe[0] == '@'))
+            if (RequiresSpreadsheetFormulaEscape(safe))
                 safe = "'" + safe;
             return "\"" + safe.Replace("\"", "\"\"") + "\"";
         }
