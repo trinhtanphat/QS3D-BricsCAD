@@ -59,14 +59,14 @@ namespace QS3D.Core.SmokeTests
             var opening = new ProjectElement("O-HARD", ElementCategory.WallOpening, "opening", "f", "z");
             opening.Properties["WidthM"] = "-1";
             opening.Properties["HeightM"] = "2";
-            new OpeningRegenerator().Regenerate(project, opening);
-            Near(0d, opening.Quantities["OpeningAreaM2"]);
+            Throws<InvalidOperationException>(() => new OpeningRegenerator().Regenerate(project, opening));
+            True(opening.Quantities.Count == 0);
 
             var skirting = new ProjectElement("S-HARD", ElementCategory.Skirting, "skirting", "f", "z");
             skirting.Properties["PerimeterM"] = "10";
             skirting.Properties["DoorWidthM"] = "-2";
-            new RoomRegenerator().Regenerate(project, skirting);
-            Near(10d, skirting.Quantities["SkirtingLengthM"]);
+            Throws<InvalidOperationException>(() => new RoomRegenerator().Regenerate(project, skirting));
+            True(skirting.Quantities.Count == 0);
         }
 
         private static void RebarSpacingRequiresDistribution()
@@ -315,7 +315,7 @@ namespace QS3D.Core.SmokeTests
             }
             finally
             {
-                try { if (File.Exists(path)) File.Delete(path); } catch { }
+                try { if (File.Exists(path)) File.Delete(path, true); } catch { }
             }
         }
 
