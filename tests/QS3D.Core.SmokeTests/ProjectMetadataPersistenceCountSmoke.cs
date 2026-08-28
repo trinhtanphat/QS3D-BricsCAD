@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
             GenericCountDriftFailsAtomically();
             ReadOnlyCountDriftFailsAtomically();
             NonGenericCountDriftFailsAtomically();
+            PostTraversalNegativeCountFailsAtomically();
+            PostTraversalConflictingCountFailsAtomically();
             StableCountedInputPublishes();
             PureStreamingInputPublishes();
         }
@@ -23,7 +25,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = SeededProject("generic");
             var input = new GenericDriftCollection(1, 2, Pair("new-generic", "value"));
-            ExpectDriftFailure(project, input, "generic Count drift");
+            ExpectFailure(project, input, "generic Count drift", "Project metadata persistence input Count changed during traversal.");
             Equal(1, input.YieldedCount, "generic Count drift yielded count");
             AssertSeedUnchanged(project, "generic Count drift");
         }
@@ -32,7 +34,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = SeededProject("readonly");
             var input = new ReadOnlyDriftCollection(1, 0, Pair("new-readonly", "value"));
-            ExpectDriftFailure(project, input, "read-only Count drift");
+            ExpectFailure(project, input, "read-only Count drift", "Project metadata persistence input Count changed during traversal.");
             Equal(1, input.YieldedCount, "read-only Count drift yielded count");
             AssertSeedUnchanged(project, "read-only Count drift");
         }
@@ -41,9 +43,27 @@ namespace QS3D.Core.SmokeTests
         {
             var project = SeededProject("nongeneric");
             var input = new NonGenericDriftCollection(1, 3, Pair("new-nongeneric", "value"));
-            ExpectDriftFailure(project, input, "non-generic Count drift");
+            ExpectFailure(project, input, "non-generic Count drift", "Project metadata persistence input Count changed during traversal.");
             Equal(1, input.YieldedCount, "non-generic Count drift yielded count");
             AssertSeedUnchanged(project, "non-generic Count drift");
+        }
+
+        private static void PostTraversalNegativeCountFailsAtomically()
+        {
+            var project = SeededProject("negative");
+            var input = new GenericDriftCollection(1, -1, Pair("new-negative", "value"));
+            ExpectFailure(project, input, "post-traversal negative Count", "Project metadata persistence input exposes an invalid negative Count.");
+            Equal(1, input.YieldedCount, "post-traversal negative Count yielded count");
+            AssertSeedUnchanged(project, "post-traversal negative Count");
+        }
+
+        private static void PostTraversalConflictingCountFailsAtomically()
+        {
+            var project = SeededProject("conflict");
+            var input = new PostTraversalConflictCollection(Pair("new-conflict", "value"));
+            ExpectFailure(project, input, "post-traversal conflicting Count", "Project metadata persistence input exposes conflicting Count contracts.");
+            Equal(1, input.YieldedCount, "post-traversal conflicting Count yielded count");
+            AssertSeedUnchanged(project, "post-traversal conflicting Count");
         }
 
         private static void StableCountedInputPublishes()
@@ -71,19 +91,19 @@ namespace QS3D.Core.SmokeTests
                 yield return items[i];
         }
 
-        private static void ExpectDriftFailure(
+        private static void ExpectFailure(
             ProjectState project,
             IEnumerable<KeyValuePair<string, string>> input,
-            string label)
+            string label,
+            string expected)
         {
             try
             {
                 InvokePersistenceReplacement(project, input);
-                throw new InvalidOperationException(label + ": expected post-traversal Count drift rejection.");
+                throw new InvalidOperationException(label + ": expected Count-contract rejection.");
             }
             catch (TargetInvocationException ex) when (ex.InnerException is InvalidOperationException failure)
             {
-                const string expected = "Project metadata persistence input Count changed during traversal.";
                 if (!string.Equals(expected, failure.Message, StringComparison.Ordinal))
                     throw new InvalidOperationException(label + ": wrong failure. Expected '" + expected + "', got '" + failure.Message + "'.");
             }
@@ -208,6 +228,35 @@ namespace QS3D.Core.SmokeTests
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
             public void CopyTo(Array array, int index) => throw new NotSupportedException();
+        }
+
+        private sealed class PostTraversalConflictCollection : ICollection<KeyValuePair<string, string>>, IReadOnlyCollection<KeyValuePair<string, string>>
+        {
+            private readonly KeyValuePair<string, string> _item;
+            private int _readOnlyCountReads;
+
+            internal PostTraversalConflictCollection(KeyValuePair<string, string> item)
+            {
+                _item = item;
+            }
+
+            int ICollection<KeyValuePair<string, string>>.Count => 1;
+            int IReadOnlyCollection<KeyValuePair<string, string>>.Count => _readOnlyCountReads++ == 0 ? 1 : 2;
+            public bool IsReadOnly => true;
+            public int YieldedCount { get; private set; }
+
+            public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+            {
+                YieldedCount++;
+                yield return _item;
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(KeyValuePair<string, string> item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(KeyValuePair<string, string> item) => false;
+            public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(KeyValuePair<string, string> item) => throw new NotSupportedException();
         }
     }
 }
