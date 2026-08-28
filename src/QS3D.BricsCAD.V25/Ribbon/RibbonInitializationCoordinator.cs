@@ -82,7 +82,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     cleanupComplete = false;
                 }
 
-                if (!StopTimedRetry()) cleanupComplete = false;
+                if (!TryStopTimedRetry()) cleanupComplete = false;
 
                 // Every downstream coordinator owns independent external/UI state. Teardown is
                 // deliberately fail-soft so one faulty cleanup cannot strand later publishers,
@@ -219,7 +219,15 @@ namespace QS3D.BricsCAD.V25.Ribbon
             timer.Start();
         }
 
-        private static bool StopTimedRetry()
+        // Preserve the long-standing NETLOAD source contract used by generic startup guards and
+        // ordinary retry call sites. Stop() uses the status-aware helper below so teardown can
+        // retain timer ownership when either native stop or event detach fails.
+        private static void StopTimedRetry()
+        {
+            TryStopTimedRetry();
+        }
+
+        private static bool TryStopTimedRetry()
         {
             var timer = _retryTimer;
             if (timer == null) return true;
