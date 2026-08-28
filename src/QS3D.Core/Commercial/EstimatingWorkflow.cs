@@ -158,6 +158,8 @@ namespace QS3D.Core.Commercial
             _byId = new Dictionary<string, EstimatingLine>(StringComparer.OrdinalIgnoreCase);
             foreach (var line in lines)
             {
+                if (knownCount.HasValue && snapshot.Count >= knownCount.Value)
+                    throw new InvalidOperationException("Estimating portfolio line count changed during enumeration.");
                 if (snapshot.Count == MaximumLines)
                     throw new InvalidOperationException("Estimating portfolio supports at most 10000 lines.");
                 if (line == null) throw new ArgumentException("Estimating portfolio contains a null line.", nameof(lines));
@@ -260,6 +262,8 @@ namespace QS3D.Core.Commercial
             var uniqueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var raw in lineIds)
             {
+                if (lineIdKnownCount.HasValue && ids.Count >= lineIdKnownCount.Value)
+                    throw new InvalidOperationException("Bulk rate assignment selected-line count changed during enumeration.");
                 if (ids.Count == MaximumSelectedLines)
                     throw new InvalidOperationException("Bulk rate assignment supports at most 10000 selected lines.");
                 var id = CommercialGuard.RequireToken(raw, nameof(lineIds));
@@ -280,6 +284,8 @@ namespace QS3D.Core.Commercial
             var units = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var assignment in unitRates)
             {
+                if (unitRateKnownCount.HasValue && rates.Count >= unitRateKnownCount.Value)
+                    throw new InvalidOperationException("Bulk rate assignment unit-rate count changed during enumeration.");
                 if (rates.Count == MaximumUnitRates)
                     throw new InvalidOperationException("Bulk rate assignment supports at most 256 unit rates.");
                 if (assignment == null) throw new ArgumentException("Bulk rate assignment contains a null unit rate.", nameof(unitRates));
