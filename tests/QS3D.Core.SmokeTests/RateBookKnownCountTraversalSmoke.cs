@@ -16,6 +16,10 @@ namespace QS3D.Core.SmokeTests
             OverYieldFailsAtFirstUnexpectedItem();
             UnderYieldFailsAfterTraversal();
             ExactKnownCountTraversalRemainsAccepted();
+            CountDriftAfterExactTraversalFailsClosed();
+            PostTraversalInterfaceConflictFailsClosed();
+            HonestMultiInterfaceCountRemainsAccepted();
+            PureStreamingInputRemainsAccepted();
         }
 
         private static void OverYieldFailsAtFirstUnexpectedItem()
@@ -57,6 +61,54 @@ namespace QS3D.Core.SmokeTests
 
             Equal(2, source.YieldedCount, "Exact counted input must enumerate every declared item once.");
             Equal(2, book.Items.Count, "Exact known Count/traversal agreement must remain accepted.");
+        }
+
+        private static void CountDriftAfterExactTraversalFailsClosed()
+        {
+            var source = new CountDriftingReadOnlyCollection(initialCount: 2, finalCount: 3);
+            var error = Capture<InvalidOperationException>(
+                () => new RateBook("BOOK-KNOWN-COUNT-DRIFT", source));
+
+            Equal(2, source.YieldedCount, "Count drift probe must yield exactly the admitted item cardinality.");
+            Equal(3, source.Count, "Probe must expose its changed deterministic Count after traversal.");
+            Contains(
+                "known count changed during traversal",
+                error.Message,
+                "RateBook must reject Count metadata that changes after exact traversal.");
+        }
+
+        private static void PostTraversalInterfaceConflictFailsClosed()
+        {
+            var source = new MultiInterfaceCollection(count: 2, finalNonGenericCount: 3);
+            var error = Capture<InvalidOperationException>(
+                () => new RateBook("BOOK-KNOWN-COUNT-CONFLICT-AFTER", source));
+
+            Equal(2, source.YieldedCount, "Interface-conflict probe must yield exactly the admitted cardinality.");
+            Contains(
+                "conflicting known counts",
+                error.Message,
+                "RateBook must re-read all deterministic Count interfaces after traversal.");
+        }
+
+        private static void HonestMultiInterfaceCountRemainsAccepted()
+        {
+            var source = new MultiInterfaceCollection(count: 2, finalNonGenericCount: 2);
+            var book = new RateBook("BOOK-KNOWN-COUNT-MULTI-HONEST", source);
+
+            Equal(2, source.YieldedCount, "Honest multi-interface input must enumerate each item once.");
+            Equal(2, book.Items.Count, "Stable matching Count interfaces must remain accepted.");
+        }
+
+        private static void PureStreamingInputRemainsAccepted()
+        {
+            var book = new RateBook("BOOK-KNOWN-COUNT-STREAM", StreamItems(2));
+            Equal(2, book.Items.Count, "Pure streaming input without deterministic Count metadata must remain accepted.");
+        }
+
+        private static IEnumerable<RateItem> StreamItems(int count)
+        {
+            for (var i = 0; i < count; i++)
+                yield return Item(i);
         }
 
         private static RateItem Item(int index)
@@ -122,6 +174,87 @@ namespace QS3D.Core.SmokeTests
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class CountDriftingReadOnlyCollection : IReadOnlyCollection<RateItem>
+        {
+            private readonly int _initialCount;
+            private readonly int _finalCount;
+
+            internal CountDriftingReadOnlyCollection(int initialCount, int finalCount)
+            {
+                _initialCount = initialCount;
+                _finalCount = finalCount;
+                Count = initialCount;
+            }
+
+            public int Count { get; private set; }
+            internal int YieldedCount { get; private set; }
+
+            public IEnumerator<RateItem> GetEnumerator()
+            {
+                try
+                {
+                    for (var i = 0; i < _initialCount; i++)
+                    {
+                        YieldedCount++;
+                        yield return Item(i);
+                    }
+                }
+                finally
+                {
+                    Count = _finalCount;
+                }
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class MultiInterfaceCollection : ICollection<RateItem>, IReadOnlyCollection<RateItem>, ICollection
+        {
+            private readonly List<RateItem> _items;
+            private readonly int _finalNonGenericCount;
+            private int _nonGenericCount;
+
+            internal MultiInterfaceCollection(int count, int finalNonGenericCount)
+            {
+                _items = new List<RateItem>(count);
+                for (var i = 0; i < count; i++)
+                    _items.Add(Item(i));
+                _nonGenericCount = count;
+                _finalNonGenericCount = finalNonGenericCount;
+            }
+
+            public int Count => _items.Count;
+            int ICollection.Count => _nonGenericCount;
+            public bool IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+            internal int YieldedCount { get; private set; }
+
+            public IEnumerator<RateItem> GetEnumerator()
+            {
+                try
+                {
+                    for (var i = 0; i < _items.Count; i++)
+                    {
+                        YieldedCount++;
+                        yield return _items[i];
+                    }
+                }
+                finally
+                {
+                    _nonGenericCount = _finalNonGenericCount;
+                }
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public bool Contains(RateItem item) => _items.Contains(item);
+            public void CopyTo(RateItem[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+            void ICollection.CopyTo(Array array, int index) => ((ICollection)_items.ToArray()).CopyTo(array, index);
+            public void Add(RateItem item) => throw new NotSupportedException();
+            public bool Remove(RateItem item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
         }
     }
 

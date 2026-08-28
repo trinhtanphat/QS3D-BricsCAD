@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Xml;
 
 namespace QS3D.Core.Mep
 {
@@ -112,6 +113,8 @@ namespace QS3D.Core.Mep
             {
                 if (index == MaxElements)
                     ThrowTooManyElements();
+                if (hasKnownCount && index >= knownCount)
+                    throw new InvalidOperationException("MEP takeoff source known count does not match the number of elements traversed.");
                 if (element == null)
                     throw new ArgumentException("MEP takeoff contains a null element at index " + index + ".", nameof(elements));
                 if (!ids.Add(element.ElementId))
@@ -279,6 +282,14 @@ namespace QS3D.Core.Mep
             {
                 if (char.IsControl(trimmed[i]))
                     throw new ArgumentException("MEP identity/classification text must not contain control characters.", parameterName);
+            }
+            try
+            {
+                XmlConvert.VerifyXmlChars(trimmed);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("MEP identity/classification text contains malformed UTF-16 or XML-invalid characters.", parameterName, ex);
             }
             return trimmed;
         }

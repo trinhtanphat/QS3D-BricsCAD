@@ -472,6 +472,7 @@ namespace QS3D.Core.Measurement
             var items = new List<MeasurementTraceFact>();
             foreach (var item in source)
             {
+                RequireTraversalCapacity(knownCount, items.Count, parameterName, "facts");
                 if (items.Count >= MaximumCollectionEntries)
                     throw CollectionCountError(parameterName, "facts");
                 if (item == null) throw new ArgumentException("Measurement trace facts cannot contain null entries.", parameterName);
@@ -504,6 +505,7 @@ namespace QS3D.Core.Measurement
             var items = new List<MeasurementTraceAdjustment>();
             foreach (var item in source)
             {
+                RequireTraversalCapacity(knownCount, items.Count, parameterName, "adjustments");
                 if (items.Count >= MaximumCollectionEntries)
                     throw CollectionCountError(parameterName, "adjustments");
                 if (item == null) throw new ArgumentException("Measurement trace adjustments cannot contain null entries.", parameterName);
@@ -526,6 +528,7 @@ namespace QS3D.Core.Measurement
             var items = new List<string>();
             foreach (var item in source)
             {
+                RequireTraversalCapacity(knownCount, items.Count, nameof(source), "messages");
                 if (items.Count >= MaximumCollectionEntries)
                     throw CollectionCountError(nameof(source), "messages");
                 items.Add(RequireText(item, nameof(source)));
@@ -571,6 +574,16 @@ namespace QS3D.Core.Measurement
             knownCount = count;
         }
 
+        private static void RequireTraversalCapacity(
+            int? knownCount,
+            int observedCount,
+            string parameterName,
+            string collectionName)
+        {
+            if (knownCount.HasValue && observedCount >= knownCount.Value)
+                throw TraversalCountError(parameterName, collectionName);
+        }
+
         private static void RequireObservedCount(
             int? knownCount,
             int observedCount,
@@ -578,9 +591,14 @@ namespace QS3D.Core.Measurement
             string collectionName)
         {
             if (knownCount.HasValue && knownCount.Value != observedCount)
-                throw new ArgumentException(
-                    "Measurement trace " + collectionName + " count does not match source traversal.",
-                    parameterName);
+                throw TraversalCountError(parameterName, collectionName);
+        }
+
+        private static ArgumentException TraversalCountError(string parameterName, string collectionName)
+        {
+            return new ArgumentException(
+                "Measurement trace " + collectionName + " count does not match source traversal.",
+                parameterName);
         }
 
         private static ArgumentException CollectionCountError(string parameterName, string collectionName)

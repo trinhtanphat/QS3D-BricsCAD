@@ -47,11 +47,23 @@ id_guard = text[id_start:required_start]
 if raw_capture not in id_guard or raw_control not in id_guard or "return Required(raw, name, 64);" not in id_guard:
     raise SystemExit("FAIL: Material ID raw-control/canonical validation contract changed")
 
-optional = text[optional_start:text.find("private static void RequireWellFormedUnicode", optional_start)]
-if "var text = (value ?? string.Empty).Trim();" not in optional:
-    raise SystemExit("FAIL: Material Unit/Description Optional semantics changed unexpectedly")
+optional_end = text.find("private static void RequireWellFormedUnicode", optional_start)
+optional = text[optional_start:optional_end]
+for label, token in (
+    ("raw capture", raw_capture),
+    ("raw control rejection", raw_control),
+    ("ordinary-space normalization", trim),
+    ("Unicode validation", "RequireWellFormedUnicode(text, name);"),
+    ("XML validation", "RequireXmlText(text, name);"),
+):
+    if token not in optional:
+        raise SystemExit(f"FAIL: Material Unit/Description Optional guard missing {label}: {token}")
+if optional.find(raw_control) >= optional.find(trim):
+    raise SystemExit("FAIL: Material Unit/Description controls must be rejected before Trim normalization")
+if legacy in optional:
+    raise SystemExit("FAIL: legacy Material Optional trim-before-control-validation path has returned")
 
 print("PASS: Material names reject raw control characters before Trim normalization")
 print("PASS: Material ID raw-control contract remains explicit")
-print("PASS: Unit/Description Optional normalization remains unchanged")
+print("PASS: Unit/Description reject raw control characters before Trim while preserving ordinary-space normalization")
 print("NOTE: Core/source guard only; no licensed BricsCAD runtime PASS is claimed")

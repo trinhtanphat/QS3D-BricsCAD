@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             AdvertisedCountGreaterThanTraversalFails();
-            AdvertisedCountLessThanTraversalFails();
+            AdvertisedCountLessThanTraversalFailsEarly();
             EnumerableWithoutKnownCountRemainsAccepted();
         }
 
@@ -24,16 +24,16 @@ namespace QS3D.Core.SmokeTests
                 2,
                 new[] { CreateResult(1) });
 
-            ThrowsCountMismatch(() => IfcRoundTripExchangeResultSet.Create(results));
+            ThrowsFinalCountMismatch(() => IfcRoundTripExchangeResultSet.Create(results));
         }
 
-        private static void AdvertisedCountLessThanTraversalFails()
+        private static void AdvertisedCountLessThanTraversalFailsEarly()
         {
             var results = new KnownCountCollection<IfcRoundTripExchangeResult>(
                 1,
                 new[] { CreateResult(1), CreateResult(2) });
 
-            ThrowsCountMismatch(() => IfcRoundTripExchangeResultSet.Create(results));
+            ThrowsEarlyCountOverrun(() => IfcRoundTripExchangeResultSet.Create(results));
         }
 
         private static void EnumerableWithoutKnownCountRemainsAccepted()
@@ -50,7 +50,7 @@ namespace QS3D.Core.SmokeTests
                 "Enumerable-only IFC result source changed canonical result ordering.");
         }
 
-        private static void ThrowsCountMismatch(Action action)
+        private static void ThrowsFinalCountMismatch(Action action)
         {
             try
             {
@@ -62,7 +62,23 @@ namespace QS3D.Core.SmokeTests
                 Require(exception.Message.StartsWith(
                         "IFC exchange result source Count does not match enumerated result count.",
                         StringComparison.Ordinal),
-                    "Unexpected IFC Count/traversal mismatch diagnostic: " + exception.Message);
+                    "Unexpected IFC result under-yield diagnostic: " + exception.Message);
+            }
+        }
+
+        private static void ThrowsEarlyCountOverrun(Action action)
+        {
+            try
+            {
+                action();
+                throw new Exception("Expected IFC early Count-overrun rejection.");
+            }
+            catch (InvalidOperationException exception)
+            {
+                Require(exception.Message.StartsWith(
+                        "IFC exchange result source Count was exceeded during traversal.",
+                        StringComparison.Ordinal),
+                    "Unexpected IFC result over-yield diagnostic: " + exception.Message);
             }
         }
 

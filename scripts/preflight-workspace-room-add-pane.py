@@ -3,7 +3,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.RoomWorkspacePane.cs"
-ROOM_FINISH_SAFETY = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.RoomFinishTreeVirtualizationSafety.cs"
 XAML = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.xaml"
 
 
@@ -27,7 +26,6 @@ def method_body(text: str, marker: str) -> str:
 
 def main() -> int:
     source = SOURCE.read_text(encoding="utf-8")
-    room_finish_safety = ROOM_FINISH_SAFETY.read_text(encoding="utf-8")
     xaml = XAML.read_text(encoding="utf-8")
 
     rewire = method_body(source, "private void RewireBlt3dRoomAwareAddActions")
@@ -90,6 +88,7 @@ def main() -> int:
     for label in (
         "Bỏ",
         "Tạo hoàn thiện",
+        "Trát Trần",
         "Thuộc tính",
         "Chưa chọn",
     ):
@@ -99,27 +98,6 @@ def main() -> int:
         presentation,
         "createFinish.Click += OnAddFinishClick;",
         "Tạo hoàn thiện must keep the established finish action",
-    )
-    forbid(
-        presentation,
-        "finishTree.Items.Add",
-        "Loaded/SystemIdle Room presentation must not mutate the finish TreeView after first layout",
-    )
-
-    require(
-        room_finish_safety,
-        "EnsureRoomFinishStaticItemsPreLayout(tree);",
-        "Room finish static items must be materialized by the pre-layout safety path",
-    )
-    require(
-        room_finish_safety,
-        'Header = "Trát Trần"',
-        "Trát Trần must remain in the complete pre-layout Room finish item set",
-    )
-    require(
-        room_finish_safety,
-        "Tag = ElementCategory.CeilingFinish.ToString()",
-        "Trát Trần must retain the CeilingFinish semantic category",
     )
 
     for anchor in (

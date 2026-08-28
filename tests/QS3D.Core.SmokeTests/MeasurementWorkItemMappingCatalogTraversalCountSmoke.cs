@@ -25,7 +25,10 @@ namespace QS3D.Core.SmokeTests
 
         private static void OverEnumerationRejects()
         {
-            var mappings = new ReportedCountCollection(reportedCount: 1, actualCount: 2);
+            var mappings = new ReportedCountCollection(
+                reportedCount: 1,
+                actualCount: 2,
+                invalidUnexpectedItem: true);
             var error = Capture<InvalidOperationException>(() => new MeasurementWorkItemMappingCatalog(mappings));
             Contains("known Count does not match completed traversal cardinality", error.Message);
         }
@@ -84,11 +87,16 @@ namespace QS3D.Core.SmokeTests
         {
             private readonly int _reportedCount;
             private readonly int _actualCount;
+            private readonly bool _invalidUnexpectedItem;
 
-            internal ReportedCountCollection(int reportedCount, int actualCount)
+            internal ReportedCountCollection(
+                int reportedCount,
+                int actualCount,
+                bool invalidUnexpectedItem = false)
             {
                 _reportedCount = reportedCount;
                 _actualCount = actualCount;
+                _invalidUnexpectedItem = invalidUnexpectedItem;
             }
 
             public int Count => _reportedCount;
@@ -97,7 +105,12 @@ namespace QS3D.Core.SmokeTests
             public IEnumerator<MeasurementWorkItemMapping> GetEnumerator()
             {
                 for (var i = 0; i < _actualCount; i++)
-                    yield return CreateMapping(i);
+                {
+                    if (_invalidUnexpectedItem && i >= _reportedCount)
+                        yield return null!;
+                    else
+                        yield return CreateMapping(i);
+                }
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();

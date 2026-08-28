@@ -27,10 +27,10 @@ namespace QS3D.BricsCAD.V25.Cad
                     if (element.Category != ElementCategory.Grid) continue;
                     if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
 
-                    var handles = raw
-                        .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                        .Select(x => x.Trim())
-                        .Where(x => x.Length > 0)
+                    // Preserve every persisted slot. Empty/malformed tokens must not collapse the
+                    // extension/bubble/text positional contract before validation.
+                    var handles = (raw ?? string.Empty)
+                        .Split(new[] { ';' }, StringSplitOptions.None)
                         .ToList();
 
                     for (var index = 0; index < handles.Count; index++)
@@ -60,12 +60,31 @@ namespace QS3D.BricsCAD.V25.Cad
             int index,
             ICollection<ModelHealthIssue> issues)
         {
-            if (!long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
+            var canonicalHandle = CadHandleService.NormalizeHexHandle(handle);
+            if (canonicalHandle == null)
             {
                 issues.Add(new ModelHealthIssue(
                     "GRID_ANNOTATION_CAD_HANDLE_INVALID",
                     HealthSeverity.Error,
-                    "Generated Grid annotation Handle không phải hexadecimal metadata hợp lệ: " + handle + ".",
+                    "Generated Grid annotation Handle không phải CAD hex dương hợp lệ: " + handle + ".",
+                    element.Id));
+                return;
+            }
+            if (!string.Equals(handle, canonicalHandle, StringComparison.Ordinal))
+            {
+                issues.Add(new ModelHealthIssue(
+                    "GRID_ANNOTATION_CAD_HANDLE_NON_CANONICAL",
+                    HealthSeverity.Error,
+                    "Generated Grid annotation Handle phải dùng đúng CAD hex canonical: " + canonicalHandle + ".",
+                    element.Id));
+                return;
+            }
+            if (!long.TryParse(canonicalHandle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value) || value <= 0L)
+            {
+                issues.Add(new ModelHealthIssue(
+                    "GRID_ANNOTATION_CAD_HANDLE_INVALID",
+                    HealthSeverity.Error,
+                    "Generated Grid annotation Handle không thể resolve theo canonical CAD hex contract: " + canonicalHandle + ".",
                     element.Id));
                 return;
             }
@@ -74,13 +93,13 @@ namespace QS3D.BricsCAD.V25.Cad
             try { id = document.Database.GetObjectId(false, new Handle(value), 0); }
             catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
             {
-                AddMissing(element, handle, issues);
+                AddMissing(element, canonicalHandle, issues);
                 return;
             }
 
             if (id.IsNull || !id.IsValid)
             {
-                AddMissing(element, handle, issues);
+                AddMissing(element, canonicalHandle, issues);
                 return;
             }
 
@@ -88,13 +107,13 @@ namespace QS3D.BricsCAD.V25.Cad
             try { entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity; }
             catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
             {
-                AddMissing(element, handle, issues);
+                AddMissing(element, canonicalHandle, issues);
                 return;
             }
 
             if (entity == null || entity.IsErased)
             {
-                AddMissing(element, handle, issues);
+                AddMissing(element, canonicalHandle, issues);
                 return;
             }
 
@@ -103,7 +122,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 issues.Add(new ModelHealthIssue(
                     "GRID_ANNOTATION_CAD_TYPE_MISMATCH",
                     HealthSeverity.Error,
-                    "Generated Grid annotation Handle " + handle + " có type " + entity.GetType().Name +
+                    "Generated Grid annotation Handle " + canonicalHandle + " có type " + entity.GetType().Name +
                     ", expected " + ExpectedTypeName(index) + " tại slot " + index + ".",
                     element.Id));
             }
@@ -113,7 +132,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 issues.Add(new ModelHealthIssue(
                     "GRID_ANNOTATION_CAD_OWNERSHIP_MISMATCH",
                     HealthSeverity.Error,
-                    "Generated Grid annotation Handle " + handle + " còn sống nhưng QS3D XData ownership không khớp project/Grid hiện tại.",
+                    "Generated Grid annotation Handle " + canonicalHandle + " còn sống nhưng QS3D XData ownership không khớp project/Grid hiện tại.",
                     element.Id));
             }
 

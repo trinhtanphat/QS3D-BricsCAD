@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             AdvertisedCountGreaterThanTraversalFails();
-            AdvertisedCountLessThanTraversalFails();
+            AdvertisedCountLessThanTraversalFailsEarly();
             EnumerableWithoutKnownCountRemainsAccepted();
         }
 
@@ -24,16 +24,16 @@ namespace QS3D.Core.SmokeTests
                 2,
                 new[] { CreateEvidence(1) });
 
-            ThrowsCountMismatch(() => IfcRoundTripQuantityEvidenceSet.Create(evidence));
+            ThrowsFinalCountMismatch(() => IfcRoundTripQuantityEvidenceSet.Create(evidence));
         }
 
-        private static void AdvertisedCountLessThanTraversalFails()
+        private static void AdvertisedCountLessThanTraversalFailsEarly()
         {
             var evidence = new KnownCountCollection<IfcRoundTripQuantityEvidence>(
                 1,
                 new[] { CreateEvidence(1), CreateEvidence(2) });
 
-            ThrowsCountMismatch(() => IfcRoundTripQuantityEvidenceSet.Create(evidence));
+            ThrowsEarlyCountOverrun(() => IfcRoundTripQuantityEvidenceSet.Create(evidence));
         }
 
         private static void EnumerableWithoutKnownCountRemainsAccepted()
@@ -52,7 +52,7 @@ namespace QS3D.Core.SmokeTests
                 "Enumerable-only IFC quantity evidence source changed canonical group ordering.");
         }
 
-        private static void ThrowsCountMismatch(Action action)
+        private static void ThrowsFinalCountMismatch(Action action)
         {
             try
             {
@@ -64,7 +64,23 @@ namespace QS3D.Core.SmokeTests
                 Require(exception.Message.StartsWith(
                         "IFC round-trip quantity evidence source Count does not match enumerated candidate count.",
                         StringComparison.Ordinal),
-                    "Unexpected IFC quantity evidence Count/traversal mismatch diagnostic: " + exception.Message);
+                    "Unexpected IFC quantity evidence under-yield diagnostic: " + exception.Message);
+            }
+        }
+
+        private static void ThrowsEarlyCountOverrun(Action action)
+        {
+            try
+            {
+                action();
+                throw new Exception("Expected IFC quantity evidence early Count-overrun rejection.");
+            }
+            catch (InvalidOperationException exception)
+            {
+                Require(exception.Message.StartsWith(
+                        "IFC round-trip quantity evidence source Count was exceeded during traversal.",
+                        StringComparison.Ordinal),
+                    "Unexpected IFC quantity evidence over-yield diagnostic: " + exception.Message);
             }
         }
 

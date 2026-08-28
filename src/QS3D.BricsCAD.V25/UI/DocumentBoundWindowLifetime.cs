@@ -31,6 +31,7 @@ namespace QS3D.BricsCAD.V25.UI
             private bool _projectAffinityBound;
             private int _invalidated;
             private int _documentCloseStarted;
+            private int _windowClosedDuringQuiescence;
             private string _projectId = string.Empty;
 
             public Registration(Window window, Document document)
@@ -72,6 +73,7 @@ namespace QS3D.BricsCAD.V25.UI
                     _projectAffinityBound = false;
                     Volatile.Write(ref _invalidated, 0);
                     Volatile.Write(ref _documentCloseStarted, 0);
+                    Volatile.Write(ref _windowClosedDuringQuiescence, 0);
                     _projectId = string.Empty;
                     throw;
                 }
@@ -242,6 +244,16 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnHostQuiescenceAborted(object? sender, EventArgs e)
             {
+                // Closed is allowed to run while host quiescence owns native teardown, but its
+                // normal Detach path must not mutate native subscriptions until QuitAborted clears
+                // the barrier. Recover that already-closed registration even if the shared native
+                // lifecycle coordinator correctly suppressed every document callback during quit.
+                if (Volatile.Read(ref _windowClosedDuringQuiescence) != 0)
+                {
+                    TryRecoverClosedWindowAfterQuitAbort();
+                    return;
+                }
+
                 // The global coordinator already cleared host quiescence. If document teardown
                 // invalidated this registration during the attempted quit, recovery is still
                 // dispatcher-deferred so no WPF/native cleanup runs on the BricsCAD quit callback.
@@ -250,6 +262,31 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
 
                 TryRecoverAfterQuitAbort();
+            }
+
+            private void TryRecoverClosedWindowAfterQuitAbort()
+            {
+                try
+                {
+                    _window.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        // QuitAborted recovery is queued. A second quit can begin before or during
+                        // this dispatcher turn, so keep the deferred marker armed until managed
+                        // detach has actually completed.
+                        if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
+                        if (Volatile.Read(ref _windowClosedDuringQuiescence) == 0) return;
+                        DetachDocumentLifecycleHandlersAfterAbort();
+                        if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
+                        Detach();
+                        if (!_attached)
+                            Interlocked.Exchange(ref _windowClosedDuringQuiescence, 0);
+                    }));
+                }
+                catch
+                {
+                    // Keep the registration fail-closed and the deferred marker armed if the
+                    // dispatcher is unavailable. No native lifecycle cleanup runs from this callback.
+                }
             }
 
             private void TryRecoverAfterQuitAbort()
@@ -383,7 +420,11 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnWindowClosed(object? sender, EventArgs e)
             {
-                if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
+                if (ModelessHostQuiescenceCoordinator.IsQuiescing)
+                {
+                    Volatile.Write(ref _windowClosedDuringQuiescence, 1);
+                    return;
+                }
                 Detach();
             }
 

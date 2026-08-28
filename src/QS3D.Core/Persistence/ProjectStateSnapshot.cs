@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Xml;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Rules;
@@ -262,7 +263,10 @@ namespace QS3D.Core.Persistence
             RequireUniqueIds(source.QuantityRules, x => x.Id, "quantity rule");
 
             foreach (var family in source.Families)
+            {
                 RequireSupportedCount(family.Properties.Count, "family " + family.Id + " properties", MaximumSnapshotNestedEntries);
+                RequireCanonicalFamilyProperties(family);
+            }
 
             foreach (var element in source.Elements)
             {
@@ -270,7 +274,95 @@ namespace QS3D.Core.Persistence
                 RequireSupportedCount(element.DependsOn.Count, "element " + element.Id + " dependencies", MaximumSnapshotNestedEntries);
                 RequireSupportedCount(element.Properties.Count, "element " + element.Id + " properties", MaximumSnapshotNestedEntries);
                 RequireSupportedCount(element.Quantities.Count, "element " + element.Id + " quantities", MaximumSnapshotNestedEntries);
+                RequireCanonicalElementProperties(element);
+                RequireCanonicalQuantities(element);
             }
+        }
+
+        private static void RequireCanonicalFamilyProperties(ProjectFamily family)
+        {
+            try
+            {
+                _ = ProjectFamilyService.SnapshotProperties(family, "Snapshot", "snapshot capture");
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidOperationException("Cannot snapshot Family " + family.Id + " with invalid property state.", ex);
+            }
+        }
+
+        private static void RequireCanonicalElementProperties(ProjectElement element)
+        {
+            var canonicalNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in element.Properties)
+            {
+                if (string.IsNullOrWhiteSpace(property.Key))
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with an empty property name.");
+                if (HasControlCharacter(property.Key))
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a property name containing control characters.");
+
+                var canonicalName = property.Key.Trim();
+                if (!string.Equals(canonicalName, property.Key, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a non-canonical property name: '" + property.Key + "'.");
+                RequireXmlPropertyText(canonicalName, element.Id, "name");
+                RequireXmlPropertyText(property.Value ?? string.Empty, element.Id, "value");
+                if (!canonicalNames.Add(canonicalName))
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with property names that collapse to the same canonical identity: " + canonicalName + ".");
+            }
+        }
+
+        private static void RequireXmlPropertyText(string value, string elementId, string role)
+        {
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidOperationException("Cannot snapshot element " + elementId + " with a property " + role + " containing malformed XML text.", ex);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidOperationException("Cannot snapshot element " + elementId + " with a property " + role + " containing malformed XML text.", ex);
+            }
+        }
+
+        private static void RequireCanonicalQuantities(ProjectElement element)
+        {
+            var canonicalNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var quantity in element.Quantities)
+            {
+                if (string.IsNullOrWhiteSpace(quantity.Key))
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with an empty quantity name.");
+                if (quantity.Key.IndexOfAny(new[] { '\t', '\r', '\n' }) >= 0 || HasControlCharacter(quantity.Key))
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a quantity name containing control characters.");
+
+                var canonicalName = quantity.Key.Trim();
+                try
+                {
+                    XmlConvert.VerifyXmlChars(canonicalName);
+                }
+                catch (XmlException ex)
+                {
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a quantity name containing malformed XML text.", ex);
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a quantity name containing malformed XML text.", ex);
+                }
+
+                if (!canonicalNames.Add(canonicalName))
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with quantity names that collapse to the same canonical identity: " + canonicalName + ".");
+                if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value) || quantity.Value < 0d)
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a non-finite or negative quantity: " + canonicalName + ".");
+            }
+        }
+
+        private static bool HasControlCharacter(string value)
+        {
+            foreach (var ch in value)
+                if (char.IsControl(ch)) return true;
+            return false;
         }
 
         private static void RequireSupportedCount(int count, string label, int maximum)
@@ -341,6 +433,7 @@ namespace QS3D.Core.Persistence
             if (!string.Equals(source.Id, target.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot restore family state into a different family id.");
 
+            _ = ProjectFamilyService.SnapshotProperties(source, "Snapshot", "snapshot materialization");
             target.Name = source.Name;
             target.Category = source.Category;
             target.Properties.Clear();
@@ -371,11 +464,12 @@ namespace QS3D.Core.Persistence
             target.DependsOn.Clear();
             foreach (var dependency in source.DependsOn) target.DependsOn.Add(dependency);
 
+            RequireCanonicalElementProperties(source);
             target.Properties.Clear();
             foreach (var property in source.Properties) target.Properties[property.Key] = property.Value;
 
             target.Quantities.Clear();
-            foreach (var quantity in source.Quantities) target.Quantities[quantity.Key] = quantity.Value;
+            foreach (var quantity in source.Quantities) target.SetQuantity(quantity.Key, quantity.Value);
 
             target.RestorePersistenceState(source.Dirty, source.UpdatedUtc);
         }
