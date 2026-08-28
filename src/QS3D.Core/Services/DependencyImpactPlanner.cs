@@ -230,10 +230,22 @@ namespace QS3D.Core.Services
                     "Dependency impact source traversal count " + index.ToString(CultureInfo.InvariantCulture) +
                     " does not match its advertised Count of " + knownCount.Value.ToString(CultureInfo.InvariantCulture) + ".",
                     nameof(sourceElementIds));
+            RequireKnownCountStableAfterTraversal(sourceElementIds, knownCount, nameof(sourceElementIds));
             if (result.Count == 0)
                 throw new ArgumentException("Dependency impact planning requires at least one source element id.", nameof(sourceElementIds));
             result.Sort(StringComparer.OrdinalIgnoreCase);
             return result.AsReadOnly();
+        }
+
+        private static void RequireKnownCountStableAfterTraversal(IEnumerable<string> source, int? expectedKnownCount, string parameterName)
+        {
+            var observedKnownCount = TryGetKnownCount(source, out var conflictingKnownCounts, out var invalidNegativeKnownCount);
+            if (invalidNegativeKnownCount)
+                throw new ArgumentException("Dependency impact source exposes an invalid negative known Count after traversal.", parameterName);
+            if (conflictingKnownCounts)
+                throw new ArgumentException("Dependency impact source exposes conflicting known Count values after traversal.", parameterName);
+            if (observedKnownCount != expectedKnownCount)
+                throw new ArgumentException("Dependency impact source known Count changed while its roots were being traversed.", parameterName);
         }
 
         private static int? TryGetKnownCount(
