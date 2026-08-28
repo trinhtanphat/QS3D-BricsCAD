@@ -47,6 +47,78 @@ function Resolve-OrdinaryNonReparseFile {
     return $item
 }
 
+function Get-StreamingSha256 {
+    param(
+        [Parameter(Mandatory = $true)]
+        [IO.FileInfo]$File,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Label
+    )
+
+    $stream = [IO.File]::Open($File.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try {
+            return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '')
+        }
+        finally {
+            $sha.Dispose()
+        }
+    }
+    catch {
+        throw "$Label could not be fingerprinted safely: $($_.Exception.Message)"
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
+function Get-StableFileState {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Label
+    )
+
+    $file = Resolve-OrdinaryNonReparseFile -Path $Path -Label $Label
+    $hash = Get-StreamingSha256 -File $file -Label $Label
+    $current = Resolve-OrdinaryNonReparseFile -Path $Path -Label $Label
+
+    if (-not [string]::Equals($file.FullName, $current.FullName, [StringComparison]::OrdinalIgnoreCase) -or
+        $file.Length -ne $current.Length -or
+        $file.LastWriteTimeUtc.Ticks -ne $current.LastWriteTimeUtc.Ticks) {
+        throw "$Label changed while its stable file state was being captured."
+    }
+
+    return [pscustomobject]@{
+        Path = $current.FullName
+        Length = [int64]$current.Length
+        LastWriteUtcTicks = [int64]$current.LastWriteTimeUtc.Ticks
+        Sha256 = $hash
+    }
+}
+
+function Assert-StableFileState {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Expected,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Label
+    )
+
+    $actual = Get-StableFileState -Path $Expected.Path -Label $Label
+    if (-not [string]::Equals($Expected.Path, $actual.Path, [StringComparison]::OrdinalIgnoreCase) -or
+        $Expected.Length -ne $actual.Length -or
+        $Expected.LastWriteUtcTicks -ne $actual.LastWriteUtcTicks -or
+        -not [string]::Equals($Expected.Sha256, $actual.Sha256, [StringComparison]::Ordinal)) {
+        throw "$Label changed after admission and before identity validation completed."
+    }
+}
+
 function Read-BoundedStrictUtf8File {
     param(
         [Parameter(Mandatory = $true)]
@@ -90,11 +162,13 @@ function Read-BoundedStrictUtf8File {
     }
 }
 
-$metadataFile = Resolve-OrdinaryNonReparseFile -Path $MetadataPath -Label 'V26 package metadata'
-$pluginFile = Resolve-OrdinaryNonReparseFile -Path $PluginPath -Label 'V26 plugin assembly'
-$coreFile = Resolve-OrdinaryNonReparseFile -Path $CorePath -Label 'V26 Core assembly'
+$metadataState = Get-StableFileState -Path $MetadataPath -Label 'V26 package metadata'
+$pluginState = Get-StableFileState -Path $PluginPath -Label 'V26 plugin assembly'
+$coreState = Get-StableFileState -Path $CorePath -Label 'V26 Core assembly'
 
+$metadataFile = Resolve-OrdinaryNonReparseFile -Path $metadataState.Path -Label 'V26 package metadata'
 $metadataText = Read-BoundedStrictUtf8File -File $metadataFile -Label 'V26 package metadata'
+Assert-StableFileState -Expected $metadataState -Label 'V26 package metadata'
 try {
     $metadata = $metadataText | ConvertFrom-Json -ErrorAction Stop
 }
@@ -118,8 +192,14 @@ catch {
     throw "PACKAGE-METADATA version is invalid: $($metadata.version)"
 }
 
+$pluginFile = Resolve-OrdinaryNonReparseFile -Path $pluginState.Path -Label 'V26 plugin assembly'
 $pluginVersion = [Reflection.AssemblyName]::GetAssemblyName($pluginFile.FullName).Version
+Assert-StableFileState -Expected $pluginState -Label 'V26 plugin assembly'
+
+$coreFile = Resolve-OrdinaryNonReparseFile -Path $coreState.Path -Label 'V26 Core assembly'
 $coreVersion = [Reflection.AssemblyName]::GetAssemblyName($coreFile.FullName).Version
+Assert-StableFileState -Expected $coreState -Label 'V26 Core assembly'
+
 if ($pluginVersion -ne $packageVersion -or $coreVersion -ne $packageVersion) {
     throw 'V26 package managed assembly identity mismatch.'
 }
@@ -127,5 +207,5 @@ if ($pluginVersion -ne $packageVersion -or $coreVersion -ne $packageVersion) {
 [pscustomobject]@{
     ProductVersion = [string]$metadata.productVersion
     AssemblyVersion = $packageVersion.ToString()
-    MetadataBytes = $metadataFile.Length
+    MetadataBytes = $metadataState.Length
 }
