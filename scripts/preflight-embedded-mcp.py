@@ -5,7 +5,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SERVER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpEmbeddedServer.cs"
 COMMANDS = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpConnectorRibbonCommands.cs"
-ONBOARDING = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareOnboarding.cs"
+TOKEN_ONBOARDING = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareOnboarding.cs"
+ACCOUNT_ONBOARDING = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareAccountOnboarding.cs"
 OVERRIDE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "McpRibbonCommandOverride.cs"
 COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonInitializationCoordinator.cs"
 PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
@@ -32,7 +33,8 @@ def main() -> int:
     errors: list[str] = []
     server = read(SERVER, errors)
     commands = read(COMMANDS, errors)
-    onboarding = read(ONBOARDING, errors)
+    token_onboarding = read(TOKEN_ONBOARDING, errors)
+    account_onboarding = read(ACCOUNT_ONBOARDING, errors)
     override = read(OVERRIDE, errors)
     coordinator = read(COORDINATOR, errors)
     plugin = read(PLUGIN, errors)
@@ -74,7 +76,7 @@ def main() -> int:
     forbid(server, "cmd.exe", errors, "arbitrary cmd surface")
 
     expected_routes = {
-        'Prefix + "MCP_SETTINGS"': "QS3DMCPSETUP",
+        'Prefix + "MCP_SETTINGS"': "QS3DMCPACCOUNTSETUP",
         'Prefix + "MCP_DOCS"': "QS3DMCPDOCSHTTP",
         'Prefix + "AI_DASHBOARD"': "QS3DAIDASHBOARDHTTP",
         'Prefix + "MCP_CONNECTION"': "QS3DMCPCHECKHTTP",
@@ -93,8 +95,9 @@ def main() -> int:
     require(coordinator, "McpRibbonCommandOverride.Reset()", errors, "ribbon override teardown")
 
     require(plugin, "McpEmbeddedServer.Start();", errors, "embedded MCP startup")
-    require(plugin, "McpCloudflareTunnelManager.TryAutoStart();", errors, "saved named-tunnel auto-start")
-    require(plugin, "TryCleanup(McpCloudflareTunnelManager.StopForHostShutdown);", errors, "cloudflared teardown")
+    require(plugin, "McpCloudflareAccountTunnelManager.TryAutoStart();", errors, "browser-auth named-tunnel auto-start")
+    require(plugin, "TryCleanup(McpCloudflareAccountTunnelManager.StopForHostShutdown);", errors, "browser-auth tunnel teardown")
+    require(plugin, "TryCleanup(McpCloudflareTunnelManager.StopForHostShutdown);", errors, "quick/token tunnel teardown")
     require(plugin, "TryCleanup(McpEmbeddedServer.Stop);", errors, "embedded MCP teardown")
     require(plugin, 'ReportOptionalStartupFailure("MCP server", ex)', errors, "fail-soft MCP startup")
 
@@ -108,22 +111,30 @@ def main() -> int:
     ):
         require(commands, f'[CommandMethod("{command}"', errors, f"CommandMethod {command}")
 
-    require(onboarding, '[CommandMethod("QS3DMCPSETUP"', errors, "click-first setup command")
-    require(onboarding, "McpCloudflareSetupWindow", errors, "MCP setup window")
-    require(onboarding, "OpenCloudflareTunnelDashboard", errors, "browser Cloudflare onboarding")
-    require(onboarding, "OpenChatGpt", errors, "browser ChatGPT handoff")
-    require(onboarding, "ProtectedData.Protect", errors, "DPAPI tunnel token protection")
-    require(onboarding, "DataProtectionScope.CurrentUser", errors, "per-Windows-user secret scope")
-    require(onboarding, 'startInfo.EnvironmentVariables["TUNNEL_TOKEN"]', errors, "token outside process command line")
-    require(onboarding, '"tunnel --no-autoupdate run"', errors, "remotely-managed named tunnel run")
-    require(onboarding, "trycloudflare.com", errors, "one-click quick tunnel test mode")
-    require(onboarding, "Mật khẩu Cloudflare chỉ nhập", errors, "provider-owned password entry guidance")
-    forbid(onboarding, "powershell.exe", errors, "PowerShell setup dependency")
-    forbid(onboarding, "cmd.exe", errors, "cmd setup dependency")
+    # Default UX: browser authentication, then hidden cloudflared provisioning. No token/pw copy.
+    require(account_onboarding, '[CommandMethod("QS3DMCPACCOUNTSETUP"', errors, "browser-login setup command")
+    require(account_onboarding, "McpCloudflareAccountSetupWindow", errors, "browser-login setup window")
+    require(account_onboarding, '"tunnel login"', errors, "Cloudflare browser login")
+    require(account_onboarding, '"tunnel create " + TunnelName', errors, "automatic tunnel creation")
+    require(account_onboarding, '"tunnel route dns "', errors, "automatic DNS route")
+    require(account_onboarding, '"credentials-file: \\""', errors, "local tunnel config credentials")
+    require(account_onboarding, '"url: " + OriginUrl', errors, "local MCP origin route")
+    require(account_onboarding, "Cloudflare login:", errors, "visible authentication status")
+    require(account_onboarding, "không hỏi và không lưu mật khẩu Cloudflare", errors, "provider-owned password entry")
+    require(account_onboarding, "OpenChatGpt", errors, "ChatGPT browser handoff")
+    require(account_onboarding, "StartQuickTunnel", errors, "one-click Quick Tunnel fallback")
+    forbid(account_onboarding, "powershell.exe", errors, "PowerShell setup dependency")
+    forbid(account_onboarding, "cmd.exe", errors, "cmd setup dependency")
 
-    # The probe methods live inside escaped C# JSON string literals. Match their source-level
-    # representation so this gate verifies the actual requests instead of demanding unrelated
-    # standalone string constants merely to satisfy a textual preflight.
+    # Advanced fallback remains available for users who prefer dashboard-issued remote tokens.
+    require(token_onboarding, "ProtectedData.Protect", errors, "DPAPI fallback tunnel token protection")
+    require(token_onboarding, "DataProtectionScope.CurrentUser", errors, "per-Windows-user fallback secret scope")
+    require(token_onboarding, 'startInfo.EnvironmentVariables["TUNNEL_TOKEN"]', errors, "fallback token outside process command line")
+    require(token_onboarding, "trycloudflare.com", errors, "Quick Tunnel test URL discovery")
+    forbid(token_onboarding, "powershell.exe", errors, "fallback PowerShell setup dependency")
+    forbid(token_onboarding, "cmd.exe", errors, "fallback cmd setup dependency")
+
+    # The probe methods live inside escaped C# JSON string literals.
     for source_token, label in (
         ('\\"method\\":\\"initialize\\"', "Ribbon protocol initialize probe"),
         ('\\"method\\":\\"notifications/initialized\\"', "Ribbon protocol initialized notification"),
@@ -143,9 +154,9 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: QS3D ships a loopback-only authenticated Streamable-HTTP MCP endpoint, routes "
-        "TOOL/MCP settings to a click-first Cloudflare onboarding wizard, protects named-tunnel "
-        "tokens with Windows DPAPI, auto-starts saved tunnels, and requires no shell setup."
+        "PASS: QS3D embeds authenticated MCP and provides a zero-shell browser-login Cloudflare "
+        "wizard that creates/reuses a named tunnel, routes DNS, persists config, auto-starts with "
+        "BricsCAD, keeps provider passwords out of QS3D, and retains Quick Tunnel as test fallback."
     )
     return 0
 
