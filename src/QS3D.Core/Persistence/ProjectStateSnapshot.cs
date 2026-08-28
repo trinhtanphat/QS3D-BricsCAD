@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Xml;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Rules;
@@ -276,20 +277,40 @@ namespace QS3D.Core.Persistence
 
         private static void RequireCanonicalQuantities(ProjectElement element)
         {
+            var canonicalNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var quantity in element.Quantities)
             {
                 if (string.IsNullOrWhiteSpace(quantity.Key))
                     throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with an empty quantity name.");
-                if (!string.Equals(quantity.Key, quantity.Key.Trim(), StringComparison.Ordinal))
-                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a non-canonical padded quantity name: " + quantity.Key + ".");
-                foreach (var ch in quantity.Key)
+                if (quantity.Key.IndexOfAny(new[] { '\t', '\r', '\n' }) >= 0 || HasControlCharacter(quantity.Key))
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a quantity name containing control characters.");
+
+                var canonicalName = quantity.Key.Trim();
+                try
                 {
-                    if (char.IsControl(ch))
-                        throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a quantity name containing control characters.");
+                    XmlConvert.VerifyXmlChars(canonicalName);
                 }
+                catch (XmlException ex)
+                {
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a quantity name containing malformed XML text.", ex);
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a quantity name containing malformed XML text.", ex);
+                }
+
+                if (!canonicalNames.Add(canonicalName))
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with quantity names that collapse to the same canonical identity: " + canonicalName + ".");
                 if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value) || quantity.Value < 0d)
-                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a non-finite or negative quantity: " + quantity.Key + ".");
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a non-finite or negative quantity: " + canonicalName + ".");
             }
+        }
+
+        private static bool HasControlCharacter(string value)
+        {
+            foreach (var ch in value)
+                if (char.IsControl(ch)) return true;
+            return false;
         }
 
         private static void RequireSupportedCount(int count, string label, int maximum)
