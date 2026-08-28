@@ -108,6 +108,22 @@ namespace QS3D.Core.Cost
                 collectionLabel + " supports at most " + MaximumEntries + " entries.");
         }
 
+        internal static void RequireCanProcessNext(
+            bool hasKnownCount,
+            int knownCount,
+            int observedCount,
+            string collectionLabel)
+        {
+            if (hasKnownCount && observedCount >= knownCount)
+            {
+                throw new InvalidOperationException(
+                    collectionLabel + " traversal produced more entries than its known count reported " + knownCount + ".");
+            }
+
+            if (observedCount == MaximumEntries)
+                ThrowTooManyEntries(collectionLabel);
+        }
+
         internal static void RequireKnownCountMatchesTraversal(
             bool hasKnownCount,
             int knownCount,
@@ -209,8 +225,11 @@ namespace QS3D.Core.Cost
             var index = 0;
             foreach (var component in components)
             {
-                if (index == AdvancedCostCollectionContract.MaximumEntries)
-                    AdvancedCostCollectionContract.ThrowTooManyEntries("Rate build-up component collection");
+                AdvancedCostCollectionContract.RequireCanProcessNext(
+                    hasKnownComponentCount,
+                    knownComponentCount,
+                    index,
+                    "Rate build-up component collection");
                 if (component == null)
                     throw new ArgumentException("Rate build-up contains a null component at index " + index + ".", nameof(components));
                 if (!resourceCodes.Add(component.ResourceCode))
@@ -320,8 +339,11 @@ namespace QS3D.Core.Cost
             var index = 0;
             foreach (var record in records)
             {
-                if (index == AdvancedCostCollectionContract.MaximumEntries)
-                    AdvancedCostCollectionContract.ThrowTooManyEntries("Historical cost catalog");
+                AdvancedCostCollectionContract.RequireCanProcessNext(
+                    hasKnownRecordCount,
+                    knownRecordCount,
+                    index,
+                    "Historical cost catalog");
                 if (record == null)
                     throw new ArgumentException("Historical cost catalog contains a null record at index " + index + ".", nameof(records));
                 if (!ids.Add(record.RecordId))
@@ -560,8 +582,11 @@ namespace QS3D.Core.Cost
             var index = 0;
             foreach (var line in lines)
             {
-                if (index == AdvancedCostCollectionContract.MaximumEntries)
-                    AdvancedCostCollectionContract.ThrowTooManyEntries("Tender quote line collection");
+                AdvancedCostCollectionContract.RequireCanProcessNext(
+                    hasKnownLineCount,
+                    knownLineCount,
+                    index,
+                    "Tender quote line collection");
                 if (line == null)
                     throw new ArgumentException("Tender bid contains a null line at index " + index + ".", nameof(lines));
                 if (byItem.ContainsKey(line.ItemCode))
@@ -697,8 +722,11 @@ namespace QS3D.Core.Cost
             var index = 0;
             foreach (var requirement in requirements)
             {
-                if (index == AdvancedCostCollectionContract.MaximumEntries)
-                    AdvancedCostCollectionContract.ThrowTooManyEntries("Tender requirement collection");
+                AdvancedCostCollectionContract.RequireCanProcessNext(
+                    hasKnownRequirementCount,
+                    knownRequirementCount,
+                    index,
+                    "Tender requirement collection");
                 if (requirement == null)
                     throw new ArgumentException("Tender requirements contain a null item at index " + index + ".", nameof(requirements));
                 if (!ids.Add(requirement.ItemCode))
@@ -726,8 +754,11 @@ namespace QS3D.Core.Cost
             var index = 0;
             foreach (var bid in bids)
             {
-                if (index == AdvancedCostCollectionContract.MaximumEntries)
-                    AdvancedCostCollectionContract.ThrowTooManyEntries("Tender bid collection");
+                AdvancedCostCollectionContract.RequireCanProcessNext(
+                    hasKnownBidCount,
+                    knownBidCount,
+                    index,
+                    "Tender bid collection");
                 if (bid == null)
                     throw new ArgumentException("Tender comparison contains a null bid at index " + index + ".", nameof(bids));
                 if (!ids.Add(bid.BidId))
@@ -870,8 +901,11 @@ namespace QS3D.Core.Cost
             var contractIndex = 0;
             foreach (var item in contractItems)
             {
-                if (contractIndex == AdvancedCostCollectionContract.MaximumEntries)
-                    AdvancedCostCollectionContract.ThrowTooManyEntries("Progress contract item collection");
+                AdvancedCostCollectionContract.RequireCanProcessNext(
+                    hasKnownContractCount,
+                    knownContractCount,
+                    contractIndex,
+                    "Progress contract item collection");
                 if (item == null) throw new ArgumentException("Progress contract contains a null item.", nameof(contractItems));
                 if (contracts.ContainsKey(item.ItemCode))
                     throw new ArgumentException("Duplicate progress contract item code: " + item.ItemCode + ".", nameof(contractItems));
@@ -888,8 +922,11 @@ namespace QS3D.Core.Cost
             var claimIndex = 0;
             foreach (var line in claimLines)
             {
-                if (claimIndex == AdvancedCostCollectionContract.MaximumEntries)
-                    AdvancedCostCollectionContract.ThrowTooManyEntries("Progress claim line collection");
+                AdvancedCostCollectionContract.RequireCanProcessNext(
+                    hasKnownClaimCount,
+                    knownClaimCount,
+                    claimIndex,
+                    "Progress claim line collection");
                 if (line == null) throw new ArgumentException("Progress claim contains a null line.", nameof(claimLines));
                 if (claims.ContainsKey(line.ItemCode))
                     throw new ArgumentException("Duplicate progress claim item code: " + line.ItemCode + ".", nameof(claimLines));
