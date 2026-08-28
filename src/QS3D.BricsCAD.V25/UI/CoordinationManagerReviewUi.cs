@@ -188,64 +188,31 @@ namespace QS3D.BricsCAD.V25.UI
                 return button;
             }
 
-            private void OnHighlight(object sender, RoutedEventArgs e)
-            {
-                RunValidated("Highlight", ids => _session.Highlight(ids));
-            }
-
-            private void OnClearHighlight(object sender, RoutedEventArgs e)
-            {
-                RunValidated("Clear Highlight", ids => _session.ClearHighlight());
-            }
-
-            private void OnIsolate(object sender, RoutedEventArgs e)
-            {
-                RunValidated("Isolate", ids => _session.Isolate(ids));
-            }
-
-            private void OnRestoreIsolation(object sender, RoutedEventArgs e)
-            {
-                RunValidated("Restore Isolation", ids => _session.RestoreIsolation());
-            }
-
-            private void OnSection(object sender, RoutedEventArgs e)
-            {
-                RunValidated("Section / Focus", ids => _session.ApplySectionFocus(ids));
-            }
-
-            private void OnRestoreView(object sender, RoutedEventArgs e)
-            {
-                RunValidated("Restore View", ids => _session.RestoreSectionView());
-            }
+            private void OnHighlight(object sender, RoutedEventArgs e) => RunValidated("Highlight", ids => _session.Highlight(ids));
+            private void OnClearHighlight(object sender, RoutedEventArgs e) => RunValidated("Clear Highlight", ids => _session.ClearHighlight());
+            private void OnIsolate(object sender, RoutedEventArgs e) => RunValidated("Isolate", ids => _session.Isolate(ids));
+            private void OnRestoreIsolation(object sender, RoutedEventArgs e) => RunValidated("Restore Isolation", ids => _session.RestoreIsolation());
+            private void OnSection(object sender, RoutedEventArgs e) => RunValidated("Section / Focus", ids => _session.ApplySectionFocus(ids));
+            private void OnRestoreView(object sender, RoutedEventArgs e) => RunValidated("Restore View", ids => _session.RestoreSectionView());
 
             private void RunValidated(string actionName, Action<IReadOnlyList<ObjectId>> effect)
             {
                 if (!_attached || _disposeInProgress || _disposed) return;
-
                 try
                 {
-                    // IMPORTANT: all canonical provenance/relink/full-pair checks complete
-                    // before the supplied native CAD effect is invoked.
                     var resolved = ResolveReviewTargets();
                     effect(resolved);
                     SetStatus(actionName + " • " + resolved.Count + " object(s) • validated full pair.");
                 }
-                catch (Exception ex)
-                {
-                    SetStatus(actionName + " bị từ chối: " + ex.Message);
-                }
-                finally
-                {
-                    UpdateActionState();
-                }
+                catch (Exception ex) { SetStatus(actionName + " bị từ chối: " + ex.Message); }
+                finally { UpdateActionState(); }
             }
 
             private IReadOnlyList<ObjectId> ResolveReviewTargets()
             {
                 var selected = _grid.SelectedItem as CoordinationManagerRow
                     ?? throw new InvalidOperationException("Hãy chọn một coordination issue trước.");
-                if (!selected.CanLocate)
-                    throw new InvalidOperationException("Issue hiện tại không actionable; CAD state không đổi.");
+                if (!selected.CanLocate) throw new InvalidOperationException("Issue hiện tại không actionable; CAD state không đổi.");
 
                 var project = RequireCurrentProject();
                 var snapshot = CoordinationIssuePersistence.Load(project)
@@ -256,8 +223,7 @@ namespace QS3D.BricsCAD.V25.UI
                     throw new InvalidOperationException("Issue đã thay đổi từ lúc hiển thị; làm mới trước khi review.");
 
                 var relink = snapshot.EvaluateRelink(project, issue.IssueId);
-                if (relink.Status != CoordinationRelinkStatus.ReadyForHostValidation &&
-                    relink.Status != CoordinationRelinkStatus.Relinked)
+                if (relink.Status != CoordinationRelinkStatus.ReadyForHostValidation && relink.Status != CoordinationRelinkStatus.Relinked)
                     throw new InvalidOperationException("Issue không thể review trong CAD: " + relink.Status + ".");
 
                 var leftHandles = CanonicalHandles(SourceHandleResolver.Resolve(project, new[] { issue.LeftSemanticId }));
@@ -265,14 +231,10 @@ namespace QS3D.BricsCAD.V25.UI
                 if (leftHandles.Count == 0 || rightHandles.Count == 0)
                     throw new InvalidOperationException("Issue thiếu source Handle hiện hành ở một hoặc cả hai phía; CAD state không đổi.");
 
-                var handles = leftHandles.Concat(rightHandles)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                var handles = leftHandles.Concat(rightHandles).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
                 var resolved = CadHandleService.Resolve(_document, handles);
                 if (resolved.Count != handles.Count)
                     throw new InvalidOperationException("Không resolve đủ toàn bộ source Handle hiện hành; CAD state không đổi.");
-
                 return resolved.ToList().AsReadOnly();
             }
 
@@ -280,32 +242,21 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (!ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document))
                     throw new InvalidOperationException("DWG đã đổi; review action không được phép tác động lên document khác.");
-
                 if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
                     throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng.");
-
-                if (!string.Equals(project.ProjectId, _projectId, StringComparison.Ordinal) ||
-                    !string.Equals(project.DrawingFingerprint, _drawingFingerprint, StringComparison.Ordinal))
+                if (!string.Equals(project.ProjectId, _projectId, StringComparison.Ordinal) || !string.Equals(project.DrawingFingerprint, _drawingFingerprint, StringComparison.Ordinal))
                     throw new InvalidOperationException("Project/Drawing Fingerprint đã đổi; review action bị fail-closed.");
                 return project;
             }
 
-            private static IReadOnlyList<string> CanonicalHandles(IEnumerable<string> handles)
-            {
-                return (handles ?? throw new ArgumentNullException(nameof(handles)))
-                    .Select(value => CadHandleService.NormalizeHexHandle(value)
-                        ?? throw new InvalidOperationException("Project contains an invalid source CAD Handle."))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-                    .ToList()
-                    .AsReadOnly();
-            }
+            private static IReadOnlyList<string> CanonicalHandles(IEnumerable<string> handles) =>
+                (handles ?? throw new ArgumentNullException(nameof(handles)))
+                    .Select(value => CadHandleService.NormalizeHexHandle(value) ?? throw new InvalidOperationException("Project contains an invalid source CAD Handle."))
+                    .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
 
             private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
             {
                 if (!_attached || _disposeInProgress || _disposed) return;
-
-                // A previous row must never leak presentation state into the next row.
                 _session.ResetTransientStateBestEffort();
                 SetStatus(string.Empty);
                 UpdateActionState();
@@ -325,15 +276,11 @@ namespace QS3D.BricsCAD.V25.UI
                 if (_window.IsLoaded) _window.Close();
             }
 
-            private void OnWindowClosed(object sender, EventArgs e)
-            {
-                Dispose();
-            }
+            private void OnWindowClosed(object sender, EventArgs e) => Dispose();
 
             private void UpdateActionState()
             {
                 if (_disposeInProgress || _disposed) return;
-
                 var row = _grid.SelectedItem as CoordinationManagerRow;
                 var actionable = row != null && row.CanLocate;
                 _highlight.IsEnabled = actionable;
@@ -355,7 +302,6 @@ namespace QS3D.BricsCAD.V25.UI
             public void Dispose()
             {
                 if (_disposed || _disposeInProgress) return;
-
                 _disposeInProgress = true;
                 _attached = false;
                 try
@@ -364,20 +310,13 @@ namespace QS3D.BricsCAD.V25.UI
                     DisposeSessionBestEffort();
                     _disposed = _attachments == Attachment.None && _sessionDisposed;
                 }
-                finally
-                {
-                    _disposeInProgress = false;
-                }
+                finally { _disposeInProgress = false; }
             }
 
             private void DetachHandlersBestEffort()
             {
-                // External BricsCAD publishers are detached first so they cannot keep this
-                // document-bound controller alive while local WPF cleanup continues.
-                TryDetach(Attachment.DocumentToBeDestroyed, () =>
-                    Bricscad.ApplicationServices.Application.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed);
-                TryDetach(Attachment.DocumentActivated, () =>
-                    Bricscad.ApplicationServices.Application.DocumentManager.DocumentActivated -= OnDocumentActivated);
+                TryDetach(Attachment.DocumentToBeDestroyed, () => Bricscad.ApplicationServices.Application.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed);
+                TryDetach(Attachment.DocumentActivated, () => Bricscad.ApplicationServices.Application.DocumentManager.DocumentActivated -= OnDocumentActivated);
                 TryDetach(Attachment.WindowClosed, () => _window.Closed -= OnWindowClosed);
                 TryDetach(Attachment.GridSelection, () => _grid.SelectionChanged -= OnSelectionChanged);
                 TryDetach(Attachment.RestoreView, () => _restoreView.Click -= OnRestoreView);
@@ -391,32 +330,15 @@ namespace QS3D.BricsCAD.V25.UI
             private void TryDetach(Attachment attachment, Action detach)
             {
                 if ((_attachments & attachment) == 0) return;
-
-                try
-                {
-                    detach();
-                    _attachments &= ~attachment;
-                }
-                catch
-                {
-                    // Preserve ownership so a later Dispose call can retry this exact detach.
-                }
+                try { detach(); _attachments &= ~attachment; }
+                catch { }
             }
 
             private void DisposeSessionBestEffort()
             {
                 if (_sessionDisposed) return;
-
-                try
-                {
-                    _session.Dispose();
-                    _sessionDisposed = true;
-                }
-                catch
-                {
-                    // A later Dispose call retries transient CAD cleanup without masking
-                    // failures from another detach or from constructor/attach rollback.
-                }
+                try { _session.Dispose(); _sessionDisposed = true; }
+                catch { }
             }
         }
 
@@ -430,11 +352,7 @@ namespace QS3D.BricsCAD.V25.UI
             private bool _destroyed;
             private bool _disposed;
 
-            public TransientReviewSession(Document document)
-            {
-                _document = document ?? throw new ArgumentNullException(nameof(document));
-            }
-
+            public TransientReviewSession(Document document) { _document = document ?? throw new ArgumentNullException(nameof(document)); }
             public bool HasHighlight => _highlighted.Count > 0;
             public bool HasIsolation => _isolationActive;
             public bool HasSectionView => _viewBeforeSection != null;
@@ -451,27 +369,20 @@ namespace QS3D.BricsCAD.V25.UI
                     {
                         foreach (var id in ids)
                         {
-                            var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity
-                                ?? throw new InvalidOperationException("Resolved CAD object is not an Entity.");
+                            var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity ?? throw new InvalidOperationException("Resolved CAD object is not an Entity.");
                             entity.Highlight();
                             pending.Add(id);
                         }
                         transaction.Commit();
                     }
-
                     _highlighted.AddRange(pending);
                 }
-                catch
-                {
-                    UnhighlightAttemptBestEffort(pending);
-                    throw;
-                }
+                catch { UnhighlightAttemptBestEffort(pending); throw; }
             }
 
             private void UnhighlightAttemptBestEffort(IReadOnlyList<ObjectId> pending)
             {
                 if (pending == null || pending.Count == 0 || _destroyed) return;
-
                 try
                 {
                     using (_document.LockDocument())
@@ -479,23 +390,12 @@ namespace QS3D.BricsCAD.V25.UI
                     {
                         foreach (var id in pending)
                         {
-                            try
-                            {
-                                var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
-                                entity?.Unhighlight();
-                            }
-                            catch
-                            {
-                                // One stale/erased native object must not prevent rollback of the rest.
-                            }
+                            try { (transaction.GetObject(id, OpenMode.ForRead, false) as Entity)?.Unhighlight(); } catch { }
                         }
                         transaction.Commit();
                     }
                 }
-                catch
-                {
-                    // Compensation is bounded best-effort and must never mask the original failure.
-                }
+                catch { }
             }
 
             public void ClearHighlight()
@@ -504,21 +404,12 @@ namespace QS3D.BricsCAD.V25.UI
                 var pending = _highlighted.ToArray();
                 _highlighted.Clear();
                 if (_destroyed) return;
-
                 using (_document.LockDocument())
                 using (var transaction = _document.Database.TransactionManager.StartTransaction())
                 {
                     foreach (var id in pending)
                     {
-                        try
-                        {
-                            var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
-                            entity?.Unhighlight();
-                        }
-                        catch
-                        {
-                            // Cleanup is best-effort for erased/closed transient objects.
-                        }
+                        try { (transaction.GetObject(id, OpenMode.ForRead, false) as Entity)?.Unhighlight(); } catch { }
                     }
                     transaction.Commit();
                 }
@@ -528,7 +419,6 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 RequireTargets(ids);
                 if (_isolationActive) RestoreIsolation();
-
                 var modeBefore = Bricscad.ApplicationServices.Application.GetSystemVariable("OBJECTISOLATIONMODE");
                 try
                 {
@@ -536,12 +426,7 @@ namespace QS3D.BricsCAD.V25.UI
                     _document.Editor.SetImpliedSelection(ids.ToArray());
                     _document.SendStringToExecute("_.ISOLATEOBJECTS ", true, false, false);
                 }
-                catch
-                {
-                    RestoreObjectIsolationModeBestEffort(modeBefore);
-                    throw;
-                }
-
+                catch { RestoreObjectIsolationModeBestEffort(modeBefore); throw; }
                 _objectIsolationModeBefore = modeBefore;
                 _isolationActive = true;
             }
@@ -551,8 +436,7 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!_isolationActive) return;
                 try
                 {
-                    if (!_destroyed)
-                        _document.SendStringToExecute("_.UNISOLATEOBJECTS ", true, false, false);
+                    if (!_destroyed) _document.SendStringToExecute("_.UNISOLATEOBJECTS ", true, false, false);
                 }
                 finally
                 {
@@ -567,21 +451,16 @@ namespace QS3D.BricsCAD.V25.UI
                 RestoreSectionView();
 
                 var bounds = ReadBounds(ids);
-                var center = new Point3d(
-                    (bounds.MinPoint.X + bounds.MaxPoint.X) * 0.5,
-                    (bounds.MinPoint.Y + bounds.MaxPoint.Y) * 0.5,
-                    (bounds.MinPoint.Z + bounds.MaxPoint.Z) * 0.5);
+                var center = new Point3d((bounds.MinPoint.X + bounds.MaxPoint.X) * 0.5, (bounds.MinPoint.Y + bounds.MaxPoint.Y) * 0.5, (bounds.MinPoint.Z + bounds.MaxPoint.Z) * 0.5);
                 var diagonal = (bounds.MaxPoint - bounds.MinPoint).Length;
                 if (!(diagonal > 1e-9) || double.IsNaN(diagonal) || double.IsInfinity(diagonal))
                     throw new InvalidOperationException("Không thể tạo section/focus từ extents suy biến.");
 
                 using (var view = _document.Editor.GetCurrentView())
                 {
-                    _viewBeforeSection = ViewSnapshot.Capture(view);
+                    var viewBeforeSection = ViewSnapshot.Capture(view);
                     var direction = view.ViewDirection.GetNormal();
-                    var distances = Corners(bounds)
-                        .Select(point => (point - center).DotProduct(direction))
-                        .ToArray();
+                    var distances = Corners(bounds).Select(point => (point - center).DotProduct(direction)).ToArray();
                     var margin = Math.Max(diagonal * 0.05, 1e-6);
                     var minDistance = distances.Min() - margin;
                     var maxDistance = distances.Max() + margin;
@@ -591,22 +470,23 @@ namespace QS3D.BricsCAD.V25.UI
 
                     view.Target = center;
                     view.CenterPoint = new Point2d(0.0, 0.0);
-                    if (aspect >= 1.0)
-                    {
-                        view.Height = span;
-                        view.Width = span * aspect;
-                    }
-                    else
-                    {
-                        view.Width = span;
-                        view.Height = span / aspect;
-                    }
+                    if (aspect >= 1.0) { view.Height = span; view.Width = span * aspect; }
+                    else { view.Width = span; view.Height = span / aspect; }
                     view.FrontClipAtEye = false;
                     view.BackClipDistance = minDistance;
                     view.FrontClipDistance = maxDistance;
                     view.BackClipEnabled = true;
                     view.FrontClipEnabled = true;
-                    _document.Editor.SetCurrentView(view);
+                    try
+                    {
+                        _document.Editor.SetCurrentView(view);
+                    }
+                    catch
+                    {
+                        RestoreSectionViewBestEffort(viewBeforeSection);
+                        throw;
+                    }
+                    _viewBeforeSection = viewBeforeSection;
                 }
             }
 
@@ -616,12 +496,25 @@ namespace QS3D.BricsCAD.V25.UI
                 var snapshot = _viewBeforeSection;
                 _viewBeforeSection = null;
                 if (_destroyed) return;
-
                 using (var view = _document.Editor.GetCurrentView())
                 {
                     snapshot.Apply(view);
                     _document.Editor.SetCurrentView(view);
                 }
+            }
+
+            private void RestoreSectionViewBestEffort(ViewSnapshot snapshot)
+            {
+                if (snapshot == null || _destroyed) return;
+                try
+                {
+                    using (var view = _document.Editor.GetCurrentView())
+                    {
+                        snapshot.Apply(view);
+                        _document.Editor.SetCurrentView(view);
+                    }
+                }
+                catch { }
             }
 
             private Extents3d ReadBounds(IReadOnlyList<ObjectId> ids)
@@ -634,39 +527,19 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     foreach (var id in ids)
                     {
-                        var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity
-                            ?? throw new InvalidOperationException("Resolved CAD object is not an Entity.");
+                        var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity ?? throw new InvalidOperationException("Resolved CAD object is not an Entity.");
                         Extents3d extents;
-                        try
-                        {
-                            extents = entity.GeometricExtents;
-                        }
-                        catch (Exception ex)
-                        {
-                            throw new InvalidOperationException("Không đọc được geometric extents của full-pair target.", ex);
-                        }
-
-                        if (!hasBounds)
-                        {
-                            min = extents.MinPoint;
-                            max = extents.MaxPoint;
-                            hasBounds = true;
-                        }
+                        try { extents = entity.GeometricExtents; }
+                        catch (Exception ex) { throw new InvalidOperationException("Không đọc được geometric extents của full-pair target.", ex); }
+                        if (!hasBounds) { min = extents.MinPoint; max = extents.MaxPoint; hasBounds = true; }
                         else
                         {
-                            min = new Point3d(
-                                Math.Min(min.X, extents.MinPoint.X),
-                                Math.Min(min.Y, extents.MinPoint.Y),
-                                Math.Min(min.Z, extents.MinPoint.Z));
-                            max = new Point3d(
-                                Math.Max(max.X, extents.MaxPoint.X),
-                                Math.Max(max.Y, extents.MaxPoint.Y),
-                                Math.Max(max.Z, extents.MaxPoint.Z));
+                            min = new Point3d(Math.Min(min.X, extents.MinPoint.X), Math.Min(min.Y, extents.MinPoint.Y), Math.Min(min.Z, extents.MinPoint.Z));
+                            max = new Point3d(Math.Max(max.X, extents.MaxPoint.X), Math.Max(max.Y, extents.MaxPoint.Y), Math.Max(max.Z, extents.MaxPoint.Z));
                         }
                     }
                     transaction.Commit();
                 }
-
                 if (!hasBounds) throw new InvalidOperationException("Không có extents để section/focus.");
                 return new Extents3d(min, max);
             }
@@ -687,8 +560,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             private static void RequireTargets(IReadOnlyList<ObjectId> ids)
             {
-                if (ids == null || ids.Count == 0)
-                    throw new InvalidOperationException("Validated review target set is empty.");
+                if (ids == null || ids.Count == 0) throw new InvalidOperationException("Validated review target set is empty.");
             }
 
             public void ResetTransientStateBestEffort()
@@ -740,53 +612,18 @@ namespace QS3D.BricsCAD.V25.UI
                 private readonly bool _frontClipEnabled;
                 private readonly bool _backClipEnabled;
 
-                private ViewSnapshot(
-                    Point3d target,
-                    Point2d centerPoint,
-                    double height,
-                    double width,
-                    bool frontClipAtEye,
-                    double frontClipDistance,
-                    double backClipDistance,
-                    bool frontClipEnabled,
-                    bool backClipEnabled)
+                private ViewSnapshot(Point3d target, Point2d centerPoint, double height, double width, bool frontClipAtEye, double frontClipDistance, double backClipDistance, bool frontClipEnabled, bool backClipEnabled)
                 {
-                    _target = target;
-                    _centerPoint = centerPoint;
-                    _height = height;
-                    _width = width;
-                    _frontClipAtEye = frontClipAtEye;
-                    _frontClipDistance = frontClipDistance;
-                    _backClipDistance = backClipDistance;
-                    _frontClipEnabled = frontClipEnabled;
-                    _backClipEnabled = backClipEnabled;
+                    _target = target; _centerPoint = centerPoint; _height = height; _width = width; _frontClipAtEye = frontClipAtEye;
+                    _frontClipDistance = frontClipDistance; _backClipDistance = backClipDistance; _frontClipEnabled = frontClipEnabled; _backClipEnabled = backClipEnabled;
                 }
 
-                public static ViewSnapshot Capture(ViewTableRecord view)
-                {
-                    return new ViewSnapshot(
-                        view.Target,
-                        view.CenterPoint,
-                        view.Height,
-                        view.Width,
-                        view.FrontClipAtEye,
-                        view.FrontClipDistance,
-                        view.BackClipDistance,
-                        view.FrontClipEnabled,
-                        view.BackClipEnabled);
-                }
+                public static ViewSnapshot Capture(ViewTableRecord view) => new ViewSnapshot(view.Target, view.CenterPoint, view.Height, view.Width, view.FrontClipAtEye, view.FrontClipDistance, view.BackClipDistance, view.FrontClipEnabled, view.BackClipEnabled);
 
                 public void Apply(ViewTableRecord view)
                 {
-                    view.Target = _target;
-                    view.CenterPoint = _centerPoint;
-                    view.Height = _height;
-                    view.Width = _width;
-                    view.FrontClipAtEye = _frontClipAtEye;
-                    view.FrontClipDistance = _frontClipDistance;
-                    view.BackClipDistance = _backClipDistance;
-                    view.FrontClipEnabled = _frontClipEnabled;
-                    view.BackClipEnabled = _backClipEnabled;
+                    view.Target = _target; view.CenterPoint = _centerPoint; view.Height = _height; view.Width = _width; view.FrontClipAtEye = _frontClipAtEye;
+                    view.FrontClipDistance = _frontClipDistance; view.BackClipDistance = _backClipDistance; view.FrontClipEnabled = _frontClipEnabled; view.BackClipEnabled = _backClipEnabled;
                 }
             }
         }
