@@ -29,6 +29,9 @@ namespace QS3D.BricsCAD.V25
         private const int MaxHeaderBytes = 64 * 1024;
         private const int MaxBodyBytes = 1024 * 1024;
         private const int CadDispatchTimeoutMilliseconds = 15000;
+        private const int CadWorkQueued = 0;
+        private const int CadWorkRunning = 1;
+        private const int CadWorkCancelledBeforeStart = 2;
         private const int MaxConcurrentClients = 16;
         private const int MaxSessions = 128;
         private const string ProtocolVersion = "2025-06-18";
@@ -1257,7 +1260,7 @@ namespace QS3D.BricsCAD.V25
             public string Result = string.Empty;
             public Exception? Error;
             public readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
-            public int Cancelled;
+            public int DispatchState = CadWorkQueued;
             public int Abandoned;
         }
 
@@ -1268,10 +1271,12 @@ namespace QS3D.BricsCAD.V25
             Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadWork, item);
             if (!item.Done.Wait(CadDispatchTimeoutMilliseconds))
             {
-                Interlocked.Exchange(ref item.Cancelled, 1);
+                var cancellation = Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued);
                 Interlocked.Exchange(ref item.Abandoned, 1);
                 try { if (item.Done.IsSet) item.Done.Dispose(); } catch (ObjectDisposedException) { }
-                throw new TimeoutException("Timed out waiting for the BricsCAD application context; queued work was cancelled when possible.");
+                if (cancellation == CadWorkQueued)
+                    throw new TimeoutException("Timed out waiting for the BricsCAD application context; queued work was cancelled before it started.");
+                throw new TimeoutException("Timed out waiting for the BricsCAD application context after CAD work started; completion is uncertain. Do not retry automatically; inspect CAD state before deciding whether another mutation is safe.");
             }
             try
             {
@@ -1286,8 +1291,9 @@ namespace QS3D.BricsCAD.V25
             var item = (CadWorkItem)data;
             try
             {
-                if (Volatile.Read(ref item.Cancelled) == 0)
-                    item.Result = item.Action == null ? string.Empty : item.Action();
+                if (Interlocked.CompareExchange(ref item.DispatchState, CadWorkRunning, CadWorkQueued) != CadWorkQueued)
+                    return;
+                item.Result = item.Action == null ? string.Empty : item.Action();
             }
             catch (Exception ex) { item.Error = ex; }
             finally
