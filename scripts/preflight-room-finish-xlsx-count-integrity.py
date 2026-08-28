@@ -20,7 +20,11 @@ def main() -> int:
     smoke = SMOKE.read_text(encoding="utf-8")
     registration = REGISTRATION.read_text(encoding="utf-8")
 
-    row_count = require(exporter, "var rowCount = rows.Count;", "initial outer row Count snapshot")
+    row_count = require(
+        exporter,
+        'var rowCount = RequireConsistentKnownCount(rows, MaxDataRows, "export rows");',
+        "outer deterministic known-count binding",
+    )
     row_loop = require(exporter, "for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)", "indexed outer traversal")
     row_bind = require(exporter, "if (rows.Count != rowCount)", "post-traversal outer Count binding")
     row_failure = require(
@@ -30,7 +34,17 @@ def main() -> int:
     )
     path_resolution = require(exporter, "var fullPath = Path.GetFullPath(path);", "filesystem boundary")
     if not (row_count < row_loop < row_bind < row_failure < path_resolution):
-        raise SystemExit("FAIL: Room-finish outer Count drift must fail after traversal and before filesystem output")
+        raise SystemExit("FAIL: Room-finish outer known-count/drift validation must fail before filesystem output")
+
+    for token, label in (
+        ("private static int RequireConsistentKnownCount<T>(IEnumerable<T> source, int maximum, string label)", "known-count helper"),
+        ("var readOnly = source as IReadOnlyCollection<T>;", "IReadOnlyCollection<T> count binding"),
+        ("var generic = source as ICollection<T>;", "ICollection<T> count binding"),
+        ("var nonGeneric = source as ICollection;", "non-generic ICollection count binding"),
+        ('throw new InvalidOperationException("Room-finish XLSX " + label + " exposes conflicting known collection counts.");', "conflicting known-count rejection"),
+        ('throw new ArgumentException("Room-finish XLSX " + label + " must expose a deterministic collection count.", "rows");', "missing deterministic-count rejection"),
+    ):
+        require(exporter, token, label)
 
     joined_count = require(exporter, "var count = source.Count;", "joined-cell Count snapshot")
     joined_loop = require(exporter, "for (var index = 0; index < count; index++)", "joined-cell indexed traversal")
@@ -56,8 +70,9 @@ def main() -> int:
     require(registration, "RoomFinishXlsxCountIntegritySmoke.Run();", "smoke registration")
 
     print(
-        "PASS: Room-finish XLSX binds outer and joined-cell Counts after indexed snapshot traversal, "
-        "fails before filesystem output on outer drift, and registers deterministic regression coverage."
+        "PASS: Room-finish XLSX binds all deterministic outer collection Counts before indexed traversal, "
+        "preserves post-snapshot drift detection and nested concrete-list drift semantics, fails before filesystem output, "
+        "and registers deterministic regression coverage."
     )
     return 0
 
