@@ -421,8 +421,8 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 process = new Process { StartInfo = CreateStartInfo(executable, arguments), EnableRaisingEvents = false };
-                process.OutputDataReceived += (_, args) => HandleRunLine(args.Data, false);
-                process.ErrorDataReceived += (_, args) => HandleRunLine(args.Data, true);
+                process.OutputDataReceived += (_, args) => HandleRunLine(process, args.Data, false);
+                process.ErrorDataReceived += (_, args) => HandleRunLine(process, args.Data, true);
                 if (!process.Start())
                 {
                     process.Dispose();
@@ -474,13 +474,16 @@ namespace QS3D.BricsCAD.V25
             if (owned) { try { process.Dispose(); } catch { } }
         }
 
-        private static void HandleRunLine(string? line, bool stderr)
+        private static void HandleRunLine(Process process, string? line, bool stderr)
         {
             if (line == null || string.IsNullOrWhiteSpace(line)) return;
             var clean = line.Trim();
             if (clean.Length > 500) clean = clean.Substring(0, 500);
             lock (Sync)
             {
+                // Output callbacks can arrive after StopProcess or after a new tunnel takes
+                // ownership. Ignore stale lines so an old process cannot overwrite current status.
+                if (!ReferenceEquals(_process, process)) return;
                 _lastMessage = clean;
                 if (stderr && (clean.IndexOf("ERR", StringComparison.OrdinalIgnoreCase) >= 0
                                || clean.IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0))
