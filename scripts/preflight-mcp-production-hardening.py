@@ -73,6 +73,18 @@ def main() -> int:
         if token not in text:
             errors.append(f"missing {label}: {token}")
 
+    named_start = account.find("private static bool StartProcess")
+    named_exit = account.find("private static void HandleProcessExit", named_start)
+    if named_start < 0 or named_exit < 0:
+        errors.append("cannot inspect Named Tunnel process startup ordering")
+    else:
+        named_block = account[named_start:named_exit]
+        stdout_drain = named_block.find("process.BeginOutputReadLine();")
+        stderr_drain = named_block.find("process.BeginErrorReadLine();")
+        exit_events = named_block.find("process.EnableRaisingEvents = true;")
+        if min(stdout_drain, stderr_drain, exit_events) < 0 or max(stdout_drain, stderr_drain) > exit_events:
+            errors.append("Named Tunnel must begin stdout/stderr drain before enabling Exited callbacks")
+
     if 'IndexOf("already exists"' in account:
         errors.append("Cloudflare DNS conflict must not be silently accepted via 'already exists'")
     if '"Bearer token: " + McpEmbeddedServer.GetBearerToken()' in connector:
@@ -93,8 +105,9 @@ def main() -> int:
     print(
         "PASS: MCP production source uses one validated HTTPS endpoint resolver, isolated user "
         "fallback state, live/exact Cloudflare tunnel identity checks, fail-closed DNS conflict "
-        "handling, owner-bound named/Quick Tunnel output, verified click-first redacted onboarding, "
-        "bounded network/session surfaces and BricsCAD-confined emergency recovery."
+        "handling, owner-bound named/Quick Tunnel output with drain-before-exit ordering, verified "
+        "click-first redacted onboarding, bounded network/session surfaces and BricsCAD-confined "
+        "emergency recovery."
     )
     return 0
 
