@@ -95,9 +95,10 @@ namespace QS3D.Core.Commercial
             var snapshot = new List<CommercialAuditRecord>();
             foreach (var record in records)
             {
-                if (record == null) throw new ArgumentException("Commercial audit batch contains a null record.", nameof(records));
+                CommercialGuard.RequireCanProcessNext(knownCount, snapshot.Count, "Commercial audit batch source");
                 if (snapshot.Count == remainingCapacity)
                     throw new InvalidOperationException("Commercial audit log supports at most 10000 events.");
+                if (record == null) throw new ArgumentException("Commercial audit batch contains a null record.", nameof(records));
                 RequireUniqueEventId(record.EventId, eventIds);
                 snapshot.Add(record);
             }
@@ -242,6 +243,7 @@ namespace QS3D.Core.Commercial
                 : new List<T>();
             foreach (var item in source)
             {
+                RequireCanProcessNext(knownCount, result.Count, paramName);
                 if (result.Count == maximum)
                     throw new InvalidOperationException(paramName + " supports at most " + maximum + " entries.");
                 if (item == null)
@@ -253,6 +255,12 @@ namespace QS3D.Core.Commercial
                 throw new InvalidOperationException(paramName + " known Count does not match completed traversal cardinality.");
 
             return new ReadOnlyCollection<T>(result.ToArray());
+        }
+
+        internal static void RequireCanProcessNext(int? knownCount, int observedCount, string label)
+        {
+            if (knownCount.HasValue && observedCount >= knownCount.Value)
+                throw new InvalidOperationException(label + " known Count was exceeded during traversal.");
         }
 
         private static int? SnapshotKnownCount<T>(IEnumerable<T> source, string paramName, int maximum)
