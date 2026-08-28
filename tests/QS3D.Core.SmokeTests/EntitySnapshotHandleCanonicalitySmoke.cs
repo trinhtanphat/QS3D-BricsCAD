@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         {
             var canonical = new EntitySnapshot("AB12", "LINE", "Layer 1");
             Require(canonical.Handle == "AB12", "Canonical entity snapshot handle changed unexpectedly.");
+            Require(canonical.EntityType == "LINE", "Canonical entity snapshot EntityType changed unexpectedly.");
 
             ExpectArgument(() => new EntitySnapshot(" AB12", "LINE", "Layer 1"), "leading-space handle");
             ExpectArgument(() => new EntitySnapshot("AB12 ", "LINE", "Layer 1"), "trailing-space handle");
@@ -21,8 +22,10 @@ namespace QS3D.Core.SmokeTests
             ExpectArgument(() => new EntitySnapshot("\rAB12", "LINE", "Layer 1"), "leading-CR handle");
             ExpectArgument(() => new EntitySnapshot("AB12\n", "LINE", "Layer 1"), "trailing-LF handle");
 
-            var normalizedEntityType = new EntitySnapshot("AB12", " LINE ", "Layer 1");
-            Require(normalizedEntityType.EntityType == "LINE", "Handle hardening unexpectedly changed EntityType normalization.");
+            ExpectArgument(() => new EntitySnapshot("AB12", " LINE", "Layer 1"), "leading-space EntityType");
+            ExpectArgument(() => new EntitySnapshot("AB12", "LINE ", "Layer 1"), "trailing-space EntityType");
+            ExpectArgument(() => new EntitySnapshot("AB12", "\tLINE", "Layer 1"), "leading-tab EntityType");
+            ExpectArgument(() => new EntitySnapshot("AB12", "LINE\r", "Layer 1"), "trailing-CR EntityType");
         }
 
         private static void ExpectArgument(Action action, string scenario)
