@@ -5,6 +5,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SERVER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpEmbeddedServer.cs"
 ACCOUNT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareAccountOnboarding.cs"
+FALLBACK = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareOnboarding.cs"
 CONNECTOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpConnectorRibbonCommands.cs"
 RESOLVER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpPublicEndpointResolver.cs"
 PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
@@ -21,6 +22,7 @@ def main() -> int:
     try:
         server = read(SERVER)
         account = read(ACCOUNT)
+        fallback = read(FALLBACK)
         connector = read(CONNECTOR)
         resolver = read(RESOLVER)
         plugin = read(PLUGIN)
@@ -33,6 +35,8 @@ def main() -> int:
         "resolver quick/token precedence": (resolver, "McpCloudflareTunnelManager.PublicMcpUrl"),
         "HTTPS-only public endpoint": (resolver, "Uri.UriSchemeHttps"),
         "loopback public rejection": (resolver, "uri.IsLoopback"),
+        "literal public-address validation": (resolver, "IPAddress.TryParse(uri.Host"),
+        "private/link-local literal rejection": (resolver, "IsPrivateOrLocalAddress"),
         "canonical MCP path": (resolver, 'path = "/mcp"'),
         "process endpoint synchronization": (resolver, "EnvironmentVariableTarget.Process"),
         "startup endpoint publication": (plugin, "McpPublicEndpointResolver.Resolve()"),
@@ -47,6 +51,10 @@ def main() -> int:
         "hostname-scoped ingress": (account, '"ingress:\\r\\n"'),
         "Quick Tunnel URL polling": (account, "DispatcherTimer"),
         "Quick Tunnel bounded poll": (account, "_quickUrlPollTicks >= 20"),
+        "fallback process owner before exit events": (fallback, "EnableRaisingEvents = false"),
+        "fallback process exit cleanup": (fallback, "HandleProcessExit(Process process)"),
+        "fallback output bound to process owner": (fallback, "HandleLine(process, args.Data, discoverQuickUrl)"),
+        "fallback stale-process output rejection": (fallback, "if (!ReferenceEquals(_process, process)) return;"),
         "foreground ESC fallback": (server, "TrySendEscapeFallback()"),
         "emergency-stop latch": (server, "_automationStopped = true"),
         "CAD dispatch timeout cancellation": (server, "Interlocked.Exchange(ref item.Cancelled, 1)"),
@@ -72,8 +80,8 @@ def main() -> int:
 
     print(
         "PASS: MCP production source uses one validated HTTPS endpoint resolver, live/exact "
-        "Cloudflare tunnel identity checks, fail-closed DNS conflict handling, bounded Quick "
-        "Tunnel URL discovery, copy-ready ChatGPT configuration helpers, bounded network/session "
+        "Cloudflare tunnel identity checks, fail-closed DNS conflict handling, owner-bound "
+        "Quick Tunnel URL discovery, copy-ready ChatGPT configuration helpers, bounded network/session "
         "surfaces and BricsCAD-confined emergency recovery."
     )
     return 0
