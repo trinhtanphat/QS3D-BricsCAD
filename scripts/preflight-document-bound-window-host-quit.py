@@ -115,7 +115,7 @@ for marker in (
 
 host_abort = method_block(window_source, "private void OnHostQuiescenceAborted(object? sender, EventArgs e)")
 require("TryRecoverAfterQuitAbort();" in host_abort,
-        "Managed quit-abort callback must enter dispatcher-deferred recovery.")
+        "Managed quit-abort callback must retain document-close dispatcher-deferred recovery.")
 
 ensure_affinity = method_block(window_source, "private bool EnsureProjectAffinity()")
 fail_closed = "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return false;"
@@ -181,10 +181,18 @@ require(close_on_dispatcher.index(barrier) < close_on_dispatcher.index("_window.
         "Global quiescence guard must precede Window.Close().")
 
 window_closed = method_block(window_source, "private void OnWindowClosed(object? sender, EventArgs e)")
-require(barrier in window_closed,
-        "Host-owned WPF Closed must not translate into native lifecycle unsubscription.")
-require(window_closed.index(barrier) < window_closed.index("Detach();"),
-        "Window Closed must cross global quiescence before normal cleanup.")
+closed_guard = "if (ModelessHostQuiescenceCoordinator.IsQuiescing)"
+require(closed_guard in window_closed,
+        "Host-owned WPF Closed must cross the global quiescence barrier before normal cleanup.")
+require("Volatile.Write(ref _windowClosedDuringQuiescence, 1);" in window_closed,
+        "Closed during host quiescence must remember that normal cleanup was deferred until QuitAborted.")
+require(
+    window_closed.index(closed_guard)
+    < window_closed.index("Volatile.Write(ref _windowClosedDuringQuiescence, 1);")
+    < window_closed.index("return;")
+    < window_closed.index("Detach();"),
+    "Window Closed must record deferred cleanup and return while quiescing; ordinary close must still detach.",
+)
 
 detach = method_block(window_source, "private void Detach()")
 require(barrier in detach,
@@ -194,4 +202,4 @@ require("ModelessHostQuiescenceCoordinator.QuiescenceAborted -= OnHostQuiescence
 require(detach.index(barrier) < detach.index("DetachDocumentLifecycleHandlersIfSafe();"),
         "Shared detach must not release the managed native subscription after host quiescence starts.")
 
-print("[OK] V25 modeless host teardown uses one global host-quiescence owner and one shared document/native lifecycle coordinator; per-window WPF registrations own managed callbacks only.")
+print("[OK] V25 modeless host teardown uses one global host-quiescence owner and one shared document/native lifecycle coordinator; windows closed during quiescence defer cleanup safely to QuitAborted.")
