@@ -529,10 +529,20 @@ namespace QS3D.BricsCAD.V25.UI
                 RequireTargets(ids);
                 if (_isolationActive) RestoreIsolation();
 
-                _objectIsolationModeBefore = Bricscad.ApplicationServices.Application.GetSystemVariable("OBJECTISOLATIONMODE");
-                Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", 0);
-                _document.Editor.SetImpliedSelection(ids.ToArray());
-                _document.SendStringToExecute("_.ISOLATEOBJECTS ", true, false, false);
+                var modeBefore = Bricscad.ApplicationServices.Application.GetSystemVariable("OBJECTISOLATIONMODE");
+                try
+                {
+                    Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", 0);
+                    _document.Editor.SetImpliedSelection(ids.ToArray());
+                    _document.SendStringToExecute("_.ISOLATEOBJECTS ", true, false, false);
+                }
+                catch
+                {
+                    RestoreObjectIsolationModeBestEffort(modeBefore);
+                    throw;
+                }
+
+                _objectIsolationModeBefore = modeBefore;
                 _isolationActive = true;
             }
 
@@ -702,7 +712,13 @@ namespace QS3D.BricsCAD.V25.UI
                 if (_objectIsolationModeBefore == null) return;
                 var value = _objectIsolationModeBefore;
                 _objectIsolationModeBefore = null;
-                try { Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", value); } catch { }
+                RestoreObjectIsolationModeBestEffort(value);
+            }
+
+            private void RestoreObjectIsolationModeBestEffort(object? modeBefore)
+            {
+                if (modeBefore == null) return;
+                try { Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", modeBefore); } catch { }
             }
 
             public void Dispose()

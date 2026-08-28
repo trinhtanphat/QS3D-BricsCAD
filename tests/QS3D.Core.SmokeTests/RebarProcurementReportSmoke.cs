@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.IO;
 using QS3D.Core.Export;
 using QS3D.Core.Rebar;
 
@@ -12,7 +13,7 @@ namespace QS3D.Core.SmokeTests
             ProjectionConsumesCanonicalOptimizerResult();
             GroupOrderingIsDeterministic();
             DuplicateGroupIdentityFailsClosed();
-            CsvUsesProjectedQuantitiesAndEscapesFormulaText();
+            CsvUsesProjectedQuantitiesAndRejectsFormulaGradeIdentity();
             CsvRejectsNullRows();
         }
 
@@ -64,19 +65,23 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => RebarProcurementReportBuilder.Build(new[] { first, second }));
         }
 
-        private static void CsvUsesProjectedQuantitiesAndEscapesFormulaText()
+        private static void CsvUsesProjectedQuantitiesAndRejectsFormulaGradeIdentity()
         {
-            var result = Optimize("G", "+CB400-V", 16d, 12d, 0.01d, new RebarCutRequirement("A", 6d, 1));
+            var result = Optimize("G", "CB400-V", 16d, 12d, 0.01d, new RebarCutRequirement("A", 6d, 1));
             var row = RebarProcurementReportBuilder.Build(new[] { result })[0];
             var csv = RebarProcurementCsvExporter.ToCsv(new[] { row });
 
             Require(csv, "AlgorithmId,GroupId,Grade,DiameterMm");
             Require(csv, "\"G\"");
-            Require(csv, "\"'+CB400-V\"");
+            Require(csv, "\"CB400-V\"");
             Require(csv, row.KerfLengthM.ToString("R", CultureInfo.InvariantCulture));
             Require(csv, row.OffCutLengthM.ToString("R", CultureInfo.InvariantCulture));
             Require(csv, row.ProcurementLengthM.ToString("R", CultureInfo.InvariantCulture));
             Require(csv, row.WastePercent.ToString("R", CultureInfo.InvariantCulture));
+
+            var formulaGrade = Optimize("G-FORMULA", "+CB400-V", 16d, 12d, 0.01d, new RebarCutRequirement("A", 6d, 1));
+            var formulaRow = RebarProcurementReportBuilder.Build(new[] { formulaGrade })[0];
+            Throws<InvalidDataException>(() => RebarProcurementCsvExporter.ToCsv(new[] { formulaRow }));
         }
 
         private static void CsvRejectsNullRows()
