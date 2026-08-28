@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
         {
             ProjectsCanonicalMetricsAndPreservesWorkspace();
             StableProjectionAndCsv();
+            MalformedUtf16IdentityFailsClosedBeforeProjection();
+            SupplementaryUnicodeIdentityProjects();
             EmptyMetricsDoNotCreateRows();
             UnrepresentableMetricFailsClosed();
         }
@@ -93,6 +95,46 @@ namespace QS3D.Core.SmokeTests
                 Equal(firstOwned[i].ItemCode, secondOwned[i].ItemCode, "stable projected row identity " + i);
                 Equal(firstOwned[i].Quantity, secondOwned[i].Quantity, "stable projected row quantity " + i);
                 Equal(firstOwned[i].Unit, secondOwned[i].Unit, "stable projected row unit " + i);
+            }
+        }
+
+        private static void MalformedUtf16IdentityFailsClosedBeforeProjection()
+        {
+            Throws<ArgumentException>(
+                () => new MepElement("E-\uD800", MepElementKind.Pipe, "CHW", "DN50", "L01"),
+                "malformed element id");
+            Throws<ArgumentException>(
+                () => new MepElement("E-SYSTEM", MepElementKind.Pipe, "CHW-\uD800", "DN50", "L01"),
+                "malformed system identity");
+            Throws<ArgumentException>(
+                () => new MepElement("E-SPEC", MepElementKind.Pipe, "CHW", "DN50-\uDC00", "L01"),
+                "malformed specification identity");
+            Throws<ArgumentException>(
+                () => new MepElement("E-REGION", MepElementKind.Pipe, "CHW", "DN50", "L01-\uD800"),
+                "malformed region identity");
+        }
+
+        private static void SupplementaryUnicodeIdentityProjects()
+        {
+            var service = new MepTbqProjectionService();
+            var groups = new MepQuantityService().Aggregate(new[]
+            {
+                new MepElement("E-😀", MepElementKind.Pipe, "CHW-😀", "DN50-梁", "L02-😀", 1, 2d)
+            });
+
+            Equal(1, groups.Count, "supplementary Unicode group count");
+            Equal("CHW-😀", groups[0].System, "supplementary Unicode system preservation");
+            Equal("DN50-梁", groups[0].Specification, "supplementary Unicode specification preservation");
+            Equal("L02-😀", groups[0].Region, "supplementary Unicode region preservation");
+
+            var result = service.Project(CreateState(), groups);
+            var owned = OwnedItems(result.State.BillItems);
+            Equal(2, owned.Count, "supplementary Unicode projected metric rows");
+            for (var i = 0; i < owned.Count; i++)
+            {
+                Equal(true, owned[i].Description.IndexOf("CHW-😀", StringComparison.Ordinal) >= 0, "supplementary Unicode system in TBQ description");
+                Equal(true, owned[i].Description.IndexOf("DN50-梁", StringComparison.Ordinal) >= 0, "supplementary Unicode specification in TBQ description");
+                Equal(true, owned[i].Description.IndexOf("L02-😀", StringComparison.Ordinal) >= 0, "supplementary Unicode region in TBQ description");
             }
         }
 
