@@ -18,7 +18,7 @@ namespace QS3D.Core.Geometry
             Handle = RequireCanonicalHandle(handle);
             if (!Finite(point.X) || !Finite(point.Y) || !Finite(elevation))
                 throw new ArgumentOutOfRangeException(nameof(point), "Grid intersection marker record coordinates must be finite.");
-            Point = point;
+            Point = new Point2(point.X == 0d ? 0d : point.X, point.Y == 0d ? 0d : point.Y);
             Elevation = elevation == 0d ? 0d : elevation;
         }
 
