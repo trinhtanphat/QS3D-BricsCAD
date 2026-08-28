@@ -37,12 +37,12 @@ for token in (
     require(token in text, "close-cleanup contract missing: " + token)
 
 constructor = text.find("internal UpdateCenterWindow()")
-subscribe = text.find("UpdateCoordinator.Instance.StateChanged += OnStateChanged;", constructor)
+closed = text.find("Closed += (_, __) => DetachCoordinator();", constructor)
+subscribe = text.find("UpdateCoordinator.Instance.StateChanged += OnStateChanged;", closed)
 attach = text.find("_coordinatorAttached = true;", subscribe)
-closed = text.find("Closed += (_, __) => DetachCoordinator();", attach)
 require(
-    min(constructor, subscribe, attach, closed) >= 0 and constructor < subscribe < attach < closed,
-    "constructor must subscribe once, record ownership, then delegate Closed cleanup to DetachCoordinator",
+    min(constructor, closed, subscribe, attach) >= 0 and constructor < closed < subscribe < attach,
+    "constructor must register Closed cleanup before acquiring coordinator subscription ownership",
 )
 
 detach = text.find("internal void DetachCoordinator()")
@@ -83,5 +83,5 @@ require(
 )
 
 print(
-    "Update Center close cleanup preflight PASS: coordinator subscription cleanup is explicit, idempotent and guaranteed from the host close finally path."
+    "Update Center close cleanup preflight PASS: cleanup registration precedes coordinator ownership, and explicit/idempotent detach remains guaranteed."
 )
