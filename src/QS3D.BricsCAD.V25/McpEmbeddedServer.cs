@@ -797,7 +797,6 @@ namespace QS3D.BricsCAD.V25
                 }
             });
         }
-
         private static string DeleteEntity(string body)
         {
             var handle = ExtractString(body, "handle");
@@ -897,7 +896,6 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("inputs exceeds bounds or contains forbidden control characters.");
             if (NoInputCadCommands.Contains(command) && value.Trim().Length != 0)
                 throw new InvalidOperationException(command + " does not accept MCP command-sequence inputs.");
-
             var lines = value.Split(new[] { '\n' }, StringSplitOptions.None);
             if (lines.Length > 64) throw new InvalidOperationException("inputs exceeds 64 prompt lines.");
             var blankTerminatorSeen = false;
@@ -1297,7 +1295,6 @@ namespace QS3D.BricsCAD.V25
                 }
             }
         }
-
         private static List<Point2d> ParsePoints2d(string value)
         {
             var points = new List<Point2d>();
@@ -1400,18 +1397,19 @@ namespace QS3D.BricsCAD.V25
         private static bool TryExtractObjectProperty(string json, string property, out string objectJson)
         {
             objectJson = string.Empty;
-            var match = Regex.Match(json ?? string.Empty, "\"" + Regex.Escape(property) + "\"\\s*:", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            var source = json ?? string.Empty;
+            var match = Regex.Match(source, "\"" + Regex.Escape(property) + "\"\\s*:", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             if (!match.Success) return false;
             var index = match.Index + match.Length;
-            while (index < json.Length && char.IsWhiteSpace(json[index])) index++;
-            if (index >= json.Length || json[index] != '{') return false;
+            while (index < source.Length && char.IsWhiteSpace(source[index])) index++;
+            if (index >= source.Length || source[index] != '{') return false;
             var start = index;
             var depth = 0;
             var inString = false;
             var escaped = false;
-            for (; index < json.Length; index++)
+            for (; index < source.Length; index++)
             {
-                var ch = json[index];
+                var ch = source[index];
                 if (inString)
                 {
                     if (escaped) { escaped = false; continue; }
@@ -1426,7 +1424,7 @@ namespace QS3D.BricsCAD.V25
                     depth--;
                     if (depth == 0)
                     {
-                        objectJson = json.Substring(start, index - start + 1);
+                        objectJson = source.Substring(start, index - start + 1);
                         return true;
                     }
                     if (depth < 0) return false;
