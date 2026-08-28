@@ -128,6 +128,12 @@ namespace QS3D.Core.Coordination
             {
                 if (observedCount == MaximumEntries)
                     ThrowTooManyEntries(collectionLabel);
+                if (hasKnownCount && observedCount == knownCount)
+                {
+                    throw new InvalidOperationException(
+                        collectionLabel + " traversal produced more entries than its admitted known count of " + knownCount + ".");
+                }
+
                 snapshot.Add(item);
                 observedCount++;
             }
@@ -137,6 +143,17 @@ namespace QS3D.Core.Coordination
                 throw new InvalidOperationException(
                     collectionLabel + " traversal produced " + observedCount +
                     " entries but its known count reported " + knownCount + ".");
+            }
+
+            if (hasKnownCount)
+            {
+                var stillHasKnownCount = TryGetKnownCount(items, out var reboundKnownCount);
+                if (!stillHasKnownCount || reboundKnownCount != knownCount)
+                {
+                    throw new InvalidOperationException(
+                        collectionLabel + " known Count changed during traversal from " + knownCount +
+                        " to " + (stillHasKnownCount ? reboundKnownCount.ToString(CultureInfo.InvariantCulture) : "<unavailable>") + ".");
+                }
             }
 
             return snapshot.ToArray();
