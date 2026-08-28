@@ -47,6 +47,8 @@ namespace QS3D.Core.Audit
                 foreach (var item in _events)
                 {
                     observed++;
+                    if (observed > storedCount)
+                        throw HistoryCountMismatch();
                     if (observed > MaxStoredEvents)
                         throw TooManyEvents();
                     if (item == null)
@@ -136,6 +138,8 @@ namespace QS3D.Core.Audit
             foreach (var existing in _events)
             {
                 observed++;
+                if (observed > storedCount)
+                    throw HistoryCountMismatch();
                 if (observed > MaxStoredEvents)
                     throw TooManyEvents();
                 if (existing == null)
@@ -171,8 +175,11 @@ namespace QS3D.Core.Audit
         private static void RequireObservedHistoryCount(int storedCount, int observed)
         {
             if (observed != storedCount)
-                throw new InvalidOperationException("Audit trail event count does not match stored history traversal. Repair the existing audit history before reading or modifying it.");
+                throw HistoryCountMismatch();
         }
+
+        private static InvalidOperationException HistoryCountMismatch()
+            => new InvalidOperationException("Audit trail event count does not match stored history traversal. Repair the existing audit history before reading or modifying it.");
 
         private static InvalidOperationException TooManyEvents()
             => new InvalidOperationException("Audit trail contains more than 10000 events. Repair the existing audit history before reading or modifying it.");
