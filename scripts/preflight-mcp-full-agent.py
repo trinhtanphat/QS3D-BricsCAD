@@ -4,14 +4,19 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpEmbeddedServer.cs"
+ACCOUNT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareAccountOnboarding.cs"
+FALLBACK = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareOnboarding.cs"
 
 
 def main() -> int:
-    if not SERVER.is_file():
-        print("ERROR: missing", SERVER.relative_to(ROOT))
-        return 1
+    for path in (SERVER, ACCOUNT, FALLBACK):
+        if not path.is_file():
+            print("ERROR: missing", path.relative_to(ROOT))
+            return 1
 
     text = SERVER.read_text(encoding="utf-8")
+    account = ACCOUNT.read_text(encoding="utf-8")
+    fallback = FALLBACK.read_text(encoding="utf-8")
     errors: list[str] = []
 
     required = {
@@ -19,6 +24,7 @@ def main() -> int:
         "direct circle creation": '"cad_create_circle"',
         "direct polyline creation": '"cad_create_polyline"',
         "direct text creation": '"cad_create_text"',
+        "single entity inspection": '"cad_entity_inspect"',
         "entity transform": '"cad_entity_transform"',
         "entity delete": '"cad_entity_delete"',
         "layer management": '"cad_layer"',
@@ -40,9 +46,11 @@ def main() -> int:
         "foreground acquisition": "RequireForegroundCadWindow",
         "Unicode SendInput": "SendUnicodeText(hwnd, text)",
         "mouse SendInput": "SendMouse(down)",
+        "emergency foreground fallback": "TrySendEscapeFallback",
         "Win32 input API": 'DllImport("user32.dll"',
         "CAD application context": "ExecuteInApplicationContext",
         "bounded CAD wait": "ManualResetEventSlim",
+        "timed-out CAD work cancellation": "queued work was cancelled when possible",
         "transactional native entities": "transaction.Commit()",
         "mutation audit": "mcp-agent-audit.jsonl",
         "bounded audit rotation": "MaxAuditBytes",
@@ -58,6 +66,7 @@ def main() -> int:
         "MCP session termination": 'request.Method == "DELETE"',
         "MCP protocol/session binding": "MCP-Protocol-Version does not match the initialized session",
         "bounded clients": "MaxConcurrentClients",
+        "bounded sessions": "MaxSessions",
     }
     for label, token in required.items():
         if token not in text:
@@ -96,6 +105,15 @@ def main() -> int:
         if forbidden in text:
             errors.append(f"forbidden remote execution/legacy input surface in MCP server: {forbidden}")
 
+    # Named browser-login tunnel, token tunnel and Quick Tunnel must hand ownership to one another;
+    # two simultaneous cloudflared routes to one local MCP create ambiguous connector state.
+    if "McpCloudflareTunnelManager.StopForHostShutdown();" not in account:
+        errors.append("browser-login named tunnel does not stop fallback tunnel before start")
+    if fallback.count("McpCloudflareAccountTunnelManager.StopForHostShutdown();") < 2:
+        errors.append("token/Quick fallback does not stop browser-login tunnel before start")
+    if "process.WaitForExit();" not in account:
+        errors.append("browser-login cloudflared command output is not drained before process disposal")
+
     if errors:
         print("Full MCP CAD agent preflight FAILED:")
         for error in errors:
@@ -105,8 +123,9 @@ def main() -> int:
     print(
         "PASS: embedded MCP exposes direct transactional CAD creation/editing, bounded "
         "allowlisted advanced command workflows, foreground-process-confined SendInput, "
-        "emergency stop/resume, idle/status observation, rotating local audit evidence, "
-        "bounded HTTP/session handling and mutation confirmation without arbitrary shell execution."
+        "emergency stop/resume with ESC fallback, idle/status observation, rotating local "
+        "audit evidence, bounded HTTP/session handling, mutually-exclusive Cloudflare tunnel "
+        "modes and mutation confirmation without arbitrary shell execution."
     )
     return 0
 
