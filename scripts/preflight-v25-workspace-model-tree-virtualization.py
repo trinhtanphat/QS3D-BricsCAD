@@ -30,6 +30,7 @@ if not errors:
         "VirtualizingPanel.SetVirtualizationMode(panel.ModelTree, VirtualizationMode.Standard);": "ModelTree must pin Standard mode before first host layout",
         "VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);": "ModelTree must opt out of recycling virtualization locally",
         "ScrollViewer.SetCanContentScroll(panel.ModelTree, false);": "ModelTree must use physical scrolling so a virtualizing items host is not selected",
+        "panel.EnsureProjectBrowserSurface();": "ModelTree must enter its final Project Browser host before first layout",
     }
     for token, message in required_safety.items():
         if token not in safety:
@@ -49,9 +50,9 @@ if not errors:
         if constructor_body.count("ApplyModelTreeVirtualizationSafety(this);") != 1:
             errors.append("ModelTree safety must be applied exactly once from the constructor")
 
-    # Regression contract from licensed V25 preview .10230: once the TreeView has a local
-    # virtualization contract, reparenting must not re-write virtualization state at Loaded.
-    # Local dependency-property values follow the same TreeView instance into the TabControl.
+    # Regression contract from licensed V25 preview .10230: all virtualization writes and the
+    # ModelTree -> Project Browser host transition must finish before first host layout. Loaded-time
+    # browser attachment may call EnsureProjectBrowserSurface only as an idempotent no-op.
     forbidden_loaded_tokens = (
         "FrameworkElement.LoadedEvent",
         "OnModelTreeVirtualizationSafetyLoaded",
@@ -69,10 +70,11 @@ if not errors:
     mode_set_index = safety.find("VirtualizingPanel.SetVirtualizationMode(panel.ModelTree, VirtualizationMode.Standard);")
     is_virtualizing_index = safety.find("VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);")
     scroll_index = safety.find("ScrollViewer.SetCanContentScroll(panel.ModelTree, false);")
-    if mode_set_index < 0 or is_virtualizing_index < 0 or scroll_index < 0:
+    surface_index = safety.find("panel.EnsureProjectBrowserSurface();")
+    if min(mode_set_index, is_virtualizing_index, scroll_index, surface_index) < 0:
         pass
-    elif not (mode_set_index < is_virtualizing_index < scroll_index):
-        errors.append("ModelTree virtualization contract must establish Standard mode, then disable virtualization, then physical scrolling")
+    elif not (mode_set_index < is_virtualizing_index < scroll_index < surface_index):
+        errors.append("ModelTree contract must pin mode, disable virtualization, select physical scrolling, then reparent before first layout")
 
     if "ApplyVirtualizationDefaults(root)" in polish:
         errors.append("ProductionUiPolish Loaded path must not traverse item controls to apply virtualization defaults")
@@ -80,11 +82,20 @@ if not errors:
         errors.append("ProductionUiPolish Loaded path must not mutate VirtualizationMode after ItemsHost Measure")
 
     browser_tokens = (
+        "if (_browserTabs != null || !(ModelTree.Parent is DockPanel modelDock)) return;",
         "modelDock.Children.Remove(ModelTree);",
         'tabs.Items.Add(new TabItem { Header = "Mô hình", Content = ModelTree });',
     )
     if any(token not in browser for token in browser_tokens):
-        errors.append("Project Browser must still use the canonical ModelTree reparenting path guarded by constructor-only local containment")
+        errors.append("Project Browser must keep one idempotent canonical ModelTree reparenting path for constructor-time containment")
+
+    attach_match = re.search(
+        r"private\s+void\s+AttachProjectBrowser\s*\(\s*\)\s*\{(.*?)\n\s*\}",
+        browser,
+        flags=re.DOTALL,
+    )
+    if not attach_match or "EnsureProjectBrowserSurface();" not in attach_match.group(1):
+        errors.append("Loaded Project Browser attachment must retain only the idempotent surface ensure before event wiring")
 
     if not re.search(r"\btree\.Items\.Remove\(", augmenter) or not re.search(r"\.Items\.Insert\(", augmenter):
         errors.append("reference-tree registry must retain explicit container reordering evidence covered by the containment")
