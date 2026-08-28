@@ -29,12 +29,12 @@ namespace QS3D.BricsCAD.V25
                 var text =
                     "QS3D MCP đã được nhúng trong plugin.\n\n"
                     + "Local MCP URL: " + McpEmbeddedServer.Endpoint + "\n"
-                    + "Bearer token: " + McpEmbeddedServer.GetBearerToken() + "\n"
+                    + "Bearer token: [hidden; use QS3DMCPCOPYTOKEN]\n"
                     + "Token source: " + McpEmbeddedServer.TokenSource + "\n"
                     + "Token file: " + McpEmbeddedServer.TokenFilePath + "\n"
                     + (string.IsNullOrWhiteSpace(publicUrl) ? string.Empty : "Public MCP URL: " + publicUrl + "\n")
                     + "\nKhông cần clone/cài QS3D-CAD-MCP riêng.\n"
-                    + "Luồng khuyến nghị: QS3DMCPACCOUNTSETUP -> đăng nhập Cloudflare trong browser -> tạo/reuse Named Tunnel -> thêm URL /mcp + Bearer token vào ChatGPT custom MCP.";
+                    + "Luồng khuyến nghị: mở MCP Agent Center từ Ribbon -> cài/cập nhật cloudflared -> đăng nhập Cloudflare trong browser -> tạo/reuse Named Tunnel -> copy URL + Authorization -> mở ChatGPT.";
                 MessageBox.Show(text, "QS3D MCP Settings", MessageBoxButton.OK, MessageBoxImage.Information);
                 Report(document, "MCP settings: " + McpEmbeddedServer.Describe());
             });
@@ -86,7 +86,7 @@ namespace QS3D.BricsCAD.V25
                            + "MCP protocol + tool call: " + (result.Ready ? "READY" : "NOT READY") + "\n"
                            + "Automation: " + McpEmbeddedServer.Describe() + "\n"
                            + "Chi tiết: " + result.Message + "\n\n"
-                           + "Setup Cloudflare: QS3DMCPACCOUNTSETUP\n"
+                           + "Agent Center: QS3DMCPAGENTCENTER\n"
                            + "Advanced/Quick Tunnel: QS3DMCPSETUP\n"
                            + "Copy URL: QS3DMCPCOPYURL\n"
                            + "Copy token: QS3DMCPCOPYTOKEN\n"
@@ -127,7 +127,7 @@ namespace QS3D.BricsCAD.V25
                 var url = McpPublicEndpointResolver.Resolve();
                 if (string.IsNullOrWhiteSpace(url))
                 {
-                    Report(document, "Chưa có public MCP URL hợp lệ. Chạy QS3DMCPACCOUNTSETUP hoặc Quick Tunnel trước.");
+                    Report(document, "Chưa có public MCP URL hợp lệ. Mở MCP Agent Center và tạo Named Tunnel hoặc Quick Tunnel trước.");
                     return;
                 }
                 Clipboard.SetText(url);
@@ -192,12 +192,13 @@ namespace QS3D.BricsCAD.V25
                 + "Bearer token source: " + McpEmbeddedServer.TokenSource + "\r\n"
                 + (string.IsNullOrWhiteSpace(publicUrl) ? string.Empty : "Public MCP URL: " + publicUrl + "\r\n")
                 + "\r\n"
-                + "Recommended setup:\r\n"
-                + "1. Run QS3DMCPACCOUNTSETUP.\r\n"
-                + "2. Login to Cloudflare in the provider-owned browser page. QS3D never asks for the Cloudflare password.\r\n"
-                + "3. Enter a hostname and let QS3D create/reuse the named tunnel + DNS route.\r\n"
-                + "4. Configure ChatGPT custom MCP with the public /mcp URL and Authorization: Bearer <token>.\r\n"
-                + "5. Run QS3DMCPCHECKHTTP for initialize -> initialized -> tools/list -> tools/call -> session DELETE verification.\r\n\r\n"
+                + "Recommended setup (no terminal):\r\n"
+                + "1. Open MCP Agent Center from TOOL > MCP (AI).\r\n"
+                + "2. Click the automatic cloudflared install/update button if needed.\r\n"
+                + "3. Click Cloudflare login/create Named Tunnel and complete login only in the provider-owned browser page. QS3D never asks for the Cloudflare password.\r\n"
+                + "4. Enter a public hostname and let QS3D create/reuse the exact named tunnel + DNS route.\r\n"
+                + "5. Copy URL + Authorization from Agent Center, open ChatGPT, and configure the custom MCP endpoint.\r\n"
+                + "6. Run Agent Center protocol check and read-only self-test before any drawing mutation.\r\n\r\n"
                 + "Read-only / observation tools:\r\n"
                 + "- connector_info\r\n"
                 + "- qs3d_status\r\n"
@@ -224,11 +225,12 @@ namespace QS3D.BricsCAD.V25
                 + "Safety / recovery tools:\r\n"
                 + "- cad_agent_stop (emergency stop, no confirmation required)\r\n"
                 + "- cad_cancel_command (ESC x2, no confirmation required)\r\n\r\n"
-                + "Cloudflare Quick Tunnel is available only as a test fallback from QS3DMCPSETUP.\r\n"
-                + "Public endpoint resolution accepts only non-loopback HTTPS URLs and canonicalizes them to /mcp.\r\n"
+                + "Cloudflare Quick Tunnel is a one-click test fallback in Agent Center, not the persistent default.\r\n"
+                + "Public endpoint resolution accepts only HTTPS, rejects localhost/private or local literal IP addresses, and canonicalizes the endpoint to /mcp.\r\n"
                 + "The MCP listener binds only to 127.0.0.1:8765; remote access must arrive through the configured tunnel.\r\n"
                 + "Ordinary MCP mutation tools require confirmMutation=true, are blocked while the emergency stop is active, and write a bounded local audit log.\r\n"
-                + "No arbitrary PowerShell/cmd/shell/process execution is exposed by the network MCP server.\r\n";
+                + "No arbitrary PowerShell/cmd/shell/process execution is exposed by the network MCP server.\r\n"
+                + "Runtime qualification remains PENDING_LOCAL until the exact candidate is tested on Windows + licensed BricsCAD + Cloudflare + ChatGPT.\r\n";
             File.WriteAllText(path, text, new UTF8Encoding(false));
             return path;
         }
