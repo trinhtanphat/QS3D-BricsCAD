@@ -73,6 +73,10 @@ namespace QS3D.Core.Export
             var candidates = new List<IfcRoundTripQuantityEvidence>();
             foreach (var candidate in evidence)
             {
+                IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
+                    knownCount,
+                    candidates.Count,
+                    "IFC round-trip quantity evidence");
                 if (candidates.Count == MaxCandidates)
                     ThrowTooManyCandidates();
                 if (candidate == null)
@@ -185,7 +189,7 @@ namespace QS3D.Core.Export
                 for (var candidateIndex = 0; candidateIndex < leftGroup.Candidates.Count; candidateIndex++)
                 {
                     var left = leftGroup.Candidates[candidateIndex];
-                    var right = rightGroup.Candidates[candidateIndex];
+                    var right = actual.Groups[groupIndex].Candidates[candidateIndex];
                     if (!string.Equals(left.QuantityKey, right.QuantityKey, StringComparison.Ordinal)) return false;
                     if (!string.Equals(left.Unit, right.Unit, StringComparison.Ordinal)) return false;
                     if (!string.Equals(left.ExternalSourceIdentity, right.ExternalSourceIdentity, StringComparison.Ordinal)) return false;
