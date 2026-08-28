@@ -219,28 +219,66 @@ namespace QS3D.BricsCAD.V25
         private static bool StartProcess(ProcessStartInfo startInfo, bool discoverQuickUrl, out string error)
         {
             error = string.Empty;
+            Process? process = null;
             try
             {
-                var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
+                process = new Process { StartInfo = startInfo, EnableRaisingEvents = false };
                 process.OutputDataReceived += (_, args) => HandleLine(args.Data, discoverQuickUrl);
                 process.ErrorDataReceived += (_, args) => HandleLine(args.Data, discoverQuickUrl);
-                process.Exited += (_, __) =>
+                if (!process.Start())
                 {
-                    lock (Sync) { if (ReferenceEquals(_process, process)) _process = null; }
-                    try { process.Dispose(); } catch { }
-                };
-                if (!process.Start()) { process.Dispose(); error = "Không khởi động được cloudflared."; return false; }
+                    process.Dispose();
+                    error = "Không khởi động được cloudflared.";
+                    return false;
+                }
+
                 lock (Sync) _process = process;
+                process.Exited += (_, __) => HandleProcessExit(process);
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
-                return true;
+                process.EnableRaisingEvents = true;
+                try
+                {
+                    if (process.HasExited) HandleProcessExit(process);
+                }
+                catch (ObjectDisposedException)
+                {
+                    HandleProcessExit(process);
+                }
+                return IsRunning;
             }
             catch (Exception ex)
             {
-                lock (Sync) _lastError = ex.Message;
+                lock (Sync)
+                {
+                    if (ReferenceEquals(_process, process)) _process = null;
+                    _lastError = ex.Message;
+                    if (discoverQuickUrl)
+                    {
+                        _quickBaseUrl = string.Empty;
+                        _quickMode = false;
+                    }
+                }
+                try { process?.Dispose(); } catch { }
                 error = ex.Message;
                 return false;
             }
+        }
+
+        private static void HandleProcessExit(Process process)
+        {
+            var owned = false;
+            lock (Sync)
+            {
+                if (ReferenceEquals(_process, process))
+                {
+                    _process = null;
+                    _quickBaseUrl = string.Empty;
+                    _quickMode = false;
+                    owned = true;
+                }
+            }
+            if (owned) { try { process.Dispose(); } catch { } }
         }
 
         private static ProcessStartInfo CreateCloudflaredStartInfo(string executable, string arguments) => new ProcessStartInfo
@@ -279,6 +317,7 @@ namespace QS3D.BricsCAD.V25
             Process? process;
             lock (Sync) { process = _process; _process = null; _quickBaseUrl = string.Empty; _quickMode = false; }
             if (process == null) return;
+            try { process.EnableRaisingEvents = false; } catch { }
             try { if (!process.HasExited) process.Kill(); } catch { }
             try { if (!process.HasExited) process.WaitForExit(2000); } catch { }
             try { process.Dispose(); } catch { }
