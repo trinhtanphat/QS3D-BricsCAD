@@ -223,8 +223,8 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 process = new Process { StartInfo = startInfo, EnableRaisingEvents = false };
-                process.OutputDataReceived += (_, args) => HandleLine(args.Data, discoverQuickUrl);
-                process.ErrorDataReceived += (_, args) => HandleLine(args.Data, discoverQuickUrl);
+                process.OutputDataReceived += (_, args) => HandleLine(process, args.Data, discoverQuickUrl);
+                process.ErrorDataReceived += (_, args) => HandleLine(process, args.Data, discoverQuickUrl);
                 if (!process.Start())
                 {
                     process.Dispose();
@@ -292,13 +292,16 @@ namespace QS3D.BricsCAD.V25
             WorkingDirectory = Path.GetDirectoryName(executable) ?? Environment.CurrentDirectory
         };
 
-        private static void HandleLine(string? line, bool discoverQuickUrl)
+        private static void HandleLine(Process process, string? line, bool discoverQuickUrl)
         {
             if (line == null || string.IsNullOrWhiteSpace(line)) return;
             var clean = line.Trim();
             if (clean.Length > 1000) clean = clean.Substring(0, 1000);
             lock (Sync)
             {
+                // Async stdout/stderr callbacks may arrive after Exited or after another mode has
+                // taken ownership. Never let stale process output resurrect a dead Quick Tunnel URL.
+                if (!ReferenceEquals(_process, process)) return;
                 if (clean.IndexOf("ERR", StringComparison.OrdinalIgnoreCase) >= 0
                     || clean.IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0) _lastError = clean;
                 if (discoverQuickUrl)
