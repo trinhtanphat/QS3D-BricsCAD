@@ -208,8 +208,11 @@ namespace QS3D.Core.Cost
             var index = 0;
             foreach (var rate in rates)
             {
-                if (index == AdvancedCostCollectionContract.MaximumEntries)
-                    AdvancedCostCollectionContract.ThrowTooManyEntries("Build-up analysis rate collection");
+                AdvancedCostCollectionContract.RequireCanProcessNext(
+                    hasKnownRateCount,
+                    knownRateCount,
+                    index,
+                    "Build-up analysis rate collection");
                 if (rate == null)
                     throw new ArgumentException("Build-up analysis contains a null rate at index " + index + ".", nameof(rates));
                 if (!ids.Add(rate.RateCode))
@@ -393,8 +396,11 @@ namespace QS3D.Core.Cost
             var index = 0;
             foreach (var item in items)
             {
-                if (index == AdvancedCostCollectionContract.MaximumEntries)
-                    AdvancedCostCollectionContract.ThrowTooManyEntries("Trade analysis item collection");
+                AdvancedCostCollectionContract.RequireCanProcessNext(
+                    hasKnownItemCount,
+                    knownItemCount,
+                    index,
+                    "Trade analysis item collection");
                 if (item == null)
                     throw new ArgumentException("Trade analysis contains a null item at index " + index + ".", nameof(items));
                 if (!ids.Add(item.ItemCode))
@@ -487,8 +493,11 @@ namespace QS3D.Core.Cost
             var index = 0;
             foreach (var entry in entries)
             {
-                if (index == AdvancedCostCollectionContract.MaximumEntries)
-                    AdvancedCostCollectionContract.ThrowTooManyEntries("BQ library entry collection");
+                AdvancedCostCollectionContract.RequireCanProcessNext(
+                    hasKnownEntryCount,
+                    knownEntryCount,
+                    index,
+                    "BQ library entry collection");
                 if (entry == null)
                     throw new ArgumentException("BQ library contains a null entry at index " + index + ".", nameof(entries));
                 if (!ids.Add(entry.ItemCode))
@@ -521,8 +530,11 @@ namespace QS3D.Core.Cost
             var index = 0;
             foreach (var entry in projectEntries)
             {
-                if (index == AdvancedCostCollectionContract.MaximumEntries)
-                    AdvancedCostCollectionContract.ThrowTooManyEntries("BQ project import collection");
+                AdvancedCostCollectionContract.RequireCanProcessNext(
+                    hasKnownProjectEntryCount,
+                    knownProjectEntryCount,
+                    index,
+                    "BQ project import collection");
                 if (entry == null)
                     throw new ArgumentException("Project import contains a null BQ entry at index " + index + ".", nameof(projectEntries));
                 if (!incomingIds.Add(entry.ItemCode))
