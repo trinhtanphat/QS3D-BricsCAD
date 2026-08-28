@@ -539,12 +539,16 @@
                             </WrapPanel>
                         </StackPanel>
 
-                        <TreeView>
+                        <TreeView x:Name="RoomFinishTree"
+                                  VirtualizingPanel.VirtualizationMode="Standard"
+                                  VirtualizingPanel.IsVirtualizing="False"
+                                  ScrollViewer.CanContentScroll="False">
                             <TreeViewItem Header="Sàn Hoàn Thiện" Tag="FloorFinish"/>
                             <TreeViewItem Header="Chống Thấm" Tag="Waterproofing"/>
                             <TreeViewItem Header="Chân Tường" Tag="Skirting"/>
                             <TreeViewItem Header="Hoàn Thiện Tường" Tag="WallFinish"/>
                             <TreeViewItem Header="Trần Hoàn Thiện" Tag="CeilingFinish"/>
+                            <TreeViewItem Header="Trát Trần" Tag="CeilingFinish"/>
                         </TreeView>
                     </DockPanel>
                 </Border>
