@@ -44,10 +44,11 @@ for marker in (
 ):
     require(marker in closed, f"Closed-path deferred cleanup marker missing: {marker}")
 require(
-    closed.index("Volatile.Write(ref _windowClosedDuringQuiescence, 1);")
+    closed.index("if (ModelessHostQuiescenceCoordinator.IsQuiescing)")
+    < closed.index("Volatile.Write(ref _windowClosedDuringQuiescence, 1);")
     < closed.index("return;")
     < closed.index("Detach();"),
-    "Closed during host quiescence must record deferred cleanup before returning; ordinary close must still detach.",
+    "Closed during host quiescence must record deferred cleanup in the same guarded branch before returning; ordinary close must still detach.",
 )
 
 host_abort = method_block(source, "private void OnHostQuiescenceAborted(object? sender, EventArgs e)")
@@ -67,23 +68,27 @@ recover = method_block(source, "private void TryRecoverClosedWindowAfterQuitAbor
 for marker in (
     "_window.Dispatcher.BeginInvoke",
     "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;",
-    "Interlocked.Exchange(ref _windowClosedDuringQuiescence, 0)",
+    "Volatile.Read(ref _windowClosedDuringQuiescence) == 0",
     "DetachDocumentLifecycleHandlersAfterAbort();",
     "Detach();",
+    "if (!_attached)",
+    "Interlocked.Exchange(ref _windowClosedDuringQuiescence, 0);",
 ):
     require(marker in recover, f"Closed-window quit-abort recovery marker missing: {marker}")
 require("TryCloseWindowOnDispatcher();" not in recover and "_window.Close();" not in recover,
         "An already-closed WPF window must not be closed a second time during QuitAborted recovery.")
-require(
-    recover.index("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;")
-    < recover.index("Interlocked.Exchange(ref _windowClosedDuringQuiescence, 0)")
-    < recover.index("DetachDocumentLifecycleHandlersAfterAbort();")
-    < recover.index("Detach();"),
-    "Deferred recovery must re-check quiescence, consume the pending flag, release native lifecycle ownership, then detach managed handlers.",
-)
+first_barrier = recover.index("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;")
+release_native = recover.index("DetachDocumentLifecycleHandlersAfterAbort();")
+second_barrier = recover.index("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;", first_barrier + 1)
+detach = recover.index("Detach();")
+consume = recover.index("Interlocked.Exchange(ref _windowClosedDuringQuiescence, 0);")
+require(first_barrier < release_native < second_barrier < detach < consume,
+        "Deferred recovery must keep its marker armed across a repeated quit and consume it only after managed detach completes.")
+require(recover.index("if (!_attached)") < consume,
+        "Deferred cleanup marker may clear only after Detach reports the registration is no longer attached.")
 
 attach = method_block(source, "public void Attach(Document document)")
 require("Volatile.Write(ref _windowClosedDuringQuiescence, 0);" in attach,
         "Failed partial attach cleanup must reset the deferred-Closed marker before rethrowing.")
 
-print("[OK] V25 modeless windows closed during host quiescence are cleanup-recovered after QuitAborted without a second Window.Close().")
+print("[OK] V25 modeless windows closed during host quiescence are cleanup-recovered after QuitAborted, remain armed across repeated quit, and are never closed twice.")
