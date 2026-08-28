@@ -74,23 +74,37 @@ function Get-StreamingSha256 {
     finally { $stream.Dispose() }
 }
 
-function Get-CurrentStableState {
-    param([Parameter(Mandatory = $true)][string]$Path)
+function Get-ByteArraySha256 {
+    param([Parameter(Mandatory = $true)][byte[]]$Bytes)
 
-    $first = Assert-OrdinaryFile -Path $Path -Label 'V25 compile reference'
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $hashBytes = $sha.ComputeHash($Bytes)
+        return ([BitConverter]::ToString($hashBytes)).Replace('-', '').ToUpperInvariant()
+    }
+    finally { $sha.Dispose() }
+}
+
+function Get-CurrentStableState {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [string]$Label = 'V25 compile reference'
+    )
+
+    $first = Assert-OrdinaryFile -Path $Path -Label $Label
     $firstPath = Get-CanonicalAbsolutePath -Path $first.FullName
     $length = [int64]$first.Length
     $ticks = [int64]$first.LastWriteTimeUtc.Ticks
     $hash = Get-StreamingSha256 -Path $firstPath
 
-    $second = Assert-OrdinaryFile -Path $Path -Label 'V25 compile reference'
+    $second = Assert-OrdinaryFile -Path $Path -Label $Label
     $secondPath = Get-CanonicalAbsolutePath -Path $second.FullName
     $secondHash = Get-StreamingSha256 -Path $secondPath
     if (-not [string]::Equals($firstPath, $secondPath, [StringComparison]::OrdinalIgnoreCase) -or
         $length -ne [int64]$second.Length -or
         $ticks -ne [int64]$second.LastWriteTimeUtc.Ticks -or
         -not [string]::Equals($hash, $secondHash, [StringComparison]::Ordinal)) {
-        throw "V25 compile reference changed while its current generation was being verified: $Path"
+        throw "$Label changed while its current generation was being verified: $Path"
     }
 
     return [pscustomobject]@{
@@ -103,17 +117,33 @@ function Get-CurrentStableState {
 
 Assert-NoExistingReparseComponent -Path $StatePath -Label 'V25 compile-reference state path'
 Assert-NoExistingReparseComponent -Path $BricsCadDir -Label 'V25 compile-reference snapshot directory'
-$stateItem = Assert-OrdinaryFile -Path $StatePath -Label 'V25 compile-reference state'
-if ($stateItem.Length -le 0 -or $stateItem.Length -gt $maxStateBytes) {
-    throw "V25 compile-reference state size is outside the accepted bound: $($stateItem.Length) bytes."
+$stateBefore = Get-CurrentStableState -Path $StatePath -Label 'V25 compile-reference state'
+if ($stateBefore.length -le 0 -or $stateBefore.length -gt $maxStateBytes) {
+    throw "V25 compile-reference state size is outside the accepted bound: $($stateBefore.length) bytes."
 }
+$rawBytes = [IO.File]::ReadAllBytes($stateBefore.path)
+if ($rawBytes.Length -ne $stateBefore.length -or $rawBytes.Length -gt $maxStateBytes) {
+    throw 'V25 compile-reference state changed size while it was being materialized.'
+}
+$materializedHash = Get-ByteArraySha256 -Bytes $rawBytes
+$stateAfter = Get-CurrentStableState -Path $StatePath -Label 'V25 compile-reference state'
+if (-not [string]::Equals($stateBefore.path, $stateAfter.path, [StringComparison]::OrdinalIgnoreCase) -or
+    $stateBefore.length -ne $stateAfter.length -or
+    $stateBefore.lastWriteUtcTicks -ne $stateAfter.lastWriteUtcTicks -or
+    -not [string]::Equals($stateBefore.sha256, $stateAfter.sha256, [StringComparison]::Ordinal) -or
+    -not [string]::Equals($materializedHash, $stateBefore.sha256, [StringComparison]::Ordinal)) {
+    throw 'V25 compile-reference state changed while it was being materialized.'
+}
+
 $utf8 = New-Object Text.UTF8Encoding($false, $true)
-$rawBytes = [IO.File]::ReadAllBytes($stateItem.FullName)
 try { $raw = $utf8.GetString($rawBytes) }
 catch { throw "V25 compile-reference state is not strict UTF-8: $($_.Exception.Message)" }
 try { $state = $raw | ConvertFrom-Json }
 catch { throw "V25 compile-reference state is invalid JSON: $($_.Exception.Message)" }
 
+if ([int]$state.schemaVersion -ne 1) {
+    throw "Unsupported V25 compile-reference state schemaVersion: $($state.schemaVersion)"
+}
 $expectedDir = Get-CanonicalAbsolutePath -Path $BricsCadDir
 if (-not [string]::Equals(([string]$state.bricsCadDir), $expectedDir, [StringComparison]::OrdinalIgnoreCase)) {
     throw "V25 compile-reference state directory mismatch. Expected $expectedDir, got $($state.bricsCadDir)."
