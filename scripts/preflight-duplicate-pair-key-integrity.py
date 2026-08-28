@@ -13,8 +13,8 @@ if 'public string PairKey => LeftElementId + "|" + RightElementId;' in source:
     errors.append("DuplicatePair.PairKey must not use raw delimiter concatenation.")
 if 'EscapePairComponent(LeftElementId) + "|" + EscapePairComponent(RightElementId)' not in source:
     errors.append("DuplicatePair.PairKey must escape both exact element-id components before joining them.")
-if 'return elementId.Replace("|", "||");' not in source:
-    errors.append("Duplicate pair-key escaping must double embedded delimiters deterministically.")
+if 'return elementId.Replace("\\\\", "\\\\\\\\").Replace("|", "\\\\|");' not in source:
+    errors.append("Duplicate pair-key escaping must escape backslash first and then the pair delimiter.")
 if not smoke_path.exists():
     errors.append("Duplicate PairKey collision smoke is missing.")
 else:
@@ -23,6 +23,10 @@ else:
         'Element("B|C", "PairOne", firstBox)',
         'Element("A|B", "PairTwo", secondBox)',
         'Element("C", "PairTwo", secondBox)',
+        'Element("||", "DoubleDelimiter", firstBox)',
+        'Element("A|", "SplitDelimiter", secondBox)',
+        'Element("|", "SplitDelimiter", secondBox)',
+        'Element("A\\\\|B", "Slash", slashBox)',
         'keys.Distinct(StringComparer.Ordinal).Count() != result.Pairs.Count',
         'PairIdentityRemainsInputOrderIndependent()',
     )
