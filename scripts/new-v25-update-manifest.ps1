@@ -190,6 +190,33 @@ function Get-ZipEntrySha256 {
     finally { $sha.Dispose(); $input.Dispose() }
 }
 
+function Get-SafeStagedFiles {
+    param([Parameter(Mandatory = $true)][IO.DirectoryInfo]$Root)
+    $rootDirectory = Resolve-OrdinaryNonReparseDirectory -Path $Root.FullName -Label 'Signed staging package root'
+    $pending = [Collections.Generic.Stack[string]]::new()
+    $files = [Collections.Generic.List[IO.FileInfo]]::new()
+    $pending.Push($rootDirectory.FullName)
+    while ($pending.Count -gt 0) {
+        $directoryPath = $pending.Pop()
+        $directory = Resolve-OrdinaryNonReparseDirectory -Path $directoryPath -Label 'Signed staging package directory'
+        foreach ($item in @(Get-ChildItem -LiteralPath $directory.FullName -Force -ErrorAction Stop)) {
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Signed staging package contains a reparse-backed entry: $($item.FullName)"
+            }
+            if ($item.PSIsContainer) {
+                $pending.Push($item.FullName)
+                continue
+            }
+            if (-not ($item -is [IO.FileInfo])) {
+                throw "Signed staging package contains a non-regular filesystem entry: $($item.FullName)"
+            }
+            $safeFile = Resolve-OrdinaryNonReparseFile -Path $item.FullName -Label 'Signed staging package file'
+            $files.Add($safeFile)
+        }
+    }
+    return @($files | Sort-Object FullName)
+}
+
 function Assert-ZipPayloadMatchesSignedStaging {
     param([IO.FileInfo]$ZipFile, [IO.DirectoryInfo]$PackageRoot, [string]$ExpectedSigner)
     $tempParent = Resolve-OrdinaryNonReparseDirectory -Path ([IO.Path]::GetTempPath()) -Label 'Manifest verification temp parent'
@@ -202,7 +229,7 @@ function Assert-ZipPayloadMatchesSignedStaging {
         $archive = [System.IO.Compression.ZipFile]::OpenRead($ZipFile.FullName)
         $packageRootPath = $PackageRoot.FullName.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
         $packageRootPrefix = $packageRootPath + [IO.Path]::DirectorySeparatorChar
-        $stagedFiles = @(Get-ChildItem -LiteralPath $PackageRoot.FullName -File -Recurse -Force)
+        $stagedFiles = @(Get-SafeStagedFiles -Root $PackageRoot)
         if ($stagedFiles.Count -eq 0) { throw 'Signed staging package contains no regular files.' }
 
         $stagedByName = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
