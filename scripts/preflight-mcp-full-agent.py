@@ -124,9 +124,17 @@ def main() -> int:
         errors.append("browser-login cloudflared command output is not asynchronously drained before process disposal")
     if "ingress:" not in account or "http_status:404" not in account:
         errors.append("browser-login named tunnel lacks hostname-scoped ingress + fail-closed 404 rule")
+    if "EnableRaisingEvents = false" not in fallback or "process.EnableRaisingEvents = true;" not in fallback or "return IsRunning;" not in fallback:
+        errors.append("fallback cloudflared ownership is not established before exit events are enabled")
+    if "private static void HandleProcessExit(Process process)" not in fallback:
+        errors.append("fallback cloudflared lacks idempotent owned-process exit cleanup")
+    stale_quick_cleanup = "if (ReferenceEquals(_process, process))\n                {\n                    _process = null;\n                    _quickBaseUrl = string.Empty;\n                    _quickMode = false;"
+    if stale_quick_cleanup not in fallback:
+        errors.append("fallback Quick Tunnel exit can leave a stale trycloudflare public URL")
 
     # The normal non-technical path is one Agent Center: install, login/setup, copy/open, self-test,
-    # emergency stop/cancel/resume. It must not ask users to invoke a shell.
+    # emergency stop/cancel/resume. CAD-touching local MCP calls must run off the WPF button thread
+    # so ExecuteInApplicationContext can marshal back to the BricsCAD application context.
     center_required = (
         '[CommandMethod("QS3DMCPAGENTCENTER"',
         "McpCloudflaredBootstrapper.BeginInstall",
@@ -137,6 +145,9 @@ def main() -> int:
         'InvokeControlTool("cad_cancel_command"',
         'InvokeControlTool("cad_agent_resume"',
         "OpenChatGpt",
+        "ThreadPool.QueueUserWorkItem",
+        "Interlocked.CompareExchange(ref _localOperationActive",
+        "Dispatcher.BeginInvoke",
     )
     for token in center_required:
         if token not in agent_center:
@@ -161,12 +172,15 @@ def main() -> int:
             errors.append(f"verified cloudflared bootstrap missing: {token}")
 
     # A single resolver prevents the setup wizard, dashboard and ChatGPT copy helpers from
-    # presenting different or unsafe public endpoints.
+    # presenting different or unsafe public endpoints. Literal private/link-local addresses are
+    # rejected in addition to Uri.IsLoopback; hostnames remain DNS-provider validated.
     endpoint_required = (
         "McpCloudflareAccountTunnelManager.PublicMcpUrl",
         "McpCloudflareTunnelManager.PublicMcpUrl",
         "Uri.UriSchemeHttps",
         "uri.IsLoopback",
+        "IPAddress.TryParse(uri.Host",
+        "IsPrivateOrLocalAddress",
         'path = "/mcp"',
     )
     for token in endpoint_required:
