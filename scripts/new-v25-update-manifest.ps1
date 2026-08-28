@@ -56,6 +56,49 @@ function Resolve-OrdinaryNonReparseFile {
     return $item
 }
 
+function Get-StreamingSha256 {
+    param([Parameter(Mandatory = $true)][IO.FileInfo]$File, [Parameter(Mandatory = $true)][string]$Label)
+    $stream = [IO.File]::Open($File.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = $sha.ComputeHash($stream)
+        return ([BitConverter]::ToString($bytes)).Replace('-', '').ToUpperInvariant()
+    }
+    catch { throw "$Label SHA-256 could not be read safely: $($_.Exception.Message)" }
+    finally { $sha.Dispose(); $stream.Dispose() }
+}
+
+function Get-StableFileState {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Label)
+    $file = Resolve-OrdinaryNonReparseFile -Path $Path -Label $Label
+    $firstLength = [long]$file.Length
+    $firstLastWriteUtcTicks = [long]$file.LastWriteTimeUtc.Ticks
+    $hash = Get-StreamingSha256 -File $file -Label $Label
+    $current = Resolve-OrdinaryNonReparseFile -Path $file.FullName -Label $Label
+    $currentHash = Get-StreamingSha256 -File $current -Label $Label
+    if ($firstLength -ne [long]$current.Length -or $firstLastWriteUtcTicks -ne [long]$current.LastWriteTimeUtc.Ticks -or -not [string]::Equals($hash, $currentHash, [StringComparison]::Ordinal)) {
+        throw "$Label changed while its stable input state was being captured."
+    }
+    return [pscustomobject]@{
+        Path = $current.FullName
+        Length = [long]$current.Length
+        LastWriteUtcTicks = [long]$current.LastWriteTimeUtc.Ticks
+        Sha256 = $currentHash
+    }
+}
+
+function Assert-StableFileState {
+    param([Parameter(Mandatory = $true)]$Expected, [Parameter(Mandatory = $true)][string]$Label)
+    $current = Resolve-OrdinaryNonReparseFile -Path ([string]$Expected.Path) -Label $Label
+    $currentHash = Get-StreamingSha256 -File $current -Label $Label
+    if ([long]$Expected.Length -ne [long]$current.Length -or
+        [long]$Expected.LastWriteUtcTicks -ne [long]$current.LastWriteTimeUtc.Ticks -or
+        -not [string]::Equals([string]$Expected.Sha256, $currentHash, [StringComparison]::Ordinal)) {
+        throw "$Label changed after its admitted input generation was captured."
+    }
+    return $current
+}
+
 function Read-BoundedStrictUtf8File {
     param([Parameter(Mandatory = $true)][IO.FileInfo]$File, [Parameter(Mandatory = $true)][string]$Label)
     $stream = [IO.File]::Open($File.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
@@ -147,6 +190,33 @@ function Get-ZipEntrySha256 {
     finally { $sha.Dispose(); $input.Dispose() }
 }
 
+function Get-SafeStagedFiles {
+    param([Parameter(Mandatory = $true)][IO.DirectoryInfo]$Root)
+    $rootDirectory = Resolve-OrdinaryNonReparseDirectory -Path $Root.FullName -Label 'Signed staging package root'
+    $pending = [Collections.Generic.Stack[string]]::new()
+    $files = [Collections.Generic.List[IO.FileInfo]]::new()
+    $pending.Push($rootDirectory.FullName)
+    while ($pending.Count -gt 0) {
+        $directoryPath = $pending.Pop()
+        $directory = Resolve-OrdinaryNonReparseDirectory -Path $directoryPath -Label 'Signed staging package directory'
+        foreach ($item in @(Get-ChildItem -LiteralPath $directory.FullName -Force -ErrorAction Stop)) {
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Signed staging package contains a reparse-backed entry: $($item.FullName)"
+            }
+            if ($item.PSIsContainer) {
+                $pending.Push($item.FullName)
+                continue
+            }
+            if (-not ($item -is [IO.FileInfo])) {
+                throw "Signed staging package contains a non-regular filesystem entry: $($item.FullName)"
+            }
+            $safeFile = Resolve-OrdinaryNonReparseFile -Path $item.FullName -Label 'Signed staging package file'
+            $files.Add($safeFile)
+        }
+    }
+    return @($files | Sort-Object FullName)
+}
+
 function Assert-ZipPayloadMatchesSignedStaging {
     param([IO.FileInfo]$ZipFile, [IO.DirectoryInfo]$PackageRoot, [string]$ExpectedSigner)
     $tempParent = Resolve-OrdinaryNonReparseDirectory -Path ([IO.Path]::GetTempPath()) -Label 'Manifest verification temp parent'
@@ -159,17 +229,20 @@ function Assert-ZipPayloadMatchesSignedStaging {
         $archive = [System.IO.Compression.ZipFile]::OpenRead($ZipFile.FullName)
         $packageRootPath = $PackageRoot.FullName.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
         $packageRootPrefix = $packageRootPath + [IO.Path]::DirectorySeparatorChar
-        $stagedFiles = @(Get-ChildItem -LiteralPath $PackageRoot.FullName -File -Recurse -Force)
+        $stagedFiles = @(Get-SafeStagedFiles -Root $PackageRoot)
         if ($stagedFiles.Count -eq 0) { throw 'Signed staging package contains no regular files.' }
 
         $stagedByName = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+        $stagedStates = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($stagedFile in $stagedFiles) {
             $safeStagedFile = Resolve-OrdinaryNonReparseFile -Path $stagedFile.FullName -Label 'Signed staging package file'
             $fullPath = $safeStagedFile.FullName
             if (-not $fullPath.StartsWith($packageRootPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw "Staged package file escaped package root: $fullPath" }
             $relative = $fullPath.Substring($packageRootPrefix.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')
             if ($stagedByName.ContainsKey($relative)) { throw "Duplicate/case-colliding staged package path: $relative" }
-            $stagedByName.Add($relative, $fullPath)
+            $state = Get-StableFileState -Path $fullPath -Label ("Signed staging package file " + $relative)
+            $stagedByName.Add($relative, $state.Path)
+            $stagedStates.Add($relative, $state)
         }
 
         $zipByName = [Collections.Generic.Dictionary[string,System.IO.Compression.ZipArchiveEntry]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -186,8 +259,11 @@ function Assert-ZipPayloadMatchesSignedStaging {
 
         foreach ($name in $stagedByName.Keys) {
             if (-not $zipByName.ContainsKey($name)) { throw "Package ZIP is missing signed staging file: $name" }
-            $stagedHash = (Get-FileHash -LiteralPath $stagedByName[$name] -Algorithm SHA256).Hash.ToUpperInvariant()
+            $stagedState = $stagedStates[$name]
+            $null = Assert-StableFileState -Expected $stagedState -Label ("Signed staging package file " + $name)
+            $stagedHash = [string]$stagedState.Sha256
             $zippedHash = Get-ZipEntrySha256 -Entry $zipByName[$name]
+            $null = Assert-StableFileState -Expected $stagedState -Label ("Signed staging package file " + $name)
             if ($stagedHash -ne $zippedHash) { throw "Package ZIP payload does not match signed staging file: $name" }
         }
         if ($zipByName.Count -ne $stagedByName.Count) { throw "Package ZIP/staging file-count mismatch. ZIP=$($zipByName.Count), staging=$($stagedByName.Count)." }
@@ -242,12 +318,17 @@ if (Test-Path -LiteralPath $outputFull) {
 }
 
 $metadataFile = Resolve-OrdinaryNonReparseFile -Path (Join-Path $package.FullName 'PACKAGE-METADATA.json') -Label 'PACKAGE-METADATA.json'
+$metadataState = Get-StableFileState -Path $metadataFile.FullName -Label 'PACKAGE-METADATA.json'
+$zipState = Get-StableFileState -Path $zip.FullName -Label 'Signed package ZIP'
 $payloadFiles = @{}
+$payloadStates = @{}
 foreach ($name in $SignedPayloadNames) {
     $payloadFiles[$name] = Resolve-OrdinaryNonReparseFile -Path (Join-Path $package.FullName $name) -Label ("Signed payload " + $name)
+    $payloadStates[$name] = Get-StableFileState -Path $payloadFiles[$name].FullName -Label ("Signed payload " + $name)
 }
 
 $metadataText = Read-BoundedStrictUtf8File -File $metadataFile -Label 'PACKAGE-METADATA.json'
+$metadataFile = Assert-StableFileState -Expected $metadataState -Label 'PACKAGE-METADATA.json'
 try { $metadata = $metadataText | ConvertFrom-Json -ErrorAction Stop }
 catch { throw "PACKAGE-METADATA.json is invalid JSON: $($_.Exception.Message)" }
 if ([string]$metadata.product -ne 'QS3D') { throw 'PACKAGE-METADATA product must be QS3D.' }
@@ -259,22 +340,28 @@ catch { throw "PACKAGE-METADATA version is invalid: $($metadata.version)" }
 $productVersion = Convert-ToStrictSemVerText -Value ([string]$metadata.productVersion) -Label 'PACKAGE-METADATA productVersion'
 
 $expectedSigner = Normalize-Thumbprint $ExpectedSignerThumbprint
-foreach ($name in $SignedPayloadNames) { Assert-AuthenticodeSigner -Path $payloadFiles[$name].FullName -ExpectedSigner $expectedSigner -Label ("QS3D executable payload " + $name) }
+foreach ($name in $SignedPayloadNames) {
+    Assert-AuthenticodeSigner -Path $payloadFiles[$name].FullName -ExpectedSigner $expectedSigner -Label ("QS3D executable payload " + $name)
+    $payloadFiles[$name] = Assert-StableFileState -Expected $payloadStates[$name] -Label ("Signed payload " + $name)
+}
 $managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')
 $managedIdentities = @{}
 foreach ($name in $managedIdentityNames) {
     $path = $payloadFiles[$name].FullName
     $assemblyVersion = Read-ManagedAssemblyVersion -Path $path -Label $name
+    $payloadFiles[$name] = Assert-StableFileState -Expected $payloadStates[$name] -Label ("Signed payload " + $name)
     if ($version -ne $assemblyVersion) { throw "PACKAGE-METADATA version $version does not match signed $name assembly version $assemblyVersion." }
-    $managedProductVersion = Read-ManagedProductVersion -Path $path -Label $name
+    $managedProductVersion = Read-ManagedProductVersion -Path $payloadFiles[$name].FullName -Label $name
+    $payloadFiles[$name] = Assert-StableFileState -Expected $payloadStates[$name] -Label ("Signed payload " + $name)
     if (-not [string]::Equals($productVersion, $managedProductVersion, [StringComparison]::Ordinal)) { throw "PACKAGE-METADATA productVersion $productVersion does not match signed $name product version $managedProductVersion." }
     $managedIdentities[$name] = [pscustomobject]@{ AssemblyVersion = $assemblyVersion; ProductVersion = $managedProductVersion }
 }
 $signedPluginVersion = $managedIdentities['QS3D.BricsCAD.V25.dll'].AssemblyVersion
 $signedPluginProductVersion = $managedIdentities['QS3D.BricsCAD.V25.dll'].ProductVersion
 Assert-ZipPayloadMatchesSignedStaging -ZipFile $zip -PackageRoot $package -ExpectedSigner $expectedSigner
+$zip = Assert-StableFileState -Expected $zipState -Label 'Signed package ZIP'
 
-$zipHash = (Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+$zipHash = [string]$zipState.Sha256
 $manifest = [ordered]@{
     schemaVersion = 2
     product = 'QS3D'
