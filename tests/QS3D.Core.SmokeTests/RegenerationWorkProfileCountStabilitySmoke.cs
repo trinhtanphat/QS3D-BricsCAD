@@ -108,7 +108,7 @@ namespace QS3D.Core.SmokeTests
                 }
 
                 public T Current => _inner.Current;
-                object IEnumerator.Current => Current;
+                object IEnumerator.Current => Current!;
 
                 public bool MoveNext()
                 {
