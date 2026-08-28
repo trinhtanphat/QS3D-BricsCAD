@@ -21,8 +21,16 @@ def validate_helper(text: str) -> list[str]:
         "Resolve-OrdinaryNonReparseFile",
         "$item.Attributes -band [IO.FileAttributes]::ReparsePoint",
         "$cursor.Attributes -band [IO.FileAttributes]::ReparsePoint",
+        "Get-StreamingSha256",
+        "[Security.Cryptography.SHA256]::Create()",
+        "$currentHash = Get-StreamingSha256 -File $current -Label $Label",
+        "Get-StableFileState",
+        "Assert-StableFileState",
+        "LastWriteUtcTicks",
+        "Sha256 = $currentHash",
         "Read-BoundedStrictUtf8File",
         "[IO.File]::Open",
+        "[IO.FileShare]::Read",
         "$stream.Length -gt $script:MaxMetadataBytes",
         "[byte[]]::new([int]$stream.Length)",
         "[Text.UTF8Encoding]::new($false, $true)",
@@ -38,26 +46,48 @@ def validate_helper(text: str) -> list[str]:
         if token not in text:
             errors.append(f"V26 release identity helper missing required safety token: {token}")
 
+    metadata_state = text.find("$metadataState = Get-StableFileState")
+    plugin_state = text.find("$pluginState = Get-StableFileState")
+    core_state = text.find("$coreState = Get-StableFileState")
     metadata_guard = text.find("$metadataFile = Resolve-OrdinaryNonReparseFile")
     metadata_read = text.find("$metadataText = Read-BoundedStrictUtf8File")
+    metadata_recheck = text.find("Assert-StableFileState -Expected $metadataState")
     json_parse = text.find("ConvertFrom-Json -ErrorAction Stop")
     plugin_guard = text.find("$pluginFile = Resolve-OrdinaryNonReparseFile")
     plugin_read = text.find("GetAssemblyName($pluginFile.FullName)")
+    plugin_recheck = text.find("Assert-StableFileState -Expected $pluginState")
     core_guard = text.find("$coreFile = Resolve-OrdinaryNonReparseFile")
     core_read = text.find("GetAssemblyName($coreFile.FullName)")
-    if min(metadata_guard, metadata_read, json_parse) < 0 or not metadata_guard < metadata_read < json_parse:
-        errors.append("V26 metadata safety order must be ordinary-file guard -> bounded strict-UTF8 read -> JSON parse")
-    if min(plugin_guard, plugin_read) < 0 or plugin_guard >= plugin_read:
-        errors.append("V26 plugin assembly must be ordinary/non-reparse before AssemblyName parsing")
-    if min(core_guard, core_read) < 0 or core_guard >= core_read:
-        errors.append("V26 Core assembly must be ordinary/non-reparse before AssemblyName parsing")
+    core_recheck = text.find("Assert-StableFileState -Expected $coreState")
+
+    if min(metadata_state, metadata_guard, metadata_read, metadata_recheck, json_parse) < 0 or not metadata_state < metadata_guard < metadata_read < metadata_recheck < json_parse:
+        errors.append("V26 metadata safety order must be stable-state capture -> ordinary-file guard -> bounded strict-UTF8 read -> stability recheck -> JSON parse")
+    if min(plugin_state, plugin_guard, plugin_read, plugin_recheck) < 0 or not plugin_state < plugin_guard < plugin_read < plugin_recheck:
+        errors.append("V26 plugin assembly safety order must be stable-state capture -> ordinary-file guard -> AssemblyName parsing -> stability recheck")
+    if min(core_state, core_guard, core_read, core_recheck) < 0 or not core_state < core_guard < core_read < core_recheck:
+        errors.append("V26 Core assembly safety order must be stable-state capture -> ordinary-file guard -> AssemblyName parsing -> stability recheck")
+
+    stable_capture = text.find("function Get-StableFileState")
+    first_hash = text.find("Get-StreamingSha256 -File $file")
+    second_resolve = text.find("$current = Resolve-OrdinaryNonReparseFile")
+    second_hash = text.find("$currentHash = Get-StreamingSha256 -File $current -Label $Label")
+    state_hash = text.find("Sha256 = $currentHash")
+    if min(stable_capture, first_hash, second_resolve, second_hash, state_hash) < 0 or not stable_capture < first_hash < second_resolve < second_hash < state_hash:
+        errors.append("V26 stable file-state capture must fingerprint, re-resolve, re-fingerprint, and publish the revalidated SHA-256 state")
+
+    stability_assert = text.find("function Assert-StableFileState")
+    actual_capture = text.find("$actual = Get-StableFileState", stability_assert)
+    hash_compare = text.find("$Expected.Sha256", stability_assert)
+    if min(stability_assert, actual_capture, hash_compare) < 0 or not stability_assert < actual_capture < hash_compare:
+        errors.append("V26 stability assertion must recapture file state and compare the SHA-256 fingerprint")
 
     for forbidden in (
         "Get-Content -LiteralPath $MetadataPath -Raw | ConvertFrom-Json",
         "[Text.Encoding]::UTF8.GetString",
+        "Get-FileHash",
     ):
         if forbidden in text:
-            errors.append(f"V26 release identity helper contains unsafe parsing shortcut: {forbidden}")
+            errors.append(f"V26 release identity helper contains unsafe parsing/fingerprinting shortcut: {forbidden}")
     return errors
 
 
@@ -66,8 +96,6 @@ def package_identity_call(text: str) -> str:
     start = text.find(helper_call)
     if start < 0:
         return ""
-    # Bound this check to the package-identity invocation. Other release helpers
-    # may legitimately bind the same RELEASE_TAG input earlier in the workflow.
     line_start = text.rfind("\n", 0, start) + 1
     end_marker = " | Out-Null"
     end = text.find(end_marker, start)
@@ -114,6 +142,14 @@ helper_mutations = {
     "strict UTF-8 decoder": helper.replace("[Text.UTF8Encoding]::new($false, $true)", "[Text.Encoding]::UTF8", 1),
     "leaf reparse rejection": helper.replace("$item.Attributes -band [IO.FileAttributes]::ReparsePoint", "$item.Attributes -band [IO.FileAttributes]::Normal", 1),
     "parent reparse rejection": helper.replace("$cursor.Attributes -band [IO.FileAttributes]::ReparsePoint", "$cursor.Attributes -band [IO.FileAttributes]::Normal", 1),
+    "streaming fingerprint": helper.replace("[Security.Cryptography.SHA256]::Create()", "[Security.Cryptography.MD5]::Create()", 1),
+    "revalidated fingerprint": helper.replace("$currentHash = Get-StreamingSha256 -File $current -Label $Label", "$currentHash = $hash", 1),
+    "stable metadata capture": helper.replace("$metadataState = Get-StableFileState", "$metadataState = Resolve-OrdinaryNonReparseFile", 1),
+    "stable plugin capture": helper.replace("$pluginState = Get-StableFileState", "$pluginState = Resolve-OrdinaryNonReparseFile", 1),
+    "stable core capture": helper.replace("$coreState = Get-StableFileState", "$coreState = Resolve-OrdinaryNonReparseFile", 1),
+    "metadata post-read recheck": helper.replace("Assert-StableFileState -Expected $metadataState", "# removed metadata stability recheck", 1),
+    "plugin post-read recheck": helper.replace("Assert-StableFileState -Expected $pluginState", "# removed plugin stability recheck", 1),
+    "core post-read recheck": helper.replace("Assert-StableFileState -Expected $coreState", "# removed core stability recheck", 1),
     "metadata ordinary-file binding": helper.replace("$metadataFile = Resolve-OrdinaryNonReparseFile", "$metadataFile = Get-Item", 1),
     "plugin ordinary-file binding": helper.replace("$pluginFile = Resolve-OrdinaryNonReparseFile", "$pluginFile = Get-Item", 1),
     "core ordinary-file binding": helper.replace("$coreFile = Resolve-OrdinaryNonReparseFile", "$coreFile = Get-Item", 1),
@@ -144,4 +180,4 @@ if errors:
         print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: V26 release package identity is bounded, strict-UTF8, ordinary-file/reparse guarded, and the manual release workflow is mutation-locked to the exact shared-helper invocation.")
+print("PASS: V26 release package identity is bounded, strict-UTF8, ordinary-file/reparse guarded, SHA-256 state-bound before/after consumption, and the manual release workflow is mutation-locked to the exact shared-helper invocation.")
