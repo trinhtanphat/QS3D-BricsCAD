@@ -72,6 +72,21 @@ namespace QS3D.BricsCAD.V25.UI
                 var owned = project.FindFamily(family.Id);
                 if (owned == null || !RaftFoundationPropertySet.IsRaftFamily(owned))
                     throw new InvalidOperationException("Family Móng Bè đang chọn đã stale.");
+
+                // The visible Workspace action promises both create and update.  When the
+                // current CAD selection already resolves to an instance of this Raft Family,
+                // keep that native user selection and route the physical click through the
+                // established atomic QS3DBUILD3D replacement path.  A new/untracked closed
+                // boundary still enters the authoring prompt below, so users can place another
+                // raft without switching to the command line.
+                if (SelectionContainsRaftFamilyInstance(doc, project, owned))
+                {
+                    panel._viewModel.SetActiveFamily(owned);
+                    panel.SetStatus("Móng Bè: cập nhật hình học 3D native từ đối tượng đang chọn.");
+                    panel.Send("QS3DBUILD3D");
+                    return;
+                }
+
                 var placement = RaftFoundationLevelPlacement.Resolve(project, owned);
                 panel._viewModel.SetActiveFamily(owned);
                 panel.SetStatus(
@@ -83,6 +98,23 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 panel.SetStatus("Không thể bắt đầu Vẽ Móng Bè: " + ex.Message);
             }
+        }
+
+        private static bool SelectionContainsRaftFamilyInstance(
+            Bricscad.ApplicationServices.Document document,
+            ProjectState project,
+            ProjectFamily family)
+        {
+            var selectedHandles = new HashSet<string>(
+                Cad.EntitySnapshotReader.ReadCurrentSelection(document)
+                    .Select(snapshot => (snapshot.Handle ?? string.Empty).Trim())
+                    .Where(handle => handle.Length > 0),
+                StringComparer.OrdinalIgnoreCase);
+            if (selectedHandles.Count == 0) return false;
+
+            return project.Elements.Any(element =>
+                string.Equals(element.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase) &&
+                SemanticReferenceHandles.MatchesSelection(element, selectedHandles));
         }
 
         private static WorkspacePanel? FindRaftWorkspacePanel(DependencyObject source)

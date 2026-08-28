@@ -59,7 +59,10 @@ def main():
     require(visible_add, "e.Handled = true;", "visible Add claims routed click", failures)
     require(visible_add, "panel.CreateFamilyFromWorkspaceSubtype(false);", "visible Add direct Family creation", failures)
     forbid(workspace, "IsWorkspaceAddFamilyButton(button)", "legacy raft Add interception must be absent", failures)
-    require(workspace, 'if (!string.Equals(button.Content as string, "Vẽ 3D", StringComparison.Ordinal) ||', "legacy raft workflow Draw-only routing", failures)
+    require(workspace, 'if (!string.Equals(button.Content as string, "Vẽ 3D", StringComparison.Ordinal) ||', "raft Vẽ 3D routed action", failures)
+    require(workspace, "SelectionContainsRaftFamilyInstance(doc, project, owned)", "selected raft update decision", failures)
+    require(workspace, 'panel.Send("QS3DBUILD3D")', "selected raft native rebuild route", failures)
+    require(workspace, "SemanticReferenceHandles.MatchesSelection(element, selectedHandles)", "source/generated-host selection ownership", failures)
 
     # Add/select/property must remain in the primary Family render path. A separate selection
     # handler in the raft file is intentionally not accepted because generic rendering can win.
@@ -119,7 +122,7 @@ def main():
     require(cad_vertical, "placement.UsesBottomLevel || placement.UsesTopLevel", "native absolute Level bottom", failures)
     require(cad_vertical, "placement.BottomElevationM", "native bottom uses resolved elevation", failures)
     require(cad_vertical, "UsesBottomLevel || UsesTopLevel", "fingerprint uses resolved Level bottom", failures)
-    require(workspace, 'panel.Send("QS3DDRAWRAFTFOUNDATION")', "raft native draw command", failures)
+    require(workspace, 'panel.Send("QS3DDRAWRAFTFOUNDATION")', "new raft native draw fallback", failures)
 
     # Acceptance arithmetic: a 4 m x 6 m x 0.8 m rectangular raft.
     length = 4.0
