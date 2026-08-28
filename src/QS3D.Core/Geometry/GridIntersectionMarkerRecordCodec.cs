@@ -221,8 +221,13 @@ namespace QS3D.Core.Geometry
                 }
             }
 
-            try { return new GridIntersectionPairRecord(first, second, pairToken, entries); }
+            GridIntersectionPairRecord record;
+            try { record = new GridIntersectionPairRecord(first, second, pairToken, entries); }
             catch (ArgumentException ex) { throw new FormatException("Grid intersection pair record violates canonical ownership.", ex); }
+
+            if (!string.Equals(Encode(record), value, StringComparison.Ordinal))
+                throw new FormatException("Grid intersection pair record is not in canonical serialized form.");
+            return record;
         }
 
         private static string RequirePairToken(string value, string parameterName)
