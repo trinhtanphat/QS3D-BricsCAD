@@ -46,6 +46,9 @@ def main() -> int:
         "copy URL command": (connector, 'CommandMethod("QS3DMCPCOPYURL"'),
         "copy token command": (connector, 'CommandMethod("QS3DMCPCOPYTOKEN"'),
         "copy config command": (connector, 'CommandMethod("QS3DMCPCOPYCONFIG"'),
+        "legacy settings hide bearer value": (connector, "Bearer token: [hidden; use QS3DMCPCOPYTOKEN]"),
+        "generated guide starts from Agent Center": (connector, "1. Open MCP Agent Center from TOOL > MCP (AI)."),
+        "generated guide uses click-first installer": (connector, "2. Click the automatic cloudflared install/update button if needed."),
         "live Cloudflare tunnel list": (account, 'RunCommand(executable, "tunnel list"'),
         "exact tunnel-name comparison": (account, "string.Equals(parts[1], name, StringComparison.OrdinalIgnoreCase)"),
         "missing tunnel credential fail-closed": (account, "máy này thiếu credential"),
@@ -71,6 +74,10 @@ def main() -> int:
 
     if 'IndexOf("already exists"' in account:
         errors.append("Cloudflare DNS conflict must not be silently accepted via 'already exists'")
+    if '"Bearer token: " + McpEmbeddedServer.GetBearerToken()' in connector:
+        errors.append("legacy settings must not render the raw bearer token; use explicit copy action")
+    if '"1. Run QS3DMCPACCOUNTSETUP.' in connector:
+        errors.append("generated guide must not make a typed BricsCAD setup command the default path")
 
     for forbidden in ("powershell.exe", "cmd.exe", "Process.Start("):
         if forbidden in server:
@@ -85,8 +92,8 @@ def main() -> int:
     print(
         "PASS: MCP production source uses one validated HTTPS endpoint resolver, isolated user "
         "fallback state, live/exact Cloudflare tunnel identity checks, fail-closed DNS conflict "
-        "handling, owner-bound named/Quick Tunnel output, copy-ready ChatGPT configuration "
-        "helpers, bounded network/session surfaces and BricsCAD-confined emergency recovery."
+        "handling, owner-bound named/Quick Tunnel output, click-first redacted onboarding, "
+        "bounded network/session surfaces and BricsCAD-confined emergency recovery."
     )
     return 0
 
