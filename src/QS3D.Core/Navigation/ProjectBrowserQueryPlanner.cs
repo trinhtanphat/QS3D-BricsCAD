@@ -37,7 +37,8 @@ namespace QS3D.Core.Navigation
                 if (knownCount.HasValue && result.Count >= knownCount.Value)
                     throw new InvalidOperationException(
                         "Project browser query option " + parameterName + " Count " + knownCount.Value +
-                        " was exceeded during traversal.");
+                        " does not match traversed value count " + (result.Count + 1) +
+                        " because known Count was exceeded during traversal.");
                 if (result.Count >= ProjectBrowserQueryPlanner.MaxFilterIds)
                     throw TooManyFilterValues(parameterName);
                 result.Add(value);
