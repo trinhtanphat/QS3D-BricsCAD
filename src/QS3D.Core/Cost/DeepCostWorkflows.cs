@@ -228,7 +228,8 @@ namespace QS3D.Core.Cost
                 }
                 index++;
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                rates,
                 hasKnownRateCount,
                 knownRateCount,
                 index,
@@ -424,7 +425,8 @@ namespace QS3D.Core.Cost
                 }
                 index++;
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                items,
                 hasKnownItemCount,
                 knownItemCount,
                 index,
@@ -505,7 +507,8 @@ namespace QS3D.Core.Cost
                 snapshot.Add(entry);
                 index++;
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                entries,
                 hasKnownEntryCount,
                 knownEntryCount,
                 index,
@@ -544,7 +547,8 @@ namespace QS3D.Core.Cost
                 merged[entry.ItemCode] = entry;
                 index++;
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                projectEntries,
                 hasKnownProjectEntryCount,
                 knownProjectEntryCount,
                 index,
