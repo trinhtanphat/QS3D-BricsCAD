@@ -140,6 +140,7 @@ namespace QS3D.Core.Domain
             var activeInputCount = 0;
             foreach (var rawRoomId in activeRoomIds)
             {
+                RequireCanProcessNextKnownCount("Auto Room active room id set", knownActiveRoomCount, activeInputCount);
                 activeInputCount++;
                 if (string.IsNullOrWhiteSpace(rawRoomId)) continue;
                 active.Add(rawRoomId.Trim());
@@ -150,6 +151,7 @@ namespace QS3D.Core.Domain
             var selectedInputCount = 0;
             foreach (var raw in selectedSourceHandles)
             {
+                RequireCanProcessNextKnownCount("Auto Room selected source handle set", knownSelectedSourceHandleCount, selectedInputCount);
                 if (selectedInputCount >= MaxSourceHandleInputCount)
                     throw new InvalidOperationException(
                         "Auto Room source handles cannot exceed " + MaxSourceHandleInputCount + " input entries.");
@@ -358,6 +360,13 @@ namespace QS3D.Core.Domain
                 parsed.Kind != DateTimeKind.Utc)
                 return false;
             return string.Equals(staleUtc, parsed.ToString("O"), StringComparison.Ordinal);
+        }
+
+        private static void RequireCanProcessNextKnownCount(string collectionLabel, int knownCount, int observedCount)
+        {
+            if (observedCount < knownCount) return;
+            throw new InvalidOperationException(
+                collectionLabel + " traversal produced more entries than its known count reported " + knownCount + ".");
         }
 
         private static void RequireKnownCountMatchesTraversal(string collectionLabel, int knownCount, int observedCount)
