@@ -68,7 +68,7 @@ namespace QS3D.Core.Coordination
 
         private static string EscapePairComponent(string elementId)
         {
-            return elementId.Replace("|", "||");
+            return elementId.Replace("\\", "\\\\").Replace("|", "\\|");
         }
     }
 
