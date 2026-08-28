@@ -321,45 +321,34 @@ namespace QS3D.Core.Domain
             project.Metadata[MetadataKey] = string.Join("\n", custom.Select(x => string.Join("|", Encode(x.Id), Encode(x.Name), Encode(x.Unit), Encode(x.Description))));
         }
 
-        private static string Encode(string value)
-        {
-            return Convert.ToBase64String(StrictUtf8.GetBytes(value));
-        }
+        private static string Encode(string value) => Convert.ToBase64String(Encoding.UTF8.GetBytes(value ?? string.Empty));
 
-        private static string Decode(string encoded)
+        private static string Decode(string value)
         {
             try
             {
+                var encoded = value ?? string.Empty;
                 var bytes = Convert.FromBase64String(encoded);
-                var decoded = StrictUtf8.GetString(bytes);
-                if (!string.Equals(Convert.ToBase64String(StrictUtf8.GetBytes(decoded)), encoded, StringComparison.Ordinal))
-                    throw new InvalidOperationException("Material catalog text is not canonical Base64.");
-                return decoded;
+                if (!string.Equals(Convert.ToBase64String(bytes), encoded, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Material catalog contains non-canonical Base64 data.");
+                return StrictUtf8.GetString(bytes);
             }
-            catch (EncoderFallbackException ex)
+            catch (Exception ex) when (ex is FormatException || ex is DecoderFallbackException)
             {
-                throw new InvalidOperationException("Material catalog contains invalid UTF-8 text.", ex);
-            }
-            catch (DecoderFallbackException ex)
-            {
-                throw new InvalidOperationException("Material catalog contains invalid UTF-8 text.", ex);
-            }
-            catch (FormatException ex)
-            {
-                throw new InvalidOperationException("Material catalog contains invalid encoded text.", ex);
+                throw new InvalidOperationException("Material catalog contains invalid Base64 or UTF-8 data.", ex);
             }
         }
 
         private sealed class MaterialReferenceScope
         {
-            public MaterialReferenceScope(List<ProjectFamily> families, List<ProjectElement> elements)
+            public MaterialReferenceScope(IReadOnlyList<ProjectFamily> families, IReadOnlyList<ProjectElement> elements)
             {
                 Families = families;
                 Elements = elements;
             }
 
-            public List<ProjectFamily> Families { get; }
-            public List<ProjectElement> Elements { get; }
+            public IReadOnlyList<ProjectFamily> Families { get; }
+            public IReadOnlyList<ProjectElement> Elements { get; }
         }
     }
 }
