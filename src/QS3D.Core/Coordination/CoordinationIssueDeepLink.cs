@@ -45,6 +45,7 @@ namespace QS3D.Core.Coordination
         public const int MaxUriCharacters = 128 * 1024;
         private const string Prefix = "qs3d://coordination/issue?";
         private static readonly string[] RequiredKeys = { "v", "project", "drawing", "issue", "revision" };
+        private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public CoordinationIssueDeepLink(
             string projectId,
@@ -241,13 +242,40 @@ namespace QS3D.Core.Coordination
 
         private static void ValidatePercentEncoding(string encoded, string key)
         {
-            for (var i = 0; i < encoded.Length; i++)
+            var index = 0;
+            while (index < encoded.Length)
             {
-                if (encoded[i] != '%') continue;
-                if (i + 2 >= encoded.Length || !IsHex(encoded[i + 1]) || !IsHex(encoded[i + 2]))
-                    throw new FormatException("Coordination deep-link contains malformed percent-encoding in query key: " + key + ".");
-                i += 2;
+                if (encoded[index] != '%')
+                {
+                    index++;
+                    continue;
+                }
+
+                var bytes = new List<byte>();
+                while (index < encoded.Length && encoded[index] == '%')
+                {
+                    if (index + 2 >= encoded.Length || !IsHex(encoded[index + 1]) || !IsHex(encoded[index + 2]))
+                        throw new FormatException("Coordination deep-link contains malformed percent-encoding in query key: " + key + ".");
+                    bytes.Add((byte)((HexValue(encoded[index + 1]) << 4) | HexValue(encoded[index + 2])));
+                    index += 3;
+                }
+
+                try
+                {
+                    StrictUtf8.GetString(bytes.ToArray());
+                }
+                catch (DecoderFallbackException ex)
+                {
+                    throw new FormatException("Coordination deep-link contains invalid UTF-8 percent-encoding in query key: " + key + ".", ex);
+                }
             }
+        }
+
+        private static int HexValue(char value)
+        {
+            if (value >= '0' && value <= '9') return value - '0';
+            if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+            return value - 'A' + 10;
         }
 
         private static bool IsHex(char value)
