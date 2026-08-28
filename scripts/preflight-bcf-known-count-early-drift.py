@@ -36,18 +36,32 @@ legacy_bound_smoke = LEGACY_BOUND_SMOKE.read_text(encoding="utf-8")
 runbook = RUNBOOK.read_text(encoding="utf-8")
 
 helper = require(source, "internal static List<T> MaterializeBounded<T>(", "shared bounded materializer")
-corroboration = require(source[helper:], "out var corroboratedKnownCount", "known-Count corroboration output")
-overrun = require(source[helper:], "if (corroboratedKnownCount && knownCount.HasValue && observedCount >= knownCount.Value)", "early corroborated known-Count overrun guard")
-bound = require(source[helper:], "if (observedCount >= maximumCount)", "streaming maximum guard")
-append = require(source[helper:], "items.Add(value);", "materialization append")
-under_yield = require(source[helper:], "if (knownCount.HasValue && observedCount != knownCount.Value)", "post-traversal under-yield guard")
-source_count = require(source[helper:], "var knownCountSources = 0;", "known-Count evidence source counter")
-corroborated_assignment = require(source[helper:], "corroboratedKnownCount = knownCountSources > 1;", "corroborated known-Count assignment")
+materializer = source[helper:]
+corroboration = require(materializer, "out var corroboratedKnownCount", "known-Count corroboration output")
+overrun = require(materializer, "if (corroboratedKnownCount && knownCount.HasValue && observedCount >= knownCount.Value)", "early corroborated known-Count overrun guard")
+bound = require(materializer, "if (observedCount >= maximumCount)", "streaming maximum guard")
+append = require(materializer, "items.Add(value);", "materialization append")
+under_yield = require(materializer, "if (knownCount.HasValue && observedCount != knownCount.Value)", "post-traversal under-yield guard")
 
-if not (corroboration < overrun < bound < append < under_yield < source_count < corroborated_assignment):
-    fail("BCF materialization ordering must preserve corroborated Count guard, streaming bound, append, under-yield check, and evidence accounting")
+if "out int knownCountSources" in materializer:
+    # The post-traversal Count-stability extension exposes the number of deterministic
+    # Count surfaces to its caller. Preserve #4349's evidence accounting while allowing
+    # the implementation-local counter to have a distinct name from the out parameter.
+    source_count = require(materializer, "var observedKnownCountSources = 0;", "known-Count evidence source counter")
+    source_count_assignment = require(materializer, "knownCountSources = observedKnownCountSources;", "known-Count evidence source output")
+    corroborated_assignment = require(materializer, "corroboratedKnownCount = observedKnownCountSources > 1;", "corroborated known-Count assignment")
+    if not (
+        corroboration < overrun < bound < append < under_yield < source_count <
+        source_count_assignment < corroborated_assignment
+    ):
+        fail("BCF materialization ordering must preserve corroborated Count guard, streaming bound, append, under-yield check, and extended evidence accounting")
+else:
+    source_count = require(materializer, "var knownCountSources = 0;", "known-Count evidence source counter")
+    corroborated_assignment = require(materializer, "corroboratedKnownCount = knownCountSources > 1;", "corroborated known-Count assignment")
+    if not (corroboration < overrun < bound < append < under_yield < source_count < corroborated_assignment):
+        fail("BCF materialization ordering must preserve corroborated Count guard, streaming bound, append, under-yield check, and evidence accounting")
 
-if "observedCount++;\n                if (observedCount > maximumCount)" in source[helper:]:
+if "observedCount++;\n                if (observedCount > maximumCount)" in materializer:
     fail("legacy post-increment BCF bound ordering reappeared")
 
 for method in (
