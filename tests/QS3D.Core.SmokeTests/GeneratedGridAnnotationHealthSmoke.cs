@@ -21,6 +21,9 @@ namespace QS3D.Core.SmokeTests
             HealthyMetadataHasNoAnnotationIssue();
             LabelChangeIsStale();
             CorruptOwnerAndHandleAreReported();
+            HandleCanonicalityIsReported();
+            DuplicateAliasesRemainDuplicate();
+            MaximumPositiveHandleIsCanonical();
         }
 
         private static void NoMetadataIsOptional()
@@ -63,6 +66,47 @@ namespace QS3D.Core.SmokeTests
             var issues = new GeneratedGridAnnotationHealthService().Inspect(project);
             True(issues.Any(x => x.ElementId == grid.Id && x.Code == "GRID_ANNOTATION_HANDLE_INVALID"));
             True(issues.Any(x => x.ElementId == grid.Id && x.Code == "GRID_ANNOTATION_PROJECT_MISMATCH"));
+        }
+
+        private static void HandleCanonicalityIsReported()
+        {
+            foreach (var nonCanonical in new[] { "1a;11;12;13;14;15", "0010;11;12;13;14;15", " 10;11;12;13;14;15" })
+            {
+                var project = Project();
+                var grid = Grid(project, "G-1", "A");
+                AddHealthyAnnotation(project, grid, "A");
+                grid.SetProperty(HandlesKey, nonCanonical);
+                var issues = new GeneratedGridAnnotationHealthService().Inspect(project);
+                True(issues.Any(x => x.ElementId == grid.Id && x.Code == "GRID_ANNOTATION_HANDLE_NON_CANONICAL"));
+            }
+
+            var zeroProject = Project();
+            var zeroGrid = Grid(zeroProject, "G-1", "A");
+            AddHealthyAnnotation(zeroProject, zeroGrid, "A");
+            zeroGrid.SetProperty(HandlesKey, "0;11;12;13;14;15");
+            var zeroIssues = new GeneratedGridAnnotationHealthService().Inspect(zeroProject);
+            True(zeroIssues.Any(x => x.ElementId == zeroGrid.Id && x.Code == "GRID_ANNOTATION_HANDLE_INVALID"));
+        }
+
+        private static void DuplicateAliasesRemainDuplicate()
+        {
+            var project = Project();
+            var grid = Grid(project, "G-1", "A");
+            AddHealthyAnnotation(project, grid, "A");
+            grid.SetProperty(HandlesKey, "10;010;12;13;14;15");
+            var issues = new GeneratedGridAnnotationHealthService().Inspect(project);
+            True(issues.Any(x => x.ElementId == grid.Id && x.Code == "GRID_ANNOTATION_HANDLE_NON_CANONICAL"));
+            True(issues.Any(x => x.ElementId == grid.Id && x.Code == "GRID_ANNOTATION_HANDLE_DUPLICATE"));
+        }
+
+        private static void MaximumPositiveHandleIsCanonical()
+        {
+            var project = Project();
+            var grid = Grid(project, "G-1", "A");
+            AddHealthyAnnotation(project, grid, "A");
+            grid.SetProperty(HandlesKey, "7FFFFFFFFFFFFFFF;11;12;13;14;15");
+            var issues = new GeneratedGridAnnotationHealthService().Inspect(project);
+            False(issues.Any(x => x.ElementId == grid.Id && (x.Code == "GRID_ANNOTATION_HANDLE_INVALID" || x.Code == "GRID_ANNOTATION_HANDLE_NON_CANONICAL")));
         }
 
         private static ProjectState Project() => new ProjectState("grid-annotation-health", "Grid Annotation Health");
