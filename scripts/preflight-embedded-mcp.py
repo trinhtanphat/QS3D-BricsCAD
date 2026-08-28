@@ -7,6 +7,8 @@ SERVER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpEmbeddedServer.cs"
 COMMANDS = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpConnectorRibbonCommands.cs"
 TOKEN_ONBOARDING = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareOnboarding.cs"
 ACCOUNT_ONBOARDING = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareAccountOnboarding.cs"
+AGENT_CENTER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpAgentControlCenter.cs"
+BOOTSTRAPPER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflaredBootstrapper.cs"
 OVERRIDE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "McpRibbonCommandOverride.cs"
 COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonInitializationCoordinator.cs"
 PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
@@ -35,6 +37,8 @@ def main() -> int:
     commands = read(COMMANDS, errors)
     token_onboarding = read(TOKEN_ONBOARDING, errors)
     account_onboarding = read(ACCOUNT_ONBOARDING, errors)
+    agent_center = read(AGENT_CENTER, errors)
+    bootstrapper = read(BOOTSTRAPPER, errors)
     override = read(OVERRIDE, errors)
     coordinator = read(COORDINATOR, errors)
     plugin = read(PLUGIN, errors)
@@ -67,6 +71,7 @@ def main() -> int:
         "cad_active_document",
         "cad_selection",
         "cad_database_snapshot",
+        "cad_entity_inspect",
         "qs3d_run_command",
         "cad_cancel_command",
     ):
@@ -81,9 +86,9 @@ def main() -> int:
     forbid(server, "mouse_event(", errors, "legacy global mouse injection")
 
     expected_routes = {
-        'Prefix + "MCP_SETTINGS"': "QS3DMCPACCOUNTSETUP",
+        'Prefix + "MCP_SETTINGS"': "QS3DMCPAGENTCENTER",
         'Prefix + "MCP_DOCS"': "QS3DMCPDOCSHTTP",
-        'Prefix + "AI_DASHBOARD"': "QS3DAIDASHBOARDHTTP",
+        'Prefix + "AI_DASHBOARD"': "QS3DMCPAGENTCENTER",
         'Prefix + "MCP_CONNECTION"': "QS3DMCPCHECKHTTP",
     }
     for button, command in expected_routes.items():
@@ -116,7 +121,26 @@ def main() -> int:
     ):
         require(commands, f'[CommandMethod("{command}"', errors, f"CommandMethod {command}")
 
-    # Default UX: browser authentication, then hidden cloudflared provisioning. No token/password copy required.
+    # Default UX: one unified click-first Agent Center. Provider credentials stay in browser.
+    require(agent_center, '[CommandMethod("QS3DMCPAGENTCENTER"', errors, "unified Agent Center command")
+    require(agent_center, "McpAgentControlCenterWindow", errors, "unified Agent Center window")
+    require(agent_center, "McpCloudflaredBootstrapper.BeginInstall", errors, "one-click verified cloudflared install")
+    require(agent_center, "RunReadOnlySelfTest", errors, "read-only end-to-end self-test")
+    require(agent_center, 'InvokeControlTool("cad_agent_stop"', errors, "click emergency stop")
+    require(agent_center, 'InvokeControlTool("cad_cancel_command"', errors, "click command cancel")
+    require(agent_center, 'InvokeControlTool("cad_agent_resume"', errors, "click explicit resume")
+    require(agent_center, "OpenChatGpt", errors, "ChatGPT browser handoff")
+    forbid(agent_center, "powershell.exe", errors, "PowerShell user workflow")
+    forbid(agent_center, "cmd.exe", errors, "cmd user workflow")
+
+    require(bootstrapper, "cloudflared-windows-amd64.exe", errors, "official cloudflared Windows binary")
+    require(bootstrapper, "WinVerifyTrust", errors, "Authenticode verification")
+    require(bootstrapper, "Cloudflare", errors, "Cloudflare signer constraint")
+    require(bootstrapper, 'PathEnvironment = "QS3D_CLOUDFLARED_PATH"', errors, "managed cloudflared persistence")
+    forbid(bootstrapper, "powershell.exe", errors, "PowerShell installer dependency")
+    forbid(bootstrapper, "cmd.exe", errors, "cmd installer dependency")
+
+    # Browser-auth setup remains the account-owned named-tunnel implementation behind Agent Center.
     require(account_onboarding, '[CommandMethod("QS3DMCPACCOUNTSETUP"', errors, "browser-login setup command")
     require(account_onboarding, "McpCloudflareAccountSetupWindow", errors, "browser-login setup window")
     require(account_onboarding, '"tunnel login"', errors, "Cloudflare browser login")
@@ -131,7 +155,7 @@ def main() -> int:
     forbid(account_onboarding, "powershell.exe", errors, "PowerShell setup dependency")
     forbid(account_onboarding, "cmd.exe", errors, "cmd setup dependency")
 
-    # Advanced fallback remains available for users who prefer dashboard-issued remote tokens.
+    # Advanced fallback remains available for dashboard-issued remote tokens.
     require(token_onboarding, "ProtectedData.Protect", errors, "DPAPI fallback tunnel token protection")
     require(token_onboarding, "DataProtectionScope.CurrentUser", errors, "per-Windows-user fallback secret scope")
     require(token_onboarding, 'startInfo.EnvironmentVariables["TUNNEL_TOKEN"]', errors, "fallback token outside process command line")
@@ -162,10 +186,10 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: QS3D embeds authenticated MCP, full protocol/tool-call diagnostics and a zero-shell "
-        "browser-login Cloudflare wizard that creates/reuses a named tunnel, routes DNS, persists "
-        "config, auto-starts with BricsCAD, keeps provider passwords out of QS3D and retains Quick "
-        "Tunnel as a test fallback."
+        "PASS: QS3D embeds authenticated MCP plus a unified click-first Agent Center with "
+        "verified one-click cloudflared bootstrap, provider-browser login, named/Quick tunnel "
+        "management, ChatGPT copy/open actions, read-only MCP self-test and emergency controls "
+        "without PowerShell/CMD user setup."
     )
     return 0
 
