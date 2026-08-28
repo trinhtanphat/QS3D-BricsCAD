@@ -18,8 +18,10 @@ else:
         "if (handle.Length == 0)",
         '"GRID_ANNOTATION_HANDLE_INVALID"',
         '"Generated Grid annotation Handle không được rỗng."',
-        "var isValidHex = long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _);",
-        "GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle)",
+        "long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value)",
+        "value <= 0L",
+        'value.ToString("X", CultureInfo.InvariantCulture)',
+        '"GRID_ANNOTATION_HANDLE_NON_CANONICAL"',
         "if (!distinct.Add(identity))",
         "if (distinct.Count != ExpectedHandleCount)",
     )
@@ -31,9 +33,10 @@ else:
         ".Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)",
         ".Where(x => x.Length > 0)",
         "if (!distinct.Add(handle))",
+        "var isValidHex = long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _);",
     ):
         if forbidden in text:
-            errors.append("grid-annotation inspected stream regressed to discarded/uncanonical handle identity: " + forbidden)
+            errors.append("grid-annotation inspected stream regressed to discarded/non-canonical handle identity: " + forbidden)
 
 fixtures = (
     "A1;A2;A3;A4;A5;A6;;",
@@ -53,4 +56,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Grid annotation metadata keeps empty tokens fail-visible while duplicate checks use canonical numeric CAD-handle identity.")
+print("PASS: Grid annotation metadata keeps empty tokens fail-visible while duplicate checks use positive canonical CAD-handle identity.")

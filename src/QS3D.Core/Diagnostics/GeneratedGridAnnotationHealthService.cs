@@ -41,10 +41,8 @@ namespace QS3D.Core.Diagnostics
                 }
 
                 var handlesText = rawHandles ?? string.Empty;
-                var tokens = handlesText
-                    .Split(new[] { ';' }, StringSplitOptions.None)
-                    .Select(x => (x ?? string.Empty).Trim())
-                    .ToList();
+                var rawTokens = handlesText.Split(new[] { ';' }, StringSplitOptions.None).ToList();
+                var tokens = rawTokens.Select(x => (x ?? string.Empty).Trim()).ToList();
                 if (tokens.All(x => x.Length > 0) &&
                     !string.Equals(handlesText, string.Join(";", tokens), StringComparison.Ordinal))
                 {
@@ -56,8 +54,10 @@ namespace QS3D.Core.Diagnostics
                 }
 
                 var distinct = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var handle in tokens)
+                for (var index = 0; index < tokens.Count; index++)
                 {
+                    var rawHandle = rawTokens[index] ?? string.Empty;
+                    var handle = tokens[index];
                     if (handle.Length == 0)
                     {
                         issues.Add(new ModelHealthIssue(
@@ -68,10 +68,26 @@ namespace QS3D.Core.Diagnostics
                         continue;
                     }
 
-                    var isValidHex = long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _);
-                    var identity = isValidHex
-                        ? GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle)
-                        : handle;
+                    if (!long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value) || value <= 0L)
+                    {
+                        issues.Add(new ModelHealthIssue(
+                            "GRID_ANNOTATION_HANDLE_INVALID",
+                            HealthSeverity.Error,
+                            "Generated Grid annotation Handle không phải CAD hex dương hợp lệ: " + handle + ".",
+                            element.Id));
+                        continue;
+                    }
+
+                    var identity = value.ToString("X", CultureInfo.InvariantCulture);
+                    if (!string.Equals(rawHandle, identity, StringComparison.Ordinal))
+                    {
+                        issues.Add(new ModelHealthIssue(
+                            "GRID_ANNOTATION_HANDLE_NON_CANONICAL",
+                            HealthSeverity.Error,
+                            "Generated Grid annotation Handle phải dùng đúng CAD hex canonical: " + identity + ".",
+                            element.Id));
+                    }
+
                     if (!distinct.Add(identity))
                     {
                         issues.Add(new ModelHealthIssue(
@@ -81,16 +97,8 @@ namespace QS3D.Core.Diagnostics
                             element.Id));
                         continue;
                     }
-                    if (!isValidHex)
-                    {
-                        issues.Add(new ModelHealthIssue(
-                            "GRID_ANNOTATION_HANDLE_INVALID",
-                            HealthSeverity.Error,
-                            "Generated Grid annotation Handle không phải hex hợp lệ: " + handle + ".",
-                            element.Id));
-                    }
                     if (element.SourceHandles.Any(x => string.Equals(
-                        isValidHex ? GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x) : (x ?? string.Empty).Trim(),
+                        GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(x),
                         identity,
                         StringComparison.OrdinalIgnoreCase)))
                     {
