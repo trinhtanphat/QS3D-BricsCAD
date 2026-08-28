@@ -59,6 +59,8 @@ else:
         errors.append("Hide must release DocumentActivated ownership while dormant")
     if hide_visible >= 0 and unsubscribe >= 0 and hide_visible > unsubscribe:
         errors.append("Hide must release host event ownership only after native hide succeeds")
+    if "return;" in body[:unsubscribe if unsubscribe >= 0 else len(body)]:
+        errors.append("Hide must not bypass callback release when the PaletteSet is absent or already hidden")
 
 unsubscribe = re.search(
     r"private static void UnsubscribeFromDocumentActivation\(\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*private static void OnDocumentActivated",
