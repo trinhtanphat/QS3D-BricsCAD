@@ -32,7 +32,7 @@ namespace QS3D.Core.Export
                 sourceRows.Add(sourceRow);
                 snapshot.Add(SnapshotRow(sourceRow, rowIndex));
             }
-            if (RequireConsistentKnownCount(rows, MaxDataRows, "export rows") != rowCount)
+            if (rows.Count != rowCount)
                 throw new InvalidOperationException("Door/opening XLSX export row count changed during snapshot.");
             for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
                 EnsureRowStable(sourceRows[rowIndex], snapshot[rowIndex], rowIndex);
@@ -105,7 +105,7 @@ namespace QS3D.Core.Export
                         "Door/opening XLSX " + label + " exceeds Excel's " + MaxCellTextLength + "-character cell text limit.");
                 target.Add(value);
             }
-            if (RequireConsistentKnownCount(source, MaxCellTextLength + 1, label) != count)
+            if (source.Count != count)
                 throw new InvalidOperationException("Door/opening XLSX " + label + " count changed during snapshot.");
         }
 
@@ -136,7 +136,7 @@ namespace QS3D.Core.Export
         {
             if (source == null)
                 throw new InvalidOperationException("Door/opening XLSX export row " + rowIndex + " field " + fieldName + " became unavailable during snapshot traversal.");
-            var sourceCount = RequireConsistentKnownCount(source, MaxCellTextLength + 1, fieldName);
+            var sourceCount = source.Count;
             if (sourceCount != snapshot.Count)
                 throw new InvalidOperationException("Door/opening XLSX export row " + rowIndex + " field " + fieldName + " count changed during snapshot traversal.");
             for (var index = 0; index < snapshot.Count; index++)
@@ -144,7 +144,7 @@ namespace QS3D.Core.Export
                 if (!string.Equals(source[index] ?? string.Empty, snapshot[index] ?? string.Empty, StringComparison.Ordinal))
                     throw new InvalidOperationException("Door/opening XLSX export row " + rowIndex + " field " + fieldName + " values changed during snapshot traversal.");
             }
-            if (RequireConsistentKnownCount(source, MaxCellTextLength + 1, fieldName) != sourceCount)
+            if (source.Count != sourceCount)
                 throw new InvalidOperationException("Door/opening XLSX export row " + rowIndex + " field " + fieldName + " count changed during snapshot traversal.");
         }
 
