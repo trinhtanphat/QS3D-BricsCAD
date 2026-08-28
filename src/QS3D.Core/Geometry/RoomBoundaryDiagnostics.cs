@@ -122,6 +122,7 @@ namespace QS3D.Core.Geometry
                 ThrowTooManySegments();
             if (knownCount.HasValue && segments.Count != knownCount.Value)
                 throw new InvalidOperationException("Room boundary diagnostic source known count does not match traversal.");
+            ValidateSourceProvenance(segments);
 
             var candidates = new RoomBoundaryEngine().Discover(segments, tolerance, 0d)
                 .OrderBy(x => x.Key, StringComparer.Ordinal)
@@ -203,6 +204,28 @@ namespace QS3D.Core.Geometry
                 conflictingKnownCounts = true;
             if (candidate > maximumKnownCount)
                 maximumKnownCount = candidate;
+        }
+
+        private static void ValidateSourceProvenance(IEnumerable<BoundarySegment> segments)
+        {
+            foreach (var segment in segments)
+            {
+                if (segment == null) continue;
+                var value = segment.SourceId ?? string.Empty;
+                for (var index = 0; index < value.Length; index++)
+                {
+                    if (char.IsHighSurrogate(value[index]))
+                    {
+                        if (index + 1 >= value.Length || !char.IsLowSurrogate(value[index + 1]))
+                            throw new ArgumentException("Room boundary diagnostic source provenance must not contain malformed UTF-16.", nameof(segments));
+                        index++;
+                        continue;
+                    }
+
+                    if (char.IsLowSurrogate(value[index]))
+                        throw new ArgumentException("Room boundary diagnostic source provenance must not contain malformed UTF-16.", nameof(segments));
+                }
+            }
         }
 
         private static void ThrowTooManySegments()
