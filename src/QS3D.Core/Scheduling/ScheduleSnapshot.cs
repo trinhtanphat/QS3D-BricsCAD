@@ -336,17 +336,13 @@ namespace QS3D.Core.Scheduling
 
         private static List<T> Snapshot<T>(IEnumerable<T> source, string parameterName, string collectionName) where T : class
         {
-            int? knownCount = null;
-            if (source is ICollection<T> collection)
-                ValidateKnownCount(collection.Count, ref knownCount, parameterName, collectionName);
-            if (source is IReadOnlyCollection<T> readOnlyCollection)
-                ValidateKnownCount(readOnlyCollection.Count, ref knownCount, parameterName, collectionName);
-            if (source is System.Collections.ICollection nonGenericCollection)
-                ValidateKnownCount(nonGenericCollection.Count, ref knownCount, parameterName, collectionName);
+            var knownCount = ReadKnownCount(source, parameterName, collectionName);
 
             var items = new List<T>();
             foreach (var item in source)
             {
+                if (knownCount.HasValue && items.Count >= knownCount.Value)
+                    throw CountChangedError(parameterName, collectionName);
                 if (items.Count >= MaximumEntries)
                     throw CollectionCountError(parameterName, collectionName);
                 if (item == null)
@@ -355,8 +351,28 @@ namespace QS3D.Core.Scheduling
             }
 
             if (knownCount.HasValue && knownCount.Value != items.Count)
-                throw new ArgumentException("Schedule " + collectionName + " count changed during enumeration.", parameterName);
+                throw CountChangedError(parameterName, collectionName);
+
+            var reboundCount = ReadKnownCount(source, parameterName, collectionName);
+            if (reboundCount.HasValue != knownCount.HasValue ||
+                (reboundCount.HasValue && reboundCount.Value != knownCount!.Value) ||
+                (reboundCount.HasValue && reboundCount.Value != items.Count))
+            {
+                throw CountChangedError(parameterName, collectionName);
+            }
             return items;
+        }
+
+        private static int? ReadKnownCount<T>(IEnumerable<T> source, string parameterName, string collectionName)
+        {
+            int? knownCount = null;
+            if (source is ICollection<T> collection)
+                ValidateKnownCount(collection.Count, ref knownCount, parameterName, collectionName);
+            if (source is IReadOnlyCollection<T> readOnlyCollection)
+                ValidateKnownCount(readOnlyCollection.Count, ref knownCount, parameterName, collectionName);
+            if (source is System.Collections.ICollection nonGenericCollection)
+                ValidateKnownCount(nonGenericCollection.Count, ref knownCount, parameterName, collectionName);
+            return knownCount;
         }
 
         private static void ValidateKnownCount(int count, ref int? knownCount, string parameterName, string collectionName)
@@ -368,6 +384,11 @@ namespace QS3D.Core.Scheduling
             if (knownCount.HasValue && knownCount.Value != count)
                 throw new ArgumentException("Schedule " + collectionName + " count contracts disagree.", parameterName);
             knownCount = count;
+        }
+
+        private static ArgumentException CountChangedError(string parameterName, string collectionName)
+        {
+            return new ArgumentException("Schedule " + collectionName + " count changed during enumeration.", parameterName);
         }
 
         private static ArgumentException CollectionCountError(string parameterName, string collectionName)
