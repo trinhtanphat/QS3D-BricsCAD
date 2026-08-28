@@ -137,6 +137,33 @@ namespace QS3D.Core.Cost
                 collectionLabel + " traversal produced " + observedCount +
                 " entries but its known count reported " + knownCount + ".");
         }
+
+        internal static void RequireKnownCountStableAfterTraversal<T>(
+            IEnumerable<T> items,
+            bool hadKnownCount,
+            int initialKnownCount,
+            int observedCount,
+            string collectionLabel)
+        {
+            RequireKnownCountMatchesTraversal(
+                hadKnownCount,
+                initialKnownCount,
+                observedCount,
+                collectionLabel);
+
+            if (!hadKnownCount)
+                return;
+
+            var hasCurrentKnownCount = TryGetKnownCount(items, out var currentKnownCount);
+            if (hasCurrentKnownCount && currentKnownCount > MaximumEntries)
+                ThrowTooManyEntries(collectionLabel);
+            if (!hasCurrentKnownCount || currentKnownCount != initialKnownCount)
+            {
+                throw new InvalidOperationException(
+                    collectionLabel + " known count changed during traversal from " + initialKnownCount +
+                    " to " + (hasCurrentKnownCount ? currentKnownCount.ToString() : "unavailable") + ".");
+            }
+        }
     }
 
     internal static class AdvancedCostTextContract
@@ -237,7 +264,8 @@ namespace QS3D.Core.Cost
                 snapshot.Add(component);
                 index++;
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                components,
                 hasKnownComponentCount,
                 knownComponentCount,
                 index,
@@ -351,7 +379,8 @@ namespace QS3D.Core.Cost
                 snapshot.Add(record);
                 index++;
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                records,
                 hasKnownRecordCount,
                 knownRecordCount,
                 index,
@@ -594,7 +623,8 @@ namespace QS3D.Core.Cost
                 byItem.Add(line.ItemCode, line);
                 index++;
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                lines,
                 hasKnownLineCount,
                 knownLineCount,
                 index,
@@ -734,7 +764,8 @@ namespace QS3D.Core.Cost
                 result.Add(requirement);
                 index++;
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                requirements,
                 hasKnownRequirementCount,
                 knownRequirementCount,
                 index,
@@ -766,7 +797,8 @@ namespace QS3D.Core.Cost
                 result.Add(bid);
                 index++;
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                bids,
                 hasKnownBidCount,
                 knownBidCount,
                 index,
@@ -912,7 +944,8 @@ namespace QS3D.Core.Cost
                 contracts.Add(item.ItemCode, item);
                 contractIndex++;
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                contractItems,
                 hasKnownContractCount,
                 knownContractCount,
                 contractIndex,
@@ -935,7 +968,8 @@ namespace QS3D.Core.Cost
                 claims.Add(line.ItemCode, line);
                 claimIndex++;
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                claimLines,
                 hasKnownClaimCount,
                 knownClaimCount,
                 claimIndex,
