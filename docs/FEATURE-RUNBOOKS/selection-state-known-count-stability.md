@@ -16,7 +16,7 @@ For a source exposing deterministic Count metadata, replacement is a two-phase c
 4. after traversal, preserve reentrant `SelectionState` freshness checks and reject under-yield against the admitted Count;
 5. re-read all supported Count surfaces post-traversal and fail closed when deterministic Count evidence changed or becomes negative/conflicting before publishing the replacement.
 
-No temporary replacement set is published and no `Changed` event is emitted after a cardinality/freshness failure.
+The first overrun item is the deterministic failure boundary: its value is never normalized or retained, and traversal must not advance to any later tail merely to discover a different exception. No temporary replacement set is published and no `Changed` event is emitted after a cardinality/freshness failure.
 
 ## Preserved behavior
 
