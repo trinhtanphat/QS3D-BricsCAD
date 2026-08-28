@@ -228,130 +228,19 @@ jobs:
           $cacheDir = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad'
           $msi = Join-Path $cacheDir 'BricsCAD-V25.2.10-x64.msi'
           $extract = Join-Path $env:RUNNER_TEMP 'BricsCAD-V25-admin'
-          $msiLog = Join-Path $env:RUNNER_TEMP 'BricsCAD-V25-admin.log'
-          New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
-          Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -LiteralPath $msiLog -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Path $extract -Force | Out-Null
-
-          $downloadedFrom = $null
-          if ((Test-Path -LiteralPath $msi -PathType Leaf) -and (Get-Item -LiteralPath $msi).Length -gt 1048576) {
-            $cachedHash = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash
-            if ([string]::Equals($cachedHash, $env:BRICSCAD_V25_PINNED_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)) {
-              $downloadedFrom = 'actions-cache'
-              Write-Host ("Restored verified-size BricsCAD V25 MSI candidate from Actions cache. SHA256=" + $cachedHash)
-            }
-            else {
-              Write-Warning ("Discarding cached BricsCAD V25 MSI with unexpected SHA256: " + $cachedHash)
-              Remove-Item -LiteralPath $msi -Force -ErrorAction SilentlyContinue
-            }
+          $bricsDir = (& .\scripts\acquire-v25-compile-references.ps1 `
+            -MsiPath $msi `
+            -ExtractDir $extract `
+            -ExpectedSha256 $env:BRICSCAD_V25_PINNED_MSI_SHA256 `
+            -MirrorUrl $env:BRICSCAD_V25_MIRROR_MSI_URL `
+            -PublicUrl $env:BRICSCAD_V25_PUBLIC_MSI_URL `
+            -FallbackUrl $env:BRICSCAD_V25_MSI_URL | Select-Object -Last 1)
+          if ([string]::IsNullOrWhiteSpace([string]$bricsDir)) {
+            throw 'Shared V25 compile-reference acquisition did not return the extracted runtime directory.'
           }
-
-          if ([string]::IsNullOrWhiteSpace($downloadedFrom)) {
-            $candidates = @(
-              [pscustomobject]@{ Name = 'pinned-official-primary'; Url = $env:BRICSCAD_V25_MIRROR_MSI_URL },
-              [pscustomobject]@{ Name = 'pinned-official-secondary'; Url = $env:BRICSCAD_V25_PUBLIC_MSI_URL }
-            )
-            if (-not [string]::IsNullOrWhiteSpace($env:BRICSCAD_V25_MSI_URL)) {
-              $candidates += [pscustomobject]@{ Name = 'signed-secret-fallback'; Url = $env:BRICSCAD_V25_MSI_URL }
-            }
-
-            foreach ($candidate in $candidates) {
-              Remove-Item -LiteralPath $msi -Force -ErrorAction SilentlyContinue
-              try {
-                Write-Host ("Downloading BricsCAD V25 installer from " + $candidate.Name + "...")
-                Invoke-WebRequest -Uri $candidate.Url -OutFile $msi -MaximumRedirection 10 -TimeoutSec 1200 -UseBasicParsing
-                if (-not (Test-Path -LiteralPath $msi -PathType Leaf) -or (Get-Item -LiteralPath $msi).Length -le 1048576) {
-                  Write-Warning ("BricsCAD V25 installer source returned an undersized file: " + $candidate.Name)
-                  continue
-                }
-                $candidateHash = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash
-                Write-Host ("Downloaded " + (Get-Item -LiteralPath $msi).Length + " bytes from " + $candidate.Name + ". SHA256=" + $candidateHash)
-                if (-not [string]::Equals($candidateHash, $env:BRICSCAD_V25_PINNED_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)) {
-                  Write-Warning ("BricsCAD V25 installer digest mismatch from " + $candidate.Name)
-                  continue
-                }
-                $downloadedFrom = $candidate.Name
-                break
-              }
-              catch {
-                Write-Warning ("BricsCAD V25 installer source failed: " + $candidate.Name + " • " + $_.Exception.Message)
-              }
-            }
-          }
-          if ([string]::IsNullOrWhiteSpace($downloadedFrom)) {
-            throw 'Unable to obtain the pinned BricsCAD V25.2.10 x64 installer from Actions cache, pinned official HTTPS sources, or configured signed HTTPS fallback.'
-          }
-
-          $actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash
-          Write-Host ("BricsCAD V25.2.10 MSI SHA256: " + $actual)
-          if (-not [string]::Equals($actual, $env:BRICSCAD_V25_PINNED_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)) {
-            throw "BricsCAD V25 MSI SHA-256 mismatch. Expected $env:BRICSCAD_V25_PINNED_MSI_SHA256, got $actual."
-          }
-
-          $signature = Get-AuthenticodeSignature -FilePath $msi
-          if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or -not $signature.SignerCertificate) {
-            throw "BricsCAD V25 MSI Authenticode signature is not valid: $($signature.Status)."
-          }
-          $signerSubject = [string]$signature.SignerCertificate.Subject
-          if ($signerSubject -notmatch '(^|,\s*)(CN|O)=Bricsys(,|$)') {
-            throw "BricsCAD V25 MSI signer is not Bricsys: $signerSubject"
-          }
-          Write-Host ("Verified installer signer: " + $signerSubject)
-
-          $installer = New-Object -ComObject WindowsInstaller.Installer
-          $database = $installer.OpenDatabase($msi, 0)
-          $versionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
-          $versionView.Execute()
-          $versionRecord = $versionView.Fetch()
-          $productVersion = if ($versionRecord) { [string]$versionRecord.StringData(1) } else { [string]::Empty }
-          if ($productVersion -notmatch '^25\.2\.10(?:\.|$)') {
-            throw "Downloaded MSI is not the pinned BricsCAD V25.2.10 product. ProductVersion=$productVersion"
-          }
-          $nameView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductName''')
-          $nameView.Execute()
-          $nameRecord = $nameView.Fetch()
-          $productName = if ($nameRecord) { [string]$nameRecord.StringData(1) } else { [string]::Empty }
-          if ($productName -notmatch 'BricsCAD') {
-            throw "Downloaded MSI ProductName is not BricsCAD: $productName"
-          }
-          Write-Host ("Verified MSI identity: " + $productName + " " + $productVersion)
-
-          $arguments = @('/a', ('"' + $msi + '"'), '/qn', '/norestart', ('TARGETDIR="' + $extract + '"'), 'REBOOT=ReallySuppress', '/L*v', ('"' + $msiLog + '"'))
-          Write-Host 'Starting BricsCAD V25 MSI administrative extraction (15-minute process timeout)...'
-          $process = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -PassThru
-          $exited = $process.WaitForExit(900000)
-          if (-not $exited) {
-            try { $process.Kill() } catch { }
-            Write-Warning 'BricsCAD V25 MSI administrative extraction timed out. MSI log tail follows.'
-            if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
-            throw 'BricsCAD V25 MSI administrative extraction timed out after 15 minutes.'
-          }
-          if ($process.ExitCode -notin @(0, 3010)) {
-            if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
-            throw "BricsCAD V25 MSI administrative extraction failed with exit code $($process.ExitCode)."
-          }
-          Write-Host ("BricsCAD V25 MSI administrative extraction completed with exit code " + $process.ExitCode + ".")
-
-          $brx = @(Get-ChildItem -LiteralPath $extract -Recurse -File -Filter 'BrxMgd.dll')
-          $td = @(Get-ChildItem -LiteralPath $extract -Recurse -File -Filter 'TD_Mgd.dll')
-          $brep = @(Get-ChildItem -LiteralPath $extract -Recurse -File -Filter 'TD_MgdBrep.dll')
-          if ($brx.Count -lt 1 -or $td.Count -lt 1 -or $brep.Count -lt 1) {
-            throw 'Could not locate BrxMgd.dll, TD_Mgd.dll, and TD_MgdBrep.dll in the extracted V25 installer.'
-          }
-
-          $candidateDirs = @($brx | ForEach-Object { $_.Directory.FullName } | Sort-Object -Unique)
-          $bricsDir = $candidateDirs | Where-Object {
-            (Test-Path -LiteralPath (Join-Path $_ 'BrxMgd.dll') -PathType Leaf) -and
-            (Test-Path -LiteralPath (Join-Path $_ 'TD_Mgd.dll') -PathType Leaf) -and
-            (Test-Path -LiteralPath (Join-Path $_ 'TD_MgdBrep.dll') -PathType Leaf)
-          } | Select-Object -First 1
-          if ([string]::IsNullOrWhiteSpace($bricsDir)) {
-            throw 'BrxMgd.dll, TD_Mgd.dll, and TD_MgdBrep.dll were not found together in one extracted V25 runtime directory.'
-          }
-
+          $bricsDir = ([string]$bricsDir).Trim()
           "BRICSCAD_V25_DIR=$bricsDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host ("V25 compile references resolved from " + $downloadedFrom + ".")
+          Write-Host 'V25 compile references resolved by shared hardened acquisition helper.'
 
       - name: Save BricsCAD V25 installer cache
         if: ${{ steps.bricscad-msi-cache.outputs.cache-hit != 'true' }}
