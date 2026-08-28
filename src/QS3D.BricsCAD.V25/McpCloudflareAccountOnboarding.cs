@@ -168,14 +168,26 @@ namespace QS3D.BricsCAD.V25
             var id = ReadText(TunnelIdPath);
             var hostname = McpCloudflareTunnelManager.NormalizeHostname(ReadText(HostnamePath));
             if (string.IsNullOrWhiteSpace(executable) || !IsUsableTunnelId(id)
-                || string.IsNullOrWhiteSpace(hostname) || !File.Exists(ConfigPath))
+                || string.IsNullOrWhiteSpace(hostname))
             {
                 error = "Named Tunnel chưa được cấu hình đầy đủ.";
                 return false;
             }
-            if (!File.Exists(Path.Combine(CloudflaredDirectory, id + ".json")))
+            var credentials = Path.Combine(CloudflaredDirectory, id + ".json");
+            if (!File.Exists(credentials))
             {
                 error = "Named Tunnel credentials không còn tồn tại. Hãy cấu hình lại tunnel.";
+                return false;
+            }
+            try
+            {
+                // Never trust a stale/mutated config.yml across restarts. Rebuild the exact
+                // hostname-scoped loopback ingress from validated saved identity every start.
+                WriteCanonicalConfig(id, hostname, credentials);
+            }
+            catch (Exception ex)
+            {
+                error = "Không ghi lại được Named Tunnel config an toàn: " + ex.Message;
                 return false;
             }
             McpCloudflareTunnelManager.StopForHostShutdown();
@@ -230,22 +242,44 @@ namespace QS3D.BricsCAD.V25
                 return false;
             }
 
-            Directory.CreateDirectory(SettingsDirectory);
-            var yamlCredentials = credentials.Replace('\\', '/').Replace("\"", "\\\"");
-            var config = "tunnel: " + tunnelId + "\r\n"
-                         + "credentials-file: \"" + yamlCredentials + "\"\r\n"
-                         + "ingress:\r\n"
-                         + "  - hostname: " + hostname + "\r\n"
-                         + "    service: " + OriginUrl + "\r\n"
-                         + "  - service: http_status:404\r\n";
-            File.WriteAllText(ConfigPath, config, new UTF8Encoding(false));
-            WriteText(TunnelIdPath, tunnelId);
-            WriteText(HostnamePath, hostname);
-            WriteText(AutoStartPath, "1");
+            try
+            {
+                WriteCanonicalConfig(tunnelId, hostname, credentials);
+                WriteText(TunnelIdPath, tunnelId);
+                WriteText(HostnamePath, hostname);
+                WriteText(AutoStartPath, "1");
+            }
+            catch (Exception ex)
+            {
+                error = "Không lưu được Named Tunnel config: " + ex.Message;
+                return false;
+            }
 
             McpCloudflareTunnelManager.StopForHostShutdown();
             StopProcess();
             return StartProcess(executable, "tunnel --config \"" + ConfigPath + "\" run " + tunnelId, out error);
+        }
+
+        private static void WriteCanonicalConfig(string tunnelId, string hostname, string credentials)
+        {
+            if (!IsUsableTunnelId(tunnelId)) throw new InvalidOperationException("Tunnel UUID không hợp lệ.");
+            var normalizedHostname = McpCloudflareTunnelManager.NormalizeHostname(hostname);
+            if (string.IsNullOrWhiteSpace(normalizedHostname)) throw new InvalidOperationException("Tunnel hostname không hợp lệ.");
+            var expectedCredentials = Path.Combine(CloudflaredDirectory, tunnelId + ".json");
+            if (string.IsNullOrWhiteSpace(credentials)
+                || !string.Equals(Path.GetFullPath(credentials), Path.GetFullPath(expectedCredentials), StringComparison.OrdinalIgnoreCase)
+                || !File.Exists(expectedCredentials))
+                throw new InvalidOperationException("Tunnel credential path không hợp lệ hoặc không tồn tại.");
+
+            Directory.CreateDirectory(SettingsDirectory);
+            var yamlCredentials = expectedCredentials.Replace('\\', '/').Replace("\"", "\\\"");
+            var config = "tunnel: " + tunnelId + "\r\n"
+                         + "credentials-file: \"" + yamlCredentials + "\"\r\n"
+                         + "ingress:\r\n"
+                         + "  - hostname: " + normalizedHostname + "\r\n"
+                         + "    service: " + OriginUrl + "\r\n"
+                         + "  - service: http_status:404\r\n";
+            File.WriteAllText(ConfigPath, config, new UTF8Encoding(false));
         }
 
         private static bool ResolveOrCreateTunnel(string executable, out string tunnelId, out string error)
