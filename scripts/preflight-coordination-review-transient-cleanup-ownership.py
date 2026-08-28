@@ -63,4 +63,31 @@ for token in ("_destroyed = true;", "_highlighted.Clear();", "_isolationActive =
     if token not in abandon:
         raise SystemExit(f"destroyed-document abandon path missing: {token}")
 
+session_start = text.find("private sealed class TransientReviewSession : IDisposable")
+if session_start < 0:
+    raise SystemExit("TransientReviewSession was not found")
+session = text[session_start:]
+if "private bool _disposeInProgress;" not in session:
+    raise SystemExit("TransientReviewSession must own an explicit dispose re-entry guard")
+dispose_start = session.find("public void Dispose()")
+dispose_end = session.find("private sealed class ViewSnapshot", dispose_start)
+if dispose_start < 0 or dispose_end < 0:
+    raise SystemExit("TransientReviewSession.Dispose boundary was not found")
+dispose = session[dispose_start:dispose_end]
+for token in (
+    "if (_disposed || _disposeInProgress) return;",
+    "_disposeInProgress = true;",
+    "ResetTransientStateBestEffort(true);",
+    "_disposed = true;",
+    "finally",
+    "_disposeInProgress = false;",
+):
+    if token not in dispose:
+        raise SystemExit(f"TransientReviewSession.Dispose missing retry-safe re-entry token: {token}")
+cleanup = dispose.find("ResetTransientStateBestEffort(true);")
+publish = dispose.find("_disposed = true;")
+release_guard = dispose.rfind("_disposeInProgress = false;")
+if not (0 <= cleanup < publish < release_guard):
+    raise SystemExit("TransientReviewSession may publish terminal disposal only after cleanup, before releasing the re-entry guard")
+
 print("PASS coordination review transient cleanup retry ownership")
