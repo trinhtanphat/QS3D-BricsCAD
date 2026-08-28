@@ -34,6 +34,7 @@ def require_before(text: str, first: str, second: str, label: str) -> None:
 
 
 def validate_helper(text: str) -> None:
+    component_guard = "Assert-NoExistingReparseComponent -Path $Path -Label $Label"
     for token in (
         "function Get-CanonicalAbsolutePath",
         ROOTED_TOKEN,
@@ -43,8 +44,8 @@ def validate_helper(text: str) -> None:
         "function Get-RequiredOrdinaryFile",
         "$item.PSIsContainer",
         "Assert-NoExistingReparseComponent -Path $canonicalDir -Label 'BricsCadDir'",
-        "Assert-NoExistingReparseComponent -Path $path -Label $name",
-        "Get-RequiredOrdinaryFile -Path $path -Label $name",
+        component_guard,
+        "Get-RequiredOrdinaryFile -Path $Path -Label $Label",
         "@('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')",
         "$version.FileMajorPart -ne 26",
         STATE_CAPTURE_TOKEN,
@@ -67,14 +68,14 @@ def validate_helper(text: str) -> None:
 
     require_before(
         text,
-        "Assert-NoExistingReparseComponent -Path $path -Label $name",
-        "Get-RequiredOrdinaryFile -Path $path -Label $name",
+        component_guard,
+        "Get-RequiredOrdinaryFile -Path $Path -Label $Label",
         "reparse check before ordinary-file trust",
     )
     require_before(
         text,
-        "Get-RequiredOrdinaryFile -Path $path -Label $name",
-        "$version = $required['bricscad.exe'].VersionInfo",
+        "Get-RequiredOrdinaryFile -Path $Path -Label $Label",
+        "$version = $versionFile.VersionInfo",
         "ordinary host files before version trust",
     )
     require_before(text, STATE_CAPTURE_TOKEN, STATE_ASSERT_TOKEN, "stable-state capture before revalidation")
