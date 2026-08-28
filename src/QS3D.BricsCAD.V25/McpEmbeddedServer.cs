@@ -698,8 +698,9 @@ namespace QS3D.BricsCAD.V25
 
         private static string ExtractToolName(string json)
         {
-            var paramsIndex = (json ?? string.Empty).IndexOf("\"params\"", StringComparison.OrdinalIgnoreCase);
-            return ExtractString(paramsIndex >= 0 ? json.Substring(paramsIndex) : json, "name");
+            var source = json ?? string.Empty;
+            var paramsIndex = source.IndexOf("\"params\"", StringComparison.OrdinalIgnoreCase);
+            return ExtractString(paramsIndex >= 0 ? source.Substring(paramsIndex) : source, "name");
         }
 
         private static string ExtractString(string json, string property)
