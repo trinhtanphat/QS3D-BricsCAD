@@ -4,7 +4,12 @@ namespace QS3D.Core.Services
 {
     internal static class QuantityMath
     {
-        public static double Positive(double value) => value > 0d && IsFinite(value) ? value : 0d;
+        public static double Positive(double value)
+        {
+            if (!IsFinite(value) || value < 0d)
+                throw new InvalidOperationException("Quantity value must be finite and non-negative.");
+            return value == 0d ? 0d : value;
+        }
 
         public static double Multiply(double left, double right, string label)
         {
