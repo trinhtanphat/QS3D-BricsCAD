@@ -22,16 +22,11 @@ def parity(staging, zipped):
     return dict(staged) == dict(archive)
 
 
-require(parity([("a.dll", "AA"), ("Samples/x.dxf", "BB")], [("a.dll", "AA"), ("Samples/x.dxf", "BB")]),
-        "ZIP/staging parity baseline must pass")
-require(not parity([("a.dll", "AA")], [("a.dll", "AA"), ("extra.txt", "CC")]),
-        "ZIP/staging parity must reject extra ZIP files")
-require(not parity([("a.dll", "AA"), ("README.txt", "BB")], [("a.dll", "AA")]),
-        "ZIP/staging parity must reject missing ZIP files")
-require(not parity([("a.dll", "AA")], [("a.dll", "AB")]),
-        "ZIP/staging parity must reject changed ZIP file content")
-require(not parity([("a.dll", "AA")], [("a.dll", "AA"), ("A.DLL", "AA")]),
-        "ZIP/staging parity must reject case-colliding ZIP paths")
+require(parity([("a.dll", "AA"), ("Samples/x.dxf", "BB")], [("a.dll", "AA"), ("Samples/x.dxf", "BB")]), "ZIP/staging parity baseline must pass")
+require(not parity([("a.dll", "AA")], [("a.dll", "AA"), ("extra.txt", "CC")]), "ZIP/staging parity must reject extra ZIP files")
+require(not parity([("a.dll", "AA"), ("README.txt", "BB")], [("a.dll", "AA")]), "ZIP/staging parity must reject missing ZIP files")
+require(not parity([("a.dll", "AA")], [("a.dll", "AB")]), "ZIP/staging parity must reject changed ZIP file content")
+require(not parity([("a.dll", "AA")], [("a.dll", "AA"), ("A.DLL", "AA")]), "ZIP/staging parity must reject case-colliding ZIP paths")
 
 if not MANIFEST.is_file():
     errors.append("missing scripts/new-v25-update-manifest.ps1")
@@ -41,7 +36,8 @@ else:
 
 required_tokens = (
     "function Get-ZipEntrySha256",
-    "Get-ChildItem -LiteralPath $PackageRoot -File -Recurse",
+    "Get-ChildItem -LiteralPath $PackageRoot.FullName -File -Recurse -Force",
+    "$safeStagedFile = Resolve-OrdinaryNonReparseFile -Path $stagedFile.FullName",
     "[Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)",
     "[Collections.Generic.Dictionary[string,System.IO.Compression.ZipArchiveEntry]]::new([StringComparer]::OrdinalIgnoreCase)",
     "Duplicate/case-colliding staged package path",
@@ -51,17 +47,21 @@ required_tokens = (
     "Get-ZipEntrySha256 -Entry $zipByName[$name]",
     "Package ZIP payload does not match signed staging file",
     "$zipByName.Count -ne $stagedByName.Count",
-    "Assert-AuthenticodeSigner -Path $destination",
+    "$verified = Resolve-OrdinaryNonReparseFile -Path $destination",
+    "Assert-AuthenticodeSigner -Path $verified.FullName",
 )
 for token in required_tokens:
     require(token in source, f"update-manifest ZIP parity guard missing token: {token}")
 
 if source:
-    parity_call = source.find("Assert-ZipPayloadMatchesSignedStaging -ZipPath $zip")
-    archive_hash = source.find("$zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()")
+    parity_call = source.find("Assert-ZipPayloadMatchesSignedStaging -ZipFile $zip -PackageRoot $package")
+    archive_hash = source.find("$zipHash = (Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256).Hash.ToUpperInvariant()")
     manifest_write = source.find("$manifest = [ordered]@{")
-    require(parity_call >= 0 and archive_hash >= 0 and manifest_write >= 0 and parity_call < archive_hash < manifest_write,
-            "full staging parity must succeed before the ZIP hash is published into the update manifest")
+    stage_write = source.find("[IO.File]::WriteAllText($stagePath")
+    require(
+        parity_call >= 0 and archive_hash >= 0 and manifest_write >= 0 and stage_write >= 0 and parity_call < archive_hash < manifest_write < stage_write,
+        "full ordinary-file staging parity must succeed before the ZIP hash is published into the atomically staged update manifest",
+    )
 
 if errors:
     print("Update ZIP staging parity preflight FAILED")
@@ -69,4 +69,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("Update ZIP staging parity preflight passed.")
+print("Update ZIP staging parity preflight passed with ordinary-file/reparse-safe staging traversal.")
