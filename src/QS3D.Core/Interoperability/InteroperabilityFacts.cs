@@ -445,53 +445,25 @@ namespace QS3D.Core.Interoperability
         {
             if (source == null) return Array.Empty<T>();
 
-            var hasKnownCount = TryGetKnownCount(source, out var knownCount);
-            if (hasKnownCount)
-            {
-                if (knownCount < 0)
-                    throw new InvalidOperationException("Interoperability element " + parameterName + " Count must not be negative.");
-                if (knownCount > MaxNestedItems)
-                    throw new InvalidOperationException("Interoperability element " + parameterName + " cannot exceed " + MaxNestedItems + " items.");
-            }
-
-            var items = hasKnownCount ? new List<T>(knownCount) : new List<T>();
+            var label = "Interoperability element " + parameterName;
+            var knownCount = InteroperabilityCollectionContract.ValidateKnownCount(source, MaxNestedItems, label);
+            var items = knownCount.HasValue ? new List<T>(knownCount.Value) : new List<T>();
             var observedCount = 0;
             foreach (var item in source)
             {
                 observedCount++;
                 if (observedCount > MaxNestedItems)
-                    throw new InvalidOperationException("Interoperability element " + parameterName + " cannot exceed " + MaxNestedItems + " items.");
+                    throw new InvalidOperationException(label + " cannot exceed " + MaxNestedItems + " items.");
                 items.Add(item);
             }
 
-            if (hasKnownCount)
-            {
-                if (!TryGetKnownCount(source, out var currentCount) ||
-                    currentCount != knownCount ||
-                    observedCount != knownCount)
-                {
-                    throw new InvalidOperationException(
-                        "Interoperability element " + parameterName + " Count changed while being materialized.");
-                }
-            }
-
+            InteroperabilityCollectionContract.ValidateCompletedTraversal(
+                source,
+                MaxNestedItems,
+                label,
+                knownCount,
+                observedCount);
             return Array.AsReadOnly(items.ToArray());
-        }
-
-        private static bool TryGetKnownCount<T>(IEnumerable<T> source, out int count)
-        {
-            switch (source)
-            {
-                case IReadOnlyCollection<T> readOnlyCollection:
-                    count = readOnlyCollection.Count;
-                    return true;
-                case ICollection<T> collection:
-                    count = collection.Count;
-                    return true;
-                default:
-                    count = 0;
-                    return false;
-            }
         }
     }
 
@@ -517,7 +489,11 @@ namespace QS3D.Core.Interoperability
             if (provenance == null) throw new ArgumentNullException(nameof(provenance));
             if (records == null) throw new ArgumentNullException(nameof(records));
 
-            var items = new List<InteroperabilityElementRecord>();
+            const string label = "Interoperability fact set records";
+            var knownCount = InteroperabilityCollectionContract.ValidateKnownCount(records, MaxRecords, label);
+            var items = knownCount.HasValue
+                ? new List<InteroperabilityElementRecord>(knownCount.Value)
+                : new List<InteroperabilityElementRecord>();
             foreach (var record in records)
             {
                 if (items.Count == MaxRecords)
@@ -529,6 +505,12 @@ namespace QS3D.Core.Interoperability
                 items.Add(record);
             }
 
+            InteroperabilityCollectionContract.ValidateCompletedTraversal(
+                records,
+                MaxRecords,
+                label,
+                knownCount,
+                items.Count);
             items.Sort((left, right) =>
                 StringComparer.Ordinal.Compare(left.Identity.SourceIdentityKey, right.Identity.SourceIdentityKey));
             return new InteroperabilityFactSet(provenance, Array.AsReadOnly(items.ToArray()));
@@ -574,6 +556,11 @@ namespace QS3D.Core.Interoperability
             var diagnostics = new List<InteroperabilityLossDiagnostic>();
             if (additionalDiagnostics != null)
             {
+                const string label = "Interoperability additional diagnostics";
+                var knownCount = InteroperabilityCollectionContract.ValidateKnownCount(
+                    additionalDiagnostics,
+                    MaxAdditionalDiagnostics,
+                    label);
                 var additionalCount = 0;
                 foreach (var diagnostic in additionalDiagnostics)
                 {
@@ -585,6 +572,12 @@ namespace QS3D.Core.Interoperability
                         throw new ArgumentException("Diagnostic collection cannot contain null entries.", nameof(additionalDiagnostics));
                     diagnostics.Add(diagnostic);
                 }
+                InteroperabilityCollectionContract.ValidateCompletedTraversal(
+                    additionalDiagnostics,
+                    MaxAdditionalDiagnostics,
+                    label,
+                    knownCount,
+                    additionalCount);
             }
 
             var seenSourceIdentities = new HashSet<string>(StringComparer.Ordinal);
@@ -670,6 +663,50 @@ namespace QS3D.Core.Interoperability
                 return StringComparer.Ordinal.Compare(left.Message, right.Message);
             });
             return Array.AsReadOnly(items.ToArray());
+        }
+    }
+
+    internal static class InteroperabilityCollectionContract
+    {
+        internal static int? ValidateKnownCount<T>(IEnumerable<T> source, int maximum, string label)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (maximum < 0) throw new ArgumentOutOfRangeException(nameof(maximum));
+
+            int? knownCount = null;
+            Observe(source is ICollection<T> collection ? collection.Count : (int?)null, maximum, label, ref knownCount);
+            Observe(source is IReadOnlyCollection<T> readOnlyCollection ? readOnlyCollection.Count : (int?)null, maximum, label, ref knownCount);
+            Observe(source is System.Collections.ICollection nonGenericCollection ? nonGenericCollection.Count : (int?)null, maximum, label, ref knownCount);
+            return knownCount;
+        }
+
+        internal static void ValidateCompletedTraversal<T>(
+            IEnumerable<T> source,
+            int maximum,
+            string label,
+            int? initialKnownCount,
+            int observedCount)
+        {
+            var finalKnownCount = ValidateKnownCount(source, maximum, label);
+            if (initialKnownCount.HasValue != finalKnownCount.HasValue ||
+                (initialKnownCount.HasValue && finalKnownCount!.Value != initialKnownCount.Value) ||
+                (initialKnownCount.HasValue && observedCount != initialKnownCount.Value))
+            {
+                throw new InvalidOperationException(
+                    label + " Count contract changed or did not match completed traversal cardinality.");
+            }
+        }
+
+        private static void Observe(int? count, int maximum, string label, ref int? knownCount)
+        {
+            if (!count.HasValue) return;
+            if (count.Value < 0)
+                throw new InvalidOperationException(label + " exposes an invalid negative Count.");
+            if (count.Value > maximum)
+                throw new InvalidOperationException(label + " cannot exceed " + maximum + " items.");
+            if (knownCount.HasValue && knownCount.Value != count.Value)
+                throw new InvalidOperationException(label + " exposes conflicting Count contracts.");
+            knownCount = count.Value;
         }
     }
 
