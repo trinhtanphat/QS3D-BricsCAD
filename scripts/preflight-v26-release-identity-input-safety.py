@@ -23,10 +23,11 @@ def validate_helper(text: str) -> list[str]:
         "$cursor.Attributes -band [IO.FileAttributes]::ReparsePoint",
         "Get-StreamingSha256",
         "[Security.Cryptography.SHA256]::Create()",
+        "$currentHash = Get-StreamingSha256 -File $current -Label $Label",
         "Get-StableFileState",
         "Assert-StableFileState",
         "LastWriteUtcTicks",
-        "Sha256 = $hash",
+        "Sha256 = $currentHash",
         "Read-BoundedStrictUtf8File",
         "[IO.File]::Open",
         "[IO.FileShare]::Read",
@@ -69,8 +70,10 @@ def validate_helper(text: str) -> list[str]:
     stable_capture = text.find("function Get-StableFileState")
     first_hash = text.find("Get-StreamingSha256 -File $file")
     second_resolve = text.find("$current = Resolve-OrdinaryNonReparseFile")
-    if min(stable_capture, first_hash, second_resolve) < 0 or not stable_capture < first_hash < second_resolve:
-        errors.append("V26 stable file-state capture must fingerprint then re-resolve the admitted ordinary file")
+    second_hash = text.find("$currentHash = Get-StreamingSha256 -File $current -Label $Label")
+    state_hash = text.find("Sha256 = $currentHash")
+    if min(stable_capture, first_hash, second_resolve, second_hash, state_hash) < 0 or not stable_capture < first_hash < second_resolve < second_hash < state_hash:
+        errors.append("V26 stable file-state capture must fingerprint, re-resolve, re-fingerprint, and publish the revalidated SHA-256 state")
 
     stability_assert = text.find("function Assert-StableFileState")
     actual_capture = text.find("$actual = Get-StableFileState", stability_assert)
@@ -140,6 +143,7 @@ helper_mutations = {
     "leaf reparse rejection": helper.replace("$item.Attributes -band [IO.FileAttributes]::ReparsePoint", "$item.Attributes -band [IO.FileAttributes]::Normal", 1),
     "parent reparse rejection": helper.replace("$cursor.Attributes -band [IO.FileAttributes]::ReparsePoint", "$cursor.Attributes -band [IO.FileAttributes]::Normal", 1),
     "streaming fingerprint": helper.replace("[Security.Cryptography.SHA256]::Create()", "[Security.Cryptography.MD5]::Create()", 1),
+    "revalidated fingerprint": helper.replace("$currentHash = Get-StreamingSha256 -File $current -Label $Label", "$currentHash = $hash", 1),
     "stable metadata capture": helper.replace("$metadataState = Get-StableFileState", "$metadataState = Resolve-OrdinaryNonReparseFile", 1),
     "stable plugin capture": helper.replace("$pluginState = Get-StableFileState", "$pluginState = Resolve-OrdinaryNonReparseFile", 1),
     "stable core capture": helper.replace("$coreState = Get-StableFileState", "$coreState = Resolve-OrdinaryNonReparseFile", 1),
