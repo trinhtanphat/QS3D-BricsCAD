@@ -239,7 +239,7 @@ namespace QS3D.Core.Scheduling
                 ScheduleContract.AddCompensated(QuantityLinks[i].AllocatedValue, ref sum, ref compensation);
             }
 
-            var total = sum + compensation;
+            var total = ScheduleContract.CompensatedTotal(sum, compensation);
             return total == 0d ? 0d : total;
         }
 
@@ -471,7 +471,7 @@ namespace QS3D.Core.Scheduling
                 }
 
                 ScheduleContract.AddCompensated(link.AllocatedValue, ref state.Sum, ref state.Compensation);
-                var allocated = state.Sum + state.Compensation;
+                var allocated = ScheduleContract.CompensatedTotal(state.Sum, state.Compensation);
                 if (allocated - state.MeasuredValue > ScheduleContract.NumericTolerance(state.MeasuredValue))
                     throw new ArgumentException("Schedule quantity allocation exceeds the frozen measured quantity.", nameof(links));
             }
@@ -570,11 +570,51 @@ namespace QS3D.Core.Scheduling
 
         internal static void AddCompensated(double value, ref double sum, ref double compensation)
         {
+            RequireFiniteAggregationState(value, sum, compensation);
+
             var next = sum + value;
-            compensation += Math.Abs(sum) >= Math.Abs(value)
+            if (!IsFinite(next))
+                throw NonFiniteAggregation();
+
+            var correction = Math.Abs(sum) >= Math.Abs(value)
                 ? (sum - next) + value
                 : (value - next) + sum;
+            if (!IsFinite(correction))
+                throw NonFiniteAggregation();
+
+            var nextCompensation = compensation + correction;
+            if (!IsFinite(nextCompensation))
+                throw NonFiniteAggregation();
+
             sum = next;
+            compensation = nextCompensation;
+            CompensatedTotal(sum, compensation);
+        }
+
+        internal static double CompensatedTotal(double sum, double compensation)
+        {
+            if (!IsFinite(sum) || !IsFinite(compensation))
+                throw NonFiniteAggregation();
+            var total = sum + compensation;
+            if (!IsFinite(total))
+                throw NonFiniteAggregation();
+            return total;
+        }
+
+        private static void RequireFiniteAggregationState(double value, double sum, double compensation)
+        {
+            if (!IsFinite(value) || !IsFinite(sum) || !IsFinite(compensation))
+                throw NonFiniteAggregation();
+        }
+
+        private static bool IsFinite(double value)
+        {
+            return !double.IsNaN(value) && !double.IsInfinity(value);
+        }
+
+        private static ArgumentException NonFiniteAggregation()
+        {
+            return new ArgumentException("Schedule compensated numeric aggregation must remain finite.");
         }
 
         internal static string Sha256(string value)
