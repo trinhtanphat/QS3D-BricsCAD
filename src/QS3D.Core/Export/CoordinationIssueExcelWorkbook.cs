@@ -27,6 +27,8 @@ namespace QS3D.Core.Export
         private const int MaxColumns = 16384;
         private const long MaxWorkbookBytes = 128L * 1024L * 1024L;
         private const long MaxXmlCharacters = 64L * 1024L * 1024L;
+        private const string WorksheetRelationshipTypeHttp = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
+        private const string WorksheetRelationshipTypeHttps = "https://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
         private static readonly XNamespace SpreadsheetNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
         private static readonly XNamespace RelationshipNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
         private static readonly XNamespace PackageRelationshipNs = "http://schemas.openxmlformats.org/package/2006/relationships";
@@ -253,12 +255,18 @@ namespace QS3D.Core.Export
         {
             var workbook = LoadXml(RequiredEntry(archive, "xl/workbook.xml"));
             var relationships = LoadXml(RequiredEntry(archive, "xl/_rels/workbook.xml.rels"));
-            var targets = new Dictionary<string, string>(StringComparer.Ordinal);
+            var relationshipsById = new Dictionary<string, List<XElement>>(StringComparer.Ordinal);
             foreach (var relationship in relationships.Root.Elements(PackageRelationshipNs + "Relationship"))
             {
                 var id = (string)relationship.Attribute("Id");
-                var target = (string)relationship.Attribute("Target");
-                if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(target)) targets[id] = target;
+                if (string.IsNullOrWhiteSpace(id)) continue;
+                List<XElement> matches;
+                if (!relationshipsById.TryGetValue(id, out matches))
+                {
+                    matches = new List<XElement>();
+                    relationshipsById.Add(id, matches);
+                }
+                matches.Add(relationship);
             }
 
             var result = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
@@ -266,16 +274,47 @@ namespace QS3D.Core.Export
             {
                 var name = (string)sheet.Attribute("name");
                 var relationshipId = (string)sheet.Attribute(RelationshipNs + "id");
-                string target;
-                if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(relationshipId) || !targets.TryGetValue(relationshipId, out target))
-                    throw new InvalidDataException("Coordination issue workbook sheet relationship is invalid.");
-                var normalized = target.Replace('\\', '/').TrimStart('/');
+                List<XElement> matches;
+                if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(relationshipId) ||
+                    !relationshipsById.TryGetValue(relationshipId, out matches) || matches.Count != 1)
+                    throw new InvalidDataException("Coordination issue workbook sheet relationship is missing or ambiguous.");
+
+                var relationship = matches[0];
+                var relationshipType = (string)relationship.Attribute("Type") ?? string.Empty;
+                if (!IsWorksheetRelationshipType(relationshipType))
+                    throw new InvalidDataException("Coordination issue workbook sheet relationship type is invalid.");
+
+                var targetMode = (string)relationship.Attribute("TargetMode") ?? string.Empty;
+                if (targetMode.Length != 0 && !string.Equals(targetMode, "Internal", StringComparison.Ordinal))
+                    throw new InvalidDataException("Coordination issue workbook sheet relationship must be internal.");
+
+                var target = (string)relationship.Attribute("Target");
+                if (string.IsNullOrWhiteSpace(target))
+                    throw new InvalidDataException("Coordination issue workbook sheet relationship target is invalid.");
+                var normalized = target.Replace('\\', '/');
+                if (ContainsParentTraversal(normalized))
+                    throw new InvalidDataException("Coordination issue workbook sheet relationship target contains parent traversal.");
+                normalized = normalized.TrimStart('/');
                 if (!normalized.StartsWith("xl/", StringComparison.OrdinalIgnoreCase)) normalized = "xl/" + normalized;
                 var entry = RequiredEntry(archive, normalized);
                 if (result.ContainsKey(name)) throw new InvalidDataException("Coordination issue workbook contains duplicate sheet name: " + name + ".");
                 result.Add(name, entry);
             }
             return result;
+        }
+
+        private static bool IsWorksheetRelationshipType(string relationshipType)
+        {
+            return string.Equals(relationshipType, WorksheetRelationshipTypeHttp, StringComparison.Ordinal) ||
+                   string.Equals(relationshipType, WorksheetRelationshipTypeHttps, StringComparison.Ordinal);
+        }
+
+        private static bool ContainsParentTraversal(string target)
+        {
+            var segments = target.Split('/');
+            for (var i = 0; i < segments.Length; i++)
+                if (string.Equals(segments[i], "..", StringComparison.Ordinal)) return true;
+            return false;
         }
 
         private static List<IReadOnlyList<string>> ReadRows(ZipArchiveEntry sheet, IReadOnlyList<string> sharedStrings)
