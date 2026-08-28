@@ -124,10 +124,19 @@ namespace QS3D.BricsCAD.V25.Updates
             root.Children.Add(actions);
 
             Content = root;
-            UpdateCoordinator.Instance.StateChanged += OnStateChanged;
-            _coordinatorAttached = true;
             Closed += (_, __) => DetachCoordinator();
-            Apply(UpdateCoordinator.Instance.LastResult);
+
+            try
+            {
+                UpdateCoordinator.Instance.StateChanged += OnStateChanged;
+                _coordinatorAttached = true;
+                Apply(UpdateCoordinator.Instance.LastResult);
+            }
+            catch
+            {
+                DetachCoordinator();
+                throw;
+            }
         }
 
         internal void Apply(UpdateCheckResult? result)
@@ -399,11 +408,11 @@ namespace QS3D.BricsCAD.V25.Updates
             chrome.SetValue(Border.PaddingProperty, new Thickness(14, 0, 14, 0));
             chrome.SetValue(UIElement.SnapsToDevicePixelsProperty, true);
 
-            var content = new FrameworkElementFactory(typeof(ContentPresenter));
-            content.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
-            content.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
-            content.SetValue(ContentPresenter.RecognizesAccessKeyProperty, true);
-            chrome.AppendChild(content);
+            var contentPresenter = new FrameworkElementFactory(typeof(ContentPresenter));
+            contentPresenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            contentPresenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            contentPresenter.SetValue(ContentPresenter.RecognizesAccessKeyProperty, true);
+            chrome.AppendChild(contentPresenter);
 
             var template = new ControlTemplate(typeof(Button)) { VisualTree = chrome };
 
