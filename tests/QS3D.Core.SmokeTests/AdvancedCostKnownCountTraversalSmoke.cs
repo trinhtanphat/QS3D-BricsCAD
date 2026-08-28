@@ -21,6 +21,7 @@ namespace QS3D.Core.SmokeTests
             TenderBidRejectsKnownCountTraversalMismatch();
             TenderEvaluationRejectsRequirementAndBidCountMismatch();
             ProgressEvaluationRejectsContractAndClaimCountMismatch();
+            KnownCountOverrunPrecedesUnexpectedItemSemanticValidation();
             ExactKnownCountAndPureStreamingRemainAccepted();
             SemanticValidationStillPrecedesPostTraversalMismatch();
         }
@@ -171,6 +172,72 @@ namespace QS3D.Core.SmokeTests
                     new[] { Contract(0), Contract(1) },
                     new MisreportedReadOnlyCollection<ProgressClaimLine>(1, Claim(0), Claim(1))),
                 "Progress claim over-yield must reject a Count/traversal mismatch.");
+        }
+
+        private static void KnownCountOverrunPrecedesUnexpectedItemSemanticValidation()
+        {
+            AssertCountMismatch(
+                () => BuildUp(new MisreportedReadOnlyCollection<CostResourceComponent>(1, Component(0), null!)),
+                "Build-up must reject known-count overrun before validating the unexpected component.");
+            AssertCountMismatch(
+                () => new HistoricalCostCatalog(
+                    new MisreportedReadOnlyCollection<HistoricalCostRecord>(1, Historical(0), null!)),
+                "Historical catalog must reject known-count overrun before validating the unexpected record.");
+
+            var references = new RateReferenceGraph(Array.Empty<RateReferenceEdge>());
+            AssertCountMismatch(
+                () => new BuildUpAnalysisService().Analyze(
+                    new MisreportedReadOnlyCollection<BuildUpRateSnapshot>(1, BuildUpRate(0), null!),
+                    references,
+                    adoptedOnly: false),
+                "Build-up analysis must reject known-count overrun before validating the unexpected rate.");
+            AssertCountMismatch(
+                () => new TradeCostAnalysisService().Analyze(
+                    new MisreportedReadOnlyCollection<TradeCostItem>(1, TradeItem(0), null!),
+                    1m),
+                "Trade analysis must reject known-count overrun before validating the unexpected item.");
+            AssertCountMismatch(
+                () => new BqLibraryCatalog(
+                    "LIB-EARLY",
+                    new MisreportedReadOnlyCollection<BqLibraryEntry>(1, BqEntry(0), null!)),
+                "BQ library must reject known-count overrun before validating the unexpected entry.");
+
+            var importBase = new BqLibraryCatalog("LIB-EARLY-IMPORT", new[] { BqEntry(0) });
+            AssertCountMismatch(
+                () => importBase.ImportFromProject(
+                    new MisreportedReadOnlyCollection<BqLibraryEntry>(1, BqEntry(1), null!),
+                    replaceExisting: false),
+                "BQ import must reject known-count overrun before validating the unexpected entry.");
+            AssertCountMismatch(
+                () => Bid(
+                    "BID-EARLY",
+                    new MisreportedReadOnlyCollection<TenderQuoteLine>(1, Quote(0), null!)),
+                "Tender bid must reject known-count overrun before validating the unexpected quote line.");
+
+            var validBid = Bid("BID-EARLY-VALID", new[] { Quote(0), Quote(1) });
+            var tender = new TenderEvaluationService();
+            AssertCountMismatch(
+                () => tender.Evaluate(
+                    new MisreportedReadOnlyCollection<TenderRequirement>(1, Requirement(0), null!),
+                    new[] { validBid }),
+                "Tender requirements must reject known-count overrun before validating the unexpected requirement.");
+            AssertCountMismatch(
+                () => tender.Evaluate(
+                    new[] { Requirement(0), Requirement(1) },
+                    new MisreportedReadOnlyCollection<TenderBid>(1, validBid, null!)),
+                "Tender bids must reject known-count overrun before validating the unexpected bid.");
+
+            var progress = new ProgressClaimService();
+            AssertCountMismatch(
+                () => progress.Evaluate(
+                    new MisreportedReadOnlyCollection<ProgressContractItem>(1, Contract(0), null!),
+                    Array.Empty<ProgressClaimLine>()),
+                "Progress contracts must reject known-count overrun before validating the unexpected contract item.");
+            AssertCountMismatch(
+                () => progress.Evaluate(
+                    new[] { Contract(0), Contract(1) },
+                    new MisreportedReadOnlyCollection<ProgressClaimLine>(1, Claim(0), null!)),
+                "Progress claims must reject known-count overrun before validating the unexpected claim line.");
         }
 
         private static void ExactKnownCountAndPureStreamingRemainAccepted()
