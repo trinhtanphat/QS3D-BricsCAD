@@ -14,6 +14,8 @@ namespace QS3D.Core.SmokeTests
         {
             SelectedSetRejectsUnderAndOverYield();
             ActiveSetRejectsUnderAndOverYield();
+            ActiveOverYieldFailsAtFirstUnexpectedItem();
+            SelectedOverYieldRemainsCardinalityOnlyAfterKnownCount();
             ExactKnownCountsRemainAccepted();
             SelectedCapacityPreflightStillPrecedesEnumeration();
         }
@@ -40,6 +42,42 @@ namespace QS3D.Core.SmokeTests
                 new MisreportedSet<string>(1, "ROOM-1", "ROOM-2"),
                 new MisreportedSet<string>(0),
                 "Active-room over-yield must reject advertised Count/traversal disagreement.");
+        }
+
+        private static void ActiveOverYieldFailsAtFirstUnexpectedItem()
+        {
+            var active = new CountingMisreportedSet<string>(1, "ROOM-1", "ROOM-2", "ROOM-3");
+            var error = Capture<InvalidOperationException>(() =>
+                AutoRoomLifecycle.MarkStaleForSelection(
+                    new ProjectState("P-AUTOROOM-ACTIVE-EARLY", "Auto Room Active Early Smoke"),
+                    active,
+                    new MisreportedSet<string>(0),
+                    string.Empty,
+                    string.Empty,
+                    UtcNow));
+
+            Contains("known count reported 1", error.Message,
+                "Active-room over-yield must fail on the first unexpected item.");
+            Equal(2, active.MoveNextCalls,
+                "Active-room over-yield must stop immediately after enumerating item knownCount + 1.");
+        }
+
+        private static void SelectedOverYieldRemainsCardinalityOnlyAfterKnownCount()
+        {
+            var selected = new CountingMisreportedSet<string>(1, "A", "B", "C");
+            var error = Capture<InvalidOperationException>(() =>
+                AutoRoomLifecycle.MarkStaleForSelection(
+                    new ProjectState("P-AUTOROOM-SELECTED-DRIFT", "Auto Room Selected Drift Smoke"),
+                    new MisreportedSet<string>(0),
+                    selected,
+                    string.Empty,
+                    string.Empty,
+                    UtcNow));
+
+            Contains("known count reported 1", error.Message,
+                "Selected-source in-bound over-yield must still reject Count/traversal disagreement.");
+            Equal(4, selected.MoveNextCalls,
+                "Selected-source Count drift must remain a cardinality-only traversal so the independent hard bound can still win if crossed.");
         }
 
         private static void ExactKnownCountsRemainAccepted()
@@ -155,6 +193,61 @@ namespace QS3D.Core.SmokeTests
                     yield return _items[i];
             }
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class CountingMisreportedSet<T> : ISet<T>
+        {
+            private readonly T[] _items;
+            private readonly HashSet<T> _delegate;
+
+            internal CountingMisreportedSet(int advertisedCount, params T[] items)
+            {
+                Count = advertisedCount;
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+                _delegate = new HashSet<T>(_items);
+            }
+
+            public int Count { get; }
+            public bool IsReadOnly => true;
+            internal int MoveNextCalls { get; private set; }
+
+            public IEnumerator<T> GetEnumerator() => new CountingEnumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class CountingEnumerator : IEnumerator<T>
+            {
+                private readonly CountingMisreportedSet<T> _owner;
+                private int _index = -1;
+
+                internal CountingEnumerator(CountingMisreportedSet<T> owner) { _owner = owner; }
+                public T Current => _owner._items[_index];
+                object IEnumerator.Current => Current!;
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    _index++;
+                    return _index < _owner._items.Length;
+                }
+                public void Reset() { _index = -1; }
+                public void Dispose() { }
+            }
+
+            public bool Add(T item) => throw new NotSupportedException();
+            void ICollection<T>.Add(T item) => throw new NotSupportedException();
+            public void ExceptWith(IEnumerable<T> other) => throw new NotSupportedException();
+            public void IntersectWith(IEnumerable<T> other) => throw new NotSupportedException();
+            public bool IsProperSubsetOf(IEnumerable<T> other) => _delegate.IsProperSubsetOf(other);
+            public bool IsProperSupersetOf(IEnumerable<T> other) => _delegate.IsProperSupersetOf(other);
+            public bool IsSubsetOf(IEnumerable<T> other) => _delegate.IsSubsetOf(other);
+            public bool IsSupersetOf(IEnumerable<T> other) => _delegate.IsSupersetOf(other);
+            public bool Overlaps(IEnumerable<T> other) => _delegate.Overlaps(other);
+            public bool SetEquals(IEnumerable<T> other) => _delegate.SetEquals(other);
+            public void SymmetricExceptWith(IEnumerable<T> other) => throw new NotSupportedException();
+            public void UnionWith(IEnumerable<T> other) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(T item) => _delegate.Contains(item);
+            public void CopyTo(T[] array, int arrayIndex) => _delegate.CopyTo(array, arrayIndex);
+            public bool Remove(T item) => throw new NotSupportedException();
         }
 
         private sealed class ThrowingSet<T> : ISet<T>
