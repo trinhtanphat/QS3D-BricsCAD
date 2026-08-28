@@ -38,6 +38,9 @@ namespace QS3D.Core.Diagnostics
             {
                 while (enumerator.MoveNext())
                 {
+                    if (expectedKnownCount.HasValue && result.Count >= expectedKnownCount.Value)
+                        throw new InvalidOperationException(
+                            "Health summary traversal produced more diagnostic issues than its known count of " + expectedKnownCount.Value + ".");
                     if (result.Count >= MaxIssueCount)
                         throw new InvalidOperationException("Health summary supports at most " + MaxIssueCount + " diagnostic issues.");
                     result.Add(enumerator.Current);
@@ -46,6 +49,14 @@ namespace QS3D.Core.Diagnostics
 
             if (expectedKnownCount.HasValue && result.Count != expectedKnownCount.Value)
                 throw new InvalidOperationException("Health summary known issue count does not match enumerated issue count.");
+
+            var finalKnownCount = RequireKnownCountsWithinLimit(issues);
+            if (expectedKnownCount.HasValue != finalKnownCount.HasValue ||
+                (expectedKnownCount.HasValue && expectedKnownCount.Value != finalKnownCount!.Value))
+                throw new InvalidOperationException(
+                    "Health summary known issue count changed during traversal from " +
+                    (expectedKnownCount.HasValue ? expectedKnownCount.Value.ToString() : "<none>") + " to " +
+                    (finalKnownCount.HasValue ? finalKnownCount.Value.ToString() : "<none>") + ".");
 
             return result;
         }
