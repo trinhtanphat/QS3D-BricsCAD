@@ -10,7 +10,10 @@ smoke = SMOKE.read_text(encoding="utf-8")
 
 required_source = [
     "var knownCount = SnapshotKnownCount(source, parameterName, label);",
+    "using (var enumerator = source.GetEnumerator())",
+    "while (enumerator.MoveNext())",
     "knownCount.HasValue && result.Count >= knownCount.Value",
+    "var item = enumerator.Current;",
     "var postTraversalKnownCount = SnapshotKnownCount(source, parameterName, label);",
     "known count changed during traversal",
     "private static int? SnapshotKnownCount<T>",
@@ -32,15 +35,16 @@ missing += [token for token in required_smoke if token not in smoke]
 if missing:
     raise SystemExit("Progress snapshot Count-stability preflight missing contract tokens: " + ", ".join(missing))
 
-# Ordering matters: admitted known Count must reject the unexpected traversal item
-# before streaming ceiling/null semantics and before retention.
-loop = source.index("foreach (var item in source)")
+# Ordering matters: MoveNext may expose the existence of an unexpected item, but
+# admitted known Count must reject it before Current, null semantics or retention.
+loop = source.index("while (enumerator.MoveNext())")
 overrun = source.index("knownCount.HasValue && result.Count >= knownCount.Value", loop)
 limit = source.index("result.Count == MaximumEntries", loop)
+current = source.index("var item = enumerator.Current;", loop)
 null_check = source.index("item == null", loop)
 retain = source.index("result.Add(item)", loop)
-if not (loop < overrun < limit < null_check < retain):
-    raise SystemExit("Progress snapshot Count overrun guard must precede streaming/null/retention semantics")
+if not (loop < overrun < limit < current < null_check < retain):
+    raise SystemExit("Progress snapshot Count overrun guard must precede Current/streaming-null-retention semantics")
 
 post = source.index("var postTraversalKnownCount = SnapshotKnownCount(source, parameterName, label);")
 return_result = source.index("return result;", post)
