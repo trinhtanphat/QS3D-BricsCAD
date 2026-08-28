@@ -76,7 +76,7 @@ namespace QS3D.Core.Diagnostics
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (issues == null) throw new ArgumentNullException(nameof(issues));
-            return new ModelHealthBaseline(project.ProjectId, Unique(issues));
+            return new ModelHealthBaseline(project.ProjectId, Unique(MaterializeIssues(issues)));
         }
 
         public ModelHealthBaselineDiff Compare(ModelHealthBaseline before, ModelHealthBaseline after)
@@ -92,6 +92,63 @@ namespace QS3D.Core.Diagnostics
             var resolved = beforeIndex.Where(x => !afterIndex.ContainsKey(x.Key)).Select(x => x.Value);
             var persistent = afterIndex.Where(x => beforeIndex.ContainsKey(x.Key)).Select(x => x.Value);
             return new ModelHealthBaselineDiff(before.ProjectId, added, resolved, persistent);
+        }
+
+        private static IReadOnlyList<ModelHealthIssue> MaterializeIssues(IEnumerable<ModelHealthIssue> issues)
+        {
+            var expectedKnownCount = RequireKnownCountsWithinLimit(issues);
+            var result = new List<ModelHealthIssue>(Math.Min(expectedKnownCount ?? 256, 256));
+
+            using (var enumerator = issues.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= HealthSummary.MaxIssueCount)
+                        throw new InvalidOperationException("Model health baseline supports at most " + HealthSummary.MaxIssueCount + " diagnostic issues.");
+
+                    var issue = enumerator.Current;
+                    if (issue == null)
+                        throw new InvalidOperationException("Model health baseline cannot contain a null diagnostic issue.");
+                    if (!Enum.IsDefined(typeof(HealthSeverity), issue.Severity))
+                        throw new InvalidOperationException("Model health baseline contains an undefined severity: " + (int)issue.Severity + ".");
+                    result.Add(issue);
+                }
+            }
+
+            if (expectedKnownCount.HasValue && result.Count != expectedKnownCount.Value)
+                throw new InvalidOperationException("Model health baseline known issue count does not match enumerated issue count.");
+
+            return result.AsReadOnly();
+        }
+
+        private static int? RequireKnownCountsWithinLimit(IEnumerable<ModelHealthIssue> issues)
+        {
+            var counts = new List<int>(3);
+            if (issues is ICollection<ModelHealthIssue> collection) counts.Add(collection.Count);
+            if (issues is IReadOnlyCollection<ModelHealthIssue> readOnlyCollection) counts.Add(readOnlyCollection.Count);
+            if (issues is System.Collections.ICollection nonGenericCollection) counts.Add(nonGenericCollection.Count);
+
+            if (counts.Count == 0) return null;
+
+            var expected = counts[0];
+            var maximum = expected;
+            var hasNegative = expected < 0;
+            var hasConflict = false;
+            for (var i = 1; i < counts.Count; i++)
+            {
+                if (counts[i] < 0) hasNegative = true;
+                if (counts[i] != expected) hasConflict = true;
+                if (counts[i] > maximum) maximum = counts[i];
+            }
+
+            if (maximum > HealthSummary.MaxIssueCount)
+                throw new InvalidOperationException("Model health baseline supports at most " + HealthSummary.MaxIssueCount + " diagnostic issues.");
+            if (hasNegative)
+                throw new InvalidOperationException("Model health baseline received an invalid negative known issue count.");
+            if (hasConflict)
+                throw new InvalidOperationException("Model health baseline received conflicting known issue counts.");
+
+            return expected;
         }
 
         private static IReadOnlyList<ModelHealthIssue> Unique(IEnumerable<ModelHealthIssue> issues)

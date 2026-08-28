@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -18,8 +19,7 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            var rowCount = rows.Count;
-            if (rowCount > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Room-finish XLSX export supports at most " + MaxDataRows + " data rows.");
+            var rowCount = RequireConsistentKnownCount(rows, MaxDataRows, "export rows");
             var snapshot = new List<RoomFinishScheduleRow>(rowCount);
             for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
             {
@@ -69,6 +69,31 @@ namespace QS3D.Core.Export
                 AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
             }
             finally { AtomicFileCommit.TryDelete(tempPath); }
+        }
+
+        private static int RequireConsistentKnownCount<T>(IEnumerable<T> source, int maximum, string label)
+        {
+            int? expected = null;
+            Action<int> bind = count =>
+            {
+                if (count < 0)
+                    throw new ArgumentOutOfRangeException("rows", "Room-finish XLSX " + label + " count must be non-negative.");
+                if (count > maximum)
+                    throw new ArgumentOutOfRangeException("rows", "Room-finish XLSX " + label + " count exceeds the supported maximum of " + maximum + ".");
+                if (expected.HasValue && expected.Value != count)
+                    throw new InvalidOperationException("Room-finish XLSX " + label + " exposes conflicting known collection counts.");
+                expected = count;
+            };
+
+            var readOnly = source as IReadOnlyCollection<T>;
+            if (readOnly != null) bind(readOnly.Count);
+            var generic = source as ICollection<T>;
+            if (generic != null) bind(generic.Count);
+            var nonGeneric = source as ICollection;
+            if (nonGeneric != null) bind(nonGeneric.Count);
+            if (!expected.HasValue)
+                throw new ArgumentException("Room-finish XLSX " + label + " must expose a deterministic collection count.", "rows");
+            return expected.Value;
         }
 
         private static RoomFinishScheduleRow SnapshotRow(RoomFinishScheduleRow source, int rowIndex)
