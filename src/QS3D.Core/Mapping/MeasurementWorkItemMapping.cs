@@ -94,6 +94,9 @@ namespace QS3D.Core.Mapping
             var index = 0;
             foreach (var mapping in mappings)
             {
+                if (knownCount.HasValue && index >= knownCount.Value)
+                    throw new InvalidOperationException(
+                        "Measurement/work-item mapping source known Count does not match completed traversal cardinality.");
                 if (index == MaximumEntries)
                     throw new InvalidOperationException("Measurement/work-item mapping catalog supports at most " + MaximumEntries + " entries.");
                 if (mapping == null)
