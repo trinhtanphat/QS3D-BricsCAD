@@ -21,4 +21,10 @@
       </Reference>
     </ItemGroup>
   </Target>
+
+  <Target Name="QS3DRevalidateStableV25CompileReferences"
+          AfterTargets="ResolveAssemblyReferences"
+          Condition="'$(MSBuildProjectName)' == 'QS3D.BricsCAD.V25' and '$(DesignTimeBuild)' != 'true' and '$(BRICSCAD_V25_DIR)' != ''">
+    <Exec Command="powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)scripts\assert-v25-compile-reference-state.ps1&quot; -StatePath &quot;$(QS3DV25ReferenceStatePath)&quot; -BricsCadDir &quot;$(QS3DV25ReferenceSnapshotDir)&quot;" />
+  </Target>
 </Project>
