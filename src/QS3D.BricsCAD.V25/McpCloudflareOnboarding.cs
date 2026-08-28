@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using Bricscad.ApplicationServices;
 using Application = Bricscad.ApplicationServices.Application;
 using Teigha.Runtime;
@@ -375,6 +376,8 @@ namespace QS3D.BricsCAD.V25
         private readonly TextBox _hostname = new TextBox { Margin = new Thickness(0, 4, 0, 8) };
         private readonly PasswordBox _token = new PasswordBox { Margin = new Thickness(0, 4, 0, 8) };
         private readonly TextBlock _status = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 8) };
+        private DispatcherTimer? _quickUrlTimer;
+        private int _quickUrlPollTicks;
 
         public McpCloudflareSetupWindow()
         {
@@ -382,9 +385,10 @@ namespace QS3D.BricsCAD.V25
             Width = 620;
             Height = 480;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            Closed += (_, __) => StopQuickUrlPolling();
             var panel = new StackPanel { Margin = new Thickness(18) };
             panel.Children.Add(new TextBlock { Text = "Luồng mặc định nên dùng Cài đặt MCP -> Đăng nhập Cloudflare. Màn hình này chỉ dành cho Quick Tunnel hoặc token nâng cao.", TextWrapping = TextWrapping.Wrap });
-            panel.Children.Add(Button("Cài Cloudflare Tunnel", (_, __) => McpCloudflareTunnelManager.OpenCloudflaredDownloadPage()));
+            panel.Children.Add(Button("Cài / cập nhật Cloudflare Tunnel tự động", (_, __) => InstallCloudflared()));
             panel.Children.Add(Button("Mở Cloudflare Dashboard", (_, __) => McpCloudflareTunnelManager.OpenCloudflareTunnelDashboard()));
             panel.Children.Add(new TextBlock { Text = "Hostname (token mode):" });
             panel.Children.Add(_hostname);
@@ -392,7 +396,7 @@ namespace QS3D.BricsCAD.V25
             panel.Children.Add(_token);
             panel.Children.Add(Button("Lưu + chạy token tunnel", (_, __) => SaveAndStart()));
             panel.Children.Add(Button("Quick Tunnel (chỉ test)", (_, __) => StartQuick()));
-            panel.Children.Add(Button("Dừng tunnel", (_, __) => { McpCloudflareTunnelManager.Stop(); Refresh(); }));
+            panel.Children.Add(Button("Dừng tunnel", (_, __) => { StopQuickUrlPolling(); McpCloudflareTunnelManager.Stop(); Refresh(); }));
             panel.Children.Add(Button("Mở ChatGPT", (_, __) => McpCloudflareTunnelManager.OpenChatGpt()));
             panel.Children.Add(_status);
             panel.Children.Add(Button("Đóng", (_, __) => Close()));
@@ -407,8 +411,33 @@ namespace QS3D.BricsCAD.V25
             return button;
         }
 
+        private void InstallCloudflared()
+        {
+            if (McpCloudflaredBootstrapper.IsInstalling)
+            {
+                _status.Text = "Cloudflare Tunnel đang được tải/cài.";
+                return;
+            }
+            _status.Text = "Đang tải cloudflared chính thức và kiểm tra Authenticode...";
+            McpCloudflaredBootstrapper.BeginInstall((ok, message) =>
+            {
+                try
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _status.Text = message;
+                        Refresh();
+                        if (!ok)
+                            MessageBox.Show(message, "QS3D MCP", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }));
+                }
+                catch { }
+            });
+        }
+
         private void SaveAndStart()
         {
+            StopQuickUrlPolling();
             string error;
             if (!McpCloudflareTunnelManager.SaveNamedTunnelSettings(_hostname.Text, _token.Password, out error)
                 || !McpCloudflareTunnelManager.StartNamedTunnel(out error))
@@ -420,8 +449,45 @@ namespace QS3D.BricsCAD.V25
         {
             string error;
             if (!McpCloudflareTunnelManager.StartQuickTunnel(out error))
+            {
+                StopQuickUrlPolling();
                 MessageBox.Show(error, "QS3D MCP", MessageBoxButton.OK, MessageBoxImage.Warning);
+                Refresh();
+                return;
+            }
+            StartQuickUrlPolling();
             Refresh();
+        }
+
+        private void StartQuickUrlPolling()
+        {
+            StopQuickUrlPolling();
+            _quickUrlPollTicks = 0;
+            _quickUrlTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+            {
+                Interval = TimeSpan.FromMilliseconds(500)
+            };
+            _quickUrlTimer.Tick += QuickUrlTimerOnTick;
+            _quickUrlTimer.Start();
+        }
+
+        private void QuickUrlTimerOnTick(object? sender, EventArgs e)
+        {
+            _quickUrlPollTicks++;
+            Refresh();
+            if (!string.IsNullOrWhiteSpace(McpCloudflareTunnelManager.PublicMcpUrl)
+                || !McpCloudflareTunnelManager.IsRunning
+                || _quickUrlPollTicks >= 20)
+                StopQuickUrlPolling();
+        }
+
+        private void StopQuickUrlPolling()
+        {
+            var timer = _quickUrlTimer;
+            _quickUrlTimer = null;
+            if (timer == null) return;
+            timer.Stop();
+            timer.Tick -= QuickUrlTimerOnTick;
         }
 
         private void Refresh() => _status.Text = McpCloudflareTunnelManager.Describe();
