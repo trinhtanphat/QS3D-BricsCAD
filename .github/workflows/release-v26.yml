@@ -120,6 +120,7 @@ jobs:
       - name: Validate BricsCAD V26 references and .NET 8 host
         shell: powershell
         run: |
+          # The shared helper validates bricscad.exe, BrxMgd.dll, TD_Mgd.dll, and TD_MgdBrep.dll as ordinary non-reparse files and enforces FileMajorPart -ne 26 rejection.
           & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR | Out-Null
           if (@(dotnet --list-runtimes | Where-Object { $_ -match '^Microsoft\.WindowsDesktop\.App 8\.' }).Count -eq 0) {
             throw ".NET 8 Windows Desktop Runtime is required for the V26 managed host."
