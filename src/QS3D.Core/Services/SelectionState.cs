@@ -29,6 +29,9 @@ namespace QS3D.Core.Services
             var inputCount = 0;
             foreach (var raw in ids)
             {
+                if (knownCount.HasValue && inputCount >= knownCount.Value)
+                    throw new InvalidOperationException(
+                        "Semantic selection traversal produced more entries than its known Count of " + knownCount.Value + ".");
                 if (inputCount >= MaxInputCount)
                     throw new InvalidOperationException("Semantic selection cannot exceed " + MaxInputCount + " input entries.");
                 inputCount++;
@@ -42,6 +45,15 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException(
                     "Semantic selection known Count reported " + knownCount.Value +
                     " entries but traversal produced " + inputCount + ".");
+
+            var finalKnownCount = ResolveKnownCount(ids);
+            if (knownCount.HasValue != finalKnownCount.HasValue ||
+                (knownCount.HasValue && knownCount.Value != finalKnownCount!.Value))
+                throw new InvalidOperationException(
+                    "Semantic selection known Count changed during traversal from " +
+                    (knownCount.HasValue ? knownCount.Value.ToString() : "<none>") + " to " +
+                    (finalKnownCount.HasValue ? finalKnownCount.Value.ToString() : "<none>") + ".");
+
             if (_ids.SetEquals(next)) return;
 
             var nextVersion = checked(_changeVersion + 1L);
