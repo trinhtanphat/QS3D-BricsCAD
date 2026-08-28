@@ -91,6 +91,23 @@ function Assert-SafeExistingOutputLeaf {
     return $true
 }
 
+function Remove-SafeChecksumLeaf {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Label
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    [void](Resolve-OrdinaryNonReparseFile -Path $Path -Label $Label)
+    Remove-Item -LiteralPath $Path -Force -ErrorAction Stop
+}
+
 $package = Resolve-OrdinaryNonReparseFile -Path $PackagePath -Label 'V26 package ZIP'
 if (-not [string]::Equals($package.Name, $script:ExpectedPackageName, [StringComparison]::Ordinal)) {
     throw "V26 checksum source must be named $($script:ExpectedPackageName): $($package.Name)"
@@ -131,7 +148,8 @@ $recordBytes = [Text.Encoding]::ASCII.GetBytes($record + [Environment]::NewLine)
 $nonce = [Guid]::NewGuid().ToString('N')
 $tempPath = [IO.Path]::Combine($outputParent.FullName, ([IO.Path]::GetFileName($outputFullPath) + ".tmp-$nonce"))
 $backupPath = [IO.Path]::Combine($outputParent.FullName, ([IO.Path]::GetFileName($outputFullPath) + ".bak-$nonce"))
-$published = $false
+$publicationStarted = $false
+$publicationCommitted = $false
 
 try {
     if (Test-Path -LiteralPath $tempPath) { throw "Refusing to reuse checksum staging path: $tempPath" }
@@ -143,35 +161,59 @@ try {
         throw 'V26 checksum staging file length changed before publication.'
     }
 
+    # Revalidate the output parent immediately before the publication mutation.
+    $outputParent = Resolve-OrdinaryNonReparseDirectory -Path $outputParentPath -Label 'V26 checksum destination parent before publication'
     if ($hadExistingOutput) {
+        [void](Assert-SafeExistingOutputLeaf -Path $outputFullPath)
         [IO.File]::Replace($tempPath, $outputFullPath, $backupPath, $true)
     }
     else {
+        if (Test-Path -LiteralPath $outputFullPath) {
+            throw "V26 checksum destination appeared after preflight validation: $outputFullPath"
+        }
         [IO.File]::Move($tempPath, $outputFullPath)
     }
-    $published = $true
+    $publicationStarted = $true
 
+    # Publication is not committed until the exact destination is revalidated and
+    # its bytes match the staged canonical record. Any failure before this point
+    # must restore the prior destination (or remove a newly-created destination).
     $publishedItem = Resolve-OrdinaryNonReparseFile -Path $outputFullPath -Label 'Published V26 checksum'
     $publishedText = [IO.File]::ReadAllText($publishedItem.FullName, [Text.Encoding]::ASCII).TrimEnd("`r", "`n")
     if (-not [string]::Equals($publishedText, $record, [StringComparison]::Ordinal)) {
         throw 'Published V26 checksum bytes do not match the computed canonical record.'
     }
+    $publicationCommitted = $true
 }
 catch {
-    if (-not $published -and (Test-Path -LiteralPath $backupPath)) {
-        if (Test-Path -LiteralPath $outputFullPath) {
-            Remove-Item -LiteralPath $outputFullPath -Force -ErrorAction Stop
+    $publicationFailure = $_
+    if ($publicationStarted -and -not $publicationCommitted) {
+        try {
+            [void](Resolve-OrdinaryNonReparseDirectory -Path $outputParentPath -Label 'V26 checksum rollback parent')
+            if ($hadExistingOutput) {
+                $backup = Resolve-OrdinaryNonReparseFile -Path $backupPath -Label 'V26 checksum rollback backup'
+                if (Test-Path -LiteralPath $outputFullPath) {
+                    [void](Assert-SafeExistingOutputLeaf -Path $outputFullPath)
+                    Remove-Item -LiteralPath $outputFullPath -Force -ErrorAction Stop
+                }
+                [IO.File]::Move($backup.FullName, $outputFullPath)
+                [void](Resolve-OrdinaryNonReparseFile -Path $outputFullPath -Label 'Restored V26 checksum destination')
+            }
+            elseif (Test-Path -LiteralPath $outputFullPath) {
+                [void](Assert-SafeExistingOutputLeaf -Path $outputFullPath)
+                Remove-Item -LiteralPath $outputFullPath -Force -ErrorAction Stop
+            }
         }
-        [IO.File]::Move($backupPath, $outputFullPath)
+        catch {
+            throw "V26 checksum publication failed and rollback could not safely restore the pre-publication state. Publication failure: $($publicationFailure.Exception.Message) Rollback failure: $($_.Exception.Message)"
+        }
     }
-    throw
+    throw $publicationFailure
 }
 finally {
-    if (Test-Path -LiteralPath $tempPath) {
-        Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
-    }
-    if (Test-Path -LiteralPath $backupPath) {
-        Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
+    Remove-SafeChecksumLeaf -Path $tempPath -Label 'V26 checksum staging residue'
+    if ($publicationCommitted) {
+        Remove-SafeChecksumLeaf -Path $backupPath -Label 'V26 checksum committed backup residue'
     }
 }
 
