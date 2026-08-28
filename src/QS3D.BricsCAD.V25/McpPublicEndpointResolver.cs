@@ -17,14 +17,14 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 value = NormalizeCandidate(McpCloudflareAccountTunnelManager.PublicMcpUrl);
-                if (!string.IsNullOrWhiteSpace(value)) return value;
+                if (!string.IsNullOrWhiteSpace(value)) return Publish(value);
             }
             catch { }
 
             try
             {
                 value = NormalizeCandidate(McpCloudflareTunnelManager.PublicMcpUrl);
-                if (!string.IsNullOrWhiteSpace(value)) return value;
+                if (!string.IsNullOrWhiteSpace(value)) return Publish(value);
             }
             catch { }
 
@@ -62,6 +62,18 @@ namespace QS3D.BricsCAD.V25
                 Fragment = string.Empty
             };
             return builder.Uri.AbsoluteUri.TrimEnd('/');
+        }
+
+        private static string Publish(string value)
+        {
+            try
+            {
+                var current = Environment.GetEnvironmentVariable(PublicUrlEnvironment) ?? string.Empty;
+                if (!string.Equals(current, value, StringComparison.Ordinal))
+                    Environment.SetEnvironmentVariable(PublicUrlEnvironment, value, EnvironmentVariableTarget.Process);
+            }
+            catch { }
+            return value;
         }
     }
 }
