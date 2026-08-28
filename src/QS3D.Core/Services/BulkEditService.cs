@@ -241,6 +241,7 @@ namespace QS3D.Core.Services
             var inputCount = 0;
             foreach (var element in elements)
             {
+                RequireCanObserveNext(knownCount, inputCount, "Bulk edit target collection");
                 if (inputCount >= MaxTargetInputCount)
                     throw new InvalidOperationException("Bulk edit target collection cannot exceed " + MaxTargetInputCount + " input entries.");
                 inputCount++;
@@ -281,7 +282,6 @@ namespace QS3D.Core.Services
                     throw new InvalidOperationException("Project contains duplicate family id: " + id + ".");
                 result.Add(id, family);
             }
-            return result;
         }
 
         private static void RequireFamilyOwnershipUnchanged(
@@ -375,6 +375,7 @@ namespace QS3D.Core.Services
             var inputCount = 0;
             foreach (var value in values)
             {
+                RequireCanObserveNext(knownCount, inputCount, label);
                 if (inputCount >= MaxTargetInputCount)
                     throw new InvalidOperationException(label + " cannot exceed " + MaxTargetInputCount + " input entries.");
                 inputCount++;
@@ -410,6 +411,12 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException(label + " reports an invalid negative input count.");
             if (count.Value > MaxTargetInputCount)
                 throw new InvalidOperationException(label + " cannot exceed " + MaxTargetInputCount + " input entries.");
+        }
+
+        private static void RequireCanObserveNext(int? knownCount, int observedCount, string label)
+        {
+            if (knownCount.HasValue && observedCount >= knownCount.Value)
+                throw new InvalidOperationException(label + " input count changed during enumeration.");
         }
 
         private static void RequireObservedCount(int? knownCount, int observedCount, string label)
