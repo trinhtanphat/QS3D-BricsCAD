@@ -6,10 +6,15 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpEmbeddedServer.cs"
 ACCOUNT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareAccountOnboarding.cs"
 FALLBACK = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareOnboarding.cs"
+AGENT_CENTER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpAgentControlCenter.cs"
+BOOTSTRAPPER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflaredBootstrapper.cs"
+PUBLIC_ENDPOINT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpPublicEndpointResolver.cs"
+RIBBON_OVERRIDE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "McpRibbonCommandOverride.cs"
 
 
 def main() -> int:
-    for path in (SERVER, ACCOUNT, FALLBACK):
+    paths = (SERVER, ACCOUNT, FALLBACK, AGENT_CENTER, BOOTSTRAPPER, PUBLIC_ENDPOINT, RIBBON_OVERRIDE)
+    for path in paths:
         if not path.is_file():
             print("ERROR: missing", path.relative_to(ROOT))
             return 1
@@ -17,6 +22,10 @@ def main() -> int:
     text = SERVER.read_text(encoding="utf-8")
     account = ACCOUNT.read_text(encoding="utf-8")
     fallback = FALLBACK.read_text(encoding="utf-8")
+    agent_center = AGENT_CENTER.read_text(encoding="utf-8")
+    bootstrapper = BOOTSTRAPPER.read_text(encoding="utf-8")
+    endpoint = PUBLIC_ENDPOINT.read_text(encoding="utf-8")
+    ribbon_override = RIBBON_OVERRIDE.read_text(encoding="utf-8")
     errors: list[str] = []
 
     required = {
@@ -111,8 +120,68 @@ def main() -> int:
         errors.append("browser-login named tunnel does not stop fallback tunnel before start")
     if fallback.count("McpCloudflareAccountTunnelManager.StopForHostShutdown();") < 2:
         errors.append("token/Quick fallback does not stop browser-login tunnel before start")
-    if "process.WaitForExit();" not in account:
-        errors.append("browser-login cloudflared command output is not drained before process disposal")
+    if "BeginOutputReadLine" not in account or "BeginErrorReadLine" not in account or "process.WaitForExit();" not in account:
+        errors.append("browser-login cloudflared command output is not asynchronously drained before process disposal")
+    if "ingress:" not in account or "http_status:404" not in account:
+        errors.append("browser-login named tunnel lacks hostname-scoped ingress + fail-closed 404 rule")
+
+    # The normal non-technical path is one Agent Center: install, login/setup, copy/open, self-test,
+    # emergency stop/cancel/resume. It must not ask users to invoke a shell.
+    center_required = (
+        '[CommandMethod("QS3DMCPAGENTCENTER"',
+        "McpCloudflaredBootstrapper.BeginInstall",
+        "McpCloudflareAccountSetupWindow",
+        "McpPublicEndpointResolver.Resolve()",
+        "RunReadOnlySelfTest",
+        'InvokeControlTool("cad_agent_stop"',
+        'InvokeControlTool("cad_cancel_command"',
+        'InvokeControlTool("cad_agent_resume"',
+        "OpenChatGpt",
+    )
+    for token in center_required:
+        if token not in agent_center:
+            errors.append(f"Agent Center missing click-first capability: {token}")
+    for forbidden in ("powershell.exe", "cmd.exe"):
+        if forbidden in agent_center:
+            errors.append(f"Agent Center exposes forbidden shell dependency: {forbidden}")
+
+    # A one-click bootstrap may download cloudflared, but the executable is accepted only after
+    # Windows trust verification and Cloudflare signer identity, with rollback on replacement failure.
+    bootstrap_required = (
+        "cloudflared-windows-amd64.exe",
+        "WinVerifyTrust",
+        "CreateFromSignedFile",
+        "Cloudflare",
+        'PathEnvironment = "QS3D_CLOUDFLARED_PATH"',
+        "backupCreated",
+        "ProviderFlags = 0",
+    )
+    for token in bootstrap_required:
+        if token not in bootstrapper:
+            errors.append(f"verified cloudflared bootstrap missing: {token}")
+
+    # A single resolver prevents the setup wizard, dashboard and ChatGPT copy helpers from
+    # presenting different or unsafe public endpoints.
+    endpoint_required = (
+        "McpCloudflareAccountTunnelManager.PublicMcpUrl",
+        "McpCloudflareTunnelManager.PublicMcpUrl",
+        "Uri.UriSchemeHttps",
+        "uri.IsLoopback",
+        'path = "/mcp"',
+    )
+    for token in endpoint_required:
+        if token not in endpoint:
+            errors.append(f"public MCP endpoint contract missing: {token}")
+
+    # Ribbon settings/dashboard both land in the unified center; docs/check remain focused actions.
+    for token in (
+        '[Prefix + "MCP_SETTINGS"] = "QS3DMCPAGENTCENTER"',
+        '[Prefix + "AI_DASHBOARD"] = "QS3DMCPAGENTCENTER"',
+        '[Prefix + "MCP_DOCS"] = "QS3DMCPDOCSHTTP"',
+        '[Prefix + "MCP_CONNECTION"] = "QS3DMCPCHECKHTTP"',
+    ):
+        if token not in ribbon_override:
+            errors.append(f"Ribbon MCP route missing: {token}")
 
     if errors:
         print("Full MCP CAD agent preflight FAILED:")
@@ -125,7 +194,9 @@ def main() -> int:
         "allowlisted advanced command workflows, foreground-process-confined SendInput, "
         "emergency stop/resume with ESC fallback, idle/status observation, rotating local "
         "audit evidence, bounded HTTP/session handling, mutually-exclusive Cloudflare tunnel "
-        "modes and mutation confirmation without arbitrary shell execution."
+        "modes, verified one-click cloudflared bootstrap, unified click-first Agent Center, "
+        "single HTTPS public endpoint resolution and mutation confirmation without arbitrary "
+        "shell execution."
     )
     return 0
 
