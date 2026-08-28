@@ -476,7 +476,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void HandleRunLine(string? line, bool stderr)
         {
-            if (string.IsNullOrWhiteSpace(line)) return;
+            if (line == null || string.IsNullOrWhiteSpace(line)) return;
             var clean = line.Trim();
             if (clean.Length > 500) clean = clean.Substring(0, 500);
             lock (Sync)
