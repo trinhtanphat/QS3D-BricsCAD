@@ -57,6 +57,10 @@ namespace QS3D.Core.Cost
             var index = 0;
             foreach (var edge in edges)
             {
+                if (knownCount.HasValue && index == knownCount.Value)
+                    throw new ArgumentException(
+                        "Rate reference edge collection contains more entries than its known count.",
+                        nameof(edges));
                 if (index == MaximumEdges)
                     ThrowTooManyEdges();
                 if (edge == null)
@@ -71,6 +75,8 @@ namespace QS3D.Core.Cost
                 throw new ArgumentException(
                     "Rate reference edge collection known count does not match the observed traversal.",
                     nameof(edges));
+            if (knownCount.HasValue)
+                RequireKnownCountStableAfterTraversal(edges, knownCount.Value);
             snapshot.Sort(CompareEdges);
             _edges = new ReadOnlyCollection<RateReferenceEdge>(snapshot.ToArray());
         }
@@ -139,6 +145,17 @@ namespace QS3D.Core.Cost
             if (hasConflict)
                 throw new ArgumentException("Rate reference edge collection reports conflicting known counts.", nameof(edges));
             return expected;
+        }
+
+        private static void RequireKnownCountStableAfterTraversal(
+            IEnumerable<RateReferenceEdge> edges,
+            int admittedKnownCount)
+        {
+            var reboundKnownCount = ValidateKnownCount(edges);
+            if (!reboundKnownCount.HasValue || reboundKnownCount.Value != admittedKnownCount)
+                throw new ArgumentException(
+                    "Rate reference edge collection known count changed during traversal.",
+                    nameof(edges));
         }
 
         private static int CompareEdges(RateReferenceEdge left, RateReferenceEdge right)
