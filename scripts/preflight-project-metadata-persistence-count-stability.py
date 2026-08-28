@@ -39,10 +39,14 @@ if smoke.is_file():
         "GenericCountDriftFailsAtomically",
         "ReadOnlyCountDriftFailsAtomically",
         "NonGenericCountDriftFailsAtomically",
+        "PostTraversalNegativeCountFailsAtomically",
+        "PostTraversalConflictingCountFailsAtomically",
         "StableCountedInputPublishes",
         "PureStreamingInputPublishes",
         "AssertSeedUnchanged",
         "Project metadata persistence input Count changed during traversal.",
+        "Project metadata persistence input exposes an invalid negative Count.",
+        "Project metadata persistence input exposes conflicting Count contracts.",
     ):
         if token not in text:
             errors.append("project-metadata Count-stability smoke missing regression token: " + token)
