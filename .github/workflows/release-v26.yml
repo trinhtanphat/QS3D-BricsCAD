@@ -120,13 +120,8 @@ jobs:
       - name: Validate BricsCAD V26 references and .NET 8 host
         shell: powershell
         run: |
-          if (-not $env:BRICSCAD_V26_DIR) { throw "BRICSCAD_V26_DIR repository variable is not set." }
-          foreach ($name in @('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')) {
-            $path = Join-Path $env:BRICSCAD_V26_DIR $name
-            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required BricsCAD V26 runtime file is missing: $name" }
-          }
-          $version = (Get-Item -LiteralPath (Join-Path $env:BRICSCAD_V26_DIR 'bricscad.exe')).VersionInfo
-          if ($version.FileMajorPart -ne 26) { throw "BRICSCAD_V26_DIR is not V26. Detected $($version.FileVersion)." }
+          # The shared helper validates bricscad.exe, BrxMgd.dll, TD_Mgd.dll, and TD_MgdBrep.dll as ordinary non-reparse files and enforces FileMajorPart -ne 26 rejection.
+          & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR | Out-Null
           if (@(dotnet --list-runtimes | Where-Object { $_ -match '^Microsoft\.WindowsDesktop\.App 8\.' }).Count -eq 0) {
             throw ".NET 8 Windows Desktop Runtime is required for the V26 managed host."
           }
