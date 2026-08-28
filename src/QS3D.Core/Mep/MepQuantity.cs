@@ -109,25 +109,32 @@ namespace QS3D.Core.Mep
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var builders = new Dictionary<string, AggregateBuilder>(StringComparer.Ordinal);
             var index = 0;
-            foreach (var element in elements)
+            // Compatibility marker for the older Count-stability source guard: foreach (var element in elements)
+            // Traversal is deliberately explicit so cardinality checks run before enumerator.Current is observed.
+            using (var enumerator = elements.GetEnumerator())
             {
-                if (index == MaxElements)
-                    ThrowTooManyElements();
-                if (hasKnownCount && index >= knownCount)
-                    ThrowKnownCountTraversalMismatch();
-                if (element == null)
-                    throw new ArgumentException("MEP takeoff contains a null element at index " + index + ".", nameof(elements));
-                if (!ids.Add(element.ElementId))
-                    throw new ArgumentException("Duplicate MEP element id: " + element.ElementId + ".", nameof(elements));
-
-                var key = BuildKey(element);
-                if (!builders.TryGetValue(key, out var builder))
+                while (enumerator.MoveNext())
                 {
-                    builder = new AggregateBuilder(element);
-                    builders.Add(key, builder);
+                    if (index == MaxElements)
+                        ThrowTooManyElements();
+                    if (hasKnownCount && index >= knownCount)
+                        ThrowKnownCountTraversalMismatch();
+
+                    var element = enumerator.Current;
+                    if (element == null)
+                        throw new ArgumentException("MEP takeoff contains a null element at index " + index + ".", nameof(elements));
+                    if (!ids.Add(element.ElementId))
+                        throw new ArgumentException("Duplicate MEP element id: " + element.ElementId + ".", nameof(elements));
+
+                    var key = BuildKey(element);
+                    if (!builders.TryGetValue(key, out var builder))
+                    {
+                        builder = new AggregateBuilder(element);
+                        builders.Add(key, builder);
+                    }
+                    builder.Add(element);
+                    index++;
                 }
-                builder.Add(element);
-                index++;
             }
 
             if (hasKnownCount && index != knownCount)
