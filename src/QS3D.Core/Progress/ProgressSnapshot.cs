@@ -434,15 +434,20 @@ namespace QS3D.Core.Progress
             var knownCount = SnapshotKnownCount(source, parameterName, label);
 
             var result = new List<T>();
-            foreach (var item in source)
+            using (var enumerator = source.GetEnumerator())
             {
-                if (knownCount.HasValue && result.Count >= knownCount.Value)
-                    throw CountMismatch(knownCount.Value, result.Count + 1, parameterName, label);
-                if (result.Count == MaximumEntries)
-                    throw TooMany(parameterName, label);
-                if (item == null)
-                    throw new ArgumentException(label + " cannot contain null entries.", parameterName);
-                result.Add(item);
+                while (enumerator.MoveNext())
+                {
+                    if (knownCount.HasValue && result.Count >= knownCount.Value)
+                        throw CountMismatch(knownCount.Value, result.Count + 1, parameterName, label);
+                    if (result.Count == MaximumEntries)
+                        throw TooMany(parameterName, label);
+
+                    var item = enumerator.Current;
+                    if (item == null)
+                        throw new ArgumentException(label + " cannot contain null entries.", parameterName);
+                    result.Add(item);
+                }
             }
             if (knownCount.HasValue && knownCount.Value != result.Count)
                 throw CountMismatch(knownCount.Value, result.Count, parameterName, label);
