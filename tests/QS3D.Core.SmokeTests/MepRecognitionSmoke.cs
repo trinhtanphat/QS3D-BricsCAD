@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             RecognitionInputBounds();
+            RecognitionTextIntegrity();
             DefaultProfilePriorityAndCase();
             BlockNameRecognition();
             ExplicitPriority();
@@ -67,6 +68,57 @@ namespace QS3D.Core.SmokeTests
             True(
                 infiniteRules.MoveNextCalls <= MepRecognitionLimits.MaxRules + 1,
                 "infinite rule input must stop at the first disallowed element");
+        }
+
+        private static void RecognitionTextIntegrity()
+        {
+            ArgumentContains(
+                () => new MepRecognitionRule(
+                    "bad-id-\ud800",
+                    10,
+                    MepRecognitionDiscipline.Structure,
+                    "Structure",
+                    new[] { "STRUCT" }),
+                "well-formed UTF-16",
+                "lone high surrogate recognition rule id");
+
+            ArgumentContains(
+                () => new MepRecognitionRule(
+                    "bad-category",
+                    10,
+                    MepRecognitionDiscipline.Structure,
+                    "Structure\udc00",
+                    new[] { "STRUCT" }),
+                "well-formed UTF-16",
+                "lone low surrogate recognition category");
+
+            ArgumentContains(
+                () => new MepRecognitionRule(
+                    "bad-token",
+                    10,
+                    MepRecognitionDiscipline.Structure,
+                    "Structure",
+                    new[] { "DUCT\ud800X" }),
+                "well-formed UTF-16",
+                "broken surrogate pair recognition token");
+
+            var supplementary = char.ConvertFromUtf32(0x1F6A7);
+            var rule = new MepRecognitionRule(
+                "valid-" + supplementary,
+                10,
+                MepRecognitionDiscipline.Mep,
+                "Pipe-" + supplementary,
+                new[] { "PIPE-" + supplementary },
+                MepRecognitionSource.Layer,
+                MepElementKind.Pipe);
+            Equal("valid-" + supplementary, rule.Id, "supplementary rule id preservation");
+            Equal("Pipe-" + supplementary, rule.Category, "supplementary category preservation");
+            Equal("PIPE-" + supplementary, rule.Tokens[0], "supplementary token preservation");
+
+            var result = new MepRecognitionProfile(new[] { rule }).Recognize("SERVICE-PIPE-" + supplementary, null);
+            Equal(MepRecognitionStatus.Matched, result.Status, "supplementary recognition status");
+            Equal("Pipe-" + supplementary, result.Category, "supplementary recognition category");
+            Equal("valid-" + supplementary, result.MatchedRuleIds[0], "supplementary recognition rule identity");
         }
 
         private static MepRecognitionRule BuildingRule(string id, IEnumerable<string> tokens) =>
