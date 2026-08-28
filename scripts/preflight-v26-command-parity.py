@@ -85,10 +85,11 @@ for linked_source in LINKED_V25_UPDATE_SOURCES:
 
 for token in (
     "function Add-CommandMethodsFromSource",
+    "function Get-SafeSourceFiles",
     "$_ .Name -ne 'PluginEntry.cs'".replace("$_ .", "$_."),
     "StartsWith((Join-Path $v25Root 'Updates')",
     "Required V26 command was not discovered from compiled source",
-    "Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V26')",
+    "Get-SafeSourceFiles -SourceRoot (Join-Path $root 'src/QS3D.BricsCAD.V26') -RepositoryRoot $root -Extension '.cs'",
 ):
     if token not in package:
         errors.append(f"V26 package command inventory guard missing: {token}")
@@ -96,6 +97,10 @@ for token in (
 legacy_scan = "Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V25') -Recurse -Filter '*.cs' | ForEach-Object"
 if legacy_scan in package:
     errors.append("V26 package still scans the entire V25 source tree as if every file were compiled into V26")
+
+unsafe_v26_scan = "Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V26') -Recurse -Filter '*.cs'"
+if unsafe_v26_scan in package:
+    errors.append("V26 package command inventory must use reparse-safe source traversal")
 
 for token in ("LOCAL_ONLY", "DO_NOT_RETRY_REMOTE", "net8.0-windows"):
     if token not in qualification:
