@@ -471,7 +471,26 @@ namespace QS3D.Core.Export
             var normalized = (value ?? string.Empty).Trim();
             if (normalized.Length == 0)
                 throw StandardProvenanceError(rowIndex, fieldName, "must not contain blank provenance values");
+            ValidateStandardProvenanceUtf16(normalized, rowIndex, fieldName);
             return normalized;
+        }
+
+        private static void ValidateStandardProvenanceUtf16(string value, int rowIndex, string fieldName)
+        {
+            for (var index = 0; index < value.Length; index++)
+            {
+                var codeUnit = value[index];
+                if (char.IsHighSurrogate(codeUnit))
+                {
+                    if (index + 1 >= value.Length || !char.IsLowSurrogate(value[index + 1]))
+                        throw StandardProvenanceError(rowIndex, fieldName, "must contain well-formed UTF-16 provenance text");
+                    index++;
+                    continue;
+                }
+
+                if (char.IsLowSurrogate(codeUnit))
+                    throw StandardProvenanceError(rowIndex, fieldName, "must contain well-formed UTF-16 provenance text");
+            }
         }
 
         private static void ValidateStandardHandle(string? value, int rowIndex)
