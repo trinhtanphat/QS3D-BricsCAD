@@ -98,6 +98,29 @@ def main() -> int:
         if token not in top_level_json:
             errors.append(f"MCP top-level JSON helper missing {label}: {token}")
 
+    scalar_scope_required = {
+        "JSON-RPC version top-level extraction": 'ExtractTopLevelString(request.Body, "jsonrpc")',
+        "JSON-RPC method top-level extraction": 'ExtractTopLevelString(request.Body, "method")',
+        "JSON-RPC id top-level extraction": "ExtractTopLevelId(request.Body)",
+        "JSON-RPC id top-level presence": 'HasTopLevelProperty(request.Body, "id")',
+        "MCP protocol version top-level extraction": 'ExtractTopLevelString(request.Body, "protocolVersion")',
+        "general string top-level extraction": "return ExtractTopLevelString(json, property);",
+        "general boolean top-level extraction": "return ExtractTopLevelBoolean(json, property);",
+        "general property top-level presence": "return HasTopLevelProperty(json, property);",
+        "double top-level extraction": "TryExtractTopLevelDouble",
+        "integer top-level extraction": "TryExtractTopLevelInteger",
+    }
+    for label, token in scalar_scope_required.items():
+        if token not in text:
+            errors.append(f"MCP scalar parser missing {label}: {token}")
+
+    if "private static Match NumberMatch(" in text:
+        errors.append("MCP numeric arguments are still regex-scoped instead of top-level JSON scoped")
+    if 'var match = Regex.Match(json ?? string.Empty,' in text:
+        errors.append("MCP scalar extraction still contains a whole-object regex lookup")
+    if 'return Regex.IsMatch(json ?? string.Empty,' in text:
+        errors.append("MCP property presence still contains a whole-object regex lookup")
+
     for command in (
         '"HATCH"', '"DIMLINEAR"', '"BLOCK"', '"XREF"', '"LAYOUT"',
         '"MVIEW"', '"PLOT"', '"SAVEAS"', '"OPEN"', '"UNDO"',
