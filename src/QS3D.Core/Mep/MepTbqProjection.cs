@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -68,6 +69,7 @@ namespace QS3D.Core.Mep
     public sealed class MepTbqProjectionService
     {
         public const string OwnedItemPrefix = "QS3D.MEP.";
+        internal const int MaxGroups = 10000;
 
         public MepTbqProjectionResult Project(
             TbqProjectWorkspaceState current,
@@ -105,15 +107,31 @@ namespace QS3D.Core.Mep
         public IReadOnlyList<MepTbqReportRow> BuildReport(IEnumerable<MepQuantityGroup> groups)
         {
             if (groups == null) throw new ArgumentNullException(nameof(groups));
-            var rows = new List<MepTbqReportRow>();
+            var hasKnownCount = TryGetKnownCount(groups, out var knownCount);
+            if (hasKnownCount && knownCount > MaxGroups)
+                ThrowTooManyGroups();
+
+            var rows = hasKnownCount
+                ? new List<MepTbqReportRow>(knownCount)
+                : new List<MepTbqReportRow>();
             var index = 0;
             foreach (var group in groups)
             {
+                if (index == MaxGroups)
+                    ThrowTooManyGroups();
+                if (hasKnownCount && index >= knownCount)
+                    throw new InvalidOperationException("MEP/TBQ report source Count does not match source traversal.");
                 if (group == null)
                     throw new ArgumentException("MEP/TBQ report contains a null quantity group at index " + index + ".", nameof(groups));
                 rows.Add(new MepTbqReportRow(group));
                 index++;
             }
+
+            if (hasKnownCount && index != knownCount)
+                throw new InvalidOperationException("MEP/TBQ report source Count does not match source traversal.");
+            if (hasKnownCount)
+                RequireStableKnownCount(groups, knownCount);
+
             rows.Sort(CompareRows);
             return new ReadOnlyCollection<MepTbqReportRow>(rows.ToArray());
         }
@@ -149,6 +167,63 @@ namespace QS3D.Core.Mep
 
         public static bool IsOwnedItem(string itemCode) =>
             itemCode != null && itemCode.StartsWith(OwnedItemPrefix, StringComparison.OrdinalIgnoreCase);
+
+        private static bool TryGetKnownCount(IEnumerable<MepQuantityGroup> groups, out int count)
+        {
+            var hasKnownCount = false;
+            var firstKnownCount = 0;
+            var maximumKnownCount = 0;
+            var conflictingKnownCounts = false;
+
+            if (groups is ICollection<MepQuantityGroup> collection)
+                ObserveKnownCount(collection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+            if (groups is IReadOnlyCollection<MepQuantityGroup> readOnlyCollection)
+                ObserveKnownCount(readOnlyCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+            if (groups is ICollection nonGenericCollection)
+                ObserveKnownCount(nonGenericCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+
+            count = maximumKnownCount;
+            if (maximumKnownCount > MaxGroups)
+                return true;
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("MEP/TBQ report source reports conflicting known counts.");
+            return hasKnownCount;
+        }
+
+        private static void ObserveKnownCount(
+            int candidate,
+            ref bool hasKnownCount,
+            ref int firstKnownCount,
+            ref int maximumKnownCount,
+            ref bool conflictingKnownCounts)
+        {
+            if (candidate < 0)
+                throw new InvalidOperationException("MEP/TBQ report source reports an invalid negative known count.");
+
+            if (!hasKnownCount)
+            {
+                hasKnownCount = true;
+                firstKnownCount = candidate;
+                maximumKnownCount = candidate;
+                return;
+            }
+
+            if (candidate != firstKnownCount)
+                conflictingKnownCounts = true;
+            if (candidate > maximumKnownCount)
+                maximumKnownCount = candidate;
+        }
+
+        private static void RequireStableKnownCount(IEnumerable<MepQuantityGroup> groups, int expectedCount)
+        {
+            if (!TryGetKnownCount(groups, out var observedCount) || observedCount != expectedCount)
+                throw new InvalidOperationException("MEP/TBQ report source Count changed during enumeration.");
+        }
+
+        private static void ThrowTooManyGroups()
+        {
+            throw new InvalidOperationException("MEP/TBQ report supports at most " + MaxGroups + " quantity groups.");
+        }
 
         private static int AddBillRows(List<TbqBillItem> target, MepTbqReportRow row)
         {
