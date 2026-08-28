@@ -23,7 +23,8 @@ if not SOURCE.is_file():
     fail("missing PaletteCoordinator.cs")
 
 source = SOURCE.read_text(encoding="utf-8")
-ensure = method(source, "public static void EnsureCreated()", "public static void Show()")
+ensure = method(source, "public static void EnsureCreated()", "private static PaletteSet CreatePaletteSet(")
+create = method(source, "private static PaletteSet CreatePaletteSet(", "public static void Show()")
 dispose = method(source, "private static void DisposeCore(bool persistLayout)", "private static void DisposePalette(ref PaletteSet? palette)")
 handler = method(
     source,
@@ -32,15 +33,32 @@ handler = method(
 )
 
 creation_order = (
-    '_properties.AddVisual("Thuộc tính", _propertiesVisual, true);',
+    "_properties = CreatePaletteSet(",
+    '"Thuộc tính",',
+    "_propertiesVisual);",
     "_properties.StateChanged += OnPropertiesPaletteStateChanged;",
 )
 cursor = -1
 for token in creation_order:
     index = ensure.find(token, cursor + 1)
     if index < 0 or index <= cursor:
-        fail("dedicated Properties show hook is missing or installed before its visual host: " + token)
+        fail("dedicated Properties show hook is missing or installed before rollback-safe palette publication: " + token)
     cursor = index
+
+helper_order = (
+    "palette = new PaletteSet(title, guid);",
+    "palette.AddVisual(visualTitle, visual, true);",
+    "return palette;",
+)
+cursor = -1
+for token in helper_order:
+    index = create.find(token, cursor + 1)
+    if index < 0 or index <= cursor:
+        fail("rollback-safe palette helper must host the visual before returning the published instance: " + token)
+    cursor = index
+
+if "try { palette.Dispose(); }" not in create or "throw;" not in create:
+    fail("rollback-safe palette helper must dispose the exact pre-publication native instance before rethrow")
 
 dispose_order = (
     "UnsubscribeFromPropertiesPaletteStateChanges();",
@@ -78,6 +96,7 @@ for forbidden in (
 
 print(
     "PASS: explicit host Show/Hide drives immediate, identity-guarded single-editor Properties reparenting; "
-    "the callback is re-entry-safe, visibility-write-free, and unsubscribed before PaletteSet disposal."
+    "the palette visual is hosted under rollback-safe local ownership before publication, the callback is re-entry-safe, "
+    "visibility-write-free, and unsubscribed before PaletteSet disposal."
 )
 sys.exit(0)
