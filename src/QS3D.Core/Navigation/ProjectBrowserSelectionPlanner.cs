@@ -132,19 +132,51 @@ namespace QS3D.Core.Navigation
         private static IReadOnlyList<string> NormalizeSelection(IEnumerable<string> values)
         {
             if (values == null) throw new ArgumentNullException(nameof(values));
+            var knownCount = ValidateKnownCounts(values);
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var raw in values)
             {
                 if (result.Count >= MaxSelectedElementIds)
-                    throw new InvalidOperationException("Project browser selection supports at most " + MaxSelectedElementIds + " semantic element ids.");
+                    throw TooManySelectedElementIds();
                 var elementId = CanonicalRequired(raw, "project browser selected element id");
                 if (!seen.Add(elementId))
                     throw new InvalidOperationException("Project browser selection contains duplicate semantic element id: " + elementId + ".");
                 result.Add(elementId);
             }
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw new InvalidOperationException(
+                    "Project browser selection Count " + knownCount.Value +
+                    " does not match traversed semantic element id count " + result.Count + ".");
             result.Sort(CompareCanonicalIds);
             return result.AsReadOnly();
+        }
+
+        private static int? ValidateKnownCounts(IEnumerable<string> values)
+        {
+            int? knownCount = null;
+            ValidateKnownCount(values is ICollection<string> collection ? collection.Count : (int?)null, ref knownCount);
+            ValidateKnownCount(values is IReadOnlyCollection<string> readOnlyCollection ? readOnlyCollection.Count : (int?)null, ref knownCount);
+            ValidateKnownCount(values is System.Collections.ICollection nonGenericCollection ? nonGenericCollection.Count : (int?)null, ref knownCount);
+            return knownCount;
+        }
+
+        private static void ValidateKnownCount(int? count, ref int? knownCount)
+        {
+            if (!count.HasValue) return;
+            if (count.Value < 0)
+                throw new InvalidOperationException("Project browser selection exposes an invalid negative Count.");
+            if (count.Value > MaxSelectedElementIds)
+                throw TooManySelectedElementIds();
+            if (knownCount.HasValue && knownCount.Value != count.Value)
+                throw new InvalidOperationException("Project browser selection exposes conflicting Count contracts.");
+            knownCount = count.Value;
+        }
+
+        private static InvalidOperationException TooManySelectedElementIds()
+        {
+            return new InvalidOperationException(
+                "Project browser selection supports at most " + MaxSelectedElementIds + " semantic element ids.");
         }
 
         private static string NormalizePrimary(string? raw, IReadOnlyList<string> selected)
