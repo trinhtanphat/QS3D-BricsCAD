@@ -282,6 +282,7 @@ namespace QS3D.Core.Services
                     throw new InvalidOperationException("Project contains duplicate family id: " + id + ".");
                 result.Add(id, family);
             }
+            return result;
         }
 
         private static void RequireFamilyOwnershipUnchanged(
