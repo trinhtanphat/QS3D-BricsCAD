@@ -114,7 +114,7 @@ namespace QS3D.Core.SmokeTests
             };
 
             var first = service.Analyze(source, minimumArea: 0.5d).Report;
-            var second = service.Analyze(source.Reverse(), minimumArea: 0.5d).Report;
+            var second = service.Analyze(source.AsEnumerable().Reverse(), minimumArea: 0.5d).Report;
             Equal(RoomBoundaryDiagnosticReason.Ready, first.Reason);
             Equal(4, first.UniqueSourceCount);
             Equal(first.Faces[0].SourceFingerprint, second.Faces[0].SourceFingerprint);
