@@ -5,6 +5,7 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/release-v25-cloud.yml"
+HELPER = ROOT / "scripts/acquire-v25-compile-references.ps1"
 DOC = ROOT / "docs/CLOUD-V25-PREVIEW-RELEASE.md"
 PINNED_SHA256 = "F44DF674C0E165D96BF579E243B20A8301E3F395F929779F47BF39A7D9DACDE1"
 PINNED_PUBLIC_URL = "https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/25.2.10/BricsCAD-V25.2.10-1-en_US%28x64%29.msi"
@@ -79,25 +80,14 @@ else:
         "BRICSCAD_V25_PINNED_MSI_SHA256: " + PINNED_SHA256,
         "BRICSCAD_V25_MSI_SHA256: ${{ vars.BRICSCAD_V25_MSI_SHA256 }}",
         "bricscad-v25.2.10-x64-en-us-${{ env.BRICSCAD_V25_PINNED_MSI_SHA256 }}",
-        "Name = 'pinned-official-primary'",
-        "Name = 'pinned-official-secondary'",
-        "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi -MaximumRedirection 10 -TimeoutSec 1200 -UseBasicParsing",
-        "$actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash",
-        "[string]::Equals($actual, $env:BRICSCAD_V25_PINNED_MSI_SHA256, [StringComparison]::OrdinalIgnoreCase)",
-        "BricsCAD V25 MSI SHA-256 mismatch.",
-        "$signature = Get-AuthenticodeSignature -FilePath $msi",
-        "$signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid",
-        "BricsCAD V25 MSI Authenticode signature is not valid",
-        "$signerSubject -notmatch '(^|,\\s*)(CN|O)=Bricsys(,|$)'",
-        "BricsCAD V25 MSI signer is not Bricsys",
-        "New-Object -ComObject WindowsInstaller.Installer",
-        "$database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')",
-        "$productVersion -notmatch '^25\\.2\\.10(?:\\.|$)'",
-        "Downloaded MSI is not the pinned BricsCAD V25.2.10 product.",
-        "$database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductName''')",
-        "$productName -notmatch 'BricsCAD'",
-        "$process.WaitForExit(900000)",
-        "administrative extraction timed out after 15 minutes",
+        ".\\scripts\\acquire-v25-compile-references.ps1",
+        "-MsiPath $msi",
+        "-ExtractDir $extract",
+        "-ExpectedSha256 $env:BRICSCAD_V25_PINNED_MSI_SHA256",
+        "-MirrorUrl $env:BRICSCAD_V25_MIRROR_MSI_URL",
+        "-PublicUrl $env:BRICSCAD_V25_PUBLIC_MSI_URL",
+        "-FallbackUrl $env:BRICSCAD_V25_MSI_URL",
+        '"BRICSCAD_V25_DIR=$bricsDir"',
         "([string]$metadata.productVersion).Trim()",
         "PACKAGE-METADATA productVersion must match source product version.",
         "PACKAGE-METADATA assembly version is missing.",
@@ -111,7 +101,7 @@ else:
     )
     for token in required:
         if token not in text:
-            errors.append("cloud V25 workflow missing immutable-action/cache/pinning/signature/version/URI/manual-release token: " + token)
+            errors.append("cloud V25 workflow missing immutable-action/cache/pinning/helper/URI/manual-release token: " + token)
 
     if ".StartsWith($env:BRICSCAD_V25_PUBLIC_MSI_URL" in text:
         errors.append("cloud V25 fallback URI must not use string-prefix matching for pinned-object identity")
@@ -123,34 +113,29 @@ else:
     save_index = text.find("- name: Save BricsCAD V25 installer cache")
     validate_refs_index = text.find("- name: Validate BricsCAD V25 compile references")
     if min(restore_index, acquire_index, save_index, validate_refs_index) < 0 or not restore_index < acquire_index < save_index < validate_refs_index:
-        errors.append("BricsCAD installer cache restore must precede acquisition and verified cache save must precede reference validation")
-
-    candidates_index = text.find("$candidates = @(", acquire_index if acquire_index >= 0 else 0)
-    primary_index = text.find("Name = 'pinned-official-primary'", candidates_index if candidates_index >= 0 else 0)
-    secondary_index = text.find("Name = 'pinned-official-secondary'", candidates_index if candidates_index >= 0 else 0)
-    if min(candidates_index, primary_index, secondary_index) < 0:
-        errors.append("cloud V25 workflow must define pinned official HTTPS primary and secondary candidates")
-    elif not candidates_index < primary_index < secondary_index:
-        errors.append("pinned official HTTPS primary must be attempted before the secondary candidate after cache miss")
+        errors.append("BricsCAD installer cache restore must precede helper acquisition and cache save must precede reference validation")
 
     uri_parse_index = text.find("[Uri]::TryCreate($env:BRICSCAD_V25_MSI_URL")
     uri_path_index = text.find("$fallbackUri.AbsolutePath", uri_parse_index if uri_parse_index >= 0 else 0)
-    candidates_index_after_uri = text.find("$candidates = @(", uri_path_index if uri_path_index >= 0 else 0)
-    if min(uri_parse_index, uri_path_index, candidates_index_after_uri) < 0 or not uri_parse_index < uri_path_index < candidates_index_after_uri:
-        errors.append("cloud V25 secret fallback must be bound to the pinned URI object before it can enter the download candidate list")
+    helper_index = text.find(".\\scripts\\acquire-v25-compile-references.ps1", acquire_index if acquire_index >= 0 else 0)
+    if min(uri_parse_index, uri_path_index, helper_index) < 0 or not uri_parse_index < uri_path_index < helper_index:
+        errors.append("cloud V25 secret fallback must be bound to the pinned URI object before shared-helper acquisition")
 
-    cache_hash_index = text.find("$cachedHash = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash")
-    download_index = text.find("Invoke-WebRequest -Uri $candidate.Url", acquire_index if acquire_index >= 0 else 0)
-    hash_index = text.find("$actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash")
-    signature_index = text.find("$signature = Get-AuthenticodeSignature -FilePath $msi")
-    signer_index = text.find("$signerSubject -notmatch", signature_index if signature_index >= 0 else 0)
-    product_index = text.find("$database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')")
-    extract_index = text.find("$process = Start-Process -FilePath msiexec.exe")
-    timeout_index = text.find("$process.WaitForExit(900000)", extract_index if extract_index >= 0 else 0)
-    if min(cache_hash_index, download_index, hash_index, signature_index, signer_index, product_index, extract_index, timeout_index) < 0:
-        errors.append("cloud V25 workflow is missing a required cache/download/integrity/extraction boundary")
-    elif not hash_index < signature_index < signer_index < product_index < extract_index < timeout_index:
-        errors.append("cloud V25 workflow must pin digest and verify Bricsys Authenticode + V25.2.10 MSI identity before bounded administrative extraction")
+    if acquire_index >= 0 and save_index > acquire_index:
+        acquire = text[acquire_index:save_index]
+        forbidden_inline = (
+            "$candidates = @(",
+            "Invoke-WebRequest -Uri $candidate.Url",
+            "$actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash",
+            "$signature = Get-AuthenticodeSignature -FilePath $msi",
+            "New-Object -ComObject WindowsInstaller.Installer",
+            "Start-Process -FilePath msiexec.exe",
+            "$process.WaitForExit(900000)",
+            "Remove-Item -LiteralPath $extract -Recurse",
+        )
+        for token in forbidden_inline:
+            if token in acquire:
+                errors.append("cloud V25 acquisition must delegate security/destructive operations to the shared hardened helper; found inline token: " + token)
 
     tag_check = text.find("Release tag must exactly match source product version.")
     product_check = text.find("PACKAGE-METADATA productVersion must match source product version.")
@@ -158,6 +143,36 @@ else:
     publish_step = text.find("- name: Publish GitHub prerelease")
     if min(tag_check, product_check, checksum_step, publish_step) < 0 or not tag_check < product_check < checksum_step < publish_step:
         errors.append("cloud V25 workflow must bind tag and package productVersion to source before checksum/publish")
+
+if not HELPER.is_file():
+    errors.append("missing scripts/acquire-v25-compile-references.ps1")
+else:
+    helper = HELPER.read_text(encoding="utf-8")
+    helper_required = (
+        "Get-FileHash -LiteralPath $MsiPath -Algorithm SHA256",
+        "Get-AuthenticodeSignature -FilePath $MsiPath",
+        "[System.Management.Automation.SignatureStatus]::Valid",
+        "CN|O)=Bricsys",
+        "WindowsInstaller.Installer",
+        "ProductVersion",
+        "ProductName",
+        "WaitForExit(900000)",
+        "Stop-ProcessTree",
+        "Assert-OrdinaryMsiFile",
+        "Assert-ExistingPathChainSafe",
+    )
+    for token in helper_required:
+        if token not in helper:
+            errors.append("shared V25 acquisition helper missing required integrity/identity/bounded-process/path-safety token: " + token)
+    if helper.find("Assert-ExistingPathChainSafe") > helper.find("Remove-Item -LiteralPath $ExtractDir -Recurse") >= 0:
+        errors.append("shared V25 acquisition helper must validate existing path components before recursive extraction cleanup")
+    hash_index = helper.find("Get-FileHash -LiteralPath $MsiPath -Algorithm SHA256")
+    signature_index = helper.find("Get-AuthenticodeSignature -FilePath $MsiPath")
+    product_index = helper.find("ProductVersion", signature_index if signature_index >= 0 else 0)
+    extract_index = helper.find("Start-Process", product_index if product_index >= 0 else 0)
+    timeout_index = helper.find("WaitForExit(900000)", extract_index if extract_index >= 0 else 0)
+    if min(hash_index, signature_index, product_index, extract_index, timeout_index) < 0 or not hash_index < signature_index < product_index < extract_index < timeout_index:
+        errors.append("shared V25 acquisition helper must verify digest, Authenticode and MSI identity before bounded extraction")
 
 if not DOC.is_file():
     errors.append("missing docs/CLOUD-V25-PREVIEW-RELEASE.md")
@@ -185,4 +200,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: cloud V25 preview remains manual-only; GitHub Actions use immutable commits, installer transport is HTTPS-only, secret fallback is bound to the exact pinned official MSI object except query, the V25.2.10 digest is pinned, cache hits are re-verified, Bricsys Authenticode + MSI identity checks precede bounded extraction, and download/extraction waits are finite.")
+print("PASS: cloud V25 preview remains manual-only; immutable Actions/cache pins, exact installer URI/digest provenance, shared hardened acquisition, Bricsys Authenticode + MSI identity, bounded extraction, and release/package binding remain fail-closed.")
