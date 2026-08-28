@@ -30,6 +30,7 @@ namespace QS3D.BricsCAD.V25
         private const int MaxBodyBytes = 1024 * 1024;
         private const int CadDispatchTimeoutMilliseconds = 15000;
         private const int MaxConcurrentClients = 16;
+        private const int MaxSessions = 128;
         private const string ProtocolVersion = "2025-06-18";
         private const string LegacyProtocolVersion = "2025-03-26";
         private const string BearerEnvironment = "QS3D_MCP_BEARER_TOKEN";
@@ -368,12 +369,18 @@ namespace QS3D.BricsCAD.V25
                         "Unsupported MCP protocolVersion. Supported: " + ProtocolVersion + ", " + LegacyProtocolVersion + "."), null);
                     return;
                 }
+                CleanupSessions();
+                if (Sessions.Count >= MaxSessions)
+                {
+                    WriteResponse(stream, 200, "OK", JsonRpcError(id, -32003, "MCP session capacity reached; close or expire an existing session."), null);
+                    return;
+                }
                 var sessionId = Guid.NewGuid().ToString("N");
                 Sessions[sessionId] = new SessionState(DateTime.UtcNow, requested);
                 var response = "{\"jsonrpc\":\"2.0\",\"id\":" + id
                                + ",\"result\":{\"protocolVersion\":\"" + requested
                                + "\",\"capabilities\":{\"tools\":{\"listChanged\":false}},"
-                               + "\"serverInfo\":{\"name\":\"qs3d-bricscad\",\"version\":\"embedded-3\"},"
+                               + "\"serverInfo\":{\"name\":\"qs3d-bricscad\",\"version\":\"embedded-4\"},"
                                + "\"instructions\":\"QS3D embedded BricsCAD MCP. Prefer direct CAD API tools. Use cad_command_sequence only for allowlisted command-line workflows and BricsCAD-window UI tools only as a fallback. Every ordinary mutation requires confirmMutation=true; emergency stop/cancel stay available without confirmation.\"}}";
                 WriteResponse(stream, 200, "OK", response, new Dictionary<string, string>
                 {
@@ -492,12 +499,13 @@ namespace QS3D.BricsCAD.V25
                    + "," + Tool("cad_active_document", "Read active BricsCAD document identity.", "{}")
                    + "," + Tool("cad_selection", "Read current implied selection handles, types and layers.", "{}")
                    + "," + Tool("cad_database_snapshot", "Read a bounded ModelSpace entity snapshot.", "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":1000}")
+                   + "," + Tool("cad_entity_inspect", "Read one entity by hexadecimal handle including type, layer and extents.", "\"handle\":{\"type\":\"string\",\"maxLength\":32}", Required("handle"))
                    + "," + Tool("cad_view_state", "Read command-active state, current view center/size and active BricsCAD window size.", "{}")
                    + "," + Tool("cad_wait_idle", "Wait until BricsCAD reports CMDACTIVE=0 or timeout.", "\"timeoutMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":30000}")
                    + "," + Tool("cad_create_line", "Create one native Line in ModelSpace.", NumericProperties("x1","y1","z1","x2","y2","z2") + ",\"layer\":{\"type\":\"string\",\"maxLength\":255},\"confirmMutation\":{\"type\":\"boolean\"}", Required("x1","y1","x2","y2","confirmMutation"))
                    + "," + Tool("cad_create_circle", "Create one native Circle in ModelSpace.", NumericProperties("x","y","z","radius") + ",\"layer\":{\"type\":\"string\",\"maxLength\":255},\"confirmMutation\":{\"type\":\"boolean\"}", Required("x","y","radius","confirmMutation"))
                    + "," + Tool("cad_create_polyline", "Create a native 2D Polyline. points format: x,y;x,y;...", "\"points\":{\"type\":\"string\",\"maxLength\":16000},\"closed\":{\"type\":\"boolean\"},\"elevation\":{\"type\":\"number\"},\"layer\":{\"type\":\"string\",\"maxLength\":255},\"confirmMutation\":{\"type\":\"boolean\"}", Required("points","confirmMutation"))
-                   + "," + Tool("cad_create_text", "Create native DBText in ModelSpace.", "\"text\":{\"type\":\"string\",\"maxLength\":4000}," + NumericProperties("x","y","z","height","rotationDeg") + ",\"layer\":{\"type\":\"string\",\"maxLength\":255},\"confirmMutation\":{\"type\":\"boolean\"}", Required("text","x","y","height","confirmMutation"))
+                   + "," + Tool("cad_create_text", "Create native single-line DBText in ModelSpace.", "\"text\":{\"type\":\"string\",\"maxLength\":4000}," + NumericProperties("x","y","z","height","rotationDeg") + ",\"layer\":{\"type\":\"string\",\"maxLength\":255},\"confirmMutation\":{\"type\":\"boolean\"}", Required("text","x","y","height","confirmMutation"))
                    + "," + Tool("cad_entity_transform", "Move, rotate or scale one entity by handle.", "\"handle\":{\"type\":\"string\",\"maxLength\":32},\"action\":{\"type\":\"string\",\"enum\":[\"move\",\"rotate\",\"scale\"]}," + NumericProperties("dx","dy","dz","angleDeg","factor") + ",\"confirmMutation\":{\"type\":\"boolean\"}", Required("handle","action","confirmMutation"))
                    + "," + Tool("cad_entity_delete", "Erase one entity by handle.", "\"handle\":{\"type\":\"string\",\"maxLength\":32},\"confirmMutation\":{\"type\":\"boolean\"}", Required("handle","confirmMutation"))
                    + "," + Tool("cad_layer", "Create a layer or make it current.", "\"action\":{\"type\":\"string\",\"enum\":[\"create\",\"set_current\"]},\"name\":{\"type\":\"string\",\"maxLength\":255},\"confirmMutation\":{\"type\":\"boolean\"}", Required("action","name","confirmMutation"))
@@ -507,10 +515,10 @@ namespace QS3D.BricsCAD.V25
                    + "," + Tool("cad_ui_click", "Click inside the active BricsCAD-process window only, using client-relative pixels.", "\"x\":{\"type\":\"integer\"},\"y\":{\"type\":\"integer\"},\"button\":{\"type\":\"string\",\"enum\":[\"left\",\"right\",\"middle\"]},\"count\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":3},\"confirmMutation\":{\"type\":\"boolean\"}", Required("x","y","button","confirmMutation"))
                    + "," + Tool("cad_ui_type", "Type printable Unicode text into the active BricsCAD-process window only.", "\"text\":{\"type\":\"string\",\"maxLength\":8000},\"pressEnter\":{\"type\":\"boolean\"},\"confirmMutation\":{\"type\":\"boolean\"}", Required("text","confirmMutation"))
                    + "," + Tool("cad_ui_key", "Press a named key in the active BricsCAD-process window with optional Ctrl/Alt/Shift modifiers.", "\"key\":{\"type\":\"string\",\"maxLength\":16},\"ctrl\":{\"type\":\"boolean\"},\"alt\":{\"type\":\"boolean\"},\"shift\":{\"type\":\"boolean\"},\"confirmMutation\":{\"type\":\"boolean\"}", Required("key","confirmMutation"))
-                   + "," + Tool("cad_agent_stop", "Emergency-stop autonomous input and send ESC twice to BricsCAD. Deliberately available without confirmation.", "{}")
+                   + "," + Tool("cad_agent_stop", "Emergency-stop autonomous input and send ESC twice to BricsCAD, with foreground-input fallback if CAD-context dispatch is unavailable. Deliberately available without confirmation.", "{}")
                    + "," + Tool("cad_agent_resume", "Re-enable autonomous mutation/UI tools after an emergency stop.", "\"confirmMutation\":{\"type\":\"boolean\"}", Required("confirmMutation"))
                    + "," + Tool("cad_audit_tail", "Read the latest bounded MCP mutation audit entries.", "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}")
-                   + "," + Tool("cad_cancel_command", "Send two ESC characters to cancel the current CAD command. Deliberately available without confirmation.", "{}")
+                   + "," + Tool("cad_cancel_command", "Send ESC twice to cancel the current CAD command, with foreground-input fallback if CAD-context dispatch is unavailable. Deliberately available without confirmation.", "{}")
                    + "]}}";
         }
 
@@ -552,6 +560,7 @@ namespace QS3D.BricsCAD.V25
                     case "cad_active_document": return ToolSuccess(InvokeCad(BuildActiveDocumentJson));
                     case "cad_selection": return ToolSuccess(InvokeCad(BuildSelectionJson));
                     case "cad_database_snapshot": return ToolSuccess(InvokeCad(() => BuildDatabaseSnapshotJson(ExtractInteger(arguments, "limit", 250, 1, 1000))));
+                    case "cad_entity_inspect": return ToolSuccess(InspectEntity(arguments));
                     case "cad_view_state": return ToolSuccess(InvokeCad(BuildViewStateJson));
                     case "cad_wait_idle": return ToolSuccess(WaitUntilIdle(ExtractInteger(arguments, "timeoutMs", 10000, 100, 30000)));
                     case "cad_create_line": return RequireMutation(arguments, "cad_create_line", () => CreateLine(arguments));
@@ -594,11 +603,19 @@ namespace QS3D.BricsCAD.V25
                 {
                     var document = RequireDocument();
                     document.SendStringToExecute("\u001b\u001b", true, false, true);
-                    return "{\"stopped\":true,\"escapeCount\":2}";
+                    return "{\"stopped\":true,\"escapeCount\":2,\"delivery\":\"cad-context\"}";
                 });
                 return ToolSuccess(result);
             }
-            catch (Exception ex) { return ToolError("Automation stopped, but ESC dispatch failed: " + ex.Message); }
+            catch (Exception ex)
+            {
+                if (TrySendEscapeFallback())
+                {
+                    Audit("cad_agent_stop", "foreground ESC fallback after cad-context failure");
+                    return ToolSuccess("{\"stopped\":true,\"escapeCount\":2,\"delivery\":\"foreground-fallback\",\"cadContextError\":\"" + JsonEscape(ex.Message) + "\"}");
+                }
+                return ToolError("Automation stopped, but both CAD-context and foreground ESC delivery failed: " + ex.Message);
+            }
         }
 
         private static string ResumeAgent(string body)
@@ -617,12 +634,35 @@ namespace QS3D.BricsCAD.V25
                 {
                     var document = RequireDocument();
                     document.SendStringToExecute("\u001b\u001b", true, false, true);
-                    Audit("cad_cancel_command", "escapeCount=2");
-                    return "{\"accepted\":true,\"escapeCount\":2}";
+                    Audit("cad_cancel_command", "escapeCount=2; delivery=cad-context");
+                    return "{\"accepted\":true,\"escapeCount\":2,\"delivery\":\"cad-context\"}";
                 });
                 return ToolSuccess(result);
             }
-            catch (Exception ex) { return ToolError(ex.Message); }
+            catch (Exception ex)
+            {
+                if (TrySendEscapeFallback())
+                {
+                    Audit("cad_cancel_command", "escapeCount=2; delivery=foreground-fallback");
+                    return ToolSuccess("{\"accepted\":true,\"escapeCount\":2,\"delivery\":\"foreground-fallback\",\"cadContextError\":\"" + JsonEscape(ex.Message) + "\"}");
+                }
+                return ToolError("Could not deliver ESC through CAD context or foreground fallback: " + ex.Message);
+            }
+        }
+
+        private static bool TrySendEscapeFallback()
+        {
+            try
+            {
+                var hwnd = RequireForegroundCadWindow();
+                RequireSameForegroundCadWindow(hwnd);
+                SendVirtualKey(0x1B, false, false, false);
+                Thread.Sleep(25);
+                RequireSameForegroundCadWindow(hwnd);
+                SendVirtualKey(0x1B, false, false, false);
+                return true;
+            }
+            catch { return false; }
         }
 
         private static string CreateLine(string body)
@@ -665,7 +705,7 @@ namespace QS3D.BricsCAD.V25
         private static string CreateText(string body)
         {
             var text = ExtractString(body, "text");
-            ValidatePrintableText(text, "text", 4000, false);
+            ValidatePrintableText(text, "text", 4000, true);
             var x = RequireDouble(body, "x"); var y = RequireDouble(body, "y"); var z = ExtractDouble(body, "z", 0d);
             var height = RequireDouble(body, "height");
             if (!(height > 0d)) throw new InvalidOperationException("height must be > 0.");
@@ -708,6 +748,21 @@ namespace QS3D.BricsCAD.V25
                 transaction.AddNewlyCreatedDBObject(record, true);
             }
             entity.Layer = layer;
+        }
+
+        private static string InspectEntity(string body)
+        {
+            var handle = ExtractString(body, "handle");
+            ValidateHandleText(handle);
+            return InvokeCad(() =>
+            {
+                var document = RequireDocument();
+                using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+                {
+                    var entity = OpenEntityByHandle(transaction, document.Database, handle, OpenMode.ForRead);
+                    return DescribeEntity(transaction, entity.ObjectId, true);
+                }
+            });
         }
 
         private static string TransformEntity(string body)
@@ -769,9 +824,11 @@ namespace QS3D.BricsCAD.V25
             ObjectId id;
             try { id = database.GetObjectId(false, new Handle(value), 0); }
             catch (Exception ex) { throw new InvalidOperationException("Entity handle was not found.", ex); }
-            if (id.IsNull || id.IsErased) throw new InvalidOperationException("Entity handle was not found or is erased.");
-            var entity = transaction.GetObject(id, mode, false) as Entity;
-            if (entity == null) throw new InvalidOperationException("Object handle is not an entity.");
+            if (id.IsNull) throw new InvalidOperationException("Entity handle was not found.");
+            Entity? entity;
+            try { entity = transaction.GetObject(id, mode, false) as Entity; }
+            catch (Exception ex) { throw new InvalidOperationException("Entity handle was not readable.", ex); }
+            if (entity == null) throw new InvalidOperationException("Object handle is not an entity or was erased.");
             return entity;
         }
 
@@ -1073,9 +1130,12 @@ namespace QS3D.BricsCAD.V25
         private static string BuildStatusJson()
         {
             var document = Application.DocumentManager.MdiActiveDocument;
+            var currentLayer = string.Empty;
+            try { currentLayer = Convert.ToString(Application.GetSystemVariable("CLAYER"), CultureInfo.InvariantCulture) ?? string.Empty; } catch { }
             return "{\"product\":\"QS3D-BricsCAD\",\"processId\":" + Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture)
                    + ",\"bricscadVersion\":\"" + JsonEscape(Convert.ToString(Application.Version) ?? string.Empty)
                    + "\",\"activeDocument\":\"" + JsonEscape(document?.Name ?? string.Empty)
+                   + "\",\"currentLayer\":\"" + JsonEscape(currentLayer)
                    + "\",\"mcpProtocol\":\"" + ProtocolVersion + "\",\"fullCadAgent\":true,\"automationStopped\":" + (_automationStopped ? "true" : "false") + "}";
         }
 
@@ -1121,10 +1181,11 @@ namespace QS3D.BricsCAD.V25
             {
                 foreach (var id in result.Value.GetObjectIds())
                 {
-                    if (id.IsNull || id.IsErased) continue;
+                    if (id.IsNull) continue;
                     if (!first) output.Append(',');
                     first = false;
-                    output.Append(DescribeEntity(transaction, id, false));
+                    try { output.Append(DescribeEntity(transaction, id, false)); }
+                    catch { output.Append("{\"handle\":\"" + JsonEscape(id.Handle.ToString()) + "\",\"unavailable\":true}"); }
                 }
             }
             return output.Append(']').ToString();
@@ -1143,11 +1204,15 @@ namespace QS3D.BricsCAD.V25
                 var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForRead);
                 foreach (ObjectId id in modelSpace)
                 {
-                    if (id.IsNull || id.IsErased) continue;
+                    if (id.IsNull) continue;
                     if (count >= limit) { hasMore = true; break; }
-                    if (count > 0) output.Append(',');
-                    output.Append(DescribeEntity(transaction, id, true));
-                    count++;
+                    try
+                    {
+                        if (count > 0) output.Append(',');
+                        output.Append(DescribeEntity(transaction, id, true));
+                        count++;
+                    }
+                    catch { }
                 }
             }
             return output.Append("],\"count\":").Append(count).Append(",\"truncated\":").Append(hasMore ? "true" : "false").Append('}').ToString();
@@ -1156,11 +1221,12 @@ namespace QS3D.BricsCAD.V25
         private static string DescribeEntity(Transaction transaction, ObjectId id, bool includeExtents)
         {
             var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+            if (entity == null) throw new InvalidOperationException("Object is not a readable entity.");
             var output = new StringBuilder();
             output.Append("{\"handle\":\"").Append(JsonEscape(id.Handle.ToString())).Append("\",\"type\":\"")
-                .Append(JsonEscape(entity == null ? string.Empty : entity.GetType().Name)).Append("\",\"layer\":\"")
-                .Append(JsonEscape(entity == null ? string.Empty : entity.Layer)).Append('"');
-            if (entity != null && includeExtents)
+                .Append(JsonEscape(entity.GetType().Name)).Append("\",\"layer\":\"")
+                .Append(JsonEscape(entity.Layer)).Append('"');
+            if (includeExtents)
             {
                 output.Append(",\"extents\":");
                 try { output.Append(ExtentsJson(entity.GeometricExtents)); }
@@ -1186,34 +1252,50 @@ namespace QS3D.BricsCAD.V25
             public string Result = string.Empty;
             public Exception? Error;
             public readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
+            public int Cancelled;
+            public int Abandoned;
         }
 
         private static string InvokeCad(Func<string> action)
         {
             if (action == null) throw new ArgumentNullException(nameof(action));
-            using (var item = new CadWorkItemDisposable(action))
+            var item = new CadWorkItem { Action = action };
+            Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadWork, item);
+            if (!item.Done.Wait(CadDispatchTimeoutMilliseconds))
             {
-                Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadWork, item.Work);
-                if (!item.Work.Done.Wait(CadDispatchTimeoutMilliseconds))
-                    throw new TimeoutException("Timed out waiting for the BricsCAD application context.");
-                if (item.Work.Error != null) throw new InvalidOperationException(item.Work.Error.Message, item.Work.Error);
-                return item.Work.Result;
+                Interlocked.Exchange(ref item.Cancelled, 1);
+                Interlocked.Exchange(ref item.Abandoned, 1);
+                try { if (item.Done.IsSet) item.Done.Dispose(); } catch (ObjectDisposedException) { }
+                throw new TimeoutException("Timed out waiting for the BricsCAD application context; queued work was cancelled when possible.");
             }
-        }
-
-        private sealed class CadWorkItemDisposable : IDisposable
-        {
-            public CadWorkItemDisposable(Func<string> action) { Work = new CadWorkItem { Action = action }; }
-            public CadWorkItem Work { get; private set; }
-            public void Dispose() { Work.Done.Dispose(); }
+            try
+            {
+                if (item.Error != null) throw new InvalidOperationException(item.Error.Message, item.Error);
+                return item.Result;
+            }
+            finally { item.Done.Dispose(); }
         }
 
         private static void ExecuteCadWork(object data)
         {
             var item = (CadWorkItem)data;
-            try { item.Result = item.Action == null ? string.Empty : item.Action(); }
+            try
+            {
+                if (Volatile.Read(ref item.Cancelled) == 0)
+                    item.Result = item.Action == null ? string.Empty : item.Action();
+            }
             catch (Exception ex) { item.Error = ex; }
-            finally { item.Done.Set(); }
+            finally
+            {
+                try { item.Done.Set(); }
+                finally
+                {
+                    if (Volatile.Read(ref item.Abandoned) != 0)
+                    {
+                        try { item.Done.Dispose(); } catch (ObjectDisposedException) { }
+                    }
+                }
+            }
         }
 
         private static List<Point2d> ParsePoints2d(string value)
@@ -1517,10 +1599,12 @@ namespace QS3D.BricsCAD.V25
                     var lines = File.ReadAllLines(AuditFilePath, Encoding.UTF8);
                     var start = Math.Max(0, lines.Length - limit);
                     var builder = new StringBuilder("{\"entries\":[");
+                    var written = 0;
                     for (var i = start; i < lines.Length; i++)
                     {
-                        if (i > start) builder.Append(',');
-                        if (lines[i].StartsWith("{", StringComparison.Ordinal) && lines[i].EndsWith("}", StringComparison.Ordinal)) builder.Append(lines[i]);
+                        if (!lines[i].StartsWith("{", StringComparison.Ordinal) || !lines[i].EndsWith("}", StringComparison.Ordinal)) continue;
+                        if (written++ > 0) builder.Append(',');
+                        builder.Append(lines[i]);
                     }
                     return builder.Append("]}").ToString();
                 }
