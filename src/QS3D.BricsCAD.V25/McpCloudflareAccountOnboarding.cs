@@ -572,7 +572,7 @@ namespace QS3D.BricsCAD.V25
                 FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(0, 0, 0, 12)
             });
-            panel.Children.Add(Button("1. Cài Cloudflare Tunnel", (_, __) => McpCloudflareAccountTunnelManager.OpenInstallerPage()));
+            panel.Children.Add(Button("1. Cài / cập nhật Cloudflare Tunnel tự động", (_, __) => InstallCloudflared()));
             panel.Children.Add(Button("2. Đăng nhập Cloudflare", (_, __) => Login()));
             panel.Children.Add(new TextBlock { Text = "3. Hostname public (ví dụ qs3d.example.com):", Margin = new Thickness(0, 10, 0, 0) });
             _hostname.Text = McpCloudflareAccountTunnelManager.SavedHostname;
@@ -597,6 +597,31 @@ namespace QS3D.BricsCAD.V25
             var button = new Button { Content = text, Margin = new Thickness(0, 4, 0, 4), MinHeight = 32 };
             button.Click += handler;
             return button;
+        }
+
+        private void InstallCloudflared()
+        {
+            if (McpCloudflaredBootstrapper.IsInstalling)
+            {
+                _status.Text = "Cloudflare Tunnel đang được tải/cài.";
+                return;
+            }
+
+            _status.Text = "Đang tải cloudflared chính thức và kiểm tra Authenticode...";
+            McpCloudflaredBootstrapper.BeginInstall((ok, message) =>
+            {
+                try
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _status.Text = message;
+                        Refresh();
+                        if (!ok)
+                            MessageBox.Show(message, "QS3D MCP", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }));
+                }
+                catch { }
+            });
         }
 
         private void Login()
