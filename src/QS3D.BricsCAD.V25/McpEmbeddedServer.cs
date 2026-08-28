@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.Net.Sockets;
 using System.Net;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -19,9 +20,8 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Embedded loopback-only Streamable-HTTP MCP endpoint for ChatGPT/custom MCP clients.
-    /// It owns both the direct CAD API surface and a BricsCAD-window-only UI automation fallback.
-    /// Network work stays off the CAD thread; database/editor work is marshalled through
-    /// ExecuteInApplicationContext and every mutation is explicitly confirmed and audited.
+    /// Network work stays off the CAD thread. Database/editor work is marshalled through
+    /// ExecuteInApplicationContext; mutating agent tools are confirmation-gated and audited.
     /// </summary>
     internal static class McpEmbeddedServer
     {
@@ -29,15 +29,20 @@ namespace QS3D.BricsCAD.V25
         private const int MaxHeaderBytes = 64 * 1024;
         private const int MaxBodyBytes = 1024 * 1024;
         private const int CadDispatchTimeoutMilliseconds = 15000;
+        private const int MaxConcurrentClients = 16;
         private const string ProtocolVersion = "2025-06-18";
+        private const string LegacyProtocolVersion = "2025-03-26";
         private const string BearerEnvironment = "QS3D_MCP_BEARER_TOKEN";
         private const string PublicUrlEnvironment = "QS3D_MCP_PUBLIC_URL";
         private const string TokenFileName = "mcp-bearer-token.txt";
         private const string AuditFileName = "mcp-agent-audit.jsonl";
+        private const long MaxAuditBytes = 4L * 1024L * 1024L;
 
         private static readonly object Sync = new object();
-        private static readonly ConcurrentDictionary<string, DateTime> Sessions =
-            new ConcurrentDictionary<string, DateTime>(StringComparer.Ordinal);
+        private static readonly object AuditSync = new object();
+        private static readonly SemaphoreSlim ClientSlots = new SemaphoreSlim(MaxConcurrentClients, MaxConcurrentClients);
+        private static readonly ConcurrentDictionary<string, SessionState> Sessions =
+            new ConcurrentDictionary<string, SessionState>(StringComparer.Ordinal);
         private static readonly HashSet<string> AllowedCadCommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "LINE", "PLINE", "3DPOLY", "CIRCLE", "ARC", "RECTANG", "POLYGON", "ELLIPSE", "SPLINE", "POINT",
@@ -53,6 +58,11 @@ namespace QS3D.BricsCAD.V25
             "UNISOLATEOBJECTS", "UNDO", "REDO", "QSAVE", "SAVEAS", "OPEN", "NEW", "CLOSE", "PURGE", "-PURGE",
             "AUDIT", "OVERKILL"
         };
+        private static readonly HashSet<string> NoInputCadCommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "REGEN", "REGENALL", "QSAVE", "REDO", "UNISOLATEOBJECTS"
+        };
+
         private static TcpListener? _listener;
         private static Thread? _listenerThread;
         private static volatile bool _stopping;
@@ -65,7 +75,6 @@ namespace QS3D.BricsCAD.V25
         public static Uri HealthEndpoint => new Uri("http://127.0.0.1:" + Port.ToString(CultureInfo.InvariantCulture) + "/healthz");
         public static string TokenFilePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QS3D", TokenFileName);
         public static string AuditFilePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QS3D", AuditFileName);
-
         public static bool IsRunning { get { lock (Sync) return _listener != null && !_stopping; } }
         public static string LastError { get { lock (Sync) return _lastError; } }
         public static string TokenSource { get { EnsureBearerToken(); lock (Sync) return _tokenSource; } }
@@ -133,6 +142,12 @@ namespace QS3D.BricsCAD.V25
                     if (listener == null) return;
                     client = listener.AcceptTcpClient();
                     client.NoDelay = true;
+                    if (!ClientSlots.Wait(0))
+                    {
+                        try { client.Close(); } catch { }
+                        client = null;
+                        continue;
+                    }
                     ThreadPool.QueueUserWorkItem(HandleClient, client);
                     client = null;
                 }
@@ -155,21 +170,29 @@ namespace QS3D.BricsCAD.V25
 
         private static void HandleClient(object? state)
         {
-            using (var client = state as TcpClient)
+            try
             {
-                if (client == null) return;
-                try
+                using (var client = state as TcpClient)
                 {
+                    if (client == null) return;
                     using (var stream = client.GetStream())
                     {
                         stream.ReadTimeout = 10000;
                         stream.WriteTimeout = 10000;
-                        var request = ReadRequest(stream);
-                        if (request != null) HandleRequest(stream, request);
+                        try
+                        {
+                            var request = ReadRequest(stream);
+                            if (request != null) HandleRequest(stream, request);
+                        }
+                        catch (HttpProtocolException ex)
+                        {
+                            WriteResponse(stream, ex.StatusCode, ex.Reason, "{\"error\":\"" + JsonEscape(ex.Message) + "\"}", null);
+                        }
                     }
                 }
-                catch (Exception ex) { SetLastError("request: " + ex.Message); }
             }
+            catch (Exception ex) { SetLastError("request: " + ex.Message); }
+            finally { ClientSlots.Release(); }
         }
 
         private static HttpRequest? ReadRequest(NetworkStream stream)
@@ -184,31 +207,45 @@ namespace QS3D.BricsCAD.V25
                     if (read <= 0) return null;
                     accumulated.Write(buffer, 0, read);
                     if (accumulated.Length > MaxHeaderBytes + MaxBodyBytes)
-                        throw new InvalidOperationException("MCP HTTP request exceeds configured bounds.");
+                        throw new HttpProtocolException(413, "Payload Too Large", "MCP HTTP request exceeds configured bounds.");
                     headerEnd = FindHeaderEnd(accumulated.GetBuffer(), (int)accumulated.Length);
                     if (headerEnd < 0 && accumulated.Length > MaxHeaderBytes)
-                        throw new InvalidOperationException("MCP HTTP headers exceed 64 KiB.");
+                        throw new HttpProtocolException(431, "Request Header Fields Too Large", "MCP HTTP headers exceed 64 KiB.");
                 }
 
                 var all = accumulated.ToArray();
                 var headerText = Encoding.ASCII.GetString(all, 0, headerEnd);
                 var lines = headerText.Split(new[] { "\r\n" }, StringSplitOptions.None);
-                if (lines.Length == 0) throw new InvalidOperationException("Invalid MCP HTTP request line.");
-                var requestParts = lines[0].Split(' ');
-                if (requestParts.Length < 2) throw new InvalidOperationException("Invalid MCP HTTP request line.");
+                var requestParts = lines.Length == 0 ? Array.Empty<string>() : lines[0].Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (requestParts.Length != 3 || (!string.Equals(requestParts[2], "HTTP/1.1", StringComparison.OrdinalIgnoreCase)
+                                                 && !string.Equals(requestParts[2], "HTTP/1.0", StringComparison.OrdinalIgnoreCase)))
+                    throw new HttpProtocolException(400, "Bad Request", "Invalid MCP HTTP request line.");
+
                 var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 for (var i = 1; i < lines.Length; i++)
                 {
+                    if (lines[i].Length == 0) continue;
                     var separator = lines[i].IndexOf(':');
-                    if (separator > 0) headers[lines[i].Substring(0, separator).Trim()] = lines[i].Substring(separator + 1).Trim();
+                    if (separator <= 0) throw new HttpProtocolException(400, "Bad Request", "Malformed HTTP header.");
+                    var name = lines[i].Substring(0, separator).Trim();
+                    var value = lines[i].Substring(separator + 1).Trim();
+                    if (name.Length == 0 || value.IndexOfAny(new[] { '\r', '\n' }) >= 0)
+                        throw new HttpProtocolException(400, "Bad Request", "Malformed HTTP header.");
+                    if (headers.ContainsKey(name) && IsCriticalSingletonHeader(name))
+                        throw new HttpProtocolException(400, "Bad Request", "Duplicate security-sensitive HTTP header.");
+                    headers[name] = value;
                 }
+
+                string transferEncoding;
+                if (headers.TryGetValue("Transfer-Encoding", out transferEncoding) && !string.IsNullOrWhiteSpace(transferEncoding))
+                    throw new HttpProtocolException(400, "Bad Request", "Transfer-Encoding is not supported; use Content-Length.");
 
                 var contentLength = 0;
                 string lengthText;
                 if (headers.TryGetValue("Content-Length", out lengthText)
-                    && (!int.TryParse(lengthText, NumberStyles.Integer, CultureInfo.InvariantCulture, out contentLength)
+                    && (!int.TryParse(lengthText, NumberStyles.None, CultureInfo.InvariantCulture, out contentLength)
                         || contentLength < 0 || contentLength > MaxBodyBytes))
-                    throw new InvalidOperationException("Invalid MCP HTTP Content-Length.");
+                    throw new HttpProtocolException(400, "Bad Request", "Invalid MCP HTTP Content-Length.");
 
                 var bodyOffset = headerEnd + 4;
                 var body = new byte[contentLength];
@@ -218,12 +255,24 @@ namespace QS3D.BricsCAD.V25
                 while (written < contentLength)
                 {
                     var read = stream.Read(body, written, contentLength - written);
-                    if (read <= 0) throw new EndOfStreamException("MCP HTTP body ended early.");
+                    if (read <= 0) throw new HttpProtocolException(400, "Bad Request", "MCP HTTP body ended early.");
                     written += read;
                 }
-                return new HttpRequest(requestParts[0].Trim().ToUpperInvariant(), requestParts[1].Trim(), headers,
+
+                var path = requestParts[1].Trim();
+                var query = path.IndexOf('?');
+                if (query >= 0) path = path.Substring(0, query);
+                return new HttpRequest(requestParts[0].Trim().ToUpperInvariant(), path, headers,
                     contentLength == 0 ? string.Empty : Encoding.UTF8.GetString(body));
             }
+        }
+
+        private static bool IsCriticalSingletonHeader(string name)
+        {
+            return string.Equals(name, "Content-Length", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(name, "Authorization", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(name, "Mcp-Session-Id", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(name, "MCP-Protocol-Version", StringComparison.OrdinalIgnoreCase);
         }
 
         private static int FindHeaderEnd(byte[] bytes, int count)
@@ -240,62 +289,149 @@ namespace QS3D.BricsCAD.V25
                 WriteResponse(stream, 200, "OK", "{\"ok\":true,\"service\":\"qs3d-bricscad-mcp\",\"running\":true}", null);
                 return;
             }
-            if (request.Method == "OPTIONS") { WriteResponse(stream, 204, "No Content", string.Empty, null); return; }
-            if (request.Method == "GET" && string.Equals(request.Path, "/mcp", StringComparison.OrdinalIgnoreCase))
+            if (request.Method == "OPTIONS" && string.Equals(request.Path, "/mcp", StringComparison.OrdinalIgnoreCase))
             {
-                WriteResponse(stream, 405, "Method Not Allowed", "{\"error\":\"use MCP POST\"}", new Dictionary<string, string> { ["Allow"] = "POST" });
+                WriteResponse(stream, 204, "No Content", string.Empty, new Dictionary<string, string> { ["Allow"] = "POST, DELETE" });
                 return;
             }
-            if (request.Method != "POST" || !string.Equals(request.Path, "/mcp", StringComparison.OrdinalIgnoreCase))
+            if (request.Method == "GET" && string.Equals(request.Path, "/mcp", StringComparison.OrdinalIgnoreCase))
+            {
+                WriteResponse(stream, 405, "Method Not Allowed", "{\"error\":\"server-sent event stream is not enabled; use MCP POST\"}",
+                    new Dictionary<string, string> { ["Allow"] = "POST, DELETE" });
+                return;
+            }
+            if (!string.Equals(request.Path, "/mcp", StringComparison.OrdinalIgnoreCase))
             {
                 WriteResponse(stream, 404, "Not Found", "{\"error\":\"not found\"}", null);
                 return;
             }
             if (!Authorize(request.Headers))
             {
-                WriteResponse(stream, 401, "Unauthorized",
-                    "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32001,\"message\":\"Bearer authorization required.\"}}",
+                WriteResponse(stream, 401, "Unauthorized", JsonRpcError("null", -32001, "Bearer authorization required."),
                     new Dictionary<string, string> { ["WWW-Authenticate"] = "Bearer" });
                 return;
             }
+            if (request.Method == "DELETE")
+            {
+                string sessionId;
+                if (!request.Headers.TryGetValue("Mcp-Session-Id", out sessionId) || string.IsNullOrWhiteSpace(sessionId))
+                {
+                    WriteResponse(stream, 400, "Bad Request", JsonRpcError("null", -32002, "Mcp-Session-Id is required."), null);
+                    return;
+                }
+                SessionState removed;
+                Sessions.TryRemove(sessionId, out removed);
+                WriteResponse(stream, 204, "No Content", string.Empty, null);
+                return;
+            }
+            if (request.Method != "POST")
+            {
+                WriteResponse(stream, 405, "Method Not Allowed", "{\"error\":\"method not allowed\"}", new Dictionary<string, string> { ["Allow"] = "POST, DELETE" });
+                return;
+            }
 
+            string contentType;
+            if (!request.Headers.TryGetValue("Content-Type", out contentType)
+                || !contentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase))
+            {
+                WriteResponse(stream, 415, "Unsupported Media Type", "{\"error\":\"Content-Type application/json is required\"}", null);
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(request.Body))
+            {
+                WriteResponse(stream, 400, "Bad Request", JsonRpcError("null", -32700, "JSON-RPC body is required."), null);
+                return;
+            }
+
+            var jsonRpc = ExtractString(request.Body, "jsonrpc");
             var method = ExtractString(request.Body, "method");
             var id = ExtractId(request.Body);
+            var hasId = HasProperty(request.Body, "id");
+            if (!string.Equals(jsonRpc, "2.0", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(method))
+            {
+                WriteResponse(stream, 200, "OK", JsonRpcError(hasId ? id : "null", -32600, "Invalid JSON-RPC 2.0 request."), null);
+                return;
+            }
+
             if (string.Equals(method, "initialize", StringComparison.Ordinal))
             {
+                if (!hasId)
+                {
+                    WriteResponse(stream, 200, "OK", JsonRpcError("null", -32600, "initialize must include a JSON-RPC id."), null);
+                    return;
+                }
                 var requested = ExtractString(request.Body, "protocolVersion");
-                var selected = string.Equals(requested, "2025-03-26", StringComparison.Ordinal) ? "2025-03-26" : ProtocolVersion;
+                if (!string.Equals(requested, ProtocolVersion, StringComparison.Ordinal)
+                    && !string.Equals(requested, LegacyProtocolVersion, StringComparison.Ordinal))
+                {
+                    WriteResponse(stream, 200, "OK", JsonRpcError(id, -32602,
+                        "Unsupported MCP protocolVersion. Supported: " + ProtocolVersion + ", " + LegacyProtocolVersion + "."), null);
+                    return;
+                }
                 var sessionId = Guid.NewGuid().ToString("N");
-                Sessions[sessionId] = DateTime.UtcNow;
+                Sessions[sessionId] = new SessionState(DateTime.UtcNow, requested);
                 var response = "{\"jsonrpc\":\"2.0\",\"id\":" + id
-                               + ",\"result\":{\"protocolVersion\":\"" + selected
+                               + ",\"result\":{\"protocolVersion\":\"" + requested
                                + "\",\"capabilities\":{\"tools\":{\"listChanged\":false}},"
-                               + "\"serverInfo\":{\"name\":\"qs3d-bricscad\",\"version\":\"embedded-2\"},"
-                               + "\"instructions\":\"QS3D embedded BricsCAD MCP. Prefer direct CAD API tools, use cad_command_sequence for supported command-line workflows, and use BricsCAD-window-only mouse/keyboard tools only as a UI fallback. Every mutation requires confirmMutation=true.\"}}";
+                               + "\"serverInfo\":{\"name\":\"qs3d-bricscad\",\"version\":\"embedded-3\"},"
+                               + "\"instructions\":\"QS3D embedded BricsCAD MCP. Prefer direct CAD API tools. Use cad_command_sequence only for allowlisted command-line workflows and BricsCAD-window UI tools only as a fallback. Every ordinary mutation requires confirmMutation=true; emergency stop/cancel stay available without confirmation.\"}}";
                 WriteResponse(stream, 200, "OK", response, new Dictionary<string, string>
                 {
                     ["Mcp-Session-Id"] = sessionId,
-                    ["MCP-Protocol-Version"] = selected
+                    ["MCP-Protocol-Version"] = requested
                 });
                 return;
             }
 
+            SessionState session;
             string sessionError;
-            if (!TryValidateSession(request.Headers, out sessionError))
+            if (!TryValidateSession(request.Headers, out session, out sessionError))
             {
-                WriteResponse(stream, 400, "Bad Request", JsonRpcError(id, -32002, sessionError), null);
+                WriteResponse(stream, 400, "Bad Request", JsonRpcError(hasId ? id : "null", -32002, sessionError), null);
                 return;
             }
-            if (string.Equals(method, "notifications/initialized", StringComparison.Ordinal)) { WriteResponse(stream, 202, "Accepted", string.Empty, null); return; }
-            if (string.Equals(method, "ping", StringComparison.Ordinal)) { WriteResponse(stream, 200, "OK", "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{}}", null); return; }
-            if (string.Equals(method, "tools/list", StringComparison.Ordinal)) { WriteResponse(stream, 200, "OK", ToolsListResponse(id), null); return; }
+            if (string.Equals(method, "notifications/initialized", StringComparison.Ordinal)
+                || string.Equals(method, "notifications/cancelled", StringComparison.Ordinal)
+                || (!hasId && method.StartsWith("notifications/", StringComparison.Ordinal)))
+            {
+                WriteResponse(stream, 202, "Accepted", string.Empty, ProtocolHeader(session));
+                return;
+            }
+            if (!hasId)
+            {
+                WriteResponse(stream, 202, "Accepted", string.Empty, ProtocolHeader(session));
+                return;
+            }
+            if (string.Equals(method, "ping", StringComparison.Ordinal))
+            {
+                WriteResponse(stream, 200, "OK", "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{}}", ProtocolHeader(session));
+                return;
+            }
+            if (string.Equals(method, "tools/list", StringComparison.Ordinal))
+            {
+                WriteResponse(stream, 200, "OK", ToolsListResponse(id), ProtocolHeader(session));
+                return;
+            }
             if (string.Equals(method, "tools/call", StringComparison.Ordinal))
             {
-                var result = CallTool(ExtractToolName(request.Body), request.Body);
-                WriteResponse(stream, 200, "OK", "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":" + result + "}", null);
+                string toolName;
+                string arguments;
+                string toolParseError;
+                if (!TryExtractToolCall(request.Body, out toolName, out arguments, out toolParseError))
+                {
+                    WriteResponse(stream, 200, "OK", JsonRpcError(id, -32602, toolParseError), ProtocolHeader(session));
+                    return;
+                }
+                var result = CallTool(toolName, arguments);
+                WriteResponse(stream, 200, "OK", "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":" + result + "}", ProtocolHeader(session));
                 return;
             }
-            WriteResponse(stream, 200, "OK", JsonRpcError(id, -32601, "Method not found."), null);
+            WriteResponse(stream, 200, "OK", JsonRpcError(id, -32601, "Method not found."), ProtocolHeader(session));
+        }
+
+        private static IDictionary<string, string> ProtocolHeader(SessionState session)
+        {
+            return new Dictionary<string, string> { ["MCP-Protocol-Version"] = session.ProtocolVersion };
         }
 
         private static bool Authorize(IDictionary<string, string> headers)
@@ -307,19 +443,34 @@ namespace QS3D.BricsCAD.V25
             return ConstantTimeEquals(authorization.Substring(prefix.Length).Trim(), GetBearerToken());
         }
 
-        private static bool TryValidateSession(IDictionary<string, string> headers, out string error)
+        private static bool TryValidateSession(IDictionary<string, string> headers, out SessionState state, out string error)
         {
             CleanupSessions();
+            state = new SessionState(DateTime.MinValue, ProtocolVersion);
             string sessionId;
             if (!headers.TryGetValue("Mcp-Session-Id", out sessionId) || string.IsNullOrWhiteSpace(sessionId))
             { error = "Mcp-Session-Id is required after initialize."; return false; }
-            DateTime lastSeen;
-            if (!Sessions.TryGetValue(sessionId, out lastSeen)) { error = "Unknown or expired MCP session."; return false; }
-            if (DateTime.UtcNow - lastSeen > TimeSpan.FromHours(4))
+            SessionState stored;
+            if (!Sessions.TryGetValue(sessionId, out stored)) { error = "Unknown or expired MCP session."; return false; }
+            if (DateTime.UtcNow - stored.LastSeenUtc > TimeSpan.FromHours(4))
             {
-                DateTime ignored; Sessions.TryRemove(sessionId, out ignored); error = "MCP session expired."; return false;
+                SessionState ignored;
+                Sessions.TryRemove(sessionId, out ignored);
+                error = "MCP session expired.";
+                return false;
             }
-            Sessions[sessionId] = DateTime.UtcNow; error = string.Empty; return true;
+            string version;
+            if (headers.TryGetValue("MCP-Protocol-Version", out version)
+                && !string.IsNullOrWhiteSpace(version)
+                && !string.Equals(version, stored.ProtocolVersion, StringComparison.Ordinal))
+            {
+                error = "MCP-Protocol-Version does not match the initialized session.";
+                return false;
+            }
+            state = new SessionState(DateTime.UtcNow, stored.ProtocolVersion);
+            Sessions[sessionId] = state;
+            error = string.Empty;
+            return true;
         }
 
         private static void CleanupSessions()
@@ -327,8 +478,9 @@ namespace QS3D.BricsCAD.V25
             var cutoff = DateTime.UtcNow - TimeSpan.FromHours(4);
             foreach (var pair in Sessions)
             {
-                if (pair.Value >= cutoff) continue;
-                DateTime ignored; Sessions.TryRemove(pair.Key, out ignored);
+                if (pair.Value.LastSeenUtc >= cutoff) continue;
+                SessionState ignored;
+                Sessions.TryRemove(pair.Key, out ignored);
             }
         }
 
@@ -340,25 +492,25 @@ namespace QS3D.BricsCAD.V25
                    + "," + Tool("cad_active_document", "Read active BricsCAD document identity.", "{}")
                    + "," + Tool("cad_selection", "Read current implied selection handles, types and layers.", "{}")
                    + "," + Tool("cad_database_snapshot", "Read a bounded ModelSpace entity snapshot.", "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":1000}")
-                   + "," + Tool("cad_view_state", "Read command-active state, current view center/size and BricsCAD window size.", "{}")
+                   + "," + Tool("cad_view_state", "Read command-active state, current view center/size and active BricsCAD window size.", "{}")
                    + "," + Tool("cad_wait_idle", "Wait until BricsCAD reports CMDACTIVE=0 or timeout.", "\"timeoutMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":30000}")
-                   + "," + Tool("cad_create_line", "Create one native Line in ModelSpace.", NumericProperties("x1","y1","z1","x2","y2","z2") + ",\"layer\":{\"type\":\"string\"},\"confirmMutation\":{\"type\":\"boolean\"}", Required("x1","y1","x2","y2","confirmMutation"))
-                   + "," + Tool("cad_create_circle", "Create one native Circle in ModelSpace.", NumericProperties("x","y","z","radius") + ",\"layer\":{\"type\":\"string\"},\"confirmMutation\":{\"type\":\"boolean\"}", Required("x","y","radius","confirmMutation"))
-                   + "," + Tool("cad_create_polyline", "Create a native 2D Polyline. points format: x,y;x,y;...", "\"points\":{\"type\":\"string\",\"maxLength\":16000},\"closed\":{\"type\":\"boolean\"},\"elevation\":{\"type\":\"number\"},\"layer\":{\"type\":\"string\"},\"confirmMutation\":{\"type\":\"boolean\"}", Required("points","confirmMutation"))
-                   + "," + Tool("cad_create_text", "Create native DBText in ModelSpace.", "\"text\":{\"type\":\"string\",\"maxLength\":4000}," + NumericProperties("x","y","z","height","rotationDeg") + ",\"layer\":{\"type\":\"string\"},\"confirmMutation\":{\"type\":\"boolean\"}", Required("text","x","y","height","confirmMutation"))
-                   + "," + Tool("cad_entity_transform", "Move, rotate or scale one entity by handle.", "\"handle\":{\"type\":\"string\"},\"action\":{\"type\":\"string\",\"enum\":[\"move\",\"rotate\",\"scale\"]}," + NumericProperties("dx","dy","dz","angleDeg","factor") + ",\"confirmMutation\":{\"type\":\"boolean\"}", Required("handle","action","confirmMutation"))
-                   + "," + Tool("cad_entity_delete", "Erase one entity by handle.", "\"handle\":{\"type\":\"string\"},\"confirmMutation\":{\"type\":\"boolean\"}", Required("handle","confirmMutation"))
+                   + "," + Tool("cad_create_line", "Create one native Line in ModelSpace.", NumericProperties("x1","y1","z1","x2","y2","z2") + ",\"layer\":{\"type\":\"string\",\"maxLength\":255},\"confirmMutation\":{\"type\":\"boolean\"}", Required("x1","y1","x2","y2","confirmMutation"))
+                   + "," + Tool("cad_create_circle", "Create one native Circle in ModelSpace.", NumericProperties("x","y","z","radius") + ",\"layer\":{\"type\":\"string\",\"maxLength\":255},\"confirmMutation\":{\"type\":\"boolean\"}", Required("x","y","radius","confirmMutation"))
+                   + "," + Tool("cad_create_polyline", "Create a native 2D Polyline. points format: x,y;x,y;...", "\"points\":{\"type\":\"string\",\"maxLength\":16000},\"closed\":{\"type\":\"boolean\"},\"elevation\":{\"type\":\"number\"},\"layer\":{\"type\":\"string\",\"maxLength\":255},\"confirmMutation\":{\"type\":\"boolean\"}", Required("points","confirmMutation"))
+                   + "," + Tool("cad_create_text", "Create native DBText in ModelSpace.", "\"text\":{\"type\":\"string\",\"maxLength\":4000}," + NumericProperties("x","y","z","height","rotationDeg") + ",\"layer\":{\"type\":\"string\",\"maxLength\":255},\"confirmMutation\":{\"type\":\"boolean\"}", Required("text","x","y","height","confirmMutation"))
+                   + "," + Tool("cad_entity_transform", "Move, rotate or scale one entity by handle.", "\"handle\":{\"type\":\"string\",\"maxLength\":32},\"action\":{\"type\":\"string\",\"enum\":[\"move\",\"rotate\",\"scale\"]}," + NumericProperties("dx","dy","dz","angleDeg","factor") + ",\"confirmMutation\":{\"type\":\"boolean\"}", Required("handle","action","confirmMutation"))
+                   + "," + Tool("cad_entity_delete", "Erase one entity by handle.", "\"handle\":{\"type\":\"string\",\"maxLength\":32},\"confirmMutation\":{\"type\":\"boolean\"}", Required("handle","confirmMutation"))
                    + "," + Tool("cad_layer", "Create a layer or make it current.", "\"action\":{\"type\":\"string\",\"enum\":[\"create\",\"set_current\"]},\"name\":{\"type\":\"string\",\"maxLength\":255},\"confirmMutation\":{\"type\":\"boolean\"}", Required("action","name","confirmMutation"))
                    + "," + Tool("cad_command_catalog", "Return the allowlisted BricsCAD commands available to cad_command_sequence.", "{}")
-                   + "," + Tool("cad_command_sequence", "Run one allowlisted BricsCAD command with newline-delimited command-line inputs. Covers hatch/dimensions/blocks/xrefs/layout/plot/open/save and advanced CAD workflows.", "\"command\":{\"type\":\"string\",\"maxLength\":40},\"inputs\":{\"type\":\"string\",\"maxLength\":16000},\"confirmMutation\":{\"type\":\"boolean\"}", Required("command","confirmMutation"))
+                   + "," + Tool("cad_command_sequence", "Run one allowlisted BricsCAD command with bounded newline-delimited prompt inputs. Input chaining after a blank terminator and known command injection are rejected.", "\"command\":{\"type\":\"string\",\"maxLength\":40},\"inputs\":{\"type\":\"string\",\"maxLength\":16000},\"confirmMutation\":{\"type\":\"boolean\"}", Required("command","confirmMutation"))
                    + "," + Tool("qs3d_run_command", "Start one allowlisted QS3D command in the active document.", "\"command\":{\"type\":\"string\",\"pattern\":\"^QS3D[A-Za-z0-9_]*$\",\"maxLength\":80},\"confirmMutation\":{\"type\":\"boolean\"}", Required("command","confirmMutation"))
-                   + "," + Tool("cad_ui_click", "Click inside the BricsCAD client window only, using client-relative pixels.", "\"x\":{\"type\":\"integer\"},\"y\":{\"type\":\"integer\"},\"button\":{\"type\":\"string\",\"enum\":[\"left\",\"right\",\"middle\"]},\"count\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":3},\"confirmMutation\":{\"type\":\"boolean\"}", Required("x","y","button","confirmMutation"))
-                   + "," + Tool("cad_ui_type", "Type Unicode text into the BricsCAD foreground window only.", "\"text\":{\"type\":\"string\",\"maxLength\":8000},\"pressEnter\":{\"type\":\"boolean\"},\"confirmMutation\":{\"type\":\"boolean\"}", Required("text","confirmMutation"))
-                   + "," + Tool("cad_ui_key", "Press a named key in BricsCAD with optional Ctrl/Alt/Shift modifiers.", "\"key\":{\"type\":\"string\"},\"ctrl\":{\"type\":\"boolean\"},\"alt\":{\"type\":\"boolean\"},\"shift\":{\"type\":\"boolean\"},\"confirmMutation\":{\"type\":\"boolean\"}", Required("key","confirmMutation"))
-                   + "," + Tool("cad_agent_stop", "Emergency-stop autonomous input and send ESC twice to BricsCAD.", "{}")
+                   + "," + Tool("cad_ui_click", "Click inside the active BricsCAD-process window only, using client-relative pixels.", "\"x\":{\"type\":\"integer\"},\"y\":{\"type\":\"integer\"},\"button\":{\"type\":\"string\",\"enum\":[\"left\",\"right\",\"middle\"]},\"count\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":3},\"confirmMutation\":{\"type\":\"boolean\"}", Required("x","y","button","confirmMutation"))
+                   + "," + Tool("cad_ui_type", "Type printable Unicode text into the active BricsCAD-process window only.", "\"text\":{\"type\":\"string\",\"maxLength\":8000},\"pressEnter\":{\"type\":\"boolean\"},\"confirmMutation\":{\"type\":\"boolean\"}", Required("text","confirmMutation"))
+                   + "," + Tool("cad_ui_key", "Press a named key in the active BricsCAD-process window with optional Ctrl/Alt/Shift modifiers.", "\"key\":{\"type\":\"string\",\"maxLength\":16},\"ctrl\":{\"type\":\"boolean\"},\"alt\":{\"type\":\"boolean\"},\"shift\":{\"type\":\"boolean\"},\"confirmMutation\":{\"type\":\"boolean\"}", Required("key","confirmMutation"))
+                   + "," + Tool("cad_agent_stop", "Emergency-stop autonomous input and send ESC twice to BricsCAD. Deliberately available without confirmation.", "{}")
                    + "," + Tool("cad_agent_resume", "Re-enable autonomous mutation/UI tools after an emergency stop.", "\"confirmMutation\":{\"type\":\"boolean\"}", Required("confirmMutation"))
                    + "," + Tool("cad_audit_tail", "Read the latest bounded MCP mutation audit entries.", "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}")
-                   + "," + Tool("cad_cancel_command", "Send two ESC characters to cancel the current CAD command.", "{}")
+                   + "," + Tool("cad_cancel_command", "Send two ESC characters to cancel the current CAD command. Deliberately available without confirmation.", "{}")
                    + "]}}";
         }
 
@@ -385,7 +537,7 @@ namespace QS3D.BricsCAD.V25
             return output;
         }
 
-        private static string CallTool(string toolName, string requestBody)
+        private static string CallTool(string toolName, string arguments)
         {
             try
             {
@@ -399,32 +551,26 @@ namespace QS3D.BricsCAD.V25
                     case "qs3d_status": return ToolSuccess(InvokeCad(BuildStatusJson));
                     case "cad_active_document": return ToolSuccess(InvokeCad(BuildActiveDocumentJson));
                     case "cad_selection": return ToolSuccess(InvokeCad(BuildSelectionJson));
-                    case "cad_database_snapshot": return ToolSuccess(InvokeCad(() => BuildDatabaseSnapshotJson(ExtractInteger(requestBody, "limit", 250, 1, 1000))));
+                    case "cad_database_snapshot": return ToolSuccess(InvokeCad(() => BuildDatabaseSnapshotJson(ExtractInteger(arguments, "limit", 250, 1, 1000))));
                     case "cad_view_state": return ToolSuccess(InvokeCad(BuildViewStateJson));
-                    case "cad_wait_idle": return ToolSuccess(WaitUntilIdle(ExtractInteger(requestBody, "timeoutMs", 10000, 100, 30000)));
-                    case "cad_create_line": return RequireMutation(requestBody, "cad_create_line", () => CreateLine(requestBody));
-                    case "cad_create_circle": return RequireMutation(requestBody, "cad_create_circle", () => CreateCircle(requestBody));
-                    case "cad_create_polyline": return RequireMutation(requestBody, "cad_create_polyline", () => CreatePolyline(requestBody));
-                    case "cad_create_text": return RequireMutation(requestBody, "cad_create_text", () => CreateText(requestBody));
-                    case "cad_entity_transform": return RequireMutation(requestBody, "cad_entity_transform", () => TransformEntity(requestBody));
-                    case "cad_entity_delete": return RequireMutation(requestBody, "cad_entity_delete", () => DeleteEntity(requestBody));
-                    case "cad_layer": return RequireMutation(requestBody, "cad_layer", () => LayerAction(requestBody));
+                    case "cad_wait_idle": return ToolSuccess(WaitUntilIdle(ExtractInteger(arguments, "timeoutMs", 10000, 100, 30000)));
+                    case "cad_create_line": return RequireMutation(arguments, "cad_create_line", () => CreateLine(arguments));
+                    case "cad_create_circle": return RequireMutation(arguments, "cad_create_circle", () => CreateCircle(arguments));
+                    case "cad_create_polyline": return RequireMutation(arguments, "cad_create_polyline", () => CreatePolyline(arguments));
+                    case "cad_create_text": return RequireMutation(arguments, "cad_create_text", () => CreateText(arguments));
+                    case "cad_entity_transform": return RequireMutation(arguments, "cad_entity_transform", () => TransformEntity(arguments));
+                    case "cad_entity_delete": return RequireMutation(arguments, "cad_entity_delete", () => DeleteEntity(arguments));
+                    case "cad_layer": return RequireMutation(arguments, "cad_layer", () => LayerAction(arguments));
                     case "cad_command_catalog": return ToolSuccess(CommandCatalogJson());
-                    case "cad_command_sequence": return RequireMutation(requestBody, "cad_command_sequence", () => RunCadCommandSequence(requestBody));
-                    case "qs3d_run_command": return RequireMutation(requestBody, "qs3d_run_command", () => RunQs3dCommand(requestBody));
-                    case "cad_ui_click": return RequireMutation(requestBody, "cad_ui_click", () => UiClick(requestBody));
-                    case "cad_ui_type": return RequireMutation(requestBody, "cad_ui_type", () => UiType(requestBody));
-                    case "cad_ui_key": return RequireMutation(requestBody, "cad_ui_key", () => UiKey(requestBody));
-                    case "cad_agent_stop":
-                        _automationStopped = true;
-                        Audit("cad_agent_stop", "emergency stop");
-                        return ToolSuccess(InvokeCad(() => { var d = RequireDocument(); d.SendStringToExecute("\u001b\u001b", true, false, true); return "{\"stopped\":true}"; }));
-                    case "cad_agent_resume":
-                        if (!ExtractBoolean(requestBody, "confirmMutation")) return ToolError("confirmMutation=true is required before resuming automation.");
-                        _automationStopped = false; Audit("cad_agent_resume", "resume"); return ToolSuccess("{\"stopped\":false}");
-                    case "cad_audit_tail": return ToolSuccess(ReadAuditTail(ExtractInteger(requestBody, "limit", 25, 1, 100)));
-                    case "cad_cancel_command":
-                        return ToolSuccess(InvokeCad(() => { var d = RequireDocument(); d.SendStringToExecute("\u001b\u001b", true, false, true); return "{\"accepted\":true,\"escapeCount\":2}"; }));
+                    case "cad_command_sequence": return RequireMutation(arguments, "cad_command_sequence", () => RunCadCommandSequence(arguments));
+                    case "qs3d_run_command": return RequireMutation(arguments, "qs3d_run_command", () => RunQs3dCommand(arguments));
+                    case "cad_ui_click": return RequireMutation(arguments, "cad_ui_click", () => UiClick(arguments));
+                    case "cad_ui_type": return RequireMutation(arguments, "cad_ui_type", () => UiType(arguments));
+                    case "cad_ui_key": return RequireMutation(arguments, "cad_ui_key", () => UiKey(arguments));
+                    case "cad_agent_stop": return EmergencyStop();
+                    case "cad_agent_resume": return ResumeAgent(arguments);
+                    case "cad_audit_tail": return ToolSuccess(ReadAuditTail(ExtractInteger(arguments, "limit", 25, 1, 100)));
+                    case "cad_cancel_command": return CancelCurrentCommand();
                     default: return ToolError("Unknown MCP tool: " + toolName);
                 }
             }
@@ -435,50 +581,96 @@ namespace QS3D.BricsCAD.V25
         {
             if (_automationStopped) return ToolError("Automation is emergency-stopped. Call cad_agent_resume with confirmMutation=true first.");
             if (!ExtractBoolean(body, "confirmMutation")) return ToolError("confirmMutation=true is required for " + tool + ".");
-            var result = action();
-            return ToolSuccess(result);
+            return ToolSuccess(action());
+        }
+
+        private static string EmergencyStop()
+        {
+            _automationStopped = true;
+            Audit("cad_agent_stop", "emergency stop");
+            try
+            {
+                var result = InvokeCad(() =>
+                {
+                    var document = RequireDocument();
+                    document.SendStringToExecute("\u001b\u001b", true, false, true);
+                    return "{\"stopped\":true,\"escapeCount\":2}";
+                });
+                return ToolSuccess(result);
+            }
+            catch (Exception ex) { return ToolError("Automation stopped, but ESC dispatch failed: " + ex.Message); }
+        }
+
+        private static string ResumeAgent(string body)
+        {
+            if (!ExtractBoolean(body, "confirmMutation")) return ToolError("confirmMutation=true is required before resuming automation.");
+            _automationStopped = false;
+            Audit("cad_agent_resume", "resume");
+            return ToolSuccess("{\"stopped\":false}");
+        }
+
+        private static string CancelCurrentCommand()
+        {
+            try
+            {
+                var result = InvokeCad(() =>
+                {
+                    var document = RequireDocument();
+                    document.SendStringToExecute("\u001b\u001b", true, false, true);
+                    Audit("cad_cancel_command", "escapeCount=2");
+                    return "{\"accepted\":true,\"escapeCount\":2}";
+                });
+                return ToolSuccess(result);
+            }
+            catch (Exception ex) { return ToolError(ex.Message); }
         }
 
         private static string CreateLine(string body)
         {
             var x1 = RequireDouble(body, "x1"); var y1 = RequireDouble(body, "y1"); var z1 = ExtractDouble(body, "z1", 0d);
             var x2 = RequireDouble(body, "x2"); var y2 = RequireDouble(body, "y2"); var z2 = ExtractDouble(body, "z2", 0d);
-            var layer = ExtractString(body, "layer");
+            var layer = ValidateLayerName(ExtractString(body, "layer"), true);
             return InvokeCad(() => AddEntity(new Line(new Point3d(x1, y1, z1), new Point3d(x2, y2, z2)), layer, "cad_create_line"));
         }
 
         private static string CreateCircle(string body)
         {
             var x = RequireDouble(body, "x"); var y = RequireDouble(body, "y"); var z = ExtractDouble(body, "z", 0d);
-            var radius = RequireDouble(body, "radius"); if (!(radius > 0d)) throw new InvalidOperationException("radius must be > 0.");
-            var layer = ExtractString(body, "layer");
+            var radius = RequireDouble(body, "radius");
+            if (!(radius > 0d)) throw new InvalidOperationException("radius must be > 0.");
+            var layer = ValidateLayerName(ExtractString(body, "layer"), true);
             return InvokeCad(() => AddEntity(new Circle(new Point3d(x, y, z), Vector3d.ZAxis, radius), layer, "cad_create_circle"));
         }
 
         private static string CreatePolyline(string body)
         {
             var points = ExtractString(body, "points");
+            if (points.Length > 16000) throw new InvalidOperationException("points exceeds 16000 characters.");
             var closed = ExtractBoolean(body, "closed");
             var elevation = ExtractDouble(body, "elevation", 0d);
-            var layer = ExtractString(body, "layer");
+            var layer = ValidateLayerName(ExtractString(body, "layer"), true);
             var parsed = ParsePoints2d(points);
             if (parsed.Count < 2) throw new InvalidOperationException("Polyline requires at least two x,y points.");
+            if (parsed.Count > 2048) throw new InvalidOperationException("Polyline exceeds 2048 vertices.");
             return InvokeCad(() =>
             {
                 var polyline = new Polyline(parsed.Count);
                 for (var i = 0; i < parsed.Count; i++) polyline.AddVertexAt(i, parsed[i], 0d, 0d, 0d);
-                polyline.Closed = closed; polyline.Elevation = elevation;
+                polyline.Closed = closed;
+                polyline.Elevation = elevation;
                 return AddEntity(polyline, layer, "cad_create_polyline");
             });
         }
 
         private static string CreateText(string body)
         {
-            var text = ExtractString(body, "text"); if (string.IsNullOrEmpty(text)) throw new InvalidOperationException("text is required.");
+            var text = ExtractString(body, "text");
+            ValidatePrintableText(text, "text", 4000, false);
             var x = RequireDouble(body, "x"); var y = RequireDouble(body, "y"); var z = ExtractDouble(body, "z", 0d);
-            var height = RequireDouble(body, "height"); if (!(height > 0d)) throw new InvalidOperationException("height must be > 0.");
+            var height = RequireDouble(body, "height");
+            if (!(height > 0d)) throw new InvalidOperationException("height must be > 0.");
             var rotation = ExtractDouble(body, "rotationDeg", 0d) * Math.PI / 180d;
-            var layer = ExtractString(body, "layer");
+            var layer = ValidateLayerName(ExtractString(body, "layer"), true);
             return InvokeCad(() =>
             {
                 var entity = new DBText { TextString = text, Position = new Point3d(x, y, z), Height = height, Rotation = rotation };
@@ -495,8 +687,11 @@ namespace QS3D.BricsCAD.V25
                 ApplyLayer(transaction, document.Database, entity, layer);
                 var table = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
                 var model = (BlockTableRecord)transaction.GetObject(table[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-                var id = model.AppendEntity(entity); transaction.AddNewlyCreatedDBObject(entity, true); transaction.Commit();
-                var handle = id.Handle.ToString(); Audit(auditTool, "handle=" + handle);
+                var id = model.AppendEntity(entity);
+                transaction.AddNewlyCreatedDBObject(entity, true);
+                transaction.Commit();
+                var handle = id.Handle.ToString();
+                Audit(auditTool, "handle=" + handle);
                 return "{\"created\":true,\"handle\":\"" + JsonEscape(handle) + "\",\"type\":\"" + JsonEscape(entity.GetType().Name) + "\"}";
             }
         }
@@ -504,20 +699,22 @@ namespace QS3D.BricsCAD.V25
         private static void ApplyLayer(Transaction transaction, Database database, Entity entity, string layer)
         {
             if (string.IsNullOrWhiteSpace(layer)) return;
-            var name = layer.Trim();
             var table = (LayerTable)transaction.GetObject(database.LayerTableId, OpenMode.ForRead);
-            if (!table.Has(name))
+            if (!table.Has(layer))
             {
                 table.UpgradeOpen();
-                var record = new LayerTableRecord { Name = name };
-                table.Add(record); transaction.AddNewlyCreatedDBObject(record, true);
+                var record = new LayerTableRecord { Name = layer };
+                table.Add(record);
+                transaction.AddNewlyCreatedDBObject(record, true);
             }
-            entity.Layer = name;
+            entity.Layer = layer;
         }
 
         private static string TransformEntity(string body)
         {
-            var handle = ExtractString(body, "handle"); var action = ExtractString(body, "action").Trim().ToLowerInvariant();
+            var handle = ExtractString(body, "handle");
+            var action = ExtractString(body, "action").Trim().ToLowerInvariant();
+            ValidateHandleText(handle);
             return InvokeCad(() =>
             {
                 var document = RequireDocument();
@@ -525,19 +722,22 @@ namespace QS3D.BricsCAD.V25
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
                     var entity = OpenEntityByHandle(transaction, document.Database, handle, OpenMode.ForWrite);
-                    if (action == "move") entity.TransformBy(Matrix3d.Displacement(new Vector3d(ExtractDouble(body,"dx",0d), ExtractDouble(body,"dy",0d), ExtractDouble(body,"dz",0d))));
+                    if (action == "move")
+                        entity.TransformBy(Matrix3d.Displacement(new Vector3d(ExtractDouble(body, "dx", 0d), ExtractDouble(body, "dy", 0d), ExtractDouble(body, "dz", 0d))));
                     else if (action == "rotate")
                     {
-                        var center = EntityCenter(entity); var radians = RequireDouble(body, "angleDeg") * Math.PI / 180d;
-                        entity.TransformBy(Matrix3d.Rotation(radians, Vector3d.ZAxis, center));
+                        var radians = RequireDouble(body, "angleDeg") * Math.PI / 180d;
+                        entity.TransformBy(Matrix3d.Rotation(radians, Vector3d.ZAxis, EntityCenter(entity)));
                     }
                     else if (action == "scale")
                     {
-                        var factor = RequireDouble(body, "factor"); if (!(factor > 0d)) throw new InvalidOperationException("factor must be > 0.");
+                        var factor = RequireDouble(body, "factor");
+                        if (!(factor > 0d)) throw new InvalidOperationException("factor must be > 0.");
                         entity.TransformBy(Matrix3d.Scaling(factor, EntityCenter(entity)));
                     }
                     else throw new InvalidOperationException("action must be move, rotate or scale.");
-                    transaction.Commit(); Audit("cad_entity_transform", "handle=" + handle + "; action=" + action);
+                    transaction.Commit();
+                    Audit("cad_entity_transform", "handle=" + handle + "; action=" + action);
                     return "{\"updated\":true,\"handle\":\"" + JsonEscape(handle) + "\",\"action\":\"" + JsonEscape(action) + "\"}";
                 }
             });
@@ -546,6 +746,7 @@ namespace QS3D.BricsCAD.V25
         private static string DeleteEntity(string body)
         {
             var handle = ExtractString(body, "handle");
+            ValidateHandleText(handle);
             return InvokeCad(() =>
             {
                 var document = RequireDocument();
@@ -553,7 +754,8 @@ namespace QS3D.BricsCAD.V25
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
                     OpenEntityByHandle(transaction, document.Database, handle, OpenMode.ForWrite).Erase();
-                    transaction.Commit(); Audit("cad_entity_delete", "handle=" + handle);
+                    transaction.Commit();
+                    Audit("cad_entity_delete", "handle=" + handle);
                     return "{\"erased\":true,\"handle\":\"" + JsonEscape(handle) + "\"}";
                 }
             });
@@ -562,11 +764,14 @@ namespace QS3D.BricsCAD.V25
         private static Entity OpenEntityByHandle(Transaction transaction, Database database, string handleText, OpenMode mode)
         {
             long value;
-            if (!long.TryParse((handleText ?? string.Empty).Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value))
+            if (!long.TryParse((handleText ?? string.Empty).Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value) || value <= 0)
                 throw new InvalidOperationException("Invalid entity handle.");
-            var id = database.GetObjectId(false, new Handle(value), 0);
+            ObjectId id;
+            try { id = database.GetObjectId(false, new Handle(value), 0); }
+            catch (Exception ex) { throw new InvalidOperationException("Entity handle was not found.", ex); }
+            if (id.IsNull || id.IsErased) throw new InvalidOperationException("Entity handle was not found or is erased.");
             var entity = transaction.GetObject(id, mode, false) as Entity;
-            if (entity == null) throw new InvalidOperationException("Entity handle was not found.");
+            if (entity == null) throw new InvalidOperationException("Object handle is not an entity.");
             return entity;
         }
 
@@ -575,7 +780,9 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var extents = entity.GeometricExtents;
-                return new Point3d((extents.MinPoint.X + extents.MaxPoint.X) / 2d, (extents.MinPoint.Y + extents.MaxPoint.Y) / 2d, (extents.MinPoint.Z + extents.MaxPoint.Z) / 2d);
+                return new Point3d((extents.MinPoint.X + extents.MaxPoint.X) / 2d,
+                    (extents.MinPoint.Y + extents.MaxPoint.Y) / 2d,
+                    (extents.MinPoint.Z + extents.MaxPoint.Z) / 2d);
             }
             catch { return Point3d.Origin; }
         }
@@ -583,7 +790,8 @@ namespace QS3D.BricsCAD.V25
         private static string LayerAction(string body)
         {
             var action = ExtractString(body, "action").Trim().ToLowerInvariant();
-            var name = ExtractString(body, "name").Trim(); if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Layer name is required.");
+            var name = ValidateLayerName(ExtractString(body, "name"), false);
+            if (action != "create" && action != "set_current") throw new InvalidOperationException("action must be create or set_current.");
             return InvokeCad(() =>
             {
                 var document = RequireDocument();
@@ -595,11 +803,14 @@ namespace QS3D.BricsCAD.V25
                     if (table.Has(name)) id = table[name];
                     else
                     {
-                        table.UpgradeOpen(); var record = new LayerTableRecord { Name = name }; id = table.Add(record); transaction.AddNewlyCreatedDBObject(record, true);
+                        table.UpgradeOpen();
+                        var record = new LayerTableRecord { Name = name };
+                        id = table.Add(record);
+                        transaction.AddNewlyCreatedDBObject(record, true);
                     }
                     if (action == "set_current") document.Database.Clayer = id;
-                    else if (action != "create") throw new InvalidOperationException("action must be create or set_current.");
-                    transaction.Commit(); Audit("cad_layer", "action=" + action + "; name=" + name);
+                    transaction.Commit();
+                    Audit("cad_layer", "action=" + action + "; name=" + name);
                     return "{\"ok\":true,\"action\":\"" + JsonEscape(action) + "\",\"name\":\"" + JsonEscape(name) + "\"}";
                 }
             });
@@ -607,20 +818,50 @@ namespace QS3D.BricsCAD.V25
 
         private static string RunCadCommandSequence(string body)
         {
-            var command = ExtractString(body, "command").Trim().TrimStart('_').ToUpperInvariant();
-            if (!AllowedCadCommands.Contains(command)) throw new InvalidOperationException("Command is not in the QS3D MCP CAD allowlist. Use cad_command_catalog.");
-            var inputs = ExtractString(body, "inputs");
-            if (inputs.Length > 16000 || inputs.IndexOf('\0') >= 0 || inputs.IndexOf('\u001b') >= 0)
-                throw new InvalidOperationException("inputs exceeds bounds or contains forbidden control characters.");
+            var command = ExtractString(body, "command").Trim().TrimStart('_').TrimStart('.').ToUpperInvariant();
+            if (!AllowedCadCommands.Contains(command))
+                throw new InvalidOperationException("Command is not in the QS3D MCP CAD allowlist. Use cad_command_catalog.");
+            var inputs = NormalizeCadInputs(ExtractString(body, "inputs"), command);
             return InvokeCad(() =>
             {
                 var document = RequireDocument();
-                var script = "_." + command + "\n" + inputs.Replace("\r\n", "\n").Replace('\r', '\n');
+                var script = "_." + command + "\n" + inputs;
                 if (!script.EndsWith("\n", StringComparison.Ordinal)) script += "\n";
                 document.SendStringToExecute(script, true, false, true);
                 Audit("cad_command_sequence", "command=" + command + "; inputChars=" + inputs.Length.ToString(CultureInfo.InvariantCulture));
                 return "{\"accepted\":true,\"command\":\"" + JsonEscape(command) + "\",\"inputChars\":" + inputs.Length.ToString(CultureInfo.InvariantCulture) + "}";
             });
+        }
+
+        private static string NormalizeCadInputs(string inputs, string command)
+        {
+            var value = (inputs ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+            if (value.Length > 16000 || value.IndexOf('\0') >= 0 || value.IndexOf('\u001b') >= 0 || value.IndexOf('\u0003') >= 0)
+                throw new InvalidOperationException("inputs exceeds bounds or contains forbidden control characters.");
+            if (NoInputCadCommands.Contains(command) && value.Trim().Length != 0)
+                throw new InvalidOperationException(command + " does not accept MCP command-sequence inputs.");
+
+            var lines = value.Split(new[] { '\n' }, StringSplitOptions.None);
+            if (lines.Length > 64) throw new InvalidOperationException("inputs exceeds 64 prompt lines.");
+            var blankTerminatorSeen = false;
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Length > 1024) throw new InvalidOperationException("one command input line exceeds 1024 characters.");
+                foreach (var ch in lines[i])
+                    if (ch < 32 && ch != '\t') throw new InvalidOperationException("inputs contains forbidden control characters.");
+                var trimmed = lines[i].Trim();
+                if (trimmed.Length == 0)
+                {
+                    if (i < lines.Length - 1) blankTerminatorSeen = true;
+                    continue;
+                }
+                if (blankTerminatorSeen)
+                    throw new InvalidOperationException("inputs may not continue after a blank command terminator.");
+                var commandLike = trimmed.TrimStart('_').TrimStart('.').ToUpperInvariant();
+                if (AllowedCadCommands.Contains(commandLike) || commandLike.StartsWith("QS3D", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("inputs may not inject another CAD/QS3D command.");
+            }
+            return value;
         }
 
         private static string RunQs3dCommand(string body)
@@ -639,65 +880,130 @@ namespace QS3D.BricsCAD.V25
 
         private static string CommandCatalogJson()
         {
-            var commands = new List<string>(AllowedCadCommands); commands.Sort(StringComparer.OrdinalIgnoreCase);
+            var commands = new List<string>(AllowedCadCommands);
+            commands.Sort(StringComparer.OrdinalIgnoreCase);
             var builder = new StringBuilder("{\"commands\":[");
-            for (var i = 0; i < commands.Count; i++) { if (i > 0) builder.Append(','); builder.Append('"').Append(JsonEscape(commands[i])).Append('"'); }
-            return builder.Append("]}").ToString();
+            for (var i = 0; i < commands.Count; i++)
+            {
+                if (i > 0) builder.Append(',');
+                builder.Append('"').Append(JsonEscape(commands[i])).Append('"');
+            }
+            return builder.Append("],\"guard\":\"one allowlisted command; bounded prompt lines; no known command chaining after terminators\"}").ToString();
         }
 
         private static string UiClick(string body)
         {
-            var x = ExtractInteger(body, "x", -1, -1, 100000); var y = ExtractInteger(body, "y", -1, -1, 100000);
-            var button = ExtractString(body, "button").Trim().ToLowerInvariant(); var count = ExtractInteger(body, "count", 1, 1, 3);
-            var hwnd = CurrentProcessWindow(); RECT rect; if (!GetClientRect(hwnd, out rect)) throw new InvalidOperationException("Could not read BricsCAD client rectangle.");
-            if (x < 0 || y < 0 || x >= rect.Right - rect.Left || y >= rect.Bottom - rect.Top) throw new InvalidOperationException("Click coordinates must stay inside the BricsCAD client window.");
-            POINT point = new POINT { X = x, Y = y }; if (!ClientToScreen(hwnd, ref point)) throw new InvalidOperationException("Could not map BricsCAD client coordinates.");
-            SetForegroundWindow(hwnd); SetCursorPos(point.X, point.Y);
-            uint down; uint up;
+            var x = ExtractInteger(body, "x", -1, -1, 100000);
+            var y = ExtractInteger(body, "y", -1, -1, 100000);
+            var button = ExtractString(body, "button").Trim().ToLowerInvariant();
+            var count = ExtractInteger(body, "count", 1, 1, 3);
+            var hwnd = RequireForegroundCadWindow();
+            RECT rect;
+            if (!GetClientRect(hwnd, out rect)) throw new InvalidOperationException("Could not read active BricsCAD window client rectangle.");
+            if (x < 0 || y < 0 || x >= rect.Right - rect.Left || y >= rect.Bottom - rect.Top)
+                throw new InvalidOperationException("Click coordinates must stay inside the active BricsCAD-process window.");
+            POINT point = new POINT { X = x, Y = y };
+            if (!ClientToScreen(hwnd, ref point)) throw new InvalidOperationException("Could not map BricsCAD client coordinates.");
+            if (!SetCursorPos(point.X, point.Y)) throw new InvalidOperationException("Could not position cursor inside BricsCAD.");
+
+            uint down;
+            uint up;
             if (button == "left") { down = 0x0002; up = 0x0004; }
             else if (button == "right") { down = 0x0008; up = 0x0010; }
             else if (button == "middle") { down = 0x0020; up = 0x0040; }
             else throw new InvalidOperationException("button must be left, right or middle.");
-            for (var i = 0; i < count; i++) { mouse_event(down, 0, 0, 0, UIntPtr.Zero); mouse_event(up, 0, 0, 0, UIntPtr.Zero); Thread.Sleep(40); }
+
+            for (var i = 0; i < count; i++)
+            {
+                RequireSameForegroundCadWindow(hwnd);
+                SendMouse(down);
+                SendMouse(up);
+                Thread.Sleep(40);
+            }
             Audit("cad_ui_click", "x=" + x + "; y=" + y + "; button=" + button + "; count=" + count);
             return "{\"clicked\":true,\"x\":" + x + ",\"y\":" + y + ",\"button\":\"" + JsonEscape(button) + "\",\"count\":" + count + "}";
         }
 
         private static string UiType(string body)
         {
-            var text = ExtractString(body, "text"); if (text.Length > 8000) throw new InvalidOperationException("text exceeds 8000 characters.");
-            var hwnd = CurrentProcessWindow(); SetForegroundWindow(hwnd); SendUnicodeText(text);
-            if (ExtractBoolean(body, "pressEnter")) SendVirtualKey(0x0D, false, false, false);
-            Audit("cad_ui_type", "chars=" + text.Length.ToString(CultureInfo.InvariantCulture) + "; enter=" + ExtractBoolean(body, "pressEnter"));
-            return "{\"typed\":true,\"characters\":" + text.Length.ToString(CultureInfo.InvariantCulture) + "}";
+            var text = ExtractString(body, "text");
+            ValidatePrintableText(text, "text", 8000, true);
+            var hwnd = RequireForegroundCadWindow();
+            SendUnicodeText(hwnd, text);
+            var pressEnter = ExtractBoolean(body, "pressEnter");
+            if (pressEnter)
+            {
+                RequireSameForegroundCadWindow(hwnd);
+                SendVirtualKey(0x0D, false, false, false);
+            }
+            Audit("cad_ui_type", "chars=" + text.Length.ToString(CultureInfo.InvariantCulture) + "; enter=" + pressEnter);
+            return "{\"typed\":true,\"characters\":" + text.Length.ToString(CultureInfo.InvariantCulture) + ",\"enter\":" + (pressEnter ? "true" : "false") + "}";
         }
 
         private static string UiKey(string body)
         {
-            var key = ExtractString(body, "key").Trim().ToUpperInvariant(); var vk = VirtualKey(key);
-            var ctrl = ExtractBoolean(body, "ctrl"); var alt = ExtractBoolean(body, "alt"); var shift = ExtractBoolean(body, "shift");
-            SetForegroundWindow(CurrentProcessWindow()); SendVirtualKey(vk, ctrl, alt, shift);
+            var key = ExtractString(body, "key").Trim().ToUpperInvariant();
+            var vk = VirtualKey(key);
+            var ctrl = ExtractBoolean(body, "ctrl");
+            var alt = ExtractBoolean(body, "alt");
+            var shift = ExtractBoolean(body, "shift");
+            if (alt && key == "F4") throw new InvalidOperationException("Alt+F4 is blocked from MCP UI automation.");
+            var hwnd = RequireForegroundCadWindow();
+            RequireSameForegroundCadWindow(hwnd);
+            SendVirtualKey(vk, ctrl, alt, shift);
             Audit("cad_ui_key", "key=" + key + "; ctrl=" + ctrl + "; alt=" + alt + "; shift=" + shift);
             return "{\"pressed\":true,\"key\":\"" + JsonEscape(key) + "\"}";
         }
 
         private static IntPtr CurrentProcessWindow()
         {
-            var handle = System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
-            if (handle == IntPtr.Zero) throw new InvalidOperationException("BricsCAD main window handle is unavailable.");
+            var handle = Process.GetCurrentProcess().MainWindowHandle;
+            if (handle == IntPtr.Zero || !IsCurrentProcessWindow(handle))
+                throw new InvalidOperationException("BricsCAD main window handle is unavailable.");
             return handle;
         }
 
-        private static void SendUnicodeText(string text)
+        private static IntPtr RequireForegroundCadWindow()
+        {
+            var foreground = GetForegroundWindow();
+            if (foreground != IntPtr.Zero && IsCurrentProcessWindow(foreground)) return foreground;
+            var main = CurrentProcessWindow();
+            if (!SetForegroundWindow(main)) throw new InvalidOperationException("Could not focus the BricsCAD window; UI input was not sent.");
+            for (var i = 0; i < 20; i++)
+            {
+                Thread.Sleep(25);
+                foreground = GetForegroundWindow();
+                if (foreground != IntPtr.Zero && IsCurrentProcessWindow(foreground)) return foreground;
+            }
+            throw new InvalidOperationException("BricsCAD did not become foreground; UI input was not sent.");
+        }
+
+        private static void RequireSameForegroundCadWindow(IntPtr expected)
+        {
+            var foreground = GetForegroundWindow();
+            if (foreground == IntPtr.Zero || foreground != expected || !IsCurrentProcessWindow(foreground))
+                throw new InvalidOperationException("BricsCAD foreground window changed; UI input stopped before injection.");
+        }
+
+        private static bool IsCurrentProcessWindow(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero) return false;
+            uint processId;
+            GetWindowThreadProcessId(hwnd, out processId);
+            return processId == (uint)Process.GetCurrentProcess().Id;
+        }
+
+        private static void SendUnicodeText(IntPtr hwnd, string text)
         {
             foreach (var ch in text)
             {
+                RequireSameForegroundCadWindow(hwnd);
                 var inputs = new[]
                 {
                     new INPUT { type = 1, U = new InputUnion { ki = new KEYBDINPUT { wVk = 0, wScan = ch, dwFlags = 0x0004 } } },
                     new INPUT { type = 1, U = new InputUnion { ki = new KEYBDINPUT { wVk = 0, wScan = ch, dwFlags = 0x0004 | 0x0002 } } }
                 };
-                if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT))) != inputs.Length)
+                if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT))) != (uint)inputs.Length)
                     throw new InvalidOperationException("Windows SendInput rejected Unicode keyboard input.");
             }
         }
@@ -705,14 +1011,30 @@ namespace QS3D.BricsCAD.V25
         private static void SendVirtualKey(ushort key, bool ctrl, bool alt, bool shift)
         {
             var list = new List<INPUT>();
-            if (ctrl) list.Add(KeyInput(0x11, false)); if (alt) list.Add(KeyInput(0x12, false)); if (shift) list.Add(KeyInput(0x10, false));
-            list.Add(KeyInput(key, false)); list.Add(KeyInput(key, true));
-            if (shift) list.Add(KeyInput(0x10, true)); if (alt) list.Add(KeyInput(0x12, true)); if (ctrl) list.Add(KeyInput(0x11, true));
-            var array = list.ToArray(); if (SendInput((uint)array.Length, array, Marshal.SizeOf(typeof(INPUT))) != array.Length)
+            if (ctrl) list.Add(KeyInput(0x11, false));
+            if (alt) list.Add(KeyInput(0x12, false));
+            if (shift) list.Add(KeyInput(0x10, false));
+            list.Add(KeyInput(key, false));
+            list.Add(KeyInput(key, true));
+            if (shift) list.Add(KeyInput(0x10, true));
+            if (alt) list.Add(KeyInput(0x12, true));
+            if (ctrl) list.Add(KeyInput(0x11, true));
+            var array = list.ToArray();
+            if (SendInput((uint)array.Length, array, Marshal.SizeOf(typeof(INPUT))) != (uint)array.Length)
                 throw new InvalidOperationException("Windows SendInput rejected keyboard input.");
         }
 
-        private static INPUT KeyInput(ushort key, bool up) => new INPUT { type = 1, U = new InputUnion { ki = new KEYBDINPUT { wVk = key, dwFlags = up ? 0x0002u : 0u } } };
+        private static void SendMouse(uint flags)
+        {
+            var input = new[] { new INPUT { type = 0, U = new InputUnion { mi = new MOUSEINPUT { dwFlags = flags } } } };
+            if (SendInput(1, input, Marshal.SizeOf(typeof(INPUT))) != 1)
+                throw new InvalidOperationException("Windows SendInput rejected mouse input.");
+        }
+
+        private static INPUT KeyInput(ushort key, bool up)
+        {
+            return new INPUT { type = 1, U = new InputUnion { ki = new KEYBDINPUT { wVk = key, dwFlags = up ? 0x0002u : 0u } } };
+        }
 
         private static ushort VirtualKey(string key)
         {
@@ -740,7 +1062,8 @@ namespace QS3D.BricsCAD.V25
             while ((DateTime.UtcNow - started).TotalMilliseconds < timeoutMs)
             {
                 var active = InvokeCad(() => Convert.ToString(Application.GetSystemVariable("CMDACTIVE"), CultureInfo.InvariantCulture) ?? "0");
-                int value; if (int.TryParse(active, NumberStyles.Integer, CultureInfo.InvariantCulture, out value) && value == 0)
+                int value;
+                if (int.TryParse(active, NumberStyles.Integer, CultureInfo.InvariantCulture, out value) && value == 0)
                     return "{\"idle\":true,\"elapsedMs\":" + ((int)(DateTime.UtcNow - started).TotalMilliseconds).ToString(CultureInfo.InvariantCulture) + "}";
                 Thread.Sleep(100);
             }
@@ -750,7 +1073,7 @@ namespace QS3D.BricsCAD.V25
         private static string BuildStatusJson()
         {
             var document = Application.DocumentManager.MdiActiveDocument;
-            return "{\"product\":\"QS3D-BricsCAD\",\"processId\":" + System.Diagnostics.Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture)
+            return "{\"product\":\"QS3D-BricsCAD\",\"processId\":" + Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture)
                    + ",\"bricscadVersion\":\"" + JsonEscape(Convert.ToString(Application.Version) ?? string.Empty)
                    + "\",\"activeDocument\":\"" + JsonEscape(document?.Name ?? string.Empty)
                    + "\",\"mcpProtocol\":\"" + ProtocolVersion + "\",\"fullCadAgent\":true,\"automationStopped\":" + (_automationStopped ? "true" : "false") + "}";
@@ -765,51 +1088,90 @@ namespace QS3D.BricsCAD.V25
 
         private static string BuildViewStateJson()
         {
-            var document = RequireDocument(); var view = document.Editor.GetCurrentView(); RECT rect; var hwnd = CurrentProcessWindow(); GetClientRect(hwnd, out rect);
-            var active = Convert.ToString(Application.GetSystemVariable("CMDACTIVE"), CultureInfo.InvariantCulture) ?? "0";
-            return "{\"commandActive\":" + active + ",\"center\":{\"x\":" + Number(view.CenterPoint.X) + ",\"y\":" + Number(view.CenterPoint.Y)
-                   + "},\"width\":" + Number(view.Width) + ",\"height\":" + Number(view.Height)
-                   + ",\"clientWidth\":" + (rect.Right - rect.Left).ToString(CultureInfo.InvariantCulture)
-                   + ",\"clientHeight\":" + (rect.Bottom - rect.Top).ToString(CultureInfo.InvariantCulture) + "}";
+            var document = RequireDocument();
+            using (var view = document.Editor.GetCurrentView())
+            {
+                RECT rect;
+                var hwnd = CurrentProcessWindow();
+                var hasRect = GetClientRect(hwnd, out rect);
+                var active = Convert.ToString(Application.GetSystemVariable("CMDACTIVE"), CultureInfo.InvariantCulture) ?? "0";
+                return "{\"commandActive\":" + SafeJsonInteger(active) + ",\"center\":{\"x\":" + Number(view.CenterPoint.X) + ",\"y\":" + Number(view.CenterPoint.Y)
+                       + "},\"width\":" + Number(view.Width) + ",\"height\":" + Number(view.Height)
+                       + ",\"clientWidth\":" + (hasRect ? (rect.Right - rect.Left).ToString(CultureInfo.InvariantCulture) : "null")
+                       + ",\"clientHeight\":" + (hasRect ? (rect.Bottom - rect.Top).ToString(CultureInfo.InvariantCulture) : "null") + "}";
+            }
+        }
+
+        private static string SafeJsonInteger(string value)
+        {
+            int parsed;
+            return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed)
+                ? parsed.ToString(CultureInfo.InvariantCulture)
+                : "0";
         }
 
         private static string BuildSelectionJson()
         {
-            var document = RequireDocument(); var result = document.Editor.SelectImplied();
+            var document = RequireDocument();
+            var result = document.Editor.SelectImplied();
             if (result.Status != PromptStatus.OK || result.Value == null) return "[]";
-            var output = new StringBuilder("["); var first = true;
+            var output = new StringBuilder("[");
+            var first = true;
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
-                foreach (var id in result.Value.GetObjectIds()) { if (!first) output.Append(','); first = false; output.Append(DescribeEntity(transaction, id, false)); }
+                foreach (var id in result.Value.GetObjectIds())
+                {
+                    if (id.IsNull || id.IsErased) continue;
+                    if (!first) output.Append(',');
+                    first = false;
+                    output.Append(DescribeEntity(transaction, id, false));
+                }
             }
             return output.Append(']').ToString();
         }
 
         private static string BuildDatabaseSnapshotJson(int limit)
         {
-            var document = RequireDocument(); var output = new StringBuilder(); output.Append("{\"limit\":").Append(limit).Append(",\"entities\":["); var count = 0;
+            var document = RequireDocument();
+            var output = new StringBuilder();
+            output.Append("{\"limit\":").Append(limit).Append(",\"entities\":[");
+            var count = 0;
+            var hasMore = false;
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
                 var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
                 var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForRead);
-                foreach (ObjectId id in modelSpace) { if (count >= limit) break; if (count > 0) output.Append(','); output.Append(DescribeEntity(transaction, id, true)); count++; }
+                foreach (ObjectId id in modelSpace)
+                {
+                    if (id.IsNull || id.IsErased) continue;
+                    if (count >= limit) { hasMore = true; break; }
+                    if (count > 0) output.Append(',');
+                    output.Append(DescribeEntity(transaction, id, true));
+                    count++;
+                }
             }
-            return output.Append("],\"truncated\":").Append(count >= limit ? "true" : "false").Append('}').ToString();
+            return output.Append("],\"count\":").Append(count).Append(",\"truncated\":").Append(hasMore ? "true" : "false").Append('}').ToString();
         }
 
         private static string DescribeEntity(Transaction transaction, ObjectId id, bool includeExtents)
         {
-            var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity; var output = new StringBuilder();
+            var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+            var output = new StringBuilder();
             output.Append("{\"handle\":\"").Append(JsonEscape(id.Handle.ToString())).Append("\",\"type\":\"")
                 .Append(JsonEscape(entity == null ? string.Empty : entity.GetType().Name)).Append("\",\"layer\":\"")
                 .Append(JsonEscape(entity == null ? string.Empty : entity.Layer)).Append('"');
-            if (entity != null && includeExtents) { output.Append(",\"extents\":"); try { output.Append(ExtentsJson(entity.GeometricExtents)); } catch { output.Append("null"); } }
+            if (entity != null && includeExtents)
+            {
+                output.Append(",\"extents\":");
+                try { output.Append(ExtentsJson(entity.GeometricExtents)); }
+                catch { output.Append("null"); }
+            }
             return output.Append('}').ToString();
         }
 
-        private static string ExtentsJson(Extents3d e) => "{\"min\":" + PointJson(e.MinPoint) + ",\"max\":" + PointJson(e.MaxPoint) + "}";
-        private static string PointJson(Point3d p) => "{\"x\":" + Number(p.X) + ",\"y\":" + Number(p.Y) + ",\"z\":" + Number(p.Z) + "}";
-        private static string Number(double value) => double.IsNaN(value) || double.IsInfinity(value) ? "null" : value.ToString("R", CultureInfo.InvariantCulture);
+        private static string ExtentsJson(Extents3d e) { return "{\"min\":" + PointJson(e.MinPoint) + ",\"max\":" + PointJson(e.MaxPoint) + "}"; }
+        private static string PointJson(Point3d p) { return "{\"x\":" + Number(p.X) + ",\"y\":" + Number(p.Y) + ",\"z\":" + Number(p.Z) + "}"; }
+        private static string Number(double value) { return double.IsNaN(value) || double.IsInfinity(value) ? "null" : value.ToString("R", CultureInfo.InvariantCulture); }
 
         private static Document RequireDocument()
         {
@@ -820,22 +1182,38 @@ namespace QS3D.BricsCAD.V25
 
         private sealed class CadWorkItem
         {
-            public Func<string>? Action; public string Result = string.Empty; public Exception? Error; public readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
+            public Func<string>? Action;
+            public string Result = string.Empty;
+            public Exception? Error;
+            public readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
         }
 
         private static string InvokeCad(Func<string> action)
         {
-            var item = new CadWorkItem { Action = action };
-            Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadWork, item);
-            if (!item.Done.Wait(CadDispatchTimeoutMilliseconds)) throw new TimeoutException("Timed out waiting for the BricsCAD application context.");
-            if (item.Error != null) throw new InvalidOperationException(item.Error.Message, item.Error);
-            return item.Result;
+            if (action == null) throw new ArgumentNullException(nameof(action));
+            using (var item = new CadWorkItemDisposable(action))
+            {
+                Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadWork, item.Work);
+                if (!item.Work.Done.Wait(CadDispatchTimeoutMilliseconds))
+                    throw new TimeoutException("Timed out waiting for the BricsCAD application context.");
+                if (item.Work.Error != null) throw new InvalidOperationException(item.Work.Error.Message, item.Work.Error);
+                return item.Work.Result;
+            }
+        }
+
+        private sealed class CadWorkItemDisposable : IDisposable
+        {
+            public CadWorkItemDisposable(Func<string> action) { Work = new CadWorkItem { Action = action }; }
+            public CadWorkItem Work { get; private set; }
+            public void Dispose() { Work.Done.Dispose(); }
         }
 
         private static void ExecuteCadWork(object data)
         {
             var item = (CadWorkItem)data;
-            try { item.Result = item.Action == null ? string.Empty : item.Action(); } catch (Exception ex) { item.Error = ex; } finally { item.Done.Set(); }
+            try { item.Result = item.Action == null ? string.Empty : item.Action(); }
+            catch (Exception ex) { item.Error = ex; }
+            finally { item.Done.Set(); }
         }
 
         private static List<Point2d> ParsePoints2d(string value)
@@ -843,93 +1221,288 @@ namespace QS3D.BricsCAD.V25
             var points = new List<Point2d>();
             foreach (var part in (value ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
             {
-                var pair = part.Split(','); double x; double y;
-                if (pair.Length != 2 || !double.TryParse(pair[0], NumberStyles.Float, CultureInfo.InvariantCulture, out x) || !double.TryParse(pair[1], NumberStyles.Float, CultureInfo.InvariantCulture, out y))
+                var pair = part.Split(',');
+                double x;
+                double y;
+                if (pair.Length != 2
+                    || !double.TryParse(pair[0], NumberStyles.Float, CultureInfo.InvariantCulture, out x)
+                    || !double.TryParse(pair[1], NumberStyles.Float, CultureInfo.InvariantCulture, out y))
                     throw new InvalidOperationException("points must use invariant x,y;x,y format.");
-                if (double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y)) throw new InvalidOperationException("points must be finite.");
+                if (!IsFinite(x) || !IsFinite(y)) throw new InvalidOperationException("points must be finite.");
                 points.Add(new Point2d(x, y));
             }
             return points;
         }
 
+        private static bool IsFinite(double value) { return !double.IsNaN(value) && !double.IsInfinity(value); }
+
+        private static void ValidateHandleText(string handle)
+        {
+            if (string.IsNullOrWhiteSpace(handle) || handle.Length > 32 || !Regex.IsMatch(handle, "^[0-9A-Fa-f]+$", RegexOptions.CultureInvariant))
+                throw new InvalidOperationException("handle must be a hexadecimal entity handle up to 32 characters.");
+        }
+
+        private static string ValidateLayerName(string value, bool optional)
+        {
+            var name = (value ?? string.Empty).Trim();
+            if (name.Length == 0 && optional) return string.Empty;
+            if (name.Length == 0) throw new InvalidOperationException("Layer name is required.");
+            if (name.Length > 255) throw new InvalidOperationException("Layer name exceeds 255 characters.");
+            foreach (var ch in name)
+                if (ch < 32) throw new InvalidOperationException("Layer name contains control characters.");
+            return name;
+        }
+
+        private static void ValidatePrintableText(string value, string property, int maximum, bool rejectAllControls)
+        {
+            if (string.IsNullOrEmpty(value)) throw new InvalidOperationException(property + " is required.");
+            if (value.Length > maximum) throw new InvalidOperationException(property + " exceeds " + maximum.ToString(CultureInfo.InvariantCulture) + " characters.");
+            foreach (var ch in value)
+            {
+                if (ch == '\0' || ch == '\u001b' || (rejectAllControls && ch < 32))
+                    throw new InvalidOperationException(property + " contains forbidden control characters.");
+            }
+        }
+
         private static double RequireDouble(string json, string property)
         {
-            var match = NumberMatch(json, property); double value;
-            if (!match.Success || !double.TryParse(match.Groups["value"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out value) || double.IsNaN(value) || double.IsInfinity(value))
+            var match = NumberMatch(json, property);
+            double value;
+            if (!match.Success || !double.TryParse(match.Groups["value"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out value) || !IsFinite(value))
                 throw new InvalidOperationException(property + " must be a finite number.");
             return value;
         }
 
         private static double ExtractDouble(string json, string property, double fallback)
         {
-            var match = NumberMatch(json, property); double value;
-            if (!match.Success || !double.TryParse(match.Groups["value"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out value) || double.IsNaN(value) || double.IsInfinity(value)) return fallback;
+            var match = NumberMatch(json, property);
+            double value;
+            if (!match.Success || !double.TryParse(match.Groups["value"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out value) || !IsFinite(value)) return fallback;
             return value;
         }
 
-        private static Match NumberMatch(string json, string property) => Regex.Match(json ?? string.Empty,
-            "\"" + Regex.Escape(property) + "\"\\s*:\\s*(?<value>-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?)",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        private static Match NumberMatch(string json, string property)
+        {
+            return Regex.Match(json ?? string.Empty,
+                "\"" + Regex.Escape(property) + "\"\\s*:\\s*(?<value>-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?)",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+
+        private static bool TryExtractToolCall(string body, out string name, out string arguments, out string error)
+        {
+            name = string.Empty;
+            arguments = "{}";
+            error = string.Empty;
+            string parameters;
+            if (!TryExtractObjectProperty(body, "params", out parameters))
+            {
+                error = "tools/call requires an object params value.";
+                return false;
+            }
+            name = ExtractString(parameters, "name").Trim();
+            if (name.Length == 0 || name.Length > 128)
+            {
+                error = "tools/call params.name is required and must be <= 128 characters.";
+                return false;
+            }
+            string parsedArguments;
+            if (TryExtractObjectProperty(parameters, "arguments", out parsedArguments)) arguments = parsedArguments;
+            else if (HasProperty(parameters, "arguments"))
+            {
+                error = "tools/call params.arguments must be an object.";
+                return false;
+            }
+            return true;
+        }
+
+        private static bool TryExtractObjectProperty(string json, string property, out string objectJson)
+        {
+            objectJson = string.Empty;
+            var match = Regex.Match(json ?? string.Empty, "\"" + Regex.Escape(property) + "\"\\s*:", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (!match.Success) return false;
+            var index = match.Index + match.Length;
+            while (index < json.Length && char.IsWhiteSpace(json[index])) index++;
+            if (index >= json.Length || json[index] != '{') return false;
+            var start = index;
+            var depth = 0;
+            var inString = false;
+            var escaped = false;
+            for (; index < json.Length; index++)
+            {
+                var ch = json[index];
+                if (inString)
+                {
+                    if (escaped) { escaped = false; continue; }
+                    if (ch == '\\') { escaped = true; continue; }
+                    if (ch == '"') inString = false;
+                    continue;
+                }
+                if (ch == '"') { inString = true; continue; }
+                if (ch == '{') depth++;
+                else if (ch == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        objectJson = json.Substring(start, index - start + 1);
+                        return true;
+                    }
+                    if (depth < 0) return false;
+                }
+            }
+            return false;
+        }
 
         private static string ToolSuccess(string jsonValue)
         {
             var text = string.IsNullOrWhiteSpace(jsonValue) ? "{}" : jsonValue;
             return "{\"content\":[{\"type\":\"text\",\"text\":\"" + JsonEscape(text) + "\"}],\"isError\":false}";
         }
-        private static string ToolError(string message) => "{\"content\":[{\"type\":\"text\",\"text\":\"" + JsonEscape(message ?? "MCP tool failed.") + "\"}],\"isError\":true}";
-        private static string JsonRpcError(string id, int code, string message) => "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"error\":{\"code\":" + code.ToString(CultureInfo.InvariantCulture) + ",\"message\":\"" + JsonEscape(message) + "\"}}";
 
-        private static string ExtractToolName(string json)
+        private static string ToolError(string message)
         {
-            var source = json ?? string.Empty; var index = source.IndexOf("\"params\"", StringComparison.OrdinalIgnoreCase);
-            return ExtractString(index >= 0 ? source.Substring(index) : source, "name");
+            return "{\"content\":[{\"type\":\"text\",\"text\":\"" + JsonEscape(message ?? "MCP tool failed.") + "\"}],\"isError\":true}";
         }
+
+        private static string JsonRpcError(string id, int code, string message)
+        {
+            return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"error\":{\"code\":" + code.ToString(CultureInfo.InvariantCulture)
+                   + ",\"message\":\"" + JsonEscape(message) + "\"}}";
+        }
+
         private static string ExtractString(string json, string property)
         {
-            var match = Regex.Match(json ?? string.Empty, "\"" + Regex.Escape(property) + "\"\\s*:\\s*\"(?<value>(?:\\\\.|[^\"])*)\"", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            var match = Regex.Match(json ?? string.Empty,
+                "\"" + Regex.Escape(property) + "\"\\s*:\\s*\"(?<value>(?:\\\\.|[^\"])*)\"",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             return match.Success ? JsonUnescape(match.Groups["value"].Value) : string.Empty;
         }
+
         private static bool ExtractBoolean(string json, string property)
         {
-            var match = Regex.Match(json ?? string.Empty, "\"" + Regex.Escape(property) + "\"\\s*:\\s*(?<value>true|false)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            var match = Regex.Match(json ?? string.Empty,
+                "\"" + Regex.Escape(property) + "\"\\s*:\\s*(?<value>true|false)(?![A-Za-z0-9_])",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             return match.Success && string.Equals(match.Groups["value"].Value, "true", StringComparison.OrdinalIgnoreCase);
         }
+
         private static int ExtractInteger(string json, string property, int fallback, int minimum, int maximum)
         {
-            var match = Regex.Match(json ?? string.Empty, "\"" + Regex.Escape(property) + "\"\\s*:\\s*(?<value>-?[0-9]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            int value; if (!match.Success || !int.TryParse(match.Groups["value"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out value)) return fallback;
+            var match = Regex.Match(json ?? string.Empty,
+                "\"" + Regex.Escape(property) + "\"\\s*:\\s*(?<value>-?[0-9]+)(?![0-9.eE])",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            int value;
+            if (!match.Success || !int.TryParse(match.Groups["value"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out value)) return fallback;
             return Math.Max(minimum, Math.Min(maximum, value));
         }
+
+        private static bool HasProperty(string json, string property)
+        {
+            return Regex.IsMatch(json ?? string.Empty, "\"" + Regex.Escape(property) + "\"\\s*:", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+
         private static string ExtractId(string json)
         {
-            var match = Regex.Match(json ?? string.Empty, "\"id\"\\s*:\\s*(?<value>\"(?:\\\\.|[^\"])*\"|-?[0-9]+(?:\\.[0-9]+)?|null)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            var match = Regex.Match(json ?? string.Empty,
+                "\"id\"\\s*:\\s*(?<value>\"(?:\\\\.|[^\"])*\"|-?[0-9]+|null)(?![A-Za-z0-9_.])",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             return match.Success ? match.Groups["value"].Value : "null";
         }
-        private static string JsonUnescape(string value) => string.IsNullOrEmpty(value) ? string.Empty : Regex.Unescape(value);
+
+        private static string JsonUnescape(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return string.Empty;
+            var output = new StringBuilder(value.Length);
+            for (var i = 0; i < value.Length; i++)
+            {
+                var ch = value[i];
+                if (ch != '\\') { output.Append(ch); continue; }
+                if (++i >= value.Length) throw new InvalidOperationException("Invalid JSON string escape.");
+                ch = value[i];
+                switch (ch)
+                {
+                    case '"': output.Append('"'); break;
+                    case '\\': output.Append('\\'); break;
+                    case '/': output.Append('/'); break;
+                    case 'b': output.Append('\b'); break;
+                    case 'f': output.Append('\f'); break;
+                    case 'n': output.Append('\n'); break;
+                    case 'r': output.Append('\r'); break;
+                    case 't': output.Append('\t'); break;
+                    case 'u':
+                        if (i + 4 >= value.Length) throw new InvalidOperationException("Invalid JSON unicode escape.");
+                        int code;
+                        if (!int.TryParse(value.Substring(i + 1, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out code))
+                            throw new InvalidOperationException("Invalid JSON unicode escape.");
+                        output.Append((char)code);
+                        i += 4;
+                        break;
+                    default: throw new InvalidOperationException("Invalid JSON string escape.");
+                }
+            }
+            return output.ToString();
+        }
 
         internal static string JsonEscape(string value)
         {
-            if (value == null) return string.Empty; var b = new StringBuilder(value.Length + 16);
+            if (value == null) return string.Empty;
+            var builder = new StringBuilder(value.Length + 16);
             foreach (var c in value)
             {
                 switch (c)
                 {
-                    case '\\': b.Append("\\\\"); break; case '"': b.Append("\\\""); break; case '\r': b.Append("\\r"); break;
-                    case '\n': b.Append("\\n"); break; case '\t': b.Append("\\t"); break; case '\b': b.Append("\\b"); break; case '\f': b.Append("\\f"); break;
-                    default: if (c < 32) b.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture)); else b.Append(c); break;
+                    case '\\': builder.Append("\\\\"); break;
+                    case '"': builder.Append("\\\""); break;
+                    case '\r': builder.Append("\\r"); break;
+                    case '\n': builder.Append("\\n"); break;
+                    case '\t': builder.Append("\\t"); break;
+                    case '\b': builder.Append("\\b"); break;
+                    case '\f': builder.Append("\\f"); break;
+                    default:
+                        if (c < 32) builder.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                        else builder.Append(c);
+                        break;
                 }
             }
-            return b.ToString();
+            return builder.ToString();
         }
 
         private static void Audit(string tool, string detail)
         {
             try
             {
-                var path = AuditFilePath; var dir = Path.GetDirectoryName(path); if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir);
-                var line = "{\"utc\":\"" + DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture) + "\",\"tool\":\"" + JsonEscape(tool)
-                           + "\",\"detail\":\"" + JsonEscape(detail ?? string.Empty) + "\"}" + Environment.NewLine;
-                File.AppendAllText(path, line, new UTF8Encoding(false));
+                lock (AuditSync)
+                {
+                    var path = AuditFilePath;
+                    var dir = Path.GetDirectoryName(path);
+                    if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir);
+                    RotateAuditIfNeeded(path);
+                    var cleanDetail = SanitizeAuditDetail(detail);
+                    var line = "{\"utc\":\"" + DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture) + "\",\"tool\":\"" + JsonEscape(tool)
+                               + "\",\"detail\":\"" + JsonEscape(cleanDetail) + "\"}" + Environment.NewLine;
+                    File.AppendAllText(path, line, new UTF8Encoding(false));
+                }
+            }
+            catch { }
+        }
+
+        private static string SanitizeAuditDetail(string detail)
+        {
+            var value = detail ?? string.Empty;
+            if (value.Length > 1024) value = value.Substring(0, 1024);
+            var output = new StringBuilder(value.Length);
+            foreach (var ch in value) output.Append(ch < 32 ? ' ' : ch);
+            return output.ToString();
+        }
+
+        private static void RotateAuditIfNeeded(string path)
+        {
+            try
+            {
+                if (!File.Exists(path) || new FileInfo(path).Length < MaxAuditBytes) return;
+                var previous = path + ".1";
+                try { if (File.Exists(previous)) File.Delete(previous); } catch { }
+                try { File.Move(path, previous); } catch { File.WriteAllText(path, string.Empty, new UTF8Encoding(false)); }
             }
             catch { }
         }
@@ -938,25 +1511,52 @@ namespace QS3D.BricsCAD.V25
         {
             try
             {
-                if (!File.Exists(AuditFilePath)) return "{\"entries\":[]}";
-                var lines = File.ReadAllLines(AuditFilePath, Encoding.UTF8); var start = Math.Max(0, lines.Length - limit); var b = new StringBuilder("{\"entries\":[");
-                for (var i = start; i < lines.Length; i++) { if (i > start) b.Append(','); b.Append(lines[i]); }
-                return b.Append("]}").ToString();
+                lock (AuditSync)
+                {
+                    if (!File.Exists(AuditFilePath)) return "{\"entries\":[]}";
+                    var lines = File.ReadAllLines(AuditFilePath, Encoding.UTF8);
+                    var start = Math.Max(0, lines.Length - limit);
+                    var builder = new StringBuilder("{\"entries\":[");
+                    for (var i = start; i < lines.Length; i++)
+                    {
+                        if (i > start) builder.Append(',');
+                        if (lines[i].StartsWith("{", StringComparison.Ordinal) && lines[i].EndsWith("}", StringComparison.Ordinal)) builder.Append(lines[i]);
+                    }
+                    return builder.Append("]}").ToString();
+                }
             }
             catch (Exception ex) { return "{\"entries\":[],\"error\":\"" + JsonEscape(ex.Message) + "\"}"; }
         }
 
         private static void WriteResponse(NetworkStream stream, int statusCode, string reason, string body, IDictionary<string, string>? extraHeaders)
         {
-            var payload = string.IsNullOrEmpty(body) ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(body); var header = new StringBuilder();
-            header.Append("HTTP/1.1 ").Append(statusCode).Append(' ').Append(reason).Append("\r\nConnection: close\r\nCache-Control: no-store\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: ").Append(payload.Length).Append("\r\n");
-            if (extraHeaders != null) foreach (var pair in extraHeaders) header.Append(pair.Key).Append(": ").Append(pair.Value).Append("\r\n");
-            header.Append("\r\n"); var headerBytes = Encoding.ASCII.GetBytes(header.ToString()); stream.Write(headerBytes, 0, headerBytes.Length); if (payload.Length > 0) stream.Write(payload, 0, payload.Length); stream.Flush();
+            var payload = string.IsNullOrEmpty(body) ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(body);
+            var header = new StringBuilder();
+            header.Append("HTTP/1.1 ").Append(statusCode).Append(' ').Append(reason)
+                .Append("\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n");
+            if (payload.Length > 0) header.Append("Content-Type: application/json; charset=utf-8\r\n");
+            header.Append("Content-Length: ").Append(payload.Length).Append("\r\n");
+            if (extraHeaders != null)
+            {
+                foreach (var pair in extraHeaders)
+                {
+                    if (pair.Key.IndexOfAny(new[] { '\r', '\n' }) >= 0 || pair.Value.IndexOfAny(new[] { '\r', '\n' }) >= 0) continue;
+                    header.Append(pair.Key).Append(": ").Append(pair.Value).Append("\r\n");
+                }
+            }
+            header.Append("\r\n");
+            var headerBytes = Encoding.ASCII.GetBytes(header.ToString());
+            stream.Write(headerBytes, 0, headerBytes.Length);
+            if (payload.Length > 0) stream.Write(payload, 0, payload.Length);
+            stream.Flush();
         }
 
         private static bool ConstantTimeEquals(string left, string right)
         {
-            var a = Encoding.UTF8.GetBytes(left ?? string.Empty); var b = Encoding.UTF8.GetBytes(right ?? string.Empty); var difference = a.Length ^ b.Length; var count = Math.Max(a.Length, b.Length);
+            var a = Encoding.UTF8.GetBytes(left ?? string.Empty);
+            var b = Encoding.UTF8.GetBytes(right ?? string.Empty);
+            var difference = a.Length ^ b.Length;
+            var count = Math.Max(a.Length, b.Length);
             for (var i = 0; i < count; i++) difference |= (i < a.Length ? a[i] : (byte)0) ^ (i < b.Length ? b[i] : (byte)0);
             return difference == 0;
         }
@@ -967,46 +1567,95 @@ namespace QS3D.BricsCAD.V25
             {
                 if (!string.IsNullOrWhiteSpace(_bearerToken)) return;
                 var environment = (Environment.GetEnvironmentVariable(BearerEnvironment) ?? string.Empty).Trim();
-                if (environment.Length >= 16) { _bearerToken = environment; _tokenSource = "environment " + BearerEnvironment; return; }
+                if (environment.Length >= 16)
+                {
+                    _bearerToken = environment;
+                    _tokenSource = "environment " + BearerEnvironment;
+                    return;
+                }
                 var path = TokenFilePath;
                 try
                 {
                     if (File.Exists(path))
                     {
-                        var saved = File.ReadAllText(path, Encoding.UTF8).Trim(); if (saved.Length >= 16) { _bearerToken = saved; _tokenSource = "saved token file"; return; }
+                        var saved = File.ReadAllText(path, Encoding.UTF8).Trim();
+                        if (saved.Length >= 16)
+                        {
+                            _bearerToken = saved;
+                            _tokenSource = "saved token file";
+                            return;
+                        }
                     }
-                    var bytes = new byte[32]; using (var random = RandomNumberGenerator.Create()) random.GetBytes(bytes); var token = new StringBuilder(64);
-                    foreach (var value in bytes) token.Append(value.ToString("x2", CultureInfo.InvariantCulture));
-                    var directory = Path.GetDirectoryName(path); if (string.IsNullOrWhiteSpace(directory)) throw new InvalidOperationException("Could not resolve MCP configuration directory.");
-                    Directory.CreateDirectory(directory); File.WriteAllText(path, token.ToString(), new UTF8Encoding(false)); _bearerToken = token.ToString(); _tokenSource = "generated token file";
+                    _bearerToken = GenerateToken();
+                    var directory = Path.GetDirectoryName(path);
+                    if (string.IsNullOrWhiteSpace(directory)) throw new InvalidOperationException("Could not resolve MCP configuration directory.");
+                    Directory.CreateDirectory(directory);
+                    File.WriteAllText(path, _bearerToken, new UTF8Encoding(false));
+                    _tokenSource = "generated token file";
                 }
                 catch
                 {
-                    var bytes = new byte[32]; using (var random = RandomNumberGenerator.Create()) random.GetBytes(bytes); var token = new StringBuilder(64);
-                    foreach (var value in bytes) token.Append(value.ToString("x2", CultureInfo.InvariantCulture)); _bearerToken = token.ToString(); _tokenSource = "ephemeral process token";
+                    _bearerToken = GenerateToken();
+                    _tokenSource = "ephemeral process token";
                 }
             }
         }
 
+        private static string GenerateToken()
+        {
+            var bytes = new byte[32];
+            using (var random = RandomNumberGenerator.Create()) random.GetBytes(bytes);
+            var token = new StringBuilder(64);
+            foreach (var value in bytes) token.Append(value.ToString("x2", CultureInfo.InvariantCulture));
+            return token.ToString();
+        }
+
         private static void SetLastError(string message) { lock (Sync) _lastError = message ?? string.Empty; }
+
+        private sealed class SessionState
+        {
+            public SessionState(DateTime lastSeenUtc, string protocolVersion) { LastSeenUtc = lastSeenUtc; ProtocolVersion = protocolVersion; }
+            public DateTime LastSeenUtc { get; private set; }
+            public string ProtocolVersion { get; private set; }
+        }
 
         private sealed class HttpRequest
         {
-            public HttpRequest(string method, string path, IDictionary<string, string> headers, string body) { Method = method; Path = path; Headers = headers; Body = body ?? string.Empty; }
-            public string Method { get; } public string Path { get; } public IDictionary<string, string> Headers { get; } public string Body { get; }
+            public HttpRequest(string method, string path, IDictionary<string, string> headers, string body)
+            { Method = method; Path = path; Headers = headers; Body = body ?? string.Empty; }
+            public string Method { get; private set; }
+            public string Path { get; private set; }
+            public IDictionary<string, string> Headers { get; private set; }
+            public string Body { get; private set; }
+        }
+
+        private sealed class HttpProtocolException : Exception
+        {
+            public HttpProtocolException(int statusCode, string reason, string message) : base(message)
+            { StatusCode = statusCode; Reason = reason; }
+            public int StatusCode { get; private set; }
+            public string Reason { get; private set; }
         }
 
         [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X; public int Y; }
         [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
         [StructLayout(LayoutKind.Sequential)] private struct INPUT { public uint type; public InputUnion U; }
-        [StructLayout(LayoutKind.Explicit)] private struct InputUnion { [FieldOffset(0)] public KEYBDINPUT ki; }
-        [StructLayout(LayoutKind.Sequential)] private struct KEYBDINPUT { public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public UIntPtr dwExtraInfo; }
+        [StructLayout(LayoutKind.Explicit)] private struct InputUnion
+        {
+            [FieldOffset(0)] public MOUSEINPUT mi;
+            [FieldOffset(0)] public KEYBDINPUT ki;
+        }
+        [StructLayout(LayoutKind.Sequential)] private struct MOUSEINPUT
+        { public int dx; public int dy; public uint mouseData; public uint dwFlags; public uint time; public UIntPtr dwExtraInfo; }
+        [StructLayout(LayoutKind.Sequential)] private struct KEYBDINPUT
+        { public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public UIntPtr dwExtraInfo; }
 
         [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
         [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
         [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
         [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
-        [DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
         [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, INPUT[] inputs, int size);
     }
 }
