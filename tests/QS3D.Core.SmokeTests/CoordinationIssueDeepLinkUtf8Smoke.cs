@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             RejectInvalidUtf8PercentOctets();
             RejectNonCanonicalPercentAliases();
             ValidSupplementaryUtf8RoundTrips();
+            ValidReservedEscapesRoundTripCanonically();
         }
 
         private static void RejectInvalidUtf8PercentOctets()
@@ -29,6 +30,7 @@ namespace QS3D.Core.SmokeTests
             Reject("%41", "percent-encoded unreserved ASCII");
             Reject("PROJECT%2dA", "lower-case percent hex alias");
             Reject("PROJECT%2DA", "percent-encoded unreserved hyphen");
+            Reject("PROJECT%2fA", "lower-case reserved percent hex alias");
             Reject("PROJECT-%f0%9f%98%80", "lower-case supplementary UTF-8 alias");
 
             var canonical = new CoordinationIssueDeepLink("PROJECT-😀", "DRAWING", "ISSUE", 7L).ToCanonicalUri();
@@ -49,6 +51,22 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("CoordinationIssueDeepLinkUtf8Smoke: valid supplementary UTF-8 did not round-trip.");
             if (!string.Equals(canonical, parsed.ToCanonicalUri(), StringComparison.Ordinal))
                 throw new InvalidOperationException("CoordinationIssueDeepLinkUtf8Smoke: valid supplementary UTF-8 lost canonical form.");
+        }
+
+        private static void ValidReservedEscapesRoundTripCanonically()
+        {
+            const string project = "PROJECT/A?B";
+            var link = new CoordinationIssueDeepLink(project, "DRAWING", "ISSUE", 9L);
+            var canonical = link.ToCanonicalUri();
+            if (canonical.IndexOf("PROJECT%2FA%3FB", StringComparison.Ordinal) < 0)
+                throw new InvalidOperationException("CoordinationIssueDeepLinkUtf8Smoke: reserved identity characters were not canonically escaped.");
+
+            var parsed = CoordinationIssueDeepLink.Parse(canonical);
+            if (!string.Equals(project, parsed.ProjectId, StringComparison.Ordinal) ||
+                !string.Equals(canonical, parsed.ToCanonicalUri(), StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("CoordinationIssueDeepLinkUtf8Smoke: canonical reserved escapes did not round-trip exactly.");
+            }
         }
 
         private static void Reject(string hostileProjectEncoding, string label)
