@@ -25,7 +25,7 @@ def validate_helper(text: str) -> list[str]:
         "[IO.File]::Open",
         "$stream.Length -gt $script:MaxMetadataBytes",
         "[byte[]]::new([int]$stream.Length)",
-        "New-Object System.Text.UTF8Encoding($false, $true)",
+        "[Text.UTF8Encoding]::new($false, $true)",
         "[Text.DecoderFallbackException]",
         "ConvertFrom-Json -ErrorAction Stop",
         "BricsCAD V26 x64",
@@ -93,7 +93,7 @@ errors.extend(validate_workflow(workflow))
 
 helper_mutations = {
     "metadata size bound": helper.replace("$stream.Length -gt $script:MaxMetadataBytes", "$false", 1),
-    "strict UTF-8 decoder": helper.replace("New-Object System.Text.UTF8Encoding($false, $true)", "[Text.Encoding]::UTF8", 1),
+    "strict UTF-8 decoder": helper.replace("[Text.UTF8Encoding]::new($false, $true)", "[Text.Encoding]::UTF8", 1),
     "leaf reparse rejection": helper.replace("$item.Attributes -band [IO.FileAttributes]::ReparsePoint", "$item.Attributes -band [IO.FileAttributes]::Normal", 1),
     "parent reparse rejection": helper.replace("$cursor.Attributes -band [IO.FileAttributes]::ReparsePoint", "$cursor.Attributes -band [IO.FileAttributes]::Normal", 1),
     "metadata ordinary-file binding": helper.replace("$metadataFile = Resolve-OrdinaryNonReparseFile", "$metadataFile = Get-Item", 1),
