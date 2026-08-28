@@ -104,9 +104,18 @@ def main() -> int:
     ):
         require(commands, f'[CommandMethod("{command}"', errors, f"CommandMethod {command}")
 
-    require(commands, '"initialize"', errors, "Ribbon protocol initialize probe")
-    require(commands, '"notifications/initialized"', errors, "Ribbon protocol initialized notification")
-    require(commands, '"tools/list"', errors, "Ribbon protocol tools/list probe")
+    # The probe methods live inside escaped C# JSON string literals. Match their source-level
+    # representation so this gate verifies the actual requests instead of demanding unrelated
+    # standalone string constants merely to satisfy a textual preflight.
+    for source_token, label in (
+        ('\\"method\\":\\"initialize\\"', "Ribbon protocol initialize probe"),
+        ('\\"method\\":\\"notifications/initialized\\"', "Ribbon protocol initialized notification"),
+        ('\\"method\\":\\"tools/list\\"', "Ribbon protocol tools/list probe"),
+    ):
+        require(commands, source_token, errors, label)
+    require(commands, 'request.Headers["MCP-Protocol-Version"]', errors, "Ribbon protocol version header")
+    require(commands, 'response.Headers["Mcp-Session-Id"]', errors, "Ribbon MCP session capture")
+    require(commands, "McpEmbeddedServer.GetBearerToken()", errors, "Ribbon bearer authentication")
     require(commands, "cloudflared tunnel --url http://127.0.0.1:8765", errors, "Cloudflare tunnel guide")
     require(commands, "no second repository", errors, "single-repository guide")
 
