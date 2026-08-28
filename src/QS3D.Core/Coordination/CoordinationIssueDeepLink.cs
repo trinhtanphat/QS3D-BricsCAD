@@ -40,6 +40,9 @@ namespace QS3D.Core.Coordination
     public sealed class CoordinationIssueDeepLink
     {
         public const int CurrentSchemaVersion = 1;
+        public const int MaxIdentityCharacters = 4096;
+        public const int MaxEncodedComponentCharacters = MaxIdentityCharacters * 9;
+        public const int MaxUriCharacters = 128 * 1024;
         private const string Prefix = "qs3d://coordination/issue?";
         private static readonly string[] RequiredKeys = { "v", "project", "drawing", "issue", "revision" };
 
@@ -95,6 +98,10 @@ namespace QS3D.Core.Coordination
         public static CoordinationIssueDeepLink Parse(string uri)
         {
             if (uri == null) throw new ArgumentNullException(nameof(uri));
+            if (uri.Length > MaxUriCharacters)
+                throw new FormatException("Coordination deep-link exceeds the maximum URI length.");
+            if (!IsWellFormedUtf16(uri))
+                throw new FormatException("Coordination deep-link contains malformed UTF-16.");
             if (!uri.StartsWith(Prefix, StringComparison.Ordinal))
                 throw new FormatException("Coordination deep-link must use canonical qs3d://coordination/issue path.");
             if (uri.Length == Prefix.Length)
@@ -121,6 +128,8 @@ namespace QS3D.Core.Coordination
                     throw new FormatException("Coordination deep-link contains duplicate query key: " + key + ".");
 
                 var encoded = segment.Substring(equals + 1);
+                if (encoded.Length > MaxEncodedComponentCharacters)
+                    throw new FormatException("Coordination deep-link query value exceeds the encoded size limit: " + key + ".");
                 ValidatePercentEncoding(encoded, key);
                 string decoded;
                 try
@@ -131,6 +140,10 @@ namespace QS3D.Core.Coordination
                 {
                     throw new FormatException("Coordination deep-link query value is not valid percent-encoding: " + key + ".", ex);
                 }
+                if (decoded.Length > MaxIdentityCharacters)
+                    throw new FormatException("Coordination deep-link query value exceeds the decoded size limit: " + key + ".");
+                if (!IsWellFormedUtf16(decoded))
+                    throw new FormatException("Coordination deep-link query value contains malformed UTF-16: " + key + ".");
                 if (decoded.Any(char.IsControl))
                     throw new FormatException("Coordination deep-link query value contains control characters: " + key + ".");
                 fields.Add(key, decoded);
@@ -193,6 +206,10 @@ namespace QS3D.Core.Coordination
         private static string RequiredToken(string value, string parameterName)
         {
             var raw = value ?? string.Empty;
+            if (raw.Length > MaxIdentityCharacters)
+                throw new ArgumentException("Coordination deep-link identity exceeds the maximum length.", parameterName);
+            if (!IsWellFormedUtf16(raw))
+                throw new ArgumentException("Coordination deep-link identity contains malformed UTF-16.", parameterName);
             if (raw.Any(char.IsControl))
                 throw new ArgumentException("Control characters are not allowed.", parameterName);
             var trimmed = raw.Trim();
@@ -201,6 +218,25 @@ namespace QS3D.Core.Coordination
             if (!string.Equals(raw, trimmed, StringComparison.Ordinal))
                 throw new ArgumentException("Coordination deep-link identity must not contain leading or trailing whitespace.", parameterName);
             return raw;
+        }
+
+        private static bool IsWellFormedUtf16(string value)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                var current = value[i];
+                if (char.IsHighSurrogate(current))
+                {
+                    if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1]))
+                        return false;
+                    i++;
+                }
+                else if (char.IsLowSurrogate(current))
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private static void ValidatePercentEncoding(string encoded, string key)
