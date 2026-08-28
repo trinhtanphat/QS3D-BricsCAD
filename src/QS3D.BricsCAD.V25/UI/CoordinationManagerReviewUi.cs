@@ -502,8 +502,11 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (_highlighted.Count == 0) return;
                 var pending = _highlighted.ToArray();
-                _highlighted.Clear();
-                if (_destroyed) return;
+                if (_destroyed)
+                {
+                    _highlighted.Clear();
+                    return;
+                }
 
                 using (_document.LockDocument())
                 using (var transaction = _document.Database.TransactionManager.StartTransaction())
@@ -522,6 +525,8 @@ namespace QS3D.BricsCAD.V25.UI
                     }
                     transaction.Commit();
                 }
+
+                _highlighted.Clear();
             }
 
             public void Isolate(IReadOnlyList<ObjectId> ids)
@@ -549,16 +554,16 @@ namespace QS3D.BricsCAD.V25.UI
             public void RestoreIsolation()
             {
                 if (!_isolationActive) return;
-                try
-                {
-                    if (!_destroyed)
-                        _document.SendStringToExecute("_.UNISOLATEOBJECTS ", true, false, false);
-                }
-                finally
+                if (_destroyed)
                 {
                     _isolationActive = false;
                     RestoreObjectIsolationModeBestEffort();
+                    return;
                 }
+
+                _document.SendStringToExecute("_.UNISOLATEOBJECTS ", true, false, false);
+                _isolationActive = false;
+                RestoreObjectIsolationModeBestEffort();
             }
 
             public void ApplySectionFocus(IReadOnlyList<ObjectId> ids)
@@ -729,13 +734,17 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)
             {
-                try { ClearHighlight(); } catch { _highlighted.Clear(); }
-                try { RestoreIsolation(); } catch { _isolationActive = false; RestoreObjectIsolationModeBestEffort(); }
+                Exception? cleanupFailure = null;
+                try { ClearHighlight(); } catch (Exception ex) { cleanupFailure = ex; }
+                try { RestoreIsolation(); } catch (Exception ex) { cleanupFailure = cleanupFailure ?? ex; }
                 try { RestoreSectionView(); }
-                catch
+                catch (Exception ex)
                 {
-                    if (throwOnSectionRestoreFailure) throw;
+                    cleanupFailure = cleanupFailure ?? ex;
                 }
+
+                if (throwOnSectionRestoreFailure && cleanupFailure != null)
+                    throw cleanupFailure;
             }
 
             public void AbandonDestroyedDocumentState()
