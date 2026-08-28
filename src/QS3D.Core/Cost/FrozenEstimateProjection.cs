@@ -28,6 +28,8 @@ namespace QS3D.Core.Cost
             var index = 0;
             foreach (var line in lines)
             {
+                if (hasKnownCount && index >= knownCount)
+                    throw new InvalidOperationException("Frozen estimate projection source Count does not match source traversal.");
                 if (index == MaxLines)
                     ThrowTooManyLines();
                 if (line == null)
@@ -41,6 +43,8 @@ namespace QS3D.Core.Cost
 
             if (hasKnownCount && rows.Count != knownCount)
                 throw new InvalidOperationException("Frozen estimate projection source Count does not match source traversal.");
+            if (hasKnownCount)
+                RequireStableKnownCount(lines, knownCount);
 
             rows.Sort(CompareRows);
             return new FrozenEstimateProjection(rows);
@@ -89,6 +93,12 @@ namespace QS3D.Core.Cost
                 throw new InvalidOperationException("Frozen estimate projection source reports conflicting known counts.");
 
             return true;
+        }
+
+        private static void RequireStableKnownCount(IEnumerable<EstimateLine> lines, int expectedCount)
+        {
+            if (!TryGetKnownCount(lines, out var observedCount) || observedCount != expectedCount)
+                throw new InvalidOperationException("Frozen estimate projection source Count changed during enumeration.");
         }
 
         private static void ThrowTooManyLines()
