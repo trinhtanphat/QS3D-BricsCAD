@@ -15,8 +15,13 @@ function Get-CanonicalAbsolutePath {
         throw 'BricsCadDir must not be empty.'
     }
 
+    $trimmed = $Path.Trim()
+    if (-not [IO.Path]::IsPathRooted($trimmed)) {
+        throw "BricsCadDir must be an absolute filesystem path: $Path"
+    }
+
     try {
-        return [IO.Path]::GetFullPath($Path.Trim())
+        return [IO.Path]::GetFullPath($trimmed)
     }
     catch {
         throw "BricsCadDir is not a valid absolute filesystem path: $Path"
@@ -69,10 +74,6 @@ function Get-RequiredOrdinaryFile {
 }
 
 $canonicalDir = Get-CanonicalAbsolutePath -Path $BricsCadDir
-if (-not [IO.Path]::IsPathRooted($canonicalDir)) {
-    throw 'BricsCadDir must resolve to an absolute path.'
-}
-
 Assert-NoExistingReparseComponent -Path $canonicalDir -Label 'BricsCadDir'
 if (-not (Test-Path -LiteralPath $canonicalDir -PathType Container)) {
     throw "BricsCadDir does not exist as a directory: $canonicalDir"
