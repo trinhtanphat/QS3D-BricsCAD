@@ -14,7 +14,12 @@ namespace QS3D.Core.Model
         public EntitySnapshot(string handle, string entityType, string layer)
         {
             Handle = CanonicalHandle(handle, nameof(handle));
-            EntityType = CanonicalIdentifier(entityType, nameof(entityType), "Entity type is required.", "Entity type must not contain control characters.");
+            EntityType = CanonicalIdentifier(
+                entityType,
+                nameof(entityType),
+                "Entity type is required.",
+                "Entity type must not contain control characters.",
+                "Entity type must not contain leading or trailing whitespace.");
             Layer = layer ?? string.Empty;
             Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
@@ -68,15 +73,25 @@ namespace QS3D.Core.Model
             return canonical;
         }
 
-        private static string CanonicalIdentifier(string value, string parameterName, string requiredMessage, string controlMessage)
+        private static string CanonicalIdentifier(
+            string value,
+            string parameterName,
+            string requiredMessage,
+            string controlMessage,
+            string boundaryWhitespaceMessage)
         {
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException(requiredMessage, parameterName);
-            var canonical = value.Trim();
-            for (var index = 0; index < canonical.Length; index++)
+
+            for (var index = 0; index < value.Length; index++)
             {
-                if (char.IsControl(canonical[index]))
+                if (char.IsControl(value[index]))
                     throw new ArgumentException(controlMessage, parameterName);
             }
+
+            var canonical = value.Trim();
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new ArgumentException(boundaryWhitespaceMessage, parameterName);
+
             return canonical;
         }
 

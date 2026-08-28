@@ -24,15 +24,16 @@ namespace QS3D.Core.SmokeTests
             if (!string.Equals(canonicalHandleResult.Handle, "A1", StringComparison.Ordinal))
                 throw new Exception("RecognitionResult must preserve the canonical EntitySnapshot handle identity.");
 
-            var paddedProxy = new EntitySnapshot("A2", "  pRoXyEnTiTy  ", "blt beam");
-            if (!string.Equals(paddedProxy.EntityType, "pRoXyEnTiTy", StringComparison.Ordinal))
-                throw new Exception("EntitySnapshot must canonicalize surrounding entity-type whitespace at construction.");
-            var paddedResult = new RecognitionEngine().Suggest(paddedProxy);
-            if (paddedResult.TopCandidate == null || paddedResult.TopCandidate.Category != ElementCategory.Beam || !paddedResult.RequiresReview || paddedResult.IsCaptureReady)
-                throw new Exception("Padded/case-varied metricless ProxyEntity must remain review-only after canonicalization.");
-            if (new RecognitionBatch(new[] { paddedResult }).AutoAccepted.Count != 0)
-                throw new Exception("Padded/case-varied metricless ProxyEntity must not be auto-accepted.");
-            Throws<InvalidOperationException>(() => EntitySnapshotCaptureEligibility.EnsureReady(paddedProxy, ElementCategory.Beam));
+            Throws<ArgumentException>(() => new EntitySnapshot("A2", "  pRoXyEnTiTy  ", "blt beam"));
+            var canonicalProxy = new EntitySnapshot("A2", "pRoXyEnTiTy", "blt beam");
+            if (!string.Equals(canonicalProxy.EntityType, "pRoXyEnTiTy", StringComparison.Ordinal))
+                throw new Exception("EntitySnapshot must preserve canonical mixed-case EntityType identity.");
+            var canonicalProxyResult = new RecognitionEngine().Suggest(canonicalProxy);
+            if (canonicalProxyResult.TopCandidate == null || canonicalProxyResult.TopCandidate.Category != ElementCategory.Beam || !canonicalProxyResult.RequiresReview || canonicalProxyResult.IsCaptureReady)
+                throw new Exception("Canonical case-varied metricless ProxyEntity must remain review-only.");
+            if (new RecognitionBatch(new[] { canonicalProxyResult }).AutoAccepted.Count != 0)
+                throw new Exception("Canonical case-varied metricless ProxyEntity must not be auto-accepted.");
+            Throws<InvalidOperationException>(() => EntitySnapshotCaptureEligibility.EnsureReady(canonicalProxy, ElementCategory.Beam));
 
             var project = new ProjectState("p", "Proxy mapping");
             var mappingKey = TemplateProfileStore.LayerMappingPrefix + "BLT-COL";
