@@ -180,7 +180,7 @@ else:
     hash_index = helper.find("Get-FileHash -LiteralPath $msi -Algorithm SHA256", ordinary_index if ordinary_index >= 0 else 0)
     signature_index = helper.find("Get-AuthenticodeSignature -FilePath $msi", hash_index if hash_index >= 0 else 0)
     product_index = helper.find("ProductVersion", signature_index if signature_index >= 0 else 0)
-    extract_index = helper.find("Start-Process -FilePath 'msiexec.exe'", product_index if product_index >= 0 else 0)
+    extract_index = helper.find("Start-Process -FilePath msiexec.exe", product_index if product_index >= 0 else 0)
     timeout_index = helper.find("$process.WaitForExit(900000)", extract_index if extract_index >= 0 else 0)
     if min(ordinary_index, hash_index, signature_index, product_index, extract_index, timeout_index) < 0 or not ordinary_index < hash_index < signature_index < product_index < extract_index < timeout_index:
         errors.append("shared V25 acquisition helper must verify ordinary-file, digest, Authenticode and MSI identity before bounded extraction")
