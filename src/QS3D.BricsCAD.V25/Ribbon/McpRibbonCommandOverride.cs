@@ -21,7 +21,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             {
                 [Prefix + "MCP_SETTINGS"] = "QS3DMCPACCOUNTSETUP",
                 [Prefix + "MCP_DOCS"] = "QS3DMCPDOCSHTTP",
-                [Prefix + "AI_DASHBOARD"] = "QS3DAIDASHBOARDHTTP",
+                [Prefix + "AI_DASHBOARD"] = "QS3DMCPAGENTCENTER",
                 [Prefix + "MCP_CONNECTION"] = "QS3DMCPCHECKHTTP"
             };
 
