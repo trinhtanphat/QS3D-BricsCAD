@@ -60,11 +60,10 @@ def main():
     require(visible_add, "panel.CreateFamilyFromWorkspaceSubtype(false);", "visible Add direct Family creation", failures)
     forbid(workspace, "IsWorkspaceAddFamilyButton(button)", "legacy raft Add interception must be absent", failures)
     require(workspace, 'if (!string.Equals(button.Content as string, "Vẽ 3D", StringComparison.Ordinal) ||', "raft Vẽ 3D routed action", failures)
-    require(workspace, "SelectionContainsRaftFamilyInstance(doc, project, owned)", "selected raft update decision", failures)
-    require(workspace, "Cad.EntitySnapshotReader.ReadImpliedSelection(document)", "non-prompting selected raft lookup", failures)
-    forbid(workspace, "Cad.EntitySnapshotReader.ReadCurrentSelection(document)", "Workspace Vẽ 3D must not open an interactive selection prompt", failures)
+    require(workspace, "FamilyHasRaftInstance(project, owned)", "placed raft update decision", failures)
+    require(workspace, "project.Elements.Any(element =>", "semantic Family instance lookup", failures)
+    forbid(workspace, "EntitySnapshotReader.Read", "Workspace Vẽ 3D class handler must not pre-empt the native builder selection prompt", failures)
     require(workspace, 'panel.Send("QS3DBUILD3D")', "selected raft native rebuild route", failures)
-    require(workspace, "SemanticReferenceHandles.MatchesSelection(element, selectedHandles)", "source/generated-host selection ownership", failures)
 
     # Add/select/property must remain in the primary Family render path. A separate selection
     # handler in the raft file is intentionally not accepted because generic rendering can win.
