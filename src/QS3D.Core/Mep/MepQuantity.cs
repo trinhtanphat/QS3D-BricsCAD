@@ -114,7 +114,7 @@ namespace QS3D.Core.Mep
                 if (index == MaxElements)
                     ThrowTooManyElements();
                 if (hasKnownCount && index >= knownCount)
-                    throw new InvalidOperationException("MEP takeoff source known count does not match the number of elements traversed.");
+                    ThrowKnownCountTraversalMismatch();
                 if (element == null)
                     throw new ArgumentException("MEP takeoff contains a null element at index " + index + ".", nameof(elements));
                 if (!ids.Add(element.ElementId))
@@ -131,7 +131,13 @@ namespace QS3D.Core.Mep
             }
 
             if (hasKnownCount && index != knownCount)
-                throw new InvalidOperationException("MEP takeoff source known count does not match the number of elements traversed.");
+                ThrowKnownCountTraversalMismatch();
+            if (hasKnownCount)
+            {
+                var hasFinalKnownCount = TryGetKnownCount(elements, out var finalKnownCount);
+                if (!hasFinalKnownCount || finalKnownCount != knownCount)
+                    ThrowKnownCountChangedDuringTraversal();
+            }
 
             var result = new List<MepQuantityGroup>(builders.Count);
             foreach (var builder in builders.Values)
@@ -192,6 +198,18 @@ namespace QS3D.Core.Mep
         {
             throw new InvalidOperationException(
                 "MEP quantity aggregation supports at most " + MaxElements + " elements.");
+        }
+
+        private static void ThrowKnownCountTraversalMismatch()
+        {
+            throw new InvalidOperationException(
+                "MEP takeoff source known count does not match the number of elements traversed.");
+        }
+
+        private static void ThrowKnownCountChangedDuringTraversal()
+        {
+            throw new InvalidOperationException(
+                "MEP takeoff source known count changed during traversal.");
         }
 
         private static string BuildKey(MepElement element) =>
