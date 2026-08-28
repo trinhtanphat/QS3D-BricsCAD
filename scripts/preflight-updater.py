@@ -98,12 +98,18 @@ for token in (
     "function Read-ManagedProductVersion",
     "managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')",
     "PACKAGE-METADATA is missing productVersion",
-    "Assert-AuthenticodeSigner",
-    "Assert-ZipPayloadMatchesSignedStaging",
+    "Resolve-OrdinaryNonReparseDirectory",
+    "Resolve-OrdinaryNonReparseFile",
+    "Read-BoundedStrictUtf8File",
+    "$payloadFiles[$name] = Resolve-OrdinaryNonReparseFile",
+    "Assert-AuthenticodeSigner -Path $payloadFiles[$name].FullName",
+    "Assert-ZipPayloadMatchesSignedStaging -ZipFile $zip -PackageRoot $package",
     "Package ZIP payload does not match signed staging file",
     "schemaVersion = 2",
     "productVersion = $signedPluginProductVersion",
     "signerThumbprint = $expectedSigner",
+    "[IO.File]::WriteAllText($stagePath",
+    "[IO.File]::Replace($stage.FullName, $outputFull, $backupPath, $true)",
 ):
     require(manifest, token, "scripts/new-v25-update-manifest.ps1")
 if "schemaVersion = 1" in manifest:
@@ -198,12 +204,41 @@ if min(archive_check, extraction) < 0 or archive_check > extraction:
 if min(package_check, signed_version, metadata_check, installer_execute) < 0 or not (package_check < signed_version < metadata_check < installer_execute):
     errors.append("updater must verify signatures, signed plugin identity and metadata binding before installer execution")
 
-manifest_signer = manifest.find("Assert-AuthenticodeSigner -Path (Join-Path $package $name)")
+manifest_package_guard = manifest.find("$package = Resolve-OrdinaryNonReparseDirectory -Path $PackageDirectory")
+manifest_zip_guard = manifest.find("$zip = Resolve-OrdinaryNonReparseFile -Path $PackageZip")
+manifest_metadata_guard = manifest.find("$metadataFile = Resolve-OrdinaryNonReparseFile")
+manifest_payload_guard = manifest.find("$payloadFiles[$name] = Resolve-OrdinaryNonReparseFile")
+manifest_metadata_read = manifest.find("$metadataText = Read-BoundedStrictUtf8File")
+manifest_signer = manifest.find("Assert-AuthenticodeSigner -Path $payloadFiles[$name].FullName")
 manifest_identity = manifest.find("$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')")
-manifest_zip_verify = manifest.find("Assert-ZipPayloadMatchesSignedStaging -ZipPath $zip")
-manifest_hash = manifest.find("$zipHash =")
-if min(manifest_signer, manifest_identity, manifest_zip_verify, manifest_hash) < 0 or not (manifest_signer < manifest_identity < manifest_zip_verify < manifest_hash):
-    errors.append("manifest generation must bind both signed managed identities before verifying/hashing the ZIP")
+manifest_zip_verify = manifest.find("Assert-ZipPayloadMatchesSignedStaging -ZipFile $zip -PackageRoot $package")
+manifest_hash = manifest.find("$zipHash = (Get-FileHash -LiteralPath $zip.FullName")
+manifest_publish = manifest.find("[IO.File]::WriteAllText($stagePath")
+manifest_positions = (
+    manifest_package_guard,
+    manifest_zip_guard,
+    manifest_metadata_guard,
+    manifest_payload_guard,
+    manifest_metadata_read,
+    manifest_signer,
+    manifest_identity,
+    manifest_zip_verify,
+    manifest_hash,
+    manifest_publish,
+)
+if min(manifest_positions) < 0 or not (
+    manifest_package_guard
+    < manifest_zip_guard
+    < manifest_metadata_guard
+    < manifest_payload_guard
+    < manifest_metadata_read
+    < manifest_signer
+    < manifest_identity
+    < manifest_zip_verify
+    < manifest_hash
+    < manifest_publish
+):
+    errors.append("manifest generation must ordinary-file bind package/ZIP/metadata/payload before bounded metadata materialization, then bind both signed managed identities before ZIP verification/hash and atomic publication")
 
 finalizer_signer = finalizer.find("Assert-AuthenticodeSigner -Path $path")
 finalizer_identity = finalizer.find("$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')")
@@ -240,4 +275,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: secure V25 update uses bounded HTTPS, schema-2 dual managed identity binding, signed/hash-verified packages, shared update serialization, transactional install rollback and quarantine-safe uninstall rollback.")
+print("PASS: secure V25 update uses bounded HTTPS, bounded/reparse-safe manifest inputs with atomic publication, schema-2 dual managed identity binding, signed/hash-verified packages, shared update serialization, transactional install rollback and quarantine-safe uninstall rollback.")
