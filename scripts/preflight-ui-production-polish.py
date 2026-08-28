@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 UI_DIR = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI"
 THEME = UI_DIR / "Theme.xaml"
 POLISH = UI_DIR / "ProductionUiPolish.cs"
+WORKSPACE = UI_DIR / "WorkspacePanel.xaml"
 PLUGIN_ENTRIES = (
     ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs",
     ROOT / "src" / "QS3D.BricsCAD.V26" / "PluginEntry.cs",
@@ -65,6 +66,42 @@ def require_setter(
             f"Theme.xaml: {target_type} must set {property_name}={expected_value!r}; "
             f"found {actual!r}."
         )
+
+
+def mask_room_finish_tree_exception(path: Path, text: str) -> str:
+    """Exclude the one host-crash containment exception from the global anti-pattern scan.
+
+    RoomFinishTree is a small static tree whose virtualization state is deliberately fixed in
+    XAML before first Measure. The dedicated V25 Room finish preflight owns that exact contract.
+    Every other XAML surface remains subject to the production-polish virtualization policy.
+    """
+    if path != WORKSPACE:
+        return text
+
+    match = re.search(
+        r'<TreeView\s+x:Name="RoomFinishTree"(?P<attrs>[^>]*)>',
+        text,
+        flags=re.DOTALL,
+    )
+    if not match:
+        return text
+
+    attrs = match.group("attrs")
+    required = (
+        'VirtualizingPanel.VirtualizationMode="Standard"',
+        'VirtualizingPanel.IsVirtualizing="False"',
+        'ScrollViewer.CanContentScroll="False"',
+    )
+    if any(token not in attrs for token in required):
+        return text
+
+    start, end = match.span()
+    opening_tag = text[start:end].replace(
+        'VirtualizingPanel.IsVirtualizing="False"',
+        'VirtualizingPanel.IsVirtualizing="__ROOM_FINISH_STATIC_EXCEPTION__"',
+        1,
+    )
+    return text[:start] + opening_tag + text[end:]
 
 
 def main() -> int:
@@ -169,7 +206,7 @@ def main() -> int:
 
     xaml_files = sorted(UI_DIR.rglob("*.xaml"))
     for path in xaml_files:
-        text = read_text(path)
+        text = mask_room_finish_tree_exception(path, read_text(path))
         for label, pattern in anti_patterns:
             if pattern.search(text):
                 fail(f"{path.relative_to(ROOT)}: {label}.")
