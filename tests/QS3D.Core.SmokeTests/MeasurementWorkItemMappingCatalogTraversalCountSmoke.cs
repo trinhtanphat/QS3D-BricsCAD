@@ -11,7 +11,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             UnderEnumerationRejects();
-            OverEnumerationRejects();
+            OverEnumerationRejectsEarly();
+            KnownCountOverrunPrecedesUnexpectedMappingValidation();
             HonestKnownCountRemainsAccepted();
             PureStreamingRemainsAccepted();
         }
@@ -23,11 +24,18 @@ namespace QS3D.Core.SmokeTests
             Contains("known Count does not match completed traversal cardinality", error.Message);
         }
 
-        private static void OverEnumerationRejects()
+        private static void OverEnumerationRejectsEarly()
         {
             var mappings = new ReportedCountCollection(reportedCount: 1, actualCount: 2);
             var error = Capture<InvalidOperationException>(() => new MeasurementWorkItemMappingCatalog(mappings));
-            Contains("known Count does not match completed traversal cardinality", error.Message);
+            Contains("traversal produced more entries than its known Count reported 1", error.Message);
+        }
+
+        private static void KnownCountOverrunPrecedesUnexpectedMappingValidation()
+        {
+            var error = Capture<InvalidOperationException>(
+                () => new MeasurementWorkItemMappingCatalog(new UnexpectedOverrunCollection()));
+            Contains("traversal produced more entries than its known Count reported 1", error.Message);
         }
 
         private static void HonestKnownCountRemainsAccepted()
@@ -106,6 +114,19 @@ namespace QS3D.Core.SmokeTests
             public bool Contains(MeasurementWorkItemMapping item) => false;
             public void CopyTo(MeasurementWorkItemMapping[] array, int arrayIndex) => throw new NotSupportedException();
             public bool Remove(MeasurementWorkItemMapping item) => throw new NotSupportedException();
+        }
+
+        private sealed class UnexpectedOverrunCollection : IReadOnlyCollection<MeasurementWorkItemMapping>
+        {
+            public int Count => 1;
+
+            public IEnumerator<MeasurementWorkItemMapping> GetEnumerator()
+            {
+                yield return CreateMapping(0);
+                yield return null!;
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private sealed class StreamingMappings : IEnumerable<MeasurementWorkItemMapping>
