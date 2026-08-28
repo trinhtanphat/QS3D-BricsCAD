@@ -24,6 +24,7 @@ permissions:
   contents: read
   actions: read
   pull-requests: read
+  issues: read
 
 concurrency:
   group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -79,8 +80,8 @@ jobs:
           QS3D_PR_BRANCH_CI_RUNTIME: "1"
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/preflight-pr-branch-ci-gate.py
-      - name: Agent Lane-Key collision gate
-        if: ${{ github.event_name == 'pull_request' }}
+      - name: Agent reservation / Lane-Key / path collision gate
+        if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
         env:
           QS3D_AGENT_LANE_COLLISION_RUNTIME: "1"
           GITHUB_TOKEN: ${{ github.token }}
