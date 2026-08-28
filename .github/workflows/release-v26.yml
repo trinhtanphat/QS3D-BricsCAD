@@ -71,21 +71,22 @@ jobs:
           if ($env:GITHUB_REF -ne 'refs/heads/main') {
             throw "V26 releases must be dispatched from refs/heads/main. Current ref: $env:GITHUB_REF"
           }
-          if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$') {
-            throw "release_tag must look like v1.2.3, v1.2.3-rc.1 or v1.2.3-rc.1+build.4"
+          $releaseRequest = & .\scripts\assert-v26-release-request.ps1 `
+            -ReleaseTag $env:RELEASE_TAG `
+            -Prerelease:($env:RELEASE_PRERELEASE -eq 'true') `
+            -RunRuntime:($env:RELEASE_RUN_RUNTIME -eq 'true') `
+            -SignPackage:($env:RELEASE_SIGN_PACKAGE -eq 'true')
+          if ($null -eq $releaseRequest) {
+            throw 'Strict V26 release request validation did not return a parsed request.'
           }
+          $isPrerelease = [bool]$releaseRequest.IsPrerelease
+          $signPackage = [bool]$releaseRequest.SignPackage
+          "V26_RELEASE_REQUEST_PRERELEASE=$($isPrerelease.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "V26_RELEASE_REQUEST_SIGN_PACKAGE=$($signPackage.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
           git rev-parse --verify HEAD | Out-Null
           if (git tag --list $env:RELEASE_TAG) { throw "Tag already exists locally: $env:RELEASE_TAG" }
 
-          $isPrerelease = $env:RELEASE_PRERELEASE -eq 'true'
-          $hasPrereleaseSuffix = $env:RELEASE_TAG -match '^v[0-9]+\.[0-9]+\.[0-9]+-'
-          if ($isPrerelease -ne $hasPrereleaseSuffix) {
-            throw "prerelease input must match the release_tag suffix."
-          }
-          $runRuntime = $env:RELEASE_RUN_RUNTIME -eq 'true'
-          $signPackage = $env:RELEASE_SIGN_PACKAGE -eq 'true'
-          if (-not $isPrerelease -and -not $runRuntime) { throw "Stable V26 release requires run_runtime=true." }
-          if (-not $isPrerelease -and -not $signPackage) { throw "Stable V26 release requires sign_package=true." }
           if ($signPackage) {
             if ($env:QS3D_SIGNING_CERT_THUMBPRINT -notmatch '^[0-9A-Fa-f]{40}$') {
               throw "QS3D_SIGNING_CERT_THUMBPRINT must be a 40-hex Authenticode thumbprint."
@@ -267,8 +268,8 @@ jobs:
             }
           }
 
-          $isPrerelease = $env:RELEASE_PRERELEASE -eq 'true'
-          $signPackage = $env:RELEASE_SIGN_PACKAGE -eq 'true'
+          $isPrerelease = $env:V26_RELEASE_REQUEST_PRERELEASE -eq 'true'
+          $signPackage = $env:V26_RELEASE_REQUEST_SIGN_PACKAGE -eq 'true'
           $runtimeState = if ($env:RELEASE_RUN_RUNTIME -eq 'true') {
             if ($signPackage) { 'passed required V26 runtime gate on the exact signed release payload' }
             else { 'passed V26 runtime gate on the unsigned prerelease payload' }
