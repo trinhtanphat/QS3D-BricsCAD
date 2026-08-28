@@ -40,8 +40,12 @@ namespace QS3D.Core.Coordination
     public sealed class CoordinationIssueDeepLink
     {
         public const int CurrentSchemaVersion = 1;
+        public const int MaxIdentityCharacters = 4096;
+        public const int MaxEncodedComponentCharacters = MaxIdentityCharacters * 9;
+        public const int MaxUriCharacters = 128 * 1024;
         private const string Prefix = "qs3d://coordination/issue?";
         private static readonly string[] RequiredKeys = { "v", "project", "drawing", "issue", "revision" };
+        private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public CoordinationIssueDeepLink(
             string projectId,
@@ -95,6 +99,10 @@ namespace QS3D.Core.Coordination
         public static CoordinationIssueDeepLink Parse(string uri)
         {
             if (uri == null) throw new ArgumentNullException(nameof(uri));
+            if (uri.Length > MaxUriCharacters)
+                throw new FormatException("Coordination deep-link exceeds the maximum URI length.");
+            if (!IsWellFormedUtf16(uri))
+                throw new FormatException("Coordination deep-link contains malformed UTF-16.");
             if (!uri.StartsWith(Prefix, StringComparison.Ordinal))
                 throw new FormatException("Coordination deep-link must use canonical qs3d://coordination/issue path.");
             if (uri.Length == Prefix.Length)
@@ -121,6 +129,8 @@ namespace QS3D.Core.Coordination
                     throw new FormatException("Coordination deep-link contains duplicate query key: " + key + ".");
 
                 var encoded = segment.Substring(equals + 1);
+                if (encoded.Length > MaxEncodedComponentCharacters)
+                    throw new FormatException("Coordination deep-link query value exceeds the encoded size limit: " + key + ".");
                 ValidatePercentEncoding(encoded, key);
                 string decoded;
                 try
@@ -131,6 +141,10 @@ namespace QS3D.Core.Coordination
                 {
                     throw new FormatException("Coordination deep-link query value is not valid percent-encoding: " + key + ".", ex);
                 }
+                if (decoded.Length > MaxIdentityCharacters)
+                    throw new FormatException("Coordination deep-link query value exceeds the decoded size limit: " + key + ".");
+                if (!IsWellFormedUtf16(decoded))
+                    throw new FormatException("Coordination deep-link query value contains malformed UTF-16: " + key + ".");
                 if (decoded.Any(char.IsControl))
                     throw new FormatException("Coordination deep-link query value contains control characters: " + key + ".");
                 fields.Add(key, decoded);
@@ -193,6 +207,10 @@ namespace QS3D.Core.Coordination
         private static string RequiredToken(string value, string parameterName)
         {
             var raw = value ?? string.Empty;
+            if (raw.Length > MaxIdentityCharacters)
+                throw new ArgumentException("Coordination deep-link identity exceeds the maximum length.", parameterName);
+            if (!IsWellFormedUtf16(raw))
+                throw new ArgumentException("Coordination deep-link identity contains malformed UTF-16.", parameterName);
             if (raw.Any(char.IsControl))
                 throw new ArgumentException("Control characters are not allowed.", parameterName);
             var trimmed = raw.Trim();
@@ -203,15 +221,61 @@ namespace QS3D.Core.Coordination
             return raw;
         }
 
+        private static bool IsWellFormedUtf16(string value)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                var current = value[i];
+                if (char.IsHighSurrogate(current))
+                {
+                    if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1]))
+                        return false;
+                    i++;
+                }
+                else if (char.IsLowSurrogate(current))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         private static void ValidatePercentEncoding(string encoded, string key)
         {
-            for (var i = 0; i < encoded.Length; i++)
+            var index = 0;
+            while (index < encoded.Length)
             {
-                if (encoded[i] != '%') continue;
-                if (i + 2 >= encoded.Length || !IsHex(encoded[i + 1]) || !IsHex(encoded[i + 2]))
-                    throw new FormatException("Coordination deep-link contains malformed percent-encoding in query key: " + key + ".");
-                i += 2;
+                if (encoded[index] != '%')
+                {
+                    index++;
+                    continue;
+                }
+
+                var bytes = new List<byte>();
+                while (index < encoded.Length && encoded[index] == '%')
+                {
+                    if (index + 2 >= encoded.Length || !IsHex(encoded[index + 1]) || !IsHex(encoded[index + 2]))
+                        throw new FormatException("Coordination deep-link contains malformed percent-encoding in query key: " + key + ".");
+                    bytes.Add((byte)((HexValue(encoded[index + 1]) << 4) | HexValue(encoded[index + 2])));
+                    index += 3;
+                }
+
+                try
+                {
+                    StrictUtf8.GetString(bytes.ToArray());
+                }
+                catch (DecoderFallbackException ex)
+                {
+                    throw new FormatException("Coordination deep-link contains invalid UTF-8 percent-encoding in query key: " + key + ".", ex);
+                }
             }
+        }
+
+        private static int HexValue(char value)
+        {
+            if (value >= '0' && value <= '9') return value - '0';
+            if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+            return value - 'A' + 10;
         }
 
         private static bool IsHex(char value)

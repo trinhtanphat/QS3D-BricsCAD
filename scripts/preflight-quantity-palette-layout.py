@@ -53,8 +53,12 @@ if COORDINATOR.is_file():
     text = COORDINATOR.read_text(encoding="utf-8")
     required = (
         "private static PaletteSet? _quantityInsight;",
-        "MinimumSize = new DrawingSize(UserUiLayoutStore.QuantityPaletteMinWidth, UserUiLayoutStore.QuantityPaletteMinHeight)",
-        "_quantityInsight.DeviceIndependentSize = new WpfSize(layout.QuantityPaletteWidth, layout.QuantityPaletteHeight);",
+        "private static PaletteSet CreatePaletteSet(",
+        "new DrawingSize(UserUiLayoutStore.QuantityPaletteMinWidth, UserUiLayoutStore.QuantityPaletteMinHeight),",
+        "new WpfSize(layout.QuantityPaletteWidth, layout.QuantityPaletteHeight),",
+        "palette.MinimumSize = minimumSize;",
+        "palette.DeviceIndependentSize = initialSize;",
+        "palette.AddVisual(visualTitle, visual, true);",
         "var quantitySize = _quantityInsight?.DeviceIndependentSize;",
         "var hasQuantitySize = TryGetPersistableSize(quantitySize, out var quantityWidth, out var quantityHeight);",
         "if (hasQuantitySize)",
@@ -71,16 +75,18 @@ if COORDINATOR.is_file():
     )
     for needle in required:
         if needle not in text:
-            errors.append("PaletteCoordinator missing independent Quantity palette layout contract: " + needle)
+            errors.append("PaletteCoordinator missing rollback-safe independent Quantity palette layout contract: " + needle)
 
     stale = (
         "MinimumSize = new DrawingSize(280, 360)",
         "Math.Max(310, layout.RightPaletteWidth)",
         "new WpfSize(Math.Max(310, layout.RightPaletteWidth), layout.RightPaletteHeight)",
+        "_quantityInsight.DeviceIndependentSize =",
+        "_quantityInsight = new PaletteSet(",
     )
     for needle in stale:
         if needle in text:
-            errors.append("Quantity palette still borrows/hard-codes layout instead of using its own persisted policy: " + needle)
+            errors.append("Quantity palette still borrows/hard-codes or configures layout after publication: " + needle)
 
     if "_quantityInsight.Size =" in text:
         errors.append("Quantity palette must use DeviceIndependentSize for persisted WPF dimensions")
@@ -92,4 +98,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Quantity Insight has independent per-user dimensions and four-palette visibility restore plus finite positive persisted-size filtering without QSDB mutation.")
+print("PASS: Quantity Insight has independent per-user dimensions, native configuration is applied under pre-publication rollback ownership, and four-palette visibility restore plus finite positive persisted-size filtering remain outside QSDB state.")

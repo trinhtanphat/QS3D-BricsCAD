@@ -239,7 +239,7 @@ namespace QS3D.Core.Scheduling
                 ScheduleContract.AddCompensated(QuantityLinks[i].AllocatedValue, ref sum, ref compensation);
             }
 
-            var total = sum + compensation;
+            var total = ScheduleContract.CompensatedTotal(sum, compensation);
             return total == 0d ? 0d : total;
         }
 
@@ -336,17 +336,13 @@ namespace QS3D.Core.Scheduling
 
         private static List<T> Snapshot<T>(IEnumerable<T> source, string parameterName, string collectionName) where T : class
         {
-            int? knownCount = null;
-            if (source is ICollection<T> collection)
-                ValidateKnownCount(collection.Count, ref knownCount, parameterName, collectionName);
-            if (source is IReadOnlyCollection<T> readOnlyCollection)
-                ValidateKnownCount(readOnlyCollection.Count, ref knownCount, parameterName, collectionName);
-            if (source is System.Collections.ICollection nonGenericCollection)
-                ValidateKnownCount(nonGenericCollection.Count, ref knownCount, parameterName, collectionName);
+            var knownCount = ReadKnownCount(source, parameterName, collectionName);
 
             var items = new List<T>();
             foreach (var item in source)
             {
+                if (knownCount.HasValue && items.Count >= knownCount.Value)
+                    throw CountChangedError(parameterName, collectionName);
                 if (items.Count >= MaximumEntries)
                     throw CollectionCountError(parameterName, collectionName);
                 if (item == null)
@@ -355,8 +351,28 @@ namespace QS3D.Core.Scheduling
             }
 
             if (knownCount.HasValue && knownCount.Value != items.Count)
-                throw new ArgumentException("Schedule " + collectionName + " count changed during enumeration.", parameterName);
+                throw CountChangedError(parameterName, collectionName);
+
+            var reboundCount = ReadKnownCount(source, parameterName, collectionName);
+            if (reboundCount.HasValue != knownCount.HasValue ||
+                (reboundCount.HasValue && reboundCount.Value != knownCount!.Value) ||
+                (reboundCount.HasValue && reboundCount.Value != items.Count))
+            {
+                throw CountChangedError(parameterName, collectionName);
+            }
             return items;
+        }
+
+        private static int? ReadKnownCount<T>(IEnumerable<T> source, string parameterName, string collectionName)
+        {
+            int? knownCount = null;
+            if (source is ICollection<T> collection)
+                ValidateKnownCount(collection.Count, ref knownCount, parameterName, collectionName);
+            if (source is IReadOnlyCollection<T> readOnlyCollection)
+                ValidateKnownCount(readOnlyCollection.Count, ref knownCount, parameterName, collectionName);
+            if (source is System.Collections.ICollection nonGenericCollection)
+                ValidateKnownCount(nonGenericCollection.Count, ref knownCount, parameterName, collectionName);
+            return knownCount;
         }
 
         private static void ValidateKnownCount(int count, ref int? knownCount, string parameterName, string collectionName)
@@ -368,6 +384,11 @@ namespace QS3D.Core.Scheduling
             if (knownCount.HasValue && knownCount.Value != count)
                 throw new ArgumentException("Schedule " + collectionName + " count contracts disagree.", parameterName);
             knownCount = count;
+        }
+
+        private static ArgumentException CountChangedError(string parameterName, string collectionName)
+        {
+            return new ArgumentException("Schedule " + collectionName + " count changed during enumeration.", parameterName);
         }
 
         private static ArgumentException CollectionCountError(string parameterName, string collectionName)
@@ -471,7 +492,7 @@ namespace QS3D.Core.Scheduling
                 }
 
                 ScheduleContract.AddCompensated(link.AllocatedValue, ref state.Sum, ref state.Compensation);
-                var allocated = state.Sum + state.Compensation;
+                var allocated = ScheduleContract.CompensatedTotal(state.Sum, state.Compensation);
                 if (allocated - state.MeasuredValue > ScheduleContract.NumericTolerance(state.MeasuredValue))
                     throw new ArgumentException("Schedule quantity allocation exceeds the frozen measured quantity.", nameof(links));
             }
@@ -570,11 +591,51 @@ namespace QS3D.Core.Scheduling
 
         internal static void AddCompensated(double value, ref double sum, ref double compensation)
         {
+            RequireFiniteAggregationState(value, sum, compensation);
+
             var next = sum + value;
-            compensation += Math.Abs(sum) >= Math.Abs(value)
+            if (!IsFinite(next))
+                throw NonFiniteAggregation();
+
+            var correction = Math.Abs(sum) >= Math.Abs(value)
                 ? (sum - next) + value
                 : (value - next) + sum;
+            if (!IsFinite(correction))
+                throw NonFiniteAggregation();
+
+            var nextCompensation = compensation + correction;
+            if (!IsFinite(nextCompensation))
+                throw NonFiniteAggregation();
+
             sum = next;
+            compensation = nextCompensation;
+            CompensatedTotal(sum, compensation);
+        }
+
+        internal static double CompensatedTotal(double sum, double compensation)
+        {
+            if (!IsFinite(sum) || !IsFinite(compensation))
+                throw NonFiniteAggregation();
+            var total = sum + compensation;
+            if (!IsFinite(total))
+                throw NonFiniteAggregation();
+            return total;
+        }
+
+        private static void RequireFiniteAggregationState(double value, double sum, double compensation)
+        {
+            if (!IsFinite(value) || !IsFinite(sum) || !IsFinite(compensation))
+                throw NonFiniteAggregation();
+        }
+
+        private static bool IsFinite(double value)
+        {
+            return !double.IsNaN(value) && !double.IsInfinity(value);
+        }
+
+        private static ArgumentException NonFiniteAggregation()
+        {
+            return new ArgumentException("Schedule compensated numeric aggregation must remain finite.");
         }
 
         internal static string Sha256(string value)

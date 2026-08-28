@@ -19,10 +19,14 @@ namespace QS3D.Core.SmokeTests
             ConsistentKnownCountsRemainAccepted();
             KnownCountTraversalMismatchFailsClosedAndPreservesGraph();
             KnownCountTraversalMismatchFailsDirtyOrdering();
+            KnownCountOverrunPrecedesUnexpectedNullAndPreservesGraph();
+            KnownCountOverrunPrecedesDuplicateValidation();
+            DirtyOrderingKnownCountOverrunPrecedesUnexpectedNullValidation();
             DirtyAndCleanDuplicateSemanticIdsFailDirtyOrdering();
             CleanDuplicateSemanticIdsFailDirtyOrdering();
             ExactBoundRemainsAccepted();
-            DishonestKnownCountStillStopsAtStreamingBoundary();
+            DishonestKnownCountStopsAtFirstUnexpectedElement();
+            PureStreamingStillStopsAtIndependentBoundary();
         }
 
         private static void ConflictingKnownCountsFailBeforeEnumerationAndPreserveGraph()
@@ -128,6 +132,58 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Known Count over-enumeration must inspect the ordering source exactly once.");
         }
 
+        private static void KnownCountOverrunPrecedesUnexpectedNullAndPreservesGraph()
+        {
+            var graph = new DependencyGraph();
+            var keep = Element("KEEP-OVERRUN");
+            graph.Rebuild(new[] { keep });
+
+            var source = new MultiCountCollection(
+                new ProjectElement[] { Element("VALID-FIRST"), null! },
+                1,
+                1,
+                1,
+                throwOnEnumeration: false);
+
+            ExpectInvalidOperation(
+                () => graph.Rebuild(source),
+                "count changed during enumeration",
+                "Known-count overrun must win before unexpected null-element validation.");
+            if (!graph.TryGetElement("KEEP-OVERRUN", out var retained) || !ReferenceEquals(keep, retained) || graph.TryGetElement("VALID-FIRST", out _))
+                throw new Exception("Known-count overrun must preserve the previously committed graph atomically.");
+        }
+
+        private static void KnownCountOverrunPrecedesDuplicateValidation()
+        {
+            var duplicate = Element("DUP-OVERRUN");
+            var source = new MultiCountCollection(
+                new[] { duplicate, Element("dup-overrun") },
+                1,
+                1,
+                1,
+                throwOnEnumeration: false);
+
+            ExpectInvalidOperation(
+                () => new DependencyGraph().Rebuild(source),
+                "count changed during enumeration",
+                "Known-count overrun must win before duplicate semantic-id validation on the first unexpected element.");
+        }
+
+        private static void DirtyOrderingKnownCountOverrunPrecedesUnexpectedNullValidation()
+        {
+            var source = new MultiCountCollection(
+                new ProjectElement[] { Element("ORDER-FIRST"), null! },
+                1,
+                1,
+                1,
+                throwOnEnumeration: false);
+
+            ExpectInvalidOperation(
+                () => new DependencyGraph().TopologicalDirtyOrder(source),
+                "count changed during enumeration",
+                "Dependency ordering known-count overrun must win before unexpected null-element validation.");
+        }
+
         private static void DirtyAndCleanDuplicateSemanticIdsFailDirtyOrdering()
         {
             var dirty = Element("ORDER-DUP-DIRTY-CLEAN");
@@ -168,17 +224,30 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("The exact-bound dirty ordering must retain all default-dirty semantic elements.");
         }
 
-        private static void DishonestKnownCountStillStopsAtStreamingBoundary()
+        private static void DishonestKnownCountStopsAtFirstUnexpectedElement()
         {
             var rebuildSource = new DishonestReadOnlyCollection(MaxElementInputCount + 1, reportedCount: 1);
-            ExpectInvalidOperation(() => new DependencyGraph().Rebuild(rebuildSource), "exceeds the supported", "Dishonest rebuild count must still be bounded while streaming.");
-            if (rebuildSource.MoveNextCalls != MaxElementInputCount + 1)
-                throw new Exception("Rebuild must stop immediately after observing raw element 10,001 and must not request element 10,002.");
+            ExpectInvalidOperation(() => new DependencyGraph().Rebuild(rebuildSource), "count changed during enumeration", "Dishonest rebuild Count must stop on the first unexpected element.");
+            if (rebuildSource.MoveNextCalls != 2)
+                throw new Exception("Rebuild must stop immediately after observing the first element beyond its trustworthy known Count.");
 
             var orderingSource = new DishonestReadOnlyCollection(MaxElementInputCount + 1, reportedCount: 1);
-            ExpectInvalidOperation(() => new DependencyGraph().TopologicalDirtyOrder(orderingSource), "exceeds the supported", "Dishonest ordering count must still be bounded while streaming.");
+            ExpectInvalidOperation(() => new DependencyGraph().TopologicalDirtyOrder(orderingSource), "count changed during enumeration", "Dishonest ordering Count must stop on the first unexpected element.");
+            if (orderingSource.MoveNextCalls != 2)
+                throw new Exception("Topological ordering must stop immediately after observing the first element beyond its trustworthy known Count.");
+        }
+
+        private static void PureStreamingStillStopsAtIndependentBoundary()
+        {
+            var rebuildSource = new StreamingElements(MaxElementInputCount + 2);
+            ExpectInvalidOperation(() => new DependencyGraph().Rebuild(rebuildSource), "exceeds the supported", "Pure-streaming rebuild input must retain the independent element limit.");
+            if (rebuildSource.MoveNextCalls != MaxElementInputCount + 1)
+                throw new Exception("Pure-streaming rebuild must stop immediately after observing raw element 10,001.");
+
+            var orderingSource = new StreamingElements(MaxElementInputCount + 2);
+            ExpectInvalidOperation(() => new DependencyGraph().TopologicalDirtyOrder(orderingSource), "exceeds the supported", "Pure-streaming ordering input must retain the independent element limit.");
             if (orderingSource.MoveNextCalls != MaxElementInputCount + 1)
-                throw new Exception("Topological ordering must stop immediately after observing raw element 10,001 and must not request element 10,002.");
+                throw new Exception("Pure-streaming ordering must stop immediately after observing raw element 10,001.");
         }
 
         private static ProjectElement Element(string id)
@@ -278,15 +347,64 @@ namespace QS3D.Core.SmokeTests
             public int Count => _reportedCount;
             public int MoveNextCalls { get; private set; }
 
-            public IEnumerator<ProjectElement> GetEnumerator() => new Enumerator(this);
+            public IEnumerator<ProjectElement> GetEnumerator() => new Enumerator(this, _actualCount, "DISHONEST");
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
             private sealed class Enumerator : IEnumerator<ProjectElement>
             {
                 private readonly DishonestReadOnlyCollection _owner;
+                private readonly int _actualCount;
+                private readonly string _prefix;
                 private int _index = -1;
 
-                public Enumerator(DishonestReadOnlyCollection owner) { _owner = owner; }
+                public Enumerator(DishonestReadOnlyCollection owner, int actualCount, string prefix)
+                {
+                    _owner = owner;
+                    _actualCount = actualCount;
+                    _prefix = prefix;
+                }
+
+                public ProjectElement Current { get; private set; } = null!;
+                object IEnumerator.Current => Current;
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    _index++;
+                    if (_index >= _actualCount) return false;
+                    Current = Element(_prefix + "-" + _index);
+                    return true;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
+        }
+
+        private sealed class StreamingElements : IEnumerable<ProjectElement>
+        {
+            private readonly int _actualCount;
+
+            public StreamingElements(int actualCount)
+            {
+                _actualCount = actualCount;
+            }
+
+            public int MoveNextCalls { get; private set; }
+
+            public IEnumerator<ProjectElement> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class Enumerator : IEnumerator<ProjectElement>
+            {
+                private readonly StreamingElements _owner;
+                private int _index = -1;
+
+                public Enumerator(StreamingElements owner)
+                {
+                    _owner = owner;
+                }
+
                 public ProjectElement Current { get; private set; } = null!;
                 object IEnumerator.Current => Current;
 

@@ -26,35 +26,55 @@ if not errors:
     polish = polish_path.read_text(encoding="utf-8")
 
     required_safety = {
-        "FrameworkElement.LoadedEvent": "ModelTree safety must retain a Loaded fallback for reparenting/reload paths",
-        "new RoutedEventHandler(OnModelTreeVirtualizationSafetyLoaded)": "ModelTree safety Loaded handler registration missing",
         "private static void ApplyModelTreeVirtualizationSafety(WorkspacePanel panel)": "ModelTree safety helper missing",
-        "ReadLocalValue(VirtualizingPanel.VirtualizationModeProperty)": "ModelTree must detect whether the pre-layout local mode pin already exists",
-        "== DependencyProperty.UnsetValue": "ModelTree must only establish VirtualizationMode before the first local pin",
         "VirtualizingPanel.SetVirtualizationMode(panel.ModelTree, VirtualizationMode.Standard);": "ModelTree must pin Standard mode before first host layout",
         "VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);": "ModelTree must opt out of recycling virtualization locally",
         "ScrollViewer.SetCanContentScroll(panel.ModelTree, false);": "ModelTree must use physical scrolling so a virtualizing items host is not selected",
+        "panel.EnsureProjectBrowserSurface();": "ModelTree must enter its final Project Browser host before first layout",
     }
     for token, message in required_safety.items():
         if token not in safety:
             errors.append(message)
 
-    if not re.search(r"InitializeComponent\(\);\s*ApplyModelTreeVirtualizationSafety\(this\);", workspace):
-        errors.append("ModelTree safety must be applied immediately after InitializeComponent and before first host layout")
+    constructor_match = re.search(
+        r"public\s+WorkspacePanel\s*\(\s*\)\s*\{(.*?)\n\s*\}",
+        workspace,
+        flags=re.DOTALL,
+    )
+    if not constructor_match:
+        errors.append("WorkspacePanel constructor not found")
+    else:
+        constructor_body = constructor_match.group(1)
+        if not re.search(r"InitializeComponent\(\);\s*ApplyModelTreeVirtualizationSafety\(this\);", constructor_body):
+            errors.append("ModelTree safety must be applied immediately after InitializeComponent and before first host layout")
+        if constructor_body.count("ApplyModelTreeVirtualizationSafety(this);") != 1:
+            errors.append("ModelTree safety must be applied exactly once from the constructor")
 
-    if "protected override void OnInitialized" in safety:
-        errors.append("ModelTree safety must not introduce a second WorkspacePanel.OnInitialized override")
+    # Regression contract from licensed V25 preview .10230: all virtualization writes and the
+    # ModelTree -> Project Browser host transition must finish before first host layout. Loaded-time
+    # browser attachment may call EnsureProjectBrowserSurface only as an idempotent no-op.
+    forbidden_loaded_tokens = (
+        "FrameworkElement.LoadedEvent",
+        "OnModelTreeVirtualizationSafetyLoaded",
+        "RegisterClassHandler",
+        "RoutedEventHandler",
+        "ReadLocalValue(VirtualizingPanel.VirtualizationModeProperty)",
+    )
+    for token in forbidden_loaded_tokens:
+        if token in safety:
+            errors.append("ModelTree safety must remain constructor-only; forbidden Loaded-time token: " + token)
 
-    # The Loaded fallback is allowed to reassert IsVirtualizing/CanContentScroll, but the
-    # mode setter must stay behind the local-value guard so a measured ItemsHost cannot
-    # transition Standard -> Recycling/Standard during Loaded traversal.
-    local_guard_index = safety.find("ReadLocalValue(VirtualizingPanel.VirtualizationModeProperty)")
+    if safety.count("ApplyModelTreeVirtualizationSafety(") != 1:
+        errors.append("ModelTree safety helper must have no call path other than the constructor-owned call in WorkspacePanel.xaml.cs")
+
     mode_set_index = safety.find("VirtualizingPanel.SetVirtualizationMode(panel.ModelTree, VirtualizationMode.Standard);")
     is_virtualizing_index = safety.find("VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);")
-    if local_guard_index < 0 or mode_set_index < local_guard_index:
-        errors.append("ModelTree VirtualizationMode setter must remain guarded by the pre-layout local-value check")
-    if is_virtualizing_index >= 0 and mode_set_index >= is_virtualizing_index:
-        errors.append("ModelTree Standard mode must be established before IsVirtualizing is disabled")
+    scroll_index = safety.find("ScrollViewer.SetCanContentScroll(panel.ModelTree, false);")
+    surface_index = safety.find("panel.EnsureProjectBrowserSurface();")
+    if min(mode_set_index, is_virtualizing_index, scroll_index, surface_index) < 0:
+        pass
+    elif not (mode_set_index < is_virtualizing_index < scroll_index < surface_index):
+        errors.append("ModelTree contract must pin mode, disable virtualization, select physical scrolling, then reparent before first layout")
 
     if "ApplyVirtualizationDefaults(root)" in polish:
         errors.append("ProductionUiPolish Loaded path must not traverse item controls to apply virtualization defaults")
@@ -62,11 +82,20 @@ if not errors:
         errors.append("ProductionUiPolish Loaded path must not mutate VirtualizationMode after ItemsHost Measure")
 
     browser_tokens = (
+        "if (_browserTabs != null || !(ModelTree.Parent is DockPanel modelDock)) return;",
         "modelDock.Children.Remove(ModelTree);",
         'tabs.Items.Add(new TabItem { Header = "Mô hình", Content = ModelTree });',
     )
     if any(token not in browser for token in browser_tokens):
-        errors.append("Project Browser must still use the canonical ModelTree reparenting path guarded by the local virtualization containment")
+        errors.append("Project Browser must keep one idempotent canonical ModelTree reparenting path for constructor-time containment")
+
+    attach_match = re.search(
+        r"private\s+void\s+AttachProjectBrowser\s*\(\s*\)\s*\{(.*?)\n\s*\}",
+        browser,
+        flags=re.DOTALL,
+    )
+    if not attach_match or "EnsureProjectBrowserSurface();" not in attach_match.group(1):
+        errors.append("Loaded Project Browser attachment must retain only the idempotent surface ensure before event wiring")
 
     if not re.search(r"\btree\.Items\.Remove\(", augmenter) or not re.search(r"\.Items\.Insert\(", augmenter):
         errors.append("reference-tree registry must retain explicit container reordering evidence covered by the containment")

@@ -112,17 +112,44 @@ namespace QS3D.BricsCAD.V25
         private static void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
         {
             var document = e.Document;
+            var teardownErrors = new List<Exception>();
 
             // Teardown is intentionally synchronous: native handlers must be gone before
-            // BricsCAD destroys the document. Any queued reconcile for this document is
-            // cancelled first so an idle callback can never touch the destroyed document.
-            CancelPendingReconcile(document);
-            FailedProjectReconciliations.Remove(document);
-            DetachProjectPersistence(document);
-            SourceReconcileUndoCoordinator.Detach(document);
-            CurtainWallUndoCoordinator.Detach(document);
-            SelectionSyncCoordinator.Detach(document);
-            ProjectContextCoordinator.Forget(document);
+            // BricsCAD destroys the document. Every action is independently fail-soft so
+            // one coordinator failure cannot suppress later native/document cleanup.
+            try { CancelPendingReconcile(document); } catch (Exception ex) { teardownErrors.Add(ex); }
+            try { FailedProjectReconciliations.Remove(document); } catch (Exception ex) { teardownErrors.Add(ex); }
+            try { DetachProjectPersistence(document); } catch (Exception ex) { teardownErrors.Add(ex); }
+            try { SourceReconcileUndoCoordinator.Detach(document); } catch (Exception ex) { teardownErrors.Add(ex); }
+            try { CurtainWallUndoCoordinator.Detach(document); } catch (Exception ex) { teardownErrors.Add(ex); }
+            try { SelectionSyncCoordinator.Detach(document); } catch (Exception ex) { teardownErrors.Add(ex); }
+            try { ProjectContextCoordinator.Forget(document); } catch (Exception ex) { teardownErrors.Add(ex); }
+
+            ReportDocumentDestroyTeardownErrors(document, teardownErrors);
+        }
+
+        private static void ReportDocumentDestroyTeardownErrors(Document document, List<Exception> errors)
+        {
+            if (errors.Count == 0) return;
+
+            const int maxReportedErrors = 3;
+            const int maxErrorMessageLength = 200;
+            var details = new List<string>();
+            for (var i = 0; i < errors.Count && i < maxReportedErrors; i++)
+            {
+                var error = errors[i];
+                var message = error.Message ?? string.Empty;
+                if (message.Length > maxErrorMessageLength)
+                    message = message.Substring(0, maxErrorMessageLength) + "…";
+                details.Add(error.GetType().Name + ": " + message);
+            }
+
+            var omitted = errors.Count - details.Count;
+            var diagnostic = "QS3D document destroy teardown completed with " + errors.Count +
+                " cleanup error(s): " + string.Join(" | ", details);
+            if (omitted > 0)
+                diagnostic += " | +" + omitted + " more";
+            Report(document, diagnostic);
         }
 
         private static void OnDocumentDestroyed(object sender, DocumentDestroyedEventArgs e)

@@ -20,6 +20,8 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException("Semantic selection cannot exceed " + MaxInputCount + " input entries.");
             if (ids is IReadOnlyCollection<string> readOnlyCollection && readOnlyCollection.Count > MaxInputCount)
                 throw new InvalidOperationException("Semantic selection cannot exceed " + MaxInputCount + " input entries.");
+            if (ids is System.Collections.ICollection nonGenericCollection && nonGenericCollection.Count > MaxInputCount)
+                throw new InvalidOperationException("Semantic selection cannot exceed " + MaxInputCount + " input entries.");
             var knownCount = ResolveKnownCount(ids);
 
             var enumerationVersion = _changeVersion;
@@ -65,6 +67,8 @@ namespace QS3D.Core.Services
                 knownCount = AcceptKnownCount(knownCount, collection.Count);
             if (ids is IReadOnlyCollection<string> readOnlyCollection)
                 knownCount = AcceptKnownCount(knownCount, readOnlyCollection.Count);
+            if (ids is System.Collections.ICollection nonGenericCollection)
+                knownCount = AcceptKnownCount(knownCount, nonGenericCollection.Count);
             return knownCount;
         }
 

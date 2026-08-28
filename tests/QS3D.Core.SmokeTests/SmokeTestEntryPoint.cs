@@ -21,6 +21,7 @@ namespace QS3D.Core.SmokeTests
                 CoordinationIssuePersistenceSmoke.Run();
                 CoordinationIssueExcelLifecycleSmoke.Run();
                 CoordinationIssueExcelWorkbookSmoke.Run();
+                CoordinationIssueExcelSheetRelationshipSmoke.Run();
                 CoordinationDirtyBatchAtomicitySmoke.Run();
                 WallJunctionSnapPreviewRevisionSmoke.Run();
                 ProjectElementKeyControlSmoke.Run();

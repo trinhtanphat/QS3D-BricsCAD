@@ -54,6 +54,40 @@ function Test-CanonicalPathWithin {
     return $Candidate.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)
 }
 
+function Assert-NoExistingReparseComponent {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $canonical = Get-CanonicalAbsolutePath -Path $Path
+    $root = [IO.Path]::GetPathRoot($canonical)
+    $relative = $canonical.Substring($root.Length)
+    $current = $root
+    foreach ($segment in @($relative -split '[\\/]' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+        $current = Join-Path $current $segment
+        if (-not (Test-Path -LiteralPath $current)) { break }
+        $item = Get-Item -LiteralPath $current -Force
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "$Label must not traverse a filesystem reparse point: $current"
+        }
+    }
+}
+
+function Get-OrdinaryFileOrNull {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+    $item = Get-Item -LiteralPath $Path -Force
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "$Label must be an ordinary non-reparse file."
+    }
+    return $item
+}
+
 function Stop-OwnedProcessTree {
     param(
         [Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process,
@@ -100,14 +134,23 @@ if (Test-CanonicalPathWithin -Candidate $cacheDir -Parent $extract) {
     throw 'ExtractDir must not equal or contain the MSI cache directory because extraction cleanup is recursive.'
 }
 
-# No destructive filesystem mutation may occur before the path-overlap guards above.
+# Existing filesystem aliases must be rejected before any recursive cleanup or
+# cache mutation. This keeps lexical overlap checks from being bypassed by a
+# junction/symlink that redirects an apparently safe path elsewhere.
+Assert-NoExistingReparseComponent -Path $cacheDir -Label 'MSI cache directory'
+Assert-NoExistingReparseComponent -Path $msi -Label 'MsiPath'
+Assert-NoExistingReparseComponent -Path $extract -Label 'ExtractDir'
+
+# No destructive filesystem mutation may occur before the path-overlap and
+# reparse-component guards above.
 New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
 Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $extract -Force | Out-Null
 
 function Test-PinnedMsi {
-    if (-not (Test-Path -LiteralPath $msi -PathType Leaf)) { return $false }
-    if ((Get-Item -LiteralPath $msi).Length -le 1048576) { return $false }
+    $item = Get-OrdinaryFileOrNull -Path $msi -Label 'BricsCAD V25 MSI'
+    if ($null -eq $item) { return $false }
+    if ($item.Length -le 1048576) { return $false }
     $actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToUpperInvariant()
     if (-not [string]::Equals($actual, $expected, [StringComparison]::Ordinal)) {
         Write-Warning "Discarding BricsCAD V25 MSI with unexpected SHA256: $actual"
