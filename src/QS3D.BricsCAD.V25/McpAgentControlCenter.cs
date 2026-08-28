@@ -5,6 +5,7 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using Bricscad.ApplicationServices;
@@ -49,6 +50,7 @@ namespace QS3D.BricsCAD.V25
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 8, 0, 8)
         };
+        private int _localOperationActive;
 
         public McpAgentControlCenterWindow()
         {
@@ -236,39 +238,68 @@ namespace QS3D.BricsCAD.V25
 
         private void CheckProtocol()
         {
-            McpEmbeddedServer.EnsureStarted();
-            var result = McpProtocolProbe.Check(McpEmbeddedServer.Endpoint, 5000);
-            _activity.Text = result.Message;
-            RefreshStatus();
+            RunLocalOperation("Đang kiểm tra MCP protocol...", () =>
+            {
+                McpEmbeddedServer.EnsureStarted();
+                return McpProtocolProbe.Check(McpEmbeddedServer.Endpoint, 5000).Message;
+            }, true);
         }
 
         private void RunReadOnlySelfTest()
         {
-            try
+            RunLocalOperation("Đang chạy Agent self-test read-only...", () =>
             {
                 McpEmbeddedServer.EnsureStarted();
-                var result = McpLocalAgentClient.RunReadOnlySelfTest(McpEmbeddedServer.Endpoint, 6000);
-                _activity.Text = result;
-            }
-            catch (Exception ex)
-            {
-                _activity.Text = "SELF-TEST FAIL: " + ex.Message;
-            }
-            RefreshStatus();
+                return McpLocalAgentClient.RunReadOnlySelfTest(McpEmbeddedServer.Endpoint, 6000);
+            }, true);
         }
 
         private void InvokeControlTool(string tool, string arguments)
         {
-            try
+            // Emergency stop/cancel must not be blocked by an observation self-test that is already
+            // waiting on CAD context. They run on a worker too, but deliberately bypass the UI-only slot.
+            RunLocalOperation("Đang gọi " + tool + "...", () =>
             {
                 McpEmbeddedServer.EnsureStarted();
-                _activity.Text = McpLocalAgentClient.CallOne(McpEmbeddedServer.Endpoint, 6000, tool, arguments);
-            }
-            catch (Exception ex)
+                return McpLocalAgentClient.CallOne(McpEmbeddedServer.Endpoint, 6000, tool, arguments);
+            }, false);
+        }
+
+        private void RunLocalOperation(string pendingMessage, Func<string> action, bool serialize)
+        {
+            if (action == null) throw new ArgumentNullException(nameof(action));
+            var ownsSlot = false;
+            if (serialize)
             {
-                _activity.Text = tool + " FAIL: " + ex.Message;
+                if (Interlocked.CompareExchange(ref _localOperationActive, 1, 0) != 0)
+                {
+                    _activity.Text = "Một MCP local check khác đang chạy; Emergency Stop/ESC vẫn luôn khả dụng.";
+                    return;
+                }
+                ownsSlot = true;
             }
-            RefreshStatus();
+
+            _activity.Text = pendingMessage;
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                string message;
+                try { message = action(); }
+                catch (Exception ex) { message = "MCP local operation FAIL: " + ex.Message; }
+                finally
+                {
+                    if (ownsSlot) Interlocked.Exchange(ref _localOperationActive, 0);
+                }
+
+                try
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _activity.Text = message;
+                        RefreshStatus();
+                    }));
+                }
+                catch { }
+            });
         }
 
         private void OpenAuditFolder()
