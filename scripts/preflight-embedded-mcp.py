@@ -7,7 +7,9 @@ SERVER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpEmbeddedServer.cs"
 COMMANDS = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpConnectorRibbonCommands.cs"
 OVERRIDE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "McpRibbonCommandOverride.cs"
 COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonInitializationCoordinator.cs"
-PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
+V25_PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
+V26_PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V26" / "PluginEntry.cs"
+DOCS = ROOT / "docs" / "CHATGPT-MCP-INTEGRATION.md"
 
 
 def require(text: str, token: str, errors: list[str], label: str) -> None:
@@ -33,7 +35,9 @@ def main() -> int:
     commands = read(COMMANDS, errors)
     override = read(OVERRIDE, errors)
     coordinator = read(COORDINATOR, errors)
-    plugin = read(PLUGIN, errors)
+    v25_plugin = read(V25_PLUGIN, errors)
+    v26_plugin = read(V26_PLUGIN, errors)
+    docs = read(DOCS, errors)
 
     require(server, "internal static class McpEmbeddedServer", errors, "embedded server")
     require(server, "new TcpListener(IPAddress.Loopback, Port)", errors, "loopback-only listener")
@@ -65,7 +69,7 @@ def main() -> int:
         require(server, f'"{tool}"', errors, f"MCP tool {tool}")
 
     require(server, "confirmMutation=true", errors, "explicit mutation gate")
-    require(server, '"^QS3D[A-Za-z0-9_]*$"', errors, "QS3D-only command allowlist")
+    require(server, '"^QS3D[A-Za-z0-9_]*$"', errors, "QS3D command namespace guard")
     require(server, "SendStringToExecute(command + \"\\n\"", errors, "guarded QS3D command dispatch")
     forbid(server, "Process.Start(", errors, "arbitrary process launch from network server")
     forbid(server, "PowerShell", errors, "arbitrary PowerShell surface")
@@ -88,11 +92,22 @@ def main() -> int:
     elif not (binder_index < override_index < fallback_index):
         errors.append("MCP ribbon override must run after legacy TOOL binder and before command fallback")
 
-    require(coordinator, "McpRibbonCommandOverride.Reset()", errors, "ribbon override teardown")
+    require(
+        coordinator,
+        "TryCleanup(() => { McpRibbonCommandOverride.Reset(); })",
+        errors,
+        "fail-soft ribbon override teardown",
+    )
 
-    require(plugin, "McpEmbeddedServer.Start();", errors, "embedded MCP startup")
-    require(plugin, "TryCleanup(McpEmbeddedServer.Stop);", errors, "embedded MCP teardown")
-    require(plugin, 'ReportOptionalStartupFailure("MCP server", ex)', errors, "fail-soft MCP startup")
+    for host_label, plugin in (("V25", v25_plugin), ("V26", v26_plugin)):
+        require(plugin, "McpEmbeddedServer.Start();", errors, f"{host_label} embedded MCP startup")
+        require(plugin, "TryCleanup(McpEmbeddedServer.Stop);", errors, f"{host_label} embedded MCP teardown")
+        require(
+            plugin,
+            'ReportOptionalStartupFailure("MCP server", ex)',
+            errors,
+            f"{host_label} fail-soft MCP startup",
+        )
 
     for command in (
         "QS3DMCPSETTINGSHTTP",
@@ -116,8 +131,22 @@ def main() -> int:
     require(commands, 'request.Headers["MCP-Protocol-Version"]', errors, "Ribbon protocol version header")
     require(commands, 'response.Headers["Mcp-Session-Id"]', errors, "Ribbon MCP session capture")
     require(commands, "McpEmbeddedServer.GetBearerToken()", errors, "Ribbon bearer authentication")
-    require(commands, "cloudflared tunnel --url http://127.0.0.1:8765", errors, "Cloudflare tunnel guide")
-    require(commands, "no second repository", errors, "single-repository guide")
+
+    # ChatGPT cannot use localhost as a remote MCP URL directly. Keep current OpenAI private
+    # connection guidance explicit without pretending that the Bearer-protected local endpoint
+    # has completed licensed/tunnel qualification.
+    require(commands, "OpenAI Secure MCP Tunnel", errors, "Secure MCP Tunnel owner guidance")
+    require(commands, "tunnel-client doctor", errors, "tunnel doctor guidance")
+    require(commands, "http://127.0.0.1:8765/mcp", errors, "private HTTP MCP target guidance")
+    require(commands, "No second MCP repository", errors, "single-repository generated guide")
+    forbid(commands, "cloudflared tunnel --url http://127.0.0.1:8765", errors, "obsolete primary Cloudflare quick-tunnel guidance")
+
+    require(docs, "Secure MCP Tunnel", errors, "current ChatGPT private-server path")
+    require(docs, "ChatGPT Web", errors, "ChatGPT integration documentation")
+    require(docs, "V26 PluginEntry.Initialize -> McpEmbeddedServer.Start", errors, "V26 lifecycle documentation")
+    require(docs, "static Bearer authentication", errors, "truthful current auth boundary")
+    require(docs, "before it is recorded as `LOCAL_PASS`", errors, "local-only tunnel qualification boundary")
+    forbid(docs, "Cloudflare Tunnel (or equivalent HTTPS ingress)", errors, "obsolete primary Cloudflare architecture")
 
     if errors:
         print("Embedded MCP preflight FAILED:")
@@ -127,8 +156,9 @@ def main() -> int:
 
     print(
         "PASS: QS3D ships a loopback-only authenticated Streamable-HTTP MCP endpoint inside "
-        "the BricsCAD plugin, TOOL/MCP routes to real protocol diagnostics, CAD work is marshalled "
-        "through the host application context, and no second MCP repository is a runtime dependency."
+        "the shared BricsCAD plugin source, both V25/V26 entries own fail-soft lifecycle, TOOL/MCP "
+        "routes to real protocol diagnostics, CAD work is marshalled through the host application "
+        "context, and current ChatGPT private-server guidance is fail-closed on tunnel/auth qualification."
     )
     return 0
 
