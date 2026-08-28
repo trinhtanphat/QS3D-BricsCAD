@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             MalformedPairTokenFailsBeforePayloadDecode();
             OversizedMetadataKeyFailsWithoutPayloadDecode();
             MarkerOwnerShapeFailsAtEntryBoundary();
+            DecodedMarkerValidationFailuresAreFormatErrors();
         }
 
         private static void EncodedGridIdExactBoundaryRoundTrips()
@@ -90,6 +91,42 @@ namespace QS3D.Core.SmokeTests
             RejectArgument(
                 () => new GridIntersectionMarkerRecordEntry(0, "GIX1:" + new string('0', 64) + ":1", "A1", new Point2(1, 2), 3),
                 "canonical GIX1");
+        }
+
+        private static void DecodedMarkerValidationFailuresAreFormatErrors()
+        {
+            const string firstId = "A";
+            const string secondId = "B";
+            var pair = GridIntersectionIdentityPlanner.BuildPairToken(firstId, secondId);
+            var key = GridIntersectionMarkerRecordCodec.MetadataKey(pair);
+            var owner = GridIntersectionIdentityPlanner.BuildIntersectionOwner(firstId, secondId, 0);
+            const string firstEncoded = "QQ==";
+            const string secondEncoded = "Qg==";
+
+            RejectFormat(
+                () => GridIntersectionMarkerRecordCodec.Decode(key, "1|" + firstEncoded + "|" + secondEncoded + "|2," + owner + ",A1,1,2,3"),
+                "invalid marker data");
+            RejectFormat(
+                () => GridIntersectionMarkerRecordCodec.Decode(key, "1|" + firstEncoded + "|" + secondEncoded + "|0,GIX1:" + new string('0', 64) + ":1,A1,1,2,3"),
+                "invalid marker data");
+            RejectFormat(
+                () => GridIntersectionMarkerRecordCodec.Decode(key, "1|" + firstEncoded + "|" + secondEncoded + "|0," + owner + ",0,1,2,3"),
+                "invalid marker data");
+            RejectFormat(
+                () => GridIntersectionMarkerRecordCodec.Decode(key, "1|" + firstEncoded + "|" + secondEncoded + "|0," + owner + ",A1,NaN,2,3"),
+                "invalid marker data");
+            RejectFormat(
+                () => GridIntersectionMarkerRecordCodec.Decode(key, "1|" + firstEncoded + "|" + secondEncoded + "|0," + owner + ",A1,1,Infinity,3"),
+                "invalid marker data");
+
+            var valid = GridIntersectionMarkerRecordCodec.Decode(
+                key,
+                "1|" + firstEncoded + "|" + secondEncoded + "|0," + owner + ",A1,1.25,-2.5,3.75");
+            Equal(1, valid.Entries.Count, "Valid finite decoded marker count changed.");
+            Equal("A1", valid.Entries[0].Handle, "Valid finite decoded marker handle changed.");
+            Equal(1.25d, valid.Entries[0].Point.X, "Valid finite decoded marker X changed.");
+            Equal(-2.5d, valid.Entries[0].Point.Y, "Valid finite decoded marker Y changed.");
+            Equal(3.75d, valid.Entries[0].Elevation, "Valid finite decoded marker elevation changed.");
         }
 
         private static void RejectFormat(Action action, string expectedMessage)
