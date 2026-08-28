@@ -19,7 +19,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
         private static readonly IReadOnlyDictionary<string, string> CommandByButtonId =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                [Prefix + "MCP_SETTINGS"] = "QS3DMCPSETTINGSHTTP",
+                [Prefix + "MCP_SETTINGS"] = "QS3DMCPSETUP",
                 [Prefix + "MCP_DOCS"] = "QS3DMCPDOCSHTTP",
                 [Prefix + "AI_DASHBOARD"] = "QS3DAIDASHBOARDHTTP",
                 [Prefix + "MCP_CONNECTION"] = "QS3DMCPCHECKHTTP"
