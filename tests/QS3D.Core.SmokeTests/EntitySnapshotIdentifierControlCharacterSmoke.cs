@@ -13,7 +13,7 @@ namespace QS3D.Core.SmokeTests
         {
             HandleRejectsInternalControlCharacters();
             EntityTypeRejectsInternalControlCharacters();
-            HandleWhitespaceRejectsAndEntityTypeCasingRemainsStable();
+            IdentifierWhitespaceRejectsAndCanonicalEntityTypeCasingRemainsStable();
         }
 
         private static void HandleRejectsInternalControlCharacters()
@@ -28,13 +28,14 @@ namespace QS3D.Core.SmokeTests
             ExpectArgument(() => new EntitySnapshot("A1", "Proxy\u001fEntity", "layer"));
         }
 
-        private static void HandleWhitespaceRejectsAndEntityTypeCasingRemainsStable()
+        private static void IdentifierWhitespaceRejectsAndCanonicalEntityTypeCasingRemainsStable()
         {
             ExpectArgument(() => new EntitySnapshot("  A1  ", "ProxyEntity", "layer"));
+            ExpectArgument(() => new EntitySnapshot("A1", "  pRoXyEnTiTy  ", "layer"));
 
-            var snapshot = new EntitySnapshot("A1", "  pRoXyEnTiTy  ", "layer");
+            var snapshot = new EntitySnapshot("A1", "pRoXyEnTiTy", "layer");
             Equal("A1", snapshot.Handle, "EntitySnapshot must preserve an already-canonical CAD handle.");
-            Equal("pRoXyEnTiTy", snapshot.EntityType, "EntitySnapshot must preserve existing EntityType trim and casing behavior.");
+            Equal("pRoXyEnTiTy", snapshot.EntityType, "EntitySnapshot must preserve canonical EntityType casing.");
         }
 
         private static void Equal<T>(T expected, T actual, string message)

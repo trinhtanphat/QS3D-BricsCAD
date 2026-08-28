@@ -11,7 +11,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             UnderEnumerationRejects();
-            OverEnumerationRejects();
+            OverEnumerationRejectsEarly();
+            KnownCountOverrunPrecedesUnexpectedRuleValidation();
             ExactKnownCountRemainsAccepted();
             PureStreamingRemainsAccepted();
             NegativeKnownCountRejectsBeforeTraversal();
@@ -28,12 +29,22 @@ namespace QS3D.Core.SmokeTests
                 "Under-enumerated color rules must reject a supported Count/traversal mismatch.");
         }
 
-        private static void OverEnumerationRejects()
+        private static void OverEnumerationRejectsEarly()
         {
             var error = Capture<InvalidOperationException>(() =>
                 CreateOptions(new ReportedCountCollection(1, Rule(1), Rule(2))));
-            Contains("known Count does not match completed traversal cardinality", error.Message,
-                "Over-enumerated color rules must reject a supported Count/traversal mismatch.");
+            Contains("traversal produced more entries than its known Count reported 1", error.Message,
+                "Over-enumerated color rules must reject at the first item outside trusted Count.");
+        }
+
+        private static void KnownCountOverrunPrecedesUnexpectedRuleValidation()
+        {
+            var error = Capture<InvalidOperationException>(() =>
+                CreateOptions(new ReportedCountCollection(
+                    1,
+                    new IdentificationColorRule[] { Rule(1), null! })));
+            Contains("traversal produced more entries than its known Count reported 1", error.Message,
+                "Known-Count overrun must fail before validating the unexpected rule.");
         }
 
         private static void ExactKnownCountRemainsAccepted()

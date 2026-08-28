@@ -4,6 +4,12 @@ using System.Collections.ObjectModel;
 
 namespace QS3D.Core.Mep
 {
+    public static class MepRecognitionLimits
+    {
+        public const int MaxRules = 500;
+        public const int MaxTokensPerRule = 100;
+    }
+
     [Flags]
     public enum MepRecognitionSource
     {
@@ -64,8 +70,14 @@ namespace QS3D.Core.Mep
             if (tokens == null) throw new ArgumentNullException(nameof(tokens));
             var normalized = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var tokenIndex = 0;
             foreach (var token in tokens)
             {
+                if (tokenIndex >= MepRecognitionLimits.MaxTokensPerRule)
+                    throw new ArgumentException(
+                        "Recognition rule may contain at most " + MepRecognitionLimits.MaxTokensPerRule + " tokens.",
+                        nameof(tokens));
+                tokenIndex++;
                 var value = RequireText(token, nameof(tokens));
                 if (seen.Add(value)) normalized.Add(value);
             }
@@ -103,8 +115,22 @@ namespace QS3D.Core.Mep
                 throw new ArgumentException("Recognition text is required.", parameterName);
             var trimmed = value.Trim();
             for (var i = 0; i < trimmed.Length; i++)
-                if (char.IsControl(trimmed[i]))
+            {
+                var character = trimmed[i];
+                if (char.IsControl(character))
                     throw new ArgumentException("Recognition text must not contain control characters.", parameterName);
+
+                if (char.IsHighSurrogate(character))
+                {
+                    if (i + 1 >= trimmed.Length || !char.IsLowSurrogate(trimmed[i + 1]))
+                        throw new ArgumentException("Recognition text must contain well-formed UTF-16.", parameterName);
+                    i++;
+                    continue;
+                }
+
+                if (char.IsLowSurrogate(character))
+                    throw new ArgumentException("Recognition text must contain well-formed UTF-16.", parameterName);
+            }
             return trimmed;
         }
     }
@@ -146,6 +172,10 @@ namespace QS3D.Core.Mep
             var index = 0;
             foreach (var rule in rules)
             {
+                if (index >= MepRecognitionLimits.MaxRules)
+                    throw new ArgumentException(
+                        "Recognition profile may contain at most " + MepRecognitionLimits.MaxRules + " rules.",
+                        nameof(rules));
                 if (rule == null)
                     throw new ArgumentException("Recognition profile contains a null rule at index " + index + ".", nameof(rules));
                 if (!ids.Add(rule.Id))

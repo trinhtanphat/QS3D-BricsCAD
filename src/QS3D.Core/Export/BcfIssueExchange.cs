@@ -288,20 +288,40 @@ namespace QS3D.Core.Export
             string overflowMessage)
         {
             if (values == null) throw new ArgumentNullException(parameterName);
-            var knownCount = ValidateKnownCounts(values, maximumCount, parameterName, overflowMessage);
+            var knownCount = ValidateKnownCounts(
+                values,
+                maximumCount,
+                parameterName,
+                overflowMessage,
+                out var corroboratedKnownCount,
+                out var knownCountSources);
 
             var items = new List<T>();
             var observedCount = 0;
             foreach (var value in values)
             {
-                observedCount++;
-                if (observedCount > maximumCount)
+                if (corroboratedKnownCount && knownCount.HasValue && observedCount >= knownCount.Value)
+                    throw new ArgumentException("BCF collection Count does not match enumerated item count.", parameterName);
+                if (observedCount >= maximumCount)
                     throw new ArgumentException(overflowMessage, parameterName);
                 items.Add(value);
+                observedCount++;
             }
 
             if (knownCount.HasValue && observedCount != knownCount.Value)
                 throw new ArgumentException("BCF collection Count does not match enumerated item count.", parameterName);
+
+            var currentKnownCount = ValidateKnownCounts(
+                values,
+                maximumCount,
+                parameterName,
+                overflowMessage,
+                out var currentCorroboratedKnownCount,
+                out var currentKnownCountSources);
+            if (knownCountSources != currentKnownCountSources ||
+                corroboratedKnownCount != currentCorroboratedKnownCount ||
+                knownCount != currentKnownCount)
+                throw new ArgumentException("BCF collection Count changed during enumeration.", parameterName);
 
             return items;
         }
@@ -310,14 +330,18 @@ namespace QS3D.Core.Export
             IEnumerable<T> values,
             int maximumCount,
             string parameterName,
-            string overflowMessage)
+            string overflowMessage,
+            out bool corroboratedKnownCount,
+            out int knownCountSources)
         {
             int? knownCount = null;
+            var observedKnownCountSources = 0;
             var invalidKnownCount = false;
             var conflictingKnownCounts = false;
 
             void ObserveKnownCount(int count)
             {
+                observedKnownCountSources++;
                 if (count > maximumCount)
                     throw new ArgumentException(overflowMessage, parameterName);
                 if (count < 0)
@@ -344,6 +368,9 @@ namespace QS3D.Core.Export
                 throw new ArgumentException("BCF collection reports a negative known Count.", parameterName);
             if (conflictingKnownCounts)
                 throw new ArgumentException("BCF collection reports conflicting known Count values.", parameterName);
+
+            knownCountSources = observedKnownCountSources;
+            corroboratedKnownCount = observedKnownCountSources > 1;
             return knownCount;
         }
 

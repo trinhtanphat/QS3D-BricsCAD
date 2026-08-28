@@ -104,7 +104,9 @@ def main() -> int:
     require(plugin_entry, "UpdateBootstrapper.Start();", "plugin initialize updater start")
     require(plugin_entry, "TryCleanup(UpdateBootstrapper.Stop);", "contained plugin updater stop")
 
-    require(package, "Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V25') -Recurse -Filter '*.cs'", "recursive command discovery")
+    require(package, "function Get-SafeSourceFiles", "reparse-safe command traversal helper")
+    require(package, "Get-SafeSourceFiles -SourceRoot (Join-Path $root 'src/QS3D.BricsCAD.V25') -RepositoryRoot $root -Extension '.cs'", "safe recursive command discovery")
+    reject(package, "Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V25') -Recurse -Filter '*.cs'", "unsafe recursive command discovery")
     require(package, "[CommandMethod", "DemandLoad command extraction")
 
     require(workflow, "Create signed auto-update manifest", "signed manifest generation step")

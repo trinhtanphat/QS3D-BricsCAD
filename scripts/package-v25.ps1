@@ -35,6 +35,69 @@ function Assert-OrdinaryDirectory {
     return $fullPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 }
 
+function Assert-SafeInputPathAncestors {
+    param([string]$Path, [string]$RepositoryRoot, [string]$Label)
+    $repo = Assert-OrdinaryDirectory -Path $RepositoryRoot -Label 'repository root'
+    $fullPath = Get-CanonicalFullPath -Path $Path -Label $Label
+    if (-not (Test-PathEqualOrContained -Path $fullPath -Container $repo) -or [string]::Equals($fullPath, $repo, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Label must stay below the repository root: $fullPath"
+    }
+    $current = [IO.Path]::GetDirectoryName($fullPath)
+    while (-not [string]::IsNullOrWhiteSpace($current) -and (Test-PathEqualOrContained -Path $current -Container $repo)) {
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+            if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "$Label traverses a non-directory or reparse-backed ancestor: $current"
+            }
+        }
+        if ([string]::Equals($current, $repo, [System.StringComparison]::OrdinalIgnoreCase)) { break }
+        $parent = [IO.Path]::GetDirectoryName($current)
+        if ([string]::IsNullOrWhiteSpace($parent) -or [string]::Equals($parent, $current, [System.StringComparison]::OrdinalIgnoreCase)) { break }
+        $current = $parent
+    }
+    return $fullPath
+}
+
+function Assert-SafeInputDirectory {
+    param([string]$Path, [string]$RepositoryRoot, [string]$Label)
+    $fullPath = Assert-SafeInputPathAncestors -Path $Path -RepositoryRoot $RepositoryRoot -Label $Label
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Container)) { throw "$Label directory was not found: $fullPath" }
+    $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
+    if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "$Label must be an ordinary non-reparse directory: $fullPath"
+    }
+    return $fullPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+}
+
+function Assert-SafeInputFile {
+    param([string]$Path, [string]$RepositoryRoot, [string]$Label)
+    $fullPath = Assert-SafeInputPathAncestors -Path $Path -RepositoryRoot $RepositoryRoot -Label $Label
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) { throw "$Label file was not found: $fullPath" }
+    $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
+    if ($item.PSIsContainer -or -not ($item -is [IO.FileInfo]) -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "$Label must be an ordinary non-reparse file: $fullPath"
+    }
+    return $fullPath
+}
+
+function Get-SafeSourceFiles {
+    param([string]$SourceRoot, [string]$RepositoryRoot, [string]$Extension)
+    $sourceRootFull = Assert-SafeInputDirectory -Path $SourceRoot -RepositoryRoot $RepositoryRoot -Label 'command source root'
+    $pending = New-Object 'System.Collections.Generic.Stack[string]'
+    $files = New-Object 'System.Collections.Generic.List[System.IO.FileInfo]'
+    $pending.Push($sourceRootFull)
+    while ($pending.Count -gt 0) {
+        $directory = $pending.Pop()
+        foreach ($item in Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop) {
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Command source contains a reparse-backed entry: $($item.FullName)" }
+            if ($item.PSIsContainer) { $pending.Push($item.FullName); continue }
+            if (-not ($item -is [IO.FileInfo])) { throw "Command source contains a non-regular filesystem entry: $($item.FullName)" }
+            if ([string]::Equals($item.Extension, $Extension, [StringComparison]::OrdinalIgnoreCase)) { $files.Add($item) }
+        }
+    }
+    return @($files | Sort-Object FullName)
+}
+
 function Assert-SafeOutputDirectoryTarget {
     param([string]$Path, [string]$RepositoryRoot, [string]$Label, [switch]$MayBeMissing)
 
@@ -121,7 +184,7 @@ function Get-SafePackageFiles {
 
 function Read-ProjectProductVersion {
     param([string]$ProjectPath)
-    if (-not (Test-Path -LiteralPath $ProjectPath -PathType Leaf)) { throw "Project file was not found: $ProjectPath" }
+    $ProjectPath = Assert-SafeInputFile -Path $ProjectPath -RepositoryRoot $root -Label 'project file'
     [xml]$project = Get-Content -LiteralPath $ProjectPath -Raw
     $versions = @($project.Project.PropertyGroup | ForEach-Object { [string]$_.Version } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     if ($versions.Count -ne 1) { throw "Project must declare exactly one Version value: $ProjectPath" }
@@ -168,8 +231,9 @@ function Get-SourceGitCommit {
     return $commit
 }
 
-$pluginProject = Join-Path $root 'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj'
-$coreProject = Join-Path $root 'src/QS3D.Core/QS3D.Core.csproj'
+$root = Assert-OrdinaryDirectory -Path $root -Label 'repository root'
+$pluginProject = Assert-SafeInputFile -Path (Join-Path $root 'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj') -RepositoryRoot $root -Label 'V25 plugin project'
+$coreProject = Assert-SafeInputFile -Path (Join-Path $root 'src/QS3D.Core/QS3D.Core.csproj') -RepositoryRoot $root -Label 'Core project'
 $productVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $pluginProject) -Label 'QS3D plugin product version'
 $coreProductVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $coreProject) -Label 'QS3D Core product version'
 $gitCommit = Get-SourceGitCommit
@@ -183,8 +247,8 @@ if (-not [string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
     }
 }
 
-if (-not (Test-Path $source)) { throw "V25 Release output was not found: $source" }
-$root = Assert-OrdinaryDirectory -Path $root -Label 'repository root'
+$source = Assert-SafeInputDirectory -Path $source -RepositoryRoot $root -Label 'V25 Release output'
+$sampleSource = Assert-SafeInputDirectory -Path $sampleSource -RepositoryRoot $root -Label 'synthetic sample folder'
 $distRoot = Assert-SafeOutputDirectoryTarget -Path $distRoot -RepositoryRoot $root -Label 'package dist root' -MayBeMissing
 $dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Label 'package staging directory' -MayBeMissing
 $zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
@@ -197,37 +261,35 @@ New-Item -ItemType Directory -Path $dist -Force | Out-Null
 $dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Label 'package staging directory'
 
 foreach ($name in $required) {
-    $path = Join-Path $source $name
-    if (-not (Test-Path $path)) { throw "Missing build artifact: $path" }
-    Copy-Item $path (Join-Path $dist $name)
+    $path = Assert-SafeInputFile -Path (Join-Path $source $name) -RepositoryRoot $root -Label ("V25 build artifact $name")
+    Copy-Item -LiteralPath $path -Destination (Join-Path $dist $name)
 }
 
 foreach ($script in @('install-v25-autoload.ps1', 'uninstall-v25-autoload.ps1', 'update-v25.ps1', 'unblock-v25-netload.ps1')) {
-    $scriptPath = Join-Path $PSScriptRoot $script
-    if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) { throw "Missing release script: $scriptPath" }
+    $scriptPath = Assert-SafeInputFile -Path (Join-Path $PSScriptRoot $script) -RepositoryRoot $root -Label ("release script $script")
     Copy-Item -LiteralPath $scriptPath -Destination (Join-Path $dist $script)
 }
 
 foreach ($launcherName in @('INSTALL-QS3D.cmd', 'UNBLOCK-QS3D.cmd')) {
-    $launcherPath = Join-Path $PSScriptRoot $launcherName
-    if (-not (Test-Path -LiteralPath $launcherPath -PathType Leaf)) { throw "Missing one-click package launcher: $launcherPath" }
+    $launcherPath = Assert-SafeInputFile -Path (Join-Path $PSScriptRoot $launcherName) -RepositoryRoot $root -Label ("package launcher $launcherName")
     Copy-Item -LiteralPath $launcherPath -Destination (Join-Path $dist $launcherName)
 }
 
-if (-not (Test-Path -LiteralPath $sampleSource -PathType Container)) { throw "Synthetic sample folder was not found: $sampleSource" }
 $sampleDestination = Join-Path $dist 'Samples'
 New-Item -ItemType Directory -Path $sampleDestination -Force | Out-Null
 foreach ($sampleName in @('README.md', 'QS3D-Sample.dxf', 'QS3D-Sample.qsdb', 'QS3D-Quantity-Template.xlsx', 'QS3D-Architecture.qstemplate')) {
-    $samplePath = Join-Path $sampleSource $sampleName
-    if (-not (Test-Path -LiteralPath $samplePath -PathType Leaf)) { throw "Missing synthetic sample artifact: $samplePath" }
+    $samplePath = Assert-SafeInputFile -Path (Join-Path $sampleSource $sampleName) -RepositoryRoot $root -Label ("synthetic sample $sampleName")
     Copy-Item -LiteralPath $samplePath -Destination (Join-Path $sampleDestination $sampleName)
 }
 $sampleDwg = Join-Path $sampleSource 'QS3D-Sample.dwg'
-if (Test-Path -LiteralPath $sampleDwg -PathType Leaf) { Copy-Item -LiteralPath $sampleDwg -Destination (Join-Path $sampleDestination 'QS3D-Sample.dwg') }
+if (Test-Path -LiteralPath $sampleDwg) {
+    $sampleDwg = Assert-SafeInputFile -Path $sampleDwg -RepositoryRoot $root -Label 'synthetic sample QS3D-Sample.dwg'
+    Copy-Item -LiteralPath $sampleDwg -Destination (Join-Path $sampleDestination 'QS3D-Sample.dwg')
+}
 
 $commands = @()
-Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V25') -Recurse -Filter '*.cs' | ForEach-Object {
-    $text = Get-Content $_.FullName -Raw
+Get-SafeSourceFiles -SourceRoot (Join-Path $root 'src/QS3D.BricsCAD.V25') -RepositoryRoot $root -Extension '.cs' | ForEach-Object {
+    $text = Get-Content -LiteralPath $_.FullName -Raw
     [regex]::Matches($text, '\[CommandMethod\("([^\"]+)"') | ForEach-Object { $commands += $_.Groups[1].Value.ToUpperInvariant() }
 }
 $commands = @($commands | Sort-Object -Unique)
@@ -317,7 +379,6 @@ $hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object {
 }
 if (-not $hashLines) { throw 'No package files were available for hashing.' }
 $hashLines | Set-Content -Path (Join-Path $dist 'SHA256SUMS.txt') -Encoding ASCII
-
 $zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 $dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Label 'package staging directory'

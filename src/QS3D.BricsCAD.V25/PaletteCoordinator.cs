@@ -46,54 +46,86 @@ namespace QS3D.BricsCAD.V25
                 _rightPanel = new RightPanel();
                 _quantityInsightPanel = new QuantityInsightPanel();
 
-                _workspace = new PaletteSet("QS3D — Mô hình", WorkspaceGuid)
-                {
-                    DockEnabled = DockSides.Left | DockSides.Right,
-                    Dock = DockSides.Left,
-                    Visible = false,
-                    KeepFocus = false,
-                    MinimumSize = new DrawingSize(UserUiLayoutStore.WorkspacePaletteMinWidth, UserUiLayoutStore.WorkspacePaletteMinHeight)
-                };
-                _workspace.DeviceIndependentSize = new WpfSize(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight);
-                _workspace.AddVisual("Mô hình", _workspacePanel, true);
+                _workspace = CreatePaletteSet(
+                    "QS3D — Mô hình",
+                    WorkspaceGuid,
+                    DockSides.Left,
+                    new DrawingSize(UserUiLayoutStore.WorkspacePaletteMinWidth, UserUiLayoutStore.WorkspacePaletteMinHeight),
+                    new WpfSize(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight),
+                    "Mô hình",
+                    _workspacePanel);
 
-                _properties = new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)
-                {
-                    DockEnabled = DockSides.Left | DockSides.Right,
-                    Dock = DockSides.Left,
-                    Visible = false,
-                    KeepFocus = false,
-                    MinimumSize = new DrawingSize(UserUiLayoutStore.PropertiesPaletteMinWidth, UserUiLayoutStore.PropertiesPaletteMinHeight)
-                };
-                _properties.DeviceIndependentSize = new WpfSize(layout.PropertiesPaletteWidth, layout.PropertiesPaletteHeight);
-                _properties.AddVisual("Thuộc tính", _propertiesVisual, true);
+                _properties = CreatePaletteSet(
+                    "QS3D — Thuộc tính",
+                    PropertiesGuid,
+                    DockSides.Left,
+                    new DrawingSize(UserUiLayoutStore.PropertiesPaletteMinWidth, UserUiLayoutStore.PropertiesPaletteMinHeight),
+                    new WpfSize(layout.PropertiesPaletteWidth, layout.PropertiesPaletteHeight),
+                    "Thuộc tính",
+                    _propertiesVisual);
                 _properties.StateChanged += OnPropertiesPaletteStateChanged;
 
-                _right = new PaletteSet("QS3D — Bản vẽ & Lớp", RightGuid)
-                {
-                    DockEnabled = DockSides.Left | DockSides.Right,
-                    Dock = DockSides.Right,
-                    Visible = false,
-                    KeepFocus = false,
-                    MinimumSize = new DrawingSize(UserUiLayoutStore.RightPaletteMinWidth, UserUiLayoutStore.RightPaletteMinHeight)
-                };
-                _right.DeviceIndependentSize = new WpfSize(layout.RightPaletteWidth, layout.RightPaletteHeight);
-                _right.AddVisual("Quản lý", _rightPanel, true);
+                _right = CreatePaletteSet(
+                    "QS3D — Bản vẽ & Lớp",
+                    RightGuid,
+                    DockSides.Right,
+                    new DrawingSize(UserUiLayoutStore.RightPaletteMinWidth, UserUiLayoutStore.RightPaletteMinHeight),
+                    new WpfSize(layout.RightPaletteWidth, layout.RightPaletteHeight),
+                    "Quản lý",
+                    _rightPanel);
 
-                _quantityInsight = new PaletteSet("QS3D — Diễn giải khối lượng", QuantityInsightGuid)
-                {
-                    DockEnabled = DockSides.Left | DockSides.Right,
-                    Dock = DockSides.Right,
-                    Visible = false,
-                    KeepFocus = false,
-                    MinimumSize = new DrawingSize(UserUiLayoutStore.QuantityPaletteMinWidth, UserUiLayoutStore.QuantityPaletteMinHeight)
-                };
-                _quantityInsight.DeviceIndependentSize = new WpfSize(layout.QuantityPaletteWidth, layout.QuantityPaletteHeight);
-                _quantityInsight.AddVisual("Khối lượng", _quantityInsightPanel, true);
+                _quantityInsight = CreatePaletteSet(
+                    "QS3D — Diễn giải khối lượng",
+                    QuantityInsightGuid,
+                    DockSides.Right,
+                    new DrawingSize(UserUiLayoutStore.QuantityPaletteMinWidth, UserUiLayoutStore.QuantityPaletteMinHeight),
+                    new WpfSize(layout.QuantityPaletteWidth, layout.QuantityPaletteHeight),
+                    "Khối lượng",
+                    _quantityInsightPanel);
             }
             catch
             {
                 DisposeCore(false);
+                throw;
+            }
+        }
+
+        private static PaletteSet CreatePaletteSet(
+            string title,
+            Guid guid,
+            DockSides dock,
+            DrawingSize minimumSize,
+            WpfSize initialSize,
+            string visualTitle,
+            System.Windows.FrameworkElement visual)
+        {
+            PaletteSet? palette = null;
+            try
+            {
+                palette = new PaletteSet(title, guid);
+                palette.DockEnabled = DockSides.Left | DockSides.Right;
+                palette.Dock = dock;
+                palette.Visible = false;
+                palette.KeepFocus = false;
+                if (guid == WorkspaceGuid)
+                    palette.MinimumSize = new DrawingSize(UserUiLayoutStore.WorkspacePaletteMinWidth, UserUiLayoutStore.WorkspacePaletteMinHeight);
+                else
+                    palette.MinimumSize = minimumSize;
+                palette.DeviceIndependentSize = initialSize;
+                palette.AddVisual(visualTitle, visual, true);
+                return palette;
+            }
+            catch
+            {
+                if (palette != null)
+                {
+                    try { palette.Dispose(); }
+                    catch
+                    {
+                        // Native construction rollback is best-effort. The important ownership
+                        // boundary is that the exact pre-publication instance is attempted here.
+                    }
+                }
                 throw;
             }
         }

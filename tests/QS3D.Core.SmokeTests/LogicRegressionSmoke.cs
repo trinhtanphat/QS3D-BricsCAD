@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
+            EntitySnapshotRejectsNonCanonicalEntityType();
             RecognitionUsesTokenBoundaries();
             RecognitionKeepsFallbackTypeGateWithAuthoritativeProjectMapping();
             RecognitionRejectsAmbiguousProjectMappings();
@@ -22,6 +23,18 @@ namespace QS3D.Core.SmokeTests
             CurtainFramesStaleOnLinkRehostAndUnlink();
             OpeningDimensionsRejectNegativeValues();
             BulkEditRejectsForeignSameIdElements();
+        }
+
+        private static void EntitySnapshotRejectsNonCanonicalEntityType()
+        {
+            Throws<ArgumentException>(() => new EntitySnapshot("A1", " Line", "A-BEAM"));
+            Throws<ArgumentException>(() => new EntitySnapshot("A2", "Line ", "A-BEAM"));
+            Throws<ArgumentException>(() => new EntitySnapshot("A3", "\tLine", "A-BEAM"));
+            Throws<ArgumentException>(() => new EntitySnapshot("A4", "Line\r", "A-BEAM"));
+
+            var canonical = new EntitySnapshot("A5", "Line", "A-BEAM");
+            Equal("Line", canonical.EntityType);
+            True(new RecognitionEngine().Suggest(canonical).TopCandidate != null);
         }
 
         private static void RecognitionUsesTokenBoundaries()
