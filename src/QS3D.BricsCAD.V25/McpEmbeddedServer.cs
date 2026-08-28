@@ -361,7 +361,13 @@ namespace QS3D.BricsCAD.V25
                     WriteResponse(stream, 200, "OK", JsonRpcError("null", -32600, "initialize must include a JSON-RPC id."), null);
                     return;
                 }
-                var requested = ExtractTopLevelString(request.Body, "protocolVersion");
+                string initializeParameters;
+                if (!TryExtractObjectProperty(request.Body, "params", out initializeParameters))
+                {
+                    WriteResponse(stream, 200, "OK", JsonRpcError(id, -32602, "initialize requires an object params value."), null);
+                    return;
+                }
+                var requested = ExtractTopLevelString(initializeParameters, "protocolVersion");
                 if (!string.Equals(requested, ProtocolVersion, StringComparison.Ordinal)
                     && !string.Equals(requested, LegacyProtocolVersion, StringComparison.Ordinal))
                 {
