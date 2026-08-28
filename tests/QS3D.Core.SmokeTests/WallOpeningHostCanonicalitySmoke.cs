@@ -11,6 +11,10 @@ namespace QS3D.Core.SmokeTests
             CanonicalHostDeductsOpeningDeterministically();
             PaddedHostFailsClosedBeforePublishingWallQuantities();
             NullProjectElementFailsClosedBeforePublishingWallQuantities();
+            ArchitecturalWallRejectsCorruptCleanOpeningCache();
+            StructuralWallRejectsCorruptCleanOpeningCache();
+            DirtyOpeningRecomputesInsteadOfTrustingCorruptCache();
+            NegativeSemanticDimensionFailsClosed();
         }
 
         private static void CanonicalHostDeductsOpeningDeterministically()
@@ -62,9 +66,89 @@ namespace QS3D.Core.SmokeTests
             Require(!wall.Quantities.ContainsKey("GrossWallAreaM2"), "Null-child rejection published a partial gross wall area.");
         }
 
+        private static void ArchitecturalWallRejectsCorruptCleanOpeningCache()
+        {
+            foreach (var corrupt in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity, -1d })
+            {
+                var project = new ProjectState("wall-host-cache-" + CorruptLabel(corrupt), "Corrupt architectural opening cache");
+                var wall = CreateWall("WALL-1");
+                wall.SetQuantity("NetWallAreaM2", 777d);
+                var opening = CreateOpening("OPENING-1", "WALL-1");
+                opening.Quantities["OpeningAreaM2"] = corrupt;
+                opening.MarkClean(ElementDirtyFlags.All);
+                project.Elements.Add(wall);
+                project.Elements.Add(opening);
+
+                Throws<InvalidOperationException>(() => new WallRegenerator().Regenerate(project, wall));
+
+                Near(777d, wall.Quantities["NetWallAreaM2"], "Corrupt cached opening area overwrote prior architectural wall quantity.");
+                Require(!wall.Quantities.ContainsKey("GrossWallAreaM2"), "Corrupt cached opening area published a partial architectural gross area.");
+                Require(!wall.Quantities.ContainsKey("OpeningAreaM2"), "Corrupt cached opening area was silently canonicalized and published.");
+            }
+        }
+
+        private static void StructuralWallRejectsCorruptCleanOpeningCache()
+        {
+            foreach (var corrupt in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity, -1d })
+            {
+                var project = new ProjectState("struct-wall-cache-" + CorruptLabel(corrupt), "Corrupt structural opening cache");
+                var wall = CreateStructuralWall("SWALL-1");
+                wall.SetQuantity("NetWallAreaM2", 555d);
+                var opening = CreateOpening("OPENING-1", "SWALL-1");
+                opening.Quantities["OpeningAreaM2"] = corrupt;
+                opening.MarkClean(ElementDirtyFlags.All);
+                project.Elements.Add(wall);
+                project.Elements.Add(opening);
+
+                Throws<InvalidOperationException>(() => new StructuralRegenerator().Regenerate(project, wall));
+
+                Near(555d, wall.Quantities["NetWallAreaM2"], "Corrupt cached opening area overwrote prior structural wall quantity.");
+                Require(!wall.Quantities.ContainsKey("GrossWallAreaM2"), "Corrupt cached opening area published a partial structural gross area.");
+                Require(!wall.Quantities.ContainsKey("OpeningAreaM2"), "Corrupt structural cached opening area was silently canonicalized and published.");
+            }
+        }
+
+        private static void DirtyOpeningRecomputesInsteadOfTrustingCorruptCache()
+        {
+            var project = new ProjectState("wall-host-dirty-cache", "Dirty opening cache recompute");
+            var wall = CreateWall("WALL-1");
+            var opening = CreateOpening("OPENING-1", "WALL-1");
+            opening.Quantities["OpeningAreaM2"] = double.NaN;
+            project.Elements.Add(wall);
+            project.Elements.Add(opening);
+
+            new WallRegenerator().Regenerate(project, wall);
+
+            Near(2d, wall.Quantities["OpeningAreaM2"], "Dirty opening should recompute WidthM*HeightM instead of reading corrupt cache.");
+            Near(28d, wall.Quantities["NetWallAreaM2"], "Dirty opening recomputation produced the wrong wall net area.");
+        }
+
+        private static void NegativeSemanticDimensionFailsClosed()
+        {
+            var project = new ProjectState("wall-negative-length", "Negative wall length");
+            var wall = CreateWall("WALL-1");
+            wall.SetProperty("LengthM", "-1");
+            wall.SetQuantity("NetWallAreaM2", 123d);
+            project.Elements.Add(wall);
+
+            Throws<InvalidOperationException>(() => new WallRegenerator().Regenerate(project, wall));
+
+            Near(123d, wall.Quantities["NetWallAreaM2"], "Negative semantic dimension overwrote prior quantity.");
+            Require(!wall.Quantities.ContainsKey("GrossWallAreaM2"), "Negative semantic dimension was silently canonicalized and published.");
+        }
+
         private static ProjectElement CreateWall(string id)
         {
             var wall = new ProjectElement(id, ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+            wall.SetProperty("LengthM", "10");
+            wall.SetProperty("HeightM", "3");
+            wall.SetProperty("ThicknessM", "0.2");
+            return wall;
+        }
+
+        private static ProjectElement CreateStructuralWall(string id)
+        {
+            var wall = new ProjectElement(id, ElementCategory.StructuralWall, string.Empty, string.Empty, string.Empty);
             wall.SetProperty("LengthM", "10");
             wall.SetProperty("HeightM", "3");
             wall.SetProperty("ThicknessM", "0.2");
@@ -78,6 +162,14 @@ namespace QS3D.Core.SmokeTests
             opening.SetProperty("WidthM", "1");
             opening.SetProperty("HeightM", "2");
             return opening;
+        }
+
+        private static string CorruptLabel(double value)
+        {
+            if (double.IsNaN(value)) return "nan";
+            if (double.IsPositiveInfinity(value)) return "posinf";
+            if (double.IsNegativeInfinity(value)) return "neginf";
+            return "negative";
         }
 
         private static void Near(double expected, double actual, string message)
