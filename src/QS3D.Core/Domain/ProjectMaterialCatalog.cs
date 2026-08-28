@@ -45,7 +45,9 @@ namespace QS3D.Core.Domain
 
         private static string Optional(string value, string name, int max)
         {
-            var text = (value ?? string.Empty).Trim();
+            var raw = value ?? string.Empty;
+            if (raw.Any(char.IsControl)) throw new ArgumentException(name + " cannot contain control characters.", name);
+            var text = raw.Trim();
             if (text.Length > max) throw new ArgumentException(name + " must contain at most " + max + " characters.", name);
             RequireWellFormedUnicode(text, name);
             RequireXmlText(text, name);
