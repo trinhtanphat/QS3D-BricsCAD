@@ -42,6 +42,7 @@ namespace QS3D.BricsCAD.V25
         private const string DashboardUrl = "https://dash.cloudflare.com/?to=/:account/networks/tunnels";
         private const string ChatGptUrl = "https://chatgpt.com/";
         private const string OriginUrl = "http://127.0.0.1:8765";
+        private const string QuickTunnelHostSuffix = ".trycloudflare.com";
         private static readonly object Sync = new object();
         private static readonly byte[] DpapiEntropy = Encoding.UTF8.GetBytes("QS3D-BricsCAD/MCP/CloudflareTunnel/v1");
         private static Process? _process;
@@ -259,7 +260,10 @@ namespace QS3D.BricsCAD.V25
                 if (clean.IndexOf("ERR", StringComparison.OrdinalIgnoreCase) >= 0) _lastError = clean;
                 if (discoverQuickUrl)
                 {
-                    var match = Regex.Match(clean, "https://[A-Za-z0-9-]+\\.trycloudflare\\.com", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                    var match = Regex.Match(
+                        clean,
+                        "https://[A-Za-z0-9-]+" + Regex.Escape(QuickTunnelHostSuffix),
+                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
                     if (match.Success) _quickBaseUrl = match.Value.TrimEnd('/');
                 }
             }
