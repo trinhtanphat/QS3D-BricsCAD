@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using Bricscad.ApplicationServices;
 using Application = Bricscad.ApplicationServices.Application;
 using Teigha.Runtime;
@@ -51,6 +52,8 @@ namespace QS3D.BricsCAD.V25
             Margin = new Thickness(0, 8, 0, 8)
         };
         private int _localOperationActive;
+        private DispatcherTimer? _quickUrlTimer;
+        private int _quickUrlPollTicks;
 
         public McpAgentControlCenterWindow()
         {
@@ -60,6 +63,7 @@ namespace QS3D.BricsCAD.V25
             MinWidth = 620;
             MinHeight = 620;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            Closed += (_, __) => StopQuickUrlPolling();
 
             var panel = new StackPanel { Margin = new Thickness(18) };
             panel.Children.Add(new TextBlock
@@ -150,7 +154,7 @@ namespace QS3D.BricsCAD.V25
                     if (!ok)
                     {
                         MessageBox.Show(
-                            message + "\n\nBạn vẫn có thể dùng nút cài thủ công trong màn hình Cloudflare setup.",
+                            message + "\n\nBạn có thể thử lại nút cài tự động hoặc kiểm tra chính sách mạng/chứng thư trên máy.",
                             "QS3D MCP",
                             MessageBoxButton.OK,
                             MessageBoxImage.Warning);
@@ -178,6 +182,7 @@ namespace QS3D.BricsCAD.V25
 
         private void StartNamedTunnel()
         {
+            StopQuickUrlPolling();
             string error;
             if (!McpCloudflareAccountTunnelManager.StartSaved(out error))
                 MessageBox.Show(error, "QS3D MCP", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -190,14 +195,60 @@ namespace QS3D.BricsCAD.V25
         {
             string error;
             if (!McpCloudflareAccountTunnelManager.StartQuickTunnel(out error))
+            {
+                StopQuickUrlPolling();
                 MessageBox.Show(error, "QS3D MCP", MessageBoxButton.OK, MessageBoxImage.Warning);
-            else
-                _activity.Text = "Quick Tunnel đang khởi động; chỉ dùng để test.";
+                RefreshStatus();
+                return;
+            }
+            _activity.Text = "Quick Tunnel đang khởi động; đang chờ public URL...";
+            StartQuickUrlPolling();
             RefreshStatus();
+        }
+
+        private void StartQuickUrlPolling()
+        {
+            StopQuickUrlPolling();
+            _quickUrlPollTicks = 0;
+            _quickUrlTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+            {
+                Interval = TimeSpan.FromMilliseconds(500)
+            };
+            _quickUrlTimer.Tick += QuickUrlTimerOnTick;
+            _quickUrlTimer.Start();
+        }
+
+        private void QuickUrlTimerOnTick(object? sender, EventArgs e)
+        {
+            _quickUrlPollTicks++;
+            RefreshStatus();
+            var publicUrl = McpCloudflareTunnelManager.PublicMcpUrl;
+            if (!string.IsNullOrWhiteSpace(publicUrl))
+            {
+                _activity.Text = "Quick Tunnel sẵn sàng: " + publicUrl;
+                StopQuickUrlPolling();
+                return;
+            }
+            if (!McpCloudflareTunnelManager.IsRunning || _quickUrlPollTicks >= 20)
+            {
+                if (McpCloudflareTunnelManager.IsRunning)
+                    _activity.Text = "Quick Tunnel đang chạy nhưng chưa nhận được public URL trong thời gian chờ; có thể bấm Refresh để kiểm tra lại.";
+                StopQuickUrlPolling();
+            }
+        }
+
+        private void StopQuickUrlPolling()
+        {
+            var timer = _quickUrlTimer;
+            _quickUrlTimer = null;
+            if (timer == null) return;
+            timer.Stop();
+            timer.Tick -= QuickUrlTimerOnTick;
         }
 
         private void StopTunnels()
         {
+            StopQuickUrlPolling();
             McpCloudflareAccountTunnelManager.StopForHostShutdown();
             McpCloudflareTunnelManager.StopForHostShutdown();
             _activity.Text = "Đã dừng tunnel của QS3D trong phiên BricsCAD này.";
