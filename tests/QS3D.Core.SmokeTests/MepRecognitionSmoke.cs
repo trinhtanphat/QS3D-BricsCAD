@@ -9,6 +9,8 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
+            RecognitionInputBounds();
+            RecognitionTextIntegrity();
             DefaultProfilePriorityAndCase();
             BlockNameRecognition();
             ExplicitPriority();
@@ -18,6 +20,115 @@ namespace QS3D.Core.SmokeTests
             QuantityKnownCountPreflightPrecedence();
             MepTbqProjectionSmoke.Run();
         }
+
+        private static void RecognitionInputBounds()
+        {
+            var boundaryTokens = new List<string>(MepRecognitionLimits.MaxTokensPerRule);
+            for (var i = 0; i < MepRecognitionLimits.MaxTokensPerRule; i++)
+                boundaryTokens.Add("TOKEN-" + i);
+            var boundaryRule = BuildingRule("boundary-token-rule", boundaryTokens);
+            Equal(MepRecognitionLimits.MaxTokensPerRule, boundaryRule.Tokens.Count, "exact token boundary");
+
+            var oversizedTokens = new List<string>(MepRecognitionLimits.MaxTokensPerRule + 1);
+            for (var i = 0; i <= MepRecognitionLimits.MaxTokensPerRule; i++)
+                oversizedTokens.Add("OVER-" + i);
+            ArgumentContains(
+                () => BuildingRule("oversized-token-rule", oversizedTokens),
+                "at most 100",
+                "101 recognition tokens");
+
+            var duplicateInfiniteTokens = new InfiniteTokenEnumerable("DUPLICATE");
+            ArgumentContains(
+                () => BuildingRule("infinite-token-rule", duplicateInfiniteTokens),
+                "at most 100",
+                "infinite duplicate recognition tokens");
+            True(
+                duplicateInfiniteTokens.MoveNextCalls <= MepRecognitionLimits.MaxTokensPerRule + 1,
+                "infinite token input must stop at the first disallowed element");
+
+            var boundaryRules = new List<MepRecognitionRule>(MepRecognitionLimits.MaxRules);
+            for (var i = 0; i < MepRecognitionLimits.MaxRules; i++)
+                boundaryRules.Add(BuildingRule("boundary-rule-" + i, new[] { "R" + i }));
+            var boundaryProfile = new MepRecognitionProfile(boundaryRules);
+            Equal(MepRecognitionLimits.MaxRules, boundaryProfile.Rules.Count, "exact rule boundary");
+
+            var oversizedRules = new List<MepRecognitionRule>(MepRecognitionLimits.MaxRules + 1);
+            for (var i = 0; i <= MepRecognitionLimits.MaxRules; i++)
+                oversizedRules.Add(BuildingRule("oversized-rule-" + i, new[] { "R" + i }));
+            ArgumentContains(
+                () => new MepRecognitionProfile(oversizedRules),
+                "at most 500",
+                "501 recognition rules");
+
+            var infiniteRules = new InfiniteRuleEnumerable();
+            ArgumentContains(
+                () => new MepRecognitionProfile(infiniteRules),
+                "at most 500",
+                "infinite recognition rules");
+            True(
+                infiniteRules.MoveNextCalls <= MepRecognitionLimits.MaxRules + 1,
+                "infinite rule input must stop at the first disallowed element");
+        }
+
+        private static void RecognitionTextIntegrity()
+        {
+            ArgumentContains(
+                () => new MepRecognitionRule(
+                    "bad-id-\ud800",
+                    10,
+                    MepRecognitionDiscipline.Structure,
+                    "Structure",
+                    new[] { "STRUCT" }),
+                "well-formed UTF-16",
+                "lone high surrogate recognition rule id");
+
+            ArgumentContains(
+                () => new MepRecognitionRule(
+                    "bad-category",
+                    10,
+                    MepRecognitionDiscipline.Structure,
+                    "Structure\udc00",
+                    new[] { "STRUCT" }),
+                "well-formed UTF-16",
+                "lone low surrogate recognition category");
+
+            ArgumentContains(
+                () => new MepRecognitionRule(
+                    "bad-token",
+                    10,
+                    MepRecognitionDiscipline.Structure,
+                    "Structure",
+                    new[] { "DUCT\ud800X" }),
+                "well-formed UTF-16",
+                "broken surrogate pair recognition token");
+
+            var supplementary = char.ConvertFromUtf32(0x1F6A7);
+            var rule = new MepRecognitionRule(
+                "valid-" + supplementary,
+                10,
+                MepRecognitionDiscipline.Mep,
+                "Pipe-" + supplementary,
+                new[] { "PIPE-" + supplementary },
+                MepRecognitionSource.Layer,
+                MepElementKind.Pipe);
+            Equal("valid-" + supplementary, rule.Id, "supplementary rule id preservation");
+            Equal("Pipe-" + supplementary, rule.Category, "supplementary category preservation");
+            Equal("PIPE-" + supplementary, rule.Tokens[0], "supplementary token preservation");
+
+            var result = new MepRecognitionProfile(new[] { rule }).Recognize("SERVICE-PIPE-" + supplementary, null);
+            Equal(MepRecognitionStatus.Matched, result.Status, "supplementary recognition status");
+            Equal("Pipe-" + supplementary, result.Category, "supplementary recognition category");
+            Equal("valid-" + supplementary, result.MatchedRuleIds[0], "supplementary recognition rule identity");
+        }
+
+        private static MepRecognitionRule BuildingRule(string id, IEnumerable<string> tokens) =>
+            new MepRecognitionRule(
+                id,
+                1,
+                MepRecognitionDiscipline.Structure,
+                "Structure",
+                tokens,
+                MepRecognitionSource.LayerOrBlockName);
 
         private static void DefaultProfilePriorityAndCase()
         {
@@ -143,6 +254,23 @@ namespace QS3D.Core.SmokeTests
                 lengthM: 1d);
         }
 
+        private static void ArgumentContains(Action action, string expectedText, string label)
+        {
+            try
+            {
+                action();
+            }
+            catch (ArgumentException ex)
+            {
+                True(
+                    ex.Message.IndexOf(expectedText, StringComparison.OrdinalIgnoreCase) >= 0,
+                    label + ": unexpected error message: " + ex.Message);
+                return;
+            }
+
+            throw new InvalidOperationException(label + ": expected ArgumentException.");
+        }
+
         private static void InvalidOperationContains(Action action, string expectedText, string label)
         {
             try
@@ -169,6 +297,42 @@ namespace QS3D.Core.SmokeTests
         private static void True(bool value, string label)
         {
             if (!value) throw new InvalidOperationException(label + ".");
+        }
+
+        private sealed class InfiniteTokenEnumerable : IEnumerable<string>
+        {
+            private readonly string _value;
+            internal InfiniteTokenEnumerable(string value) { _value = value; }
+            internal int MoveNextCalls { get; private set; }
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                while (true)
+                {
+                    MoveNextCalls++;
+                    yield return _value;
+                }
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class InfiniteRuleEnumerable : IEnumerable<MepRecognitionRule>
+        {
+            internal int MoveNextCalls { get; private set; }
+
+            public IEnumerator<MepRecognitionRule> GetEnumerator()
+            {
+                var index = 0;
+                while (true)
+                {
+                    MoveNextCalls++;
+                    yield return BuildingRule("infinite-rule-" + index, new[] { "R" + index });
+                    index++;
+                }
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private sealed class ReportedCountCollection : ICollection<MepElement>

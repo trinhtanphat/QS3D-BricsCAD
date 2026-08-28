@@ -293,7 +293,8 @@ namespace QS3D.Core.Export
                 maximumCount,
                 parameterName,
                 overflowMessage,
-                out var corroboratedKnownCount);
+                out var corroboratedKnownCount,
+                out var knownCountSources);
 
             var items = new List<T>();
             var observedCount = 0;
@@ -310,6 +311,18 @@ namespace QS3D.Core.Export
             if (knownCount.HasValue && observedCount != knownCount.Value)
                 throw new ArgumentException("BCF collection Count does not match enumerated item count.", parameterName);
 
+            var currentKnownCount = ValidateKnownCounts(
+                values,
+                maximumCount,
+                parameterName,
+                overflowMessage,
+                out var currentCorroboratedKnownCount,
+                out var currentKnownCountSources);
+            if (knownCountSources != currentKnownCountSources ||
+                corroboratedKnownCount != currentCorroboratedKnownCount ||
+                knownCount != currentKnownCount)
+                throw new ArgumentException("BCF collection Count changed during enumeration.", parameterName);
+
             return items;
         }
 
@@ -318,16 +331,17 @@ namespace QS3D.Core.Export
             int maximumCount,
             string parameterName,
             string overflowMessage,
-            out bool corroboratedKnownCount)
+            out bool corroboratedKnownCount,
+            out int knownCountSources)
         {
             int? knownCount = null;
-            var knownCountSources = 0;
+            var observedKnownCountSources = 0;
             var invalidKnownCount = false;
             var conflictingKnownCounts = false;
 
             void ObserveKnownCount(int count)
             {
-                knownCountSources++;
+                observedKnownCountSources++;
                 if (count > maximumCount)
                     throw new ArgumentException(overflowMessage, parameterName);
                 if (count < 0)
@@ -355,7 +369,8 @@ namespace QS3D.Core.Export
             if (conflictingKnownCounts)
                 throw new ArgumentException("BCF collection reports conflicting known Count values.", parameterName);
 
-            corroboratedKnownCount = knownCountSources > 1;
+            knownCountSources = observedKnownCountSources;
+            corroboratedKnownCount = observedKnownCountSources > 1;
             return knownCount;
         }
 
