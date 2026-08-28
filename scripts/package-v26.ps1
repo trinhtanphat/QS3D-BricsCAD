@@ -206,7 +206,11 @@ foreach ($name in $required) {
     Copy-Item -LiteralPath $path -Destination (Join-Path $dist $name)
 }
 
-$generatedScripts = [ordered]@{'install-v25-autoload.ps1'='install-v26-autoload.ps1';'uninstall-v25-autoload.ps1'='uninstall-v26-autoload.ps1';'update-v25.ps1'='update-v26.ps1'}
+$generatedScripts = [ordered]@{
+    'install-v25-autoload.ps1' = 'install-v26-autoload.ps1'
+    'uninstall-v25-autoload.ps1' = 'uninstall-v26-autoload.ps1'
+    'update-v25.ps1' = 'update-v26.ps1'
+}
 foreach ($sourceScript in $generatedScripts.Keys) {
     $output = Join-Path $dist $generatedScripts[$sourceScript]
     & $generator -SourceScript $sourceScript -OutputPath $output
@@ -244,7 +248,20 @@ if (-not $assemblyVersion) { throw 'Could not read QS3D V26 plugin assembly vers
 Assert-ManagedIdentity -Path $pluginPath -ExpectedAssemblyVersion $assemblyVersion -ExpectedProductVersion $productVersion -Label 'QS3D.BricsCAD.V26.dll'
 Assert-ManagedIdentity -Path $corePath -ExpectedAssemblyVersion $assemblyVersion -ExpectedProductVersion $productVersion -Label 'QS3D.Core.dll'
 
-$metadata = [ordered]@{product='QS3D';target='BricsCAD V26 x64';framework='net8.0-windows';productVersion=$productVersion;version=$assemblyVersion.ToString();generatedUtc=[DateTime]::UtcNow.ToString('o');commandCount=$commands.Count;defaultLoadMode='OnCommand';autoloadMethod='BricsCAD Registry DemandLoad';pluginSignatureStatus=$signature.Status.ToString();pluginSignerThumbprint=if($signature.SignerCertificate){$signature.SignerCertificate.Thumbprint}else{''};securityPolicy='Installer/updater never weaken BricsCAD security settings.'}
+$metadata = [ordered]@{
+    product = 'QS3D'
+    target = 'BricsCAD V26 x64'
+    framework = 'net8.0-windows'
+    productVersion = $productVersion
+    version = $assemblyVersion.ToString()
+    generatedUtc = [DateTime]::UtcNow.ToString('o')
+    commandCount = $commands.Count
+    defaultLoadMode = 'OnCommand'
+    autoloadMethod = 'BricsCAD Registry DemandLoad'
+    pluginSignatureStatus = $signature.Status.ToString()
+    pluginSignerThumbprint = if ($signature.SignerCertificate) { $signature.SignerCertificate.Thumbprint } else { '' }
+    securityPolicy = 'Installer/updater never weaken BricsCAD security settings.'
+}
 $metadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $dist 'PACKAGE-METADATA.json') -Encoding UTF8
 
 @"
