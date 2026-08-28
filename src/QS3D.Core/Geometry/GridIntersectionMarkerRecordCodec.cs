@@ -8,11 +8,13 @@ namespace QS3D.Core.Geometry
 {
     public sealed class GridIntersectionMarkerRecordEntry
     {
+        private const int OwnerTokenLength = 71;
+
         public GridIntersectionMarkerRecordEntry(int occurrence, string ownerToken, string handle, Point2 point, double elevation)
         {
             if (occurrence < 0 || occurrence > 1) throw new ArgumentOutOfRangeException(nameof(occurrence));
             Occurrence = occurrence;
-            OwnerToken = RequireCanonical(ownerToken, nameof(ownerToken));
+            OwnerToken = RequireCanonicalOwner(ownerToken, occurrence);
             Handle = RequireCanonicalHandle(handle);
             if (!Finite(point.X) || !Finite(point.Y) || !Finite(elevation))
                 throw new ArgumentOutOfRangeException(nameof(point), "Grid intersection marker record coordinates must be finite.");
@@ -25,6 +27,17 @@ namespace QS3D.Core.Geometry
         public string Handle { get; }
         public Point2 Point { get; }
         public double Elevation { get; }
+
+        private static string RequireCanonicalOwner(string value, int occurrence)
+        {
+            var owner = RequireCanonical(value, nameof(value));
+            if (owner.Length != OwnerTokenLength || !owner.StartsWith("GIX1:", StringComparison.Ordinal) || owner[69] != ':' || owner[70] != (char)('0' + occurrence))
+                throw new ArgumentException("Grid intersection marker owner token must use canonical GIX1 digest/occurrence form.", nameof(value));
+            for (var index = 5; index < 69; index++)
+                if (!LowerHex(owner[index]))
+                    throw new ArgumentException("Grid intersection marker owner token must use canonical lowercase hexadecimal digest.", nameof(value));
+            return owner;
+        }
 
         private static string RequireCanonical(string value, string name)
         {
@@ -45,6 +58,9 @@ namespace QS3D.Core.Geometry
                 throw new ArgumentException("Grid intersection marker handle must use canonical uppercase hexadecimal form.", nameof(value));
             return handle;
         }
+
+        private static bool LowerHex(char value) =>
+            (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f');
 
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
     }
@@ -113,13 +129,15 @@ namespace QS3D.Core.Geometry
     public static class GridIntersectionMarkerRecordCodec
     {
         public const string MetadataPrefix = "QS3D.GridIntersectionPair.";
+        public const int MaxRecordCharacters = 4096;
+        public const int MaxEncodedGridIdCharacters = 512;
         private const string Version = "1";
+        private const int PairTokenLength = 69;
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static string MetadataKey(string pairToken)
         {
-            if (string.IsNullOrWhiteSpace(pairToken) || !pairToken.StartsWith("GIP1:", StringComparison.Ordinal) || pairToken.Length != 69)
-                throw new ArgumentException("Grid intersection pair token must be canonical GIP1 identity.", nameof(pairToken));
+            RequirePairToken(pairToken, nameof(pairToken));
             return MetadataPrefix + pairToken;
         }
 
@@ -138,23 +156,35 @@ namespace QS3D.Core.Geometry
                 entry.Point.Y.ToString("R", CultureInfo.InvariantCulture),
                 entry.Elevation.ToString("R", CultureInfo.InvariantCulture)
             })));
-            return string.Join("|", new[]
+            var encoded = string.Join("|", new[]
             {
                 Version,
                 Convert.ToBase64String(StrictUtf8.GetBytes(record.FirstElementId)),
                 Convert.ToBase64String(StrictUtf8.GetBytes(record.SecondElementId)),
                 entries
             });
+            if (encoded.Length > MaxRecordCharacters)
+                throw new InvalidOperationException("Grid intersection pair record exceeds the maximum record length.");
+            return encoded;
         }
 
         public static GridIntersectionPairRecord Decode(string metadataKey, string value)
         {
             if (!IsMetadataKey(metadataKey)) throw new ArgumentException("Grid intersection metadata key has invalid prefix.", nameof(metadataKey));
-            var pairToken = metadataKey.Substring(MetadataPrefix.Length);
+            var expectedKeyLength = MetadataPrefix.Length + PairTokenLength;
+            if (metadataKey.Length != expectedKeyLength)
+                throw new ArgumentException("Grid intersection metadata key has invalid pair-token length.", nameof(metadataKey));
+            var pairToken = metadataKey.Substring(MetadataPrefix.Length, PairTokenLength);
+            RequirePairToken(pairToken, nameof(metadataKey));
+
             if (string.IsNullOrWhiteSpace(value)) throw new FormatException("Grid intersection pair record is blank.");
+            if (value.Length > MaxRecordCharacters)
+                throw new FormatException("Grid intersection pair record exceeds the maximum record length.");
             var fields = value.Split('|');
             if (fields.Length != 4 || !string.Equals(fields[0], Version, StringComparison.Ordinal))
                 throw new FormatException("Grid intersection pair record has unsupported version/field count.");
+            if (fields[1].Length > MaxEncodedGridIdCharacters || fields[2].Length > MaxEncodedGridIdCharacters)
+                throw new FormatException("Grid intersection pair record encoded Grid id exceeds the maximum encoded length.");
 
             string first;
             string second;
@@ -187,5 +217,18 @@ namespace QS3D.Core.Geometry
             try { return new GridIntersectionPairRecord(first, second, pairToken, entries); }
             catch (ArgumentException ex) { throw new FormatException("Grid intersection pair record violates canonical ownership.", ex); }
         }
+
+        private static string RequirePairToken(string value, string parameterName)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length != PairTokenLength || !value.StartsWith("GIP1:", StringComparison.Ordinal))
+                throw new ArgumentException("Grid intersection pair token must be canonical GIP1 identity.", parameterName);
+            for (var index = 5; index < value.Length; index++)
+                if (!LowerHex(value[index]))
+                    throw new ArgumentException("Grid intersection pair token must use canonical lowercase hexadecimal digest.", parameterName);
+            return value;
+        }
+
+        private static bool LowerHex(char value) =>
+            (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f');
     }
 }
