@@ -13,10 +13,22 @@ The QS3D BricsCAD plugin embeds the MCP endpoint directly. A second MCP reposito
 3. If Cloudflare Tunnel is not installed, use the installer button and complete the normal Windows installer UI.
 4. Click `Đăng nhập Cloudflare`; credentials are entered only in Cloudflare's provider-owned browser page. QS3D never asks for or stores the Cloudflare password.
 5. Enter the public hostname to use for QS3D, then click the automatic create/reuse/connect action.
-6. Copy the displayed public MCP URL and bearer token, open ChatGPT custom MCP configuration, add the public `/mcp` endpoint with `Authorization: Bearer <token>`, then scan tools.
+6. Copy the public URL and bearer token directly from the UI, or use `QS3DMCPCOPYCONFIG` to copy a ready URL + Authorization block for ChatGPT custom MCP.
 7. Future BricsCAD starts reuse the named-tunnel configuration and attempt to reconnect automatically.
 
 Quick Tunnel remains a one-click test fallback only. The advanced token flow is retained for users who already manage Cloudflare tunnels from the dashboard. Named-browser, token and Quick modes explicitly hand tunnel ownership to one another so multiple `cloudflared` processes do not intentionally forward the same embedded MCP endpoint at the same time.
+
+## Public endpoint contract
+
+`McpPublicEndpointResolver` is the single source used by the setup UI, dashboard, generated guide and copy helpers. Resolution precedence is the account-managed named tunnel, the token/Quick tunnel, then the optional `QS3D_MCP_PUBLIC_URL` process/environment fallback.
+
+A displayed/copyable endpoint must be an absolute non-loopback `https://` URL with no user-info, query or fragment. `/` is canonicalized to `/mcp`; any unrelated path is rejected. Provider-resolved endpoints are synchronized into the process environment so the embedded `connector_info`/status surface reports the same public endpoint after startup/onboarding.
+
+Convenience commands:
+
+- `QS3DMCPCOPYURL` copies the validated public `/mcp` URL.
+- `QS3DMCPCOPYTOKEN` copies the embedded MCP bearer token.
+- `QS3DMCPCOPYCONFIG` copies the public URL plus `Authorization: Bearer ...` block.
 
 ## MCP transport and lifecycle
 
@@ -85,7 +97,7 @@ Database mutation is marshalled through `Application.DocumentManager.ExecuteInAp
 
 `cad_entity_inspect` reads one known handle without requiring a whole-database snapshot. `cad_database_snapshot` returns an explicitly bounded ModelSpace view and reports whether more entities remain beyond the requested limit.
 
-Timed-out CAD-context work is marked cancelled before the caller returns. Its synchronization object is not disposed while a delayed BricsCAD callback could still signal it, preventing timeout/use-after-dispose races on the CAD thread.
+Timed-out CAD-context work is marked cancelled before the caller returns. Its synchronization lifetime is retained for a delayed BricsCAD callback and abandoned work owns final cleanup, avoiding the old timeout/use-after-dispose failure mode.
 
 ## Bounded BricsCAD command workflow
 
@@ -113,9 +125,13 @@ Mutations are recorded to `%APPDATA%\QS3D\mcp-agent-audit.jsonl`. The audit file
 
 ## Cloudflare onboarding behavior
 
-The default path runs `cloudflared tunnel login`, which opens the provider browser. The plugin then creates or reuses the locally-managed `qs3d-bricscad` tunnel, creates the DNS route and writes the local tunnel configuration pointing to `http://127.0.0.1:8765`.
+The default path runs `cloudflared tunnel login`, which opens the provider browser. Before reusing local tunnel state, QS3D asks `cloudflared tunnel list` for live provider state and accepts only the exact `qs3d-bricscad` tunnel name plus a matching local credential file. A stale local tunnel ID is therefore not trusted merely because an old JSON file still exists.
 
-Cloudflared CLI stdout/stderr is consumed asynchronously with a hard capture bound, and the process is allowed to drain async output callbacks before its `Process` object is disposed. This avoids the pipe deadlock and callback/disposal race patterns that can occur with redirected CLI output.
+If the named tunnel does not exist, QS3D creates it and verifies its UUID/credential material. DNS-route errors are fail-closed: a generic `already exists` response is not silently accepted because that hostname could belong to another tunnel. The generated configuration uses hostname-scoped `ingress` to `http://127.0.0.1:8765` plus a final `http_status:404` rule.
+
+Quick Tunnel URL discovery is asynchronous in `cloudflared`. The setup window now polls at 500 ms for a bounded 10-second window, refreshes the public endpoint when the `trycloudflare.com` URL appears, and stops the timer on success, process exit, timeout or window close.
+
+Cloudflared CLI stdout/stderr is consumed asynchronously with a hard capture bound, and the process is allowed to drain async output callbacks before its `Process` object is disposed. Long-lived tunnel process ownership is assigned before exit events are enabled, avoiding the immediate-exit race that could otherwise leave a dead process stored as the active tunnel.
 
 The advanced token fallback protects the dashboard-issued token with Windows DPAPI `CurrentUser` and passes it to `cloudflared` through the process environment rather than the command line. Neither onboarding path exposes Cloudflare credentials through the network MCP server.
 
@@ -144,6 +160,9 @@ Required local matrix:
 - Load the exact V25 plugin in licensed BricsCAD V25 and the exact V26 plugin in licensed BricsCAD V26.
 - Verify embedded `/healthz`, bearer rejection/acceptance, `initialize`, initialized notification, `tools/list`, `tools/call connector_info`, `ping`, protocol/session binding and session `DELETE`.
 - Complete browser Cloudflare login from the QS3D wizard without terminal use; create/reuse the named tunnel and public hostname; restart BricsCAD and verify automatic reconnect.
+- Verify stale saved tunnel IDs are not trusted, exact tunnel-name matching is used, missing local credentials fail closed and a conflicting DNS route does not get silently accepted.
+- Start Quick Tunnel and verify the public URL appears in the setup UI within the bounded poll window without reopening the dialog.
+- Verify `QS3DMCPCOPYURL`, `QS3DMCPCOPYTOKEN`, and `QS3DMCPCOPYCONFIG` return the same validated endpoint/authentication material shown by the dashboard and `connector_info`.
 - Connect ChatGPT Web/custom MCP to the public `/mcp` endpoint and verify discovery of the complete tool set above.
 - Read active document, selection, database snapshot, one entity by handle and view state.
 - Create line/circle/polyline/text and verify native entities/layers/handles in the real DWG.
