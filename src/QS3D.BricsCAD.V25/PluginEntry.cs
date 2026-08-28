@@ -39,6 +39,9 @@ namespace QS3D.BricsCAD.V25
                 // The click-first browser-auth flow is the default persistent tunnel.
                 // Quick/token modes remain available from the setup UI as fallback paths.
                 McpCloudflareAccountTunnelManager.TryAutoStart();
+                // Publish a validated saved/provider endpoint into the process so the embedded
+                // connector_info/status surface and every UI path report the same public URL.
+                McpPublicEndpointResolver.Resolve();
             }
             catch (Exception ex)
             {
