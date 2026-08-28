@@ -74,6 +74,7 @@ namespace QS3D.Core.Commercial
             if (record == null) throw new ArgumentNullException(nameof(record));
             if (_events.Count >= MaximumEvents)
                 throw new InvalidOperationException("Commercial audit log supports at most 10000 events.");
+            RequireUniqueEventId(record.EventId, ExistingEventIds());
             _events.Add(record);
         }
 
@@ -90,12 +91,14 @@ namespace QS3D.Core.Commercial
             if (conflictingKnownCounts)
                 throw new InvalidOperationException("Commercial audit batch source exposes conflicting known Count values.");
 
+            var eventIds = ExistingEventIds();
             var snapshot = new List<CommercialAuditRecord>();
             foreach (var record in records)
             {
                 if (record == null) throw new ArgumentException("Commercial audit batch contains a null record.", nameof(records));
                 if (snapshot.Count == remainingCapacity)
                     throw new InvalidOperationException("Commercial audit log supports at most 10000 events.");
+                RequireUniqueEventId(record.EventId, eventIds);
                 snapshot.Add(record);
             }
 
@@ -104,6 +107,27 @@ namespace QS3D.Core.Commercial
                     "Commercial audit batch source known Count does not match completed traversal cardinality.");
 
             _events.AddRange(snapshot);
+        }
+
+        private HashSet<string> ExistingEventIds()
+        {
+            var eventIds = new HashSet<string>(StringComparer.Ordinal);
+            for (var i = 0; i < _events.Count; i++)
+            {
+                var existing = _events[i];
+                if (existing == null)
+                    throw new InvalidOperationException("Commercial audit log contains a null existing event.");
+                if (!eventIds.Add(existing.EventId))
+                    throw new InvalidOperationException(
+                        "Commercial audit log contains duplicate event id: " + existing.EventId + ".");
+            }
+            return eventIds;
+        }
+
+        private static void RequireUniqueEventId(string eventId, HashSet<string> eventIds)
+        {
+            if (!eventIds.Add(eventId))
+                throw new InvalidOperationException("Commercial audit log contains duplicate event id: " + eventId + ".");
         }
 
         private static int? TryGetKnownCount(
