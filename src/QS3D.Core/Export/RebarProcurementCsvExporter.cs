@@ -52,7 +52,7 @@ namespace QS3D.Core.Export
                 if (row == null) throw new ArgumentException("Rebar procurement CSV cannot contain a null row.", nameof(rows));
                 sb.Append(Q(row.AlgorithmId)).Append(',')
                     .Append(QIdentity(row.GroupId, "group id")).Append(',')
-                    .Append(Q(row.Grade)).Append(',')
+                    .Append(QIdentity(row.Grade, "grade")).Append(',')
                     .Append(F(row.DiameterMm)).Append(',')
                     .Append(F(row.StockLengthM)).Append(',')
                     .Append(row.RequiredCutCount.ToString(CultureInfo.InvariantCulture)).Append(',')
