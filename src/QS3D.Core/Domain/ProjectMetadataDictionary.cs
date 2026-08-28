@@ -107,6 +107,8 @@ namespace QS3D.Core.Domain
             var observedCount = 0;
             foreach (var item in values)
             {
+                if (knownCount.HasValue && observedCount >= knownCount.Value)
+                    throw MetadataTraversalCountMismatchError(knownCount.Value, observedCount + 1);
                 observedCount++;
                 if (item.Key == null) throw new ArgumentNullException(nameof(values), "Project metadata contains a null key.");
                 if (next.ContainsKey(item.Key)) throw new ArgumentException("Project metadata contains a duplicate key: " + item.Key + ".", nameof(values));
