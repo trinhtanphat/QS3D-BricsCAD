@@ -589,7 +589,7 @@ namespace QS3D.BricsCAD.V25
         private static string RequireMutation(string body, string tool, Func<string> action)
         {
             if (_automationStopped) return ToolError("Automation is emergency-stopped. Call cad_agent_resume with confirmMutation=true first.");
-            if (!ExtractBoolean(body, "confirmMutation")) return ToolError("confirmMutation=true is required for " + tool + ".");
+            if (!ExtractTopLevelBoolean(body, "confirmMutation")) return ToolError("confirmMutation=true is required for " + tool + ".");
             return ToolSuccess(action());
         }
 
@@ -620,7 +620,7 @@ namespace QS3D.BricsCAD.V25
 
         private static string ResumeAgent(string body)
         {
-            if (!ExtractBoolean(body, "confirmMutation")) return ToolError("confirmMutation=true is required before resuming automation.");
+            if (!ExtractTopLevelBoolean(body, "confirmMutation")) return ToolError("confirmMutation=true is required before resuming automation.");
             _automationStopped = false;
             Audit("cad_agent_resume", "resume");
             return ToolSuccess("{\"stopped\":false}");
@@ -797,6 +797,7 @@ namespace QS3D.BricsCAD.V25
                 }
             });
         }
+
         private static string DeleteEntity(string body)
         {
             var handle = ExtractString(body, "handle");
@@ -1295,6 +1296,7 @@ namespace QS3D.BricsCAD.V25
                 }
             }
         }
+
         private static List<Point2d> ParsePoints2d(string value)
         {
             var points = new List<Point2d>();
@@ -1372,65 +1374,74 @@ namespace QS3D.BricsCAD.V25
             name = string.Empty;
             arguments = "{}";
             error = string.Empty;
-            string parameters;
-            if (!TryExtractObjectProperty(body, "params", out parameters))
+            try
             {
-                error = "tools/call requires an object params value.";
+                string parameters;
+                if (!TryExtractObjectProperty(body, "params", out parameters))
+                {
+                    error = "tools/call requires an object params value.";
+                    return false;
+                }
+                name = ExtractTopLevelString(parameters, "name").Trim();
+                if (name.Length == 0 || name.Length > 128)
+                {
+                    error = "tools/call params.name is required and must be <= 128 characters.";
+                    return false;
+                }
+                string parsedArguments;
+                if (TryExtractObjectProperty(parameters, "arguments", out parsedArguments)) arguments = parsedArguments;
+                else if (HasTopLevelProperty(parameters, "arguments"))
+                {
+                    error = "tools/call params.arguments must be an object.";
+                    return false;
+                }
+                return true;
+            }
+            catch (InvalidOperationException ex)
+            {
+                error = ex.Message;
                 return false;
             }
-            name = ExtractString(parameters, "name").Trim();
-            if (name.Length == 0 || name.Length > 128)
-            {
-                error = "tools/call params.name is required and must be <= 128 characters.";
-                return false;
-            }
-            string parsedArguments;
-            if (TryExtractObjectProperty(parameters, "arguments", out parsedArguments)) arguments = parsedArguments;
-            else if (HasProperty(parameters, "arguments"))
-            {
-                error = "tools/call params.arguments must be an object.";
-                return false;
-            }
-            return true;
         }
 
         private static bool TryExtractObjectProperty(string json, string property, out string objectJson)
         {
             objectJson = string.Empty;
-            var source = json ?? string.Empty;
-            var match = Regex.Match(source, "\"" + Regex.Escape(property) + "\"\\s*:", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            if (!match.Success) return false;
-            var index = match.Index + match.Length;
-            while (index < source.Length && char.IsWhiteSpace(source[index])) index++;
-            if (index >= source.Length || source[index] != '{') return false;
-            var start = index;
-            var depth = 0;
-            var inString = false;
-            var escaped = false;
-            for (; index < source.Length; index++)
-            {
-                var ch = source[index];
-                if (inString)
-                {
-                    if (escaped) { escaped = false; continue; }
-                    if (ch == '\\') { escaped = true; continue; }
-                    if (ch == '"') inString = false;
-                    continue;
-                }
-                if (ch == '"') { inString = true; continue; }
-                if (ch == '{') depth++;
-                else if (ch == '}')
-                {
-                    depth--;
-                    if (depth == 0)
-                    {
-                        objectJson = source.Substring(start, index - start + 1);
-                        return true;
-                    }
-                    if (depth < 0) return false;
-                }
-            }
-            return false;
+            string rawValue;
+            bool found;
+            string error;
+            if (!TryFindTopLevelPropertyValue(json, property, out rawValue, out found, out error))
+                throw new InvalidOperationException(error);
+            if (!found) return false;
+            var candidate = rawValue.Trim();
+            if (candidate.Length < 2 || candidate[0] != '{' || candidate[candidate.Length - 1] != '}') return false;
+            objectJson = candidate;
+            return true;
+        }
+
+        private static bool TryFindTopLevelPropertyValue(
+            string json,
+            string property,
+            out string rawValue,
+            out bool found,
+            out string error)
+        {
+            return McpTopLevelJson.TryFindPropertyValue(json, property, out rawValue, out found, out error);
+        }
+
+        private static string ExtractTopLevelString(string json, string property)
+        {
+            return McpTopLevelJson.ExtractString(json, property);
+        }
+
+        private static bool ExtractTopLevelBoolean(string json, string property)
+        {
+            return McpTopLevelJson.ExtractBoolean(json, property);
+        }
+
+        private static bool HasTopLevelProperty(string json, string property)
+        {
+            return McpTopLevelJson.HasProperty(json, property);
         }
 
         private static string ToolSuccess(string jsonValue)
