@@ -93,8 +93,17 @@ for needle in (
     "QuantityInsightGuid",
     "private static PaletteSet? _quantityInsight;",
     "private static QuantityInsightPanel? _quantityInsightPanel;",
-    'new PaletteSet("QS3D — Diễn giải khối lượng", QuantityInsightGuid)',
-    '_quantityInsight.AddVisual("Khối lượng", _quantityInsightPanel, true);',
+    "_quantityInsight = CreatePaletteSet(",
+    '"QS3D — Diễn giải khối lượng",',
+    "QuantityInsightGuid,",
+    "new DrawingSize(UserUiLayoutStore.QuantityPaletteMinWidth, UserUiLayoutStore.QuantityPaletteMinHeight),",
+    "new WpfSize(layout.QuantityPaletteWidth, layout.QuantityPaletteHeight),",
+    '"Khối lượng",',
+    "_quantityInsightPanel);",
+    "private static PaletteSet CreatePaletteSet(",
+    "palette = new PaletteSet(title, guid);",
+    "palette.AddVisual(visualTitle, visual, true);",
+    "try { palette.Dispose(); }",
     "_quantityInsightPanel?.SetInspectionReadOnly(snapshots, project);",
     "_quantityInsightPanel?.RefreshQuantityInsights();",
     "_quantityInsightPanel?.ClearQuantityInsights(status);",
@@ -103,7 +112,15 @@ for needle in (
     "if (_quantityInsight != null) _quantityInsight.Visible = quantityInsight;",
 ):
     if needle not in palette:
-        errors.append("PaletteCoordinator missing quantity workspace integration: " + needle)
+        errors.append("PaletteCoordinator missing rollback-safe quantity workspace integration: " + needle)
+
+for forbidden in (
+    '_quantityInsight = new PaletteSet("QS3D — Diễn giải khối lượng", QuantityInsightGuid)',
+    '_quantityInsight.AddVisual("Khối lượng", _quantityInsightPanel, true);',
+    "_quantityInsight.DeviceIndependentSize =",
+):
+    if forbidden in palette:
+        errors.append("Quantity Insight must not configure a native PaletteSet after static publication: " + forbidden)
 
 for needle in (
     'Click="OnAttachXrefClick"',
@@ -133,6 +150,6 @@ if errors:
 
 print(
     "PASS: the BLT-inspired far-right quantity workspace is backed by live read-only QS3D element-detail reporting, "
-    "selection highlighting, direct CAD locate/zoom, QS3DREGEN/QS3DBQ dispatch, project totals, centralized palette visibility, and the existing "
-    "drawing/Xref/layer manager remains wired to its real handlers."
+    "selection highlighting, direct CAD locate/zoom, QS3DREGEN/QS3DBQ dispatch, project totals, rollback-safe pre-publication "
+    "PaletteSet ownership, centralized visibility, and the existing drawing/Xref/layer manager remains wired to its real handlers."
 )
