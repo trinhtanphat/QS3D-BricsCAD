@@ -49,7 +49,7 @@ namespace QS3D.Core.SmokeTests
             var source = new CountProbeCollection<RegenerationCategoryWork>(
                 1,
                 1,
-                Category(ElementCategory.Wall),
+                Category(ElementCategory.ArchitecturalWall),
                 Category(ElementCategory.Slab));
             var error = Capture<ArgumentException>(() => NewProfile(Array.Empty<string>(), EmptyItems(), source, 3));
             Contains("category collection known Count reported 1 entries but traversal produced 2", error.Message,
@@ -91,7 +91,7 @@ namespace QS3D.Core.SmokeTests
         {
             var targets = new CountProbeCollection<string>(1, 1, "A");
             var items = new CountProbeCollection<RegenerationWorkItem>(1, 1, Item(0, "A"));
-            var categories = new CountProbeCollection<RegenerationCategoryWork>(1, 1, Category(ElementCategory.Wall));
+            var categories = new CountProbeCollection<RegenerationCategoryWork>(1, 1, Category(ElementCategory.ArchitecturalWall));
             var profile = NewProfile(targets, items, categories, 1);
 
             Equal(1, profile.TargetElementIds.Count, "Honest target input must remain accepted.");
@@ -122,7 +122,7 @@ namespace QS3D.Core.SmokeTests
         }
 
         private static RegenerationWorkItem Item(int index, string id) =>
-            new RegenerationWorkItem(index, id, ElementCategory.Wall, ElementDirtyFlags.None, 0, 0, 0);
+            new RegenerationWorkItem(index, id, ElementCategory.ArchitecturalWall, ElementDirtyFlags.None, 0, 0, 0);
 
         private static RegenerationCategoryWork Category(ElementCategory category) =>
             new RegenerationCategoryWork(category, 0, 0);
