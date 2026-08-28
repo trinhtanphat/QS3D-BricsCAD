@@ -24,6 +24,10 @@ namespace QS3D.Core.SmokeTests
             PricedTotalKeepsRepresentableContribution();
             BulkPreviewRejectsSwallowedAfterTotal();
             BulkPreviewKeepsRepresentableValueDelta();
+            CommercialAuditAppendRejectsExistingEventIdAtomically();
+            CommercialAuditBatchRejectsInternalDuplicateAtomically();
+            CommercialAuditBatchRejectsExistingCollisionAtomically();
+            CommercialAuditDistinctEventIdsRemainAccepted();
         }
 
         private static void NegativeKnownCountFailsBeforeEnumeration()
@@ -189,6 +193,91 @@ namespace QS3D.Core.SmokeTests
 
             if (preview.TotalBefore != 100m || preview.TotalAfter != 0.1m || preview.ValueDelta != -99.9m)
                 throw new Exception("Representable bulk preview value delta changed unexpectedly.");
+        }
+
+        private static void CommercialAuditAppendRejectsExistingEventIdAtomically()
+        {
+            var log = new CommercialAuditLog();
+            var original = AuditRecord("EV-1", "entity-a");
+            log.Append(original);
+
+            ExpectInvalidOperation(
+                () => log.Append(AuditRecord("EV-1", "entity-b")),
+                "duplicate event id",
+                "Commercial audit append must reject an existing exact EventId.");
+
+            if (log.Events.Count != 1 || !ReferenceEquals(log.Events[0], original))
+                throw new Exception("Rejected commercial audit append mutated the existing log.");
+        }
+
+        private static void CommercialAuditBatchRejectsInternalDuplicateAtomically()
+        {
+            var log = new CommercialAuditLog();
+            log.Append(AuditRecord("BASE", "entity-base"));
+
+            ExpectInvalidOperation(
+                () => log.AppendBatch(new[]
+                {
+                    AuditRecord("BATCH-DUP", "entity-a"),
+                    AuditRecord("BATCH-DUP", "entity-b")
+                }),
+                "duplicate event id",
+                "Commercial audit batch must reject duplicate EventIds within the incoming batch.");
+
+            if (log.Events.Count != 1 || log.Events[0].EventId != "BASE")
+                throw new Exception("Rejected internal-duplicate commercial audit batch partially mutated the log.");
+        }
+
+        private static void CommercialAuditBatchRejectsExistingCollisionAtomically()
+        {
+            var log = new CommercialAuditLog();
+            log.Append(AuditRecord("BASE", "entity-base"));
+
+            ExpectInvalidOperation(
+                () => log.AppendBatch(new[]
+                {
+                    AuditRecord("NEW-1", "entity-a"),
+                    AuditRecord("BASE", "entity-b"),
+                    AuditRecord("NEW-2", "entity-c")
+                }),
+                "duplicate event id",
+                "Commercial audit batch must reject an EventId already present in the log.");
+
+            if (log.Events.Count != 1 || log.Events[0].EventId != "BASE")
+                throw new Exception("Existing-collision commercial audit batch partially mutated the log.");
+        }
+
+        private static void CommercialAuditDistinctEventIdsRemainAccepted()
+        {
+            var log = new CommercialAuditLog();
+            log.Append(AuditRecord("Case-Sensitive", "entity-a"));
+            log.AppendBatch(new[]
+            {
+                AuditRecord("case-sensitive", "entity-b"),
+                AuditRecord("EV-3", "entity-c")
+            });
+
+            if (log.Events.Count != 3 ||
+                log.Events[0].EventId != "Case-Sensitive" ||
+                log.Events[1].EventId != "case-sensitive" ||
+                log.Events[2].EventId != "EV-3")
+                throw new Exception("Distinct exact commercial audit EventIds or insertion order changed unexpectedly.");
+        }
+
+        private static CommercialAuditRecord AuditRecord(string eventId, string entityId)
+        {
+            return new CommercialAuditRecord(
+                eventId,
+                "estimate-line",
+                entityId,
+                "rate-reviewed",
+                "tester",
+                new DateTime(2026, 8, 28, 0, 0, 0, DateTimeKind.Utc),
+                string.Empty,
+                "corr-1",
+                "before",
+                "after",
+                Array.Empty<CommercialRevisionRef>());
         }
 
         private static BulkRateAssignmentRequest ReplacementRequest(string lineId, decimal rate)
