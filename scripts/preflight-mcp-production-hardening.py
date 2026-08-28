@@ -3,12 +3,16 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-SERVER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpEmbeddedServer.cs"
-ACCOUNT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareAccountOnboarding.cs"
-FALLBACK = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareOnboarding.cs"
-CONNECTOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpConnectorRibbonCommands.cs"
-RESOLVER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpPublicEndpointResolver.cs"
-PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
+V25 = ROOT / "src" / "QS3D.BricsCAD.V25"
+SERVER = V25 / "McpEmbeddedServerV2.cs"
+RUNTIME = V25 / "McpCadAgentRuntime.cs"
+V25_PROJECT = V25 / "QS3D.BricsCAD.V25.csproj"
+V26_PROJECT = ROOT / "src" / "QS3D.BricsCAD.V26" / "QS3D.BricsCAD.V26.csproj"
+ACCOUNT = V25 / "McpCloudflareAccountOnboarding.cs"
+FALLBACK = V25 / "McpCloudflareOnboarding.cs"
+CONNECTOR = V25 / "McpConnectorRibbonCommands.cs"
+RESOLVER = V25 / "McpPublicEndpointResolver.cs"
+PLUGIN = V25 / "PluginEntry.cs"
 
 
 def read(path: Path) -> str:
@@ -21,6 +25,9 @@ def main() -> int:
     errors: list[str] = []
     try:
         server = read(SERVER)
+        runtime = read(RUNTIME)
+        v25_project = read(V25_PROJECT)
+        v26_project = read(V26_PROJECT)
         account = read(ACCOUNT)
         fallback = read(FALLBACK)
         connector = read(CONNECTOR)
@@ -68,11 +75,22 @@ def main() -> int:
         "fallback output bound to process owner": (fallback, "HandleLine(process, args.Data, discoverQuickUrl)"),
         "fallback stale-process output rejection": (fallback, "if (!ReferenceEquals(_process, process)) return;"),
         "fallback public URL requires live process": (fallback, "if (!IsRunning) return string.Empty;"),
-        "foreground ESC fallback": (server, "TrySendEscapeFallback()"),
-        "emergency-stop latch": (server, "_automationStopped = true"),
-        "CAD dispatch timeout cancellation": (server, "Interlocked.Exchange(ref item.Cancelled, 1)"),
-        "bounded MCP sessions": (server, "MaxSessions"),
-        "bounded MCP clients": (server, "MaxConcurrentClients"),
+        "compiled transport loopback listener": (server, "IPAddress.Loopback"),
+        "compiled transport exact JSON media type": (server, "IsJsonContentType(contentType)"),
+        "compiled transport bounded sessions": (server, "MaxSessions = 128"),
+        "compiled transport bounded clients": (server, "MaxConcurrentClients = 16"),
+        "compiled transport runtime delegation": (server, "McpCadAgentRuntime.Call(tool, arguments)"),
+        "runtime foreground ESC fallback": (runtime, "TrySendEscapeFallback()"),
+        "runtime emergency-stop latch": (runtime, "_automationStopped = true"),
+        "runtime queued dispatch state": (runtime, "CadWorkQueued = 0"),
+        "runtime running dispatch state": (runtime, "CadWorkRunning = 1"),
+        "runtime cancelled-before-start state": (runtime, "CadWorkCancelledBeforeStart = 2"),
+        "runtime atomic start claim": (runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkRunning, CadWorkQueued)"),
+        "runtime atomic timeout cancellation": (runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued)"),
+        "runtime uncertain timeout truth": (runtime, "completion is uncertain"),
+        "runtime no-auto-retry truth": (runtime, "Do not retry automatically"),
+        "V25 legacy monolith exclusion": (v25_project, '<Compile Remove="McpEmbeddedServer.cs" />'),
+        "V26 legacy monolith exclusion": (v26_project, "..\\QS3D.BricsCAD.V25\\McpEmbeddedServer.cs"),
     }
     for label, (text, token) in required.items():
         if token not in text:
@@ -90,6 +108,8 @@ def main() -> int:
         if min(stdout_drain, stderr_drain, exit_events) < 0 or max(stdout_drain, stderr_drain) > exit_events:
             errors.append("Named Tunnel must begin stdout/stderr drain before enabling Exited callbacks")
 
+    if 'contentType.StartsWith("application/json"' in server:
+        errors.append("compiled MCP transport accepts application/json lookalike media types via prefix matching")
     if 'IndexOf("already exists"' in account:
         errors.append("Cloudflare DNS conflict must not be silently accepted via 'already exists'")
     if '"Bearer token: " + McpEmbeddedServer.GetBearerToken()' in connector:
@@ -97,9 +117,10 @@ def main() -> int:
     if '"1. Run QS3DMCPACCOUNTSETUP.' in connector:
         errors.append("generated guide must not make a typed BricsCAD setup command the default path")
 
-    for forbidden in ("powershell.exe", "cmd.exe", "Process.Start("):
-        if forbidden in server:
-            errors.append(f"network MCP server exposes forbidden OS execution token: {forbidden}")
+    for source_name, text in (("transport", server), ("runtime", runtime)):
+        for forbidden in ("powershell.exe", "cmd.exe", "Process.Start(", "mouse_event("):
+            if forbidden in text:
+                errors.append(f"compiled MCP {source_name} exposes forbidden OS execution/input token: {forbidden}")
 
     if errors:
         print("Production MCP hardening preflight FAILED:")
@@ -108,12 +129,10 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: MCP production source uses one validated HTTPS endpoint resolver, isolated user "
-        "fallback state, live-only provider URLs, exact Cloudflare tunnel identity checks, "
-        "canonical named-tunnel config regeneration, fail-closed DNS conflict handling, "
-        "owner-bound named/Quick Tunnel output with drain-before-exit ordering, verified "
-        "click-first redacted onboarding, bounded network/session surfaces and BricsCAD-confined "
-        "emergency recovery."
+        "PASS: compiled modular MCP transport/runtime use exact JSON media-type admission, bounded "
+        "authenticated session handling, atomic CAD timeout truth, BricsCAD-confined recovery, one "
+        "validated HTTPS endpoint resolver, live-only Cloudflare provider URLs, exact tunnel identity, "
+        "canonical named-tunnel config regeneration and verified click-first redacted onboarding."
     )
     return 0
 
