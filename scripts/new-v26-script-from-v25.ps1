@@ -17,12 +17,52 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Assert-OrdinaryPathItem {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][bool]$Directory
+    )
+
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    if ($Directory -and -not $item.PSIsContainer) { throw "$Label must be a directory: $Path" }
+    if (-not $Directory -and $item.PSIsContainer) { throw "$Label must be a regular file: $Path" }
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "$Label must not be reparse-backed: $Path"
+    }
+    return $item
+}
+
+function Assert-DirectoryAncestorChain {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Label)
+
+    $cursor = [IO.Path]::GetFullPath($Path)
+    while ($true) {
+        if (Test-Path -LiteralPath $cursor) {
+            Assert-OrdinaryPathItem -Path $cursor -Label $Label -Directory $true | Out-Null
+        }
+        $parent = [IO.Directory]::GetParent($cursor)
+        if (-not $parent) { break }
+        $cursor = $parent.FullName
+    }
+}
+
+function Assert-SafeExistingOutputLeaf {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    if (Test-Path -LiteralPath $Path) {
+        Assert-OrdinaryPathItem -Path $Path -Label 'V26 generated script output' -Directory $false | Out-Null
+    }
+}
+
 $sourcePath = Join-Path $PSScriptRoot $SourceScript
 if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
     throw "V25 template script was not found: $sourcePath"
 }
 
 $sourceFull = [IO.Path]::GetFullPath($sourcePath)
+Assert-DirectoryAncestorChain -Path (Split-Path -Parent $sourceFull) -Label 'V25 template ancestor'
+Assert-OrdinaryPathItem -Path $sourceFull -Label 'V25 template script' -Directory $false | Out-Null
+
 $outputFull = [IO.Path]::GetFullPath($OutputPath)
 if ([string]::Equals($sourceFull, $outputFull, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'V26 generation output must not overwrite its V25 source template.'
@@ -93,8 +133,34 @@ foreach ($token in $requiredTokens) {
 
 $parent = Split-Path -Parent $outputFull
 if ([string]::IsNullOrWhiteSpace($parent)) { throw "V26 generated script output requires a parent directory: $outputFull" }
+Assert-DirectoryAncestorChain -Path $parent -Label 'V26 output ancestor'
+Assert-SafeExistingOutputLeaf -Path $outputFull
 New-Item -ItemType Directory -Path $parent -Force | Out-Null
-[IO.File]::WriteAllText($outputFull, $generated, (New-Object Text.UTF8Encoding($false)))
+Assert-DirectoryAncestorChain -Path $parent -Label 'V26 output ancestor'
+Assert-OrdinaryPathItem -Path $parent -Label 'V26 output parent' -Directory $true | Out-Null
+Assert-SafeExistingOutputLeaf -Path $outputFull
+
+$stagePath = Join-Path $parent ('.' + [IO.Path]::GetFileName($outputFull) + '.' + [Guid]::NewGuid().ToString('N') + '.tmp')
+try {
+    [IO.File]::WriteAllText($stagePath, $generated, (New-Object Text.UTF8Encoding($false)))
+    Assert-OrdinaryPathItem -Path $stagePath -Label 'V26 generated script staging file' -Directory $false | Out-Null
+    Assert-DirectoryAncestorChain -Path $parent -Label 'V26 output ancestor'
+    Assert-SafeExistingOutputLeaf -Path $outputFull
+
+    if (Test-Path -LiteralPath $outputFull) {
+        [IO.File]::Replace($stagePath, $outputFull, $null)
+    }
+    else {
+        [IO.File]::Move($stagePath, $outputFull)
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $stagePath) {
+        Assert-OrdinaryPathItem -Path $stagePath -Label 'V26 generated script staging file' -Directory $false | Out-Null
+        Remove-Item -LiteralPath $stagePath -Force
+    }
+}
+Assert-OrdinaryPathItem -Path $outputFull -Label 'V26 generated script output' -Directory $false | Out-Null
 
 Write-Host "Generated V26 script: $outputFull"
 Write-Host "Template: $SourceScript"

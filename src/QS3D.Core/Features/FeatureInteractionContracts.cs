@@ -71,6 +71,9 @@ namespace QS3D.Core.Features
 
     public sealed class InteractionProfile
     {
+        private const int MaxPersistentSurfaces = 2;
+        private const string PersistentSurfaceLimitMessage = "Normal Workspace interaction profiles support at most two persistent surfaces.";
+
         public InteractionProfile(
             FeatureOnSelectBehavior onSelect,
             IEnumerable<CreateRecipeDescriptor> recipes,
@@ -119,8 +122,8 @@ namespace QS3D.Core.Features
                 throw new InvalidOperationException("Primary create recipe must exist in the recipe set.");
             if (Recipes.Any(x => x.RequiresForm && string.IsNullOrWhiteSpace(x.SchemaKey)))
                 throw new InvalidOperationException("Form-driven create recipes require a schema key.");
-            if (PersistentSurfaces.Count > 2)
-                throw new InvalidOperationException("Normal Workspace interaction profiles support at most two persistent surfaces.");
+            if (PersistentSurfaces.Count > MaxPersistentSurfaces)
+                throw new InvalidOperationException(PersistentSurfaceLimitMessage);
             if (PersistentSurfaces.Any(x => x != InteractionSurface.PrimaryInspector && x != InteractionSurface.SecondaryInspector))
                 throw new InvalidOperationException("Only primary/secondary inspector surfaces may be persistent.");
             if (!AllowsModal && Recipes.Any(x => x.RequiresForm || x.InputMode == CreateInputMode.ChooseRecipe))
@@ -137,18 +140,48 @@ namespace QS3D.Core.Features
             if (source == null)
                 return new ReadOnlyCollection<InteractionSurface>(Array.Empty<InteractionSurface>());
 
-            var snapshot = new List<InteractionSurface>(2);
+            var knownCount = ResolvePersistentSurfaceKnownCount(source);
+            var snapshot = new List<InteractionSurface>(MaxPersistentSurfaces);
             using (var enumerator = source.GetEnumerator())
             {
                 while (enumerator.MoveNext())
                 {
-                    if (snapshot.Count == 2)
-                        throw new InvalidOperationException("Normal Workspace interaction profiles support at most two persistent surfaces.");
+                    if (snapshot.Count == MaxPersistentSurfaces)
+                        throw new InvalidOperationException(PersistentSurfaceLimitMessage);
                     snapshot.Add(enumerator.Current);
                 }
             }
 
+            if (knownCount.HasValue && snapshot.Count != knownCount.Value)
+                throw new InvalidOperationException(
+                    "Persistent surface source Count " + knownCount.Value +
+                    " does not match traversed surface count " + snapshot.Count + ".");
+
             return new ReadOnlyCollection<InteractionSurface>(snapshot);
+        }
+
+        private static int? ResolvePersistentSurfaceKnownCount(IEnumerable<InteractionSurface> source)
+        {
+            int? knownCount = null;
+            if (source is ICollection<InteractionSurface> collection)
+                knownCount = AcceptPersistentSurfaceKnownCount(knownCount, collection.Count);
+            if (source is IReadOnlyCollection<InteractionSurface> readOnlyCollection)
+                knownCount = AcceptPersistentSurfaceKnownCount(knownCount, readOnlyCollection.Count);
+            if (source is System.Collections.ICollection nonGenericCollection)
+                knownCount = AcceptPersistentSurfaceKnownCount(knownCount, nonGenericCollection.Count);
+            return knownCount;
+        }
+
+        private static int AcceptPersistentSurfaceKnownCount(int? knownCount, int candidate)
+        {
+            if (candidate < 0)
+                throw new InvalidOperationException("Persistent surface source Count cannot be negative.");
+            if (candidate > MaxPersistentSurfaces)
+                throw new InvalidOperationException(PersistentSurfaceLimitMessage);
+            if (knownCount.HasValue && knownCount.Value != candidate)
+                throw new InvalidOperationException(
+                    "Persistent surface source exposes conflicting known Counts: " + knownCount.Value + " and " + candidate + ".");
+            return candidate;
         }
 
         private static string? NormalizeOptional(string? value)

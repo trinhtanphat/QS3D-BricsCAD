@@ -32,6 +32,7 @@ namespace QS3D.Core.Services
             var elementCount = 0;
             foreach (var element in elements)
             {
+                RequireTraversalCapacity(knownCount, elementCount, "Dependency graph rebuild");
                 elementCount++;
                 if (elementCount > MaxElementInputCount)
                     throw new InvalidOperationException("Dependency graph rebuild exceeds the supported " + MaxElementInputCount + " element limit.");
@@ -137,6 +138,7 @@ namespace QS3D.Core.Services
             var materialized = new List<ProjectElement>();
             foreach (var element in elements)
             {
+                RequireTraversalCapacity(knownCount, materialized.Count, "Dependency ordering");
                 if (materialized.Count >= MaxElementInputCount)
                     throw new InvalidOperationException("Dependency ordering exceeds the supported " + MaxElementInputCount + " element limit.");
                 if (element == null) throw new InvalidOperationException("Dependency ordering cannot contain a null semantic element.");
@@ -212,10 +214,21 @@ namespace QS3D.Core.Services
             return expected;
         }
 
+        private static void RequireTraversalCapacity(int? knownCount, int observedCount, string operation)
+        {
+            if (knownCount.HasValue && observedCount >= knownCount.Value)
+                throw TraversalCountError(operation);
+        }
+
         private static void RequireObservedCount(int? knownCount, int observedCount, string operation)
         {
             if (knownCount.HasValue && knownCount.Value != observedCount)
-                throw new InvalidOperationException(operation + " element count changed during enumeration.");
+                throw TraversalCountError(operation);
+        }
+
+        private static InvalidOperationException TraversalCountError(string operation)
+        {
+            return new InvalidOperationException(operation + " element count changed during enumeration.");
         }
 
         private static void ValidateKnownCount(int? count, string operation)
