@@ -103,7 +103,8 @@ def main() -> int:
         "JSON-RPC method top-level extraction": 'ExtractTopLevelString(request.Body, "method")',
         "JSON-RPC id top-level extraction": "ExtractTopLevelId(request.Body)",
         "JSON-RPC id top-level presence": 'HasTopLevelProperty(request.Body, "id")',
-        "MCP protocol version top-level extraction": 'ExtractTopLevelString(request.Body, "protocolVersion")',
+        "initialize params object extraction": 'TryExtractObjectProperty(request.Body, "params", out initializeParameters)',
+        "MCP protocol version params extraction": 'ExtractTopLevelString(initializeParameters, "protocolVersion")',
         "general string top-level extraction": "return ExtractTopLevelString(json, property);",
         "general boolean top-level extraction": "return ExtractTopLevelBoolean(json, property);",
         "general property top-level presence": "return HasTopLevelProperty(json, property);",
@@ -114,6 +115,8 @@ def main() -> int:
         if token not in text:
             errors.append(f"MCP scalar parser missing {label}: {token}")
 
+    if 'ExtractTopLevelString(request.Body, "protocolVersion")' in text:
+        errors.append("initialize protocolVersion is read from the JSON-RPC envelope instead of params")
     if "private static Match NumberMatch(" in text:
         errors.append("MCP numeric arguments are still regex-scoped instead of top-level JSON scoped")
     if 'var match = Regex.Match(json ?? string.Empty,' in text:
