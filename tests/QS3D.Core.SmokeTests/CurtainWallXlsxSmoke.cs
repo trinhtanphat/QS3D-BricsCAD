@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -19,6 +20,8 @@ namespace QS3D.Core.SmokeTests
             InvalidProvenanceFailsBeforeDirectoryCreation();
             InvalidSourceHandlePreservesExistingDestination();
             PresentationTextStillUsesOpenXmlSanitization();
+            CountStableRowReplacementFailsBeforePublication();
+            CountStableProvenanceMutationFailsBeforePublication();
         }
 
         private static void ValidWorkbookPreservesTraceAndNumericPayload()
@@ -127,6 +130,36 @@ namespace QS3D.Core.SmokeTests
             finally { SafeDelete(path); }
         }
 
+        private static void CountStableRowReplacementFailsBeforePublication()
+        {
+            var path = TempPath("row-replacement");
+            try
+            {
+                File.WriteAllText(path, "existing-workbook");
+                var first = ValidRow();
+                var replacement = ValidRow();
+                replacement.ProjectId = "PROJECT-REPLACED";
+                var rows = new RebindingRows(first, replacement, mutateProvenanceOnSecondRead: false);
+                Throws<InvalidOperationException>(() => CurtainWallXlsxExporter.Export(path, rows));
+                Equal("existing-workbook", File.ReadAllText(path), "count-stable row replacement must preserve destination");
+            }
+            finally { SafeDelete(path); }
+        }
+
+        private static void CountStableProvenanceMutationFailsBeforePublication()
+        {
+            var path = TempPath("provenance-mutation");
+            try
+            {
+                File.WriteAllText(path, "existing-workbook");
+                var row = ValidRow();
+                var rows = new RebindingRows(row, row, mutateProvenanceOnSecondRead: true);
+                Throws<InvalidOperationException>(() => CurtainWallXlsxExporter.Export(path, rows));
+                Equal("existing-workbook", File.ReadAllText(path), "count-stable provenance mutation must preserve destination");
+            }
+            finally { SafeDelete(path); }
+        }
+
         private static CurtainWallScheduleRow ValidRow()
         {
             var row = new CurtainWallScheduleRow
@@ -189,6 +222,42 @@ namespace QS3D.Core.SmokeTests
         private static void SafeDeleteDirectory(string path)
         {
             try { if (Directory.Exists(path)) Directory.Delete(path, true); } catch { }
+        }
+
+        private sealed class RebindingRows : IReadOnlyList<CurtainWallScheduleRow>
+        {
+            private readonly CurtainWallScheduleRow _first;
+            private readonly CurtainWallScheduleRow _second;
+            private readonly bool _mutateProvenanceOnSecondRead;
+            private int _reads;
+
+            internal RebindingRows(CurtainWallScheduleRow first, CurtainWallScheduleRow second, bool mutateProvenanceOnSecondRead)
+            {
+                _first = first;
+                _second = second;
+                _mutateProvenanceOnSecondRead = mutateProvenanceOnSecondRead;
+            }
+
+            public int Count => 1;
+
+            public CurtainWallScheduleRow this[int index]
+            {
+                get
+                {
+                    if (index != 0) throw new ArgumentOutOfRangeException(nameof(index));
+                    _reads++;
+                    if (_reads == 1) return _first;
+                    if (_mutateProvenanceOnSecondRead) _first.ElementIds[0] = "CW-MUTATED";
+                    return _second;
+                }
+            }
+
+            public IEnumerator<CurtainWallScheduleRow> GetEnumerator()
+            {
+                yield return _first;
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
     }
 }
