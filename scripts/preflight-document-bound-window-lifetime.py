@@ -215,10 +215,17 @@ for name, snippet in (("mouse", mouse), ("keyboard", keyboard)):
             f"Invalidated modeless {name} input must remain handled/fail-closed.")
 
 closed = method_block(source, "private void OnWindowClosed(object? sender, EventArgs e)")
-require(barrier in closed and "Detach();" in closed,
-        "Window.Closed must preserve full detach for ordinary closes but leave ownership untouched during host quit.")
-require(closed.index(barrier) < closed.index("Detach();"),
-        "Window.Closed must cross the global host-quiescence barrier before full detach.")
+closed_barrier = "if (ModelessHostQuiescenceCoordinator.IsQuiescing)"
+closed_marker = "Volatile.Write(ref _windowClosedDuringQuiescence, 1);"
+for marker in (closed_barrier, closed_marker, "return;", "Detach();"):
+    require(marker in closed, f"Window.Closed must retain quiescent deferred-cleanup marker: {marker}")
+require(
+    closed.index(closed_barrier)
+    < closed.index(closed_marker)
+    < closed.index("return;")
+    < closed.index("Detach();"),
+    "Window.Closed must record deferred cleanup and return during host quit before ordinary full detach.",
+)
 
 detach = method_block(source, "private void Detach()")
 require(barrier in detach,
