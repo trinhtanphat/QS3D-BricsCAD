@@ -83,7 +83,7 @@ def workflow_contract(text: str) -> None:
 
 def expect_helper_mutation_failure(original: str, token: str, replacement: str, label: str) -> None:
     require(token in original, "mutation source token missing for " + label)
-    mutated = original.replace(token, replacement, 1)
+    mutated = original.replace(token, replacement)
     failed = False
     try:
         helper_contract(mutated)
