@@ -1,0 +1,108 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)][string]$StatePath,
+    [Parameter(Mandatory = $true)][string]$BricsCadDir
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$requiredNames = @('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')
+$maxStateBytes = 32768
+
+function Get-CanonicalAbsolutePath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+}
+
+function Assert-OrdinaryFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "$Label is missing: $Path"
+    }
+    $item = Get-Item -LiteralPath $Path -Force
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "$Label must be an ordinary non-reparse file: $Path"
+    }
+    return $item
+}
+
+function Get-StreamingSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try {
+            $bytes = $sha.ComputeHash($stream)
+            return ([BitConverter]::ToString($bytes)).Replace('-', '').ToUpperInvariant()
+        }
+        finally { $sha.Dispose() }
+    }
+    finally { $stream.Dispose() }
+}
+
+function Get-CurrentStableState {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $first = Assert-OrdinaryFile -Path $Path -Label 'V25 compile reference'
+    $firstPath = Get-CanonicalAbsolutePath -Path $first.FullName
+    $length = [int64]$first.Length
+    $ticks = [int64]$first.LastWriteTimeUtc.Ticks
+    $hash = Get-StreamingSha256 -Path $firstPath
+
+    $second = Assert-OrdinaryFile -Path $Path -Label 'V25 compile reference'
+    $secondPath = Get-CanonicalAbsolutePath -Path $second.FullName
+    $secondHash = Get-StreamingSha256 -Path $secondPath
+    if (-not [string]::Equals($firstPath, $secondPath, [StringComparison]::OrdinalIgnoreCase) -or
+        $length -ne [int64]$second.Length -or
+        $ticks -ne [int64]$second.LastWriteTimeUtc.Ticks -or
+        -not [string]::Equals($hash, $secondHash, [StringComparison]::Ordinal)) {
+        throw "V25 compile reference changed while its current generation was being verified: $Path"
+    }
+
+    return [pscustomobject]@{
+        path = $secondPath
+        length = $length
+        lastWriteUtcTicks = $ticks
+        sha256 = $hash
+    }
+}
+
+$stateItem = Assert-OrdinaryFile -Path $StatePath -Label 'V25 compile-reference state'
+if ($stateItem.Length -le 0 -or $stateItem.Length -gt $maxStateBytes) {
+    throw "V25 compile-reference state size is outside the accepted bound: $($stateItem.Length) bytes."
+}
+$utf8 = New-Object Text.UTF8Encoding($false, $true)
+$rawBytes = [IO.File]::ReadAllBytes($stateItem.FullName)
+try { $raw = $utf8.GetString($rawBytes) }
+catch { throw "V25 compile-reference state is not strict UTF-8: $($_.Exception.Message)" }
+try { $state = $raw | ConvertFrom-Json }
+catch { throw "V25 compile-reference state is invalid JSON: $($_.Exception.Message)" }
+
+$expectedDir = Get-CanonicalAbsolutePath -Path $BricsCadDir
+if (-not [string]::Equals(([string]$state.bricsCadDir), $expectedDir, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "V25 compile-reference state directory mismatch. Expected $expectedDir, got $($state.bricsCadDir)."
+}
+
+$entries = @($state.references)
+if ($entries.Count -ne $requiredNames.Count) {
+    throw "V25 compile-reference state must contain exactly $($requiredNames.Count) references."
+}
+foreach ($name in $requiredNames) {
+    $matches = @($entries | Where-Object { [string]::Equals(([string]$_.name), $name, [StringComparison]::Ordinal) })
+    if ($matches.Count -ne 1) { throw "V25 compile-reference state must contain exactly one entry for $name." }
+    $expected = $matches[0]
+    $path = Join-Path $expectedDir $name
+    $current = Get-CurrentStableState -Path $path
+    if (-not [string]::Equals(([string]$expected.path), $current.path, [StringComparison]::OrdinalIgnoreCase) -or
+        [int64]$expected.length -ne $current.length -or
+        [int64]$expected.lastWriteUtcTicks -ne $current.lastWriteUtcTicks -or
+        -not [string]::Equals(([string]$expected.sha256).ToUpperInvariant(), $current.sha256, [StringComparison]::Ordinal)) {
+        throw "V25 compile reference no longer matches its admitted generation: $name"
+    }
+}
+
+Write-Host 'PASS: V25 compile references still match the exact admitted generations.'
