@@ -5,7 +5,7 @@
 **Lane-Key:** `issue-4352`  
 **Canonical issue:** #4352 — Production ChatGPT MCP onboarding + full CAD agent for QS3D  
 **Canonical branch:** `agent/interactive-20260828-mcpui/issue-4352-gui-cloudflare-onboarding`  
-**Canonical PR:** pending  
+**Canonical PR:** #4425  
 **Runtime qualification:** `PENDING_LOCAL` until an exact candidate SHA passes licensed Windows/BricsCAD/Cloudflare/ChatGPT end-to-end qualification.
 
 > This file is the canonical handoff for the MCP work started in the 2026-08-28 ChatGPT session. Future agents must read this file first, then `docs/MCP-FULL-CAD-AGENT.md`, `docs/LOCAL-AGENT-INBOX.md`, `docs/AGENT-RUNTIME-CONTRACT.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, and `CI_POLICY.md` before changing this lane.
@@ -51,7 +51,7 @@ Quick Tunnel is a test fallback only.
 
 ## 3. Current MCP protocol/security contract
 
-The embedded service currently implements Streamable-HTTP request/response behavior for MCP protocol `2025-06-18` with compatibility for `2025-03-26`. `initialize` creates a bounded session, returns `Mcp-Session-Id`, and all post-initialize calls use the session. The server supports ping, initialized/cancelled notifications, `tools/list`, `tools/call`, and session DELETE. Sessions expire and are bounded; HTTP header/body sizes and concurrent clients are bounded.
+The embedded service implements Streamable-HTTP request/response behavior for MCP protocol `2025-06-18` with compatibility for `2025-03-26`. `initialize` creates a bounded session, returns `Mcp-Session-Id`, and post-initialize calls use that session. The server supports ping, initialized/cancelled notifications, `tools/list`, `tools/call`, and session DELETE. Sessions expire and are bounded; HTTP header/body sizes and concurrent clients are bounded.
 
 `/mcp` requires bearer authentication. The bearer secret is either a sufficiently long `QS3D_MCP_BEARER_TOKEN` environment override or a cryptographically generated 32-byte token persisted in the QS3D application-data directory; it is never a Cloudflare account password. The listener binds only to `IPAddress.Loopback`.
 
@@ -89,11 +89,11 @@ inspect document/model/view
 -> plot/export
 ```
 
-A feature is not considered complete merely because a command name appears in `tools/list`. The local qualification must prove that ChatGPT can discover the tool, supply bounded arguments, observe the resulting drawing state, recover from a bad step using cancel/undo/emergency stop, and persist the disposable drawing through save/reopen.
+A feature is not complete merely because a command name appears in `tools/list`. Local qualification must prove ChatGPT can discover the tool, supply bounded arguments, observe the resulting drawing state, recover from a bad step using cancel/undo/emergency stop, and persist the disposable drawing through save/reopen.
 
-### Visual/UI observation gap policy
+### Visual/UI observation policy
 
-Database/view-state inspection is the canonical verification path for CAD geometry. UI-only automation must not become unrestricted desktop remote control. If a future agent adds a visual snapshot tool, it must capture only a window owned by the current BricsCAD process, return a bounded image payload, avoid private/customer drawings in committed evidence, and have an explicit source guard plus local runtime cell. Do not add desktop-wide screenshots.
+Database/entity/view-state inspection is the canonical production verification path for CAD geometry. The current production MCP scope deliberately does **not** add a remote screenshot/desktop-capture tool: UI fallback stays process-confined and does not create a new image-exfiltration surface. If a later separately reviewed scope adds visual snapshot support, it must capture only a window owned by the current BricsCAD process, return a bounded image payload, avoid private/customer drawings in committed evidence, and add an explicit source guard plus local runtime cell. Desktop-wide screenshots are forbidden.
 
 ## 6. UI automation security invariants
 
@@ -105,7 +105,7 @@ Mouse and keyboard injection must target only an HWND owned by the current Brics
 
 ### Default end-user path
 
-1. User opens `TOOL > MCP (AI) > Cài đặt MCP`.
+1. User opens `TOOL > MCP (AI) > Cài đặt MCP` / Agent Center.
 2. QS3D detects `cloudflared`; if absent/outdated, the GUI bootstrapper downloads the official Windows binary and verifies the expected publisher/signature policy before making it available to QS3D.
 3. User clicks **Đăng nhập Cloudflare**; `cloudflared tunnel login` opens the provider browser page. Credentials stay with Cloudflare.
 4. User enters a DNS hostname already under the Cloudflare account/zone.
@@ -119,23 +119,28 @@ Token-mode onboarding remains an advanced fallback with DPAPI protection. Quick 
 
 Named-tunnel and Quick-tunnel process ownership must remain mutually exclusive. Background output readers must be bounded and stale callbacks from an old process must not overwrite current tunnel status.
 
-## 8. Main source files to inspect before changing this lane
+## 8. Main source/files to inspect before changing this lane
 
-- `src/QS3D.BricsCAD.V25/McpEmbeddedServer.cs` — protocol, auth, tool schemas/calls, CAD dispatch, UI-input guard, emergency stop, audit.
+- `src/QS3D.BricsCAD.V25/McpEmbeddedServer.cs` — protocol, auth, tools, CAD dispatch, UI-input guard, emergency stop, audit.
+- `src/QS3D.BricsCAD.V25/McpTopLevelJson.cs` — security-sensitive top-level JSON/member parsing.
 - `src/QS3D.BricsCAD.V25/McpConnectorRibbonCommands.cs` — local protocol probe/dashboard/user-facing connector commands.
+- `src/QS3D.BricsCAD.V25/McpAgentControlCenter.cs` — unified click-first GUI and local read-only/self-test controls.
 - `src/QS3D.BricsCAD.V25/McpCloudflareAccountOnboarding.cs` — default browser-login named-tunnel wizard.
-- `src/QS3D.BricsCAD.V25/McpCloudflareOnboarding.cs` — advanced token/Quick Tunnel fallback and public endpoint helpers/bootstrapper.
+- `src/QS3D.BricsCAD.V25/McpCloudflareOnboarding.cs` — advanced token/Quick Tunnel fallback.
+- `src/QS3D.BricsCAD.V25/McpCloudflaredBootstrapper.cs` — verified GUI cloudflared installation/update.
+- `src/QS3D.BricsCAD.V25/McpPublicEndpointResolver.cs` — canonical public HTTPS `/mcp` resolution.
 - `src/QS3D.BricsCAD.V25/Ribbon/McpRibbonCommandOverride.cs` and `RibbonInitializationCoordinator.cs` — TOOL/MCP routing/order.
 - `src/QS3D.BricsCAD.V25/PluginEntry.cs` — embedded MCP/tunnel lifecycle ownership.
 - `src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj` and `src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj` — V25/V26 source composition and framework references.
-- `scripts/preflight-embedded-mcp.py`, `scripts/preflight-mcp-full-agent.py`, and Cloudflare/Ribbon MCP preflights — static contract guards.
+- `scripts/preflight-embedded-mcp.py`, `scripts/preflight-mcp-full-agent.py`, `scripts/preflight-mcp-production-hardening.py`, `scripts/preflight-mcp-session-handoff.py`, `scripts/preflight-mcp-loopback-readonly.py` — source contracts.
+- `scripts/test-mcp-loopback-readonly.py` — sanitized engineering/local-agent protocol + read-only tool probe; never an end-user setup requirement.
 - `docs/MCP-FULL-CAD-AGENT.md` — end-user/runbook + local qualification matrix.
 - `docs/LOCAL-AGENT-INBOX.md` — single live LOCAL_ONLY queue.
 - this file — canonical cross-agent state/decision record.
 
 ## 9. Source-hardening checklist
 
-The source side is considered ready only when all applicable cells below are implemented and static/source-reviewed. A checked source item is **not** runtime evidence.
+A checked source item is **not** runtime evidence.
 
 - [x] Embedded single-repository MCP listener; no Node/second MCP runtime.
 - [x] Loopback binding + bearer auth + bounded HTTP/session/concurrency behavior.
@@ -150,9 +155,10 @@ The source side is considered ready only when all applicable cells below are imp
 - [x] Click-first Cloudflare browser login + named tunnel + DNS route + canonical ingress + autostart.
 - [x] GUI cloudflared bootstrap path; no terminal requirement for end user.
 - [x] Quick Tunnel test fallback and advanced DPAPI token fallback.
+- [x] Sanitized read-only loopback qualification probe with no mutation/shell/token output.
+- [x] Production decision: no remote screenshot tool in the current MCP surface; use database/entity/view-state verification and keep any future BricsCAD-only image capture in a separate reviewed scope.
 - [ ] Final source audit for timeout/late-CAD-callback semantics: a timed-out request must never report a definitive failure while an untracked mutation can still later commit. Preserve fail-closed cancellation or explicitly surface completion uncertainty.
-- [ ] Decide and, if implemented, source-guard a BricsCAD-process-only visual snapshot tool for robust UI-only dialog automation; desktop-wide capture is forbidden.
-- [ ] Keep this handoff, the runbook and LOCAL-AGENT-INBOX synchronized whenever source materially changes the local scenario.
+- [ ] Keep this handoff, the runbook and the single matching item in `docs/LOCAL-AGENT-INBOX.md` synchronized whenever source materially changes the local scenario.
 
 ## 10. LOCAL_ONLY end-to-end matrix
 
@@ -161,8 +167,8 @@ No remote/static agent may convert these cells to `LOCAL_PASS`. Pin the **exact 
 Required runtime proof includes:
 
 1. Load exact V25 plugin in licensed BricsCAD V25 and exact V26 plugin in licensed BricsCAD V26; record sanitized host/plugin identity.
-2. Prove `/healthz`, bearer reject/accept, initialize/session/version handling, notifications, ping, tools/list, tools/call and session close.
-3. Complete GUI cloudflared installation/update if required, Cloudflare browser login, named-tunnel create/reuse, DNS route, public `/mcp`, restart BricsCAD and automatic reconnect — without terminal use.
+2. Run `scripts/test-mcp-loopback-readonly.py` against the loaded exact candidate and prove `/healthz`, bearer rejection, initialize/session/version handling, initialized notification, ping, required `tools/list`, bounded read-only tool calls and session DELETE without printing the token or mutating the drawing.
+3. Complete GUI cloudflared installation/update if required, Cloudflare browser login, named-tunnel create/reuse, DNS route, public `/mcp`, restart BricsCAD and automatic reconnect — without terminal use in the end-user flow.
 4. Connect ChatGPT Web custom MCP to the public endpoint and prove tool discovery.
 5. Read active document, selection, database/entity snapshot and view state.
 6. Create direct line/circle/polyline/text entities, layer them, transform/delete them, and verify native DB state/handles and audit entries.
@@ -170,13 +176,12 @@ Required runtime proof includes:
 8. Exercise BricsCAD-process-only mouse click, printable Unicode typing and named keys; prove outside-window/non-BricsCAD targeting is rejected.
 9. Trigger emergency stop while autonomous work is active; prove later mutations/UI calls refuse until explicit resume; prove cancel/ESC recovery.
 10. Save, close/reopen the disposable DWG and verify the intended final drawing survives; verify tunnel/plugin shutdown leaves no task-owned process residue.
-11. If a visual snapshot tool exists on the candidate, verify it captures only the BricsCAD-owned target window, remains bounded, and does not expose unrelated desktop content.
 
 Evidence must never contain bearer tokens, Cloudflare credentials, raw private paths, customer/private DWGs, proprietary BricsCAD binaries or unsanitized screenshots.
 
 ## 11. Future-agent operating procedure
 
-1. Read #4352 and this handoff first. Confirm `Lane-Key: issue-4352` and the canonical branch before touching source.
+1. Read #4352 and this handoff first. Confirm `Lane-Key: issue-4352`, PR #4425 and the canonical branch before touching source.
 2. Refresh the canonical branch head immediately before **every write**. Multiple agents may be working concurrently; never overwrite a newer blob/SHA and never reset another agent's work.
 3. Read the runtime contract, main-write authorization and CI policy. Do not manufacture `LOCAL_PASS` from source review or hosted CI.
 4. Preserve the one-repository runtime rule and click-first UX. Do not introduce Node, a second clone, PowerShell/CMD setup instructions, or password storage into the user path.
