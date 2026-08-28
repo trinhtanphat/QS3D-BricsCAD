@@ -315,7 +315,7 @@ namespace QS3D.Core.SmokeTests
             }
             finally
             {
-                try { if (File.Exists(path)) File.Delete(path, true); } catch { }
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
             }
         }
 
