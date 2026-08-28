@@ -428,6 +428,7 @@ namespace QS3D.BricsCAD.V25.UI
             private object? _objectIsolationModeBefore;
             private ViewSnapshot? _viewBeforeSection;
             private bool _destroyed;
+            private bool _disposeInProgress;
             private bool _disposed;
 
             public TransientReviewSession(Document document)
@@ -772,9 +773,18 @@ namespace QS3D.BricsCAD.V25.UI
 
             public void Dispose()
             {
-                if (_disposed) return;
-                ResetTransientStateBestEffort(true);
-                _disposed = true;
+                if (_disposed || _disposeInProgress) return;
+
+                _disposeInProgress = true;
+                try
+                {
+                    ResetTransientStateBestEffort(true);
+                    _disposed = true;
+                }
+                finally
+                {
+                    _disposeInProgress = false;
+                }
             }
 
             private sealed class ViewSnapshot
