@@ -11,6 +11,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $script:ExpectedPackageName = 'QS3D-BricsCAD-V26.zip'
+$script:ExpectedChecksumName = 'QS3D-BricsCAD-V26.zip.sha256'
 
 function Assert-NoReparseDirectoryChain {
     param(
@@ -96,6 +97,9 @@ if (-not [string]::Equals($package.Name, $script:ExpectedPackageName, [StringCom
 }
 
 $outputFullPath = [IO.Path]::GetFullPath($OutputPath)
+if (-not [string]::Equals([IO.Path]::GetFileName($outputFullPath), $script:ExpectedChecksumName, [StringComparison]::Ordinal)) {
+    throw "V26 checksum destination must be named $($script:ExpectedChecksumName): $outputFullPath"
+}
 $outputParentPath = [IO.Path]::GetDirectoryName($outputFullPath)
 if ([string]::IsNullOrWhiteSpace($outputParentPath)) {
     throw 'V26 checksum destination must have a parent directory.'
