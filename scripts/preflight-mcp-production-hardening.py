@@ -53,6 +53,8 @@ def main() -> int:
         "hostname-scoped ingress": (account, '"ingress:\\r\\n"'),
         "Quick Tunnel URL polling": (account, "DispatcherTimer"),
         "Quick Tunnel bounded poll": (account, "_quickUrlPollTicks >= 20"),
+        "named tunnel output bound to process owner": (account, "HandleRunLine(process, args.Data, false)"),
+        "named stale-process output rejection": (account, "if (!ReferenceEquals(_process, process)) return;"),
         "fallback process owner before exit events": (fallback, "EnableRaisingEvents = false"),
         "fallback process exit cleanup": (fallback, "HandleProcessExit(Process process)"),
         "fallback output bound to process owner": (fallback, "HandleLine(process, args.Data, discoverQuickUrl)"),
@@ -83,7 +85,7 @@ def main() -> int:
     print(
         "PASS: MCP production source uses one validated HTTPS endpoint resolver, isolated user "
         "fallback state, live/exact Cloudflare tunnel identity checks, fail-closed DNS conflict "
-        "handling, owner-bound Quick Tunnel URL discovery, copy-ready ChatGPT configuration "
+        "handling, owner-bound named/Quick Tunnel output, copy-ready ChatGPT configuration "
         "helpers, bounded network/session surfaces and BricsCAD-confined emergency recovery."
     )
     return 0
