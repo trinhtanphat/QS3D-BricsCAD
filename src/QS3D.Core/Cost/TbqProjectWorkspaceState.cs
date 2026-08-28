@@ -202,6 +202,7 @@ namespace QS3D.Core.Cost
                 index++;
             }
             RequireKnownCountMatchesTraversal("bill items", knownCount, index);
+            RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
             snapshot.Sort(CompareBillItems);
             return new ReadOnlyCollection<TbqBillItem>(snapshot.ToArray());
         }
@@ -224,6 +225,7 @@ namespace QS3D.Core.Cost
                 index++;
             }
             RequireKnownCountMatchesTraversal("build-up rates", knownCount, index);
+            RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
             snapshot.Sort(CompareBuildUps);
             return new ReadOnlyCollection<BuildUpRateSnapshot>(snapshot.ToArray());
         }
@@ -274,12 +276,21 @@ namespace QS3D.Core.Cost
                 yield return item;
             }
             RequireKnownCountMatchesTraversal(label, knownCount, count);
+            RequireKnownCountStable(source, maximum, label, knownCount);
         }
 
         private static void RequireKnownCountMatchesTraversal(string label, int? knownCount, int observedCount)
         {
             if (knownCount.HasValue && knownCount.Value != observedCount)
                 ThrowKnownCountMismatch(label, knownCount.Value, observedCount);
+        }
+
+        private static void RequireKnownCountStable<T>(IEnumerable<T> source, int maximum, string label, int? knownCount)
+        {
+            if (!knownCount.HasValue) return;
+            var finalKnownCount = ValidateKnownCount(source, maximum, label);
+            if (!finalKnownCount.HasValue || finalKnownCount.Value != knownCount.Value)
+                throw new InvalidOperationException("TBQ workspace " + label + " known count changed during traversal.");
         }
 
         private static void ThrowKnownCountMismatch(string label, int knownCount, int observedCount)
