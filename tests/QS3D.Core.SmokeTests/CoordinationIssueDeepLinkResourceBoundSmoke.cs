@@ -12,10 +12,13 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             ExactIdentityBoundaryRoundTrips();
+            SupplementaryUnicodeRoundTrips();
             ConstructorRejectsOversizedIdentity();
+            ConstructorRejectsMalformedUtf16();
+            ParserRejectsMalformedUtf16();
             ParserRejectsOversizedDecodedIdentity();
-            ParserRejectsOversizedEncodedComponent();
-            ParserRejectsOversizedRawUri();
+            ParserRejectsOversizedEncodedComponentBeforePercentValidation();
+            ParserRejectsOversizedRawUriBeforePathValidation();
         }
 
         private static void ExactIdentityBoundaryRoundTrips()
@@ -28,12 +31,42 @@ namespace QS3D.Core.SmokeTests
             Equal(canonical, parsed.ToCanonicalUri(), "Exact maximum identity changed canonical URI.");
         }
 
+        private static void SupplementaryUnicodeRoundTrips()
+        {
+            var identity = string.Concat(new string[] { "PROJECT-", char.ConvertFromUtf32(0x1F6A7), "-", char.ConvertFromUtf32(0x1F3D7) });
+            var link = new CoordinationIssueDeepLink(identity, "DRAWING", "ISSUE", 2L);
+            var canonical = link.ToCanonicalUri();
+            var parsed = CoordinationIssueDeepLink.Parse(canonical);
+            Equal(identity, parsed.ProjectId, "Valid surrogate-pair identity did not round-trip.");
+            Equal(canonical, parsed.ToCanonicalUri(), "Supplementary Unicode changed canonical URI.");
+        }
+
         private static void ConstructorRejectsOversizedIdentity()
         {
             var oversized = new string('A', CoordinationIssueDeepLink.MaxIdentityCharacters + 1);
             RejectArgument(
                 () => new CoordinationIssueDeepLink(oversized, "DRAWING", "ISSUE", 1L),
                 "maximum length");
+        }
+
+        private static void ConstructorRejectsMalformedUtf16()
+        {
+            RejectArgument(
+                () => new CoordinationIssueDeepLink("PROJECT\uD800", "DRAWING", "ISSUE", 1L),
+                "malformed UTF-16");
+            RejectArgument(
+                () => new CoordinationIssueDeepLink("PROJECT\uDC00", "DRAWING", "ISSUE", 1L),
+                "malformed UTF-16");
+        }
+
+        private static void ParserRejectsMalformedUtf16()
+        {
+            RejectFormat(
+                Prefix + "v=1&project=P\uD800&drawing=D&issue=I&revision=1",
+                "malformed UTF-16");
+            RejectFormat(
+                Prefix + "v=1&project=P\uDC00&drawing=D&issue=I&revision=1",
+                "malformed UTF-16");
         }
 
         private static void ParserRejectsOversizedDecodedIdentity()
@@ -43,17 +76,16 @@ namespace QS3D.Core.SmokeTests
             RejectFormat(uri, "decoded size limit");
         }
 
-        private static void ParserRejectsOversizedEncodedComponent()
+        private static void ParserRejectsOversizedEncodedComponentBeforePercentValidation()
         {
-            var oversized = new string('A', CoordinationIssueDeepLink.MaxEncodedComponentCharacters + 1);
+            var oversized = new string('A', CoordinationIssueDeepLink.MaxEncodedComponentCharacters) + "%ZZ";
             var uri = Prefix + "v=1&project=" + oversized + "&drawing=D&issue=I&revision=1";
             RejectFormat(uri, "encoded size limit");
         }
 
-        private static void ParserRejectsOversizedRawUri()
+        private static void ParserRejectsOversizedRawUriBeforePathValidation()
         {
-            var suffixLength = CoordinationIssueDeepLink.MaxUriCharacters + 1 - Prefix.Length;
-            var uri = Prefix + new string('A', suffixLength);
+            var uri = new string('X', CoordinationIssueDeepLink.MaxUriCharacters + 1);
             RejectFormat(uri, "maximum URI length");
         }
 
@@ -69,7 +101,7 @@ namespace QS3D.Core.SmokeTests
                     throw new InvalidOperationException("CoordinationIssueDeepLinkResourceBoundSmoke: wrong constructor rejection: " + ex.Message);
                 return;
             }
-            throw new InvalidOperationException("CoordinationIssueDeepLinkResourceBoundSmoke: oversized constructor identity was accepted.");
+            throw new InvalidOperationException("CoordinationIssueDeepLinkResourceBoundSmoke: malformed constructor identity was accepted.");
         }
 
         private static void RejectFormat(string uri, string expectedMessage)
@@ -83,10 +115,10 @@ namespace QS3D.Core.SmokeTests
                 if (ex.Message.IndexOf(expectedMessage, StringComparison.Ordinal) < 0)
                     throw new InvalidOperationException("CoordinationIssueDeepLinkResourceBoundSmoke: wrong parser rejection: " + ex.Message);
                 if (CoordinationIssueDeepLink.TryParse(uri, out var parsed) || parsed != null)
-                    throw new InvalidOperationException("CoordinationIssueDeepLinkResourceBoundSmoke: TryParse accepted rejected oversized input.");
+                    throw new InvalidOperationException("CoordinationIssueDeepLinkResourceBoundSmoke: TryParse accepted rejected hostile input.");
                 return;
             }
-            throw new InvalidOperationException("CoordinationIssueDeepLinkResourceBoundSmoke: oversized parser input was accepted.");
+            throw new InvalidOperationException("CoordinationIssueDeepLinkResourceBoundSmoke: hostile parser input was accepted.");
         }
 
         private static void Equal(string expected, string actual, string message)
