@@ -443,17 +443,58 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 RequireTargets(ids);
                 ClearHighlight();
-                using (_document.LockDocument())
-                using (var transaction = _document.Database.TransactionManager.StartTransaction())
+                var pending = new List<ObjectId>();
+                try
                 {
-                    foreach (var id in ids)
+                    using (_document.LockDocument())
+                    using (var transaction = _document.Database.TransactionManager.StartTransaction())
                     {
-                        var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity
-                            ?? throw new InvalidOperationException("Resolved CAD object is not an Entity.");
-                        entity.Highlight();
-                        _highlighted.Add(id);
+                        foreach (var id in ids)
+                        {
+                            var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity
+                                ?? throw new InvalidOperationException("Resolved CAD object is not an Entity.");
+                            entity.Highlight();
+                            pending.Add(id);
+                        }
+                        transaction.Commit();
                     }
-                    transaction.Commit();
+
+                    _highlighted.AddRange(pending);
+                }
+                catch
+                {
+                    UnhighlightAttemptBestEffort(pending);
+                    throw;
+                }
+            }
+
+            private void UnhighlightAttemptBestEffort(IReadOnlyList<ObjectId> pending)
+            {
+                if (pending == null || pending.Count == 0 || _destroyed) return;
+
+                try
+                {
+                    using (_document.LockDocument())
+                    using (var transaction = _document.Database.TransactionManager.StartTransaction())
+                    {
+                        foreach (var id in pending)
+                        {
+                            try
+                            {
+                                var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+                                entity?.Unhighlight();
+                            }
+                            catch
+                            {
+                                // One stale/erased native object must not prevent rollback of the rest.
+                            }
+                        }
+                        transaction.Commit();
+                    }
+                }
+                catch
+                {
+                    // Compensation is bounded best-effort and must never mask the original failure.
                 }
             }
 
