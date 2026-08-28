@@ -73,7 +73,7 @@ ordered = (
     "$metadataText = Read-BoundedStrictUtf8File",
     "ConvertFrom-Json -ErrorAction Stop",
     "$expectedSigner = Normalize-Thumbprint",
-    "Assert-ZipPayloadMatchesSignedStaging",
+    "Assert-ZipPayloadMatchesSignedStaging -ZipFile $zip -PackageRoot $package",
     "$zipHash = (Get-FileHash",
     "[IO.File]::WriteAllText($stagePath",
 )
