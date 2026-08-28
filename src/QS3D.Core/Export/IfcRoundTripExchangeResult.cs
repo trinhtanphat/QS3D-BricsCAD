@@ -137,9 +137,13 @@ namespace QS3D.Core.Export
             var observedResultCount = 0;
             foreach (var item in results)
             {
-                observedResultCount++;
-                if (observedResultCount > MaxResultsPerCollection)
+                IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
+                    knownCount,
+                    observedResultCount,
+                    "IFC exchange result");
+                if (observedResultCount == MaxResultsPerCollection)
                     throw ResultCollectionTooLarge();
+                observedResultCount++;
 
                 if (item == null)
                     throw new ArgumentException("IFC exchange result collection cannot contain null entries.", nameof(results));
