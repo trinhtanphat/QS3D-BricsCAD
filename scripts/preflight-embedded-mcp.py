@@ -9,6 +9,7 @@ TOKEN_ONBOARDING = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareOnboarding
 ACCOUNT_ONBOARDING = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareAccountOnboarding.cs"
 AGENT_CENTER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpAgentControlCenter.cs"
 BOOTSTRAPPER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflaredBootstrapper.cs"
+PUBLIC_ENDPOINT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpPublicEndpointResolver.cs"
 OVERRIDE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "McpRibbonCommandOverride.cs"
 COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonInitializationCoordinator.cs"
 PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
@@ -39,6 +40,7 @@ def main() -> int:
     account_onboarding = read(ACCOUNT_ONBOARDING, errors)
     agent_center = read(AGENT_CENTER, errors)
     bootstrapper = read(BOOTSTRAPPER, errors)
+    public_endpoint = read(PUBLIC_ENDPOINT, errors)
     override = read(OVERRIDE, errors)
     coordinator = read(COORDINATOR, errors)
     plugin = read(PLUGIN, errors)
@@ -52,6 +54,7 @@ def main() -> int:
     require(server, "ManualResetEventSlim", errors, "bounded CAD dispatch wait")
     require(server, "ConstantTimeEquals", errors, "constant-time bearer comparison")
     require(server, "MaxConcurrentClients", errors, "bounded concurrent MCP clients")
+    require(server, "MaxSessions", errors, "bounded MCP sessions")
     require(server, "Transfer-Encoding is not supported", errors, "HTTP request framing guard")
     require(server, 'request.Method == "DELETE"', errors, "MCP session termination")
 
@@ -101,7 +104,6 @@ def main() -> int:
         errors.append("cannot verify MCP ribbon override ordering")
     elif not (binder_index < override_index < fallback_index):
         errors.append("MCP ribbon override must run after legacy TOOL binder and before command fallback")
-
     require(coordinator, "McpRibbonCommandOverride.Reset()", errors, "ribbon override teardown")
 
     require(plugin, "McpEmbeddedServer.Start();", errors, "embedded MCP startup")
@@ -118,6 +120,9 @@ def main() -> int:
         "QS3DAIDASHBOARDHTTP",
         "QS3DMCPSTART",
         "QS3DMCPSTOP",
+        "QS3DMCPCOPYURL",
+        "QS3DMCPCOPYTOKEN",
+        "QS3DMCPCOPYCONFIG",
     ):
         require(commands, f'[CommandMethod("{command}"', errors, f"CommandMethod {command}")
 
@@ -125,6 +130,7 @@ def main() -> int:
     require(agent_center, '[CommandMethod("QS3DMCPAGENTCENTER"', errors, "unified Agent Center command")
     require(agent_center, "McpAgentControlCenterWindow", errors, "unified Agent Center window")
     require(agent_center, "McpCloudflaredBootstrapper.BeginInstall", errors, "one-click verified cloudflared install")
+    require(agent_center, "McpPublicEndpointResolver.Resolve()", errors, "single validated public endpoint")
     require(agent_center, "RunReadOnlySelfTest", errors, "read-only end-to-end self-test")
     require(agent_center, 'InvokeControlTool("cad_agent_stop"', errors, "click emergency stop")
     require(agent_center, 'InvokeControlTool("cad_cancel_command"', errors, "click command cancel")
@@ -133,10 +139,22 @@ def main() -> int:
     forbid(agent_center, "powershell.exe", errors, "PowerShell user workflow")
     forbid(agent_center, "cmd.exe", errors, "cmd user workflow")
 
+    # Public URLs are normalized once: HTTPS only, non-loopback, canonical /mcp.
+    require(public_endpoint, "internal static class McpPublicEndpointResolver", errors, "public endpoint resolver")
+    require(public_endpoint, "Uri.UriSchemeHttps", errors, "HTTPS-only public endpoint")
+    require(public_endpoint, "uri.IsLoopback", errors, "loopback public endpoint rejection")
+    require(public_endpoint, 'path = "/mcp"', errors, "canonical public MCP path")
+    require(public_endpoint, "McpCloudflareAccountTunnelManager.PublicMcpUrl", errors, "named-tunnel precedence")
+    require(public_endpoint, "McpCloudflareTunnelManager.PublicMcpUrl", errors, "fallback-tunnel precedence")
+
+    # Managed cloudflared bootstrap downloads only the official Windows binary and verifies it.
     require(bootstrapper, "cloudflared-windows-amd64.exe", errors, "official cloudflared Windows binary")
     require(bootstrapper, "WinVerifyTrust", errors, "Authenticode verification")
+    require(bootstrapper, "CreateFromSignedFile", errors, "signer certificate inspection")
     require(bootstrapper, "Cloudflare", errors, "Cloudflare signer constraint")
     require(bootstrapper, 'PathEnvironment = "QS3D_CLOUDFLARED_PATH"', errors, "managed cloudflared persistence")
+    require(bootstrapper, "backupCreated", errors, "failed replacement rollback")
+    require(bootstrapper, "ProviderFlags = 0", errors, "normal Windows signer-chain verification")
     forbid(bootstrapper, "powershell.exe", errors, "PowerShell installer dependency")
     forbid(bootstrapper, "cmd.exe", errors, "cmd installer dependency")
 
@@ -146,12 +164,15 @@ def main() -> int:
     require(account_onboarding, '"tunnel login"', errors, "Cloudflare browser login")
     require(account_onboarding, '"tunnel create " + TunnelName', errors, "automatic tunnel creation")
     require(account_onboarding, '"tunnel route dns "', errors, "automatic DNS route")
-    require(account_onboarding, '"credentials-file: \\""', errors, "local tunnel config credentials")
-    require(account_onboarding, '"url: " + OriginUrl', errors, "local MCP origin route")
+    require(account_onboarding, "credentials-file:", errors, "local tunnel config credentials")
+    require(account_onboarding, '"    service: " + OriginUrl', errors, "hostname-scoped local MCP ingress")
+    require(account_onboarding, "http_status:404", errors, "fail-closed unmatched tunnel ingress")
     require(account_onboarding, "Cloudflare login:", errors, "visible authentication status")
     require(account_onboarding, "không hỏi và không lưu mật khẩu Cloudflare", errors, "provider-owned password entry")
     require(account_onboarding, "OpenChatGpt", errors, "ChatGPT browser handoff")
     require(account_onboarding, "StartQuickTunnel", errors, "one-click Quick Tunnel fallback")
+    require(account_onboarding, "BeginOutputReadLine", errors, "async cloudflared stdout drain")
+    require(account_onboarding, "BeginErrorReadLine", errors, "async cloudflared stderr drain")
     forbid(account_onboarding, "powershell.exe", errors, "PowerShell setup dependency")
     forbid(account_onboarding, "cmd.exe", errors, "cmd setup dependency")
 
@@ -164,7 +185,7 @@ def main() -> int:
     forbid(token_onboarding, "powershell.exe", errors, "fallback PowerShell setup dependency")
     forbid(token_onboarding, "cmd.exe", errors, "fallback cmd setup dependency")
 
-    # The local probe exercises a real MCP lifecycle including one tools/call and session termination.
+    # The local Ribbon probe exercises a real MCP lifecycle including one tools/call and cleanup.
     for source_token, label in (
         ('\\"method\\":\\"initialize\\"', "Ribbon protocol initialize probe"),
         ('\\"method\\":\\"notifications/initialized\\"', "Ribbon protocol initialized notification"),
@@ -178,6 +199,7 @@ def main() -> int:
     require(commands, "McpEmbeddedServer.GetBearerToken()", errors, "Ribbon bearer authentication")
     require(commands, 'Send(endpoint, "DELETE"', errors, "Ribbon session cleanup")
     require(commands, "No second repository", errors, "single-repository guide")
+    require(commands, "McpPublicEndpointResolver.Resolve()", errors, "commands use validated public endpoint")
 
     if errors:
         print("Embedded MCP preflight FAILED:")
@@ -188,8 +210,8 @@ def main() -> int:
     print(
         "PASS: QS3D embeds authenticated MCP plus a unified click-first Agent Center with "
         "verified one-click cloudflared bootstrap, provider-browser login, named/Quick tunnel "
-        "management, ChatGPT copy/open actions, read-only MCP self-test and emergency controls "
-        "without PowerShell/CMD user setup."
+        "management, a single HTTPS /mcp endpoint resolver, ChatGPT copy/open actions, "
+        "read-only MCP self-test and emergency controls without PowerShell/CMD user setup."
     )
     return 0
 
