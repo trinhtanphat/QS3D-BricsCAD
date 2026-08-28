@@ -86,6 +86,10 @@ namespace QS3D.Core.Export
 
             if (knownCount.HasValue && candidates.Count != knownCount.Value)
                 throw new InvalidOperationException("IFC round-trip quantity evidence source Count does not match enumerated candidate count.");
+            IfcRoundTripKnownCountContract.RequireStableAfterTraversal(
+                evidence,
+                knownCount,
+                "IFC round-trip quantity evidence");
 
             candidates.Sort(IfcRoundTripQuantityEvidenceComparer.Instance);
             var groups = new List<IfcRoundTripQuantityEvidenceGroup>();
