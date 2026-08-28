@@ -61,8 +61,12 @@ for token in (
     "[string]::Equals($productVersion, $coreProductVersion, [StringComparison]::Ordinal)", "$expectedTag = 'v' + $productVersion",
     "RELEASE_TAG must exactly match the source product version", "productVersion = $productVersion", "QS3DRUNTIMECHECK",
 ): require(package, token, "package-v25.ps1")
-if "[StringComparison]::OrdinalIgnoreCase" in package:
-    errors.append("package-v25.ps1 must not case-fold exact product/tag identity")
+for token in (
+    "[string]::Equals($productVersion, $coreProductVersion, [StringComparison]::OrdinalIgnoreCase)",
+    "[string]::Equals($env:RELEASE_TAG, $expectedTag, [StringComparison]::OrdinalIgnoreCase)",
+):
+    if token in package:
+        errors.append("package-v25.ps1 must not case-fold exact product/tag identity: " + token)
 
 for token in ("Assert-CleanRepository -Phase 'before package creation'", "& $packer", "Repository HEAD changed during release packaging", "Assert-CleanRepository -Phase 'after package creation'", "PACKAGE-METADATA gitCommit", "does not match the exact clean package source HEAD"):
     require(release_package, token, "package-v25-release.ps1")
