@@ -37,7 +37,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void RateBookStreamingCeilingRejectsBeforeOverflowCurrent()
         {
-            var source = new StreamingProbe<RateItem>(10001, i => Item("R-" + i.ToString("D5")));
+            var source = new StreamingProbe<RateItem>(10001, i => Item("R-" + i.ToString("D5"), i));
             var error = Capture<InvalidOperationException>(() => new RateBook("book", source));
             Contains("at most 10000", error.Message, "rate-book streaming ceiling diagnostic");
             Equal(10001, source.MoveNextCalls, "rate-book streaming overflow MoveNext");
@@ -137,7 +137,8 @@ namespace QS3D.Core.SmokeTests
             Equal(2, lines.CountReads, "projection Count must be rebound");
         }
 
-        private static RateItem Item(string id) => new RateItem(id, new CostCode("COST-1"), "m3", "USD", 1m, EffectiveUtc, "v1");
+        private static RateItem Item(string id, int effectiveOffset = 0) =>
+            new RateItem(id, new CostCode("COST-1"), "m3", "USD", 1m, EffectiveUtc.AddTicks(effectiveOffset), "v1");
 
         private static EstimateLine Line(string id)
         {
