@@ -36,7 +36,9 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                McpCloudflareTunnelManager.TryAutoStart();
+                // The click-first browser-auth flow is the default persistent tunnel.
+                // Quick/token modes remain available from the setup UI as fallback paths.
+                McpCloudflareAccountTunnelManager.TryAutoStart();
             }
             catch (Exception ex)
             {
@@ -69,6 +71,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void TeardownHostServices()
         {
+            TryCleanup(McpCloudflareAccountTunnelManager.StopForHostShutdown);
             TryCleanup(McpCloudflareTunnelManager.StopForHostShutdown);
             TryCleanup(McpEmbeddedServer.Stop);
             TryCleanup(UpdateBootstrapper.Stop);
