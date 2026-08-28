@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             InfoOnlyIsReleaseReady();
             NullIssueEntriesFailClosed();
             UndefinedSeverityFailsAtIssueBoundary();
+            ModelHealthBaselineKnownCountContractSmoke.Run();
         }
 
         private static void WarningIsHealthyButNotReleaseReady()
