@@ -75,6 +75,7 @@ namespace QS3D.BricsCAD.V25
         {
             get
             {
+                if (!IsRunning) return string.Empty;
                 lock (Sync)
                 {
                     if (!string.IsNullOrWhiteSpace(_quickBaseUrl)) return _quickBaseUrl.TrimEnd('/') + "/mcp";
