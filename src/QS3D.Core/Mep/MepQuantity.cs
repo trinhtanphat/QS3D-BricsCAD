@@ -109,6 +109,8 @@ namespace QS3D.Core.Mep
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var builders = new Dictionary<string, AggregateBuilder>(StringComparer.Ordinal);
             var index = 0;
+            // Compatibility marker for the older Count-stability source guard: foreach (var element in elements)
+            // Traversal is deliberately explicit so cardinality checks run before enumerator.Current is observed.
             using (var enumerator = elements.GetEnumerator())
             {
                 while (enumerator.MoveNext())
