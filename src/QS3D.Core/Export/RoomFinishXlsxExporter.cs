@@ -240,11 +240,7 @@ namespace QS3D.Core.Export
                         "Room-finish XLSX row " + rowIndex + " field " + fieldName + " contains malformed UTF-16 provenance.",
                         "rows");
 
-                if (char.IsControl(current))
-                    throw new ArgumentException(
-                        "Room-finish XLSX row " + rowIndex + " field " + fieldName + " contains a control character in provenance.",
-                        "rows");
-                if (current >= '\u0020') continue;
+                if (current == '\t' || current == '\n' || current == '\r' || current >= '\u0020') continue;
                 throw new ArgumentException(
                     "Room-finish XLSX row " + rowIndex + " field " + fieldName + " contains an XML control character.",
                     "rows");
