@@ -19,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             ConsistentKnownCountsRemainAccepted();
             KnownCountUnderEnumerationFailsClosed();
             KnownCountOverEnumerationFailsClosed();
+            KnownCountOverrunPrecedesUnexpectedItemValidation();
             StreamingOversizeStopsAtFirstDisallowedTrace();
             ExactBoundaryRemainsAccepted();
             CanonicalOrderingAndValidationRemainStable();
@@ -78,6 +79,22 @@ namespace QS3D.Core.SmokeTests
 
             Equal(1, source.GetEnumeratorCalls, "Known-count over-enumeration must consume the source only once.");
             Contains("count changed during enumeration", error.Message, "Known-count over-enumeration must report traversal mismatch.");
+        }
+
+        private static void KnownCountOverrunPrecedesUnexpectedItemValidation()
+        {
+            var source = new MultiCountedTraces(
+                1,
+                1,
+                1,
+                new MeasurementTrace[] { Trace(0), null! });
+            var error = Capture<ArgumentException>(() => new MeasurementSnapshot(source));
+
+            Equal(1, source.GetEnumeratorCalls, "Known-count overrun must consume the source only once.");
+            Contains(
+                "count changed during enumeration",
+                error.Message,
+                "Known-count overrun must fail before validating the first unexpected trace payload.");
         }
 
         private static void StreamingOversizeStopsAtFirstDisallowedTrace()
