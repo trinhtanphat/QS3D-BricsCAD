@@ -71,6 +71,7 @@ namespace QS3D.Core.Navigation
             var traversedCount = 0;
             foreach (var value in source)
             {
+                RejectKnownCountOverrun(knownCount, traversedCount, label);
                 if (traversedCount >= ProjectBrowserQueryPlanner.MaxFilterIds)
                     throw TooManyValues(label, ProjectBrowserQueryPlanner.MaxFilterIds);
                 traversedCount++;
@@ -91,6 +92,7 @@ namespace QS3D.Core.Navigation
             var traversedCount = 0;
             foreach (var raw in source)
             {
+                RejectKnownCountOverrun(knownCount, traversedCount, label);
                 if (traversedCount >= maxCount) throw TooManyValues(label, maxCount);
                 traversedCount++;
                 var value = RequiredCanonical(raw, label);
@@ -113,6 +115,7 @@ namespace QS3D.Core.Navigation
             var traversedCount = 0;
             foreach (var raw in source)
             {
+                RejectKnownCountOverrun(knownCount, traversedCount, label);
                 if (traversedCount >= maxCount) throw TooManyValues(label, maxCount);
                 traversedCount++;
                 var value = RequiredCanonical(raw, label);
@@ -143,6 +146,13 @@ namespace QS3D.Core.Navigation
             if (knownCount.HasValue && knownCount.Value != count.Value)
                 throw new InvalidOperationException(label + " exposes conflicting Count contracts.");
             knownCount = count.Value;
+        }
+
+        private static void RejectKnownCountOverrun(int? knownCount, int traversedCount, string label)
+        {
+            if (knownCount.HasValue && traversedCount >= knownCount.Value)
+                throw new InvalidOperationException(
+                    label + " traversal exceeds declared Count " + knownCount.Value + ".");
         }
 
         private static void ValidateTraversedCount(int? knownCount, int traversedCount, string label)
