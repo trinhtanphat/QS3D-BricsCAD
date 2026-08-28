@@ -5,22 +5,22 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.Core/Domain/AutoRoomLifecycle.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/AutoRoomLifecycleKnownCountTraversalSmoke.cs"
+BOUND_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/AutoRoomStaleSelectionBoundSmoke.cs"
 errors = []
 
-if not SOURCE.is_file():
-    errors.append("missing AutoRoomLifecycle source")
-if not SMOKE.is_file():
-    errors.append("missing AutoRoomLifecycle known-count smoke")
+for path, label in ((SOURCE, "AutoRoomLifecycle source"), (SMOKE, "known-count smoke"), (BOUND_SMOKE, "stale-selection bound smoke")):
+    if not path.is_file():
+        errors.append("missing " + label)
 
 source = SOURCE.read_text(encoding="utf-8") if SOURCE.is_file() else ""
 smoke = SMOKE.read_text(encoding="utf-8") if SMOKE.is_file() else ""
+bound_smoke = BOUND_SMOKE.read_text(encoding="utf-8") if BOUND_SMOKE.is_file() else ""
 
 for token in (
     "private static void RequireCanProcessNextKnownCount(",
-    'collectionLabel + " traversal produced more entries than its known count reported " + knownCount + "."',
     'RequireCanProcessNextKnownCount("Auto Room active room id set", knownActiveRoomCount, activeInputCount);',
-    'RequireCanProcessNextKnownCount("Auto Room selected source handle set", knownSelectedSourceHandleCount, selectedInputCount);',
     'RequireKnownCountMatchesTraversal("Auto Room active room id set", knownActiveRoomCount, activeInputCount);',
+    'if (selectedInputCount >= knownSelectedSourceHandleCount)',
     'RequireKnownCountMatchesTraversal("Auto Room selected source handle set", knownSelectedSourceHandleCount, selectedInputCount);',
 ):
     if token not in source:
@@ -32,31 +32,41 @@ active_semantic = source.find("string.IsNullOrWhiteSpace(rawRoomId)", active_gua
 if not (0 <= active_guard < active_increment < active_semantic):
     errors.append("active-room known-count guard must precede increment/semantic processing")
 
-selected_guard = source.find('RequireCanProcessNextKnownCount("Auto Room selected source handle set"')
-selected_capacity = source.find("selectedInputCount >= MaxSourceHandleInputCount", selected_guard)
-selected_increment = source.find("selectedInputCount++;", selected_guard)
-selected_semantic = source.find("GeneratedHandleIdentity.Normalize(raw)", selected_guard)
-if not (0 <= selected_guard < selected_capacity < selected_increment < selected_semantic):
-    errors.append("selected-source known-count guard must precede capacity accounting and handle normalization")
+selected_loop = source.find("foreach (var raw in selectedSourceHandles)")
+selected_capacity = source.find("selectedInputCount >= MaxSourceHandleInputCount", selected_loop)
+selected_drift = source.find("selectedInputCount >= knownSelectedSourceHandleCount", selected_loop)
+selected_continue = source.find("continue;", selected_drift)
+selected_normalize = source.find("GeneratedHandleIdentity.Normalize(raw)", selected_loop)
+selected_final = source.find('RequireKnownCountMatchesTraversal("Auto Room selected source handle set"', selected_loop)
+if not (0 <= selected_loop < selected_capacity < selected_drift < selected_continue < selected_normalize < selected_final):
+    errors.append("selected-source drift quarantine must follow hard-bound enforcement and precede handle normalization/final Count mismatch")
 
 for token in (
-    "OverYieldFailsAtFirstUnexpectedItem();",
-    "private static void OverYieldFailsAtFirstUnexpectedItem()",
+    "ActiveOverYieldFailsAtFirstUnexpectedItem();",
+    "SelectedOverYieldRemainsCardinalityOnlyAfterKnownCount();",
     "CountingMisreportedSet<string>(1, \"ROOM-1\", \"ROOM-2\", \"ROOM-3\")",
     "CountingMisreportedSet<string>(1, \"A\", \"B\", \"C\")",
     "Equal(2, active.MoveNextCalls",
-    "Equal(2, selected.MoveNextCalls",
+    "Equal(4, selected.MoveNextCalls",
     "SelectedCapacityPreflightStillPrecedesEnumeration();",
     "ExactKnownCountsRemainAccepted();",
 ):
     if token not in smoke:
-        errors.append("Auto Room smoke missing early-overrun regression/control: " + token)
+        errors.append("Auto Room smoke missing Count-drift regression/control: " + token)
 
-print("QS3D Auto Room known-count early-overrun preflight")
+for token in (
+    "DishonestCountStopsAtFirstDisallowedEntry();",
+    'Contains("cannot exceed 5000", error.Message',
+    "Equal(MaximumSourceHandles + 1, handles.ObservedEntries",
+):
+    if token not in bound_smoke:
+        errors.append("existing Auto Room hard-bound regression must remain authoritative: " + token)
+
+print("QS3D Auto Room known-count processing preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Auto Room counted selections reject item knownCount+1 before semantic processing while preserving under-yield, exact-count, and capacity behavior.")
+print("PASS: Auto Room active-room overrun fails before processing; selected-source drift is quarantined before normalization while the independent 5000-entry hard bound retains precedence.")
