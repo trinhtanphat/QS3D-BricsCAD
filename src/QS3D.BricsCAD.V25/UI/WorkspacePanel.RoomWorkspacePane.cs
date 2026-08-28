@@ -447,16 +447,9 @@ namespace QS3D.BricsCAD.V25.UI
                     createFinish.ToolTip = "Tạo/cập nhật hoàn thiện cho Phòng đang chọn";
                 }
 
-                var finishTree = RoomPaneDescendants<TreeView>(roomPane).FirstOrDefault();
-                if (finishTree != null && !finishTree.Items.OfType<TreeViewItem>().Any(item =>
-                        string.Equals(item.Header as string, "Trát Trần", StringComparison.OrdinalIgnoreCase)))
-                {
-                    finishTree.Items.Add(new TreeViewItem
-                    {
-                        Header = "Trát Trần",
-                        Tag = ElementCategory.CeilingFinish.ToString()
-                    });
-                }
+                // RoomFinishTree's complete static item set and local virtualization state are
+                // sealed during InitializeComponent before first Measure. Loaded/SystemIdle
+                // presentation must never mutate that TreeView or its ItemsHost afterwards.
 
                 var inspectionTitle = FindRoomPaneText(roomPane, "ĐỐI TƯỢNG ĐANG CHỌN");
                 if (inspectionTitle != null) inspectionTitle.Text = "Thuộc tính";
