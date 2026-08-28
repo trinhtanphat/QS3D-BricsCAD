@@ -115,8 +115,22 @@ namespace QS3D.Core.Mep
                 throw new ArgumentException("Recognition text is required.", parameterName);
             var trimmed = value.Trim();
             for (var i = 0; i < trimmed.Length; i++)
-                if (char.IsControl(trimmed[i]))
+            {
+                var character = trimmed[i];
+                if (char.IsControl(character))
                     throw new ArgumentException("Recognition text must not contain control characters.", parameterName);
+
+                if (char.IsHighSurrogate(character))
+                {
+                    if (i + 1 >= trimmed.Length || !char.IsLowSurrogate(trimmed[i + 1]))
+                        throw new ArgumentException("Recognition text must contain well-formed UTF-16.", parameterName);
+                    i++;
+                    continue;
+                }
+
+                if (char.IsLowSurrogate(character))
+                    throw new ArgumentException("Recognition text must contain well-formed UTF-16.", parameterName);
+            }
             return trimmed;
         }
     }
