@@ -61,10 +61,15 @@ namespace QS3D.Core.Coordination
         public DuplicateMatchKind MatchKinds { get; }
         public string LeftElementId => Left.Element.ElementId;
         public string RightElementId => Right.Element.ElementId;
-        public string PairKey => LeftElementId + "|" + RightElementId;
+        public string PairKey => EscapePairComponent(LeftElementId) + "|" + EscapePairComponent(RightElementId);
         public bool IsExactGeometry => (MatchKinds & DuplicateMatchKind.ExactGeometry) != 0;
         public bool IsNearGeometry => (MatchKinds & DuplicateMatchKind.NearGeometry) != 0;
         public bool IsSemanticIdentity => (MatchKinds & DuplicateMatchKind.SemanticIdentity) != 0;
+
+        private static string EscapePairComponent(string elementId)
+        {
+            return elementId.Replace("|", "||");
+        }
     }
 
     public sealed class DuplicateSummary
