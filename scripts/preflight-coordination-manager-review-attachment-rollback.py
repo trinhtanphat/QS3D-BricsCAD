@@ -2,6 +2,8 @@
 from pathlib import Path
 import sys
 
+# issue-4398: deterministic source guard for transactional Coordination Manager
+# modeless-window publication. Reservation-v2 metadata is machine-readable on the Issue.
 ROOT = Path(__file__).resolve().parents[1]
 COMMAND = ROOT / "src/QS3D.BricsCAD.V25/CoordinationManagerCommands.cs"
 
