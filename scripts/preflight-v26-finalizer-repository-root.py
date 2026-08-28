@@ -52,11 +52,18 @@ for token in required_template_tokens:
 required_generator_tokens = (
     "'finalize-v25-signed-package.ps1'",
     "$generated = $text.Replace('V25', 'V26').Replace('v25', 'v26')",
-    "[IO.File]::WriteAllText($outputFull, $generated",
+    "$stagePath = Join-Path $parent",
+    "[IO.File]::WriteAllText($stagePath, $generated",
+    "[IO.File]::Replace($stagePath, $outputFull, $null)",
+    "[IO.File]::Move($stagePath, $outputFull)",
+    "Assert-SafeExistingOutputLeaf -Path $outputFull",
 )
 for token in required_generator_tokens:
     if token not in generator:
         errors.append(f"V25→V26 transformer contract changed unexpectedly: {token}")
+
+if "[IO.File]::WriteAllText($outputFull" in generator:
+    errors.append("V25→V26 transformer must not publish generated content by writing the final output leaf in place")
 
 # The containment invariant is positional: the generated script must live directly
 # in scripts/, because the inherited template calculates repositoryRoot as the
@@ -70,6 +77,19 @@ if wrapper:
     if min(temp_index, generate_index, execute_index, cleanup_index) >= 0:
         if not temp_index < generate_index < execute_index < cleanup_index:
             errors.append("generated V26 finalizer lifecycle is not create -> generate -> execute -> cleanup")
+
+# The transformer now writes to an ordinary sibling stage then performs a same-directory
+# replace/move. Preserve that publication boundary so repository-root-sensitive wrappers
+# still receive the final generated script at the exact path they selected.
+if generator:
+    parent_index = generator.find("$parent = Split-Path -Parent $outputFull")
+    stage_index = generator.find("$stagePath = Join-Path $parent")
+    write_index = generator.find("[IO.File]::WriteAllText($stagePath, $generated")
+    replace_index = generator.find("[IO.File]::Replace($stagePath, $outputFull, $null)")
+    move_index = generator.find("[IO.File]::Move($stagePath, $outputFull)")
+    if min(parent_index, stage_index, write_index, replace_index, move_index) >= 0:
+        if not parent_index < stage_index < write_index < replace_index and parent_index < stage_index < write_index < move_index:
+            errors.append("V25→V26 transformer publication is not parent -> sibling stage -> write -> replace/move")
 
 if errors:
     print("V26 finalizer repository-root preflight FAILED:", file=sys.stderr)
