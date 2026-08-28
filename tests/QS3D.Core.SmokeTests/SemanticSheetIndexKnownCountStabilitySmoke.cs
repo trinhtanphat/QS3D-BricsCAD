@@ -80,7 +80,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void NullSheetStillFailsClosed()
         {
-            var source = new CountProbeCollection<SemanticSheetPlan>(1, 1, null!);
+            var source = new CountProbeCollection<SemanticSheetPlan>(1, 1, (SemanticSheetPlan)null!);
             var error = Capture<ArgumentException>(() => SemanticSheetIndexBuilder.Build(source));
             Contains("cannot contain a null sheet", error.Message,
                 "Null sheet entries must remain rejected.");
