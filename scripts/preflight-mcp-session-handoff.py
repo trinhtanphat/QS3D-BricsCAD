@@ -7,6 +7,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 HANDOFF = ROOT / "docs" / "agent-work-claims" / "issue-4352-chatgpt-mcp-session-handoff.md"
 RUNBOOK = ROOT / "docs" / "MCP-FULL-CAD-AGENT.md"
+LOCAL_INBOX = ROOT / "docs" / "LOCAL-AGENT-INBOX.md"
 
 
 def main() -> int:
@@ -17,9 +18,13 @@ def main() -> int:
     if not RUNBOOK.is_file():
         print(f"ERROR: missing MCP runbook: {RUNBOOK.relative_to(ROOT)}")
         return 1
+    if not LOCAL_INBOX.is_file():
+        print(f"ERROR: missing LOCAL_ONLY queue: {LOCAL_INBOX.relative_to(ROOT)}")
+        return 1
 
     handoff = HANDOFF.read_text(encoding="utf-8")
     runbook = RUNBOOK.read_text(encoding="utf-8")
+    local_inbox = LOCAL_INBOX.read_text(encoding="utf-8")
 
     required_handoff = {
         "canonical issue": "#4352",
@@ -59,6 +64,26 @@ def main() -> int:
         if token not in runbook:
             errors.append(f"runbook missing current MCP contract marker: {token}")
 
+    required_local_inbox = {
+        "single MCP local queue item": "## LOCAL-024 — #4352 ChatGPT MCP full-agent qualification",
+        "MCP local priority": "- Priority: P0",
+        "MCP local open status": "- Status: OPEN",
+        "MCP local issue": "issue #4352",
+        "MCP local remote disposition": "PENDING_LOCAL / DO_NOT_RETRY_REMOTE",
+        "MCP exact-SHA boundary": "exact candidate SHA",
+        "MCP V25/V26 host boundary": "licensed BricsCAD V25/V26",
+        "MCP Cloudflare boundary": "Cloudflare",
+        "MCP ChatGPT boundary": "ChatGPT",
+        "MCP handoff link": "docs/agent-work-claims/issue-4352-chatgpt-mcp-session-handoff.md",
+        "MCP runbook link": "docs/MCP-FULL-CAD-AGENT.md",
+        "MCP pending evidence": "- Evidence: `PENDING_LOCAL`",
+    }
+    for label, token in required_local_inbox.items():
+        if token not in local_inbox:
+            errors.append(f"LOCAL_ONLY inbox missing {label}: {token}")
+    if local_inbox.count("## LOCAL-024 — #4352 ChatGPT MCP full-agent qualification") != 1:
+        errors.append("LOCAL_ONLY inbox must contain exactly one LOCAL-024/#4352 MCP qualification item")
+
     forbidden_handoff_claims = (
         "Runtime qualification: LOCAL_PASS",
         "Status: 100% / LOCAL_PASS",
@@ -68,6 +93,17 @@ def main() -> int:
         if token in handoff:
             errors.append(f"handoff contains forbidden/stale claim: {token}")
 
+    mcp_local_section = ""
+    marker = "## LOCAL-024 — #4352 ChatGPT MCP full-agent qualification"
+    if marker in local_inbox:
+        mcp_local_section = local_inbox.split(marker, 1)[1]
+        next_header = mcp_local_section.find("\n## ")
+        if next_header >= 0:
+            mcp_local_section = mcp_local_section[:next_header]
+    for token in ("LOCAL_PASS", "Status: PASS", "COMPLETE / 100%"):
+        if token in mcp_local_section:
+            errors.append(f"#4352 LOCAL_ONLY inbox item contains premature runtime claim: {token}")
+
     if errors:
         print("Canonical MCP session-handoff preflight FAILED:")
         for error in errors:
@@ -75,9 +111,10 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: #4352 has one canonical cross-agent handoff covering the single-repository "
-        "embedded MCP architecture, click-first Cloudflare onboarding, full CAD/UI agent "
-        "surface, security boundaries, future-agent procedure and exact-SHA LOCAL_ONLY tail."
+        "PASS: #4352 has one canonical cross-agent handoff and one matching P0 LOCAL_ONLY "
+        "queue item covering the single-repository embedded MCP architecture, click-first "
+        "Cloudflare onboarding, full CAD/UI agent surface, security boundaries, future-agent "
+        "procedure and exact-SHA licensed V25/V26 + Cloudflare + ChatGPT qualification tail."
     )
     return 0
 
