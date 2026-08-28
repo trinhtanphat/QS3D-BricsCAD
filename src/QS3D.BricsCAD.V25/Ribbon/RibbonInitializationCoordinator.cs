@@ -87,26 +87,26 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 // Every downstream coordinator owns independent external/UI state. Teardown is
                 // deliberately fail-soft so one faulty cleanup cannot strand later publishers,
                 // command bindings, images, tabs, or workspace activation across NETLOAD reload.
-                if (!TryCleanup(BltBimWorkspaceActivationCoordinator.Stop)) cleanupComplete = false;
-                if (!TryCleanup(HomeTabActivationCoordinator.Stop)) cleanupComplete = false;
-                if (!TryCleanup(Blt3dShellChromeCoordinator.Reset)) cleanupComplete = false;
-                if (!TryCleanup(BltHomeRibbonAugmenter.Reset)) cleanupComplete = false;
-                if (!TryCleanup(BltDrawRibbonAugmenter.Reset)) cleanupComplete = false;
-                if (!TryCleanup(BltToolRibbonAugmenter.Reset)) cleanupComplete = false;
-                if (!TryCleanup(BltToolRibbonCommandBinder.Reset)) cleanupComplete = false;
-                if (!TryCleanup(BltToolRibbonIconPolisher.Reset)) cleanupComplete = false;
-                if (!TryCleanup(BltRecognitionRibbonAugmenter.Reset)) cleanupComplete = false;
-                if (!TryCleanup(BltRecognitionIconPolisher.Reset)) cleanupComplete = false;
-                if (!TryCleanup(BltViewRibbonAugmenter.Reset)) cleanupComplete = false;
-                if (!TryCleanup(BltViewActionOverrideAugmenter.Reset)) cleanupComplete = false;
-                if (!TryCleanup(BltBimRibbonMirrorAugmenter.Reset)) cleanupComplete = false;
-                if (!TryCleanup(BltModelingRibbonVisualRefiner.Reset)) cleanupComplete = false;
-                if (!TryCleanup(BltModelingRibbonFunctionRefiner.Reset)) cleanupComplete = false;
-                if (!TryCleanup(BltModelingRibbonAugmenter.Reset)) cleanupComplete = false;
-                if (!TryCleanup(QuantityReferenceRibbonAugmenter.Reset)) cleanupComplete = false;
-                if (!TryCleanup(BltTopbarTabContract.Reset)) cleanupComplete = false;
-                if (!TryCleanup(RibbonBootstrapIconAugmenter.Reset)) cleanupComplete = false;
-                if (!TryCleanup(Qs3dRibbonTabGroupCoordinator.Reset)) cleanupComplete = false;
+                if (!TryCleanup(() => { BltBimWorkspaceActivationCoordinator.Stop(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { HomeTabActivationCoordinator.Stop(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { Blt3dShellChromeCoordinator.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltHomeRibbonAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltDrawRibbonAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltToolRibbonAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltToolRibbonCommandBinder.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltToolRibbonIconPolisher.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltRecognitionRibbonAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltRecognitionIconPolisher.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltViewRibbonAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltViewActionOverrideAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltBimRibbonMirrorAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltModelingRibbonVisualRefiner.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltModelingRibbonFunctionRefiner.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltModelingRibbonAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { QuantityReferenceRibbonAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltTopbarTabContract.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { RibbonBootstrapIconAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { Qs3dRibbonTabGroupCoordinator.Reset(); })) cleanupComplete = false;
             }
             finally
             {
