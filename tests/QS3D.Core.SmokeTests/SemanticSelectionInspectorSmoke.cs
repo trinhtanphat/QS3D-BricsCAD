@@ -26,6 +26,12 @@ namespace QS3D.Core.SmokeTests
             MissingSemanticReferenceFailsClosed();
             FamilyCategoryMismatchFailsClosed();
             DuplicateProjectIdentityFailsClosed();
+            InPlaceRelationMutationDuringEnumerationFailsClosed();
+            InPlaceElementPropertyMutationDuringEnumerationFailsClosed();
+            InPlaceFamilyPropertyMutationDuringEnumerationFailsClosed();
+            InPlaceQuantityMutationDuringEnumerationFailsClosed();
+            FloorOwnershipMutationDuringEnumerationFailsClosed();
+            StableLazyEnumerationStillPasses();
             OversizedKnownCountsRejectBeforeEnumeration();
             NegativeKnownCountsRejectBeforeEnumeration();
             ExactBoundKnownCountReachesEnumeration();
@@ -299,6 +305,106 @@ namespace QS3D.Core.SmokeTests
             MustFail(
                 () => SemanticSelectionInspector.Inspect(project, new[] { "B-001" }),
                 "Duplicate project element IDs must fail closed before inspection.");
+        }
+
+        private static void InPlaceRelationMutationDuringEnumerationFailsClosed()
+        {
+            var project = BuildProject();
+            FreshnessMutationMustFail(
+                project,
+                () => project.FindElement("B-001")!.ZoneId = "Z-B",
+                "B-001");
+        }
+
+        private static void InPlaceElementPropertyMutationDuringEnumerationFailsClosed()
+        {
+            var project = BuildProject();
+            FreshnessMutationMustFail(
+                project,
+                () => project.FindElement("B-001")!.Properties["Mark"] = "B9",
+                "B-001");
+        }
+
+        private static void InPlaceFamilyPropertyMutationDuringEnumerationFailsClosed()
+        {
+            var project = BuildProject();
+            FreshnessMutationMustFail(
+                project,
+                () => project.FindFamily("FAM-B")!.Properties["FireRating"] = "R90",
+                "B-001");
+        }
+
+        private static void InPlaceQuantityMutationDuringEnumerationFailsClosed()
+        {
+            var project = BuildProject();
+            FreshnessMutationMustFail(
+                project,
+                () => project.FindElement("B-001")!.Quantities["LengthM"] = 7d,
+                "B-001");
+        }
+
+        private static void FloorOwnershipMutationDuringEnumerationFailsClosed()
+        {
+            var project = BuildProject();
+            FreshnessMutationMustFail(
+                project,
+                () =>
+                {
+                    project.Floors.Clear();
+                    project.Floors.Add(new FloorDefinition("F-02", "L02 replacement", 3.6d));
+                },
+                "B-001");
+        }
+
+        private static void StableLazyEnumerationStillPasses()
+        {
+            var project = BuildProject();
+            var version = project.ChangeVersion;
+            var result = SemanticSelectionInspector.Inspect(
+                project,
+                new MutatingSelectionSource(() => { }, "B-002", "B-001"));
+            Equal(2, result.Count);
+            Equal("B-001", result.ElementIds[0]);
+            Equal("B-002", result.ElementIds[1]);
+            Equal(version, project.ChangeVersion);
+        }
+
+        private static void FreshnessMutationMustFail(ProjectState project, Action mutation, params string[] elementIds)
+        {
+            var version = project.ChangeVersion;
+            try
+            {
+                SemanticSelectionInspector.Inspect(project, new MutatingSelectionSource(mutation, elementIds));
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("inspection state changed", StringComparison.Ordinal) < 0)
+                    throw new Exception("Unexpected in-place semantic selection freshness rejection: " + ex.Message);
+                Equal(version, project.ChangeVersion);
+                return;
+            }
+
+            throw new Exception("In-place semantic inspection mutation during lazy selection enumeration must fail closed.");
+        }
+
+        private sealed class MutatingSelectionSource : IEnumerable<string>
+        {
+            private readonly Action _mutation;
+            private readonly IReadOnlyList<string> _elementIds;
+
+            internal MutatingSelectionSource(Action mutation, params string[] elementIds)
+            {
+                _mutation = mutation ?? throw new ArgumentNullException(nameof(mutation));
+                _elementIds = elementIds ?? throw new ArgumentNullException(nameof(elementIds));
+            }
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                _mutation();
+                foreach (var id in _elementIds) yield return id;
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private static void OversizedKnownCountsRejectBeforeEnumeration()
