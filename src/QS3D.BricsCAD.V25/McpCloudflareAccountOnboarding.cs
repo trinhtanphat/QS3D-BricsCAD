@@ -338,44 +338,40 @@ namespace QS3D.BricsCAD.V25
                 {
                     var stdout = new StringBuilder();
                     var stderr = new StringBuilder();
-                    var outputClosed = new ManualResetEventSlim(false);
-                    var errorClosed = new ManualResetEventSlim(false);
+                    process.StartInfo = CreateStartInfo(executable, arguments);
+                    process.OutputDataReceived += (_, args) => { if (args.Data != null) AppendBounded(stdout, args.Data); };
+                    process.ErrorDataReceived += (_, args) => { if (args.Data != null) AppendBounded(stderr, args.Data); };
+                    if (!process.Start()) { error = "Không khởi động được cloudflared."; return false; }
+                    process.BeginOutputReadLine();
+                    process.BeginErrorReadLine();
+
+                    var exited = process.WaitForExit(timeoutMs);
+                    if (!exited)
+                    {
+                        try { process.Kill(); } catch { }
+                        try { process.WaitForExit(3000); } catch { }
+                    }
+
+                    // The parameterless WaitForExit is the documented drain boundary for async
+                    // BeginOutputReadLine/BeginErrorReadLine callbacks. Call it only after exit was
+                    // observed (or after a successful kill) so no callback can race a disposed object.
                     try
                     {
-                        process.StartInfo = CreateStartInfo(executable, arguments);
-                        process.OutputDataReceived += (_, args) =>
-                        {
-                            if (args.Data == null) { outputClosed.Set(); return; }
-                            AppendBounded(stdout, args.Data);
-                        };
-                        process.ErrorDataReceived += (_, args) =>
-                        {
-                            if (args.Data == null) { errorClosed.Set(); return; }
-                            AppendBounded(stderr, args.Data);
-                        };
-                        if (!process.Start()) { error = "Không khởi động được cloudflared."; return false; }
-                        process.BeginOutputReadLine();
-                        process.BeginErrorReadLine();
-                        if (!process.WaitForExit(timeoutMs))
-                        {
-                            try { process.Kill(); } catch { }
-                            try { process.WaitForExit(2000); } catch { }
-                            error = "Cloudflare thao tác quá thời gian chờ.";
-                            return false;
-                        }
-                        try { outputClosed.Wait(1000); } catch { }
-                        try { errorClosed.Wait(1000); } catch { }
-                        output = stdout.ToString().Trim();
-                        error = stderr.ToString().Trim();
-                        if (process.ExitCode == 0) return true;
-                        if (string.IsNullOrWhiteSpace(error)) error = output;
+                        if (process.HasExited) process.WaitForExit();
+                    }
+                    catch { }
+
+                    output = stdout.ToString().Trim();
+                    error = stderr.ToString().Trim();
+                    if (!exited)
+                    {
+                        error = "Cloudflare thao tác quá thời gian chờ."
+                                + (string.IsNullOrWhiteSpace(error) ? string.Empty : " " + Limit(error, 1000));
                         return false;
                     }
-                    finally
-                    {
-                        outputClosed.Dispose();
-                        errorClosed.Dispose();
-                    }
+                    if (process.ExitCode == 0) return true;
+                    if (string.IsNullOrWhiteSpace(error)) error = output;
+                    return false;
                 }
             }
             catch (Exception ex) { error = ex.Message; return false; }
@@ -483,6 +479,7 @@ namespace QS3D.BricsCAD.V25
             lock (Sync) { process = _process; _process = null; }
             if (process == null) return;
             try { if (!process.HasExited) process.Kill(); } catch { }
+            try { if (!process.HasExited) process.WaitForExit(2000); } catch { }
             try { process.Dispose(); } catch { }
         }
 
