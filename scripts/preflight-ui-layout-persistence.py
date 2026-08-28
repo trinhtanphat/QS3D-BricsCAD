@@ -127,19 +127,27 @@ if palette.is_file():
     for needle in (
         "using WpfSize = System.Windows.Size;",
         "var layout = UserUiLayoutStore.Get();",
-        "MinimumSize = new DrawingSize(UserUiLayoutStore.WorkspacePaletteMinWidth, UserUiLayoutStore.WorkspacePaletteMinHeight)",
-        "MinimumSize = new DrawingSize(UserUiLayoutStore.RightPaletteMinWidth, UserUiLayoutStore.RightPaletteMinHeight)",
-        "_workspace.DeviceIndependentSize = new WpfSize(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight);",
-        "_right.DeviceIndependentSize = new WpfSize(layout.RightPaletteWidth, layout.RightPaletteHeight);",
+        "private static PaletteSet CreatePaletteSet(",
+        "new DrawingSize(UserUiLayoutStore.WorkspacePaletteMinWidth, UserUiLayoutStore.WorkspacePaletteMinHeight),",
+        "new DrawingSize(UserUiLayoutStore.RightPaletteMinWidth, UserUiLayoutStore.RightPaletteMinHeight),",
+        "new WpfSize(layout.WorkspacePaletteWidth, layout.WorkspacePaletteHeight),",
+        "new WpfSize(layout.RightPaletteWidth, layout.RightPaletteHeight),",
+        "palette.MinimumSize = minimumSize;",
+        "palette.DeviceIndependentSize = initialSize;",
+        "palette.AddVisual(visualTitle, visual, true);",
         "PersistPaletteLayout();",
         "UserUiLayoutStore.Update(layout =>",
     ):
-        if needle not in text: errors.append("PaletteCoordinator missing per-user dimension/minimum persistence: " + needle)
+        if needle not in text: errors.append("PaletteCoordinator missing rollback-safe per-user dimension/minimum persistence: " + needle)
     for stale in (
         "MinimumSize = new DrawingSize(460, 420)",
         "MinimumSize = new DrawingSize(255, 420)",
+        "_workspace.DeviceIndependentSize =",
+        "_right.DeviceIndependentSize =",
+        "_workspace = new PaletteSet(",
+        "_right = new PaletteSet(",
     ):
-        if stale in text: errors.append("PaletteCoordinator retains stale palette minimum: " + stale)
+        if stale in text: errors.append("PaletteCoordinator retains stale or post-publication palette configuration: " + stale)
     if "_workspace.Size =" in text or "_right.Size =" in text:
         errors.append("PaletteCoordinator must not regress to obsolete PaletteSet.Size for layout persistence")
 
@@ -248,4 +256,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: centralized palette minimums remain persisted atomically/best-effort, the compact Loaded pass preserves a measurable Workspace client, later authoritative layout passes own final pane geometry, and the offline palette smoke validates equivalent source/XAML contracts without loading hosted UI.")
+print("PASS: centralized palette minimums remain persisted atomically/best-effort, native size/minimum configuration occurs under pre-publication rollback ownership, the compact Loaded pass preserves a measurable Workspace client, later authoritative layout passes own final pane geometry, and the offline palette smoke validates equivalent source/XAML contracts without loading hosted UI.")

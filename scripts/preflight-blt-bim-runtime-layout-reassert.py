@@ -28,14 +28,22 @@ for token in (
     "SetVisibility(workspace: true, right: false, quantityInsight: false);",
     "SetVisibility(workspace: true, right: true, quantityInsight: false);",
     "private static readonly Guid PropertiesGuid",
-    'new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)',
+    "_properties = CreatePaletteSet(",
+    '"QS3D — Thuộc tính",',
+    "PropertiesGuid,",
+    "palette = new PaletteSet(title, guid);",
+    "palette.AddVisual(visualTitle, visual, true);",
+    "try { palette.Dispose(); }",
     "public static bool IsPropertiesVisible",
     "_workspace.Dock = DockSides.Left;",
     "_right.Dock = DockSides.Right;",
     "viewport BricsCAD native ở giữa",
 ):
     if token not in palette:
-        errors.append("PaletteCoordinator embedded BIM contract missing: " + token)
+        errors.append("PaletteCoordinator embedded BIM rollback-safe contract missing: " + token)
+
+if '_properties = new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)' in palette:
+    errors.append("embedded BIM must not publish a Properties PaletteSet before native setup succeeds")
 
 bim_start = palette.find("public static bool ShowBimWorkspace()")
 bim_end = palette.find("public static void ShowDrawingManagement()", bim_start)
@@ -114,4 +122,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM activation/retry reasserts the integrated side-by-side Workspace plus Management around native BricsCAD modelspace without reopening optional dedicated Properties/Quantity surfaces.")
+print("PASS: BIM activation/retry reasserts the integrated side-by-side Workspace plus Management around native BricsCAD modelspace without reopening optional dedicated Properties/Quantity surfaces, while Properties native construction remains rollback-safe before publication.")
