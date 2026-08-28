@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             RestoreAtRevisionCeilingDoesNotOverflow();
+            RejectsInvalidMutablePropertyState();
+            PreservesCanonicalPropertyState();
             RejectsInvalidMutableQuantityState();
             RejectsCanonicalQuantityNameCollision();
             DetachedCopyCanonicalizesQuantityNameAndNegativeZero();
@@ -46,6 +48,73 @@ namespace QS3D.Core.SmokeTests
                 try { if (File.Exists(path)) File.Delete(path); } catch { }
                 try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
             }
+        }
+
+        private static void RejectsInvalidMutablePropertyState()
+        {
+            ExpectRejectedElementProperty("padded key", " WidthM ", "0.2");
+            ExpectRejectedElementProperty("control key", "Width\tM", "0.2");
+            ExpectRejectedElementProperty("malformed key", "Width\uD800M", "0.2");
+            ExpectRejectedElementProperty("malformed value", "WidthM", "bad\uD800value");
+            ExpectRejectedFamilyProperty("padded key", " WidthM ", "0.2");
+            ExpectRejectedFamilyProperty("control key", "Width\nM", "0.2");
+            ExpectRejectedFamilyProperty("malformed key", "Width\uD800M", "0.2");
+            ExpectRejectedFamilyProperty("malformed value", "WidthM", "bad\uD800value");
+            ExpectRejectedFamilyProperty("oversized key", new string('K', 121), "0.2");
+            ExpectRejectedFamilyProperty("oversized value", "Description", new string('V', 1001));
+        }
+
+        private static void ExpectRejectedElementProperty(string label, string key, string value)
+        {
+            var project = new ProjectState("snapshot-invalid-element-property-" + label.Replace(" ", "-"), "Invalid element property fixture");
+            var element = new ProjectElement("E1", ElementCategory.Room);
+            element.Properties[key] = value;
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+            var originalDirty = element.Dirty;
+            var originalUpdatedUtc = element.UpdatedUtc;
+            var originalChangeVersion = project.ChangeVersion;
+            var originalProjectUpdatedUtc = project.UpdatedUtc;
+            ExpectInvalidOperation(() => ProjectStateSnapshot.Capture(project), label + " element property was accepted by snapshot capture.");
+            ExpectInvalidOperation(() => ProjectStateSnapshot.CreateDetachedCopy(project), label + " element property was accepted by detached-copy capture.");
+            Require(element.Properties.Count == 1 && element.Properties.ContainsKey(key) && string.Equals(element.Properties[key], value, StringComparison.Ordinal), "Rejected element-property validation mutated source properties.");
+            Require(element.Dirty == originalDirty && element.UpdatedUtc == originalUpdatedUtc, "Rejected element-property validation changed source persistence state.");
+            Require(project.ChangeVersion == originalChangeVersion && project.UpdatedUtc == originalProjectUpdatedUtc, "Rejected element-property validation changed project persistence state.");
+        }
+
+        private static void ExpectRejectedFamilyProperty(string label, string key, string value)
+        {
+            var project = new ProjectState("snapshot-invalid-family-property-" + label.Replace(" ", "-"), "Invalid Family property fixture");
+            var family = new ProjectFamily("F1", "Family", ElementCategory.Room);
+            family.Properties[key] = value;
+            project.Families.Add(family);
+            var originalChangeVersion = project.ChangeVersion;
+            var originalProjectUpdatedUtc = project.UpdatedUtc;
+            ExpectInvalidOperation(() => ProjectStateSnapshot.Capture(project), label + " Family property was accepted by snapshot capture.");
+            ExpectInvalidOperation(() => ProjectStateSnapshot.CreateDetachedCopy(project), label + " Family property was accepted by detached-copy capture.");
+            Require(family.Properties.Count == 1 && family.Properties.ContainsKey(key) && string.Equals(family.Properties[key], value, StringComparison.Ordinal), "Rejected Family-property validation mutated source properties.");
+            Require(project.ChangeVersion == originalChangeVersion && project.UpdatedUtc == originalProjectUpdatedUtc, "Rejected Family-property validation changed project persistence state.");
+        }
+
+        private static void PreservesCanonicalPropertyState()
+        {
+            var project = new ProjectState("snapshot-property-unicode", "Canonical property fixture");
+            var family = new ProjectFamily("F1", "Family", ElementCategory.Room);
+            family.Properties["Description"] = "Family-\U0001F680\tvalue";
+            project.Families.Add(family);
+            var element = new ProjectElement("E1", ElementCategory.Room, "F1", string.Empty, string.Empty);
+            element.SetProperty("Label", "Element-\U0001F680\nvalue");
+            element.MarkClean(ElementDirtyFlags.All);
+            var dirty = element.Dirty;
+            var updatedUtc = element.UpdatedUtc;
+            project.Elements.Add(element);
+
+            var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
+            var detachedFamily = detached.FindFamily("F1") ?? throw new Exception("Detached property fixture lost F1.");
+            var detachedElement = detached.FindElement("E1") ?? throw new Exception("Detached property fixture lost E1.");
+            Require(detachedFamily.Properties.Count == 1 && detachedFamily.Properties["Description"] == "Family-\U0001F680\tvalue", "Detached snapshot changed canonical Family property Unicode/control-preserving value semantics.");
+            Require(detachedElement.Properties.Count == 1 && detachedElement.Properties["Label"] == "Element-\U0001F680\nvalue", "Detached snapshot changed canonical element property Unicode/control-preserving value semantics.");
+            Require(detachedElement.Dirty == dirty && detachedElement.UpdatedUtc == updatedUtc, "Canonical element property cloning changed captured persistence state.");
         }
 
         private static void RejectsInvalidMutableQuantityState()
