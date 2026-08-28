@@ -55,6 +55,7 @@ def main() -> int:
         "DNS conflict fail-closed": (account, "QS3D không tự bỏ qua xung đột DNS"),
         "hostname-scoped ingress": (account, '"ingress:\\r\\n"'),
         "account setup verified one-click installer": (account, "McpCloudflaredBootstrapper.BeginInstall"),
+        "named public URL requires live process": (account, "PublicMcpUrl => IsRunning"),
         "Quick Tunnel URL polling": (account, "DispatcherTimer"),
         "Quick Tunnel bounded poll": (account, "_quickUrlPollTicks >= 20"),
         "named tunnel output bound to process owner": (account, "HandleRunLine(process, args.Data, false)"),
@@ -63,6 +64,7 @@ def main() -> int:
         "fallback process exit cleanup": (fallback, "HandleProcessExit(Process process)"),
         "fallback output bound to process owner": (fallback, "HandleLine(process, args.Data, discoverQuickUrl)"),
         "fallback stale-process output rejection": (fallback, "if (!ReferenceEquals(_process, process)) return;"),
+        "fallback public URL requires live process": (fallback, "if (!IsRunning) return string.Empty;"),
         "foreground ESC fallback": (server, "TrySendEscapeFallback()"),
         "emergency-stop latch": (server, "_automationStopped = true"),
         "CAD dispatch timeout cancellation": (server, "Interlocked.Exchange(ref item.Cancelled, 1)"),
@@ -104,10 +106,10 @@ def main() -> int:
 
     print(
         "PASS: MCP production source uses one validated HTTPS endpoint resolver, isolated user "
-        "fallback state, live/exact Cloudflare tunnel identity checks, fail-closed DNS conflict "
-        "handling, owner-bound named/Quick Tunnel output with drain-before-exit ordering, verified "
-        "click-first redacted onboarding, bounded network/session surfaces and BricsCAD-confined "
-        "emergency recovery."
+        "fallback state, live-only provider URLs, exact Cloudflare tunnel identity checks, "
+        "fail-closed DNS conflict handling, owner-bound named/Quick Tunnel output with "
+        "drain-before-exit ordering, verified click-first redacted onboarding, bounded "
+        "network/session surfaces and BricsCAD-confined emergency recovery."
     )
     return 0
 
