@@ -91,9 +91,12 @@ for token in (
     require(wrapper, token, "V26 update-manifest wrapper")
 
 # Mutation probes ensure each major protection is independently observable.
+# The strict-UTF8 marker is intentionally bound to the metadata decoder call;
+# the source also constructs a strict UTF8 encoder for atomic manifest output,
+# and that unrelated second constructor must not let a weakened decoder escape.
 required_markers = (
     "$stream.Length -gt $script:MaxMetadataBytes",
-    "[Text.UTF8Encoding]::new($false, $true)",
+    "[Text.UTF8Encoding]::new($false, $true).GetString($bytes)",
     "$metadataFile = Resolve-OrdinaryNonReparseFile",
     "$zip = Resolve-OrdinaryNonReparseFile",
     "$package = Resolve-OrdinaryNonReparseDirectory",
@@ -103,7 +106,7 @@ required_markers = (
 )
 mutations = {
     "remove metadata bound": source.replace("$stream.Length -gt $script:MaxMetadataBytes", "$false", 1),
-    "weaken strict UTF8": source.replace("[Text.UTF8Encoding]::new($false, $true)", "[Text.Encoding]::UTF8", 1),
+    "weaken strict UTF8": source.replace("[Text.UTF8Encoding]::new($false, $true).GetString($bytes)", "[Text.Encoding]::UTF8.GetString($bytes)", 1),
     "bypass metadata ordinary file": source.replace("$metadataFile = Resolve-OrdinaryNonReparseFile", "$metadataFile = Get-Item", 1),
     "bypass zip ordinary file": source.replace("$zip = Resolve-OrdinaryNonReparseFile", "$zip = Get-Item", 1),
     "bypass package root guard": source.replace("$package = Resolve-OrdinaryNonReparseDirectory", "$package = Get-Item", 1),
