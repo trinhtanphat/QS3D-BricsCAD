@@ -13,6 +13,8 @@ REPARSE_TOKEN = "[IO.FileAttributes]::ReparsePoint"
 ROOTED_TOKEN = "if (-not [IO.Path]::IsPathRooted($trimmed))"
 STATE_CAPTURE_TOKEN = "function Get-StableHostFileState"
 STATE_ASSERT_TOKEN = "function Assert-StableHostFileState"
+SECOND_CAPTURE_HASH_TOKEN = "$secondHash = Get-FileStreamSha256 -File $second -Label $Label"
+CURRENT_VERIFY_HASH_TOKEN = "$currentHash = Get-FileStreamSha256 -File $current -Label $Label"
 STATE_WRITE_TOKEN = "-StatePath $env:V26_HOST_REFERENCE_STATE"
 STATE_VERIFY_TOKEN = "-VerifyStatePath $env:V26_HOST_REFERENCE_STATE"
 
@@ -35,6 +37,7 @@ def require_before(text: str, first: str, second: str, label: str) -> None:
 
 def validate_helper(text: str) -> None:
     component_guard = "Assert-NoExistingReparseComponent -Path $Path -Label $Label"
+    second_resolve = "Get-RequiredOrdinaryFile -Path $first.FullName -Label $Label"
     for token in (
         "function Get-CanonicalAbsolutePath",
         ROOTED_TOKEN,
@@ -46,6 +49,9 @@ def validate_helper(text: str) -> None:
         "Assert-NoExistingReparseComponent -Path $canonicalDir -Label 'BricsCadDir'",
         component_guard,
         "Get-RequiredOrdinaryFile -Path $Path -Label $Label",
+        second_resolve,
+        SECOND_CAPTURE_HASH_TOKEN,
+        CURRENT_VERIFY_HASH_TOKEN,
         "@('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')",
         "$version.FileMajorPart -ne 26",
         STATE_CAPTURE_TOKEN,
@@ -71,6 +77,12 @@ def validate_helper(text: str) -> None:
         component_guard,
         "Get-RequiredOrdinaryFile -Path $Path -Label $Label",
         "reparse check before ordinary-file trust",
+    )
+    require_before(
+        text,
+        second_resolve,
+        SECOND_CAPTURE_HASH_TOKEN,
+        "second ordinary-file resolve before second generation hash",
     )
     require_before(
         text,
@@ -118,6 +130,16 @@ def main() -> None:
     expect_rejected(validate_helper, helper.replace(STATE_CAPTURE_TOKEN, "function Get-UnstableHostFileState", 1), "removed stable host-file capture")
     expect_rejected(validate_helper, helper.replace(STATE_ASSERT_TOKEN, "function Ignore-StableHostFileState", 1), "removed stable host-file revalidation")
     expect_rejected(
+        validate_helper,
+        helper.replace(SECOND_CAPTURE_HASH_TOKEN, "$secondHash = $firstHash", 1),
+        "removed second-generation hash capture",
+    )
+    expect_rejected(
+        validate_helper,
+        helper.replace(CURRENT_VERIFY_HASH_TOKEN, "$currentHash = [string]$Expected.Sha256", 1),
+        "removed current-generation verification hash",
+    )
+    expect_rejected(
         lambda text: validate_workflow(text, "manual V26 build workflow"),
         build.replace(STATE_VERIFY_TOKEN, "# removed generation revalidation", 1),
         "removed build-workflow generation revalidation",
@@ -132,7 +154,7 @@ def main() -> None:
     print(" - both V26 workflows capture admitted host-reference generations and revalidate before plugin build/runtime")
     print(" - configured host roots must be absolute before canonicalization")
     print(" - host path components and required V26 leaves reject filesystem reparse aliases")
-    print(" - required host leaves are ordinary files and stable across admission/consumption boundaries")
+    print(" - required host leaves are independently re-resolved and re-hashed across admission/consumption boundaries")
 
 
 if __name__ == "__main__":
