@@ -9,6 +9,7 @@ BUILD_WORKFLOW = ROOT / ".github" / "workflows" / "bricscad-v26.yml"
 RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release-v26.yml"
 
 CALL = r"& .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR"
+REPARSE_TOKEN = "[IO.FileAttributes]::ReparsePoint"
 
 
 def fail(message: str) -> None:
@@ -32,7 +33,7 @@ def validate_helper(text: str) -> None:
         "function Get-CanonicalAbsolutePath",
         "[IO.Path]::GetFullPath",
         "function Assert-NoExistingReparseComponent",
-        "[IO.FileAttributes]::ReparsePoint",
+        REPARSE_TOKEN,
         "function Get-RequiredOrdinaryFile",
         "$item.PSIsContainer",
         "Assert-NoExistingReparseComponent -Path $canonicalDir -Label 'BricsCadDir'",
@@ -42,6 +43,13 @@ def validate_helper(text: str) -> None:
         "$version.FileMajorPart -ne 26",
     ):
         require(text, token, "V26 host-safety helper")
+
+    # The helper has three independent reparse boundaries: traversed path
+    # components, required host-file leaves, and the configured host directory.
+    # Keep the source contract explicit so a mutation of one boundary cannot be
+    # masked by the same token remaining in another boundary.
+    if text.count(REPARSE_TOKEN) < 3:
+        fail("V26 host-safety helper: expected reparse rejection at path-component, file-leaf, and host-directory boundaries")
 
     require_before(
         text,
@@ -66,7 +74,7 @@ def validate_workflow(text: str, label: str) -> None:
         require_before(text, CALL, "test-bricscad-v26-runtime.ps1", f"{label} safety before runtime")
 
 
-def expect_rejected(validator, original: str, mutated: str, label: str) -> None:
+def expect_rejected(validator, mutated: str, label: str) -> None:
     try:
         validator(mutated)
     except SystemExit:
@@ -85,25 +93,21 @@ def main() -> None:
 
     expect_rejected(
         validate_helper,
-        helper,
-        helper.replace("[IO.FileAttributes]::ReparsePoint", "[IO.FileAttributes]::Archive", 1),
-        "removed reparse attribute check",
+        helper.replace(REPARSE_TOKEN, "[IO.FileAttributes]::Archive"),
+        "removed reparse attribute checks",
     )
     expect_rejected(
         validate_helper,
-        helper,
         helper.replace("$item.PSIsContainer", "$false", 1),
         "removed ordinary-file container rejection",
     )
     expect_rejected(
         lambda text: validate_workflow(text, "manual V26 build workflow"),
-        build,
         build.replace(CALL, "# removed V26 host path safety", 1),
         "removed build-workflow host safety call",
     )
     expect_rejected(
         lambda text: validate_workflow(text, "manual V26 release workflow"),
-        release,
         release.replace(CALL, "# removed V26 host path safety", 1),
         "removed release-workflow host safety call",
     )
