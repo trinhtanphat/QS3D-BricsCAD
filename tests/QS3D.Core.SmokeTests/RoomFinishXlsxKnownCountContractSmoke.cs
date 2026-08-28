@@ -21,6 +21,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectsConflictingKnownCountsBeforeTraversalOrFilesystem()
         {
+            // One public object can expose several deterministic collection Count contracts at once.
             var rows = new KnownCountRows(ValidRow(), 1, 2, 3);
             ExpectRejected<InvalidOperationException>(rows, "conflicting known collection counts");
         }
