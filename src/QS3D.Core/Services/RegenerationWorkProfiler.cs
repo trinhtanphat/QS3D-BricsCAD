@@ -126,15 +126,20 @@ namespace QS3D.Core.Services
             if (values == null) throw new ArgumentNullException(parameterName);
             var knownCount = ValidateKnownCountContract(values, maxCount, parameterName, label);
             var result = new List<T>();
-            foreach (var value in values)
+            using (var enumerator = values.GetEnumerator())
             {
-                if (knownCount.HasValue && result.Count >= knownCount.Value)
-                    throw CountMismatch(knownCount.Value, result.Count + 1, parameterName, label);
-                if (ReferenceEquals(value, null))
-                    throw new ArgumentException("Regeneration work profile " + label + " collection cannot contain null entries.", parameterName);
-                if (result.Count >= maxCount)
-                    throw CollectionTooLarge(maxCount, parameterName, label);
-                result.Add(value);
+                while (enumerator.MoveNext())
+                {
+                    if (knownCount.HasValue && result.Count >= knownCount.Value)
+                        throw CountMismatch(knownCount.Value, result.Count + 1, parameterName, label);
+                    if (result.Count >= maxCount)
+                        throw CollectionTooLarge(maxCount, parameterName, label);
+
+                    var value = enumerator.Current;
+                    if (ReferenceEquals(value, null))
+                        throw new ArgumentException("Regeneration work profile " + label + " collection cannot contain null entries.", parameterName);
+                    result.Add(value);
+                }
             }
             if (knownCount.HasValue && result.Count != knownCount.Value)
                 throw CountMismatch(knownCount.Value, result.Count, parameterName, label);
