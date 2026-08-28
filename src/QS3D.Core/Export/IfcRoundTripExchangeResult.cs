@@ -163,6 +163,10 @@ namespace QS3D.Core.Export
 
             if (knownCount.HasValue && observedResultCount != knownCount.Value)
                 throw new InvalidOperationException("IFC exchange result source Count does not match enumerated result count.");
+            IfcRoundTripKnownCountContract.RequireStableAfterTraversal(
+                results,
+                knownCount,
+                "IFC exchange result");
 
             var items = byExternalIdentity.Values.ToList();
             items.Sort(IfcRoundTripExchangeResultComparer.Instance);
