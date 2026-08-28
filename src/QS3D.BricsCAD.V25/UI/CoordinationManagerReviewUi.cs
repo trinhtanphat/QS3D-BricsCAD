@@ -623,14 +623,19 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (_viewBeforeSection == null) return;
                 var snapshot = _viewBeforeSection;
-                _viewBeforeSection = null;
-                if (_destroyed) return;
+                if (_destroyed)
+                {
+                    _viewBeforeSection = null;
+                    return;
+                }
 
                 using (var view = _document.Editor.GetCurrentView())
                 {
                     snapshot.Apply(view);
                     _document.Editor.SetCurrentView(view);
                 }
+
+                _viewBeforeSection = null;
             }
 
             private void RestoreSectionViewBestEffort(ViewSnapshot snapshot)
@@ -719,9 +724,18 @@ namespace QS3D.BricsCAD.V25.UI
 
             public void ResetTransientStateBestEffort()
             {
+                ResetTransientStateBestEffort(false);
+            }
+
+            private void ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)
+            {
                 try { ClearHighlight(); } catch { _highlighted.Clear(); }
                 try { RestoreIsolation(); } catch { _isolationActive = false; RestoreObjectIsolationModeBestEffort(); }
-                try { RestoreSectionView(); } catch { _viewBeforeSection = null; }
+                try { RestoreSectionView(); }
+                catch
+                {
+                    if (throwOnSectionRestoreFailure) throw;
+                }
             }
 
             public void AbandonDestroyedDocumentState()
@@ -750,8 +764,8 @@ namespace QS3D.BricsCAD.V25.UI
             public void Dispose()
             {
                 if (_disposed) return;
+                ResetTransientStateBestEffort(true);
                 _disposed = true;
-                ResetTransientStateBestEffort();
             }
 
             private sealed class ViewSnapshot
