@@ -27,6 +27,29 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                McpEmbeddedServer.Start();
+            }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("MCP server", ex);
+            }
+
+            try
+            {
+                // The click-first browser-auth flow is the default persistent tunnel.
+                // Quick/token modes remain available from the setup UI as fallback paths.
+                McpCloudflareAccountTunnelManager.TryAutoStart();
+                // Publish a validated saved/provider endpoint into the process so the embedded
+                // connector_info/status surface and every UI path report the same public URL.
+                McpPublicEndpointResolver.Resolve();
+            }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("MCP Cloudflare tunnel", ex);
+            }
+
+            try
+            {
                 QuantityContextMenuCoordinator.Start();
             }
             catch (Exception ex)
@@ -51,6 +74,9 @@ namespace QS3D.BricsCAD.V25
 
         private static void TeardownHostServices()
         {
+            TryCleanup(McpCloudflareAccountTunnelManager.StopForHostShutdown);
+            TryCleanup(McpCloudflareTunnelManager.StopForHostShutdown);
+            TryCleanup(McpEmbeddedServer.Stop);
             TryCleanup(UpdateBootstrapper.Stop);
             TryCleanup(QuantityContextMenuCoordinator.Stop);
             TryCleanup(RibbonInitializationCoordinator.Stop);
