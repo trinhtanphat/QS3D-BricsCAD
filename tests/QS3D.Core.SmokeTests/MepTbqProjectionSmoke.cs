@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using QS3D.Core.Cost;
 using QS3D.Core.Mep;
@@ -15,6 +16,11 @@ namespace QS3D.Core.SmokeTests
             SupplementaryUnicodeIdentityProjects();
             EmptyMetricsDoNotCreateRows();
             UnrepresentableMetricFailsClosed();
+            KnownCountOverrunWinsBeforeExtraRowValidation();
+            KnownCountUnderYieldFailsClosed();
+            KnownCountDriftFailsClosedAfterTraversal();
+            OversizedKnownCountFailsBeforeEnumeration();
+            StreamingTraversalIsBounded();
         }
 
         private static void ProjectsCanonicalMetricsAndPreservesWorkspace()
@@ -100,18 +106,10 @@ namespace QS3D.Core.SmokeTests
 
         private static void MalformedUtf16IdentityFailsClosedBeforeProjection()
         {
-            Throws<ArgumentException>(
-                () => new MepElement("E-\uD800", MepElementKind.Pipe, "CHW", "DN50", "L01"),
-                "malformed element id");
-            Throws<ArgumentException>(
-                () => new MepElement("E-SYSTEM", MepElementKind.Pipe, "CHW-\uD800", "DN50", "L01"),
-                "malformed system identity");
-            Throws<ArgumentException>(
-                () => new MepElement("E-SPEC", MepElementKind.Pipe, "CHW", "DN50-\uDC00", "L01"),
-                "malformed specification identity");
-            Throws<ArgumentException>(
-                () => new MepElement("E-REGION", MepElementKind.Pipe, "CHW", "DN50", "L01-\uD800"),
-                "malformed region identity");
+            Throws<ArgumentException>(() => new MepElement("E-\uD800", MepElementKind.Pipe, "CHW", "DN50", "L01"), "malformed element id");
+            Throws<ArgumentException>(() => new MepElement("E-SYSTEM", MepElementKind.Pipe, "CHW-\uD800", "DN50", "L01"), "malformed system identity");
+            Throws<ArgumentException>(() => new MepElement("E-SPEC", MepElementKind.Pipe, "CHW", "DN50-\uDC00", "L01"), "malformed specification identity");
+            Throws<ArgumentException>(() => new MepElement("E-REGION", MepElementKind.Pipe, "CHW", "DN50", "L01-\uD800"), "malformed region identity");
         }
 
         private static void SupplementaryUnicodeIdentityProjects()
@@ -155,12 +153,67 @@ namespace QS3D.Core.SmokeTests
         private static void UnrepresentableMetricFailsClosed()
         {
             var service = new MepTbqProjectionService();
-            var current = CreateState();
             var groups = new MepQuantityService().Aggregate(new[]
             {
                 new MepElement("HUGE", MepElementKind.Pipe, "CHW", "DN100", "L99", 1, double.MaxValue)
             });
-            Throws<OverflowException>(() => service.Project(current, groups), "MEP metric outside decimal range");
+            Throws<OverflowException>(() => service.Project(CreateState(), groups), "MEP metric outside decimal range");
+        }
+
+        private static void KnownCountOverrunWinsBeforeExtraRowValidation()
+        {
+            var group = OneGroup();
+            var source = new CountedGroups(1, new MepQuantityGroup[] { group, null! });
+            Throws<InvalidOperationException>(() => new MepTbqProjectionService().BuildReport(source), "known-count overrun before extra row validation");
+        }
+
+        private static void KnownCountUnderYieldFailsClosed()
+        {
+            var source = new CountedGroups(2, new[] { OneGroup() });
+            Throws<InvalidOperationException>(() => new MepTbqProjectionService().BuildReport(source), "known-count under-yield");
+        }
+
+        private static void KnownCountDriftFailsClosedAfterTraversal()
+        {
+            var reads = 0;
+            var source = new CountedGroups(() => ++reads == 1 ? 1 : 2, new[] { OneGroup() });
+            Throws<InvalidOperationException>(() => new MepTbqProjectionService().BuildReport(source), "known-count drift after traversal");
+        }
+
+        private static void OversizedKnownCountFailsBeforeEnumeration()
+        {
+            var source = new CountedGroups(10001, new[] { OneGroup() }, throwOnEnumeration: true);
+            Throws<InvalidOperationException>(() => new MepTbqProjectionService().BuildReport(source), "oversized known count before enumeration");
+            Equal(0, source.EnumeratorRequests, "oversized known count must not enumerate");
+        }
+
+        private static void StreamingTraversalIsBounded()
+        {
+            var group = OneGroup();
+            Throws<InvalidOperationException>(
+                () => new MepTbqProjectionService().BuildReport(Stream(group, 10001)),
+                "streaming traversal cap");
+            Equal(10001, StreamingYieldCount, "streaming cap observes only the first item beyond the maximum");
+        }
+
+        private static int StreamingYieldCount;
+
+        private static IEnumerable<MepQuantityGroup> Stream(MepQuantityGroup group, int count)
+        {
+            StreamingYieldCount = 0;
+            for (var i = 0; i < count; i++)
+            {
+                StreamingYieldCount++;
+                yield return group;
+            }
+        }
+
+        private static MepQuantityGroup OneGroup()
+        {
+            return new MepQuantityService().Aggregate(new[]
+            {
+                new MepElement("BOUND", MepElementKind.Pipe, "CHW", "DN50", "L01", 1, 1d)
+            })[0];
         }
 
         private static TbqProjectWorkspaceState CreateState()
@@ -227,6 +280,44 @@ namespace QS3D.Core.SmokeTests
             try { action(); }
             catch (T) { return; }
             throw new InvalidOperationException(label + ": expected " + typeof(T).Name + ".");
+        }
+
+        private sealed class CountedGroups : ICollection<MepQuantityGroup>
+        {
+            private readonly Func<int> _count;
+            private readonly IReadOnlyList<MepQuantityGroup> _items;
+            private readonly bool _throwOnEnumeration;
+
+            internal CountedGroups(int count, IReadOnlyList<MepQuantityGroup> items, bool throwOnEnumeration = false)
+                : this(() => count, items, throwOnEnumeration)
+            {
+            }
+
+            internal CountedGroups(Func<int> count, IReadOnlyList<MepQuantityGroup> items, bool throwOnEnumeration = false)
+            {
+                _count = count;
+                _items = items;
+                _throwOnEnumeration = throwOnEnumeration;
+            }
+
+            public int Count => _count();
+            public bool IsReadOnly => true;
+            public int EnumeratorRequests { get; private set; }
+
+            public IEnumerator<MepQuantityGroup> GetEnumerator()
+            {
+                EnumeratorRequests++;
+                if (_throwOnEnumeration)
+                    throw new InvalidOperationException("Enumeration should not have started.");
+                for (var i = 0; i < _items.Count; i++) yield return _items[i];
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public bool Contains(MepQuantityGroup item) => throw new NotSupportedException();
+            public void CopyTo(MepQuantityGroup[] array, int arrayIndex) => throw new NotSupportedException();
+            public void Add(MepQuantityGroup item) => throw new NotSupportedException();
+            public bool Remove(MepQuantityGroup item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
         }
     }
 }

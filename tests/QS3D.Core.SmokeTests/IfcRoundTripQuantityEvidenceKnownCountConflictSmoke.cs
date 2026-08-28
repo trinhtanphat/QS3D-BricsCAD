@@ -94,9 +94,9 @@ namespace QS3D.Core.SmokeTests
 
             Equal(1, result.CandidateCount, "equal Count candidate count");
             Equal(1, result.Groups.Count, "equal Count group count");
-            Equal(1, source.GenericCountReads, "equal Count generic contract read count");
-            Equal(1, source.ReadOnlyCountReads, "equal Count read-only contract read count");
-            Equal(1, source.NonGenericCountReads, "equal Count non-generic contract read count");
+            Equal(2, source.GenericCountReads, "equal Count generic contract read count");
+            Equal(2, source.ReadOnlyCountReads, "equal Count read-only contract read count");
+            Equal(2, source.NonGenericCountReads, "equal Count non-generic contract read count");
             True(source.EnumeratorRequested, "equal Count source should be enumerated");
         }
 

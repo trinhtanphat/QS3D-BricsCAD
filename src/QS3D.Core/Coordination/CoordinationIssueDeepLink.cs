@@ -147,6 +147,8 @@ namespace QS3D.Core.Coordination
                     throw new FormatException("Coordination deep-link query value contains malformed UTF-16: " + key + ".");
                 if (decoded.Any(char.IsControl))
                     throw new FormatException("Coordination deep-link query value contains control characters: " + key + ".");
+                if (!string.Equals(encoded, Uri.EscapeDataString(decoded), StringComparison.Ordinal))
+                    throw new FormatException("Coordination deep-link query value is not canonically encoded: " + key + ".");
                 fields.Add(key, decoded);
             }
 
