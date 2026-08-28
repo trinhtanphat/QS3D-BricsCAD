@@ -106,7 +106,7 @@ namespace QS3D.BricsCAD.V25.UI
             ProjectFamily family)
         {
             var selectedHandles = new HashSet<string>(
-                Cad.EntitySnapshotReader.ReadCurrentSelection(document)
+                Cad.EntitySnapshotReader.ReadImpliedSelection(document)
                     .Select(snapshot => (snapshot.Handle ?? string.Empty).Trim())
                     .Where(handle => handle.Length > 0),
                 StringComparer.OrdinalIgnoreCase);
