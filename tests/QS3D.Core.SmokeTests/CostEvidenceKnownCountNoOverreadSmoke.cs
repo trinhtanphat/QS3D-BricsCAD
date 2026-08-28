@@ -19,6 +19,10 @@ namespace QS3D.Core.SmokeTests
             RateBookStreamingCeilingRejectsBeforeOverflowCurrent();
             FrozenProjectionOverrunRejectsBeforeSecondCurrent();
             FrozenProjectionStreamingCeilingRejectsBeforeOverflowCurrent();
+            UnderYieldRejectsOnBothSurfaces();
+            CountDriftRejectsOnBothSurfaces();
+            ConflictingAndNegativeCountsRejectBeforeTraversal();
+            NullAndDuplicateEvidenceRemainRejected();
             HonestCountedEvidenceRemainsAccepted();
         }
 
@@ -56,6 +60,68 @@ namespace QS3D.Core.SmokeTests
             Contains("at most 10000", error.Message, "projection streaming ceiling diagnostic");
             Equal(10001, source.MoveNextCalls, "projection streaming overflow MoveNext");
             Equal(10000, source.CurrentReads, "projection streaming overflow Current");
+        }
+
+        private static void UnderYieldRejectsOnBothSurfaces()
+        {
+            var rates = new CountProbeCollection<RateItem>(2, Item("R-1"));
+            var rateError = Capture<InvalidOperationException>(() => new RateBook("book", rates));
+            Contains("traversal count", rateError.Message, "rate-book under-yield diagnostic");
+            Equal(2, rates.MoveNextCalls, "rate-book under-yield MoveNext");
+            Equal(1, rates.CurrentReads, "rate-book under-yield Current");
+
+            var lines = new CountProbeCollection<EstimateLine>(2, Line("L-1"));
+            var projectionError = Capture<InvalidOperationException>(() => FrozenEstimateProjection.Create(lines));
+            Contains("Count does not match", projectionError.Message, "projection under-yield diagnostic");
+            Equal(2, lines.MoveNextCalls, "projection under-yield MoveNext");
+            Equal(1, lines.CurrentReads, "projection under-yield Current");
+        }
+
+        private static void CountDriftRejectsOnBothSurfaces()
+        {
+            var rates = new SequencedCountCollection<RateItem>(new[] { 1, 2 }, Item("R-1"));
+            var rateError = Capture<InvalidOperationException>(() => new RateBook("book", rates));
+            Contains("changed during traversal", rateError.Message, "rate-book Count drift diagnostic");
+            Equal(2, rates.CountReads, "rate-book Count drift rebind");
+
+            var lines = new SequencedCountCollection<EstimateLine>(new[] { 1, 2 }, Line("L-1"));
+            var projectionError = Capture<InvalidOperationException>(() => FrozenEstimateProjection.Create(lines));
+            Contains("changed during enumeration", projectionError.Message, "projection Count drift diagnostic");
+            Equal(2, lines.CountReads, "projection Count drift rebind");
+        }
+
+        private static void ConflictingAndNegativeCountsRejectBeforeTraversal()
+        {
+            var conflictingRates = new DualCountCollection<RateItem>(1, 2, Item("R-1"));
+            Contains("conflicting", Capture<InvalidOperationException>(() => new RateBook("book", conflictingRates)).Message, "rate-book conflicting Count");
+            Equal(0, conflictingRates.MoveNextCalls, "rate-book conflicting Count traversal");
+
+            var conflictingLines = new DualCountCollection<EstimateLine>(1, 2, Line("L-1"));
+            Contains("conflicting", Capture<InvalidOperationException>(() => FrozenEstimateProjection.Create(conflictingLines)).Message, "projection conflicting Count");
+            Equal(0, conflictingLines.MoveNextCalls, "projection conflicting Count traversal");
+
+            var negativeRates = new CountProbeCollection<RateItem>(-1, Item("R-1"));
+            Contains("negative", Capture<InvalidOperationException>(() => new RateBook("book", negativeRates)).Message, "rate-book negative Count");
+            Equal(0, negativeRates.MoveNextCalls, "rate-book negative Count traversal");
+
+            var negativeLines = new CountProbeCollection<EstimateLine>(-1, Line("L-1"));
+            Contains("negative", Capture<InvalidOperationException>(() => FrozenEstimateProjection.Create(negativeLines)).Message, "projection negative Count");
+            Equal(0, negativeLines.MoveNextCalls, "projection negative Count traversal");
+        }
+
+        private static void NullAndDuplicateEvidenceRemainRejected()
+        {
+            var nullRates = new CountProbeCollection<RateItem>(1, null!);
+            Contains("null item", Capture<ArgumentException>(() => new RateBook("book", nullRates)).Message, "rate-book null evidence");
+
+            var duplicateRates = new CountProbeCollection<RateItem>(2, Item("R-DUP"), Item("R-DUP"));
+            Contains("Duplicate rate item id", Capture<ArgumentException>(() => new RateBook("book", duplicateRates)).Message, "rate-book duplicate evidence");
+
+            var nullLines = new CountProbeCollection<EstimateLine>(1, null!);
+            Contains("null line", Capture<ArgumentException>(() => FrozenEstimateProjection.Create(nullLines)).Message, "projection null evidence");
+
+            var duplicateLines = new CountProbeCollection<EstimateLine>(2, Line("L-DUP"), Line("L-DUP"));
+            Contains("Duplicate estimate line id", Capture<ArgumentException>(() => FrozenEstimateProjection.Create(duplicateLines)).Message, "projection duplicate evidence");
         }
 
         private static void HonestCountedEvidenceRemainsAccepted()
@@ -119,6 +185,53 @@ namespace QS3D.Core.SmokeTests
                 private int _index = -1;
                 internal ProbeEnumerator(CountProbeCollection<T> owner) { _owner = owner; }
                 public T Current { get { _owner.CurrentReads++; return _owner._items[_index]; } }
+                object IEnumerator.Current => Current!;
+                public bool MoveNext() { _owner.MoveNextCalls++; _index++; return _index < _owner._items.Length; }
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
+            public void Add(T item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(T item) => throw new NotSupportedException();
+            public void CopyTo(T[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(T item) => throw new NotSupportedException();
+        }
+
+        private sealed class SequencedCountCollection<T> : ICollection<T>
+        {
+            private readonly int[] _counts;
+            private readonly T[] _items;
+            internal SequencedCountCollection(int[] counts, params T[] items) { _counts = counts; _items = items; }
+            public int Count { get { var index = CountReads < _counts.Length ? CountReads : _counts.Length - 1; CountReads++; return _counts[index]; } }
+            public bool IsReadOnly => true;
+            internal int CountReads { get; private set; }
+            public IEnumerator<T> GetEnumerator() => ((IEnumerable<T>)_items).GetEnumerator();
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void Add(T item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(T item) => throw new NotSupportedException();
+            public void CopyTo(T[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(T item) => throw new NotSupportedException();
+        }
+
+        private sealed class DualCountCollection<T> : ICollection<T>, IReadOnlyCollection<T>
+        {
+            private readonly int _genericCount;
+            private readonly int _readOnlyCount;
+            private readonly T[] _items;
+            internal DualCountCollection(int genericCount, int readOnlyCount, params T[] items) { _genericCount = genericCount; _readOnlyCount = readOnlyCount; _items = items; }
+            public int Count => _genericCount;
+            int IReadOnlyCollection<T>.Count => _readOnlyCount;
+            public bool IsReadOnly => true;
+            internal int MoveNextCalls { get; private set; }
+            public IEnumerator<T> GetEnumerator() => new ProbeEnumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            private sealed class ProbeEnumerator : IEnumerator<T>
+            {
+                private readonly DualCountCollection<T> _owner;
+                private int _index = -1;
+                internal ProbeEnumerator(DualCountCollection<T> owner) { _owner = owner; }
+                public T Current => _owner._items[_index];
                 object IEnumerator.Current => Current!;
                 public bool MoveNext() { _owner.MoveNextCalls++; _index++; return _index < _owner._items.Length; }
                 public void Reset() => throw new NotSupportedException();
