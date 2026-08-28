@@ -7,76 +7,207 @@ namespace QS3D.BricsCAD.V25.Ribbon
 {
     internal static class RibbonInitializationCoordinator
     {
+        [Flags]
+        private enum HostSubscription : byte
+        {
+            None = 0,
+            DocumentCreated = 1,
+            DocumentActivated = 2,
+            All = DocumentCreated | DocumentActivated
+        }
+
         private const int MaxTimedAttempts = 60;
         private static readonly TimeSpan RetryInterval = TimeSpan.FromMilliseconds(500);
         private static bool _started;
         private static bool _initialized;
+        private static bool _stopping;
+        private static bool _cleanupPending;
         private static int _timedAttempts;
         private static DispatcherTimer? _retryTimer;
+        private static HostSubscription _hostSubscriptions;
 
         public static void Start()
         {
-            if (_started)
+            if (_stopping) return;
+
+            if (!_started)
             {
-                if (!_initialized) StartTimedRetry();
-                return;
+                _started = true;
+                _initialized = false;
+                _cleanupPending = true;
             }
 
-            _started = true;
-            _initialized = false;
-            var documents = Application.DocumentManager;
-            try { documents.DocumentCreated += OnDocumentAvailable; } catch { }
-            try { documents.DocumentActivated += OnDocumentAvailable; } catch { }
+            // Host event acquisition is retryable and transactional per attempt. If an add
+            // fails, newly acquired handlers from that attempt are rolled back. Any rollback
+            // failure keeps its ownership bit so the next retry never double-subscribes it.
+            TryEnsureHostSubscriptions();
 
             // NETLOAD runs on BricsCAD's UI thread. Do not synchronously reconcile the
-            // large reflective ribbon tree before NETLOAD can return; queue the first
-            // attempt through the same bounded retry path used when the host ribbon is
-            // not ready yet.
-            StartTimedRetry();
+            // large reflective ribbon tree before NETLOAD can return; queue initialization
+            // and any missing host subscription retry through the bounded idle timer.
+            if (!_initialized || _hostSubscriptions != HostSubscription.All)
+                StartTimedRetry();
         }
 
         public static void Stop()
         {
-            if (!_started) return;
+            if (_stopping) return;
+            if (!_started && !_cleanupPending && _hostSubscriptions == HostSubscription.None && _retryTimer == null)
+                return;
+
+            _stopping = true;
             _started = false;
             _initialized = false;
+            var cleanupComplete = true;
 
-            var documents = Application.DocumentManager;
-            try { documents.DocumentCreated -= OnDocumentAvailable; } catch { }
-            try { documents.DocumentActivated -= OnDocumentAvailable; } catch { }
-            StopTimedRetry();
-            BltBimWorkspaceActivationCoordinator.Stop();
-            HomeTabActivationCoordinator.Stop();
-            Blt3dShellChromeCoordinator.Reset();
-            BltHomeRibbonAugmenter.Reset();
-            BltDrawRibbonAugmenter.Reset();
-            BltToolRibbonAugmenter.Reset();
-            BltToolRibbonCommandBinder.Reset();
-            BltToolRibbonIconPolisher.Reset();
-            BltRecognitionRibbonAugmenter.Reset();
-            BltRecognitionIconPolisher.Reset();
-            BltViewRibbonAugmenter.Reset();
-            BltViewActionOverrideAugmenter.Reset();
-            BltBimRibbonMirrorAugmenter.Reset();
-            BltModelingRibbonVisualRefiner.Reset();
-            BltModelingRibbonFunctionRefiner.Reset();
-            BltModelingRibbonAugmenter.Reset();
-            QuantityReferenceRibbonAugmenter.Reset();
-            BltTopbarTabContract.Reset();
-            RibbonBootstrapIconAugmenter.Reset();
-            Qs3dRibbonTabGroupCoordinator.Reset();
+            try
+            {
+                DocumentCollection? documents = null;
+                try { documents = Application.DocumentManager; }
+                catch { cleanupComplete = false; }
+
+                if (documents != null)
+                {
+                    if (!TryDetachHostSubscription(
+                            HostSubscription.DocumentCreated,
+                            () => documents.DocumentCreated -= OnDocumentAvailable))
+                        cleanupComplete = false;
+                    if (!TryDetachHostSubscription(
+                            HostSubscription.DocumentActivated,
+                            () => documents.DocumentActivated -= OnDocumentAvailable))
+                        cleanupComplete = false;
+                }
+                else if (_hostSubscriptions != HostSubscription.None)
+                {
+                    cleanupComplete = false;
+                }
+
+                if (!TryStopTimedRetry()) cleanupComplete = false;
+
+                // Every downstream coordinator owns independent external/UI state. Teardown is
+                // deliberately fail-soft so one faulty cleanup cannot strand later publishers,
+                // command bindings, images, tabs, or workspace activation across NETLOAD reload.
+                if (!TryCleanup(() => { BltBimWorkspaceActivationCoordinator.Stop(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { HomeTabActivationCoordinator.Stop(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { Blt3dShellChromeCoordinator.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltHomeRibbonAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltDrawRibbonAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltToolRibbonAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltToolRibbonCommandBinder.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltToolRibbonIconPolisher.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltRecognitionRibbonAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltRecognitionIconPolisher.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltViewRibbonAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltViewActionOverrideAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltBimRibbonMirrorAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltModelingRibbonVisualRefiner.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltModelingRibbonFunctionRefiner.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltModelingRibbonAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { QuantityReferenceRibbonAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { BltTopbarTabContract.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { RibbonBootstrapIconAugmenter.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { Qs3dRibbonTabGroupCoordinator.Reset(); })) cleanupComplete = false;
+            }
+            finally
+            {
+                _cleanupPending = !cleanupComplete
+                    || _hostSubscriptions != HostSubscription.None
+                    || _retryTimer != null;
+                _stopping = false;
+            }
+        }
+
+        private static bool TryEnsureHostSubscriptions()
+        {
+            if (!_started) return false;
+            if (_hostSubscriptions == HostSubscription.All) return true;
+
+            DocumentCollection documents;
+            try { documents = Application.DocumentManager; }
+            catch { return false; }
+
+            var acquiredThisAttempt = HostSubscription.None;
+            try
+            {
+                if ((_hostSubscriptions & HostSubscription.DocumentCreated) == 0)
+                {
+                    documents.DocumentCreated += OnDocumentAvailable;
+                    _hostSubscriptions |= HostSubscription.DocumentCreated;
+                    acquiredThisAttempt |= HostSubscription.DocumentCreated;
+                }
+
+                if ((_hostSubscriptions & HostSubscription.DocumentActivated) == 0)
+                {
+                    documents.DocumentActivated += OnDocumentAvailable;
+                    _hostSubscriptions |= HostSubscription.DocumentActivated;
+                    acquiredThisAttempt |= HostSubscription.DocumentActivated;
+                }
+
+                return _hostSubscriptions == HostSubscription.All;
+            }
+            catch
+            {
+                RollbackHostSubscriptions(documents, acquiredThisAttempt);
+                return false;
+            }
+        }
+
+        private static void RollbackHostSubscriptions(
+            DocumentCollection documents,
+            HostSubscription acquiredThisAttempt)
+        {
+            if ((acquiredThisAttempt & HostSubscription.DocumentActivated) != 0)
+                TryDetachHostSubscription(
+                    HostSubscription.DocumentActivated,
+                    () => documents.DocumentActivated -= OnDocumentAvailable);
+            if ((acquiredThisAttempt & HostSubscription.DocumentCreated) != 0)
+                TryDetachHostSubscription(
+                    HostSubscription.DocumentCreated,
+                    () => documents.DocumentCreated -= OnDocumentAvailable);
+        }
+
+        private static bool TryDetachHostSubscription(HostSubscription subscription, Action detach)
+        {
+            if ((_hostSubscriptions & subscription) == 0) return true;
+            try
+            {
+                detach();
+                _hostSubscriptions &= ~subscription;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool TryCleanup(Action cleanup)
+        {
+            try
+            {
+                cleanup();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static void OnDocumentAvailable(object sender, DocumentCollectionEventArgs e)
         {
+            if (!_started || _stopping) return;
+
             // Document creation/activation is also a host UI callback. Keep it passive;
             // the timer runs after the event returns and retries only while needed.
-            if (!_initialized) StartTimedRetry();
+            if (!_initialized || _hostSubscriptions != HostSubscription.All)
+                StartTimedRetry();
         }
 
         private static void StartTimedRetry()
         {
-            if (!_started || _initialized || _retryTimer != null) return;
+            if (!_started || (_initialized && _hostSubscriptions == HostSubscription.All) || _retryTimer != null)
+                return;
 
             _timedAttempts = 0;
             var timer = new DispatcherTimer(DispatcherPriority.ApplicationIdle)
@@ -88,13 +219,27 @@ namespace QS3D.BricsCAD.V25.Ribbon
             timer.Start();
         }
 
+        // Preserve the long-standing NETLOAD source contract used by generic startup guards and
+        // ordinary retry call sites. Stop() uses the status-aware helper below so teardown can
+        // retain timer ownership when either native stop or event detach fails.
         private static void StopTimedRetry()
         {
+            TryStopTimedRetry();
+        }
+
+        private static bool TryStopTimedRetry()
+        {
             var timer = _retryTimer;
-            _retryTimer = null;
-            if (timer == null) return;
-            try { timer.Stop(); } catch { }
-            try { timer.Tick -= OnRetryTick; } catch { }
+            if (timer == null) return true;
+
+            var stopped = true;
+            var detached = true;
+            try { timer.Stop(); } catch { stopped = false; }
+            try { timer.Tick -= OnRetryTick; } catch { detached = false; }
+
+            if (stopped && detached)
+                _retryTimer = null;
+            return stopped && detached;
         }
 
         private static void OnRetryTick(object? sender, EventArgs e)
@@ -106,6 +251,19 @@ namespace QS3D.BricsCAD.V25.Ribbon
             }
 
             _timedAttempts++;
+            if (!TryEnsureHostSubscriptions())
+            {
+                if (_timedAttempts >= MaxTimedAttempts)
+                    StopTimedRetry();
+                return;
+            }
+
+            if (_initialized)
+            {
+                StopTimedRetry();
+                return;
+            }
+
             if (TryInitializeAll())
             {
                 _initialized = true;
