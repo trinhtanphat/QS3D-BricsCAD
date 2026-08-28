@@ -118,12 +118,12 @@ namespace QS3D.Core.Export
                 !string.Equals(source.Category ?? string.Empty, snapshot.Category, StringComparison.Ordinal) ||
                 !string.Equals(source.FamilyName ?? string.Empty, snapshot.FamilyName, StringComparison.Ordinal) ||
                 !string.Equals(source.Material ?? string.Empty, snapshot.Material, StringComparison.Ordinal) ||
-                source.WidthM != snapshot.WidthM ||
-                source.HeightM != snapshot.HeightM ||
-                source.SillHeightM != snapshot.SillHeightM ||
-                source.ThicknessM != snapshot.ThicknessM ||
+                !source.WidthM.Equals(snapshot.WidthM) ||
+                !source.HeightM.Equals(snapshot.HeightM) ||
+                !source.SillHeightM.Equals(snapshot.SillHeightM) ||
+                !source.ThicknessM.Equals(snapshot.ThicknessM) ||
                 source.Count != snapshot.Count ||
-                source.OpeningAreaM2 != snapshot.OpeningAreaM2 ||
+                !source.OpeningAreaM2.Equals(snapshot.OpeningAreaM2) ||
                 source.HostCount != snapshot.HostCount)
                 throw new InvalidOperationException("Door/opening XLSX export row values changed during snapshot traversal. Invalid row index: " + rowIndex + ".");
 
