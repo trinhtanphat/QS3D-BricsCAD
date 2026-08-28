@@ -28,14 +28,15 @@ namespace QS3D.BricsCAD.V25
                 var token = McpEmbeddedServer.GetBearerToken();
                 var publicUrl = McpEmbeddedServer.PublicUrl;
                 var text =
-                    "QS3D MCP đã được nhúng trong plugin.\n\n"
+                    "QS3D MCP đã được nhúng trực tiếp trong plugin.\n\n"
                     + "Local MCP URL: " + McpEmbeddedServer.Endpoint + "\n"
                     + "Bearer token: " + token + "\n"
                     + "Token source: " + McpEmbeddedServer.TokenSource + "\n"
                     + "Token file: " + McpEmbeddedServer.TokenFilePath + "\n"
-                    + (string.IsNullOrWhiteSpace(publicUrl) ? string.Empty : "Public URL: " + publicUrl + "\n")
-                    + "\nKhông cần clone/cài QS3D-CAD-MCP riêng.\n"
-                    + "Nếu dùng Cloudflare Tunnel, expose local port 8765 và dùng URL public + /mcp trong ChatGPT custom MCP.";
+                    + (string.IsNullOrWhiteSpace(publicUrl) ? string.Empty : "Optional public URL: " + publicUrl + "\n")
+                    + "\nKhông cần clone/cài một repository MCP riêng.\n"
+                    + "ChatGPT Web không kết nối localhost trực tiếp. Với private/on-prem MCP, ưu tiên OpenAI Secure MCP Tunnel. "
+                    + "Bearer endpoint này vẫn dành cho local/custom clients hoặc HTTPS ingress có thể chuyển tiếp Authorization.";
                 MessageBox.Show(text, "QS3D MCP Settings", MessageBoxButton.OK, MessageBoxImage.Information);
                 Report(document, "MCP settings: " + McpEmbeddedServer.Describe());
             });
@@ -82,10 +83,11 @@ namespace QS3D.BricsCAD.V25
                 var text = "QS3D AI / MCP\n\n"
                            + "Server: embedded trong QS3D plugin\n"
                            + "Local endpoint: " + McpEmbeddedServer.Endpoint + "\n"
-                           + (string.IsNullOrWhiteSpace(publicUrl) ? string.Empty : "Public endpoint: " + publicUrl + "\n")
+                           + (string.IsNullOrWhiteSpace(publicUrl) ? string.Empty : "Optional public endpoint: " + publicUrl + "\n")
                            + "Auth: Bearer (" + McpEmbeddedServer.TokenSource + ")\n"
                            + "MCP protocol: " + (result.Ready ? "READY" : "NOT READY") + "\n"
                            + "Chi tiết: " + result.Message + "\n\n"
+                           + "ChatGPT Web private/on-prem: dùng OpenAI Secure MCP Tunnel; localhost trực tiếp không được hỗ trợ.\n"
                            + "Cài đặt: QS3DMCPSETTINGSHTTP\n"
                            + "Kiểm tra: QS3DMCPCHECKHTTP\n"
                            + "Tài liệu: QS3DMCPDOCSHTTP";
@@ -138,12 +140,12 @@ namespace QS3D.BricsCAD.V25
             var text =
                 "QS3D ChatGPT / custom MCP\r\n"
                 + "===========================\r\n\r\n"
-                + "MCP server is EMBEDDED in QS3D-BricsCAD. No second QS3D-CAD-MCP clone/install is required.\r\n\r\n"
+                + "MCP server is EMBEDDED in QS3D-BricsCAD. No second MCP repository, probe DLL or Node service is required.\r\n\r\n"
                 + "Local endpoint: " + McpEmbeddedServer.Endpoint + "\r\n"
                 + "Health endpoint: " + McpEmbeddedServer.HealthEndpoint + "\r\n"
                 + "Bearer token file: " + McpEmbeddedServer.TokenFilePath + "\r\n"
                 + "Bearer token source: " + McpEmbeddedServer.TokenSource + "\r\n"
-                + (string.IsNullOrWhiteSpace(publicUrl) ? string.Empty : "Configured public URL: " + publicUrl + "\r\n")
+                + (string.IsNullOrWhiteSpace(publicUrl) ? string.Empty : "Optional configured public URL: " + publicUrl + "\r\n")
                 + "\r\n"
                 + "MCP protocol flow:\r\n"
                 + "initialize -> notifications/initialized -> tools/list -> tools/call\r\n\r\n"
@@ -155,14 +157,19 @@ namespace QS3D.BricsCAD.V25
                 + "- cad_database_snapshot\r\n"
                 + "- qs3d_run_command (QS3D* only; confirmMutation=true required)\r\n"
                 + "- cad_cancel_command\r\n\r\n"
-                + "Cloudflare quick tunnel example:\r\n"
-                + "cloudflared tunnel --url http://127.0.0.1:8765 --http-host-header 127.0.0.1:8765\r\n\r\n"
-                + "Then configure ChatGPT custom MCP with:\r\n"
-                + "https://<generated-host>/mcp\r\n"
-                + "Authorization: Bearer <contents of the token file above>\r\n\r\n"
-                + "Optional QS3D_MCP_PUBLIC_URL stores only the public connector URL for the local dashboard.\r\n"
-                + "Optional QS3D_MCP_BEARER_TOKEN overrides the generated token; use a strong secret.\r\n"
-                + "The listener binds only to 127.0.0.1 and never opens a public interface directly.\r\n";
+                + "ChatGPT Web private/on-prem connection:\r\n"
+                + "- ChatGPT does not connect directly to localhost.\r\n"
+                + "- Use OpenAI Secure MCP Tunnel for a private MCP server on this Windows/CAD machine.\r\n"
+                + "- tunnel-client runs on a host that can reach this local MCP endpoint and uses outbound HTTPS to OpenAI.\r\n"
+                + "- For an HTTP MCP profile, point tunnel-client at http://127.0.0.1:8765/mcp.\r\n"
+                + "- Run tunnel-client doctor for the profile, then select Tunnel when creating the ChatGPT developer-mode app.\r\n"
+                + "- The current embedded endpoint requires Bearer auth. Do not disable that protection merely to make a tunnel pass; qualify an auth-compatible tunnel/app configuration before claiming ChatGPT runtime PASS.\r\n\r\n"
+                + "Custom MCP clients / optional public ingress:\r\n"
+                + "- Clients that support static Authorization can use: Authorization: Bearer <contents of the token file above>.\r\n"
+                + "- A separately administered HTTPS proxy/tunnel may forward to the loopback endpoint, but QS3D itself never binds a public/LAN listener.\r\n"
+                + "- QS3D_MCP_PUBLIC_URL is display-only and does not create or secure a tunnel.\r\n"
+                + "- QS3D_MCP_BEARER_TOKEN overrides the generated token; use a strong secret.\r\n\r\n"
+                + "OpenAI references: developers.openai.com/api/docs/guides/secure-mcp-tunnels and the current ChatGPT developer-mode documentation.\r\n";
             File.WriteAllText(path, text, new UTF8Encoding(false));
             return path;
         }
