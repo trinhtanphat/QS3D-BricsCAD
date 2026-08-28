@@ -58,28 +58,28 @@ namespace QS3D.Core.SmokeTests
 
         private static void LazyCollectionsStopAtFirstDisallowedItem()
         {
-            var topics = new StreamingCollection<BcfTopic>(MaxTopics + 20, CreateTopic);
+            var topics = new DishonestCountCollection<BcfTopic>(MaxTopics + 20, 1, CreateTopic);
             ThrowsBound(
                 () => BcfIssueExchange.Create(topics),
                 "BCF topic count exceeds the bounded package contract.",
                 "topics");
             Require(topics.YieldedCount == MaxTopics + 1, "BCF topic streaming bound did not stop on item 257.");
 
-            var viewpoints = new StreamingCollection<BcfViewpoint>(MaxViewpointsPerTopic + 20, CreateViewpoint);
+            var viewpoints = new DishonestCountCollection<BcfViewpoint>(MaxViewpointsPerTopic + 20, 1, CreateViewpoint);
             ThrowsBound(
                 () => CreateTopic(1, Array.Empty<BcfComment>(), viewpoints),
                 "BCF viewpoint count exceeds the bounded package contract.",
                 "viewpoints");
             Require(viewpoints.YieldedCount == MaxViewpointsPerTopic + 1, "BCF viewpoint streaming bound did not stop on item 257.");
 
-            var comments = new StreamingCollection<BcfComment>(MaxCommentsPerTopic + 20, CreateComment);
+            var comments = new DishonestCountCollection<BcfComment>(MaxCommentsPerTopic + 20, 1, CreateComment);
             ThrowsBound(
                 () => CreateTopic(1, comments, Array.Empty<BcfViewpoint>()),
                 "BCF comment count exceeds the bounded package contract.",
                 "comments");
             Require(comments.YieldedCount == MaxCommentsPerTopic + 1, "BCF comment streaming bound did not stop on item 1025.");
 
-            var components = new StreamingCollection<BcfComponentReference>(MaxComponentsPerViewpoint + 20, CreateComponent);
+            var components = new DishonestCountCollection<BcfComponentReference>(MaxComponentsPerViewpoint + 20, 1, CreateComponent);
             ThrowsBound(
                 () => new BcfViewpoint(GuidFor(1), CreateCamera(), components),
                 "BCF viewpoint component count exceeds the bounded package contract.",
@@ -222,31 +222,6 @@ namespace QS3D.Core.SmokeTests
             {
                 EnumerationAttempted = true;
                 throw new InvalidOperationException("Known-oversized input must fail before enumeration.");
-            }
-
-            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-        }
-
-        private sealed class StreamingCollection<T> : IEnumerable<T>
-        {
-            private readonly int _actualCount;
-            private readonly Func<int, T> _factory;
-
-            public StreamingCollection(int actualCount, Func<int, T> factory)
-            {
-                _actualCount = actualCount;
-                _factory = factory;
-            }
-
-            public int YieldedCount { get; private set; }
-
-            public IEnumerator<T> GetEnumerator()
-            {
-                for (var index = 0; index < _actualCount; index++)
-                {
-                    YieldedCount++;
-                    yield return _factory(index);
-                }
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
