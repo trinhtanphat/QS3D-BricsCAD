@@ -86,10 +86,12 @@ function Get-StableFileState {
     $file = Resolve-OrdinaryNonReparseFile -Path $Path -Label $Label
     $hash = Get-StreamingSha256 -File $file -Label $Label
     $current = Resolve-OrdinaryNonReparseFile -Path $Path -Label $Label
+    $currentHash = Get-StreamingSha256 -File $current -Label $Label
 
     if (-not [string]::Equals($file.FullName, $current.FullName, [StringComparison]::OrdinalIgnoreCase) -or
         $file.Length -ne $current.Length -or
-        $file.LastWriteTimeUtc.Ticks -ne $current.LastWriteTimeUtc.Ticks) {
+        $file.LastWriteTimeUtc.Ticks -ne $current.LastWriteTimeUtc.Ticks -or
+        -not [string]::Equals($hash, $currentHash, [StringComparison]::Ordinal)) {
         throw "$Label changed while its stable file state was being captured."
     }
 
@@ -97,7 +99,7 @@ function Get-StableFileState {
         Path = $current.FullName
         Length = [int64]$current.Length
         LastWriteUtcTicks = [int64]$current.LastWriteTimeUtc.Ticks
-        Sha256 = $hash
+        Sha256 = $currentHash
     }
 }
 
