@@ -34,7 +34,15 @@ def main() -> None:
     require(text, "UnsubscribeFromHostLifecycle();", "window host unsubscription")
     require(text, "private bool _hostLifecycleSubscribed;", "idempotent subscription state")
     require(text, "if (_hostLifecycleSubscribed || _windowClosed)", "idempotent subscription guard")
-    require(text, "if (!_hostLifecycleSubscribed)", "idempotent unsubscription guard")
+
+    # Unsubscription deliberately attempts both removes even when the published ownership flag is false.
+    # A transactional add rollback can itself fail during host teardown; close must retry that cleanup.
+    unsubscribe = method_body(text, "private void UnsubscribeFromHostLifecycle()", "private void OnHostDocumentActivated", "host unsubscription")
+    if re.search(r"if\s*\(\s*!_hostLifecycleSubscribed\s*\)\s*return\s*;", unsubscribe):
+        raise AssertionError("Start Center close must retry native detach after a partially failed subscription rollback")
+    if unsubscribe.count("try") < 2 or unsubscribe.count("catch") < 2:
+        raise AssertionError("Start Center host unsubscription must attempt both native detach operations independently")
+    require(unsubscribe, "_hostLifecycleSubscribed = false;", "unsubscription ownership reset")
 
     # Host transitions are symmetrical and do not directly refresh from the event stack.
     require(text, "Application.DocumentManager.DocumentActivated += OnHostDocumentActivated;", "document activation subscription")

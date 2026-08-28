@@ -18,7 +18,7 @@ namespace QS3D.Core.Geometry
             Handle = RequireCanonicalHandle(handle);
             if (!Finite(point.X) || !Finite(point.Y) || !Finite(elevation))
                 throw new ArgumentOutOfRangeException(nameof(point), "Grid intersection marker record coordinates must be finite.");
-            Point = point;
+            Point = new Point2(point.X == 0d ? 0d : point.X, point.Y == 0d ? 0d : point.Y);
             Elevation = elevation == 0d ? 0d : elevation;
         }
 
@@ -211,11 +211,23 @@ namespace QS3D.Core.Geometry
                     !double.TryParse(parts[4], NumberStyles.Float, CultureInfo.InvariantCulture, out var y) ||
                     !double.TryParse(parts[5], NumberStyles.Float, CultureInfo.InvariantCulture, out var z))
                     throw new FormatException("Grid intersection pair record contains malformed marker fields.");
-                entries.Add(new GridIntersectionMarkerRecordEntry(occurrence, parts[1], parts[2], new Point2(x, y), z));
+                try
+                {
+                    entries.Add(new GridIntersectionMarkerRecordEntry(occurrence, parts[1], parts[2], new Point2(x, y), z));
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new FormatException("Grid intersection pair record contains invalid marker data.", ex);
+                }
             }
 
-            try { return new GridIntersectionPairRecord(first, second, pairToken, entries); }
+            GridIntersectionPairRecord record;
+            try { record = new GridIntersectionPairRecord(first, second, pairToken, entries); }
             catch (ArgumentException ex) { throw new FormatException("Grid intersection pair record violates canonical ownership.", ex); }
+
+            if (!string.Equals(Encode(record), value, StringComparison.Ordinal))
+                throw new FormatException("Grid intersection pair record is not in canonical serialized form.");
+            return record;
         }
 
         private static string RequirePairToken(string value, string parameterName)
