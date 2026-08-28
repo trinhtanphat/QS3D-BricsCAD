@@ -34,7 +34,7 @@ namespace QS3D.Core.SmokeTests
             var log = new CommercialAuditLog();
             var records = new ReportedCountCollection(reportedCount: 1, actualCount: 2);
             var error = Capture<InvalidOperationException>(() => log.AppendBatch(records));
-            Contains("known Count does not match completed traversal cardinality", error.Message);
+            Contains("known Count was exceeded during traversal", error.Message);
             Equal(0, log.Events.Count, "Over-enumerated batch must not publish partial audit events.");
         }
 
