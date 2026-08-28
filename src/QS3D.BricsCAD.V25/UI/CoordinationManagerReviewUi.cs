@@ -577,7 +577,7 @@ namespace QS3D.BricsCAD.V25.UI
 
                 using (var view = _document.Editor.GetCurrentView())
                 {
-                    _viewBeforeSection = ViewSnapshot.Capture(view);
+                    var viewBeforeSection = ViewSnapshot.Capture(view);
                     var direction = view.ViewDirection.GetNormal();
                     var distances = Corners(bounds)
                         .Select(point => (point - center).DotProduct(direction))
@@ -606,7 +606,16 @@ namespace QS3D.BricsCAD.V25.UI
                     view.FrontClipDistance = maxDistance;
                     view.BackClipEnabled = true;
                     view.FrontClipEnabled = true;
-                    _document.Editor.SetCurrentView(view);
+                    try
+                    {
+                        _document.Editor.SetCurrentView(view);
+                    }
+                    catch
+                    {
+                        RestoreSectionViewBestEffort(viewBeforeSection);
+                        throw;
+                    }
+                    _viewBeforeSection = viewBeforeSection;
                 }
             }
 
@@ -621,6 +630,23 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     snapshot.Apply(view);
                     _document.Editor.SetCurrentView(view);
+                }
+            }
+
+            private void RestoreSectionViewBestEffort(ViewSnapshot snapshot)
+            {
+                if (snapshot == null || _destroyed) return;
+                try
+                {
+                    using (var view = _document.Editor.GetCurrentView())
+                    {
+                        snapshot.Apply(view);
+                        _document.Editor.SetCurrentView(view);
+                    }
+                }
+                catch
+                {
+                    // Compensation is bounded best-effort and must not mask native apply failure.
                 }
             }
 
