@@ -51,6 +51,22 @@ namespace QS3D.BricsCAD.V25.UI
 
         private sealed class Controller : IDisposable
         {
+            [Flags]
+            private enum Attachment
+            {
+                None = 0,
+                Highlight = 1 << 0,
+                ClearHighlight = 1 << 1,
+                Isolate = 1 << 2,
+                RestoreIsolation = 1 << 3,
+                Section = 1 << 4,
+                RestoreView = 1 << 5,
+                GridSelection = 1 << 6,
+                WindowClosed = 1 << 7,
+                DocumentActivated = 1 << 8,
+                DocumentToBeDestroyed = 1 << 9,
+            }
+
             private readonly CoordinationManagerWindow _window;
             private readonly Document _document;
             private readonly string _projectId;
@@ -65,6 +81,10 @@ namespace QS3D.BricsCAD.V25.UI
             private readonly Button _restoreIsolation;
             private readonly Button _section;
             private readonly Button _restoreView;
+            private Attachment _attachments;
+            private bool _attached;
+            private bool _disposeInProgress;
+            private bool _sessionDisposed;
             private bool _disposed;
 
             public Controller(
@@ -114,17 +134,46 @@ namespace QS3D.BricsCAD.V25.UI
 
             public void Attach()
             {
-                _highlight.Click += OnHighlight;
-                _clearHighlight.Click += OnClearHighlight;
-                _isolate.Click += OnIsolate;
-                _restoreIsolation.Click += OnRestoreIsolation;
-                _section.Click += OnSection;
-                _restoreView.Click += OnRestoreView;
-                _grid.SelectionChanged += OnSelectionChanged;
-                _window.Closed += OnWindowClosed;
-                Bricscad.ApplicationServices.Application.DocumentManager.DocumentActivated += OnDocumentActivated;
-                Bricscad.ApplicationServices.Application.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
-                UpdateActionState();
+                if (_disposed || _disposeInProgress)
+                    throw new ObjectDisposedException(nameof(Controller));
+                if (_attached) return;
+                if (_attachments != Attachment.None)
+                    throw new InvalidOperationException("Coordination review controller has incomplete prior attachment cleanup.");
+
+                try
+                {
+                    _highlight.Click += OnHighlight;
+                    _attachments |= Attachment.Highlight;
+                    _clearHighlight.Click += OnClearHighlight;
+                    _attachments |= Attachment.ClearHighlight;
+                    _isolate.Click += OnIsolate;
+                    _attachments |= Attachment.Isolate;
+                    _restoreIsolation.Click += OnRestoreIsolation;
+                    _attachments |= Attachment.RestoreIsolation;
+                    _section.Click += OnSection;
+                    _attachments |= Attachment.Section;
+                    _restoreView.Click += OnRestoreView;
+                    _attachments |= Attachment.RestoreView;
+                    _grid.SelectionChanged += OnSelectionChanged;
+                    _attachments |= Attachment.GridSelection;
+                    _window.Closed += OnWindowClosed;
+                    _attachments |= Attachment.WindowClosed;
+                    Bricscad.ApplicationServices.Application.DocumentManager.DocumentActivated += OnDocumentActivated;
+                    _attachments |= Attachment.DocumentActivated;
+                    Bricscad.ApplicationServices.Application.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
+                    _attachments |= Attachment.DocumentToBeDestroyed;
+
+                    UpdateActionState();
+                    _attached = true;
+                }
+                catch
+                {
+                    _attached = false;
+                    DetachHandlersBestEffort();
+                    DisposeSessionBestEffort();
+                    _disposed = _attachments == Attachment.None && _sessionDisposed;
+                    throw;
+                }
             }
 
             private static Button AddButton(Panel panel, string text, double width)
@@ -171,6 +220,8 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void RunValidated(string actionName, Action<IReadOnlyList<ObjectId>> effect)
             {
+                if (!_attached || _disposeInProgress || _disposed) return;
+
                 try
                 {
                     // IMPORTANT: all canonical provenance/relink/full-pair checks complete
@@ -252,6 +303,8 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
             {
+                if (!_attached || _disposeInProgress || _disposed) return;
+
                 // A previous row must never leak presentation state into the next row.
                 _session.ResetTransientStateBestEffort();
                 SetStatus(string.Empty);
@@ -260,14 +313,14 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
             {
-                if (_disposed || ReferenceEquals(e.Document, _document)) return;
+                if (!_attached || _disposeInProgress || _disposed || ReferenceEquals(e.Document, _document)) return;
                 _session.ResetTransientStateBestEffort();
                 if (_window.IsLoaded) _window.Close();
             }
 
             private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
             {
-                if (_disposed || !ReferenceEquals(e.Document, _document)) return;
+                if (!_attached || _disposeInProgress || _disposed || !ReferenceEquals(e.Document, _document)) return;
                 _session.AbandonDestroyedDocumentState();
                 if (_window.IsLoaded) _window.Close();
             }
@@ -279,6 +332,8 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void UpdateActionState()
             {
+                if (_disposeInProgress || _disposed) return;
+
                 var row = _grid.SelectedItem as CoordinationManagerRow;
                 var actionable = row != null && row.CanLocate;
                 _highlight.IsEnabled = actionable;
@@ -299,14 +354,69 @@ namespace QS3D.BricsCAD.V25.UI
 
             public void Dispose()
             {
-                if (_disposed) return;
-                _disposed = true;
+                if (_disposed || _disposeInProgress) return;
 
-                Bricscad.ApplicationServices.Application.DocumentManager.DocumentActivated -= OnDocumentActivated;
-                Bricscad.ApplicationServices.Application.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed;
-                _grid.SelectionChanged -= OnSelectionChanged;
-                _window.Closed -= OnWindowClosed;
-                _session.Dispose();
+                _disposeInProgress = true;
+                _attached = false;
+                try
+                {
+                    DetachHandlersBestEffort();
+                    DisposeSessionBestEffort();
+                    _disposed = _attachments == Attachment.None && _sessionDisposed;
+                }
+                finally
+                {
+                    _disposeInProgress = false;
+                }
+            }
+
+            private void DetachHandlersBestEffort()
+            {
+                // External BricsCAD publishers are detached first so they cannot keep this
+                // document-bound controller alive while local WPF cleanup continues.
+                TryDetach(Attachment.DocumentToBeDestroyed, () =>
+                    Bricscad.ApplicationServices.Application.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed);
+                TryDetach(Attachment.DocumentActivated, () =>
+                    Bricscad.ApplicationServices.Application.DocumentManager.DocumentActivated -= OnDocumentActivated);
+                TryDetach(Attachment.WindowClosed, () => _window.Closed -= OnWindowClosed);
+                TryDetach(Attachment.GridSelection, () => _grid.SelectionChanged -= OnSelectionChanged);
+                TryDetach(Attachment.RestoreView, () => _restoreView.Click -= OnRestoreView);
+                TryDetach(Attachment.Section, () => _section.Click -= OnSection);
+                TryDetach(Attachment.RestoreIsolation, () => _restoreIsolation.Click -= OnRestoreIsolation);
+                TryDetach(Attachment.Isolate, () => _isolate.Click -= OnIsolate);
+                TryDetach(Attachment.ClearHighlight, () => _clearHighlight.Click -= OnClearHighlight);
+                TryDetach(Attachment.Highlight, () => _highlight.Click -= OnHighlight);
+            }
+
+            private void TryDetach(Attachment attachment, Action detach)
+            {
+                if ((_attachments & attachment) == 0) return;
+
+                try
+                {
+                    detach();
+                    _attachments &= ~attachment;
+                }
+                catch
+                {
+                    // Preserve ownership so a later Dispose call can retry this exact detach.
+                }
+            }
+
+            private void DisposeSessionBestEffort()
+            {
+                if (_sessionDisposed) return;
+
+                try
+                {
+                    _session.Dispose();
+                    _sessionDisposed = true;
+                }
+                catch
+                {
+                    // A later Dispose call retries transient CAD cleanup without masking
+                    // failures from another detach or from constructor/attach rollback.
+                }
             }
         }
 
