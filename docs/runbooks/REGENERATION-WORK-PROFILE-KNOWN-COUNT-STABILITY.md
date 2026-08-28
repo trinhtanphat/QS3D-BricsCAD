@@ -1,6 +1,8 @@
 # Regeneration work profile known-Count stability
 
 Carrier: `issue-4456`
+Reservation protocol: `v2`
+Canonical branch: `agent/longnguyentuan2107-maker-c01-20260829/issue-4456-regeneration-profile-count-stability`
 
 ## Defect
 
