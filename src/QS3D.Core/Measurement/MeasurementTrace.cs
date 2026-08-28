@@ -611,7 +611,7 @@ namespace QS3D.Core.Measurement
         private static ArgumentException TraversalCountError(string parameterName, string collectionName)
         {
             return new ArgumentException(
-                "Measurement trace " + collectionName + " count changed during enumeration or does not match source traversal.",
+                "Measurement trace " + collectionName + " count does not match source traversal; count changed during enumeration.",
                 parameterName);
         }
 
