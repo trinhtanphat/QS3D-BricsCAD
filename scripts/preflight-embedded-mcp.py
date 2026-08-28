@@ -185,7 +185,7 @@ def main() -> int:
     forbid(account_onboarding, "cmd.exe", errors, "cmd setup dependency")
 
     # Advanced fallback remains available for dashboard-issued remote tokens, but even this GUI
-    # uses the same verified local bootstrapper instead of sending users to a manual download path.
+    # uses the same verified local bootstrapper and bounded Quick URL discovery.
     require(token_onboarding, "ProtectedData.Protect", errors, "DPAPI fallback tunnel token protection")
     require(token_onboarding, "DataProtectionScope.CurrentUser", errors, "per-Windows-user fallback secret scope")
     require(token_onboarding, 'startInfo.EnvironmentVariables["TUNNEL_TOKEN"]', errors, "fallback token outside process command line")
@@ -194,6 +194,9 @@ def main() -> int:
     require(token_onboarding, "HandleProcessExit(Process process)", errors, "fallback owned-process exit cleanup")
     require(token_onboarding, "_quickBaseUrl = string.Empty;", errors, "ephemeral Quick URL cleanup")
     require(token_onboarding, "McpCloudflaredBootstrapper.BeginInstall", errors, "advanced GUI verified cloudflared install")
+    require(token_onboarding, "DispatcherTimer", errors, "advanced GUI asynchronous Quick URL refresh")
+    require(token_onboarding, "StartQuickUrlPolling", errors, "advanced GUI Quick URL polling")
+    require(token_onboarding, "_quickUrlPollTicks >= 20", errors, "advanced GUI bounded Quick URL polling")
     forbid(token_onboarding, 'Button("Cài Cloudflare Tunnel", (_, __) => McpCloudflareTunnelManager.OpenCloudflaredDownloadPage())', errors, "manual cloudflared install button in advanced GUI")
     forbid(token_onboarding, "powershell.exe", errors, "fallback PowerShell setup dependency")
     forbid(token_onboarding, "cmd.exe", errors, "fallback cmd setup dependency")
@@ -232,9 +235,9 @@ def main() -> int:
     print(
         "PASS: QS3D embeds authenticated MCP plus a unified click-first Agent Center with "
         "verified one-click cloudflared bootstrap across default/advanced GUI paths, provider-browser "
-        "login, named/Quick tunnel management, a single HTTPS /mcp endpoint resolver, ChatGPT "
-        "copy/open actions, read-only MCP self-test and emergency controls without PowerShell/CMD "
-        "user setup."
+        "login, named/Quick tunnel management with bounded URL discovery, a single HTTPS /mcp "
+        "endpoint resolver, ChatGPT copy/open actions, read-only MCP self-test and emergency controls "
+        "without PowerShell/CMD user setup."
     )
     return 0
 
