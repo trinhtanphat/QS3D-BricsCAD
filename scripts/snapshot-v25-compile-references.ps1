@@ -125,6 +125,9 @@ if ([string]::Equals($snapshot, $snapshotRoot, [StringComparison]::OrdinalIgnore
 if (Test-CanonicalPathWithin -Candidate $sourceDir -Parent $snapshot) {
     throw 'SnapshotDir must not equal or contain the V25 source reference directory.'
 }
+if (Test-CanonicalPathWithin -Candidate $snapshot -Parent $sourceDir) {
+    throw 'SnapshotDir must not be located inside the V25 source reference directory.'
+}
 if (-not (Test-CanonicalPathWithin -Candidate $state -Parent $snapshot)) {
     throw 'StatePath must be contained by SnapshotDir.'
 }
