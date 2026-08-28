@@ -211,7 +211,14 @@ namespace QS3D.Core.Geometry
                     !double.TryParse(parts[4], NumberStyles.Float, CultureInfo.InvariantCulture, out var y) ||
                     !double.TryParse(parts[5], NumberStyles.Float, CultureInfo.InvariantCulture, out var z))
                     throw new FormatException("Grid intersection pair record contains malformed marker fields.");
-                entries.Add(new GridIntersectionMarkerRecordEntry(occurrence, parts[1], parts[2], new Point2(x, y), z));
+                try
+                {
+                    entries.Add(new GridIntersectionMarkerRecordEntry(occurrence, parts[1], parts[2], new Point2(x, y), z));
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new FormatException("Grid intersection pair record contains invalid marker data.", ex);
+                }
             }
 
             try { return new GridIntersectionPairRecord(first, second, pairToken, entries); }
