@@ -294,10 +294,12 @@ namespace QS3D.Core.Export
             var observedCount = 0;
             foreach (var value in values)
             {
-                observedCount++;
-                if (observedCount > maximumCount)
+                if (knownCount.HasValue && observedCount >= knownCount.Value)
+                    throw new ArgumentException("BCF collection Count does not match enumerated item count.", parameterName);
+                if (observedCount >= maximumCount)
                     throw new ArgumentException(overflowMessage, parameterName);
                 items.Add(value);
+                observedCount++;
             }
 
             if (knownCount.HasValue && observedCount != knownCount.Value)
