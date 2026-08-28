@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
         {
             LoneSurrogatesFailClosed();
             MalformedUnicodeHasNoFilesystemSideEffects();
+            FormulaLeadingGradeFailsClosedWithoutFilesystemSideEffects();
             SupplementaryUnicodePreservesBomAndIdentity();
         }
 
@@ -67,6 +68,60 @@ namespace QS3D.Core.SmokeTests
                 var afterFiles = Directory.GetFiles(existingRoot).OrderBy(x => x, StringComparer.Ordinal).ToArray();
                 True(beforeFiles.SequenceEqual(afterFiles, StringComparer.Ordinal),
                     "Malformed procurement CSV input must not create a temporary publication file.");
+            }
+            finally
+            {
+                TryDeleteDirectory(existingRoot);
+            }
+        }
+
+        private static void FormulaLeadingGradeFailsClosedWithoutFilesystemSideEffects()
+        {
+            foreach (var grade in new[] { "=SD390", "+SD390", "-SD390", "@SD390" })
+            {
+                Throws<InvalidDataException>(() =>
+                    RebarProcurementCsvExporter.ToCsv(new[] { BuildRow("GROUP-1", grade) }));
+            }
+            Throws<InvalidDataException>(() =>
+                RebarProcurementCsvExporter.ToCsv(new[] { BuildRow("=GROUP-1", "SD390") }));
+
+            var absentRoot = Path.Combine(
+                Path.GetTempPath(),
+                "qs3d-procurement-csv-grade-identity-absent-" + Guid.NewGuid().ToString("N"));
+            var absentPath = Path.Combine(absentRoot, "nested", "procurement.csv");
+            try
+            {
+                Throws<InvalidDataException>(() =>
+                    RebarProcurementCsvExporter.Export(
+                        absentPath,
+                        new[] { BuildRow("GROUP-1", "=SD390") }));
+                True(!Directory.Exists(absentRoot),
+                    "Formula-leading procurement grade must fail before creating the destination directory.");
+            }
+            finally
+            {
+                TryDeleteDirectory(absentRoot);
+            }
+
+            var existingRoot = Path.Combine(
+                Path.GetTempPath(),
+                "qs3d-procurement-csv-grade-identity-existing-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(existingRoot);
+            var existingPath = Path.Combine(existingRoot, "procurement.csv");
+            var sentinel = new byte[] { 0x52, 0x42, 0x41, 0x52 };
+            File.WriteAllBytes(existingPath, sentinel);
+            var beforeFiles = Directory.GetFiles(existingRoot).OrderBy(x => x, StringComparer.Ordinal).ToArray();
+            try
+            {
+                Throws<InvalidDataException>(() =>
+                    RebarProcurementCsvExporter.Export(
+                        existingPath,
+                        new[] { BuildRow("GROUP-1", "@SD390") }));
+                True(File.ReadAllBytes(existingPath).SequenceEqual(sentinel),
+                    "Rejected procurement grade identity must preserve an existing destination.");
+                var afterFiles = Directory.GetFiles(existingRoot).OrderBy(x => x, StringComparer.Ordinal).ToArray();
+                True(beforeFiles.SequenceEqual(afterFiles, StringComparer.Ordinal),
+                    "Rejected procurement grade identity must not leave temporary publication files.");
             }
             finally
             {
