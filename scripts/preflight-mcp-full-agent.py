@@ -134,7 +134,8 @@ def main() -> int:
 
     # The normal non-technical path is one Agent Center: install, login/setup, copy/open, self-test,
     # emergency stop/cancel/resume. CAD-touching local MCP calls must run off the WPF button thread
-    # so ExecuteInApplicationContext can marshal back to the BricsCAD application context.
+    # so ExecuteInApplicationContext can marshal back to the BricsCAD application context. Quick
+    # Tunnel URL discovery is asynchronous, so the center itself must poll for a bounded window.
     center_required = (
         '[CommandMethod("QS3DMCPAGENTCENTER"',
         "McpCloudflaredBootstrapper.BeginInstall",
@@ -148,6 +149,10 @@ def main() -> int:
         "ThreadPool.QueueUserWorkItem",
         "Interlocked.CompareExchange(ref _localOperationActive",
         "Dispatcher.BeginInvoke",
+        "DispatcherTimer",
+        "StartQuickUrlPolling",
+        "StopQuickUrlPolling",
+        "_quickUrlPollTicks >= 20",
     )
     for token in center_required:
         if token not in agent_center:
@@ -208,9 +213,9 @@ def main() -> int:
         "allowlisted advanced command workflows, foreground-process-confined SendInput, "
         "emergency stop/resume with ESC fallback, idle/status observation, rotating local "
         "audit evidence, bounded HTTP/session handling, mutually-exclusive Cloudflare tunnel "
-        "modes, verified one-click cloudflared bootstrap, unified click-first Agent Center, "
-        "single HTTPS public endpoint resolution and mutation confirmation without arbitrary "
-        "shell execution."
+        "modes, verified one-click cloudflared bootstrap, unified click-first Agent Center with "
+        "bounded Quick URL discovery, single HTTPS public endpoint resolution and mutation "
+        "confirmation without arbitrary shell execution."
     )
     return 0
 
