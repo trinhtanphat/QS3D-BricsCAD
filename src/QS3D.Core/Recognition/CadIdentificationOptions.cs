@@ -89,6 +89,9 @@ namespace QS3D.Core.Recognition
                 var index = 0;
                 foreach (var rule in colorRules)
                 {
+                    if (knownCount.HasValue && index >= knownCount.Value)
+                        throw new InvalidOperationException(
+                            "Identification color-rule source traversal produced more entries than its known Count reported " + knownCount.Value + ".");
                     if (index == MaximumColorRules)
                         throw new InvalidOperationException("Identification color rules support at most 256 entries.");
                     if (rule == null)
