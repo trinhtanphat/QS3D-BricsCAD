@@ -88,7 +88,9 @@ if generator:
     replace_index = generator.find("[IO.File]::Replace($stagePath, $outputFull, $null)")
     move_index = generator.find("[IO.File]::Move($stagePath, $outputFull)")
     if min(parent_index, stage_index, write_index, replace_index, move_index) >= 0:
-        if not parent_index < stage_index < write_index < replace_index and parent_index < stage_index < write_index < move_index:
+        replace_ordered = parent_index < stage_index < write_index < replace_index
+        move_ordered = parent_index < stage_index < write_index < move_index
+        if not (replace_ordered and move_ordered):
             errors.append("V25→V26 transformer publication is not parent -> sibling stage -> write -> replace/move")
 
 if errors:
