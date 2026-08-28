@@ -94,7 +94,7 @@ namespace QS3D.BricsCAD.V25.UI
                 }
                 catch
                 {
-                    // Best effort only; host teardown may already own the collection lifetime.
+                    // Best effort only; close will retry both detach operations.
                 }
 
                 try
@@ -103,7 +103,7 @@ namespace QS3D.BricsCAD.V25.UI
                 }
                 catch
                 {
-                    // Best effort only; host teardown may already own the collection lifetime.
+                    // Best effort only; close will retry both detach operations.
                 }
 
                 _hostLifecycleSubscribed = false;
@@ -112,9 +112,8 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void UnsubscribeFromHostLifecycle()
         {
-            if (!_hostLifecycleSubscribed)
-                return;
-
+            // Always attempt both removals. A failed transactional rollback can leave a native
+            // handler attached even though ownership was never published as fully subscribed.
             try
             {
                 Application.DocumentManager.DocumentActivated -= OnHostDocumentActivated;
