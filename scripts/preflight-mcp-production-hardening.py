@@ -54,6 +54,7 @@ def main() -> int:
         "missing tunnel credential fail-closed": (account, "máy này thiếu credential"),
         "DNS conflict fail-closed": (account, "QS3D không tự bỏ qua xung đột DNS"),
         "hostname-scoped ingress": (account, '"ingress:\\r\\n"'),
+        "account setup verified one-click installer": (account, "McpCloudflaredBootstrapper.BeginInstall"),
         "Quick Tunnel URL polling": (account, "DispatcherTimer"),
         "Quick Tunnel bounded poll": (account, "_quickUrlPollTicks >= 20"),
         "named tunnel output bound to process owner": (account, "HandleRunLine(process, args.Data, false)"),
@@ -92,7 +93,7 @@ def main() -> int:
     print(
         "PASS: MCP production source uses one validated HTTPS endpoint resolver, isolated user "
         "fallback state, live/exact Cloudflare tunnel identity checks, fail-closed DNS conflict "
-        "handling, owner-bound named/Quick Tunnel output, click-first redacted onboarding, "
+        "handling, owner-bound named/Quick Tunnel output, verified click-first redacted onboarding, "
         "bounded network/session surfaces and BricsCAD-confined emergency recovery."
     )
     return 0
