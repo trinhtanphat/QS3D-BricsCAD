@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             AdvertisedCountGreaterThanTraversalFails();
-            AdvertisedCountLessThanTraversalFails();
+            AdvertisedCountLessThanTraversalFailsEarly();
             EnumerableWithoutKnownCountRemainsAccepted();
         }
 
@@ -24,16 +24,16 @@ namespace QS3D.Core.SmokeTests
                 2,
                 new[] { CreateProjection(1) });
 
-            ThrowsCountMismatch(() => IfcRoundTripProjectionSet.Create(projections));
+            ThrowsFinalCountMismatch(() => IfcRoundTripProjectionSet.Create(projections));
         }
 
-        private static void AdvertisedCountLessThanTraversalFails()
+        private static void AdvertisedCountLessThanTraversalFailsEarly()
         {
             var projections = new KnownCountCollection<IfcRoundTripProjection>(
                 1,
                 new[] { CreateProjection(1), CreateProjection(2) });
 
-            ThrowsCountMismatch(() => IfcRoundTripProjectionSet.Create(projections));
+            ThrowsEarlyCountOverrun(() => IfcRoundTripProjectionSet.Create(projections));
         }
 
         private static void EnumerableWithoutKnownCountRemainsAccepted()
@@ -50,7 +50,7 @@ namespace QS3D.Core.SmokeTests
                 "Enumerable-only IFC projection source changed canonical projection ordering.");
         }
 
-        private static void ThrowsCountMismatch(Action action)
+        private static void ThrowsFinalCountMismatch(Action action)
         {
             try
             {
@@ -62,7 +62,23 @@ namespace QS3D.Core.SmokeTests
                 Require(exception.Message.StartsWith(
                         "IFC round-trip projection source Count does not match enumerated projection count.",
                         StringComparison.Ordinal),
-                    "Unexpected IFC projection Count/traversal mismatch diagnostic: " + exception.Message);
+                    "Unexpected IFC projection under-yield diagnostic: " + exception.Message);
+            }
+        }
+
+        private static void ThrowsEarlyCountOverrun(Action action)
+        {
+            try
+            {
+                action();
+                throw new Exception("Expected IFC projection early Count-overrun rejection.");
+            }
+            catch (InvalidOperationException exception)
+            {
+                Require(exception.Message.StartsWith(
+                        "IFC round-trip projection source Count was exceeded during traversal.",
+                        StringComparison.Ordinal),
+                    "Unexpected IFC projection over-yield diagnostic: " + exception.Message);
             }
         }
 
