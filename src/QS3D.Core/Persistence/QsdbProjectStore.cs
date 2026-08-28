@@ -376,7 +376,6 @@ namespace QS3D.Core.Persistence
                 {
                     ValidateCanonicalKey(quantity.Key, "element " + element.Id + " quantity name");
                     if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value)) throw new InvalidDataException("Element quantity must be finite: " + element.Id + "/" + quantity.Key);
-                    if (quantity.Value < 0d) throw new InvalidDataException("Element quantity must be non-negative: " + element.Id + "/" + quantity.Key);
                 }
             }
             foreach (var audit in project.AuditEvents)
