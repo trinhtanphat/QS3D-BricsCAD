@@ -1,10 +1,12 @@
 # Issue #4321 — Project snapshot Family/Element property invariants
 
-Status: `SOURCE_FIX_ACTIVE`
+Status: `SOURCE_FIX_ACTIVE / RESERVATION_V2_RECOVERY`
 
 Lane-Key: `issue-4321`
 
-Canonical owner: independent QS3D schedule worker `C02`
+Canonical owner/session: `account:longnguyentuan2107-maker|session:c02-4321-20260828-0907`
+
+Canonical carrier: `agent/longnguyentuan2107-maker-c02-4321/issue-4321-project-snapshot-property-invariants`
 
 Runtime: `NOT_APPLICABLE` — deterministic Core state/rollback integrity.
 
@@ -29,6 +31,6 @@ Runtime: `NOT_APPLICABLE` — deterministic Core state/rollback integrity.
 
 ## Landing
 
-Use canonical branch `agent/c02/issue-4321-project-snapshot-property-invariants`. Required endpoint: automatic exact-head branch CI, latest-main reconciliation when needed, one canonical PR with `Lane-Key: issue-4321`, protected current-candidate `preflight` + `core` SUCCESS, expected-head merge and exact resulting `main` verification.
+Use canonical branch `agent/longnguyentuan2107-maker-c02-4321/issue-4321-project-snapshot-property-invariants`. The old `agent/c02/...` carrier and PR #4323 are superseded only because Reservation v2 rejects generic schedule owner tokens. Required endpoint: automatic exact-head branch CI, latest-main reconciliation when needed, one canonical PR with `Lane-Key: issue-4321`, protected current-candidate `preflight` + `core` SUCCESS, expected-head merge and exact resulting `main` verification.
 
 No licensed BricsCAD host, private DWG or `LOCAL_PASS` evidence applies.
