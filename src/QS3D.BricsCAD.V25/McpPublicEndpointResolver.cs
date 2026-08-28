@@ -13,6 +13,11 @@ namespace QS3D.BricsCAD.V25
     {
         private const string PublicUrlEnvironment = "QS3D_MCP_PUBLIC_URL";
 
+        // Keep the operator-supplied fallback distinct from the process variable that Publish()
+        // updates for connector_info/status. Without this snapshot, a provider URL published by
+        // QS3D could later be mistaken for a user fallback after a Quick Tunnel exits.
+        private static readonly string ConfiguredEnvironmentFallback = ReadConfiguredEnvironmentFallback();
+
         public static string Resolve()
         {
             string value;
@@ -32,12 +37,14 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                value = NormalizeCandidate(Environment.GetEnvironmentVariable(PublicUrlEnvironment) ?? string.Empty);
-                if (!string.IsNullOrWhiteSpace(value)) return value;
+                value = NormalizeCandidate(ConfiguredEnvironmentFallback);
+                if (!string.IsNullOrWhiteSpace(value)) return Publish(value);
             }
             catch { }
 
-            return string.Empty;
+            // Also clear a previously published provider URL from the process-visible status
+            // surface when no live/configured public endpoint remains.
+            return Publish(string.Empty);
         }
 
         internal static string NormalizeCandidate(string value)
@@ -115,16 +122,23 @@ namespace QS3D.BricsCAD.V25
             return true;
         }
 
+        private static string ReadConfiguredEnvironmentFallback()
+        {
+            try { return (Environment.GetEnvironmentVariable(PublicUrlEnvironment) ?? string.Empty).Trim(); }
+            catch { return string.Empty; }
+        }
+
         private static string Publish(string value)
         {
+            var resolved = value ?? string.Empty;
             try
             {
                 var current = Environment.GetEnvironmentVariable(PublicUrlEnvironment) ?? string.Empty;
-                if (!string.Equals(current, value, StringComparison.Ordinal))
-                    Environment.SetEnvironmentVariable(PublicUrlEnvironment, value, EnvironmentVariableTarget.Process);
+                if (!string.Equals(current, resolved, StringComparison.Ordinal))
+                    Environment.SetEnvironmentVariable(PublicUrlEnvironment, resolved, EnvironmentVariableTarget.Process);
             }
             catch { }
-            return value;
+            return resolved;
         }
     }
 }
