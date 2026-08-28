@@ -10,6 +10,7 @@ smoke = SMOKE.read_text(encoding="utf-8")
 required_source = [
     "var sourceRows = new List<CurtainWallScheduleRow>(rowCount);",
     "ReferenceEquals(currentSource, sourceRows[rowIndex])",
+    "row source changed during snapshot",
     "EnsureRowStable(currentSource, snapshot[rowIndex], rowIndex);",
     "EnsureJoinedCellValuesStable(source, target, label);",
     "values changed during snapshot",
