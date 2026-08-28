@@ -102,7 +102,6 @@ namespace QS3D.Core.SmokeTests
                 Category = "Slab",
                 FamilyName = "Slab 200",
                 ElementCount = 1,
-                PrimaryQuantity = 2.5d,
                 AreaM2 = 10d,
                 VolumeM3 = 2.5d,
                 MassKg = 6000d,
