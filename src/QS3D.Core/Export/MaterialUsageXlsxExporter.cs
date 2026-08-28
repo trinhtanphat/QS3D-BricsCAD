@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -40,8 +41,7 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            var rowCount = rows.Count;
-            if (rowCount > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Material XLSX export supports at most " + MaxDataRows + " data rows.");
+            var rowCount = BindRowCount(rows);
             var snapshot = new List<ExportRow>(rowCount);
             for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
             {
@@ -68,6 +68,8 @@ namespace QS3D.Core.Export
                 ValidateNonNegative(row.MassKg, rowIndex, "MassKg");
                 snapshot.Add(row);
             }
+            if (BindRowCount(rows) != rowCount)
+                throw new InvalidOperationException("Material XLSX source row count changed during snapshot traversal.");
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -88,6 +90,30 @@ namespace QS3D.Core.Export
                 AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
             }
             finally { AtomicFileCommit.TryDelete(tempPath); }
+        }
+
+        private static int BindRowCount(IReadOnlyList<MaterialUsageRow> rows)
+        {
+            int? expected = null;
+            BindKnownCount(rows.Count, "IReadOnlyCollection<MaterialUsageRow>", ref expected);
+            var genericCollection = rows as ICollection<MaterialUsageRow>;
+            if (genericCollection != null)
+                BindKnownCount(genericCollection.Count, "ICollection<MaterialUsageRow>", ref expected);
+            var nonGenericCollection = rows as ICollection;
+            if (nonGenericCollection != null)
+                BindKnownCount(nonGenericCollection.Count, "ICollection", ref expected);
+            return expected.GetValueOrDefault();
+        }
+
+        private static void BindKnownCount(int count, string contract, ref int? expected)
+        {
+            if (count < 0)
+                throw new ArgumentOutOfRangeException("rows", "Material XLSX source " + contract + " Count must be non-negative.");
+            if (count > MaxDataRows)
+                throw new ArgumentOutOfRangeException("rows", "Material XLSX export supports at most " + MaxDataRows + " data rows.");
+            if (expected.HasValue && expected.Value != count)
+                throw new ArgumentException("Material XLSX source exposes conflicting deterministic Count contracts.", "rows");
+            expected = count;
         }
 
         private static string BuildSheet(IReadOnlyList<ExportRow> rows)
