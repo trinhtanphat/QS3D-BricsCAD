@@ -82,8 +82,11 @@ namespace QS3D.Core.Documentation
             {
                 while (enumerator.MoveNext())
                 {
+                    if (knownCount.HasValue && result.Count >= knownCount.Value)
+                        throw TraversalCountMismatch();
                     if (result.Count >= MaxSheets)
                         throw TooManySheets();
+
                     var sheet = enumerator.Current;
                     if (sheet == null)
                         throw new ArgumentException("Semantic sheet index source cannot contain a null sheet at index " + result.Count + ".", nameof(sheets));
@@ -92,7 +95,11 @@ namespace QS3D.Core.Documentation
             }
 
             if (knownCount.HasValue && result.Count != knownCount.Value)
-                throw new InvalidOperationException("Semantic sheet index source traversal count does not match its known count.");
+                throw TraversalCountMismatch();
+
+            var postTraversalKnownCount = RequireKnownCountsWithinLimit(sheets);
+            if (knownCount != postTraversalKnownCount)
+                throw new InvalidOperationException("Semantic sheet index source known count changed during traversal.");
 
             return result;
         }
@@ -127,6 +134,11 @@ namespace QS3D.Core.Documentation
                 throw new InvalidOperationException("Semantic sheet index source reports conflicting known counts.");
 
             return expected;
+        }
+
+        private static InvalidOperationException TraversalCountMismatch()
+        {
+            return new InvalidOperationException("Semantic sheet index source traversal count does not match its known count.");
         }
 
         private static InvalidOperationException TooManySheets()
