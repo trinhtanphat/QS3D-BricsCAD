@@ -15,9 +15,11 @@ def require(condition: bool, message: str) -> None:
 def helper_contract(text: str) -> None:
     required = (
         "$script:ExpectedPackageName = 'QS3D-BricsCAD-V26.zip'",
+        "$script:ExpectedChecksumName = 'QS3D-BricsCAD-V26.zip.sha256'",
         "Resolve-OrdinaryNonReparseFile -Path $PackagePath -Label 'V26 package ZIP'",
         "Assert-NoReparseDirectoryChain -Directory $item.Directory -Label $Label",
         "[IO.FileAttributes]::ReparsePoint",
+        "[string]::Equals([IO.Path]::GetFileName($outputFullPath), $script:ExpectedChecksumName, [StringComparison]::Ordinal)",
         "Resolve-OrdinaryNonReparseDirectory -Path $outputParentPath -Label 'V26 checksum destination parent'",
         "Assert-SafeExistingOutputLeaf -Path $outputFullPath",
         "[IO.File]::Open($package.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)",
@@ -39,6 +41,7 @@ def helper_contract(text: str) -> None:
         require(token in text, "V26 checksum helper missing safety token: " + token)
 
     source_guard = text.find("Resolve-OrdinaryNonReparseFile -Path $PackagePath")
+    output_identity_guard = text.find("[string]::Equals([IO.Path]::GetFileName($outputFullPath), $script:ExpectedChecksumName")
     output_parent_guard = text.find("Resolve-OrdinaryNonReparseDirectory -Path $outputParentPath")
     output_leaf_guard = text.find("Assert-SafeExistingOutputLeaf -Path $outputFullPath")
     open_pos = text.find("[IO.File]::Open($package.FullName")
@@ -51,11 +54,11 @@ def helper_contract(text: str) -> None:
     verify_pos = text.find("Published V26 checksum bytes do not match the computed canonical record.")
     residue_pos = text.find("V26 checksum staging residue remains")
 
-    positions = (source_guard, output_parent_guard, output_leaf_guard, open_pos, hash_pos, temp_write, temp_guard)
+    positions = (source_guard, output_identity_guard, output_parent_guard, output_leaf_guard, open_pos, hash_pos, temp_write, temp_guard)
     require(min(positions) >= 0, "V26 checksum safety ordering token missing")
     require(
-        source_guard < output_parent_guard < output_leaf_guard < open_pos < hash_pos < temp_write < temp_guard,
-        "V26 checksum must validate source/destination before hash and validate staging before publication",
+        source_guard < output_identity_guard < output_parent_guard < output_leaf_guard < open_pos < hash_pos < temp_write < temp_guard,
+        "V26 checksum must bind identities and validate source/destination before hash, then validate staging before publication",
     )
     require(replace_pos > temp_guard and move_pos > temp_guard, "V26 checksum publication must occur only after staging validation")
     require(published_pos > min(replace_pos, move_pos), "V26 checksum commit marker must follow atomic publication")
@@ -113,6 +116,7 @@ def main() -> int:
     workflow_contract(workflow)
 
     mutations = (
+        ("$script:ExpectedChecksumName = 'QS3D-BricsCAD-V26.zip.sha256'", "$script:ExpectedChecksumName = 'other.sha256'", "canonical output identity"),
         ("[IO.FileAttributes]::ReparsePoint", "[IO.FileAttributes]::Hidden", "reparse rejection"),
         ("[IO.FileShare]::Read", "[IO.FileShare]::ReadWrite", "read-only hash handle"),
         ("$sha256.ComputeHash($stream)", "$sha256.ComputeHash([IO.File]::ReadAllBytes($package.FullName))", "stream-bound hashing"),
@@ -137,7 +141,7 @@ def main() -> int:
         "canonical checksum destination",
     )
 
-    print("PASS: V26 release checksum creation is stream-bound, ordinary/non-reparse guarded, canonically encoded, sibling-staged, failure-atomic, residue-checked, and workflow-routed through the shared helper.")
+    print("PASS: V26 release checksum creation is stream-bound, identity-bound, ordinary/non-reparse guarded, canonically encoded, sibling-staged, failure-atomic, residue-checked, and workflow-routed through the shared helper.")
     return 0
 
 
