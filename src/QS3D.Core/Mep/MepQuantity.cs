@@ -112,6 +112,8 @@ namespace QS3D.Core.Mep
             {
                 if (index == MaxElements)
                     ThrowTooManyElements();
+                if (hasKnownCount && index >= knownCount)
+                    throw new InvalidOperationException("MEP takeoff source known count does not match the number of elements traversed.");
                 if (element == null)
                     throw new ArgumentException("MEP takeoff contains a null element at index " + index + ".", nameof(elements));
                 if (!ids.Add(element.ElementId))
