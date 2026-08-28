@@ -3,8 +3,10 @@
 Status: `SOURCE_FIX_ACTIVE / REMOTE_SAFE`
 
 - Lane-Key: `issue-4383`
-- Canonical owner/session: `account-local QS3D schedule worker C01 / 2026-08-28`
-- Canonical branch: `agent/c01/issue-4383-mep-tbq-count-bound`
+- Reservation-Protocol: `v2`
+- Canonical owner/session: `account:longnguyentuan2107-maker|session:qs3d-c01-20260828t1900z-mep-tbq-bound`
+- Canonical branch: `agent/longnguyentuan2107-maker-c01-20260828t1900z-mep-tbq/issue-4383-mep-tbq-count-bound`
+- Supersedes: `agent/c01/issue-4383-mep-tbq-count-bound` (pre-PR reservation-v2 identity correction only)
 - Baseline: `main@f6a68f8618999305c46da1cc49b925576ccdd5e6`
 - Runtime: `NOT_APPLICABLE` — deterministic Core MEP/TBQ integrity only
 
@@ -24,7 +26,7 @@ This lane is intentionally separate from `issue-4377`, which owns `MepQuantitySe
 4. For an admitted deterministic Count, reject the first item beyond that Count before null validation or `MepTbqReportRow` materialization.
 5. Preserve the independent 10,000-group cap for pure streaming sources with no deterministic Count surface.
 6. Reject deterministic Count under-yield after traversal.
-7. Rebind deterministic Count evidence after exact traversal and reject Count disappearance, drift, negative evidence, conflict, or oversized replacement before sort/publication.
+7. Rebind deterministic Count evidence after exact traversal and reject Count drift, negative evidence, conflict, or oversized replacement before sort/publication.
 8. Only after all cardinality/stability checks pass may rows be sorted and published.
 
 ## Compatibility invariants
