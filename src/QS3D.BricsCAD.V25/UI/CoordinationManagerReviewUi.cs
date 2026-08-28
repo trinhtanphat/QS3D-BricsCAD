@@ -529,10 +529,20 @@ namespace QS3D.BricsCAD.V25.UI
                 RequireTargets(ids);
                 if (_isolationActive) RestoreIsolation();
 
-                _objectIsolationModeBefore = Bricscad.ApplicationServices.Application.GetSystemVariable("OBJECTISOLATIONMODE");
-                Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", 0);
-                _document.Editor.SetImpliedSelection(ids.ToArray());
-                _document.SendStringToExecute("_.ISOLATEOBJECTS ", true, false, false);
+                var modeBefore = Bricscad.ApplicationServices.Application.GetSystemVariable("OBJECTISOLATIONMODE");
+                try
+                {
+                    Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", 0);
+                    _document.Editor.SetImpliedSelection(ids.ToArray());
+                    _document.SendStringToExecute("_.ISOLATEOBJECTS ", true, false, false);
+                }
+                catch
+                {
+                    RestoreObjectIsolationModeBestEffort(modeBefore);
+                    throw;
+                }
+
+                _objectIsolationModeBefore = modeBefore;
                 _isolationActive = true;
             }
 
@@ -567,7 +577,7 @@ namespace QS3D.BricsCAD.V25.UI
 
                 using (var view = _document.Editor.GetCurrentView())
                 {
-                    _viewBeforeSection = ViewSnapshot.Capture(view);
+                    var viewBeforeSection = ViewSnapshot.Capture(view);
                     var direction = view.ViewDirection.GetNormal();
                     var distances = Corners(bounds)
                         .Select(point => (point - center).DotProduct(direction))
@@ -596,7 +606,16 @@ namespace QS3D.BricsCAD.V25.UI
                     view.FrontClipDistance = maxDistance;
                     view.BackClipEnabled = true;
                     view.FrontClipEnabled = true;
-                    _document.Editor.SetCurrentView(view);
+                    try
+                    {
+                        _document.Editor.SetCurrentView(view);
+                    }
+                    catch
+                    {
+                        RestoreSectionViewBestEffort(viewBeforeSection);
+                        throw;
+                    }
+                    _viewBeforeSection = viewBeforeSection;
                 }
             }
 
@@ -611,6 +630,23 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     snapshot.Apply(view);
                     _document.Editor.SetCurrentView(view);
+                }
+            }
+
+            private void RestoreSectionViewBestEffort(ViewSnapshot snapshot)
+            {
+                if (snapshot == null || _destroyed) return;
+                try
+                {
+                    using (var view = _document.Editor.GetCurrentView())
+                    {
+                        snapshot.Apply(view);
+                        _document.Editor.SetCurrentView(view);
+                    }
+                }
+                catch
+                {
+                    // Compensation is bounded best-effort and must not mask native apply failure.
                 }
             }
 
@@ -702,7 +738,13 @@ namespace QS3D.BricsCAD.V25.UI
                 if (_objectIsolationModeBefore == null) return;
                 var value = _objectIsolationModeBefore;
                 _objectIsolationModeBefore = null;
-                try { Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", value); } catch { }
+                RestoreObjectIsolationModeBestEffort(value);
+            }
+
+            private void RestoreObjectIsolationModeBestEffort(object? modeBefore)
+            {
+                if (modeBefore == null) return;
+                try { Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", modeBefore); } catch { }
             }
 
             public void Dispose()
