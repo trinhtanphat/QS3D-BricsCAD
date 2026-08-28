@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
         {
             OversizedKnownCountsFailBeforeEnumeration();
             InvalidAndConflictingKnownCountsFailBeforeEnumeration();
+            KnownCountOverrunWinsBeforeSemanticProcessing();
             KnownCountTraversalMismatchFailsClosed();
             PureStreamingInputRetainsTraversalCap();
             HonestCountedInputsPreserveCanonicalState();
@@ -52,6 +53,30 @@ namespace QS3D.Core.SmokeTests
             Equal(0, conflicting.EnumerationRequests, "Conflicting Count contracts must fail before GetEnumerator().");
         }
 
+        private static void KnownCountOverrunWinsBeforeSemanticProcessing()
+        {
+            AssertCountOverrun(
+                new CountedCollection<ElementCategory>(new[] { ElementCategory.Beam, (ElementCategory)int.MaxValue }, 1, 1, 1),
+                values => new ProjectBrowserWorkspaceState(categories: values),
+                "project browser workspace category filter");
+            AssertCountOverrun(
+                new CountedCollection<string>(new[] { "F-01", " F-02" }, 1, 1, 1),
+                values => new ProjectBrowserWorkspaceState(floorIds: values),
+                "project browser workspace floor filter");
+            AssertCountOverrun(
+                new CountedCollection<string>(new[] { "Z-01", " Z-02" }, 1, 1, 1),
+                values => new ProjectBrowserWorkspaceState(zoneIds: values),
+                "project browser workspace zone filter");
+            AssertCountOverrun(
+                new CountedCollection<string>(new[] { "ROOT/A", " ROOT/B" }, 1, 1, 1),
+                values => new ProjectBrowserWorkspaceState(expandedPaths: values),
+                "project browser workspace expanded path");
+            AssertCountOverrun(
+                new CountedCollection<string>(new[] { "E-01", " E-02" }, 1, 1, 1),
+                values => new ProjectBrowserWorkspaceState(selectedElementIds: values),
+                "project browser workspace selected element");
+        }
+
         private static void KnownCountTraversalMismatchFailsClosed()
         {
             var underEnumerated = new CountedCollection<string>(new[] { "F-01" }, 2, 2, 2);
@@ -60,7 +85,7 @@ namespace QS3D.Core.SmokeTests
 
             var overEnumerated = new CountedCollection<string>(new[] { "PATH-A", "PATH-B" }, 1, 1, 1);
             Throws<InvalidOperationException>(() => new ProjectBrowserWorkspaceState(expandedPaths: overEnumerated));
-            Equal(1, overEnumerated.EnumerationRequests, "Count/traversal mismatch must fail after one bounded traversal.");
+            Equal(1, overEnumerated.EnumerationRequests, "Count/traversal mismatch must fail during one bounded traversal.");
         }
 
         private static void PureStreamingInputRetainsTraversalCap()
@@ -101,6 +126,17 @@ namespace QS3D.Core.SmokeTests
             Equal(0, values.EnumerationRequests, "Oversized known Count must fail before GetEnumerator().");
         }
 
+        private static void AssertCountOverrun<T>(
+            CountedCollection<T> values,
+            Func<IEnumerable<T>, ProjectBrowserWorkspaceState> create,
+            string label)
+        {
+            ThrowsWithMessage<InvalidOperationException>(
+                () => create(values),
+                label + " traversal exceeds declared Count 1.");
+            Equal(1, values.EnumerationRequests, "Known-Count overrun must use exactly one input traversal.");
+        }
+
         private static void Throws<T>(Action action) where T : Exception
         {
             try
@@ -109,6 +145,20 @@ namespace QS3D.Core.SmokeTests
             }
             catch (T)
             {
+                return;
+            }
+            throw new InvalidOperationException("Expected " + typeof(T).Name + ".");
+        }
+
+        private static void ThrowsWithMessage<T>(Action action, string expectedMessage) where T : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (T ex)
+            {
+                Equal(expectedMessage, ex.Message, "Unexpected fail-closed precedence/message.");
                 return;
             }
             throw new InvalidOperationException("Expected " + typeof(T).Name + ".");
