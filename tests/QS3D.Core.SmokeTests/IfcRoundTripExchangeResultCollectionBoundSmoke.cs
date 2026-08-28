@@ -16,7 +16,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             OversizedKnownCountFailsBeforeEnumeration();
-            DishonestCountStopsAtFirstDisallowedRecord();
+            DishonestKnownCountStopsAtFirstUnexpectedRecord();
+            PureStreamingStopsAtFirstDisallowedRecord();
             ExactBoundIsAccepted();
             DuplicateCollapseAndOrderingRemainCanonical();
             NullContractsRemainUnchanged();
@@ -32,14 +33,24 @@ namespace QS3D.Core.SmokeTests
                 "Oversized IFC exchange result collection was enumerated before known-count rejection.");
         }
 
-        private static void DishonestCountStopsAtFirstDisallowedRecord()
+        private static void DishonestKnownCountStopsAtFirstUnexpectedRecord()
         {
             var results = new DishonestCountCollection(MaxResultsPerCollection + 50, reportedCount: 1);
+
+            ThrowsKnownCountOverrun(() => IfcRoundTripExchangeResultSet.Create(results));
+
+            Require(results.YieldedCount == 2,
+                "Known-count IFC exchange result drift must stop on the first record beyond the advertised Count.");
+        }
+
+        private static void PureStreamingStopsAtFirstDisallowedRecord()
+        {
+            var results = new StreamingResultSequence(MaxResultsPerCollection + 50);
 
             ThrowsBound(() => IfcRoundTripExchangeResultSet.Create(results));
 
             Require(results.YieldedCount == MaxResultsPerCollection + 1,
-                "Streaming IFC exchange result bound must stop exactly on input record 10,001.");
+                "Pure-streaming IFC exchange result bound must stop exactly on input record 10,001.");
         }
 
         private static void ExactBoundIsAccepted()
@@ -98,6 +109,21 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void ThrowsKnownCountOverrun(Action action)
+        {
+            try
+            {
+                action();
+                throw new Exception("Dishonest IFC exchange result Count must fail closed.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                const string expected = "IFC exchange result source Count was exceeded during traversal.";
+                if (!string.Equals(ex.Message, expected, StringComparison.Ordinal))
+                    throw new Exception("Unexpected IFC exchange result Count-overrun diagnostic: " + ex.Message);
+            }
+        }
+
         private static void Throws<TException>(Action action) where TException : Exception
         {
             try
@@ -151,6 +177,29 @@ namespace QS3D.Core.SmokeTests
                 {
                     YieldedCount++;
                     yield return CreateResult("R" + index.ToString("D5"), IfcRoundTripResultState.Unmapped);
+                }
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class StreamingResultSequence : IEnumerable<IfcRoundTripExchangeResult>
+        {
+            private readonly int _actualCount;
+
+            public StreamingResultSequence(int actualCount)
+            {
+                _actualCount = actualCount;
+            }
+
+            public int YieldedCount { get; private set; }
+
+            public IEnumerator<IfcRoundTripExchangeResult> GetEnumerator()
+            {
+                for (var index = 0; index < _actualCount; index++)
+                {
+                    YieldedCount++;
+                    yield return CreateResult("S" + index.ToString("D5"), IfcRoundTripResultState.Unmapped);
                 }
             }
 
