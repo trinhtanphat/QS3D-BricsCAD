@@ -34,6 +34,10 @@ namespace QS3D.Core.Navigation
             var result = new List<T>();
             foreach (var value in values)
             {
+                if (knownCount.HasValue && result.Count >= knownCount.Value)
+                    throw new InvalidOperationException(
+                        "Project browser query option " + parameterName + " Count " + knownCount.Value +
+                        " was exceeded during traversal.");
                 if (result.Count >= ProjectBrowserQueryPlanner.MaxFilterIds)
                     throw TooManyFilterValues(parameterName);
                 result.Add(value);
