@@ -1,4 +1,6 @@
 using System;
+using System.Net;
+using System.Net.Sockets;
 
 namespace QS3D.BricsCAD.V25
 {
@@ -49,6 +51,10 @@ namespace QS3D.BricsCAD.V25
             if (uri.IsLoopback || string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase)) return string.Empty;
             if (!string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment)) return string.Empty;
 
+            IPAddress literalAddress;
+            if (IPAddress.TryParse(uri.Host.Trim('[', ']'), out literalAddress) && IsPrivateOrLocalAddress(literalAddress))
+                return string.Empty;
+
             var path = uri.AbsolutePath ?? string.Empty;
             if (path.Length == 0 || path == "/") path = "/mcp";
             else if (!string.Equals(path.TrimEnd('/'), "/mcp", StringComparison.OrdinalIgnoreCase)) return string.Empty;
@@ -62,6 +68,51 @@ namespace QS3D.BricsCAD.V25
                 Fragment = string.Empty
             };
             return builder.Uri.AbsoluteUri.TrimEnd('/');
+        }
+
+        private static bool IsPrivateOrLocalAddress(IPAddress address)
+        {
+            if (address == null || IPAddress.IsLoopback(address)) return true;
+            var bytes = address.GetAddressBytes();
+            if (address.AddressFamily == AddressFamily.InterNetwork)
+            {
+                if (bytes.Length != 4) return true;
+                var first = bytes[0];
+                var second = bytes[1];
+                if (first == 0 || first == 10 || first == 127 || first >= 224) return true;
+                if (first == 100 && second >= 64 && second <= 127) return true;
+                if (first == 169 && second == 254) return true;
+                if (first == 172 && second >= 16 && second <= 31) return true;
+                if (first == 192 && second == 168) return true;
+                if (first == 192 && second == 0 && (bytes[2] == 0 || bytes[2] == 2)) return true;
+                if (first == 198 && (second == 18 || second == 19)) return true;
+                if (first == 198 && second == 51 && bytes[2] == 100) return true;
+                if (first == 203 && second == 0 && bytes[2] == 113) return true;
+                return false;
+            }
+
+            if (address.AddressFamily == AddressFamily.InterNetworkV6)
+            {
+                if (bytes.Length != 16) return true;
+                if (address.Equals(IPAddress.IPv6Any) || address.IsIPv6LinkLocal || address.IsIPv6Multicast || address.IsIPv6SiteLocal)
+                    return true;
+                if ((bytes[0] & 0xFE) == 0xFC) return true; // RFC 4193 unique-local fc00::/7
+                if (bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0D && bytes[3] == 0xB8)
+                    return true; // RFC 3849 documentation range
+
+                var mappedV4 = true;
+                for (var i = 0; i < 10; i++)
+                {
+                    if (bytes[i] == 0) continue;
+                    mappedV4 = false;
+                    break;
+                }
+                if (mappedV4 && bytes[10] == 0xFF && bytes[11] == 0xFF)
+                    return IsPrivateOrLocalAddress(new IPAddress(new[] { bytes[12], bytes[13], bytes[14], bytes[15] }));
+                return false;
+            }
+
+            return true;
         }
 
         private static string Publish(string value)
