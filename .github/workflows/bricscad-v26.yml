@@ -51,6 +51,11 @@ jobs:
         run: |
           # Capture the exact ordinary/non-reparse V26 host-reference generations that later build/runtime steps are allowed to consume.
           & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR -StatePath $env:V26_HOST_REFERENCE_STATE | Out-Null
+          # Keep the BRep reference explicit at the workflow boundary while the shared helper owns ordinary-file, reparse, host-major and stable-generation validation.
+          $requiredBrep = Join-Path $env:BRICSCAD_V26_DIR 'TD_MgdBrep.dll'
+          if (-not (Test-Path -LiteralPath $requiredBrep -PathType Leaf)) {
+            throw "Required BricsCAD V26 host reference is missing: TD_MgdBrep.dll"
+          }
           $desktopRuntimes = @(dotnet --list-runtimes | Where-Object { $_ -match '^Microsoft\.WindowsDesktop\.App 8\.' })
           if ($desktopRuntimes.Count -eq 0) {
             throw ".NET 8 Windows Desktop Runtime/SDK is required for the BricsCAD V26 managed host."
