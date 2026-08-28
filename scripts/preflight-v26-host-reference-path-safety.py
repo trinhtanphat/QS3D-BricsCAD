@@ -35,6 +35,16 @@ def require_before(text: str, first: str, second: str, label: str) -> None:
         fail(f"{label}: expected {first!r} before {second!r}")
 
 
+def require_between(text: str, token: str, after: str, before: str, label: str) -> None:
+    left = text.find(after)
+    right = text.find(before, left + 1)
+    if left < 0 or right < 0:
+        fail(f"{label}: missing boundary anchors")
+    position = text.find(token, left + len(after), right)
+    if position < 0:
+        fail(f"{label}: missing {token!r} between {after!r} and {before!r}")
+
+
 def validate_helper(text: str) -> None:
     component_guard = "Assert-NoExistingReparseComponent -Path $Path -Label $Label"
     second_resolve = "Get-RequiredOrdinaryFile -Path $first.FullName -Label $Label"
@@ -66,45 +76,35 @@ def validate_helper(text: str) -> None:
         require(text, token, "V26 host-safety helper")
 
     require_before(text, ROOTED_TOKEN, "[IO.Path]::GetFullPath($trimmed)", "absolute root before canonicalization")
-
-    # The helper has three independent reparse boundaries: traversed path
-    # components, required host-file leaves, and the configured host directory.
     if text.count(REPARSE_TOKEN) < 3:
         fail("V26 host-safety helper: expected reparse rejection at path-component, file-leaf, and host-directory boundaries")
-
-    require_before(
-        text,
-        component_guard,
-        "Get-RequiredOrdinaryFile -Path $Path -Label $Label",
-        "reparse check before ordinary-file trust",
-    )
-    require_before(
-        text,
-        second_resolve,
-        SECOND_CAPTURE_HASH_TOKEN,
-        "second ordinary-file resolve before second generation hash",
-    )
-    require_before(
-        text,
-        "Get-RequiredOrdinaryFile -Path $Path -Label $Label",
-        "$version = $versionFile.VersionInfo",
-        "ordinary host files before version trust",
-    )
+    require_before(text, component_guard, "Get-RequiredOrdinaryFile -Path $Path -Label $Label", "reparse check before ordinary-file trust")
+    require_before(text, second_resolve, SECOND_CAPTURE_HASH_TOKEN, "second ordinary-file resolve before second generation hash")
+    require_before(text, "Get-RequiredOrdinaryFile -Path $Path -Label $Label", "$version = $versionFile.VersionInfo", "ordinary host files before version trust")
     require_before(text, STATE_CAPTURE_TOKEN, STATE_ASSERT_TOKEN, "stable-state capture before revalidation")
 
 
-def validate_workflow(text: str, label: str) -> None:
+def validate_workflow(text: str, label: str, expected_verify_count: int) -> None:
     require(text, CALL, label)
     require(text, "BRICSCAD_V26_DIR", label)
     require(text, "V26_HOST_REFERENCE_STATE", label)
     require(text, STATE_WRITE_TOKEN, label)
     require(text, STATE_VERIFY_TOKEN, label)
+    actual_verify_count = text.count(STATE_VERIFY_TOKEN)
+    if actual_verify_count < expected_verify_count:
+        fail(f"{label}: expected at least {expected_verify_count} host-generation revalidations, found {actual_verify_count}")
+
     build = "dotnet build src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj"
     require(text, build, label)
     require_before(text, STATE_WRITE_TOKEN, STATE_VERIFY_TOKEN, f"{label} capture before revalidation")
     require_before(text, STATE_VERIFY_TOKEN, build, f"{label} stable-generation revalidation before plugin build")
-    if "test-bricscad-v26-runtime.ps1" in text:
-        require_before(text, STATE_VERIFY_TOKEN, "test-bricscad-v26-runtime.ps1", f"{label} generation revalidation before runtime")
+
+    runtime = "test-bricscad-v26-runtime.ps1"
+    if runtime in text:
+        require_between(text, STATE_VERIFY_TOKEN, build, runtime, f"{label} runtime revalidation after plugin build")
+    if label == "manual V26 release workflow":
+        signed_runtime_anchor = "Real V26 runtime validation for signed release payload"
+        require_between(text, STATE_VERIFY_TOKEN, signed_runtime_anchor, runtime, f"{label} signed-runtime revalidation")
 
 
 def expect_rejected(validator, mutated: str, label: str) -> None:
@@ -115,43 +115,32 @@ def expect_rejected(validator, mutated: str, label: str) -> None:
     fail(f"mutation probe accepted: {label}")
 
 
+def remove_last(text: str, token: str) -> str:
+    left, separator, right = text.rpartition(token)
+    return left + right if separator else text
+
+
 def main() -> None:
     helper = HELPER.read_text(encoding="utf-8")
     build = BUILD_WORKFLOW.read_text(encoding="utf-8")
     release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
 
     validate_helper(helper)
-    validate_workflow(build, "manual V26 build workflow")
-    validate_workflow(release, "manual V26 release workflow")
+    validate_workflow(build, "manual V26 build workflow", 2)
+    validate_workflow(release, "manual V26 release workflow", 3)
 
     expect_rejected(validate_helper, helper.replace(ROOTED_TOKEN, "if ($false)", 1), "removed absolute-root rejection")
     expect_rejected(validate_helper, helper.replace(REPARSE_TOKEN, "[IO.FileAttributes]::Archive"), "removed reparse attribute checks")
     expect_rejected(validate_helper, helper.replace("$item.PSIsContainer", "$false", 1), "removed ordinary-file container rejection")
     expect_rejected(validate_helper, helper.replace(STATE_CAPTURE_TOKEN, "function Get-UnstableHostFileState", 1), "removed stable host-file capture")
     expect_rejected(validate_helper, helper.replace(STATE_ASSERT_TOKEN, "function Ignore-StableHostFileState", 1), "removed stable host-file revalidation")
-    expect_rejected(
-        validate_helper,
-        helper.replace(SECOND_CAPTURE_HASH_TOKEN, "$secondHash = $firstHash", 1),
-        "removed second-generation hash capture",
-    )
-    expect_rejected(
-        validate_helper,
-        helper.replace(CURRENT_VERIFY_HASH_TOKEN, "$currentHash = [string]$Expected.Sha256", 1),
-        "removed current-generation verification hash",
-    )
-    expect_rejected(
-        lambda text: validate_workflow(text, "manual V26 build workflow"),
-        build.replace(STATE_VERIFY_TOKEN, "# removed generation revalidation", 1),
-        "removed build-workflow generation revalidation",
-    )
-    expect_rejected(
-        lambda text: validate_workflow(text, "manual V26 release workflow"),
-        release.replace(STATE_VERIFY_TOKEN, "# removed generation revalidation", 1),
-        "removed release-workflow generation revalidation",
-    )
+    expect_rejected(validate_helper, helper.replace(SECOND_CAPTURE_HASH_TOKEN, "$secondHash = $firstHash", 1), "removed second-generation hash capture")
+    expect_rejected(validate_helper, helper.replace(CURRENT_VERIFY_HASH_TOKEN, "$currentHash = [string]$Expected.Sha256", 1), "removed current-generation verification hash")
+    expect_rejected(lambda text: validate_workflow(text, "manual V26 build workflow", 2), remove_last(build, STATE_VERIFY_TOKEN), "removed build-workflow runtime revalidation")
+    expect_rejected(lambda text: validate_workflow(text, "manual V26 release workflow", 3), remove_last(release, STATE_VERIFY_TOKEN), "removed release-workflow signed-runtime revalidation")
 
     print("PASS V26 host reference path/generation-safety contract")
-    print(" - both V26 workflows capture admitted host-reference generations and revalidate before plugin build/runtime")
+    print(" - both V26 workflows capture admitted host-reference generations and revalidate every plugin-build/runtime consumption boundary")
     print(" - configured host roots must be absolute before canonicalization")
     print(" - host path components and required V26 leaves reject filesystem reparse aliases")
     print(" - required host leaves are independently re-resolved and re-hashed across admission/consumption boundaries")
