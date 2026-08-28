@@ -11,6 +11,10 @@ RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release-v26.yml"
 CALL = r"& .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR"
 REPARSE_TOKEN = "[IO.FileAttributes]::ReparsePoint"
 ROOTED_TOKEN = "if (-not [IO.Path]::IsPathRooted($trimmed))"
+STATE_CAPTURE_TOKEN = "function Get-StableHostFileState"
+STATE_ASSERT_TOKEN = "function Assert-StableHostFileState"
+STATE_WRITE_TOKEN = "-StatePath $env:V26_HOST_REFERENCE_STATE"
+STATE_VERIFY_TOKEN = "-VerifyStatePath $env:V26_HOST_REFERENCE_STATE"
 
 
 def fail(message: str) -> None:
@@ -43,6 +47,14 @@ def validate_helper(text: str) -> None:
         "Get-RequiredOrdinaryFile -Path $path -Label $name",
         "@('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')",
         "$version.FileMajorPart -ne 26",
+        STATE_CAPTURE_TOKEN,
+        STATE_ASSERT_TOKEN,
+        "[Security.Cryptography.SHA256]::Create()",
+        "LastWriteTimeUtc.Ticks",
+        "[IO.File]::Open(",
+        "[IO.FileShare]::Read",
+        "ConvertTo-Json",
+        "ConvertFrom-Json",
     ):
         require(text, token, "V26 host-safety helper")
 
@@ -50,8 +62,6 @@ def validate_helper(text: str) -> None:
 
     # The helper has three independent reparse boundaries: traversed path
     # components, required host-file leaves, and the configured host directory.
-    # Keep the source contract explicit so a mutation of one boundary cannot be
-    # masked by the same token remaining in another boundary.
     if text.count(REPARSE_TOKEN) < 3:
         fail("V26 host-safety helper: expected reparse rejection at path-component, file-leaf, and host-directory boundaries")
 
@@ -67,15 +77,21 @@ def validate_helper(text: str) -> None:
         "$version = $required['bricscad.exe'].VersionInfo",
         "ordinary host files before version trust",
     )
+    require_before(text, STATE_CAPTURE_TOKEN, STATE_ASSERT_TOKEN, "stable-state capture before revalidation")
 
 
 def validate_workflow(text: str, label: str) -> None:
     require(text, CALL, label)
     require(text, "BRICSCAD_V26_DIR", label)
-    require(text, "dotnet build src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj", label)
-    require_before(text, CALL, "dotnet build src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj", f"{label} safety before plugin build")
+    require(text, "V26_HOST_REFERENCE_STATE", label)
+    require(text, STATE_WRITE_TOKEN, label)
+    require(text, STATE_VERIFY_TOKEN, label)
+    build = "dotnet build src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj"
+    require(text, build, label)
+    require_before(text, STATE_WRITE_TOKEN, STATE_VERIFY_TOKEN, f"{label} capture before revalidation")
+    require_before(text, STATE_VERIFY_TOKEN, build, f"{label} stable-generation revalidation before plugin build")
     if "test-bricscad-v26-runtime.ps1" in text:
-        require_before(text, CALL, "test-bricscad-v26-runtime.ps1", f"{label} safety before runtime")
+        require_before(text, STATE_VERIFY_TOKEN, "test-bricscad-v26-runtime.ps1", f"{label} generation revalidation before runtime")
 
 
 def expect_rejected(validator, mutated: str, label: str) -> None:
@@ -95,37 +111,27 @@ def main() -> None:
     validate_workflow(build, "manual V26 build workflow")
     validate_workflow(release, "manual V26 release workflow")
 
-    expect_rejected(
-        validate_helper,
-        helper.replace(ROOTED_TOKEN, "if ($false)", 1),
-        "removed absolute-root rejection",
-    )
-    expect_rejected(
-        validate_helper,
-        helper.replace(REPARSE_TOKEN, "[IO.FileAttributes]::Archive"),
-        "removed reparse attribute checks",
-    )
-    expect_rejected(
-        validate_helper,
-        helper.replace("$item.PSIsContainer", "$false", 1),
-        "removed ordinary-file container rejection",
-    )
+    expect_rejected(validate_helper, helper.replace(ROOTED_TOKEN, "if ($false)", 1), "removed absolute-root rejection")
+    expect_rejected(validate_helper, helper.replace(REPARSE_TOKEN, "[IO.FileAttributes]::Archive"), "removed reparse attribute checks")
+    expect_rejected(validate_helper, helper.replace("$item.PSIsContainer", "$false", 1), "removed ordinary-file container rejection")
+    expect_rejected(validate_helper, helper.replace(STATE_CAPTURE_TOKEN, "function Get-UnstableHostFileState", 1), "removed stable host-file capture")
+    expect_rejected(validate_helper, helper.replace(STATE_ASSERT_TOKEN, "function Ignore-StableHostFileState", 1), "removed stable host-file revalidation")
     expect_rejected(
         lambda text: validate_workflow(text, "manual V26 build workflow"),
-        build.replace(CALL, "# removed V26 host path safety", 1),
-        "removed build-workflow host safety call",
+        build.replace(STATE_VERIFY_TOKEN, "# removed generation revalidation", 1),
+        "removed build-workflow generation revalidation",
     )
     expect_rejected(
         lambda text: validate_workflow(text, "manual V26 release workflow"),
-        release.replace(CALL, "# removed V26 host path safety", 1),
-        "removed release-workflow host safety call",
+        release.replace(STATE_VERIFY_TOKEN, "# removed generation revalidation", 1),
+        "removed release-workflow generation revalidation",
     )
 
-    print("PASS V26 host reference path-safety contract")
-    print(" - both V26 workflows fail closed through the shared helper before plugin build/runtime")
+    print("PASS V26 host reference path/generation-safety contract")
+    print(" - both V26 workflows capture admitted host-reference generations and revalidate before plugin build/runtime")
     print(" - configured host roots must be absolute before canonicalization")
     print(" - host path components and required V26 leaves reject filesystem reparse aliases")
-    print(" - required host leaves are ordinary files before V26 version trust")
+    print(" - required host leaves are ordinary files and stable across admission/consumption boundaries")
 
 
 if __name__ == "__main__":
