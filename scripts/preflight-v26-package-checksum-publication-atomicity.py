@@ -7,6 +7,11 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "scripts" / "write-v26-package-checksum.ps1"
+ROLLBACK_DESTINATION_GUARD = (
+    "if (Test-Path -LiteralPath $outputFullPath) {\n"
+    "                    [void](Assert-SafeExistingOutputLeaf -Path $outputFullPath)\n"
+    "                    Remove-Item -LiteralPath $outputFullPath"
+)
 
 
 def require(text: str, token: str, errors: list[str], label: str) -> None:
@@ -31,7 +36,7 @@ def validate_source(text: str) -> list[str]:
         ("if ($publicationStarted -and -not $publicationCommitted)", "pre-commit rollback condition"),
         ("Resolve-OrdinaryNonReparseDirectory -Path $outputParentPath -Label 'V26 checksum rollback parent'", "rollback parent revalidation"),
         ("Resolve-OrdinaryNonReparseFile -Path $backupPath -Label 'V26 checksum rollback backup'", "rollback backup revalidation"),
-        ("[void](Assert-SafeExistingOutputLeaf -Path $outputFullPath)", "rollback destination revalidation"),
+        (ROLLBACK_DESTINATION_GUARD, "rollback destination revalidation immediately before removal"),
         ("[IO.File]::Move($backup.FullName, $outputFullPath)", "existing-destination restoration"),
         ("elseif (Test-Path -LiteralPath $outputFullPath)", "new-destination rollback branch"),
         ("throw \"V26 checksum publication failed and rollback could not safely restore the pre-publication state.", "fail-closed rollback failure"),
@@ -101,7 +106,6 @@ def reference_model(
         return ModelResult(destination, False, True, False)
 
     if not destination_safe or (had_existing and not backup_safe):
-        # A hostile path substitution must stop rollback rather than follow/delete it.
         return ModelResult(destination, backup_preserved, False, True)
 
     if had_existing:
@@ -115,36 +119,12 @@ def reference_model(
 def validate_reference_model() -> list[str]:
     errors: list[str] = []
     cases = (
-        (
-            "existing verification success",
-            dict(had_existing=True, verification_ok=True),
-            ModelResult("new-canonical-bytes", False, True, False),
-        ),
-        (
-            "new verification success",
-            dict(had_existing=False, verification_ok=True),
-            ModelResult("new-canonical-bytes", False, True, False),
-        ),
-        (
-            "existing verification failure restores exact prior bytes",
-            dict(had_existing=True, verification_ok=False),
-            ModelResult("old-bytes", False, False, False),
-        ),
-        (
-            "new verification failure removes candidate",
-            dict(had_existing=False, verification_ok=False),
-            ModelResult(None, False, False, False),
-        ),
-        (
-            "unsafe replacement fails closed and preserves backup",
-            dict(had_existing=True, verification_ok=False, destination_safe=False),
-            ModelResult("new-canonical-bytes", True, False, True),
-        ),
-        (
-            "unsafe backup fails closed without following it",
-            dict(had_existing=True, verification_ok=False, backup_safe=False),
-            ModelResult("new-canonical-bytes", True, False, True),
-        ),
+        ("existing verification success", dict(had_existing=True, verification_ok=True), ModelResult("new-canonical-bytes", False, True, False)),
+        ("new verification success", dict(had_existing=False, verification_ok=True), ModelResult("new-canonical-bytes", False, True, False)),
+        ("existing verification failure restores exact prior bytes", dict(had_existing=True, verification_ok=False), ModelResult("old-bytes", False, False, False)),
+        ("new verification failure removes candidate", dict(had_existing=False, verification_ok=False), ModelResult(None, False, False, False)),
+        ("unsafe replacement fails closed and preserves backup", dict(had_existing=True, verification_ok=False, destination_safe=False), ModelResult("new-canonical-bytes", True, False, True)),
+        ("unsafe backup fails closed without following it", dict(had_existing=True, verification_ok=False, backup_safe=False), ModelResult("new-canonical-bytes", True, False, True)),
     )
     for label, kwargs, expected in cases:
         actual = reference_model(**kwargs)
@@ -172,8 +152,8 @@ def mutation_probes(source: str) -> list[str]:
             1,
         ),
         "missing destination revalidation": source.replace(
-            "[void](Assert-SafeExistingOutputLeaf -Path $outputFullPath)\n                    Remove-Item -LiteralPath $outputFullPath",
-            "Remove-Item -LiteralPath $outputFullPath",
+            ROLLBACK_DESTINATION_GUARD,
+            "if (Test-Path -LiteralPath $outputFullPath) {\n                    Remove-Item -LiteralPath $outputFullPath",
             1,
         ),
         "legacy silent backup cleanup": source.replace(
