@@ -10,10 +10,57 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
+            RejectsPaddedElementIdBeforeFilesystemMutation();
+            RejectsControlElementIdPreservingDestination();
             RejectsInvalidUtf16BeforeEncoding();
             PreservesExistingTargetOnInvalidUtf16();
             PreservesValidUtf8BomFormulaAndCultureBehavior();
             UsesCanonicalCrlfForScheduleAndProcurement();
+        }
+
+        private static void RejectsPaddedElementIdBeforeFilesystemMutation()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-rebar-csv-element-id-" + Guid.NewGuid().ToString("N"));
+            var destination = Path.Combine(root, "nested", "bbs.csv");
+            try
+            {
+                var row = ValidRow();
+                row.ElementId = " R1 ";
+
+                Throws<InvalidDataException>(() => RebarCsvExporter.Export(destination, new[] { row }));
+                if (Directory.Exists(root))
+                    throw new InvalidOperationException("Padded Rebar CSV ElementId must fail before creating the destination directory.");
+            }
+            finally
+            {
+                try { if (Directory.Exists(root)) Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
+        private static void RejectsControlElementIdPreservingDestination()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-rebar-csv-element-control-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            var destination = Path.Combine(root, "bbs.csv");
+            const string sentinel = "preserve-existing-rebar-csv";
+            try
+            {
+                File.WriteAllText(destination, sentinel);
+                var row = ValidRow();
+                row.ElementId = "R\t1";
+
+                Throws<InvalidDataException>(() => RebarCsvExporter.Export(destination, new[] { row }));
+                Equal(sentinel, File.ReadAllText(destination));
+                var files = Directory.GetFiles(root);
+                if (files.Length != 1 || !string.Equals(files[0], destination, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Invalid Rebar CSV ElementId must not leave temporary publication residue.");
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
         }
 
         private static void RejectsInvalidUtf16BeforeEncoding()
