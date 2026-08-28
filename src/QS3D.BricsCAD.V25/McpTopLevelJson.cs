@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 
 namespace QS3D.BricsCAD.V25
 {
@@ -80,6 +82,14 @@ namespace QS3D.BricsCAD.V25
                         error = "duplicate top-level JSON property: " + property;
                         return false;
                     }
+                    if (string.Equals(property, "arguments", StringComparison.OrdinalIgnoreCase)
+                        && candidate.Length > 0 && candidate[0] == '{')
+                    {
+                        string canonicalArguments;
+                        if (!TryCanonicalizeFlatObject(candidate, out canonicalArguments, out error))
+                            return false;
+                        candidate = canonicalArguments;
+                    }
                     found = true;
                     rawValue = candidate;
                 }
@@ -139,6 +149,264 @@ namespace QS3D.BricsCAD.V25
             return found;
         }
 
+        internal static bool TryExtractDouble(
+            string json,
+            string property,
+            out double value,
+            out bool found,
+            out string error)
+        {
+            value = 0d;
+            string raw;
+            if (!TryFindPropertyValue(json, property, out raw, out found, out error)) return false;
+            if (!found) return true;
+            if (!IsJsonNumberToken(raw)
+                || !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value)
+                || double.IsNaN(value)
+                || double.IsInfinity(value))
+            {
+                error = property + " must be a finite JSON number.";
+                return false;
+            }
+            return true;
+        }
+
+        internal static bool TryExtractInteger(
+            string json,
+            string property,
+            out int value,
+            out bool found,
+            out string error)
+        {
+            value = 0;
+            string raw;
+            if (!TryFindPropertyValue(json, property, out raw, out found, out error)) return false;
+            if (!found) return true;
+            if (!IsJsonIntegerToken(raw)
+                || !int.TryParse(raw, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out value))
+            {
+                error = property + " must be a JSON integer.";
+                return false;
+            }
+            return true;
+        }
+
+        internal static string ExtractId(string json)
+        {
+            string raw;
+            bool found;
+            string error;
+            if (!TryFindPropertyValue(json, "id", out raw, out found, out error))
+                throw new InvalidOperationException(error);
+            if (!found || string.Equals(raw, "null", StringComparison.Ordinal)) return "null";
+            if (IsJsonIntegerToken(raw)) return raw;
+            if (raw.Length >= 2 && raw[0] == '"')
+            {
+                var index = 0;
+                string value;
+                if (!TryReadString(raw, ref index, out value, out error)) return "null";
+                SkipWhitespace(raw, ref index);
+                if (index != raw.Length) return "null";
+                return QuoteJsonString(value, false);
+            }
+            return "null";
+        }
+
+        private static bool TryCanonicalizeFlatObject(string json, out string canonical, out string error)
+        {
+            canonical = string.Empty;
+            error = string.Empty;
+            var source = (json ?? string.Empty).Trim();
+            if (source.Length < 2 || source[0] != '{')
+            {
+                error = "MCP arguments must be a JSON object.";
+                return false;
+            }
+
+            var index = 1;
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var output = new StringBuilder("{");
+            var first = true;
+            while (true)
+            {
+                SkipWhitespace(source, ref index);
+                if (index >= source.Length)
+                {
+                    error = "MCP arguments object ended unexpectedly.";
+                    return false;
+                }
+                if (source[index] == '}')
+                {
+                    index++;
+                    SkipWhitespace(source, ref index);
+                    if (index != source.Length)
+                    {
+                        error = "Unexpected content after MCP arguments object.";
+                        return false;
+                    }
+                    canonical = output.Append('}').ToString();
+                    return true;
+                }
+                if (source[index] != '"')
+                {
+                    error = "MCP argument property name must be a string.";
+                    return false;
+                }
+
+                string name;
+                if (!TryReadString(source, ref index, out name, out error)) return false;
+                if (!names.Add(name))
+                {
+                    error = "duplicate top-level JSON property: " + name;
+                    return false;
+                }
+                SkipWhitespace(source, ref index);
+                if (index >= source.Length || source[index] != ':')
+                {
+                    error = "MCP argument property is missing ':'.";
+                    return false;
+                }
+                index++;
+                SkipWhitespace(source, ref index);
+                if (index >= source.Length)
+                {
+                    error = "MCP argument value is missing.";
+                    return false;
+                }
+                if (source[index] == '{' || source[index] == '[')
+                {
+                    error = "MCP argument values must be flat JSON scalars.";
+                    return false;
+                }
+
+                string canonicalValue;
+                if (source[index] == '"')
+                {
+                    string value;
+                    if (!TryReadString(source, ref index, out value, out error)) return false;
+                    canonicalValue = QuoteJsonString(value, true);
+                }
+                else
+                {
+                    var start = index;
+                    while (index < source.Length && source[index] != ',' && source[index] != '}') index++;
+                    var token = source.Substring(start, index - start).Trim();
+                    if (!IsJsonPrimitiveToken(token))
+                    {
+                        error = "MCP argument value must be a JSON string, boolean, null, or number.";
+                        return false;
+                    }
+                    canonicalValue = token;
+                }
+
+                if (!first) output.Append(',');
+                first = false;
+                output.Append(QuoteJsonString(name, true)).Append(':').Append(canonicalValue);
+
+                SkipWhitespace(source, ref index);
+                if (index >= source.Length)
+                {
+                    error = "MCP arguments object ended unexpectedly.";
+                    return false;
+                }
+                if (source[index] == ',')
+                {
+                    index++;
+                    continue;
+                }
+                if (source[index] != '}')
+                {
+                    error = "MCP arguments object requires ',' or '}' after a property value.";
+                    return false;
+                }
+            }
+        }
+
+        private static string QuoteJsonString(string value, bool encodeQuotesAsUnicode)
+        {
+            var output = new StringBuilder((value ?? string.Empty).Length + 8);
+            output.Append('"');
+            foreach (var ch in value ?? string.Empty)
+            {
+                switch (ch)
+                {
+                    case '"': output.Append(encodeQuotesAsUnicode ? "\\u0022" : "\\\""); break;
+                    case '\\': output.Append("\\\\"); break;
+                    case '\b': output.Append("\\b"); break;
+                    case '\f': output.Append("\\f"); break;
+                    case '\n': output.Append("\\n"); break;
+                    case '\r': output.Append("\\r"); break;
+                    case '\t': output.Append("\\t"); break;
+                    default:
+                        if (ch < 32) output.Append("\\u").Append(((int)ch).ToString("x4", CultureInfo.InvariantCulture));
+                        else output.Append(ch);
+                        break;
+                }
+            }
+            return output.Append('"').ToString();
+        }
+
+        private static bool IsJsonPrimitiveToken(string token)
+        {
+            return string.Equals(token, "true", StringComparison.Ordinal)
+                   || string.Equals(token, "false", StringComparison.Ordinal)
+                   || string.Equals(token, "null", StringComparison.Ordinal)
+                   || IsJsonNumberToken(token);
+        }
+
+        private static bool IsJsonIntegerToken(string token)
+        {
+            if (string.IsNullOrEmpty(token)) return false;
+            var index = 0;
+            if (token[index] == '-')
+            {
+                index++;
+                if (index == token.Length) return false;
+            }
+            if (token[index] == '0')
+                return index + 1 == token.Length;
+            if (token[index] < '1' || token[index] > '9') return false;
+            for (index++; index < token.Length; index++)
+                if (token[index] < '0' || token[index] > '9') return false;
+            return true;
+        }
+
+        private static bool IsJsonNumberToken(string token)
+        {
+            if (string.IsNullOrEmpty(token)) return false;
+            var index = 0;
+            if (token[index] == '-')
+            {
+                index++;
+                if (index == token.Length) return false;
+            }
+
+            if (token[index] == '0') index++;
+            else
+            {
+                if (token[index] < '1' || token[index] > '9') return false;
+                while (++index < token.Length && token[index] >= '0' && token[index] <= '9') { }
+            }
+
+            if (index < token.Length && token[index] == '.')
+            {
+                index++;
+                var fractionStart = index;
+                while (index < token.Length && token[index] >= '0' && token[index] <= '9') index++;
+                if (index == fractionStart) return false;
+            }
+
+            if (index < token.Length && (token[index] == 'e' || token[index] == 'E'))
+            {
+                index++;
+                if (index < token.Length && (token[index] == '+' || token[index] == '-')) index++;
+                var exponentStart = index;
+                while (index < token.Length && token[index] >= '0' && token[index] <= '9') index++;
+                if (index == exponentStart) return false;
+            }
+            return index == token.Length;
+        }
+
         private static void SkipWhitespace(string source, ref int index)
         {
             while (index < source.Length && char.IsWhiteSpace(source[index])) index++;
@@ -155,7 +423,7 @@ namespace QS3D.BricsCAD.V25
             }
 
             index++;
-            var output = new System.Text.StringBuilder();
+            var output = new StringBuilder();
             while (index < source.Length)
             {
                 var ch = source[index++];
@@ -198,8 +466,8 @@ namespace QS3D.BricsCAD.V25
                             return false;
                         }
                         int code;
-                        if (!int.TryParse(source.Substring(index, 4), System.Globalization.NumberStyles.HexNumber,
-                                System.Globalization.CultureInfo.InvariantCulture, out code))
+                        if (!int.TryParse(source.Substring(index, 4), NumberStyles.HexNumber,
+                                CultureInfo.InvariantCulture, out code))
                         {
                             error = "JSON unicode escape is invalid.";
                             return false;
