@@ -26,6 +26,15 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                McpEmbeddedServer.Start();
+            }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("MCP server", ex);
+            }
+
+            try
+            {
                 QuantityContextMenuCoordinator.Start();
             }
             catch (Exception ex)
@@ -50,6 +59,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void TeardownHostServices()
         {
+            TryCleanup(McpEmbeddedServer.Stop);
             TryCleanup(UpdateBootstrapper.Stop);
             TryCleanup(QuantityContextMenuCoordinator.Stop);
             TryCleanup(RibbonInitializationCoordinator.Stop);
