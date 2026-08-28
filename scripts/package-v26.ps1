@@ -40,6 +40,85 @@ function Assert-OrdinaryDirectory {
     return $fullPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 }
 
+function Assert-SafeInputPathAncestors {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    $repo = Assert-OrdinaryDirectory -Path $RepositoryRoot -Label 'repository root'
+    $fullPath = Get-CanonicalFullPath -Path $Path -Label $Label
+    if (-not (Test-PathEqualOrContained -Path $fullPath -Container $repo) -or [string]::Equals($fullPath, $repo, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Label must stay below the repository root: $fullPath"
+    }
+    $current = [IO.Path]::GetDirectoryName($fullPath)
+    while (-not [string]::IsNullOrWhiteSpace($current) -and (Test-PathEqualOrContained -Path $current -Container $repo)) {
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+            if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "$Label traverses a non-directory or reparse-backed ancestor: $current"
+            }
+        }
+        if ([string]::Equals($current, $repo, [StringComparison]::OrdinalIgnoreCase)) { break }
+        $parent = [IO.Path]::GetDirectoryName($current)
+        if ([string]::IsNullOrWhiteSpace($parent) -or [string]::Equals($parent, $current, [StringComparison]::OrdinalIgnoreCase)) { break }
+        $current = $parent
+    }
+    return $fullPath
+}
+
+function Assert-SafeInputDirectory {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    $fullPath = Assert-SafeInputPathAncestors -Path $Path -RepositoryRoot $RepositoryRoot -Label $Label
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Container)) { throw "$Label directory was not found: $fullPath" }
+    $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
+    if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "$Label must be an ordinary non-reparse directory: $fullPath"
+    }
+    return $fullPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+}
+
+function Assert-SafeInputFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    $fullPath = Assert-SafeInputPathAncestors -Path $Path -RepositoryRoot $RepositoryRoot -Label $Label
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) { throw "$Label file was not found: $fullPath" }
+    $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
+    if ($item.PSIsContainer -or -not ($item -is [IO.FileInfo]) -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "$Label must be an ordinary non-reparse file: $fullPath"
+    }
+    return $fullPath
+}
+
+function Get-SafeSourceFiles {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceRoot,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$Extension
+    )
+    $sourceRootFull = Assert-SafeInputDirectory -Path $SourceRoot -RepositoryRoot $RepositoryRoot -Label 'command source root'
+    $pending = New-Object 'System.Collections.Generic.Stack[string]'
+    $files = New-Object 'System.Collections.Generic.List[System.IO.FileInfo]'
+    $pending.Push($sourceRootFull)
+    while ($pending.Count -gt 0) {
+        $directory = $pending.Pop()
+        foreach ($item in Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop) {
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Command source contains a reparse-backed entry: $($item.FullName)" }
+            if ($item.PSIsContainer) { $pending.Push($item.FullName); continue }
+            if (-not ($item -is [IO.FileInfo])) { throw "Command source contains a non-regular filesystem entry: $($item.FullName)" }
+            if ([string]::Equals($item.Extension, $Extension, [StringComparison]::OrdinalIgnoreCase)) { $files.Add($item) }
+        }
+    }
+    return @($files | Sort-Object FullName)
+}
+
 function Assert-SafeOutputDirectoryTarget {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -129,7 +208,7 @@ function Get-SafePackageFiles {
 
 function Read-ProjectProductVersion {
     param([Parameter(Mandatory = $true)][string]$ProjectPath)
-    if (-not (Test-Path -LiteralPath $ProjectPath -PathType Leaf)) { throw "Project file was not found: $ProjectPath" }
+    $ProjectPath = Assert-SafeInputFile -Path $ProjectPath -RepositoryRoot $root -Label 'project file'
     [xml]$project = Get-Content -LiteralPath $ProjectPath -Raw
     $versions = @($project.Project.PropertyGroup | ForEach-Object { [string]$_.Version } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     if ($versions.Count -ne 1) { throw "Project must declare exactly one Version value: $ProjectPath" }
@@ -171,13 +250,14 @@ function Assert-ManagedIdentity {
 
 function Add-CommandMethodsFromSource {
     param([Parameter(Mandatory = $true)][string]$Path)
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "V26 command source was not found: $Path" }
+    $Path = Assert-SafeInputFile -Path $Path -RepositoryRoot $root -Label 'V26 command source'
     $text = Get-Content -LiteralPath $Path -Raw
     [regex]::Matches($text, '\[CommandMethod\("([^\"]+)"') | ForEach-Object { $script:commands += $_.Groups[1].Value.ToUpperInvariant() }
 }
 
-$pluginProject = Join-Path $root 'src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj'
-$coreProject = Join-Path $root 'src/QS3D.Core/QS3D.Core.csproj'
+$root = Assert-OrdinaryDirectory -Path $root -Label 'repository root'
+$pluginProject = Assert-SafeInputFile -Path (Join-Path $root 'src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj') -RepositoryRoot $root -Label 'V26 plugin project'
+$coreProject = Assert-SafeInputFile -Path (Join-Path $root 'src/QS3D.Core/QS3D.Core.csproj') -RepositoryRoot $root -Label 'Core project'
 $productVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $pluginProject) -Label 'QS3D V26 plugin product version'
 $coreProductVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $coreProject) -Label 'QS3D Core product version'
 if (-not [string]::Equals($productVersion, $coreProductVersion, [StringComparison]::Ordinal)) { throw "QS3D V26 plugin/Core product versions differ: plugin=$productVersion core=$coreProductVersion" }
@@ -186,9 +266,9 @@ if (-not [string]::IsNullOrEmpty($env:RELEASE_TAG)) {
     if (-not [string]::Equals($env:RELEASE_TAG, $expectedTag, [StringComparison]::Ordinal)) { throw "RELEASE_TAG must exactly match the V26 source product version. Expected $expectedTag, got $env:RELEASE_TAG." }
 }
 
-if (-not (Test-Path -LiteralPath $source -PathType Container)) { throw "V26 Release output was not found: $source" }
-if (-not (Test-Path -LiteralPath $generator -PathType Leaf)) { throw "V26 script transformer was not found: $generator" }
-$root = Assert-OrdinaryDirectory -Path $root -Label 'repository root'
+$source = Assert-SafeInputDirectory -Path $source -RepositoryRoot $root -Label 'V26 Release output'
+$generator = Assert-SafeInputFile -Path $generator -RepositoryRoot $root -Label 'V26 script transformer'
+$sampleSource = Assert-SafeInputDirectory -Path $sampleSource -RepositoryRoot $root -Label 'synthetic sample folder'
 $distRoot = Assert-SafeOutputDirectoryTarget -Path $distRoot -RepositoryRoot $root -Label 'package dist root' -MayBeMissing
 $dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Label 'package staging directory' -MayBeMissing
 $zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
@@ -201,8 +281,7 @@ New-Item -ItemType Directory -Path $dist -Force | Out-Null
 $dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Label 'package staging directory'
 
 foreach ($name in $required) {
-    $path = Join-Path $source $name
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing V26 build artifact: $path" }
+    $path = Assert-SafeInputFile -Path (Join-Path $source $name) -RepositoryRoot $root -Label ("V26 build artifact $name")
     Copy-Item -LiteralPath $path -Destination (Join-Path $dist $name)
 }
 
@@ -212,29 +291,31 @@ $generatedScripts = [ordered]@{
     'update-v25.ps1' = 'update-v26.ps1'
 }
 foreach ($sourceScript in $generatedScripts.Keys) {
+    $sourceScriptPath = Assert-SafeInputFile -Path (Join-Path $PSScriptRoot $sourceScript) -RepositoryRoot $root -Label ("V26 generator input $sourceScript")
     $output = Join-Path $dist $generatedScripts[$sourceScript]
-    & $generator -SourceScript $sourceScript -OutputPath $output
+    & $generator -SourceScript ([IO.Path]::GetFileName($sourceScriptPath)) -OutputPath $output
     if (-not $?) { throw "Failed to generate V26 release script from $sourceScript" }
     $generatedText = Get-Content -LiteralPath $output -Raw
     if ($generatedText -match '(?i)v25') { throw "Generated V26 release script leaked a V25 token: $output" }
 }
 
-if (-not (Test-Path -LiteralPath $sampleSource -PathType Container)) { throw "Synthetic sample folder was not found: $sampleSource" }
 $sampleDestination = Join-Path $dist 'Samples'
 New-Item -ItemType Directory -Path $sampleDestination -Force | Out-Null
 foreach ($sampleName in @('README.md','QS3D-Sample.dxf','QS3D-Sample.qsdb','QS3D-Quantity-Template.xlsx','QS3D-Architecture.qstemplate')) {
-    $samplePath = Join-Path $sampleSource $sampleName
-    if (-not (Test-Path -LiteralPath $samplePath -PathType Leaf)) { throw "Missing synthetic sample artifact: $samplePath" }
+    $samplePath = Assert-SafeInputFile -Path (Join-Path $sampleSource $sampleName) -RepositoryRoot $root -Label ("synthetic sample $sampleName")
     Copy-Item -LiteralPath $samplePath -Destination (Join-Path $sampleDestination $sampleName)
 }
 $sampleDwg = Join-Path $sampleSource 'QS3D-Sample.dwg'
-if (Test-Path -LiteralPath $sampleDwg -PathType Leaf) { Copy-Item -LiteralPath $sampleDwg -Destination (Join-Path $sampleDestination 'QS3D-Sample.dwg') }
+if (Test-Path -LiteralPath $sampleDwg) {
+    $sampleDwg = Assert-SafeInputFile -Path $sampleDwg -RepositoryRoot $root -Label 'synthetic sample QS3D-Sample.dwg'
+    Copy-Item -LiteralPath $sampleDwg -Destination (Join-Path $sampleDestination 'QS3D-Sample.dwg')
+}
 
 $commands = @()
-$v25Root = Join-Path $root 'src/QS3D.BricsCAD.V25'
-Get-ChildItem $v25Root -Recurse -Filter '*.cs' | Where-Object { $_.Name -ne 'PluginEntry.cs' -and -not $_.FullName.StartsWith((Join-Path $v25Root 'Updates') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Add-CommandMethodsFromSource -Path $_.FullName }
+$v25Root = Assert-SafeInputDirectory -Path (Join-Path $root 'src/QS3D.BricsCAD.V25') -RepositoryRoot $root -Label 'V25 linked command source root'
+Get-SafeSourceFiles -SourceRoot $v25Root -RepositoryRoot $root -Extension '.cs' | Where-Object { $_.Name -ne 'PluginEntry.cs' -and -not $_.FullName.StartsWith((Join-Path $v25Root 'Updates') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Add-CommandMethodsFromSource -Path $_.FullName }
 foreach ($linkedUpdateSource in @('SemanticReleaseVersion.cs','UpdateBootstrapper.cs','UpdateCenterWindow.cs','UpdateCoordinator.cs','UpdatePreferences.cs','UpdateSettingsCommands.cs')) { Add-CommandMethodsFromSource -Path (Join-Path $v25Root ('Updates/' + $linkedUpdateSource)) }
-Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V26') -Recurse -Filter '*.cs' | ForEach-Object { Add-CommandMethodsFromSource -Path $_.FullName }
+Get-SafeSourceFiles -SourceRoot (Join-Path $root 'src/QS3D.BricsCAD.V26') -RepositoryRoot $root -Extension '.cs' | ForEach-Object { Add-CommandMethodsFromSource -Path $_.FullName }
 $commands = @($commands | Sort-Object -Unique)
 if ($commands.Count -eq 0 -or -not ($commands -contains 'QS3D')) { throw 'No QS3D CommandMethod entries were discovered for V26.' }
 foreach ($requiredCommand in @('QS3DUPDATE','QSUPDATE','QS3DVER','QSVER')) { if (-not ($commands -contains $requiredCommand)) { throw "Required V26 command was not discovered from compiled source: $requiredCommand" } }
@@ -299,7 +380,7 @@ Security:
 Licensed V26 NETLOAD/DemandLoad, signing, clean-machine install/update/uninstall and native runtime behavior remain required before a production release is qualified.
 "@ | Set-Content -LiteralPath (Join-Path $dist 'README.txt') -Encoding UTF8
 
-foreach ($name in $forbidden) { if (Get-ChildItem -LiteralPath $dist -Recurse -Filter $name -ErrorAction SilentlyContinue) { throw "Proprietary BricsCAD assembly must not be packaged: $name" } }
+foreach ($name in $forbidden) { if (Get-SafePackageFiles -PackageRoot $dist | Where-Object { [string]::Equals($_.Name, $name, [StringComparison]::OrdinalIgnoreCase) }) { throw "Proprietary BricsCAD assembly must not be packaged: $name" } }
 
 $distFull = [IO.Path]::GetFullPath($dist).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 $hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object {
