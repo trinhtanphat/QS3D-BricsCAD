@@ -33,7 +33,9 @@ for token in (
     "_hostSubscriptions &= ~subscription;",
     "if (!TryEnsureHostSubscriptions())",
     "if (!_initialized || _hostSubscriptions != HostSubscription.All)",
-    "if (!StopTimedRetry()) cleanupComplete = false;",
+    "if (!TryStopTimedRetry()) cleanupComplete = false;",
+    "private static void StopTimedRetry()",
+    "private static bool TryStopTimedRetry()",
     "_cleanupPending = !cleanupComplete",
     "|| _hostSubscriptions != HostSubscription.None",
     "|| _retryTimer != null;",
@@ -120,7 +122,8 @@ else:
         errors.append("Ribbon Stop does not attempt every downstream teardown through fail-soft isolation")
 
 # The older retry contract must remain source-compatible: document availability still
-# participates in the passive ApplicationIdle retry path and the timer remains bounded.
+# participates in the passive ApplicationIdle retry path, StopTimedRetry retains its
+# long-standing void boundary for generic NETLOAD guards, and the timer remains bounded.
 for token in (
     "MaxTimedAttempts = 60",
     "TimeSpan.FromMilliseconds(500)",
@@ -140,4 +143,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Ribbon host subscriptions are ownership-tracked and repaired before initialization, while Stop retries failed ownership cleanup and isolates every downstream teardown action.")
+print("PASS: Ribbon host subscriptions are ownership-tracked and repaired before initialization, while Stop retries failed ownership cleanup and isolates every downstream teardown action without breaking the legacy NETLOAD retry method boundary.")
