@@ -107,7 +107,10 @@ namespace QS3D.BricsCAD.V25
                 palette.Dock = dock;
                 palette.Visible = false;
                 palette.KeepFocus = false;
-                palette.MinimumSize = minimumSize;
+                if (guid == WorkspaceGuid)
+                    palette.MinimumSize = new DrawingSize(UserUiLayoutStore.WorkspacePaletteMinWidth, UserUiLayoutStore.WorkspacePaletteMinHeight);
+                else
+                    palette.MinimumSize = minimumSize;
                 palette.DeviceIndependentSize = initialSize;
                 palette.AddVisual(visualTitle, visual, true);
                 return palette;
