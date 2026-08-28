@@ -55,8 +55,11 @@ namespace QS3D.Core.SmokeTests
         {
             var root = Path.Combine(Path.GetTempPath(), "qs3d-material-xlsx-snapshot-stability-" + Guid.NewGuid().ToString("N"));
             var path = Path.Combine(root, "material.xlsx");
+            const string sentinel = "existing-destination-must-survive";
             try
             {
+                Directory.CreateDirectory(root);
+                File.WriteAllText(path, sentinel);
                 try
                 {
                     MaterialUsageXlsxExporter.Export(path, rows);
@@ -67,8 +70,8 @@ namespace QS3D.Core.SmokeTests
                     if (ex.Message.IndexOf("changed during snapshot traversal", StringComparison.Ordinal) < 0)
                         throw;
                 }
-                if (File.Exists(path))
-                    throw new Exception("Material XLSX " + label + " must not publish a stale workbook.");
+                if (!File.Exists(path) || File.ReadAllText(path) != sentinel)
+                    throw new Exception("Material XLSX " + label + " must preserve the existing destination when snapshot validation fails.");
             }
             finally
             {
