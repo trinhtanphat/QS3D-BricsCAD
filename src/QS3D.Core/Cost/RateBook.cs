@@ -156,6 +156,12 @@ namespace QS3D.Core.Cost
 
             if (hasKnownCount && index != knownCount)
                 ThrowKnownCountTraversalMismatch();
+            if (hasKnownCount)
+            {
+                var hasFinalKnownCount = TryGetKnownCount(items, out var finalKnownCount);
+                if (!hasFinalKnownCount || finalKnownCount != knownCount)
+                    ThrowKnownCountChangedDuringTraversal();
+            }
 
             foreach (var pair in _byScope)
                 pair.Value.Sort(CompareEffectiveItems);
@@ -253,6 +259,12 @@ namespace QS3D.Core.Cost
         {
             throw new InvalidOperationException(
                 "Rate book item source traversal count does not match its reported known count.");
+        }
+
+        private static void ThrowKnownCountChangedDuringTraversal()
+        {
+            throw new InvalidOperationException(
+                "Rate book item source known count changed during traversal.");
         }
 
         private static int CompareEffectiveItems(RateItem left, RateItem right)
