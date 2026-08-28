@@ -130,7 +130,7 @@ namespace QS3D.Core.SmokeTests
 
             Throws<InvalidOperationException>(
                 () => _ = new HealthSummary(source),
-                "Health summary known issue count does not match enumerated issue count.");
+                "Health summary traversal produced more diagnostic issues than its known count of 1.");
             Equal(1, source.EnumerationCount);
             Equal(2, source.YieldedCount);
         }
