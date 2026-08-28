@@ -81,6 +81,7 @@ namespace QS3D.Core.Selection
             var knownSelectionCount = RequireSelectionKnownCountWithinLimit(elementIds);
             var projectIndex = BuildUniqueProjectIndex(project);
             var familyIndex = BuildUniqueFamilyIndex(project);
+            var freshnessState = CaptureInspectionFreshness(project, projectIndex, familyIndex);
             var requested = new List<string>();
             var requestedSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var rawId in elementIds)
@@ -97,7 +98,7 @@ namespace QS3D.Core.Selection
             }
             if (knownSelectionCount.HasValue && requested.Count != knownSelectionCount.Value)
                 throw new InvalidOperationException("Semantic property inspector selection source known count does not match traversal.");
-            RequireProjectFresh(project, inspectionVersion, projectIndex, familyIndex);
+            RequireProjectFresh(project, inspectionVersion, projectIndex, familyIndex, freshnessState);
 
             var selected = requested
                 .Select(id => projectIndex[id])
@@ -120,7 +121,7 @@ namespace QS3D.Core.Selection
                 InspectReference("ZoneId", selected.Select(x => x.ZoneId).ToArray()),
                 InspectProperties(selected, familyIndex),
                 InspectQuantities(selected));
-            RequireProjectFresh(project, inspectionVersion, projectIndex, familyIndex);
+            RequireProjectFresh(project, inspectionVersion, projectIndex, familyIndex, freshnessState);
             return inspection;
         }
 
@@ -192,11 +193,47 @@ namespace QS3D.Core.Selection
             return result;
         }
 
+        private static InspectionFreshnessState CaptureInspectionFreshness(
+            ProjectState project,
+            IReadOnlyDictionary<string, ProjectElement> elements,
+            IReadOnlyDictionary<string, ProjectFamily> families)
+        {
+            var elementStates = new Dictionary<string, ElementInspectionState>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in elements)
+                elementStates.Add(pair.Key, new ElementInspectionState(pair.Value));
+
+            var familyStates = new Dictionary<string, FamilyInspectionState>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in families)
+                familyStates.Add(pair.Key, new FamilyInspectionState(pair.Value));
+
+            return new InspectionFreshnessState(
+                elementStates,
+                familyStates,
+                CaptureReferenceOwners(project.Floors, x => x.Id),
+                CaptureReferenceOwners(project.Zones, x => x.Id));
+        }
+
+        private static IReadOnlyDictionary<string, T> CaptureReferenceOwners<T>(
+            IEnumerable<T> values,
+            Func<T, string> idSelector) where T : class
+        {
+            var result = new Dictionary<string, T>(StringComparer.OrdinalIgnoreCase);
+            foreach (var value in values)
+            {
+                if (value == null) throw StructuralFreshnessError();
+                var id = idSelector(value) ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(id) || result.ContainsKey(id)) throw StructuralFreshnessError();
+                result.Add(id, value);
+            }
+            return result;
+        }
+
         private static void RequireProjectFresh(
             ProjectState project,
             long expectedChangeVersion,
             IReadOnlyDictionary<string, ProjectElement> expectedElements,
-            IReadOnlyDictionary<string, ProjectFamily> expectedFamilies)
+            IReadOnlyDictionary<string, ProjectFamily> expectedFamilies,
+            InspectionFreshnessState expectedState)
         {
             if (project.ChangeVersion != expectedChangeVersion)
                 throw new InvalidOperationException("Project state changed while materializing semantic selection ids.");
@@ -226,10 +263,16 @@ namespace QS3D.Core.Selection
                     !ReferenceEquals(original, family))
                     throw StructuralFreshnessError();
             }
+
+            if (!expectedState.Matches(project))
+                throw MutableFreshnessError();
         }
 
         private static InvalidOperationException StructuralFreshnessError() =>
             new InvalidOperationException("Project semantic ownership changed while inspecting semantic selection; retry the inspection.");
+
+        private static InvalidOperationException MutableFreshnessError() =>
+            new InvalidOperationException("Project semantic inspection state changed while materializing semantic selection ids; retry the inspection.");
 
         private static void ValidateSemanticReferences(
             ProjectState project,
@@ -399,6 +442,153 @@ namespace QS3D.Core.Selection
             if (normalized.StartsWith("QS3D.PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
             if (normalized.StartsWith("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase)) return true;
             return false;
+        }
+
+        private static IReadOnlyDictionary<string, string> CopyTextState(IDictionary<string, string> source)
+        {
+            var result = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var pair in source)
+            {
+                if (result.ContainsKey(pair.Key)) throw StructuralFreshnessError();
+                result.Add(pair.Key, pair.Value ?? string.Empty);
+            }
+            return result;
+        }
+
+        private static IReadOnlyDictionary<string, double> CopyQuantityState(IDictionary<string, double> source)
+        {
+            var result = new Dictionary<string, double>(StringComparer.Ordinal);
+            foreach (var pair in source)
+            {
+                if (result.ContainsKey(pair.Key)) throw StructuralFreshnessError();
+                result.Add(pair.Key, pair.Value);
+            }
+            return result;
+        }
+
+        private static bool TextStateMatches(IDictionary<string, string> current, IReadOnlyDictionary<string, string> expected)
+        {
+            if (current.Count != expected.Count) return false;
+            foreach (var pair in current)
+                if (!expected.TryGetValue(pair.Key, out var value) ||
+                    !string.Equals(value, pair.Value ?? string.Empty, StringComparison.Ordinal))
+                    return false;
+            return true;
+        }
+
+        private static bool QuantityStateMatches(IDictionary<string, double> current, IReadOnlyDictionary<string, double> expected)
+        {
+            if (current.Count != expected.Count) return false;
+            foreach (var pair in current)
+                if (!expected.TryGetValue(pair.Key, out var value) || !value.Equals(pair.Value))
+                    return false;
+            return true;
+        }
+
+        private sealed class InspectionFreshnessState
+        {
+            internal InspectionFreshnessState(
+                IReadOnlyDictionary<string, ElementInspectionState> elements,
+                IReadOnlyDictionary<string, FamilyInspectionState> families,
+                IReadOnlyDictionary<string, FloorDefinition> floors,
+                IReadOnlyDictionary<string, ZoneDefinition> zones)
+            {
+                Elements = elements;
+                Families = families;
+                Floors = floors;
+                Zones = zones;
+            }
+
+            private IReadOnlyDictionary<string, ElementInspectionState> Elements { get; }
+            private IReadOnlyDictionary<string, FamilyInspectionState> Families { get; }
+            private IReadOnlyDictionary<string, FloorDefinition> Floors { get; }
+            private IReadOnlyDictionary<string, ZoneDefinition> Zones { get; }
+
+            internal bool Matches(ProjectState project)
+            {
+                if (!ReferenceOwnersMatch(project.Floors, Floors, x => x.Id) ||
+                    !ReferenceOwnersMatch(project.Zones, Zones, x => x.Id))
+                    return false;
+
+                foreach (var pair in Elements)
+                {
+                    var current = project.FindElement(pair.Key);
+                    if (current == null || !pair.Value.Matches(current)) return false;
+                }
+                foreach (var pair in Families)
+                {
+                    var current = project.FindFamily(pair.Key);
+                    if (current == null || !pair.Value.Matches(current)) return false;
+                }
+                return true;
+            }
+
+            private static bool ReferenceOwnersMatch<T>(
+                IEnumerable<T> current,
+                IReadOnlyDictionary<string, T> expected,
+                Func<T, string> idSelector) where T : class
+            {
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var value in current)
+                {
+                    if (value == null) return false;
+                    var id = idSelector(value) ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(id) || !seen.Add(id) ||
+                        !expected.TryGetValue(id, out var original) || !ReferenceEquals(original, value))
+                        return false;
+                }
+                return seen.Count == expected.Count;
+            }
+        }
+
+        private sealed class ElementInspectionState
+        {
+            internal ElementInspectionState(ProjectElement element)
+            {
+                Element = element;
+                Category = element.Category;
+                FamilyId = element.FamilyId ?? string.Empty;
+                FloorId = element.FloorId ?? string.Empty;
+                ZoneId = element.ZoneId ?? string.Empty;
+                Properties = CopyTextState(element.Properties);
+                Quantities = CopyQuantityState(element.Quantities);
+            }
+
+            private ProjectElement Element { get; }
+            private ElementCategory Category { get; }
+            private string FamilyId { get; }
+            private string FloorId { get; }
+            private string ZoneId { get; }
+            private IReadOnlyDictionary<string, string> Properties { get; }
+            private IReadOnlyDictionary<string, double> Quantities { get; }
+
+            internal bool Matches(ProjectElement element) =>
+                ReferenceEquals(Element, element) &&
+                Category == element.Category &&
+                string.Equals(FamilyId, element.FamilyId ?? string.Empty, StringComparison.Ordinal) &&
+                string.Equals(FloorId, element.FloorId ?? string.Empty, StringComparison.Ordinal) &&
+                string.Equals(ZoneId, element.ZoneId ?? string.Empty, StringComparison.Ordinal) &&
+                TextStateMatches(element.Properties, Properties) &&
+                QuantityStateMatches(element.Quantities, Quantities);
+        }
+
+        private sealed class FamilyInspectionState
+        {
+            internal FamilyInspectionState(ProjectFamily family)
+            {
+                Family = family;
+                Category = family.Category;
+                Properties = CopyTextState(family.Properties);
+            }
+
+            private ProjectFamily Family { get; }
+            private ElementCategory Category { get; }
+            private IReadOnlyDictionary<string, string> Properties { get; }
+
+            internal bool Matches(ProjectFamily family) =>
+                ReferenceEquals(Family, family) &&
+                Category == family.Category &&
+                TextStateMatches(family.Properties, Properties);
         }
     }
 }

@@ -51,8 +51,8 @@ namespace QS3D.Core.Diagnostics
                 if (element.SourceHandles.Any(source => handles.Contains(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(source))))
                     issues.Add(new ModelHealthIssue("SEMANTIC_TAG_HANDLE_IN_SOURCE", HealthSeverity.Error, "Generated semantic tag handle không được nằm trong SourceHandles.", element.Id));
 
-                RequireOwner(element, OwnerProjectKey, project.ProjectId, "SEMANTIC_TAG_PROJECT_MISMATCH", issues);
-                RequireOwner(element, OwnerElementKey, element.Id, "SEMANTIC_TAG_ELEMENT_MISMATCH", issues);
+                RequireOwner(element, OwnerProjectKey, project.ProjectId, "SEMANTIC_TAG_PROJECT_MISMATCH", "SEMANTIC_TAG_PROJECT_NON_CANONICAL", issues);
+                RequireOwner(element, OwnerElementKey, element.Id, "SEMANTIC_TAG_ELEMENT_MISMATCH", "SEMANTIC_TAG_ELEMENT_NON_CANONICAL", issues);
                 RequireOwnershipVersion(element, issues);
 
                 var template = Property(element, TemplateKey);
@@ -114,14 +114,24 @@ namespace QS3D.Core.Diagnostics
                 return;
             }
 
-            var targetHandle = Property(element, LeaderTargetHandleKey);
-            if (targetHandle.Length == 0 || !long.TryParse(targetHandle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+            var rawTargetHandle = element.Properties.TryGetValue(LeaderTargetHandleKey, out var storedTargetHandle)
+                ? storedTargetHandle ?? string.Empty
+                : string.Empty;
+            var targetHandle = rawTargetHandle.Trim();
+            if (targetHandle.Length == 0 ||
+                !long.TryParse(targetHandle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var targetHandleValue) ||
+                targetHandleValue <= 0)
             {
-                issues.Add(new ModelHealthIssue("SEMANTIC_TAG_MLEADER_TARGET_HANDLE_INVALID", HealthSeverity.Error, LeaderTargetHandleKey + " phải là authoritative source Handle hexadecimal.", element.Id));
+                issues.Add(new ModelHealthIssue("SEMANTIC_TAG_MLEADER_TARGET_HANDLE_INVALID", HealthSeverity.Error, LeaderTargetHandleKey + " phải là authoritative source Handle hexadecimal dương.", element.Id));
             }
-            else if (!element.SourceHandles.Any(source => string.Equals(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(source), GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(targetHandle), StringComparison.OrdinalIgnoreCase)))
+            else
             {
-                issues.Add(new ModelHealthIssue("SEMANTIC_TAG_MLEADER_TARGET_HANDLE_MISMATCH", HealthSeverity.Error, "MLeader target handle không còn thuộc SourceHandles authoritative của semantic element.", element.Id));
+                var canonicalTargetHandle = targetHandleValue.ToString("X", CultureInfo.InvariantCulture);
+                if (!string.Equals(rawTargetHandle, canonicalTargetHandle, StringComparison.Ordinal))
+                    issues.Add(new ModelHealthIssue("SEMANTIC_TAG_MLEADER_TARGET_HANDLE_NON_CANONICAL", HealthSeverity.Error, LeaderTargetHandleKey + " phải dùng đúng CAD hex handle canonical: " + canonicalTargetHandle + ".", element.Id));
+
+                if (!element.SourceHandles.Any(source => string.Equals(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(source), GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(targetHandle), StringComparison.OrdinalIgnoreCase)))
+                    issues.Add(new ModelHealthIssue("SEMANTIC_TAG_MLEADER_TARGET_HANDLE_MISMATCH", HealthSeverity.Error, "MLeader target handle không còn thuộc SourceHandles authoritative của semantic element.", element.Id));
             }
 
             ValidateFiniteCanonical(element, LeaderTargetXKey, "SEMANTIC_TAG_MLEADER_TARGET_INVALID", "SEMANTIC_TAG_MLEADER_TARGET_NON_CANONICAL", issues);
@@ -164,10 +174,23 @@ namespace QS3D.Core.Diagnostics
             return result;
         }
 
-        private static void RequireOwner(ProjectElement element, string key, string expected, string code, ICollection<ModelHealthIssue> issues)
+        private static void RequireOwner(
+            ProjectElement element,
+            string key,
+            string expected,
+            string mismatchCode,
+            string canonicalCode,
+            ICollection<ModelHealthIssue> issues)
         {
-            if (!string.Equals(Property(element, key), expected, StringComparison.OrdinalIgnoreCase))
-                issues.Add(new ModelHealthIssue(code, HealthSeverity.Error, key + " không khớp semantic owner hiện tại.", element.Id));
+            var raw = element.Properties.TryGetValue(key, out var stored) ? stored ?? string.Empty : string.Empty;
+            var normalized = raw.Trim();
+            if (!string.Equals(normalized, expected, StringComparison.OrdinalIgnoreCase))
+            {
+                issues.Add(new ModelHealthIssue(mismatchCode, HealthSeverity.Error, key + " không khớp semantic owner hiện tại.", element.Id));
+                return;
+            }
+            if (!string.Equals(raw, expected, StringComparison.Ordinal))
+                issues.Add(new ModelHealthIssue(canonicalCode, HealthSeverity.Error, key + " phải dùng đúng writer-owned identity: " + expected + ".", element.Id));
         }
 
         private static void RequireOwnershipVersion(ProjectElement element, ICollection<ModelHealthIssue> issues)

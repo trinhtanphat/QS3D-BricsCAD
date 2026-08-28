@@ -1,0 +1,4 @@
+QS3D agent reservation protocol v2 activation marker.
+
+The first commit adding this file defines the activation boundary for newly created reservation Issues.
+Do not delete, rename, or repurpose this marker while reservation v2 is active.
