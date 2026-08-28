@@ -209,9 +209,9 @@ jobs:
       - name: Create V26 package checksum
         shell: powershell
         run: |
-          $zip = (Resolve-Path "dist\QS3D-BricsCAD-V26.zip").Path
-          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  QS3D-BricsCAD-V26.zip" | Set-Content "dist\QS3D-BricsCAD-V26.zip.sha256" -Encoding ASCII
+          & .\scripts\write-v26-package-checksum.ps1 `
+            -PackagePath 'dist\QS3D-BricsCAD-V26.zip' `
+            -OutputPath 'dist\QS3D-BricsCAD-V26.zip.sha256' | Out-Null
 
       - name: Upload V26 qualification artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
