@@ -1,4 +1,3 @@
-using System.Windows;
 using System.Windows.Controls;
 
 namespace QS3D.BricsCAD.V25.UI
@@ -15,43 +14,21 @@ namespace QS3D.BricsCAD.V25.UI
     ///
     /// The containment is intentionally local to ModelTree. Data-heavy Family/Property/Inspection
     /// lists and Project Browser result lists continue to inherit the Theme.xaml Recycling contract.
+    ///
+    /// IMPORTANT: these attached properties are written only from the Workspace constructor,
+    /// immediately after InitializeComponent and before first host layout. Dependency-property local
+    /// values stay with the same TreeView instance when Project Browser reparents it, so Loaded-time
+    /// reassertion is both unnecessary and unsafe: WPF can already have measured an ItemsHost and a
+    /// late virtualization write can re-enter VirtualizingStackPanel.SetVirtualizationState.
     /// </summary>
     public partial class WorkspacePanel
     {
-        internal static readonly bool ModelTreeVirtualizationSafetyRegistered =
-            RegisterModelTreeVirtualizationSafety();
-
-        private static bool RegisterModelTreeVirtualizationSafety()
-        {
-            EventManager.RegisterClassHandler(
-                typeof(WorkspacePanel),
-                FrameworkElement.LoadedEvent,
-                new RoutedEventHandler(OnModelTreeVirtualizationSafetyLoaded),
-                true);
-            return true;
-        }
-
-        private static void OnModelTreeVirtualizationSafetyLoaded(object sender, RoutedEventArgs e)
-        {
-            if (sender is WorkspacePanel panel)
-                ApplyModelTreeVirtualizationSafety(panel);
-        }
-
         private static void ApplyModelTreeVirtualizationSafety(WorkspacePanel panel)
         {
             if (panel.ModelTree == null)
                 return;
 
-            // The constructor calls this immediately after InitializeComponent, before the Workspace
-            // can enter the host visual tree. Pin VirtualizationMode only on that first pre-layout
-            // call. The later Loaded fallback may safely reassert non-virtualized/physical scrolling,
-            // but it must never mutate VirtualizationMode after an ItemsHost has been measured.
-            if (panel.ModelTree.ReadLocalValue(VirtualizingPanel.VirtualizationModeProperty)
-                == DependencyProperty.UnsetValue)
-            {
-                VirtualizingPanel.SetVirtualizationMode(panel.ModelTree, VirtualizationMode.Standard);
-            }
-
+            VirtualizingPanel.SetVirtualizationMode(panel.ModelTree, VirtualizationMode.Standard);
             VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);
             ScrollViewer.SetCanContentScroll(panel.ModelTree, false);
         }

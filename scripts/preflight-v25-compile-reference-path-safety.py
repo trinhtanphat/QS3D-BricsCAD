@@ -46,10 +46,12 @@ def main() -> int:
         "function Get-CanonicalAbsolutePath",
         "function Test-CanonicalPathEqual",
         "function Test-CanonicalPathWithin",
+        "function Assert-NoExistingReparseComponent",
         "ExtractDir must not be a filesystem root",
         "ExtractDir must not equal or contain MsiPath",
         "ExtractDir must not equal or contain the MSI cache directory",
-        "No destructive filesystem mutation may occur before the path-overlap guards above.",
+        "No destructive filesystem mutation may occur before the path-overlap and",
+        "reparse-component guards above.",
         "Remove-Item -LiteralPath $extract -Recurse -Force",
     )
     for token in required_tokens:
@@ -59,9 +61,11 @@ def main() -> int:
     root_guard_index = source.index("ExtractDir must not be a filesystem root")
     msi_guard_index = source.index("ExtractDir must not equal or contain MsiPath")
     cache_guard_index = source.index("ExtractDir must not equal or contain the MSI cache directory")
+    reparse_guard_index = source.index("Assert-NoExistingReparseComponent -Path $extract -Label 'ExtractDir'")
     require(root_guard_index < cleanup_index, "filesystem-root guard occurs after recursive cleanup")
     require(msi_guard_index < cleanup_index, "MSI containment guard occurs after recursive cleanup")
     require(cache_guard_index < cleanup_index, "cache containment guard occurs after recursive cleanup")
+    require(reparse_guard_index < cleanup_index, "reparse-component guard occurs after recursive cleanup")
 
     safe_cases = (
         (
@@ -107,6 +111,7 @@ def main() -> int:
 
     print("PASS: V25 compile-reference acquisition path-safety regression")
     print(" - recursive extraction cleanup is preceded by root/MSI/cache containment guards")
+    print(" - recursive cleanup is also preceded by existing reparse-component guards")
     print(" - normal shared-CI disjoint paths and safe cache-child extraction remain accepted")
     print(" - filesystem-root, MSI-containing and cache-containing extraction layouts fail closed")
     print(" - hash/signature/version/download/timeout acquisition semantics remain source-guarded")
