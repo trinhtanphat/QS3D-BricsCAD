@@ -288,13 +288,18 @@ namespace QS3D.Core.Export
             string overflowMessage)
         {
             if (values == null) throw new ArgumentNullException(parameterName);
-            var knownCount = ValidateKnownCounts(values, maximumCount, parameterName, overflowMessage);
+            var knownCount = ValidateKnownCounts(
+                values,
+                maximumCount,
+                parameterName,
+                overflowMessage,
+                out var corroboratedKnownCount);
 
             var items = new List<T>();
             var observedCount = 0;
             foreach (var value in values)
             {
-                if (knownCount.HasValue && observedCount >= knownCount.Value)
+                if (corroboratedKnownCount && knownCount.HasValue && observedCount >= knownCount.Value)
                     throw new ArgumentException("BCF collection Count does not match enumerated item count.", parameterName);
                 if (observedCount >= maximumCount)
                     throw new ArgumentException(overflowMessage, parameterName);
@@ -312,14 +317,17 @@ namespace QS3D.Core.Export
             IEnumerable<T> values,
             int maximumCount,
             string parameterName,
-            string overflowMessage)
+            string overflowMessage,
+            out bool corroboratedKnownCount)
         {
             int? knownCount = null;
+            var knownCountSources = 0;
             var invalidKnownCount = false;
             var conflictingKnownCounts = false;
 
             void ObserveKnownCount(int count)
             {
+                knownCountSources++;
                 if (count > maximumCount)
                     throw new ArgumentException(overflowMessage, parameterName);
                 if (count < 0)
@@ -346,6 +354,8 @@ namespace QS3D.Core.Export
                 throw new ArgumentException("BCF collection reports a negative known Count.", parameterName);
             if (conflictingKnownCounts)
                 throw new ArgumentException("BCF collection reports conflicting known Count values.", parameterName);
+
+            corroboratedKnownCount = knownCountSources > 1;
             return knownCount;
         }
 
