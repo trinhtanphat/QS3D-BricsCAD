@@ -33,7 +33,16 @@ def helper_contract(text: str) -> None:
         "[IO.File]::WriteAllBytes($tempPath, $recordBytes)",
         "[IO.File]::Replace($tempPath, $outputFullPath, $backupPath, $true)",
         "[IO.File]::Move($tempPath, $outputFullPath)",
+        "$publicationStarted = $false",
+        "$publicationCommitted = $false",
+        "$publicationStarted = $true",
+        "if ($publicationStarted -and -not $publicationCommitted)",
+        "V26 checksum rollback parent",
+        "V26 checksum rollback backup",
+        "Restored V26 checksum destination",
         "Published V26 checksum bytes do not match the computed canonical record.",
+        "$publicationCommitted = $true",
+        "Remove-SafeChecksumLeaf -Path $backupPath",
         "V26 checksum staging residue remains",
         "V26 checksum backup residue remains",
     )
@@ -50,8 +59,11 @@ def helper_contract(text: str) -> None:
     temp_guard = text.find("Resolve-OrdinaryNonReparseFile -Path $tempPath")
     replace_pos = text.find("[IO.File]::Replace($tempPath, $outputFullPath")
     move_pos = text.find("[IO.File]::Move($tempPath, $outputFullPath)")
-    published_pos = text.find("$published = $true")
+    started_pos = text.find("$publicationStarted = $true")
     verify_pos = text.find("Published V26 checksum bytes do not match the computed canonical record.")
+    committed_pos = text.find("$publicationCommitted = $true")
+    rollback_pos = text.find("if ($publicationStarted -and -not $publicationCommitted)")
+    backup_cleanup_pos = text.find("Remove-SafeChecksumLeaf -Path $backupPath")
     residue_pos = text.find("V26 checksum staging residue remains")
 
     positions = (source_guard, output_identity_guard, output_parent_guard, output_leaf_guard, open_pos, hash_pos, temp_write, temp_guard)
@@ -61,12 +73,20 @@ def helper_contract(text: str) -> None:
         "V26 checksum must bind identities and validate source/destination before hash, then validate staging before publication",
     )
     require(replace_pos > temp_guard and move_pos > temp_guard, "V26 checksum publication must occur only after staging validation")
-    require(published_pos > min(replace_pos, move_pos), "V26 checksum commit marker must follow atomic publication")
-    require(verify_pos > published_pos, "V26 checksum must verify canonical published bytes after commit")
-    require(residue_pos > verify_pos, "V26 checksum residue checks must run after publication verification/cleanup")
+    require(started_pos > min(replace_pos, move_pos), "V26 checksum publication-start marker must follow atomic publication mutation")
+    require(verify_pos > started_pos, "V26 checksum must verify canonical published bytes after publication starts")
+    require(committed_pos > verify_pos, "V26 checksum commit marker must follow successful published-byte verification")
+    require(rollback_pos > committed_pos, "V26 checksum catch rollback must be gated by started-but-uncommitted state")
+    require(backup_cleanup_pos > rollback_pos, "V26 checksum backup cleanup must follow rollback handling and remain commit-gated")
+    require(residue_pos > backup_cleanup_pos, "V26 checksum residue checks must run after publication verification/rollback/cleanup")
 
+    require("$published = $true" not in text, "legacy premature checksum commit marker must not return")
     require("Get-FileHash" not in text, "V26 checksum helper must hash the guarded open stream instead of reopening by path")
     require("Set-Content" not in text, "V26 checksum helper must not write directly to the final checksum path")
+    require(
+        "Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue" not in text,
+        "V26 checksum backup must not be silently deleted without ordinary/non-reparse validation",
+    )
 
 
 def workflow_contract(text: str) -> None:
@@ -86,7 +106,7 @@ def workflow_contract(text: str) -> None:
 
 def expect_helper_mutation_failure(original: str, token: str, replacement: str, label: str) -> None:
     require(token in original, "mutation source token missing for " + label)
-    mutated = original.replace(token, replacement)
+    mutated = original.replace(token, replacement, 1)
     failed = False
     try:
         helper_contract(mutated)
@@ -122,7 +142,11 @@ def main() -> int:
         ("$sha256.ComputeHash($stream)", "$sha256.ComputeHash([IO.File]::ReadAllBytes($package.FullName))", "stream-bound hashing"),
         ('".tmp-$nonce"', '".tmp"', "nonce staging"),
         ("[IO.File]::Replace($tempPath, $outputFullPath, $backupPath, $true)", "Copy-Item $tempPath $outputFullPath -Force", "atomic replacement"),
-        ("Published V26 checksum bytes do not match the computed canonical record.", "published bytes ignored", "post-commit byte verification"),
+        ("$publicationStarted = $true", "$publicationCommitted = $true", "verification-gated commit state"),
+        ("Published V26 checksum bytes do not match the computed canonical record.", "published bytes ignored", "pre-commit byte verification"),
+        ("if ($publicationStarted -and -not $publicationCommitted)", "if ($false)", "post-publication rollback gate"),
+        ("V26 checksum rollback backup", "unchecked rollback backup", "rollback backup validation"),
+        ("Remove-SafeChecksumLeaf -Path $backupPath", "Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue", "safe backup cleanup"),
         ("V26 checksum staging residue remains", "staging residue ignored", "staging residue check"),
     )
     for token, replacement, label in mutations:
@@ -141,7 +165,7 @@ def main() -> int:
         "canonical checksum destination",
     )
 
-    print("PASS: V26 release checksum creation is stream-bound, identity-bound, ordinary/non-reparse guarded, canonically encoded, sibling-staged, failure-atomic, residue-checked, and workflow-routed through the shared helper.")
+    print("PASS: V26 release checksum creation is stream-bound, identity-bound, ordinary/non-reparse guarded, canonically encoded, sibling-staged, verification-gated, rollback-safe, residue-checked, and workflow-routed through the shared helper.")
     return 0
 
 
