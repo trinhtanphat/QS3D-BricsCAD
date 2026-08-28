@@ -24,6 +24,7 @@ namespace QS3D.Core.Measurement
             var identities = new HashSet<string>(StringComparer.Ordinal);
             foreach (var trace in traces)
             {
+                RequireTraversalCapacity(knownCount, items.Count, nameof(traces));
                 if (items.Count >= MaximumTraceCount)
                     throw TraceCountError(nameof(traces));
                 if (trace == null)
@@ -79,6 +80,12 @@ namespace QS3D.Core.Measurement
             if (knownCount.HasValue && knownCount.Value != count)
                 throw new ArgumentException("Measurement snapshot count contracts disagree.", paramName);
             knownCount = count;
+        }
+
+        private static void RequireTraversalCapacity(int? knownCount, int observedCount, string paramName)
+        {
+            if (knownCount.HasValue && observedCount >= knownCount.Value)
+                throw new ArgumentException("Measurement snapshot count changed during enumeration.", paramName);
         }
 
         private static void RequireObservedCount(int? knownCount, int observedCount, string paramName)
