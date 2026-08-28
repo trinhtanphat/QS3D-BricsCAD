@@ -70,6 +70,11 @@ def main() -> int:
         "script known-command anti-injection guard": "inputs may not inject another CAD/QS3D command",
         "tool arguments object scoping": "TryExtractToolCall",
         "tool arguments object parser": "TryExtractObjectProperty",
+        "top-level JSON member parser": "TryFindTopLevelPropertyValue",
+        "top-level tool-name extraction": 'ExtractTopLevelString(parameters, "name")',
+        "top-level arguments presence check": 'HasTopLevelProperty(parameters, "arguments")',
+        "top-level mutation confirmation": 'ExtractTopLevelBoolean(body, "confirmMutation")',
+        "duplicate top-level target rejection": "duplicate top-level JSON property",
         "HTTP transfer-encoding rejection": "Transfer-Encoding is not supported; use Content-Length",
         "duplicate critical-header rejection": "Duplicate security-sensitive HTTP header",
         "MCP session termination": 'request.Method == "DELETE"',
@@ -88,8 +93,6 @@ def main() -> int:
         if command not in text:
             errors.append(f"missing full-drawing command capability: {command}")
 
-    # Ordinary mutation surfaces must all pass through RequireMutation. Emergency stop/cancel
-    # are intentionally confirmation-free so a remote operator can always stop an active action.
     mutation_routes = (
         'case "cad_create_line": return RequireMutation',
         'case "cad_create_circle": return RequireMutation',
@@ -107,15 +110,13 @@ def main() -> int:
     for route in mutation_routes:
         if route not in text:
             errors.append(f"mutation bypasses confirmation/stop gate: {route}")
+    if 'if (!ExtractBoolean(body, "confirmMutation"))' in text:
+        errors.append("mutation confirmation is regex-scoped instead of top-level JSON scoped")
 
-    # Remote MCP must not expose general OS shell/process execution. Browser/cloudflared process
-    # launch belongs to separate, local owner-facing onboarding classes, not the network server.
     for forbidden in ("powershell.exe", "cmd.exe", "Process.Start(", "mouse_event("):
         if forbidden in text:
             errors.append(f"forbidden remote execution/legacy input surface in MCP server: {forbidden}")
 
-    # Named browser-login tunnel, token tunnel and Quick Tunnel must hand ownership to one another;
-    # two simultaneous cloudflared routes to one local MCP create ambiguous connector state.
     if "McpCloudflareTunnelManager.StopForHostShutdown();" not in account:
         errors.append("browser-login named tunnel does not stop fallback tunnel before start")
     if fallback.count("McpCloudflareAccountTunnelManager.StopForHostShutdown();") < 2:
@@ -132,10 +133,6 @@ def main() -> int:
     if stale_quick_cleanup not in fallback:
         errors.append("fallback Quick Tunnel exit can leave a stale trycloudflare public URL")
 
-    # The normal non-technical path is one Agent Center: install, login/setup, copy/open, self-test,
-    # emergency stop/cancel/resume. CAD-touching local MCP calls must run off the WPF button thread
-    # so ExecuteInApplicationContext can marshal back to the BricsCAD application context. Quick
-    # Tunnel URL discovery is asynchronous, so the center itself must poll for a bounded window.
     center_required = (
         '[CommandMethod("QS3DMCPAGENTCENTER"',
         "McpCloudflaredBootstrapper.BeginInstall",
@@ -161,8 +158,6 @@ def main() -> int:
         if forbidden in agent_center:
             errors.append(f"Agent Center exposes forbidden shell dependency: {forbidden}")
 
-    # A one-click bootstrap may download cloudflared, but the executable is accepted only after
-    # Windows trust verification and Cloudflare signer identity, with rollback on replacement failure.
     bootstrap_required = (
         "cloudflared-windows-amd64.exe",
         "WinVerifyTrust",
@@ -176,9 +171,6 @@ def main() -> int:
         if token not in bootstrapper:
             errors.append(f"verified cloudflared bootstrap missing: {token}")
 
-    # A single resolver prevents the setup wizard, dashboard and ChatGPT copy helpers from
-    # presenting different or unsafe public endpoints. Literal private/link-local addresses are
-    # rejected in addition to Uri.IsLoopback; hostnames remain DNS-provider validated.
     endpoint_required = (
         "McpCloudflareAccountTunnelManager.PublicMcpUrl",
         "McpCloudflareTunnelManager.PublicMcpUrl",
@@ -192,7 +184,6 @@ def main() -> int:
         if token not in endpoint:
             errors.append(f"public MCP endpoint contract missing: {token}")
 
-    # Ribbon settings/dashboard both land in the unified center; docs/check remain focused actions.
     for token in (
         '[Prefix + "MCP_SETTINGS"] = "QS3DMCPAGENTCENTER"',
         '[Prefix + "AI_DASHBOARD"] = "QS3DMCPAGENTCENTER"',
@@ -210,12 +201,12 @@ def main() -> int:
 
     print(
         "PASS: embedded MCP exposes direct transactional CAD creation/editing, bounded "
-        "allowlisted advanced command workflows, foreground-process-confined SendInput, "
-        "emergency stop/resume with ESC fallback, idle/status observation, rotating local "
-        "audit evidence, bounded HTTP/session handling, mutually-exclusive Cloudflare tunnel "
-        "modes, verified one-click cloudflared bootstrap, unified click-first Agent Center with "
-        "bounded Quick URL discovery, single HTTPS public endpoint resolution and mutation "
-        "confirmation without arbitrary shell execution."
+        "allowlisted advanced command workflows, top-level-scoped mutation confirmation, "
+        "foreground-process-confined SendInput, emergency stop/resume with ESC fallback, "
+        "idle/status observation, rotating local audit evidence, bounded HTTP/session handling, "
+        "mutually-exclusive Cloudflare tunnel modes, verified one-click cloudflared bootstrap, "
+        "unified click-first Agent Center with bounded Quick URL discovery, single HTTPS public "
+        "endpoint resolution and mutation confirmation without arbitrary shell execution."
     )
     return 0
 
