@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             AdjustmentCountDriftAfterExactTraversalFailsClosed();
             MessageCountDriftAfterExactTraversalFailsClosed();
             NegativeFinalCountFailsClosed();
+            MultiInterfaceConflictAfterTraversalFailsClosed();
             StableCountedChildrenRemainAccepted();
             PureStreamingChildrenRemainAccepted();
         }
@@ -21,9 +22,7 @@ namespace QS3D.Core.SmokeTests
         private static void FactCountDriftAfterExactTraversalFailsClosed()
         {
             var facts = new PhaseReadOnlyCollection<MeasurementTraceFact>(
-                new[] { new MeasurementTraceFact("length", 2d, "m", "SRC-F1") },
-                initialCount: 1,
-                finalCount: 0);
+                new[] { new MeasurementTraceFact("length", 2d, "m", "SRC-F1") }, 1, 0);
 
             var error = Capture<ArgumentException>(() => Trace(facts, Array.Empty<MeasurementTraceAdjustment>()));
             Equal(2, facts.CountReads, "Fact Count must be sampled before and after traversal.");
@@ -33,9 +32,7 @@ namespace QS3D.Core.SmokeTests
         private static void AdjustmentCountDriftAfterExactTraversalFailsClosed()
         {
             var adjustments = new PhaseReadOnlyCollection<MeasurementTraceAdjustment>(
-                new[] { new MeasurementTraceAdjustment(MeasurementTraceAdjustmentKind.Deduction, 1d, "m3", "opening", "SRC-A1") },
-                initialCount: 1,
-                finalCount: 2);
+                new[] { new MeasurementTraceAdjustment(MeasurementTraceAdjustmentKind.Deduction, 1d, "m3", "opening", "SRC-A1") }, 1, 2);
 
             var error = Capture<ArgumentException>(() => Trace(Array.Empty<MeasurementTraceFact>(), adjustments));
             Equal(2, adjustments.CountReads, "Adjustment Count must be sampled before and after traversal.");
@@ -44,12 +41,8 @@ namespace QS3D.Core.SmokeTests
 
         private static void MessageCountDriftAfterExactTraversalFailsClosed()
         {
-            var warnings = new PhaseReadOnlyCollection<string>(new[] { "review opening" }, initialCount: 1, finalCount: 0);
-
-            var error = Capture<ArgumentException>(() => Trace(
-                Array.Empty<MeasurementTraceFact>(),
-                Array.Empty<MeasurementTraceAdjustment>(),
-                warnings));
+            var warnings = new PhaseReadOnlyCollection<string>(new[] { "review opening" }, 1, 0);
+            var error = Capture<ArgumentException>(() => Trace(Array.Empty<MeasurementTraceFact>(), Array.Empty<MeasurementTraceAdjustment>(), warnings));
             Equal(2, warnings.CountReads, "Message Count must be sampled before and after traversal.");
             Contains("count changed during enumeration", error.Message, "Message Count drift must fail closed.");
         }
@@ -57,26 +50,34 @@ namespace QS3D.Core.SmokeTests
         private static void NegativeFinalCountFailsClosed()
         {
             var facts = new PhaseReadOnlyCollection<MeasurementTraceFact>(
-                new[] { new MeasurementTraceFact("area", 3d, "m2", "SRC-F2") },
-                initialCount: 1,
-                finalCount: -1);
-
+                new[] { new MeasurementTraceFact("area", 3d, "m2", "SRC-F2") }, 1, -1);
             var error = Capture<ArgumentException>(() => Trace(facts, Array.Empty<MeasurementTraceAdjustment>()));
             Equal(2, facts.CountReads, "Negative final Count must be observed by the post-traversal rebind.");
             Contains("count cannot be negative", error.Message, "Negative post-traversal Count must fail through canonical Count validation.");
         }
 
+        private static void MultiInterfaceConflictAfterTraversalFailsClosed()
+        {
+            var facts = new PhaseMultiCollection<MeasurementTraceFact>(
+                new[] { new MeasurementTraceFact("length", 2d, "m", "SRC-F3") },
+                initialCount: 1,
+                finalGenericCount: 1,
+                finalReadOnlyCount: 2,
+                finalNonGenericCount: 1);
+
+            var error = Capture<ArgumentException>(() => Trace(facts, Array.Empty<MeasurementTraceAdjustment>()));
+            Contains("count contracts disagree", error.Message, "Post-traversal Count-interface conflict must fail closed.");
+            Equal(2, facts.GenericCountReads, "Generic Count must be sampled before and after traversal.");
+            Equal(2, facts.ReadOnlyCountReads, "Read-only Count must expose the final conflict.");
+        }
+
         private static void StableCountedChildrenRemainAccepted()
         {
             var facts = new PhaseReadOnlyCollection<MeasurementTraceFact>(
-                new[] { new MeasurementTraceFact("length", 2d, "m", "SRC-F1") },
-                initialCount: 1,
-                finalCount: 1);
+                new[] { new MeasurementTraceFact("length", 2d, "m", "SRC-F1") }, 1, 1);
             var adjustments = new PhaseReadOnlyCollection<MeasurementTraceAdjustment>(
-                new[] { new MeasurementTraceAdjustment(MeasurementTraceAdjustmentKind.Deduction, 1d, "m3", "opening", "SRC-A1") },
-                initialCount: 1,
-                finalCount: 1);
-            var warnings = new PhaseReadOnlyCollection<string>(new[] { "review opening" }, initialCount: 1, finalCount: 1);
+                new[] { new MeasurementTraceAdjustment(MeasurementTraceAdjustmentKind.Deduction, 1d, "m3", "opening", "SRC-A1") }, 1, 1);
+            var warnings = new PhaseReadOnlyCollection<string>(new[] { "review opening" }, 1, 1);
 
             var trace = Trace(facts, adjustments, warnings);
             Equal(1, trace.InputFacts.Count, "Stable counted facts must remain accepted.");
@@ -99,23 +100,9 @@ namespace QS3D.Core.SmokeTests
             Equal(1, trace.Warnings.Count, "Pure-streaming messages must remain accepted.");
         }
 
-        private static MeasurementTrace Trace(
-            IEnumerable<MeasurementTraceFact> facts,
-            IEnumerable<MeasurementTraceAdjustment> adjustments,
-            IEnumerable<string>? warnings = null)
+        private static MeasurementTrace Trace(IEnumerable<MeasurementTraceFact> facts, IEnumerable<MeasurementTraceAdjustment> adjustments, IEnumerable<string>? warnings = null)
         {
-            return new MeasurementTrace(
-                "E-1",
-                "SRC-1",
-                "volume",
-                facts,
-                10d,
-                adjustments,
-                9d,
-                "m3",
-                "nearest",
-                warnings,
-                Array.Empty<string>());
+            return new MeasurementTrace("E-1", "SRC-1", "volume", facts, 10d, adjustments, 9d, "m3", "nearest", warnings, Array.Empty<string>());
         }
 
         private static IEnumerable<T> Stream<T>(params T[] values)
@@ -138,42 +125,62 @@ namespace QS3D.Core.SmokeTests
             }
 
             internal int CountReads { get; private set; }
-
-            public int Count
-            {
-                get
-                {
-                    CountReads++;
-                    return _enumerated ? _finalCount : _initialCount;
-                }
-            }
+            public int Count { get { CountReads++; return _enumerated ? _finalCount : _initialCount; } }
 
             public IEnumerator<T> GetEnumerator()
             {
-                try
-                {
-                    for (var i = 0; i < _items.Length; i++) yield return _items[i];
-                }
-                finally
-                {
-                    _enumerated = true;
-                }
+                try { for (var i = 0; i < _items.Length; i++) yield return _items[i]; }
+                finally { _enumerated = true; }
+            }
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class PhaseMultiCollection<T> : ICollection<T>, IReadOnlyCollection<T>, ICollection
+        {
+            private readonly T[] _items;
+            private readonly int _initialCount;
+            private readonly int _finalGenericCount;
+            private readonly int _finalReadOnlyCount;
+            private readonly int _finalNonGenericCount;
+            private bool _enumerated;
+
+            internal PhaseMultiCollection(T[] items, int initialCount, int finalGenericCount, int finalReadOnlyCount, int finalNonGenericCount)
+            {
+                _items = items;
+                _initialCount = initialCount;
+                _finalGenericCount = finalGenericCount;
+                _finalReadOnlyCount = finalReadOnlyCount;
+                _finalNonGenericCount = finalNonGenericCount;
             }
 
+            internal int GenericCountReads { get; private set; }
+            internal int ReadOnlyCountReads { get; private set; }
+            internal int NonGenericCountReads { get; private set; }
+            int ICollection<T>.Count { get { GenericCountReads++; return _enumerated ? _finalGenericCount : _initialCount; } }
+            int IReadOnlyCollection<T>.Count { get { ReadOnlyCountReads++; return _enumerated ? _finalReadOnlyCount : _initialCount; } }
+            int ICollection.Count { get { NonGenericCountReads++; return _enumerated ? _finalNonGenericCount : _initialCount; } }
+            bool ICollection<T>.IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                try { for (var i = 0; i < _items.Length; i++) yield return _items[i]; }
+                finally { _enumerated = true; }
+            }
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            bool ICollection<T>.Contains(T item) => Array.IndexOf(_items, item) >= 0;
+            void ICollection<T>.CopyTo(T[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+            void ICollection.CopyTo(Array array, int index) => _items.CopyTo(array, index);
+            void ICollection<T>.Add(T item) => throw new NotSupportedException();
+            bool ICollection<T>.Remove(T item) => throw new NotSupportedException();
+            void ICollection<T>.Clear() => throw new NotSupportedException();
         }
 
         private static TException Capture<TException>(Action action) where TException : Exception
         {
-            try
-            {
-                action();
-            }
-            catch (TException error)
-            {
-                return error;
-            }
-
+            try { action(); }
+            catch (TException error) { return error; }
             throw new InvalidOperationException("Expected " + typeof(TException).Name + " was not thrown.");
         }
 
@@ -193,9 +200,6 @@ namespace QS3D.Core.SmokeTests
     internal static class MeasurementTracePostTraversalCountStabilityRegistration
     {
         [ModuleInitializer]
-        internal static void Initialize()
-        {
-            MeasurementTracePostTraversalCountStabilitySmoke.Run();
-        }
+        internal static void Initialize() => MeasurementTracePostTraversalCountStabilitySmoke.Run();
     }
 }
