@@ -142,7 +142,11 @@ def main() -> int:
         ("$sha256.ComputeHash($stream)", "$sha256.ComputeHash([IO.File]::ReadAllBytes($package.FullName))", "stream-bound hashing"),
         ('".tmp-$nonce"', '".tmp"', "nonce staging"),
         ("[IO.File]::Replace($tempPath, $outputFullPath, $backupPath, $true)", "Copy-Item $tempPath $outputFullPath -Force", "atomic replacement"),
-        ("$publicationStarted = $true", "$publicationCommitted = $true", "verification-gated commit state"),
+        (
+            "$publicationStarted = $true\n\n    # Publication is not committed",
+            "$publicationStarted = $true\n    $publicationCommitted = $true\n\n    # Publication is not committed",
+            "verification-gated commit state",
+        ),
         ("Published V26 checksum bytes do not match the computed canonical record.", "published bytes ignored", "pre-commit byte verification"),
         ("if ($publicationStarted -and -not $publicationCommitted)", "if ($false)", "post-publication rollback gate"),
         ("V26 checksum rollback backup", "unchecked rollback backup", "rollback backup validation"),
