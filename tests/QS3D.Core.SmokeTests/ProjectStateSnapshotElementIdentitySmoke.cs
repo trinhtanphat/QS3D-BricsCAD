@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             RestoreAtRevisionCeilingDoesNotOverflow();
+            RejectsInvalidMutableQuantityState();
+            DetachedCopyCanonicalizesNegativeZero();
             RestorePreservesCapturedElementIdentity();
             RestoreIntoDifferentSameIdProjectNeverInjectsCapturedElements();
             DetachedCopyNeverAliasesCanonicalElements();
@@ -50,6 +52,56 @@ namespace QS3D.Core.SmokeTests
                 try { if (File.Exists(path)) File.Delete(path); } catch { }
                 try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
             }
+        }
+
+        private static void RejectsInvalidMutableQuantityState()
+        {
+            ExpectRejectedQuantity("negative", "AreaM2", -1d);
+            ExpectRejectedQuantity("NaN", "AreaM2", double.NaN);
+            ExpectRejectedQuantity("positive infinity", "AreaM2", double.PositiveInfinity);
+            ExpectRejectedQuantity("padded name", " AreaM2", 1d);
+            ExpectRejectedQuantity("control-character name", "Area\tM2", 1d);
+        }
+
+        private static void ExpectRejectedQuantity(string label, string name, double value)
+        {
+            var project = new ProjectState("snapshot-invalid-quantity-" + label.Replace(" ", "-"), "Invalid quantity fixture");
+            var element = new ProjectElement("E1", ElementCategory.Room);
+            element.Quantities[name] = value;
+            project.Elements.Add(element);
+            var originalDirty = element.Dirty;
+            var originalUpdatedUtc = element.UpdatedUtc;
+            var originalChangeVersion = project.ChangeVersion;
+            var originalProjectUpdatedUtc = project.UpdatedUtc;
+
+            ExpectInvalidOperation(() => ProjectStateSnapshot.Capture(project), label + " quantity was accepted by snapshot capture.");
+            ExpectInvalidOperation(() => ProjectStateSnapshot.CreateDetachedCopy(project), label + " quantity was accepted by detached-copy capture.");
+
+            Require(element.Quantities.Count == 1 && element.Quantities.ContainsKey(name), "Rejected snapshot quantity validation mutated the source quantity dictionary.");
+            Require(element.Dirty == originalDirty, "Rejected snapshot quantity validation changed source dirty flags.");
+            Require(element.UpdatedUtc == originalUpdatedUtc, "Rejected snapshot quantity validation changed source UpdatedUtc.");
+            Require(project.ChangeVersion == originalChangeVersion, "Rejected snapshot quantity validation changed project ChangeVersion.");
+            Require(project.UpdatedUtc == originalProjectUpdatedUtc, "Rejected snapshot quantity validation changed project UpdatedUtc.");
+        }
+
+        private static void DetachedCopyCanonicalizesNegativeZero()
+        {
+            var project = new ProjectState("snapshot-negative-zero", "Negative zero fixture");
+            var element = new ProjectElement("E1", ElementCategory.Room);
+            element.Quantities["AreaM2"] = BitConverter.Int64BitsToDouble(unchecked((long)0x8000000000000000UL));
+            element.MarkClean(ElementDirtyFlags.All);
+            var dirty = element.Dirty;
+            var updatedUtc = element.UpdatedUtc;
+            project.Elements.Add(element);
+
+            var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
+            var detachedElement = detached.FindElement("E1") ?? throw new Exception("Detached negative-zero fixture lost E1.");
+            var copied = detachedElement.Quantities["AreaM2"];
+
+            Require(copied == 0d, "Detached snapshot changed zero quantity magnitude.");
+            Require(BitConverter.DoubleToInt64Bits(copied) == 0L, "Detached snapshot bypassed canonical positive-zero normalization.");
+            Require(detachedElement.Dirty == dirty, "Canonical quantity cloning changed captured dirty flags.");
+            Require(detachedElement.UpdatedUtc == updatedUtc, "Canonical quantity cloning changed captured UpdatedUtc.");
         }
 
         private static void RestorePreservesCapturedElementIdentity()
@@ -183,6 +235,19 @@ namespace QS3D.Core.SmokeTests
             detachedElement.SourceHandles.Add("DETACHED");
             Require(element.Properties["Name"] == "Canonical", "Mutating a detached element changed canonical properties.");
             Require(element.SourceHandles.Count == 0, "Mutating a detached element changed canonical source handles.");
+        }
+
+        private static void ExpectInvalidOperation(Action action, string message)
+        {
+            try
+            {
+                action();
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+            throw new Exception(message);
         }
 
         private static void Require(bool value, string message)
