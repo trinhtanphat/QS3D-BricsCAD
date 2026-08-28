@@ -14,6 +14,10 @@ namespace QS3D.Core.SmokeTests
             CaseInsensitiveSelectionIdentityReveals();
             MultiSelectionUnionsExpansionPaths();
             InvalidSemanticSelectionFailsClosed();
+            KnownCountContractFailsClosedBeforeEnumeration();
+            KnownCountTraversalMismatchFailsClosed();
+            HonestCountedAndStreamingSelectionsRemainSupported();
+            PureStreamingSelectionRemainsBounded();
             NodeSelectionUsesDeterministicPaging();
             ResultCollectionsAreImmutable();
         }
@@ -75,6 +79,57 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => ProjectBrowserSelectionPlanner.PlanReveal(root, new[] { " B-001" }));
         }
 
+        private static void KnownCountContractFailsClosedBeforeEnumeration()
+        {
+            var root = BuildRoot();
+
+            var negative = new CountContractEnumerable(-1, -1, -1, new[] { "B-001" });
+            Throws<InvalidOperationException>(() => ProjectBrowserSelectionPlanner.PlanReveal(root, negative));
+            True(!negative.Enumerated);
+
+            var oversized = new CountContractEnumerable(10001, 10001, 10001, new[] { "B-001" });
+            Throws<InvalidOperationException>(() => ProjectBrowserSelectionPlanner.PlanReveal(root, oversized));
+            True(!oversized.Enumerated);
+
+            var conflicting = new CountContractEnumerable(1, 2, 1, new[] { "B-001" });
+            Throws<InvalidOperationException>(() => ProjectBrowserSelectionPlanner.PlanReveal(root, conflicting));
+            True(!conflicting.Enumerated);
+        }
+
+        private static void KnownCountTraversalMismatchFailsClosed()
+        {
+            var root = BuildRoot();
+
+            var shortTraversal = new CountContractEnumerable(2, 2, 2, new[] { "B-001" });
+            Throws<InvalidOperationException>(() => ProjectBrowserSelectionPlanner.PlanReveal(root, shortTraversal));
+            True(shortTraversal.Enumerated);
+
+            var longTraversal = new CountContractEnumerable(1, 1, 1, new[] { "B-001", "B-002" });
+            Throws<InvalidOperationException>(() => ProjectBrowserSelectionPlanner.PlanReveal(root, longTraversal));
+            True(longTraversal.Enumerated);
+        }
+
+        private static void HonestCountedAndStreamingSelectionsRemainSupported()
+        {
+            var root = BuildRoot();
+            var counted = new CountContractEnumerable(2, 2, 2, new[] { "B-002", "B-001" });
+            var countedPlan = ProjectBrowserSelectionPlanner.PlanReveal(root, counted, "B-002");
+            True(counted.Enumerated);
+            Equal(2, countedPlan.SelectedElementIds.Count);
+            Equal("B-001", countedPlan.SelectedElementIds[0]);
+            Equal("B-002", countedPlan.SelectedElementIds[1]);
+            Equal("B-002", countedPlan.PrimaryElementId);
+
+            var streamingPlan = ProjectBrowserSelectionPlanner.PlanReveal(root, Stream("C-001"));
+            Equal(1, streamingPlan.SelectedElementIds.Count);
+            Equal("C-001", streamingPlan.SelectedElementIds[0]);
+        }
+
+        private static void PureStreamingSelectionRemainsBounded()
+        {
+            Throws<InvalidOperationException>(() => ProjectBrowserSelectionPlanner.PlanReveal(BuildRoot(), StreamMany(10001)));
+        }
+
         private static void NodeSelectionUsesDeterministicPaging()
         {
             var root = BuildRoot();
@@ -107,6 +162,17 @@ namespace QS3D.Core.SmokeTests
             Throws<NotSupportedException>(() => ((IList<string>)page.ElementIds).Clear());
         }
 
+        private static IEnumerable<string> Stream(params string[] values)
+        {
+            foreach (var value in values) yield return value;
+        }
+
+        private static IEnumerable<string> StreamMany(int count)
+        {
+            for (var i = 0; i < count; i++)
+                yield return "STREAM-" + i.ToString("D5");
+        }
+
         private static ProjectBrowserNode BuildRoot()
         {
             var project = new ProjectState("P-SELECTION", "Selection Browser");
@@ -118,6 +184,57 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(new ProjectElement("B-001", ElementCategory.Beam, string.Empty, "F-02", "Z-A"));
             project.Elements.Add(new ProjectElement("W-001", ElementCategory.ArchitecturalWall, string.Empty, "F-01", "Z-A"));
             return ProjectBrowserPlanner.Build(project, ProjectBrowserGrouping.FloorThenCategory);
+        }
+
+        private sealed class CountContractEnumerable : ICollection<string>, IReadOnlyCollection<string>, System.Collections.ICollection
+        {
+            private readonly int _genericCount;
+            private readonly int _readOnlyCount;
+            private readonly int _nonGenericCount;
+            private readonly IReadOnlyList<string> _values;
+
+            internal CountContractEnumerable(int genericCount, int readOnlyCount, int nonGenericCount, IEnumerable<string> values)
+            {
+                _genericCount = genericCount;
+                _readOnlyCount = readOnlyCount;
+                _nonGenericCount = nonGenericCount;
+                _values = values.ToList().AsReadOnly();
+            }
+
+            internal bool Enumerated { get; private set; }
+
+            int ICollection<string>.Count => _genericCount;
+            int IReadOnlyCollection<string>.Count => _readOnlyCount;
+            int System.Collections.ICollection.Count => _nonGenericCount;
+            bool ICollection<string>.IsReadOnly => true;
+            bool System.Collections.ICollection.IsSynchronized => false;
+            object System.Collections.ICollection.SyncRoot => this;
+
+            IEnumerator<string> IEnumerable<string>.GetEnumerator()
+            {
+                Enumerated = true;
+                return _values.GetEnumerator();
+            }
+
+            System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+            {
+                return ((IEnumerable<string>)this).GetEnumerator();
+            }
+
+            bool ICollection<string>.Contains(string item) => _values.Contains(item);
+            void ICollection<string>.CopyTo(string[] array, int arrayIndex)
+            {
+                for (var i = 0; i < _values.Count; i++) array[arrayIndex + i] = _values[i];
+            }
+
+            void System.Collections.ICollection.CopyTo(Array array, int index)
+            {
+                for (var i = 0; i < _values.Count; i++) array.SetValue(_values[i], index + i);
+            }
+
+            void ICollection<string>.Add(string item) => throw new NotSupportedException();
+            void ICollection<string>.Clear() => throw new NotSupportedException();
+            bool ICollection<string>.Remove(string item) => throw new NotSupportedException();
         }
 
         private static void Equal<T>(T expected, T actual)
