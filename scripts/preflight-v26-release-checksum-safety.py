@@ -19,7 +19,7 @@ def helper_contract(text: str) -> None:
         "$script:MaxChecksumBytes = 1024",
         "Resolve-OrdinaryNonReparseFile -Path $PackagePath -Label 'V26 package ZIP'",
         "Assert-NoReparseDirectoryChain -Directory $item.Directory -Label $Label",
-        "[IO.FileAttributes]::ReparsePoint",
+        "if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)",
         "[string]::Equals([IO.Path]::GetFileName($outputFullPath), $script:ExpectedChecksumName, [StringComparison]::Ordinal)",
         "Resolve-OrdinaryNonReparseDirectory -Path $outputParentPath -Label 'V26 checksum destination parent'",
         "Assert-SafeExistingOutputLeaf -Path $outputFullPath",
@@ -135,7 +135,7 @@ def main() -> int:
 
     mutations = (
         ("$script:ExpectedChecksumName = 'QS3D-BricsCAD-V26.zip.sha256'", "$script:ExpectedChecksumName = 'other.sha256'", "canonical output identity"),
-        ("[IO.FileAttributes]::ReparsePoint", "[IO.FileAttributes]::Hidden", "reparse rejection"),
+        ("if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)", "if (($cursor.Attributes -band [IO.FileAttributes]::Hidden) -ne 0)", "directory-chain reparse rejection"),
         ("$originalOutputBytes = Read-BoundedChecksumBytes", "$originalOutputBytes = [byte[]]@()", "bounded prior-state snapshot"),
         ("[IO.FileShare]::Read", "[IO.FileShare]::ReadWrite", "read-only hash handle"),
         ("$sha256.ComputeHash($stream)", "$sha256.ComputeHash([IO.File]::ReadAllBytes($package.FullName))", "stream-bound hashing"),
