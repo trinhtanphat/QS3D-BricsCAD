@@ -123,7 +123,7 @@ else:
 
     if acquire_index >= 0 and save_index > acquire_index:
         acquire = text[acquire_index:save_index]
-        forbidden_inline = (
+        for token in (
             "$candidates = @(",
             "Invoke-WebRequest -Uri $candidate.Url",
             "$actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash",
@@ -132,8 +132,7 @@ else:
             "Start-Process -FilePath msiexec.exe",
             "$process.WaitForExit(900000)",
             "Remove-Item -LiteralPath $extract -Recurse",
-        )
-        for token in forbidden_inline:
+        ):
             if token in acquire:
                 errors.append("cloud V25 acquisition must delegate security/destructive operations to the shared hardened helper; found inline token: " + token)
 
@@ -149,30 +148,42 @@ if not HELPER.is_file():
 else:
     helper = HELPER.read_text(encoding="utf-8")
     helper_required = (
-        "Get-FileHash -LiteralPath $MsiPath -Algorithm SHA256",
-        "Get-AuthenticodeSignature -FilePath $MsiPath",
+        "function Assert-NoExistingReparseComponent",
+        "[IO.FileAttributes]::ReparsePoint",
+        "function Get-OrdinaryFileOrNull",
+        "Assert-NoExistingReparseComponent -Path $cacheDir",
+        "Assert-NoExistingReparseComponent -Path $msi",
+        "Assert-NoExistingReparseComponent -Path $extract",
+        "$item = Get-OrdinaryFileOrNull -Path $msi",
+        "Get-FileHash -LiteralPath $msi -Algorithm SHA256",
+        "Get-AuthenticodeSignature -FilePath $msi",
         "[System.Management.Automation.SignatureStatus]::Valid",
         "CN|O)=Bricsys",
         "WindowsInstaller.Installer",
         "ProductVersion",
         "ProductName",
-        "WaitForExit(900000)",
-        "Stop-ProcessTree",
-        "Assert-OrdinaryMsiFile",
-        "Assert-ExistingPathChainSafe",
+        "$process.WaitForExit(900000)",
+        "Stop-OwnedProcessTree -Process $process",
     )
     for token in helper_required:
         if token not in helper:
             errors.append("shared V25 acquisition helper missing required integrity/identity/bounded-process/path-safety token: " + token)
-    if helper.find("Assert-ExistingPathChainSafe") > helper.find("Remove-Item -LiteralPath $ExtractDir -Recurse") >= 0:
-        errors.append("shared V25 acquisition helper must validate existing path components before recursive extraction cleanup")
-    hash_index = helper.find("Get-FileHash -LiteralPath $MsiPath -Algorithm SHA256")
-    signature_index = helper.find("Get-AuthenticodeSignature -FilePath $MsiPath")
+    destructive = "Remove-Item -LiteralPath $extract -Recurse -Force"
+    for guard in (
+        "Assert-NoExistingReparseComponent -Path $cacheDir",
+        "Assert-NoExistingReparseComponent -Path $msi",
+        "Assert-NoExistingReparseComponent -Path $extract",
+    ):
+        if helper.find(guard) < 0 or helper.find(destructive) < 0 or helper.find(guard) >= helper.find(destructive):
+            errors.append("shared V25 acquisition helper must validate existing path components before recursive extraction cleanup: " + guard)
+    ordinary_index = helper.find("$item = Get-OrdinaryFileOrNull -Path $msi")
+    hash_index = helper.find("Get-FileHash -LiteralPath $msi -Algorithm SHA256", ordinary_index if ordinary_index >= 0 else 0)
+    signature_index = helper.find("Get-AuthenticodeSignature -FilePath $msi", hash_index if hash_index >= 0 else 0)
     product_index = helper.find("ProductVersion", signature_index if signature_index >= 0 else 0)
-    extract_index = helper.find("Start-Process", product_index if product_index >= 0 else 0)
-    timeout_index = helper.find("WaitForExit(900000)", extract_index if extract_index >= 0 else 0)
-    if min(hash_index, signature_index, product_index, extract_index, timeout_index) < 0 or not hash_index < signature_index < product_index < extract_index < timeout_index:
-        errors.append("shared V25 acquisition helper must verify digest, Authenticode and MSI identity before bounded extraction")
+    extract_index = helper.find("Start-Process -FilePath 'msiexec.exe'", product_index if product_index >= 0 else 0)
+    timeout_index = helper.find("$process.WaitForExit(900000)", extract_index if extract_index >= 0 else 0)
+    if min(ordinary_index, hash_index, signature_index, product_index, extract_index, timeout_index) < 0 or not ordinary_index < hash_index < signature_index < product_index < extract_index < timeout_index:
+        errors.append("shared V25 acquisition helper must verify ordinary-file, digest, Authenticode and MSI identity before bounded extraction")
 
 if not DOC.is_file():
     errors.append("missing docs/CLOUD-V25-PREVIEW-RELEASE.md")
