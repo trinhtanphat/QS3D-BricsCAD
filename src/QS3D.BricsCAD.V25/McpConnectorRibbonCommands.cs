@@ -25,7 +25,7 @@ namespace QS3D.BricsCAD.V25
             Run(document =>
             {
                 McpEmbeddedServer.EnsureStarted();
-                var publicUrl = FirstPublicUrl();
+                var publicUrl = McpPublicEndpointResolver.Resolve();
                 var text =
                     "QS3D MCP đã được nhúng trong plugin.\n\n"
                     + "Local MCP URL: " + McpEmbeddedServer.Endpoint + "\n"
@@ -77,7 +77,7 @@ namespace QS3D.BricsCAD.V25
             {
                 McpEmbeddedServer.EnsureStarted();
                 var result = McpProtocolProbe.Check(McpEmbeddedServer.Endpoint, TimeoutMilliseconds);
-                var publicUrl = FirstPublicUrl();
+                var publicUrl = McpPublicEndpointResolver.Resolve();
                 var text = "QS3D AI / MCP\n\n"
                            + "Server: embedded trong QS3D plugin\n"
                            + "Local endpoint: " + McpEmbeddedServer.Endpoint + "\n"
@@ -88,6 +88,9 @@ namespace QS3D.BricsCAD.V25
                            + "Chi tiết: " + result.Message + "\n\n"
                            + "Setup Cloudflare: QS3DMCPACCOUNTSETUP\n"
                            + "Advanced/Quick Tunnel: QS3DMCPSETUP\n"
+                           + "Copy URL: QS3DMCPCOPYURL\n"
+                           + "Copy token: QS3DMCPCOPYTOKEN\n"
+                           + "Copy config block: QS3DMCPCOPYCONFIG\n"
                            + "Kiểm tra: QS3DMCPCHECKHTTP\n"
                            + "Tài liệu: QS3DMCPDOCSHTTP";
                 MessageBox.Show(text, "QS3D AI Dashboard", MessageBoxButton.OK,
@@ -116,11 +119,49 @@ namespace QS3D.BricsCAD.V25
             });
         }
 
-        private static string FirstPublicUrl()
+        [CommandMethod("QS3DMCPCOPYURL", CommandFlags.Modal)]
+        public void CopyPublicUrl()
         {
-            if (!string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.PublicMcpUrl)) return McpCloudflareAccountTunnelManager.PublicMcpUrl;
-            if (!string.IsNullOrWhiteSpace(McpCloudflareTunnelManager.PublicMcpUrl)) return McpCloudflareTunnelManager.PublicMcpUrl;
-            return McpEmbeddedServer.PublicUrl;
+            Run(document =>
+            {
+                var url = McpPublicEndpointResolver.Resolve();
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    Report(document, "Chưa có public MCP URL hợp lệ. Chạy QS3DMCPACCOUNTSETUP hoặc Quick Tunnel trước.");
+                    return;
+                }
+                Clipboard.SetText(url);
+                Report(document, "Đã copy public MCP URL.");
+            });
+        }
+
+        [CommandMethod("QS3DMCPCOPYTOKEN", CommandFlags.Modal)]
+        public void CopyBearerToken()
+        {
+            Run(document =>
+            {
+                McpEmbeddedServer.EnsureStarted();
+                Clipboard.SetText(McpEmbeddedServer.GetBearerToken());
+                Report(document, "Đã copy MCP Bearer token vào clipboard.");
+            });
+        }
+
+        [CommandMethod("QS3DMCPCOPYCONFIG", CommandFlags.Modal)]
+        public void CopyChatGptConfig()
+        {
+            Run(document =>
+            {
+                McpEmbeddedServer.EnsureStarted();
+                var url = McpPublicEndpointResolver.Resolve();
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    Report(document, "Chưa có public MCP URL hợp lệ nên chưa thể tạo config block.");
+                    return;
+                }
+                Clipboard.SetText("MCP URL: " + url + Environment.NewLine
+                                  + "Authorization: Bearer " + McpEmbeddedServer.GetBearerToken());
+                Report(document, "Đã copy URL + Authorization config cho ChatGPT custom MCP.");
+            });
         }
 
         private static void Run(Action<Document> action)
@@ -139,11 +180,7 @@ namespace QS3D.BricsCAD.V25
     {
         public static string WriteGuide()
         {
-            var publicUrl = !string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.PublicMcpUrl)
-                ? McpCloudflareAccountTunnelManager.PublicMcpUrl
-                : (!string.IsNullOrWhiteSpace(McpCloudflareTunnelManager.PublicMcpUrl)
-                    ? McpCloudflareTunnelManager.PublicMcpUrl
-                    : McpEmbeddedServer.PublicUrl);
+            var publicUrl = McpPublicEndpointResolver.Resolve();
             var path = Path.Combine(Path.GetTempPath(), "QS3D-CHATGPT-MCP.txt");
             var text =
                 "QS3D ChatGPT / custom MCP\r\n"
@@ -167,6 +204,7 @@ namespace QS3D.BricsCAD.V25
                 + "- cad_active_document\r\n"
                 + "- cad_selection\r\n"
                 + "- cad_database_snapshot\r\n"
+                + "- cad_entity_inspect\r\n"
                 + "- cad_view_state\r\n"
                 + "- cad_wait_idle\r\n"
                 + "- cad_command_catalog\r\n"
@@ -187,6 +225,7 @@ namespace QS3D.BricsCAD.V25
                 + "- cad_agent_stop (emergency stop, no confirmation required)\r\n"
                 + "- cad_cancel_command (ESC x2, no confirmation required)\r\n\r\n"
                 + "Cloudflare Quick Tunnel is available only as a test fallback from QS3DMCPSETUP.\r\n"
+                + "Public endpoint resolution accepts only non-loopback HTTPS URLs and canonicalizes them to /mcp.\r\n"
                 + "The MCP listener binds only to 127.0.0.1:8765; remote access must arrive through the configured tunnel.\r\n"
                 + "Ordinary MCP mutation tools require confirmMutation=true, are blocked while the emergency stop is active, and write a bounded local audit log.\r\n"
                 + "No arbitrary PowerShell/cmd/shell/process execution is exposed by the network MCP server.\r\n";
@@ -223,7 +262,7 @@ namespace QS3D.BricsCAD.V25
             {
                 var initialize = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\""
                                  + ProtocolVersion
-                                 + "\",\"capabilities\":{},\"clientInfo\":{\"name\":\"QS3D-BricsCAD\",\"version\":\"embedded-3\"}}}";
+                                 + "\",\"capabilities\":{},\"clientInfo\":{\"name\":\"QS3D-BricsCAD\",\"version\":\"embedded-4\"}}}";
                 var init = Send(endpoint, "POST", initialize, timeoutMilliseconds, null);
                 if (!HasJsonProperty(init.Body, "result") || !HasJsonProperty(init.Body, "serverInfo"))
                     return new McpProtocolProbeResult(false, "initialize không trả MCP result/serverInfo: HTTP " + init.StatusCode + ".");
@@ -242,7 +281,7 @@ namespace QS3D.BricsCAD.V25
 
                 var call = "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"connector_info\",\"arguments\":{}}}";
                 var called = Send(endpoint, "POST", call, timeoutMilliseconds, sessionId);
-                if (!HasJsonProperty(called.Body, "result") || !called.Body.Contains("connector_info") && !called.Body.Contains("singleRepository"))
+                if (!HasJsonProperty(called.Body, "result") || (!called.Body.Contains("connector_info") && !called.Body.Contains("singleRepository")))
                     return new McpProtocolProbeResult(false, "tools/call connector_info không trả MCP tool result hợp lệ: HTTP " + called.StatusCode + ".");
 
                 var ping = "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"ping\",\"params\":{}}";
