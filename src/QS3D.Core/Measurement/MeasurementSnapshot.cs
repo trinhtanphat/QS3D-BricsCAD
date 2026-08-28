@@ -41,6 +41,7 @@ namespace QS3D.Core.Measurement
             }
 
             RequireObservedCount(knownCount, items.Count, nameof(traces));
+            RequireKnownCountStable(traces, knownCount, nameof(traces));
             items.Sort(CompareTraces);
             Traces = new ReadOnlyCollection<MeasurementTrace>(items.ToArray());
         }
@@ -91,6 +92,16 @@ namespace QS3D.Core.Measurement
         private static void RequireObservedCount(int? knownCount, int observedCount, string paramName)
         {
             if (knownCount.HasValue && knownCount.Value != observedCount)
+                throw new ArgumentException("Measurement snapshot count changed during enumeration.", paramName);
+        }
+
+        private static void RequireKnownCountStable(
+            IEnumerable<MeasurementTrace> traces,
+            int? admittedCount,
+            string paramName)
+        {
+            var finalCount = RequireSupportedCount(traces, paramName);
+            if (finalCount != admittedCount)
                 throw new ArgumentException("Measurement snapshot count changed during enumeration.", paramName);
         }
 
