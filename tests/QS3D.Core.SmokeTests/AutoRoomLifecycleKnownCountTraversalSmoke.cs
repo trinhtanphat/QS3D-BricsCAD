@@ -14,7 +14,8 @@ namespace QS3D.Core.SmokeTests
         {
             SelectedSetRejectsUnderAndOverYield();
             ActiveSetRejectsUnderAndOverYield();
-            OverYieldFailsAtFirstUnexpectedItem();
+            ActiveOverYieldFailsAtFirstUnexpectedItem();
+            SelectedOverYieldRemainsCardinalityOnlyAfterKnownCount();
             ExactKnownCountsRemainAccepted();
             SelectedCapacityPreflightStillPrecedesEnumeration();
         }
@@ -43,10 +44,10 @@ namespace QS3D.Core.SmokeTests
                 "Active-room over-yield must reject advertised Count/traversal disagreement.");
         }
 
-        private static void OverYieldFailsAtFirstUnexpectedItem()
+        private static void ActiveOverYieldFailsAtFirstUnexpectedItem()
         {
             var active = new CountingMisreportedSet<string>(1, "ROOM-1", "ROOM-2", "ROOM-3");
-            var activeError = Capture<InvalidOperationException>(() =>
+            var error = Capture<InvalidOperationException>(() =>
                 AutoRoomLifecycle.MarkStaleForSelection(
                     new ProjectState("P-AUTOROOM-ACTIVE-EARLY", "Auto Room Active Early Smoke"),
                     active,
@@ -55,25 +56,28 @@ namespace QS3D.Core.SmokeTests
                     string.Empty,
                     UtcNow));
 
-            Contains("known count reported 1", activeError.Message,
+            Contains("known count reported 1", error.Message,
                 "Active-room over-yield must fail on the first unexpected item.");
             Equal(2, active.MoveNextCalls,
                 "Active-room over-yield must stop immediately after enumerating item knownCount + 1.");
+        }
 
+        private static void SelectedOverYieldRemainsCardinalityOnlyAfterKnownCount()
+        {
             var selected = new CountingMisreportedSet<string>(1, "A", "B", "C");
-            var selectedError = Capture<InvalidOperationException>(() =>
+            var error = Capture<InvalidOperationException>(() =>
                 AutoRoomLifecycle.MarkStaleForSelection(
-                    new ProjectState("P-AUTOROOM-SELECTED-EARLY", "Auto Room Selected Early Smoke"),
+                    new ProjectState("P-AUTOROOM-SELECTED-DRIFT", "Auto Room Selected Drift Smoke"),
                     new MisreportedSet<string>(0),
                     selected,
                     string.Empty,
                     string.Empty,
                     UtcNow));
 
-            Contains("known count reported 1", selectedError.Message,
-                "Selected-source over-yield must fail on the first unexpected item.");
-            Equal(2, selected.MoveNextCalls,
-                "Selected-source over-yield must stop immediately after enumerating item knownCount + 1.");
+            Contains("known count reported 1", error.Message,
+                "Selected-source in-bound over-yield must still reject Count/traversal disagreement.");
+            Equal(4, selected.MoveNextCalls,
+                "Selected-source Count drift must remain a cardinality-only traversal so the independent hard bound can still win if crossed.");
         }
 
         private static void ExactKnownCountsRemainAccepted()
