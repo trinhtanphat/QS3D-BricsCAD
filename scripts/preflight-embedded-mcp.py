@@ -140,6 +140,7 @@ def main() -> int:
     require(agent_center, "OpenChatGpt", errors, "ChatGPT browser handoff")
     require(agent_center, "ThreadPool.QueueUserWorkItem", errors, "non-blocking Agent Center MCP operation")
     require(agent_center, "Interlocked.CompareExchange(ref _localOperationActive", errors, "serialized observation self-test")
+    require(agent_center, "StartQuickUrlPolling", errors, "Agent Center Quick URL refresh")
     forbid(agent_center, "powershell.exe", errors, "PowerShell user workflow")
     forbid(agent_center, "cmd.exe", errors, "cmd user workflow")
 
@@ -173,6 +174,7 @@ def main() -> int:
     require(account_onboarding, "credentials-file:", errors, "local tunnel config credentials")
     require(account_onboarding, '"    service: " + OriginUrl', errors, "hostname-scoped local MCP ingress")
     require(account_onboarding, "http_status:404", errors, "fail-closed unmatched tunnel ingress")
+    require(account_onboarding, "WriteCanonicalConfig", errors, "canonical named-tunnel config regeneration")
     require(account_onboarding, "Cloudflare login:", errors, "visible authentication status")
     require(account_onboarding, "không hỏi và không lưu mật khẩu Cloudflare", errors, "provider-owned password entry")
     require(account_onboarding, "OpenChatGpt", errors, "ChatGPT browser handoff")
@@ -182,7 +184,8 @@ def main() -> int:
     forbid(account_onboarding, "powershell.exe", errors, "PowerShell setup dependency")
     forbid(account_onboarding, "cmd.exe", errors, "cmd setup dependency")
 
-    # Advanced fallback remains available for dashboard-issued remote tokens.
+    # Advanced fallback remains available for dashboard-issued remote tokens, but even this GUI
+    # uses the same verified local bootstrapper instead of sending users to a manual download path.
     require(token_onboarding, "ProtectedData.Protect", errors, "DPAPI fallback tunnel token protection")
     require(token_onboarding, "DataProtectionScope.CurrentUser", errors, "per-Windows-user fallback secret scope")
     require(token_onboarding, 'startInfo.EnvironmentVariables["TUNNEL_TOKEN"]', errors, "fallback token outside process command line")
@@ -190,6 +193,8 @@ def main() -> int:
     require(token_onboarding, '"tunnel --no-autoupdate --url " + OriginUrl', errors, "Quick Tunnel loopback route")
     require(token_onboarding, "HandleProcessExit(Process process)", errors, "fallback owned-process exit cleanup")
     require(token_onboarding, "_quickBaseUrl = string.Empty;", errors, "ephemeral Quick URL cleanup")
+    require(token_onboarding, "McpCloudflaredBootstrapper.BeginInstall", errors, "advanced GUI verified cloudflared install")
+    forbid(token_onboarding, 'Button("Cài Cloudflare Tunnel", (_, __) => McpCloudflareTunnelManager.OpenCloudflaredDownloadPage())', errors, "manual cloudflared install button in advanced GUI")
     forbid(token_onboarding, "powershell.exe", errors, "fallback PowerShell setup dependency")
     forbid(token_onboarding, "cmd.exe", errors, "fallback cmd setup dependency")
 
@@ -226,9 +231,10 @@ def main() -> int:
 
     print(
         "PASS: QS3D embeds authenticated MCP plus a unified click-first Agent Center with "
-        "verified one-click cloudflared bootstrap, provider-browser login, named/Quick tunnel "
-        "management, a single HTTPS /mcp endpoint resolver, ChatGPT copy/open actions, "
-        "read-only MCP self-test and emergency controls without PowerShell/CMD user setup."
+        "verified one-click cloudflared bootstrap across default/advanced GUI paths, provider-browser "
+        "login, named/Quick tunnel management, a single HTTPS /mcp endpoint resolver, ChatGPT "
+        "copy/open actions, read-only MCP self-test and emergency controls without PowerShell/CMD "
+        "user setup."
     )
     return 0
 
