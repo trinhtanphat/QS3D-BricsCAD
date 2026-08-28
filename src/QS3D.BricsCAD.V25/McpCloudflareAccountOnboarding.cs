@@ -72,7 +72,7 @@ namespace QS3D.BricsCAD.V25
         public static bool IsAuthenticated { get { try { return File.Exists(CertificatePath); } catch { return false; } } }
         public static bool IsSetupBusy => Volatile.Read(ref _setupOperationActive) != 0;
         public static string SavedHostname => ReadText(HostnamePath);
-        public static string PublicMcpUrl => string.IsNullOrWhiteSpace(SavedHostname) ? string.Empty : "https://" + SavedHostname + "/mcp";
+        public static string PublicMcpUrl => IsRunning && !string.IsNullOrWhiteSpace(SavedHostname) ? "https://" + SavedHostname + "/mcp" : string.Empty;
         public static string LastMessage { get { lock (Sync) return _lastMessage; } }
         public static string LastError { get { lock (Sync) return _lastError; } }
 
