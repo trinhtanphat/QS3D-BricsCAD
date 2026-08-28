@@ -13,6 +13,8 @@ namespace QS3D.Core.SmokeTests
             QuantityOverallocationFailsClosed();
             SubUnitOverallocationFailsClosed();
             SubUnitAggregateOverallocationFailsClosed();
+            AggregateOverflowFailsClosed();
+            LargeRepresentableAggregateRemainsFinite();
             ConflictingMeasurementProvenanceFailsClosed();
             UnknownActivityFailsClosed();
             WorkstationTimeSemanticsFailClosed();
@@ -108,6 +110,39 @@ namespace QS3D.Core.SmokeTests
                     Link("alloc-a", "A", "measure-v1", trace, 6e-21d),
                     Link("alloc-b", "B", "measure-v1", trace, 6e-21d)
                 }));
+        }
+
+        private static void AggregateOverflowFailsClosed()
+        {
+            var trace = Trace(1.7e308d, "rule-a", "overflow");
+            var activityA = Activity("A", 1, 3);
+            var activityB = Activity("B", 3, 5);
+            var first = Link("alloc-a", "A", "measure-overflow", trace, 1.0e308d);
+            var second = Link("alloc-b", "B", "measure-overflow", trace, 1.0e308d);
+
+            True(!double.IsInfinity(first.AllocatedValue) && !double.IsNaN(first.AllocatedValue));
+            True(!double.IsInfinity(second.AllocatedValue) && !double.IsNaN(second.AllocatedValue));
+            Throws<ArgumentException>(() => Snapshot(
+                new[] { activityA, activityB },
+                null,
+                new[] { first, second }));
+        }
+
+        private static void LargeRepresentableAggregateRemainsFinite()
+        {
+            var trace = Trace(1.6e308d, "rule-a", "near-boundary");
+            var snapshot = Snapshot(
+                new[] { Activity("A", 1, 3), Activity("B", 3, 5) },
+                null,
+                new[]
+                {
+                    Link("alloc-a", "A", "measure-large", trace, 7.0e307d),
+                    Link("alloc-b", "B", "measure-large", trace, 7.0e307d)
+                });
+
+            var total = snapshot.GetAllocatedValue("wall-1", "AB12", "NetVolumeM3");
+            True(!double.IsInfinity(total) && !double.IsNaN(total));
+            RelativeNear(1.4e308d, total, 1e-15d);
         }
 
         private static void ConflictingMeasurementProvenanceFailsClosed()
@@ -248,6 +283,14 @@ namespace QS3D.Core.SmokeTests
         private static void Near(double expected, double actual)
         {
             if (Math.Abs(expected - actual) > 1e-9)
+                throw new Exception("Expected " + expected + ", got " + actual + ".");
+        }
+
+        private static void RelativeNear(double expected, double actual, double relativeTolerance)
+        {
+            var scale = Math.Max(Math.Abs(expected), Math.Abs(actual));
+            if (scale == 0d) return;
+            if (Math.Abs(expected - actual) / scale > relativeTolerance)
                 throw new Exception("Expected " + expected + ", got " + actual + ".");
         }
 
