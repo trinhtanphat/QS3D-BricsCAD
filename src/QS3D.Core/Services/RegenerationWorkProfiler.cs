@@ -124,16 +124,68 @@ namespace QS3D.Core.Services
         private static IReadOnlyList<T> MaterializeBounded<T>(IEnumerable<T> values, int maxCount, string parameterName, string label)
         {
             if (values == null) throw new ArgumentNullException(parameterName);
+            var knownCount = ValidateKnownCountContract(values, maxCount, parameterName, label);
             var result = new List<T>();
             foreach (var value in values)
             {
                 if (ReferenceEquals(value, null))
                     throw new ArgumentException("Regeneration work profile " + label + " collection cannot contain null entries.", parameterName);
                 if (result.Count >= maxCount)
-                    throw new ArgumentException("Regeneration work profile " + label + " collection cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".", parameterName);
+                    throw CollectionTooLarge(maxCount, parameterName, label);
+                if (knownCount.HasValue && result.Count >= knownCount.Value)
+                    throw CountMismatch(knownCount.Value, result.Count + 1, parameterName, label);
                 result.Add(value);
             }
+            if (knownCount.HasValue && result.Count != knownCount.Value)
+                throw CountMismatch(knownCount.Value, result.Count, parameterName, label);
             return result.AsReadOnly();
+        }
+
+        private static int? ValidateKnownCountContract<T>(IEnumerable<T> values, int maxCount, string parameterName, string label)
+        {
+            int? knownCount = null;
+            MergeKnownCount(values is ICollection<T> collection ? collection.Count : (int?)null, maxCount, parameterName, label, ref knownCount);
+            MergeKnownCount(values is IReadOnlyCollection<T> readOnlyCollection ? readOnlyCollection.Count : (int?)null, maxCount, parameterName, label, ref knownCount);
+            MergeKnownCount(values is System.Collections.ICollection nonGenericCollection ? nonGenericCollection.Count : (int?)null, maxCount, parameterName, label, ref knownCount);
+            return knownCount;
+        }
+
+        private static void MergeKnownCount(
+            int? candidate,
+            int maxCount,
+            string parameterName,
+            string label,
+            ref int? knownCount)
+        {
+            if (!candidate.HasValue) return;
+            if (candidate.Value < 0)
+                throw new ArgumentException(
+                    "Regeneration work profile " + label + " collection reports an invalid negative known Count.",
+                    parameterName);
+            if (candidate.Value > maxCount)
+                throw CollectionTooLarge(maxCount, parameterName, label);
+            if (knownCount.HasValue && knownCount.Value != candidate.Value)
+                throw new ArgumentException(
+                    "Regeneration work profile " + label + " collection reports conflicting known Counts.",
+                    parameterName);
+            knownCount = candidate.Value;
+        }
+
+        private static ArgumentException CountMismatch(int knownCount, int observedCount, string parameterName, string label)
+        {
+            return new ArgumentException(
+                "Regeneration work profile " + label + " collection known Count reported " +
+                knownCount.ToString(CultureInfo.InvariantCulture) + " entries but traversal produced " +
+                observedCount.ToString(CultureInfo.InvariantCulture) + ".",
+                parameterName);
+        }
+
+        private static ArgumentException CollectionTooLarge(int maxCount, string parameterName, string label)
+        {
+            return new ArgumentException(
+                "Regeneration work profile " + label + " collection cannot exceed project element count of " +
+                maxCount.ToString(CultureInfo.InvariantCulture) + ".",
+                parameterName);
         }
     }
 
