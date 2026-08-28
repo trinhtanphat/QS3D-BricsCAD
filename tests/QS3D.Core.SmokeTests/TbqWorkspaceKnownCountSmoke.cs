@@ -27,6 +27,13 @@ namespace QS3D.Core.SmokeTests
             BuildUpTraversalMustMatchKnownCount();
             RateReferenceTraversalMustMatchKnownCount();
             LibraryTraversalMustMatchKnownCount();
+            BillItemCountDriftFailsAfterTraversal();
+            BuildUpCountDriftFailsAfterTraversal();
+            RateReferenceCountDriftFailsAfterTraversal();
+            LibraryCountDriftFailsAfterTraversal();
+            NegativeCountAfterTraversalFailsClosed();
+            ConflictingCountsAfterTraversalFailClosed();
+            StableMultiInterfaceCountsRemainAccepted();
             ExactKnownCountsRemainAccepted();
             PureStreamingSourcesRemainAccepted();
         }
@@ -161,6 +168,65 @@ namespace QS3D.Core.SmokeTests
             AssertTraversalMismatch(over, "BQ library entries", 1, 2, overError);
         }
 
+        private static void BillItemCountDriftFailsAfterTraversal()
+        {
+            var source = new DriftingReadOnlyCollection<TbqBillItem>(1, 2, Bill("B1"));
+            var error = Capture<InvalidOperationException>(() => Workspace(billItems: source));
+            AssertPostTraversalDrift(source, "bill items", error);
+        }
+
+        private static void BuildUpCountDriftFailsAfterTraversal()
+        {
+            var source = new DriftingReadOnlyCollection<BuildUpRateSnapshot>(1, 2, BuildUp("R1"));
+            var error = Capture<InvalidOperationException>(() => Workspace(buildUpRates: source));
+            AssertPostTraversalDrift(source, "build-up rates", error);
+        }
+
+        private static void RateReferenceCountDriftFailsAfterTraversal()
+        {
+            var source = new DriftingReadOnlyCollection<RateReferenceEdge>(1, 2, Reference("R1"));
+            var error = Capture<InvalidOperationException>(() => Workspace(rateReferences: source));
+            AssertPostTraversalDrift(source, "rate references", error);
+        }
+
+        private static void LibraryCountDriftFailsAfterTraversal()
+        {
+            var source = new DriftingReadOnlyCollection<BqLibraryEntry>(1, 2, Library("L1"));
+            var error = Capture<InvalidOperationException>(() => Workspace(libraryEntries: source));
+            AssertPostTraversalDrift(source, "BQ library entries", error);
+        }
+
+        private static void NegativeCountAfterTraversalFailsClosed()
+        {
+            var source = new DriftingReadOnlyCollection<TbqBillItem>(1, -1, Bill("B1"));
+            var error = Capture<InvalidOperationException>(() => Workspace(billItems: source));
+            Equal(2, source.CountReads, "Post-traversal negative TBQ Count must be rebound.");
+            Equal(1, source.GetEnumeratorCalls, "Post-traversal negative TBQ source must traverse exactly once.");
+            Contains("negative known count", error.Message, "Post-traversal negative TBQ Count must fail closed explicitly.");
+        }
+
+        private static void ConflictingCountsAfterTraversalFailClosed()
+        {
+            var source = new MultiCountSequence<TbqBillItem>(1, 1, 1, 1, 2, 1, Bill("B1"));
+            var error = Capture<InvalidOperationException>(() => Workspace(billItems: source));
+            Equal(2, source.GenericCountReads, "Post-traversal conflict must rebind ICollection<T>.Count.");
+            Equal(2, source.ReadOnlyCountReads, "Post-traversal conflict must rebind IReadOnlyCollection<T>.Count.");
+            Equal(2, source.NonGenericCountReads, "Post-traversal conflict must rebind ICollection.Count.");
+            Equal(1, source.GetEnumeratorCalls, "Post-traversal conflict source must traverse exactly once.");
+            Contains("conflicting known counts", error.Message, "Post-traversal multi-interface Count conflict must fail closed.");
+        }
+
+        private static void StableMultiInterfaceCountsRemainAccepted()
+        {
+            var source = new MultiCountSequence<TbqBillItem>(1, 1, 1, 1, 1, 1, Bill("B1"));
+            var workspace = Workspace(billItems: source);
+            Equal(1, workspace.BillItems.Count, "Stable multi-interface TBQ source must remain accepted.");
+            Equal(2, source.GenericCountReads, "Stable ICollection<T>.Count must be bound before and after traversal.");
+            Equal(2, source.ReadOnlyCountReads, "Stable IReadOnlyCollection<T>.Count must be bound before and after traversal.");
+            Equal(2, source.NonGenericCountReads, "Stable ICollection.Count must be bound before and after traversal.");
+            Equal(1, source.GetEnumeratorCalls, "Stable multi-interface TBQ source must traverse exactly once.");
+        }
+
         private static void ExactKnownCountsRemainAccepted()
         {
             var billItems = new CountedSequence<TbqBillItem>(1, Bill("B1"));
@@ -173,10 +239,10 @@ namespace QS3D.Core.SmokeTests
             Equal(1, workspace.BuildUpRates.Count, "Exact counted build-up traversal must remain accepted.");
             Equal(1, workspace.RateReferences.Edges.Count, "Exact counted rate-reference traversal must remain accepted.");
             Equal(1, workspace.Library.Entries.Count, "Exact counted library traversal must remain accepted.");
-            Equal(1, billItems.CountReads, "Exact bill-item Count must be snapshotted once.");
-            Equal(1, buildUps.CountReads, "Exact build-up Count must be snapshotted once.");
-            Equal(1, references.CountReads, "Exact rate-reference Count must be snapshotted once.");
-            Equal(1, library.CountReads, "Exact library Count must be snapshotted once.");
+            Equal(2, billItems.CountReads, "Exact bill-item Count must be bound before and after traversal.");
+            Equal(2, buildUps.CountReads, "Exact build-up Count must be bound before and after traversal.");
+            Equal(2, references.CountReads, "Exact rate-reference Count must be bound before and after traversal.");
+            Equal(2, library.CountReads, "Exact library Count must be bound before and after traversal.");
         }
 
         private static void PureStreamingSourcesRemainAccepted()
@@ -231,10 +297,17 @@ namespace QS3D.Core.SmokeTests
             int observedCount,
             InvalidOperationException error)
         {
-            Equal(1, source.CountReads, "TBQ " + label + " Count must be snapshotted exactly once.");
+            Equal(1, source.CountReads, "TBQ " + label + " Count must be snapshotted exactly once before traversal mismatch.");
             Equal(1, source.GetEnumeratorCalls, "TBQ " + label + " mismatch source must be enumerated exactly once.");
             Contains(label + " traversal produced " + observedCount, error.Message, "TBQ " + label + " mismatch must report observed traversal count.");
             Contains("known count reported " + expectedCount, error.Message, "TBQ " + label + " mismatch must report snapshotted Count.");
+        }
+
+        private static void AssertPostTraversalDrift<T>(DriftingReadOnlyCollection<T> source, string label, InvalidOperationException error)
+        {
+            Equal(2, source.CountReads, "TBQ " + label + " Count must be bound before and after exact traversal.");
+            Equal(1, source.GetEnumeratorCalls, "TBQ " + label + " drift source must traverse exactly once.");
+            Contains(label + " known count changed during traversal", error.Message, "TBQ " + label + " Count drift must fail closed before publication.");
         }
 
         private static void AssertAllCountContractsReadOnce<T>(MultiCountNeverEnumerated<T> source, string message)
@@ -343,6 +416,146 @@ namespace QS3D.Core.SmokeTests
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class DriftingReadOnlyCollection<T> : IReadOnlyCollection<T>
+        {
+            private readonly int _initialCount;
+            private readonly int _finalCount;
+            private readonly T[] _items;
+            private bool _traversalCompleted;
+
+            internal DriftingReadOnlyCollection(int initialCount, int finalCount, params T[] items)
+            {
+                _initialCount = initialCount;
+                _finalCount = finalCount;
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+            }
+
+            public int Count
+            {
+                get
+                {
+                    CountReads++;
+                    return _traversalCompleted ? _finalCount : _initialCount;
+                }
+            }
+
+            internal int CountReads { get; private set; }
+            internal int GetEnumeratorCalls { get; private set; }
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                GetEnumeratorCalls++;
+                return Enumerate().GetEnumerator();
+            }
+
+            private IEnumerable<T> Enumerate()
+            {
+                try
+                {
+                    for (var i = 0; i < _items.Length; i++)
+                        yield return _items[i];
+                }
+                finally
+                {
+                    _traversalCompleted = true;
+                }
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class MultiCountSequence<T> : ICollection<T>, IReadOnlyCollection<T>, ICollection
+        {
+            private readonly int _initialGenericCount;
+            private readonly int _initialReadOnlyCount;
+            private readonly int _initialNonGenericCount;
+            private readonly int _finalGenericCount;
+            private readonly int _finalReadOnlyCount;
+            private readonly int _finalNonGenericCount;
+            private readonly T[] _items;
+            private bool _traversalCompleted;
+
+            internal MultiCountSequence(
+                int initialGenericCount,
+                int initialReadOnlyCount,
+                int initialNonGenericCount,
+                int finalGenericCount,
+                int finalReadOnlyCount,
+                int finalNonGenericCount,
+                params T[] items)
+            {
+                _initialGenericCount = initialGenericCount;
+                _initialReadOnlyCount = initialReadOnlyCount;
+                _initialNonGenericCount = initialNonGenericCount;
+                _finalGenericCount = finalGenericCount;
+                _finalReadOnlyCount = finalReadOnlyCount;
+                _finalNonGenericCount = finalNonGenericCount;
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+            }
+
+            int ICollection<T>.Count
+            {
+                get
+                {
+                    GenericCountReads++;
+                    return _traversalCompleted ? _finalGenericCount : _initialGenericCount;
+                }
+            }
+
+            int IReadOnlyCollection<T>.Count
+            {
+                get
+                {
+                    ReadOnlyCountReads++;
+                    return _traversalCompleted ? _finalReadOnlyCount : _initialReadOnlyCount;
+                }
+            }
+
+            int ICollection.Count
+            {
+                get
+                {
+                    NonGenericCountReads++;
+                    return _traversalCompleted ? _finalNonGenericCount : _initialNonGenericCount;
+                }
+            }
+
+            bool ICollection<T>.IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+            internal int GenericCountReads { get; private set; }
+            internal int ReadOnlyCountReads { get; private set; }
+            internal int NonGenericCountReads { get; private set; }
+            internal int GetEnumeratorCalls { get; private set; }
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                GetEnumeratorCalls++;
+                return Enumerate().GetEnumerator();
+            }
+
+            private IEnumerable<T> Enumerate()
+            {
+                try
+                {
+                    for (var i = 0; i < _items.Length; i++)
+                        yield return _items[i];
+                }
+                finally
+                {
+                    _traversalCompleted = true;
+                }
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            void ICollection<T>.Add(T item) => throw new NotSupportedException();
+            void ICollection<T>.Clear() => throw new NotSupportedException();
+            bool ICollection<T>.Contains(T item) => false;
+            void ICollection<T>.CopyTo(T[] array, int arrayIndex) => throw new NotSupportedException();
+            bool ICollection<T>.Remove(T item) => throw new NotSupportedException();
+            void ICollection.CopyTo(Array array, int index) => throw new NotSupportedException();
         }
 
         private sealed class MultiCountNeverEnumerated<T> : ICollection<T>, IReadOnlyCollection<T>, ICollection
