@@ -417,8 +417,10 @@ namespace QS3D.BricsCAD.V25.UI
             private void OnWindowClosed(object? sender, EventArgs e)
             {
                 if (ModelessHostQuiescenceCoordinator.IsQuiescing)
+                {
                     Volatile.Write(ref _windowClosedDuringQuiescence, 1);
-                if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
+                    return;
+                }
                 Detach();
             }
 
