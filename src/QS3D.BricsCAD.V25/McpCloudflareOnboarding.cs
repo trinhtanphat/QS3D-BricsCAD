@@ -155,6 +155,8 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex) { error = "Không đọc được tunnel token: " + ex.Message; return false; }
             if (string.IsNullOrWhiteSpace(token)) { error = "Chưa lưu tunnel token."; return false; }
 
+            // Only one Cloudflare forwarding mode may own the embedded MCP endpoint at a time.
+            McpCloudflareAccountTunnelManager.StopForHostShutdown();
             StopProcessOnly();
             var startInfo = CreateCloudflaredStartInfo(executable, "tunnel --no-autoupdate run");
             startInfo.EnvironmentVariables["TUNNEL_TOKEN"] = token;
@@ -172,6 +174,7 @@ namespace QS3D.BricsCAD.V25
                 error = "Chưa cài Cloudflare Tunnel.";
                 return false;
             }
+            McpCloudflareAccountTunnelManager.StopForHostShutdown();
             StopProcessOnly();
             WriteText(AutoStartPath, "0");
             lock (Sync) { _quickMode = true; _quickBaseUrl = string.Empty; _lastError = string.Empty; }
@@ -253,11 +256,13 @@ namespace QS3D.BricsCAD.V25
 
         private static void HandleLine(string? line, bool discoverQuickUrl)
         {
-            if (line == null || line.Length == 0) return;
+            if (string.IsNullOrWhiteSpace(line)) return;
             var clean = line.Trim();
+            if (clean.Length > 1000) clean = clean.Substring(0, 1000);
             lock (Sync)
             {
-                if (clean.IndexOf("ERR", StringComparison.OrdinalIgnoreCase) >= 0) _lastError = clean;
+                if (clean.IndexOf("ERR", StringComparison.OrdinalIgnoreCase) >= 0
+                    || clean.IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0) _lastError = clean;
                 if (discoverQuickUrl)
                 {
                     var match = Regex.Match(
@@ -275,6 +280,7 @@ namespace QS3D.BricsCAD.V25
             lock (Sync) { process = _process; _process = null; _quickBaseUrl = string.Empty; _quickMode = false; }
             if (process == null) return;
             try { if (!process.HasExited) process.Kill(); } catch { }
+            try { if (!process.HasExited) process.WaitForExit(2000); } catch { }
             try { process.Dispose(); } catch { }
         }
 
