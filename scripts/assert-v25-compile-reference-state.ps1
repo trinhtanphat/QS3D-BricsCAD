@@ -12,7 +12,34 @@ $maxStateBytes = 32768
 
 function Get-CanonicalAbsolutePath {
     param([Parameter(Mandatory = $true)][string]$Path)
-    return [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+
+    $full = [IO.Path]::GetFullPath($Path)
+    $root = [IO.Path]::GetPathRoot($full)
+    if ([string]::IsNullOrWhiteSpace($root)) { throw "Path has no filesystem root: $Path" }
+    if ($full.Length -gt $root.Length) {
+        return $full.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    }
+    return $full
+}
+
+function Assert-NoExistingReparseComponent {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $canonical = Get-CanonicalAbsolutePath -Path $Path
+    $root = [IO.Path]::GetPathRoot($canonical)
+    $relative = $canonical.Substring($root.Length)
+    $current = $root
+    foreach ($segment in @($relative -split '[\\/]' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+        $current = Join-Path $current $segment
+        if (-not (Test-Path -LiteralPath $current)) { break }
+        $item = Get-Item -LiteralPath $current -Force
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "$Label must not traverse a filesystem reparse point: $current"
+        }
+    }
 }
 
 function Assert-OrdinaryFile {
@@ -20,6 +47,8 @@ function Assert-OrdinaryFile {
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][string]$Label
     )
+
+    Assert-NoExistingReparseComponent -Path $Path -Label $Label
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         throw "$Label is missing: $Path"
     }
@@ -32,6 +61,7 @@ function Assert-OrdinaryFile {
 
 function Get-StreamingSha256 {
     param([Parameter(Mandatory = $true)][string]$Path)
+
     $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
     try {
         $sha = [Security.Cryptography.SHA256]::Create()
@@ -71,6 +101,8 @@ function Get-CurrentStableState {
     }
 }
 
+Assert-NoExistingReparseComponent -Path $StatePath -Label 'V25 compile-reference state path'
+Assert-NoExistingReparseComponent -Path $BricsCadDir -Label 'V25 compile-reference snapshot directory'
 $stateItem = Assert-OrdinaryFile -Path $StatePath -Label 'V25 compile-reference state'
 if ($stateItem.Length -le 0 -or $stateItem.Length -gt $maxStateBytes) {
     throw "V25 compile-reference state size is outside the accepted bound: $($stateItem.Length) bytes."
