@@ -5,6 +5,10 @@ namespace QS3D.Core.SmokeTests
     internal static class ProjectMaterialCatalogRegistration
     {
         [ModuleInitializer]
-        internal static void Initialize() => ProjectMaterialCatalogSmoke.Run();
+        internal static void Initialize()
+        {
+            ProjectMaterialCatalogSmoke.Run();
+            ProjectMaterialOptionalTextSmoke.Run();
+        }
     }
 }

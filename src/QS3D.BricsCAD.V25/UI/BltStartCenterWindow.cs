@@ -78,16 +78,42 @@ namespace QS3D.BricsCAD.V25.UI
             if (_hostLifecycleSubscribed || _windowClosed)
                 return;
 
-            Application.DocumentManager.DocumentActivated += OnHostDocumentActivated;
-            Application.DocumentManager.DocumentToBeDestroyed += OnHostDocumentToBeDestroyed;
-            _hostLifecycleSubscribed = true;
+            try
+            {
+                Application.DocumentManager.DocumentActivated += OnHostDocumentActivated;
+                Application.DocumentManager.DocumentToBeDestroyed += OnHostDocumentToBeDestroyed;
+                _hostLifecycleSubscribed = true;
+            }
+            catch
+            {
+                // Host add accessors can fail independently while BricsCAD is tearing down.
+                // Roll back both handlers so a half-subscribed window is never retained.
+                try
+                {
+                    Application.DocumentManager.DocumentToBeDestroyed -= OnHostDocumentToBeDestroyed;
+                }
+                catch
+                {
+                    // Best effort only; close will retry both detach operations.
+                }
+
+                try
+                {
+                    Application.DocumentManager.DocumentActivated -= OnHostDocumentActivated;
+                }
+                catch
+                {
+                    // Best effort only; close will retry both detach operations.
+                }
+
+                _hostLifecycleSubscribed = false;
+            }
         }
 
         private void UnsubscribeFromHostLifecycle()
         {
-            if (!_hostLifecycleSubscribed)
-                return;
-
+            // Always attempt both removals. A failed transactional rollback can leave a native
+            // handler attached even though ownership was never published as fully subscribed.
             try
             {
                 Application.DocumentManager.DocumentActivated -= OnHostDocumentActivated;
