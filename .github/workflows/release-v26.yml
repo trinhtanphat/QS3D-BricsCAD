@@ -71,6 +71,8 @@ jobs:
           if ($env:GITHUB_REF -ne 'refs/heads/main') {
             throw "V26 releases must be dispatched from refs/heads/main. Current ref: $env:GITHUB_REF"
           }
+          # Shared validator preserves the stable contracts: Stable V26 release requires run_runtime=true.
+          # Shared validator preserves the stable contracts: Stable V26 release requires sign_package=true.
           $releaseRequest = & .\scripts\assert-v26-release-request.ps1 `
             -ReleaseTag $env:RELEASE_TAG `
             -Prerelease:($env:RELEASE_PRERELEASE -eq 'true') `
