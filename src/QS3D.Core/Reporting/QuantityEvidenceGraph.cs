@@ -456,6 +456,11 @@ internal static class QuantityEvidenceCollectionSnapshot
         var snapshot = knownCount.HasValue ? new List<T>(knownCount.Value) : new List<T>();
         foreach (var item in source)
         {
+            if (knownCount.HasValue && snapshot.Count >= knownCount.Value)
+            {
+                throw new InvalidOperationException(label + " count changed during snapshot.");
+            }
+
             if (snapshot.Count >= MaximumItems)
             {
                 throw CapacityError(label);

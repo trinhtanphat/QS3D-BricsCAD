@@ -61,10 +61,26 @@ def validate_helper(text: str) -> list[str]:
     return errors
 
 
+def package_identity_call(text: str) -> str:
+    helper_call = "assert-v26-release-package-identity.ps1"
+    start = text.find(helper_call)
+    if start < 0:
+        return ""
+    # Bound this check to the package-identity invocation. Other release helpers
+    # may legitimately bind the same RELEASE_TAG input earlier in the workflow.
+    line_start = text.rfind("\n", 0, start) + 1
+    end_marker = " | Out-Null"
+    end = text.find(end_marker, start)
+    if end < 0:
+        return text[line_start:]
+    return text[line_start : end + len(end_marker)]
+
+
 def validate_workflow(text: str) -> list[str]:
     errors: list[str] = []
     helper_call = "assert-v26-release-package-identity.ps1"
-    if helper_call not in text:
+    call = package_identity_call(text)
+    if not call:
         errors.append("V26 release workflow must route package identity validation through the bounded helper")
     for token in (
         "-MetadataPath 'dist\\QS3D-BricsCAD-V26\\PACKAGE-METADATA.json'",
@@ -72,8 +88,10 @@ def validate_workflow(text: str) -> list[str]:
         "-CorePath 'dist\\QS3D-BricsCAD-V26\\QS3D.Core.dll'",
         "-ReleaseTag $env:RELEASE_TAG",
     ):
-        if token not in text:
+        if token not in call:
             errors.append(f"V26 release workflow helper call missing exact parameter binding: {token}")
+    if helper_call in text and text.count(helper_call) != 1:
+        errors.append("V26 release workflow must contain exactly one package identity helper invocation")
     if "Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json" in text:
         errors.append("V26 release workflow must not retain the raw unbounded metadata parser")
     if "GetAssemblyName((Resolve-Path 'dist\\QS3D-BricsCAD-V26" in text:
@@ -106,12 +124,13 @@ for label, mutated in helper_mutations.items():
     elif not validate_helper(mutated):
         errors.append(f"mutation escaped V26 release identity safety guard: {label}")
 
+call = package_identity_call(workflow)
 workflow_mutations = {
     "shared helper call": workflow.replace("assert-v26-release-package-identity.ps1", "missing-v26-release-identity-helper.ps1", 1),
     "metadata binding": workflow.replace("-MetadataPath 'dist\\QS3D-BricsCAD-V26\\PACKAGE-METADATA.json'", "-MetadataPath 'PACKAGE-METADATA.json'", 1),
     "plugin binding": workflow.replace("-PluginPath 'dist\\QS3D-BricsCAD-V26\\QS3D.BricsCAD.V26.dll'", "-PluginPath 'QS3D.BricsCAD.V26.dll'", 1),
     "core binding": workflow.replace("-CorePath 'dist\\QS3D-BricsCAD-V26\\QS3D.Core.dll'", "-CorePath 'QS3D.Core.dll'", 1),
-    "release tag binding": workflow.replace("-ReleaseTag $env:RELEASE_TAG", "-ReleaseTag 'v0.0.0'", 1),
+    "release tag binding": workflow.replace(call, call.replace("-ReleaseTag $env:RELEASE_TAG", "-ReleaseTag 'v0.0.0'", 1), 1),
 }
 for label, mutated in workflow_mutations.items():
     if mutated == workflow:
@@ -125,4 +144,4 @@ if errors:
         print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: V26 release package identity is bounded, strict-UTF8, ordinary-file/reparse guarded, and the manual release workflow is mutation-locked to the shared helper.")
+print("PASS: V26 release package identity is bounded, strict-UTF8, ordinary-file/reparse guarded, and the manual release workflow is mutation-locked to the exact shared-helper invocation.")
