@@ -21,9 +21,9 @@ clear = method_body(
 if "var pending = _highlighted.ToArray();" not in clear:
     raise SystemExit("ClearHighlight must snapshot current highlight ownership")
 commit = clear.find("transaction.Commit();")
-release = clear.find("_highlighted.Clear();")
+release = clear.rfind("_highlighted.Clear();")
 if commit < 0 or release < 0 or release < commit:
-    raise SystemExit("ClearHighlight must release highlight ownership only after native cleanup commit")
+    raise SystemExit("ClearHighlight must release live highlight ownership only after native cleanup commit")
 if "if (_destroyed)" not in clear:
     raise SystemExit("ClearHighlight must preserve explicit destroyed-document abandon semantics")
 
@@ -32,9 +32,9 @@ restore_isolation = method_body(
     "public void ApplySectionFocus(IReadOnlyList<ObjectId> ids)",
 )
 queue = restore_isolation.find('SendStringToExecute("_.UNISOLATEOBJECTS ", true, false, false);')
-release = restore_isolation.find("_isolationActive = false;")
+release = restore_isolation.rfind("_isolationActive = false;")
 if queue < 0 or release < 0 or release < queue:
-    raise SystemExit("RestoreIsolation must release isolation ownership only after native command queue success")
+    raise SystemExit("RestoreIsolation must release live isolation ownership only after native command queue success")
 if "finally" in restore_isolation:
     raise SystemExit("RestoreIsolation must not erase retry ownership from an unconditional finally block")
 
@@ -46,8 +46,14 @@ if "catch { _isolationActive = false;" in reset:
     raise SystemExit("best-effort reset must not erase isolation retry ownership after live cleanup failure")
 if "catch { _highlighted.Clear(); }" in reset:
     raise SystemExit("best-effort reset must not erase highlight retry ownership after live cleanup failure")
-if "if (throwOnSectionRestoreFailure) throw;" not in reset:
-    raise SystemExit("dispose path must remain retry-sensitive for section restore")
+for token in (
+    "Exception? cleanupFailure = null;",
+    "cleanupFailure = cleanupFailure ?? ex;",
+    "if (throwOnSectionRestoreFailure && cleanupFailure != null)",
+    "throw cleanupFailure;",
+):
+    if token not in reset:
+        raise SystemExit(f"dispose cleanup must aggregate retry-sensitive cleanup failure: {token}")
 
 abandon = method_body(
     "public void AbandonDestroyedDocumentState()",
