@@ -13,6 +13,7 @@ PUBLIC_ENDPOINT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpPublicEndpointResolve
 OVERRIDE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "McpRibbonCommandOverride.cs"
 COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonInitializationCoordinator.cs"
 PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
+INTEGRATION_DOC = ROOT / "docs" / "CHATGPT-MCP-INTEGRATION.md"
 
 
 def require(text: str, token: str, errors: list[str], label: str) -> None:
@@ -44,6 +45,7 @@ def main() -> int:
     override = read(OVERRIDE, errors)
     coordinator = read(COORDINATOR, errors)
     plugin = read(PLUGIN, errors)
+    integration_doc = read(INTEGRATION_DOC, errors)
 
     require(server, "internal static class McpEmbeddedServer", errors, "embedded server")
     require(server, "new TcpListener(IPAddress.Loopback, Port)", errors, "loopback-only listener")
@@ -136,13 +138,17 @@ def main() -> int:
     require(agent_center, 'InvokeControlTool("cad_cancel_command"', errors, "click command cancel")
     require(agent_center, 'InvokeControlTool("cad_agent_resume"', errors, "click explicit resume")
     require(agent_center, "OpenChatGpt", errors, "ChatGPT browser handoff")
+    require(agent_center, "ThreadPool.QueueUserWorkItem", errors, "non-blocking Agent Center MCP operation")
+    require(agent_center, "Interlocked.CompareExchange(ref _localOperationActive", errors, "serialized observation self-test")
     forbid(agent_center, "powershell.exe", errors, "PowerShell user workflow")
     forbid(agent_center, "cmd.exe", errors, "cmd user workflow")
 
-    # Public URLs are normalized once: HTTPS only, non-loopback, canonical /mcp.
+    # Public URLs are normalized once: HTTPS only, public literal address, canonical /mcp.
     require(public_endpoint, "internal static class McpPublicEndpointResolver", errors, "public endpoint resolver")
     require(public_endpoint, "Uri.UriSchemeHttps", errors, "HTTPS-only public endpoint")
     require(public_endpoint, "uri.IsLoopback", errors, "loopback public endpoint rejection")
+    require(public_endpoint, "IPAddress.TryParse(uri.Host", errors, "literal public-address validation")
+    require(public_endpoint, "IsPrivateOrLocalAddress", errors, "private/link-local literal rejection")
     require(public_endpoint, 'path = "/mcp"', errors, "canonical public MCP path")
     require(public_endpoint, "McpCloudflareAccountTunnelManager.PublicMcpUrl", errors, "named-tunnel precedence")
     require(public_endpoint, "McpCloudflareTunnelManager.PublicMcpUrl", errors, "fallback-tunnel precedence")
@@ -182,6 +188,8 @@ def main() -> int:
     require(token_onboarding, 'startInfo.EnvironmentVariables["TUNNEL_TOKEN"]', errors, "fallback token outside process command line")
     require(token_onboarding, "trycloudflare.com", errors, "Quick Tunnel test URL discovery")
     require(token_onboarding, '"tunnel --no-autoupdate --url " + OriginUrl', errors, "Quick Tunnel loopback route")
+    require(token_onboarding, "HandleProcessExit(Process process)", errors, "fallback owned-process exit cleanup")
+    require(token_onboarding, "_quickBaseUrl = string.Empty;", errors, "ephemeral Quick URL cleanup")
     forbid(token_onboarding, "powershell.exe", errors, "fallback PowerShell setup dependency")
     forbid(token_onboarding, "cmd.exe", errors, "fallback cmd setup dependency")
 
@@ -200,6 +208,15 @@ def main() -> int:
     require(commands, 'Send(endpoint, "DELETE"', errors, "Ribbon session cleanup")
     require(commands, "No second repository", errors, "single-repository guide")
     require(commands, "McpPublicEndpointResolver.Resolve()", errors, "commands use validated public endpoint")
+
+    # The user-facing integration note must match the canonical issue-4352 click-first contract.
+    require(integration_doc, "Status: SOURCE_READY / PENDING_LOCAL", errors, "integration doc qualification status")
+    require(integration_doc, "Canonical issue: #4352", errors, "integration doc canonical issue")
+    require(integration_doc, "QS3DMCPAGENTCENTER", errors, "integration doc Agent Center path")
+    require(integration_doc, "McpPublicEndpointResolver", errors, "integration doc public endpoint contract")
+    require(integration_doc, "PENDING_LOCAL", errors, "integration doc local qualification boundary")
+    forbid(integration_doc, "```powershell", errors, "terminal-first integration instructions")
+    forbid(integration_doc, "cloudflared tunnel --url", errors, "manual Quick Tunnel command in end-user integration doc")
 
     if errors:
         print("Embedded MCP preflight FAILED:")
