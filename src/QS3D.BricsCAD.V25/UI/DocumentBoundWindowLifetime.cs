@@ -270,18 +270,22 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     _window.Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        // QuitAborted recovery is queued. A second quit can begin before this
-                        // dispatcher turn, so re-check the global barrier before native cleanup.
+                        // QuitAborted recovery is queued. A second quit can begin before or during
+                        // this dispatcher turn, so keep the deferred marker armed until managed
+                        // detach has actually completed.
                         if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
-                        if (Interlocked.Exchange(ref _windowClosedDuringQuiescence, 0) == 0) return;
+                        if (Volatile.Read(ref _windowClosedDuringQuiescence) == 0) return;
                         DetachDocumentLifecycleHandlersAfterAbort();
+                        if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
                         Detach();
+                        if (!_attached)
+                            Interlocked.Exchange(ref _windowClosedDuringQuiescence, 0);
                     }));
                 }
                 catch
                 {
-                    // Keep the registration fail-closed if the dispatcher is unavailable. A later
-                    // host lifecycle transition must not perform native cleanup from this callback.
+                    // Keep the registration fail-closed and the deferred marker armed if the
+                    // dispatcher is unavailable. No native lifecycle cleanup runs from this callback.
                 }
             }
 
