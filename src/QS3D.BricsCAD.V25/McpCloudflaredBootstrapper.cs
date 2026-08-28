@@ -87,6 +87,8 @@ namespace QS3D.BricsCAD.V25
             Directory.CreateDirectory(directory);
 
             var temporary = destination + ".download-" + Guid.NewGuid().ToString("N");
+            var backup = destination + ".previous";
+            var backupCreated = false;
             try
             {
 #pragma warning disable SYSLIB0014
@@ -112,16 +114,43 @@ namespace QS3D.BricsCAD.V25
                     return false;
                 }
 
-                var backup = destination + ".previous";
                 try { if (File.Exists(backup)) File.Delete(backup); } catch { }
                 if (File.Exists(destination))
                 {
-                    try { File.Move(destination, backup); }
-                    catch { File.Delete(destination); }
+                    File.Move(destination, backup);
+                    backupCreated = true;
                 }
-                File.Move(temporary, destination);
-                temporary = string.Empty;
+
+                try
+                {
+                    File.Move(temporary, destination);
+                    temporary = string.Empty;
+                }
+                catch
+                {
+                    try
+                    {
+                        if (!File.Exists(destination) && backupCreated && File.Exists(backup))
+                        {
+                            File.Move(backup, destination);
+                            backupCreated = false;
+                        }
+                    }
+                    catch { }
+                    throw;
+                }
+
                 PersistPath(destination);
+                try
+                {
+                    if (backupCreated && File.Exists(backup)) File.Delete(backup);
+                    backupCreated = false;
+                }
+                catch
+                {
+                    // A stale previous binary is harmless; never roll back a verified successful install
+                    // merely because cleanup of the backup was denied by endpoint protection.
+                }
 
                 string version;
                 try { version = FileVersionInfo.GetVersionInfo(destination).FileVersion ?? string.Empty; }
@@ -136,6 +165,10 @@ namespace QS3D.BricsCAD.V25
                 if (!string.IsNullOrWhiteSpace(temporary))
                 {
                     try { if (File.Exists(temporary)) File.Delete(temporary); } catch { }
+                }
+                if (!File.Exists(destination) && backupCreated && File.Exists(backup))
+                {
+                    try { File.Move(backup, destination); } catch { }
                 }
             }
         }
@@ -245,7 +278,10 @@ namespace QS3D.BricsCAD.V25
                 StateAction = 0; // WTD_STATEACTION_IGNORE
                 StateData = IntPtr.Zero;
                 UrlReference = IntPtr.Zero;
-                ProviderFlags = 0x00001000; // WTD_CACHE_ONLY_URL_RETRIEVAL
+                // Let Windows build the signer chain normally. Cache-only verification can reject
+                // a freshly downloaded valid Cloudflare executable when an intermediate cert is not
+                // already cached on the workstation.
+                ProviderFlags = 0;
                 UiContext = 0;
             }
 
