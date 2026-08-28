@@ -49,7 +49,7 @@ namespace QS3D.Core.SmokeTests
             Equal(1, under.EnumerationRequestCount, "Under-enumerating counted source must be traversed exactly once.");
 
             var over = new MultiCountCollection<CommercialRevisionRef>(new[] { Revision(0), Revision(1) }, 1, 1, 1, false);
-            ExpectInvalidOperation(() => Record(over), "known Count does not match completed traversal cardinality");
+            ExpectInvalidOperation(() => Record(over), "known Count was exceeded during traversal");
             Equal(1, over.EnumerationRequestCount, "Over-enumerating counted source must be traversed exactly once.");
         }
 
