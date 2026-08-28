@@ -61,7 +61,13 @@ def main() -> int:
         "Win32 input API": 'DllImport("user32.dll"',
         "CAD application context": "ExecuteInApplicationContext",
         "bounded CAD wait": "ManualResetEventSlim",
-        "timed-out CAD work cancellation": "queued work was cancelled when possible",
+        "CAD dispatch queued state": "CadWorkQueued = 0",
+        "CAD dispatch running state": "CadWorkRunning = 1",
+        "CAD dispatch cancelled-before-start state": "CadWorkCancelledBeforeStart = 2",
+        "CAD dispatch atomic start claim": "Interlocked.CompareExchange(ref item.DispatchState, CadWorkRunning, CadWorkQueued)",
+        "CAD dispatch atomic timeout cancellation": "Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued)",
+        "CAD dispatch uncertain-completion truth": "completion is uncertain",
+        "CAD dispatch no-auto-retry truth": "Do not retry automatically",
         "transactional native entities": "transaction.Commit()",
         "mutation audit": "mcp-agent-audit.jsonl",
         "bounded audit rotation": "MaxAuditBytes",
@@ -123,6 +129,8 @@ def main() -> int:
         errors.append("MCP scalar extraction still contains a whole-object regex lookup")
     if 'return Regex.IsMatch(json ?? string.Empty,' in text:
         errors.append("MCP property presence still contains a whole-object regex lookup")
+    if "public int Cancelled;" in text or "Volatile.Read(ref item.Cancelled) == 0" in text:
+        errors.append("CAD dispatch timeout still uses a check-then-act cancellation flag that can race a started mutation")
 
     for command in (
         '"HATCH"', '"DIMLINEAR"', '"BLOCK"', '"XREF"', '"LAYOUT"',
