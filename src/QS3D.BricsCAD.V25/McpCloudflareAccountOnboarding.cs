@@ -42,13 +42,18 @@ namespace QS3D.BricsCAD.V25
         private const string OriginUrl = "http://127.0.0.1:8765";
         private const int CommandTimeoutMs = 60000;
         private const int LoginTimeoutMs = 10 * 60 * 1000;
+        private const int MaxCapturedOutput = 256 * 1024;
         private static readonly object Sync = new object();
         private static readonly Regex UuidRegex = new Regex(
+            "^(?<id>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex UuidSearchRegex = new Regex(
             "(?<id>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static Process? _process;
         private static string _lastMessage = string.Empty;
         private static string _lastError = string.Empty;
+        private static int _setupOperationActive;
 
         private static string SettingsDirectory => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QS3D", "MCP", "CloudflareAccount");
@@ -61,6 +66,7 @@ namespace QS3D.BricsCAD.V25
         public static string CloudflaredDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cloudflared");
         public static string CertificatePath => Path.Combine(CloudflaredDirectory, "cert.pem");
         public static bool IsAuthenticated { get { try { return File.Exists(CertificatePath); } catch { return false; } } }
+        public static bool IsSetupBusy => Volatile.Read(ref _setupOperationActive) != 0;
         public static bool IsRunning
         {
             get
@@ -80,23 +86,43 @@ namespace QS3D.BricsCAD.V25
         public static void OpenInstallerPage() => McpCloudflareTunnelManager.OpenCloudflaredDownloadPage();
         public static void OpenCloudflareDashboard() => McpCloudflareTunnelManager.OpenCloudflareTunnelDashboard();
         public static void OpenChatGpt() => McpCloudflareTunnelManager.OpenChatGpt();
-        public static bool StartQuickTunnel(out string error) => McpCloudflareTunnelManager.StartQuickTunnel(out error);
+        public static bool StartQuickTunnel(out string error)
+        {
+            StopProcess();
+            return McpCloudflareTunnelManager.StartQuickTunnel(out error);
+        }
 
         public static void BeginBrowserLogin(Action<bool, string> completed)
         {
             if (completed == null) throw new ArgumentNullException(nameof(completed));
+            if (Interlocked.CompareExchange(ref _setupOperationActive, 1, 0) != 0)
+            {
+                completed(false, "Một thao tác Cloudflare khác đang chạy. Hãy chờ thao tác đó hoàn tất.");
+                return;
+            }
             var executable = CloudflaredPath;
-            if (string.IsNullOrWhiteSpace(executable)) { completed(false, "Chưa cài Cloudflare Tunnel."); return; }
+            if (string.IsNullOrWhiteSpace(executable))
+            {
+                Interlocked.Exchange(ref _setupOperationActive, 0);
+                completed(false, "Chưa cài Cloudflare Tunnel.");
+                return;
+            }
             SetState("Cloudflare login: đang mở trình duyệt...", string.Empty);
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                string output;
-                string error;
-                var ok = RunCommand(executable, "tunnel login", LoginTimeoutMs, out output, out error);
-                var authenticated = ok && IsAuthenticated;
-                var message = authenticated ? "Cloudflare login: thành công." : "Cloudflare login: " + (string.IsNullOrWhiteSpace(error) ? "chưa hoàn tất." : error);
-                SetState(message, authenticated ? string.Empty : message);
-                try { completed(authenticated, message); } catch { }
+                try
+                {
+                    string output;
+                    string error;
+                    var ok = RunCommand(executable, "tunnel login", LoginTimeoutMs, out output, out error);
+                    var authenticated = ok && IsAuthenticated;
+                    var message = authenticated
+                        ? "Cloudflare login: thành công."
+                        : "Cloudflare login: " + FirstUsefulError(error, output, "chưa hoàn tất.");
+                    SetState(message, authenticated ? string.Empty : message);
+                    try { completed(authenticated, message); } catch { }
+                }
+                finally { Interlocked.Exchange(ref _setupOperationActive, 0); }
             });
         }
 
@@ -106,16 +132,30 @@ namespace QS3D.BricsCAD.V25
             var normalized = McpCloudflareTunnelManager.NormalizeHostname(hostname);
             if (string.IsNullOrWhiteSpace(normalized)) { completed(false, "Hostname không hợp lệ. Ví dụ qs3d.example.com"); return; }
             if (!IsAuthenticated) { completed(false, "Hãy bấm Đăng nhập Cloudflare trước."); return; }
+            if (Interlocked.CompareExchange(ref _setupOperationActive, 1, 0) != 0)
+            {
+                completed(false, "Một thao tác Cloudflare khác đang chạy. Hãy chờ thao tác đó hoàn tất.");
+                return;
+            }
             var executable = CloudflaredPath;
-            if (string.IsNullOrWhiteSpace(executable)) { completed(false, "Chưa cài Cloudflare Tunnel."); return; }
+            if (string.IsNullOrWhiteSpace(executable))
+            {
+                Interlocked.Exchange(ref _setupOperationActive, 0);
+                completed(false, "Chưa cài Cloudflare Tunnel.");
+                return;
+            }
             SetState("Đang tự tạo/reuse tunnel và DNS route...", string.Empty);
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                string error;
-                var ok = Provision(executable, normalized, out error);
-                var message = ok ? "Named Tunnel đã kết nối: " + PublicMcpUrl : error;
-                SetState(message, ok ? string.Empty : error);
-                try { completed(ok, message); } catch { }
+                try
+                {
+                    string error;
+                    var ok = Provision(executable, normalized, out error);
+                    var message = ok ? "Named Tunnel đã kết nối: " + PublicMcpUrl : error;
+                    SetState(message, ok ? string.Empty : error);
+                    try { completed(ok, message); } catch { }
+                }
+                finally { Interlocked.Exchange(ref _setupOperationActive, 0); }
             });
         }
 
@@ -130,6 +170,13 @@ namespace QS3D.BricsCAD.V25
                 error = "Named Tunnel chưa được cấu hình.";
                 return false;
             }
+            var credentials = Path.Combine(CloudflaredDirectory, id + ".json");
+            if (!File.Exists(credentials))
+            {
+                error = "Named Tunnel credentials không còn tồn tại. Hãy cấu hình lại tunnel.";
+                return false;
+            }
+            McpCloudflareTunnelManager.StopForHostShutdown();
             return StartProcess(executable, "tunnel --config \"" + ConfigPath + "\" run " + id, out error);
         }
 
@@ -141,6 +188,7 @@ namespace QS3D.BricsCAD.V25
         }
 
         public static void StopForHostShutdown() => StopProcess();
+
         public static void Stop()
         {
             WriteText(AutoStartPath, "0");
@@ -152,6 +200,7 @@ namespace QS3D.BricsCAD.V25
         {
             return "running=" + IsRunning
                    + "; authenticated=" + IsAuthenticated
+                   + "; setupBusy=" + IsSetupBusy
                    + (string.IsNullOrWhiteSpace(PublicMcpUrl) ? string.Empty : "; public=" + PublicMcpUrl)
                    + (string.IsNullOrWhiteSpace(LastError) ? string.Empty : "; error=" + LastError);
         }
@@ -159,6 +208,7 @@ namespace QS3D.BricsCAD.V25
         private static bool Provision(string executable, string hostname, out string error)
         {
             error = string.Empty;
+            McpEmbeddedServer.EnsureStarted();
             string tunnelId;
             if (!ResolveOrCreateTunnel(executable, out tunnelId, out error)) return false;
             var credentials = Path.Combine(CloudflaredDirectory, tunnelId + ".json");
@@ -175,7 +225,7 @@ namespace QS3D.BricsCAD.V25
                 var combined = (output + "\n" + routeError).Trim();
                 if (combined.IndexOf("already exists", StringComparison.OrdinalIgnoreCase) < 0)
                 {
-                    error = "Không tạo được DNS route: " + combined;
+                    error = "Không tạo được DNS route: " + FirstUsefulError(routeError, output, "Cloudflare route dns failed.");
                     return false;
                 }
             }
@@ -189,6 +239,7 @@ namespace QS3D.BricsCAD.V25
             WriteText(TunnelIdPath, tunnelId);
             WriteText(HostnamePath, hostname);
             WriteText(AutoStartPath, "1");
+            McpCloudflareTunnelManager.StopForHostShutdown();
             StopProcess();
             return StartProcess(executable, "tunnel --config \"" + ConfigPath + "\" run " + tunnelId, out error);
         }
@@ -197,14 +248,21 @@ namespace QS3D.BricsCAD.V25
         {
             error = string.Empty;
             tunnelId = ReadText(TunnelIdPath);
-            if (IsUsableTunnelId(tunnelId)) return true;
+            if (IsUsableTunnelId(tunnelId)
+                && File.Exists(Path.Combine(CloudflaredDirectory, tunnelId + ".json")))
+                return true;
 
             string output;
             string commandError;
             if (RunCommand(executable, "tunnel list", CommandTimeoutMs, out output, out commandError))
             {
                 tunnelId = FindTunnelIdByName(output, TunnelName);
-                if (IsUsableTunnelId(tunnelId)) { WriteText(TunnelIdPath, tunnelId); return true; }
+                if (IsUsableTunnelId(tunnelId)
+                    && File.Exists(Path.Combine(CloudflaredDirectory, tunnelId + ".json")))
+                {
+                    WriteText(TunnelIdPath, tunnelId);
+                    return true;
+                }
             }
 
             if (!RunCommand(executable, "tunnel create " + TunnelName, CommandTimeoutMs, out output, out commandError))
@@ -214,13 +272,18 @@ namespace QS3D.BricsCAD.V25
                 if (RunCommand(executable, "tunnel list", CommandTimeoutMs, out listOutput, out listError))
                 {
                     tunnelId = FindTunnelIdByName(listOutput, TunnelName);
-                    if (IsUsableTunnelId(tunnelId)) { WriteText(TunnelIdPath, tunnelId); return true; }
+                    if (IsUsableTunnelId(tunnelId)
+                        && File.Exists(Path.Combine(CloudflaredDirectory, tunnelId + ".json")))
+                    {
+                        WriteText(TunnelIdPath, tunnelId);
+                        return true;
+                    }
                 }
-                error = "Không tạo/reuse được tunnel '" + TunnelName + "': " + commandError;
+                error = "Không tạo/reuse được tunnel '" + TunnelName + "': " + FirstUsefulError(commandError, output, "Cloudflare tunnel create failed.");
                 return false;
             }
 
-            var match = UuidRegex.Match(output ?? string.Empty);
+            var match = UuidSearchRegex.Match(output ?? string.Empty);
             tunnelId = match.Success ? match.Groups["id"].Value : string.Empty;
             if (!IsUsableTunnelId(tunnelId))
             {
@@ -229,7 +292,11 @@ namespace QS3D.BricsCAD.V25
                 if (RunCommand(executable, "tunnel list", CommandTimeoutMs, out listOutput, out listError))
                     tunnelId = FindTunnelIdByName(listOutput, TunnelName);
             }
-            if (!IsUsableTunnelId(tunnelId)) { error = "Không đọc được tunnel UUID sau khi tạo."; return false; }
+            if (!IsUsableTunnelId(tunnelId))
+            {
+                error = "Không đọc được tunnel UUID sau khi tạo.";
+                return false;
+            }
             WriteText(TunnelIdPath, tunnelId);
             return true;
         }
@@ -242,15 +309,24 @@ namespace QS3D.BricsCAD.V25
                 string? line;
                 while ((line = reader.ReadLine()) != null)
                 {
-                    if (line.IndexOf(name, StringComparison.OrdinalIgnoreCase) < 0) continue;
-                    var match = UuidRegex.Match(line);
+                    if (!LineContainsTunnelName(line, name)) continue;
+                    var match = UuidSearchRegex.Match(line);
                     if (match.Success) return match.Groups["id"].Value;
                 }
             }
             return string.Empty;
         }
 
-        private static bool IsUsableTunnelId(string value) => !string.IsNullOrWhiteSpace(value) && UuidRegex.IsMatch(value.Trim());
+        private static bool LineContainsTunnelName(string line, string name)
+        {
+            if (string.IsNullOrWhiteSpace(line) || string.IsNullOrWhiteSpace(name)) return false;
+            return Regex.IsMatch(line, "(^|\\s)" + Regex.Escape(name) + "(\\s|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+
+        private static bool IsUsableTunnelId(string value)
+        {
+            return !string.IsNullOrWhiteSpace(value) && UuidRegex.IsMatch(value.Trim());
+        }
 
         private static bool RunCommand(string executable, string arguments, int timeoutMs, out string output, out string error)
         {
@@ -260,33 +336,74 @@ namespace QS3D.BricsCAD.V25
             {
                 using (var process = new Process())
                 {
-                    process.StartInfo = new ProcessStartInfo
+                    var stdout = new StringBuilder();
+                    var stderr = new StringBuilder();
+                    var outputClosed = new ManualResetEventSlim(false);
+                    var errorClosed = new ManualResetEventSlim(false);
+                    try
                     {
-                        FileName = executable,
-                        Arguments = arguments,
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        WorkingDirectory = Path.GetDirectoryName(executable) ?? Environment.CurrentDirectory
-                    };
-                    if (!process.Start()) { error = "Không khởi động được cloudflared."; return false; }
-                    var stdout = process.StandardOutput.ReadToEnd();
-                    var stderr = process.StandardError.ReadToEnd();
-                    if (!process.WaitForExit(timeoutMs))
-                    {
-                        try { process.Kill(); } catch { }
-                        error = "Cloudflare thao tác quá thời gian chờ.";
+                        process.StartInfo = CreateStartInfo(executable, arguments);
+                        process.OutputDataReceived += (_, args) =>
+                        {
+                            if (args.Data == null) { outputClosed.Set(); return; }
+                            AppendBounded(stdout, args.Data);
+                        };
+                        process.ErrorDataReceived += (_, args) =>
+                        {
+                            if (args.Data == null) { errorClosed.Set(); return; }
+                            AppendBounded(stderr, args.Data);
+                        };
+                        if (!process.Start()) { error = "Không khởi động được cloudflared."; return false; }
+                        process.BeginOutputReadLine();
+                        process.BeginErrorReadLine();
+                        if (!process.WaitForExit(timeoutMs))
+                        {
+                            try { process.Kill(); } catch { }
+                            try { process.WaitForExit(2000); } catch { }
+                            error = "Cloudflare thao tác quá thời gian chờ.";
+                            return false;
+                        }
+                        try { outputClosed.Wait(1000); } catch { }
+                        try { errorClosed.Wait(1000); } catch { }
+                        output = stdout.ToString().Trim();
+                        error = stderr.ToString().Trim();
+                        if (process.ExitCode == 0) return true;
+                        if (string.IsNullOrWhiteSpace(error)) error = output;
                         return false;
                     }
-                    output = stdout.Trim();
-                    error = stderr.Trim();
-                    if (process.ExitCode == 0) return true;
-                    if (string.IsNullOrWhiteSpace(error)) error = output;
-                    return false;
+                    finally
+                    {
+                        outputClosed.Dispose();
+                        errorClosed.Dispose();
+                    }
                 }
             }
             catch (Exception ex) { error = ex.Message; return false; }
+        }
+
+        private static void AppendBounded(StringBuilder builder, string line)
+        {
+            lock (builder)
+            {
+                if (builder.Length >= MaxCapturedOutput) return;
+                var remaining = MaxCapturedOutput - builder.Length;
+                if (line.Length > remaining) line = line.Substring(0, remaining);
+                builder.AppendLine(line);
+            }
+        }
+
+        private static ProcessStartInfo CreateStartInfo(string executable, string arguments)
+        {
+            return new ProcessStartInfo
+            {
+                FileName = executable,
+                Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = Path.GetDirectoryName(executable) ?? Environment.CurrentDirectory
+            };
         }
 
         private static bool StartProcess(string executable, string arguments, out string error)
@@ -297,42 +414,66 @@ namespace QS3D.BricsCAD.V25
             {
                 var process = new Process
                 {
-                    StartInfo = new ProcessStartInfo
-                    {
-                        FileName = executable,
-                        Arguments = arguments,
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        WorkingDirectory = Path.GetDirectoryName(executable) ?? Environment.CurrentDirectory
-                    },
+                    StartInfo = CreateStartInfo(executable, arguments),
                     EnableRaisingEvents = true
                 };
                 process.OutputDataReceived += (_, args) => HandleRunLine(args.Data, false);
                 process.ErrorDataReceived += (_, args) => HandleRunLine(args.Data, true);
-                process.Exited += (_, __) =>
+                process.Exited += (_, __) => HandleProcessExit(process);
+                if (!process.Start())
                 {
-                    lock (Sync) { if (ReferenceEquals(_process, process)) _process = null; }
-                    try { process.Dispose(); } catch { }
-                };
-                if (!process.Start()) { process.Dispose(); error = "Không khởi động được Named Tunnel."; return false; }
-                lock (Sync) { _process = process; _lastMessage = "Named Tunnel đang kết nối..."; _lastError = string.Empty; }
+                    process.Dispose();
+                    error = "Không khởi động được Named Tunnel.";
+                    return false;
+                }
+                lock (Sync)
+                {
+                    _process = process;
+                    _lastMessage = "Named Tunnel đang kết nối...";
+                    _lastError = string.Empty;
+                }
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
                 return true;
             }
-            catch (Exception ex) { error = ex.Message; SetState(error, error); return false; }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                SetState(error, error);
+                return false;
+            }
+        }
+
+        private static void HandleProcessExit(Process process)
+        {
+            int? exitCode = null;
+            try { exitCode = process.ExitCode; } catch { }
+            lock (Sync)
+            {
+                if (ReferenceEquals(_process, process))
+                {
+                    _process = null;
+                    if (exitCode.HasValue && exitCode.Value != 0 && string.IsNullOrWhiteSpace(_lastError))
+                        _lastError = "Named Tunnel exited with code " + exitCode.Value.ToString() + ".";
+                    _lastMessage = exitCode.HasValue
+                        ? "Named Tunnel đã dừng (exit " + exitCode.Value.ToString() + ")."
+                        : "Named Tunnel đã dừng.";
+                }
+            }
+            try { process.Dispose(); } catch { }
         }
 
         private static void HandleRunLine(string? line, bool stderr)
         {
-            if (line == null || line.Length == 0) return;
+            if (string.IsNullOrWhiteSpace(line)) return;
             var clean = line.Trim();
+            if (clean.Length > 500) clean = clean.Substring(0, 500);
             lock (Sync)
             {
-                _lastMessage = clean.Length > 500 ? clean.Substring(0, 500) : clean;
-                if (stderr && clean.IndexOf("ERR", StringComparison.OrdinalIgnoreCase) >= 0) _lastError = _lastMessage;
+                _lastMessage = clean;
+                if (stderr && (clean.IndexOf("ERR", StringComparison.OrdinalIgnoreCase) >= 0
+                               || clean.IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0))
+                    _lastError = clean;
             }
         }
 
@@ -345,9 +486,25 @@ namespace QS3D.BricsCAD.V25
             try { process.Dispose(); } catch { }
         }
 
+        private static string FirstUsefulError(string primary, string secondary, string fallback)
+        {
+            if (!string.IsNullOrWhiteSpace(primary)) return Limit(primary.Trim(), 1200);
+            if (!string.IsNullOrWhiteSpace(secondary)) return Limit(secondary.Trim(), 1200);
+            return fallback;
+        }
+
+        private static string Limit(string value, int maximum)
+        {
+            return value.Length <= maximum ? value : value.Substring(0, maximum) + "...";
+        }
+
         private static void SetState(string message, string error)
         {
-            lock (Sync) { _lastMessage = message ?? string.Empty; _lastError = error ?? string.Empty; }
+            lock (Sync)
+            {
+                _lastMessage = message ?? string.Empty;
+                _lastError = error ?? string.Empty;
+            }
         }
 
         private static void WriteText(string path, string value)
@@ -358,7 +515,8 @@ namespace QS3D.BricsCAD.V25
 
         private static string ReadText(string path)
         {
-            try { return File.Exists(path) ? File.ReadAllText(path, Encoding.UTF8).Trim() : string.Empty; } catch { return string.Empty; }
+            try { return File.Exists(path) ? File.ReadAllText(path, Encoding.UTF8).Trim() : string.Empty; }
+            catch { return string.Empty; }
         }
     }
 
@@ -371,7 +529,7 @@ namespace QS3D.BricsCAD.V25
         {
             Title = "QS3D - Kết nối ChatGPT MCP";
             Width = 640;
-            Height = 560;
+            Height = 590;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             var panel = new StackPanel { Margin = new Thickness(18) };
             panel.Children.Add(new TextBlock
@@ -390,6 +548,7 @@ namespace QS3D.BricsCAD.V25
             panel.Children.Add(Button("Quick Tunnel - chỉ dùng thử", (_, __) => Quick()));
             panel.Children.Add(Button("Copy MCP URL", (_, __) => CopyUrl()));
             panel.Children.Add(Button("Copy Bearer Token", (_, __) => Clipboard.SetText(McpEmbeddedServer.GetBearerToken())));
+            panel.Children.Add(Button("Kiểm tra MCP local", (_, __) => Probe()));
             panel.Children.Add(Button("Mở ChatGPT", (_, __) => McpCloudflareAccountTunnelManager.OpenChatGpt()));
             panel.Children.Add(Button("Mở Cloudflare Dashboard", (_, __) => McpCloudflareAccountTunnelManager.OpenCloudflareDashboard()));
             panel.Children.Add(Button("Dừng Named Tunnel", (_, __) => { McpCloudflareAccountTunnelManager.Stop(); Refresh(); }));
@@ -408,6 +567,7 @@ namespace QS3D.BricsCAD.V25
 
         private void Login()
         {
+            if (McpCloudflareAccountTunnelManager.IsSetupBusy) { MessageBox.Show("Một thao tác Cloudflare đang chạy.", "QS3D MCP"); return; }
             _status.Text = "Cloudflare login: chờ trình duyệt...";
             McpCloudflareAccountTunnelManager.BeginBrowserLogin((ok, message) =>
                 Dispatcher.BeginInvoke(new Action(() => { _status.Text = message; Refresh(); })));
@@ -415,6 +575,7 @@ namespace QS3D.BricsCAD.V25
 
         private void Provision()
         {
+            if (McpCloudflareAccountTunnelManager.IsSetupBusy) { MessageBox.Show("Một thao tác Cloudflare đang chạy.", "QS3D MCP"); return; }
             _status.Text = "Đang cấu hình Named Tunnel...";
             McpCloudflareAccountTunnelManager.BeginProvision(_hostname.Text, (ok, message) =>
                 Dispatcher.BeginInvoke(new Action(() =>
@@ -427,9 +588,19 @@ namespace QS3D.BricsCAD.V25
 
         private void Quick()
         {
+            if (McpCloudflareAccountTunnelManager.IsSetupBusy) { MessageBox.Show("Một thao tác Cloudflare đang chạy.", "QS3D MCP"); return; }
             string error;
             if (!McpCloudflareAccountTunnelManager.StartQuickTunnel(out error))
                 MessageBox.Show(error, "QS3D MCP", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Refresh();
+        }
+
+        private void Probe()
+        {
+            McpEmbeddedServer.EnsureStarted();
+            var result = McpProtocolProbe.Check(McpEmbeddedServer.Endpoint, 5000);
+            MessageBox.Show(result.Message, "QS3D MCP local check", MessageBoxButton.OK,
+                result.Ready ? MessageBoxImage.Information : MessageBoxImage.Warning);
             Refresh();
         }
 
@@ -443,11 +614,16 @@ namespace QS3D.BricsCAD.V25
 
         private void Refresh()
         {
+            var publicUrl = McpCloudflareAccountTunnelManager.PublicMcpUrl;
+            if (string.IsNullOrWhiteSpace(publicUrl)) publicUrl = McpCloudflareTunnelManager.PublicMcpUrl;
             _status.Text = "MCP local: " + McpEmbeddedServer.Endpoint
                            + "\nCloudflare installed: " + (!string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.CloudflaredPath))
                            + "\nCloudflare login: " + McpCloudflareAccountTunnelManager.IsAuthenticated
+                           + "\nSetup busy: " + McpCloudflareAccountTunnelManager.IsSetupBusy
                            + "\nNamed tunnel: " + (McpCloudflareAccountTunnelManager.IsRunning ? "RUNNING" : "STOPPED")
-                           + "\nPublic MCP: " + (string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.PublicMcpUrl) ? "chưa có" : McpCloudflareAccountTunnelManager.PublicMcpUrl)
+                           + "\nQuick/token tunnel: " + (McpCloudflareTunnelManager.IsRunning ? "RUNNING" : "STOPPED")
+                           + "\nPublic MCP: " + (string.IsNullOrWhiteSpace(publicUrl) ? "chưa có" : publicUrl)
+                           + (string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.LastMessage) ? string.Empty : "\nStatus: " + McpCloudflareAccountTunnelManager.LastMessage)
                            + (string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.LastError) ? string.Empty : "\nLỗi: " + McpCloudflareAccountTunnelManager.LastError);
         }
     }
