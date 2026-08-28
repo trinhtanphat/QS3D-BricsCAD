@@ -52,6 +52,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             BltDrawRibbonAugmenter.Reset();
             BltToolRibbonAugmenter.Reset();
             BltToolRibbonCommandBinder.Reset();
+            McpRibbonCommandOverride.Reset();
             BltToolRibbonIconPolisher.Reset();
             BltRecognitionRibbonAugmenter.Reset();
             BltRecognitionIconPolisher.Reset();
@@ -145,6 +146,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // visual tree to verified runtime commands before the generic fallback wrapper runs.
             ready = BltToolRibbonAugmenter.TryInitialize() && ready;
             ready = BltToolRibbonCommandBinder.TryInitialize() && ready;
+
+            // The embedded MCP service is the shipping single-repository route. Override only
+            // the four TOOL > MCP (AI) commands after the legacy binder has verified the complete
+            // reference tree and before generic command-parameter capture freezes the routing.
+            ready = McpRibbonCommandOverride.TryInitialize() && ready;
 
             ready = BltRecognitionRibbonAugmenter.TryInitialize() && ready;
             ready = BltViewRibbonAugmenter.TryInitialize() && ready;
