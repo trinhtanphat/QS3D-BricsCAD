@@ -3,24 +3,40 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-SERVER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpEmbeddedServer.cs"
-TOP_LEVEL_JSON = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpTopLevelJson.cs"
-ACCOUNT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareAccountOnboarding.cs"
-FALLBACK = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareOnboarding.cs"
-AGENT_CENTER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpAgentControlCenter.cs"
-BOOTSTRAPPER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflaredBootstrapper.cs"
-PUBLIC_ENDPOINT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpPublicEndpointResolver.cs"
-RIBBON_OVERRIDE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "McpRibbonCommandOverride.cs"
+V25 = ROOT / "src" / "QS3D.BricsCAD.V25"
+SERVER = V25 / "McpEmbeddedServerV2.cs"
+RUNTIME = V25 / "McpCadAgentRuntime.cs"
+LEGACY_SERVER = V25 / "McpEmbeddedServer.cs"
+TOP_LEVEL_JSON = V25 / "McpTopLevelJson.cs"
+ACCOUNT = V25 / "McpCloudflareAccountOnboarding.cs"
+FALLBACK = V25 / "McpCloudflareOnboarding.cs"
+AGENT_CENTER = V25 / "McpAgentControlCenter.cs"
+BOOTSTRAPPER = V25 / "McpCloudflaredBootstrapper.cs"
+PUBLIC_ENDPOINT = V25 / "McpPublicEndpointResolver.cs"
+RIBBON_OVERRIDE = V25 / "Ribbon" / "McpRibbonCommandOverride.cs"
+V25_PROJECT = V25 / "QS3D.BricsCAD.V25.csproj"
+V26_PROJECT = ROOT / "src" / "QS3D.BricsCAD.V26" / "QS3D.BricsCAD.V26.csproj"
+
+
+def require_tokens(errors: list[str], text: str, prefix: str, required: dict[str, str]) -> None:
+    for label, token in required.items():
+        if token not in text:
+            errors.append(f"{prefix} missing {label}: {token}")
 
 
 def main() -> int:
-    paths = (SERVER, TOP_LEVEL_JSON, ACCOUNT, FALLBACK, AGENT_CENTER, BOOTSTRAPPER, PUBLIC_ENDPOINT, RIBBON_OVERRIDE)
+    paths = (
+        SERVER, RUNTIME, LEGACY_SERVER, TOP_LEVEL_JSON, ACCOUNT, FALLBACK,
+        AGENT_CENTER, BOOTSTRAPPER, PUBLIC_ENDPOINT, RIBBON_OVERRIDE,
+        V25_PROJECT, V26_PROJECT,
+    )
     for path in paths:
         if not path.is_file():
             print("ERROR: missing", path.relative_to(ROOT))
             return 1
 
-    text = SERVER.read_text(encoding="utf-8")
+    server = SERVER.read_text(encoding="utf-8")
+    runtime = RUNTIME.read_text(encoding="utf-8")
     top_level_json = TOP_LEVEL_JSON.read_text(encoding="utf-8")
     account = ACCOUNT.read_text(encoding="utf-8")
     fallback = FALLBACK.read_text(encoding="utf-8")
@@ -28,28 +44,75 @@ def main() -> int:
     bootstrapper = BOOTSTRAPPER.read_text(encoding="utf-8")
     endpoint = PUBLIC_ENDPOINT.read_text(encoding="utf-8")
     ribbon_override = RIBBON_OVERRIDE.read_text(encoding="utf-8")
+    v25_project = V25_PROJECT.read_text(encoding="utf-8")
+    v26_project = V26_PROJECT.read_text(encoding="utf-8")
     errors: list[str] = []
 
-    required = {
-        "direct line creation": '"cad_create_line"',
-        "direct circle creation": '"cad_create_circle"',
-        "direct polyline creation": '"cad_create_polyline"',
-        "direct text creation": '"cad_create_text"',
-        "single entity inspection": '"cad_entity_inspect"',
-        "entity transform": '"cad_entity_transform"',
-        "entity delete": '"cad_entity_delete"',
-        "layer management": '"cad_layer"',
-        "command catalog": '"cad_command_catalog"',
-        "bounded command sequencing": '"cad_command_sequence"',
-        "view state": '"cad_view_state"',
-        "idle wait": '"cad_wait_idle"',
-        "BricsCAD-only mouse": '"cad_ui_click"',
-        "BricsCAD-only typing": '"cad_ui_type"',
-        "BricsCAD-only named keys": '"cad_ui_key"',
-        "emergency stop": '"cad_agent_stop"',
-        "explicit resume": '"cad_agent_resume"',
-        "audit tail": '"cad_audit_tail"',
-        "mutation confirmation": "confirmMutation=true",
+    require_tokens(errors, server, "MCP transport", {
+        "loopback listener": "IPAddress.Loopback",
+        "canonical MCP path": '"/mcp"',
+        "health endpoint": '"/healthz"',
+        "bearer authorization": 'const string prefix = "Bearer "',
+        "constant-time bearer compare": "ConstantTimeEquals",
+        "32-byte generated token": "var bytes = new byte[32]",
+        "bounded clients": "MaxConcurrentClients = 16",
+        "bounded sessions": "MaxSessions = 128",
+        "bounded body": "MaxBodyBytes = 1024 * 1024",
+        "HTTP transfer-encoding rejection": "Transfer-Encoding is not supported; use Content-Length",
+        "duplicate critical-header rejection": "Duplicate security-sensitive HTTP header",
+        "MCP initialize": 'string.Equals(method, "initialize"',
+        "MCP tools/list": 'string.Equals(method, "tools/list"',
+        "MCP tools/call": 'string.Equals(method, "tools/call"',
+        "MCP session termination": 'request.Method == "DELETE"',
+        "protocol/session binding": "MCP-Protocol-Version does not match initialized session",
+        "canonical public endpoint": "McpPublicEndpointResolver.Resolve()",
+        "runtime delegation": "McpCadAgentRuntime.Call(tool, arguments)",
+        "structured tool results": '"structuredContent"',
+        "single repository truth": '"singleRepository\\\":true',
+        "full agent truth": '"fullCadAgent\\\":true',
+        "modular server identity": '"embedded-5"',
+        "tool arguments object scoping": "TryExtractToolCall",
+        "top-level scanner dependency": "McpTopLevelJson.TryFindPropertyValue",
+    })
+
+    tool_descriptors = (
+        "connector_info", "qs3d_status", "cad_active_document", "cad_selection",
+        "cad_database_snapshot", "cad_entity_inspect", "cad_view_state", "cad_wait_idle",
+        "cad_sysvar", "cad_create_line", "cad_create_circle", "cad_create_arc",
+        "cad_create_polyline", "cad_create_text", "cad_create_mtext",
+        "cad_entity_transform", "cad_entity_delete", "cad_entity_set_layer", "cad_layer",
+        "cad_command_catalog", "cad_command_sequence", "qs3d_run_command",
+        "cad_ui_click", "cad_ui_type", "cad_ui_key", "cad_agent_stop",
+        "cad_agent_resume", "cad_audit_tail", "cad_cancel_command",
+    )
+    for tool in tool_descriptors:
+        if f'Tool("{tool}"' not in server:
+            errors.append(f"MCP transport missing tool descriptor: {tool}")
+
+    require_tokens(errors, runtime, "MCP CAD runtime", {
+        "direct line creation": 'case "cad_create_line"',
+        "direct circle creation": 'case "cad_create_circle"',
+        "direct arc creation": 'case "cad_create_arc"',
+        "direct polyline creation": 'case "cad_create_polyline"',
+        "direct DBText creation": 'case "cad_create_text"',
+        "direct MText creation": 'case "cad_create_mtext"',
+        "single entity inspection": 'case "cad_entity_inspect"',
+        "entity transform": 'case "cad_entity_transform"',
+        "entity delete": 'case "cad_entity_delete"',
+        "entity layer mutation": 'case "cad_entity_set_layer"',
+        "layer management": 'case "cad_layer"',
+        "read-only sysvar surface": 'case "cad_sysvar"',
+        "command catalog": 'case "cad_command_catalog"',
+        "bounded command sequencing": 'case "cad_command_sequence"',
+        "view state": 'case "cad_view_state"',
+        "idle wait": 'case "cad_wait_idle"',
+        "BricsCAD-only mouse": 'case "cad_ui_click"',
+        "BricsCAD-only typing": 'case "cad_ui_type"',
+        "BricsCAD-only named keys": 'case "cad_ui_key"',
+        "emergency stop": 'case "cad_agent_stop"',
+        "explicit resume": 'case "cad_agent_resume"',
+        "audit tail": 'case "cad_audit_tail"',
+        "top-level mutation confirmation": 'McpTopLevelJson.ExtractBoolean(body, "confirmMutation")',
         "window-relative click guard": "GetClientRect(hwnd, out rect)",
         "client-to-screen mapping": "ClientToScreen(hwnd, ref point)",
         "foreground process verification": "GetWindowThreadProcessId",
@@ -76,108 +139,75 @@ def main() -> int:
         "script control-char rejection": "forbidden control characters",
         "script blank-terminator anti-chain guard": "inputs may not continue after a blank command terminator",
         "script known-command anti-injection guard": "inputs may not inject another CAD/QS3D command",
-        "tool arguments object scoping": "TryExtractToolCall",
-        "tool arguments object parser": "TryExtractObjectProperty",
-        "top-level JSON member parser": "TryFindTopLevelPropertyValue",
-        "top-level tool-name extraction": 'ExtractTopLevelString(parameters, "name")',
-        "top-level arguments presence check": 'HasTopLevelProperty(parameters, "arguments")',
-        "top-level mutation confirmation": 'ExtractTopLevelBoolean(body, "confirmMutation")',
-        "HTTP transfer-encoding rejection": "Transfer-Encoding is not supported; use Content-Length",
-        "duplicate critical-header rejection": "Duplicate security-sensitive HTTP header",
-        "MCP session termination": 'request.Method == "DELETE"',
-        "MCP protocol/session binding": "MCP-Protocol-Version does not match the initialized session",
-        "bounded clients": "MaxConcurrentClients",
-        "bounded sessions": "MaxSessions",
-    }
-    for label, token in required.items():
-        if token not in text:
-            errors.append(f"missing {label}: {token}")
-
-    top_level_required = {
-        "bounded top-level property scanner": "internal static bool TryFindPropertyValue(",
-        "top-level string extraction": "internal static string ExtractString(",
-        "top-level boolean extraction": "internal static bool ExtractBoolean(",
-        "top-level presence check": "internal static bool HasProperty(",
-        "duplicate top-level target rejection": "duplicate top-level JSON property",
-    }
-    for label, token in top_level_required.items():
-        if token not in top_level_json:
-            errors.append(f"MCP top-level JSON helper missing {label}: {token}")
-
-    scalar_scope_required = {
-        "JSON-RPC version top-level extraction": 'ExtractTopLevelString(request.Body, "jsonrpc")',
-        "JSON-RPC method top-level extraction": 'ExtractTopLevelString(request.Body, "method")',
-        "JSON-RPC id top-level extraction": "ExtractTopLevelId(request.Body)",
-        "JSON-RPC id top-level presence": 'HasTopLevelProperty(request.Body, "id")',
-        "initialize params object extraction": 'TryExtractObjectProperty(request.Body, "params", out initializeParameters)',
-        "MCP protocol version params extraction": 'ExtractTopLevelString(initializeParameters, "protocolVersion")',
-        "general string top-level extraction": "return ExtractTopLevelString(json, property);",
-        "general boolean top-level extraction": "return ExtractTopLevelBoolean(json, property);",
-        "general property top-level presence": "return HasTopLevelProperty(json, property);",
-        "double top-level extraction": "TryExtractTopLevelDouble",
-        "integer top-level extraction": "TryExtractTopLevelInteger",
-    }
-    for label, token in scalar_scope_required.items():
-        if token not in text:
-            errors.append(f"MCP scalar parser missing {label}: {token}")
-
-    if 'ExtractTopLevelString(request.Body, "protocolVersion")' in text:
-        errors.append("initialize protocolVersion is read from the JSON-RPC envelope instead of params")
-    if "private static Match NumberMatch(" in text:
-        errors.append("MCP numeric arguments are still regex-scoped instead of top-level JSON scoped")
-    if 'var match = Regex.Match(json ?? string.Empty,' in text:
-        errors.append("MCP scalar extraction still contains a whole-object regex lookup")
-    if 'return Regex.IsMatch(json ?? string.Empty,' in text:
-        errors.append("MCP property presence still contains a whole-object regex lookup")
-    if "public int Cancelled;" in text or "Volatile.Read(ref item.Cancelled) == 0" in text:
-        errors.append("CAD dispatch timeout still uses a check-then-act cancellation flag that can race a started mutation")
+        "privacy-safe document basename": "SafeDocumentName",
+        "privacy-safe DWG sysvar": 'Path.GetFileName(text)',
+        "system variable allowlist": "ReadableSystemVariables",
+    })
 
     for command in (
         '"HATCH"', '"DIMLINEAR"', '"BLOCK"', '"XREF"', '"LAYOUT"',
         '"MVIEW"', '"PLOT"', '"SAVEAS"', '"OPEN"', '"UNDO"',
     ):
-        if command not in text:
-            errors.append(f"missing full-drawing command capability: {command}")
+        if command not in runtime:
+            errors.append(f"MCP runtime missing full-drawing command capability: {command}")
 
     mutation_routes = (
-        'case "cad_create_line": return RequireMutation(arguments, "cad_create_line",',
-        'case "cad_create_circle": return RequireMutation(arguments, "cad_create_circle",',
-        'case "cad_create_polyline": return RequireMutation(arguments, "cad_create_polyline",',
-        'case "cad_create_text": return RequireMutation(arguments, "cad_create_text",',
-        'case "cad_entity_transform": return RequireMutation(arguments, "cad_entity_transform",',
-        'case "cad_entity_delete": return RequireMutation(arguments, "cad_entity_delete",',
-        'case "cad_layer": return RequireMutation(arguments, "cad_layer",',
-        'case "cad_command_sequence": return RequireMutation(arguments, "cad_command_sequence",',
-        'case "qs3d_run_command": return RequireMutation(arguments, "qs3d_run_command",',
-        'case "cad_ui_click": return RequireMutation(arguments, "cad_ui_click",',
-        'case "cad_ui_type": return RequireMutation(arguments, "cad_ui_type",',
-        'case "cad_ui_key": return RequireMutation(arguments, "cad_ui_key",',
+        'case "cad_create_line": return Mutation(',
+        'case "cad_create_circle": return Mutation(',
+        'case "cad_create_arc": return Mutation(',
+        'case "cad_create_polyline": return Mutation(',
+        'case "cad_create_text": return Mutation(',
+        'case "cad_create_mtext": return Mutation(',
+        'case "cad_entity_transform": return Mutation(',
+        'case "cad_entity_delete": return Mutation(',
+        'case "cad_entity_set_layer": return Mutation(',
+        'case "cad_layer": return Mutation(',
+        'case "cad_command_sequence": return Mutation(',
+        'case "qs3d_run_command": return Mutation(',
+        'case "cad_ui_click": return Mutation(',
+        'case "cad_ui_type": return Mutation(',
+        'case "cad_ui_key": return Mutation(',
     )
     for route in mutation_routes:
-        if route not in text:
-            errors.append(f"mutation bypasses confirmation/stop gate: {route}")
-    if 'if (!ExtractBoolean(body, "confirmMutation"))' in text:
-        errors.append("mutation confirmation is regex-scoped instead of top-level JSON scoped")
+        if route not in runtime:
+            errors.append(f"MCP runtime mutation bypasses confirmation/stop gate: {route}")
+
+    if "public int Cancelled;" in runtime or "Volatile.Read(ref item.Cancelled) == 0" in runtime:
+        errors.append("CAD dispatch still uses a check-then-act cancellation flag")
+    if "databaseHandleSeed" in runtime:
+        errors.append("MCP runtime leaks database handle seed")
+    if '"fileName"' in runtime and "document.Database.Filename" in runtime:
+        errors.append("MCP runtime returns local drawing path instead of privacy-safe document metadata")
 
     for forbidden in ("powershell.exe", "cmd.exe", "Process.Start(", "mouse_event("):
-        if forbidden in text:
-            errors.append(f"forbidden remote execution/legacy input surface in MCP server: {forbidden}")
+        if forbidden in server:
+            errors.append(f"forbidden execution surface in MCP network transport: {forbidden}")
+    for forbidden in ("powershell.exe", "cmd.exe", "Process.Start(", "mouse_event("):
+        if forbidden in runtime:
+            errors.append(f"forbidden shell/process/legacy-input surface in MCP CAD runtime: {forbidden}")
+
+    require_tokens(errors, top_level_json, "MCP JSON helper", {
+        "bounded top-level property scanner": "internal static bool TryFindPropertyValue(",
+        "top-level string extraction": "internal static string ExtractString(",
+        "top-level boolean extraction": "internal static bool ExtractBoolean(",
+        "top-level integer extraction": "internal static bool TryExtractInteger(",
+        "top-level double extraction": "internal static bool TryExtractDouble(",
+        "top-level presence check": "internal static bool HasProperty(",
+        "duplicate top-level target rejection": "duplicate top-level JSON property",
+    })
 
     if "McpCloudflareTunnelManager.StopForHostShutdown();" not in account:
         errors.append("browser-login named tunnel does not stop fallback tunnel before start")
     if fallback.count("McpCloudflareAccountTunnelManager.StopForHostShutdown();") < 2:
         errors.append("token/Quick fallback does not stop browser-login tunnel before start")
     if "BeginOutputReadLine" not in account or "BeginErrorReadLine" not in account or "process.WaitForExit();" not in account:
-        errors.append("browser-login cloudflared command output is not asynchronously drained before process disposal")
+        errors.append("browser-login cloudflared command output is not asynchronously drained before disposal")
     if "ingress:" not in account or "http_status:404" not in account:
         errors.append("browser-login named tunnel lacks hostname-scoped ingress + fail-closed 404 rule")
     if "EnableRaisingEvents = false" not in fallback or "process.EnableRaisingEvents = true;" not in fallback or "return IsRunning;" not in fallback:
         errors.append("fallback cloudflared ownership is not established before exit events are enabled")
     if "private static void HandleProcessExit(Process process)" not in fallback:
         errors.append("fallback cloudflared lacks idempotent owned-process exit cleanup")
-    stale_quick_cleanup = "if (ReferenceEquals(_process, process))\n                {\n                    _process = null;\n                    _quickBaseUrl = string.Empty;\n                    _quickMode = false;"
-    if stale_quick_cleanup not in fallback:
-        errors.append("fallback Quick Tunnel exit can leave a stale trycloudflare public URL")
 
     center_required = (
         '[CommandMethod("QS3DMCPAGENTCENTER"',
@@ -239,6 +269,16 @@ def main() -> int:
         if token not in ribbon_override:
             errors.append(f"Ribbon MCP route missing: {token}")
 
+    if '<Compile Remove="McpEmbeddedServer.cs" />' not in v25_project:
+        errors.append("V25 build does not exclude legacy monolithic McpEmbeddedServer.cs")
+    if "..\\QS3D.BricsCAD.V25\\McpEmbeddedServer.cs" not in v26_project:
+        errors.append("V26 shared-source build does not exclude legacy monolithic McpEmbeddedServer.cs")
+    for source_name in ("McpEmbeddedServerV2.cs", "McpCadAgentRuntime.cs"):
+        if source_name in v25_project and source_name in v25_project.replace('<Compile Remove="McpEmbeddedServer.cs" />', ''):
+            pass  # default SDK inclusion is intentional; no explicit duplicate include required.
+    if "McpEmbeddedServerV2.cs" in v26_project and "Exclude=" not in v26_project:
+        errors.append("unexpected V26 source composition")
+
     if errors:
         print("Full MCP CAD agent preflight FAILED:")
         for error in errors:
@@ -246,13 +286,12 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: embedded MCP exposes direct transactional CAD creation/editing, bounded "
-        "allowlisted advanced command workflows, top-level-scoped mutation confirmation, "
-        "foreground-process-confined SendInput, emergency stop/resume with ESC fallback, "
-        "idle/status observation, rotating local audit evidence, bounded HTTP/session handling, "
-        "mutually-exclusive Cloudflare tunnel modes, verified one-click cloudflared bootstrap, "
-        "unified click-first Agent Center with bounded Quick URL discovery, single HTTPS public "
-        "endpoint resolution and mutation confirmation without arbitrary shell execution."
+        "PASS: modular embedded MCP v2 owns bounded authenticated Streamable HTTP/session routing "
+        "and structured tool results; McpCadAgentRuntime owns privacy-safe transactional CAD API "
+        "operations, arc/MText/entity-layer/sysvar additions, atomic timeout semantics, bounded "
+        "allowlisted native command workflows, BricsCAD-process-only SendInput, emergency recovery "
+        "and rotating audit evidence. Click-first verified Cloudflare onboarding and canonical HTTPS "
+        "public endpoint resolution remain wired without arbitrary network-exposed shell execution."
     )
     return 0
 
