@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpEmbeddedServer.cs"
+TOP_LEVEL_JSON = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpTopLevelJson.cs"
 ACCOUNT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareAccountOnboarding.cs"
 FALLBACK = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareOnboarding.cs"
 AGENT_CENTER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpAgentControlCenter.cs"
@@ -13,13 +14,14 @@ RIBBON_OVERRIDE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "McpRibbonComm
 
 
 def main() -> int:
-    paths = (SERVER, ACCOUNT, FALLBACK, AGENT_CENTER, BOOTSTRAPPER, PUBLIC_ENDPOINT, RIBBON_OVERRIDE)
+    paths = (SERVER, TOP_LEVEL_JSON, ACCOUNT, FALLBACK, AGENT_CENTER, BOOTSTRAPPER, PUBLIC_ENDPOINT, RIBBON_OVERRIDE)
     for path in paths:
         if not path.is_file():
             print("ERROR: missing", path.relative_to(ROOT))
             return 1
 
     text = SERVER.read_text(encoding="utf-8")
+    top_level_json = TOP_LEVEL_JSON.read_text(encoding="utf-8")
     account = ACCOUNT.read_text(encoding="utf-8")
     fallback = FALLBACK.read_text(encoding="utf-8")
     agent_center = AGENT_CENTER.read_text(encoding="utf-8")
@@ -50,7 +52,7 @@ def main() -> int:
         "mutation confirmation": "confirmMutation=true",
         "window-relative click guard": "GetClientRect(hwnd, out rect)",
         "client-to-screen mapping": "ClientToScreen(hwnd, ref point)",
-        "foreground process verification": "GetWindowThreadProcessId",
+        "foreground process verification": "GetWindowThreadProcessWindow",
         "foreground window verification": "RequireSameForegroundCadWindow",
         "foreground acquisition": "RequireForegroundCadWindow",
         "Unicode SendInput": "SendUnicodeText(hwnd, text)",
@@ -74,7 +76,6 @@ def main() -> int:
         "top-level tool-name extraction": 'ExtractTopLevelString(parameters, "name")',
         "top-level arguments presence check": 'HasTopLevelProperty(parameters, "arguments")',
         "top-level mutation confirmation": 'ExtractTopLevelBoolean(body, "confirmMutation")',
-        "duplicate top-level target rejection": "duplicate top-level JSON property",
         "HTTP transfer-encoding rejection": "Transfer-Encoding is not supported; use Content-Length",
         "duplicate critical-header rejection": "Duplicate security-sensitive HTTP header",
         "MCP session termination": 'request.Method == "DELETE"',
@@ -85,6 +86,17 @@ def main() -> int:
     for label, token in required.items():
         if token not in text:
             errors.append(f"missing {label}: {token}")
+
+    top_level_required = {
+        "bounded top-level property scanner": "internal static bool TryFindPropertyValue(",
+        "top-level string extraction": "internal static string ExtractString(",
+        "top-level boolean extraction": "internal static bool ExtractBoolean(",
+        "top-level presence check": "internal static bool HasProperty(",
+        "duplicate top-level target rejection": "duplicate top-level JSON property",
+    }
+    for label, token in top_level_required.items():
+        if token not in top_level_json:
+            errors.append(f"MCP top-level JSON helper missing {label}: {token}")
 
     for command in (
         '"HATCH"', '"DIMLINEAR"', '"BLOCK"', '"XREF"', '"LAYOUT"',
