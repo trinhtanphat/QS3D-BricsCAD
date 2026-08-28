@@ -73,6 +73,10 @@ namespace QS3D.Core.Export
             var candidates = new List<IfcRoundTripQuantityEvidence>();
             foreach (var candidate in evidence)
             {
+                IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
+                    knownCount,
+                    candidates.Count,
+                    "IFC round-trip quantity evidence");
                 if (candidates.Count == MaxCandidates)
                     ThrowTooManyCandidates();
                 if (candidate == null)
