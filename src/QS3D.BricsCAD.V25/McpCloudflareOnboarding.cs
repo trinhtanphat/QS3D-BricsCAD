@@ -256,7 +256,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void HandleLine(string? line, bool discoverQuickUrl)
         {
-            if (string.IsNullOrWhiteSpace(line)) return;
+            if (line == null || string.IsNullOrWhiteSpace(line)) return;
             var clean = line.Trim();
             if (clean.Length > 1000) clean = clean.Substring(0, 1000);
             lock (Sync)
