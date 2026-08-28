@@ -10,6 +10,7 @@ RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release-v26.yml"
 
 CALL = r"& .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR"
 REPARSE_TOKEN = "[IO.FileAttributes]::ReparsePoint"
+ROOTED_TOKEN = "if (-not [IO.Path]::IsPathRooted($trimmed))"
 
 
 def fail(message: str) -> None:
@@ -31,7 +32,8 @@ def require_before(text: str, first: str, second: str, label: str) -> None:
 def validate_helper(text: str) -> None:
     for token in (
         "function Get-CanonicalAbsolutePath",
-        "[IO.Path]::GetFullPath",
+        ROOTED_TOKEN,
+        "[IO.Path]::GetFullPath($trimmed)",
         "function Assert-NoExistingReparseComponent",
         REPARSE_TOKEN,
         "function Get-RequiredOrdinaryFile",
@@ -43,6 +45,8 @@ def validate_helper(text: str) -> None:
         "$version.FileMajorPart -ne 26",
     ):
         require(text, token, "V26 host-safety helper")
+
+    require_before(text, ROOTED_TOKEN, "[IO.Path]::GetFullPath($trimmed)", "absolute root before canonicalization")
 
     # The helper has three independent reparse boundaries: traversed path
     # components, required host-file leaves, and the configured host directory.
@@ -93,6 +97,11 @@ def main() -> None:
 
     expect_rejected(
         validate_helper,
+        helper.replace(ROOTED_TOKEN, "if ($false)", 1),
+        "removed absolute-root rejection",
+    )
+    expect_rejected(
+        validate_helper,
         helper.replace(REPARSE_TOKEN, "[IO.FileAttributes]::Archive"),
         "removed reparse attribute checks",
     )
@@ -114,6 +123,7 @@ def main() -> None:
 
     print("PASS V26 host reference path-safety contract")
     print(" - both V26 workflows fail closed through the shared helper before plugin build/runtime")
+    print(" - configured host roots must be absolute before canonicalization")
     print(" - host path components and required V26 leaves reject filesystem reparse aliases")
     print(" - required host leaves are ordinary files before V26 version trust")
 
