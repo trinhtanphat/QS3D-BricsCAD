@@ -207,8 +207,8 @@ if min(package_check, signed_version, metadata_check, installer_execute) < 0 or 
 manifest_package_guard = manifest.find("$package = Resolve-OrdinaryNonReparseDirectory -Path $PackageDirectory")
 manifest_zip_guard = manifest.find("$zip = Resolve-OrdinaryNonReparseFile -Path $PackageZip")
 manifest_metadata_guard = manifest.find("$metadataFile = Resolve-OrdinaryNonReparseFile")
-manifest_metadata_read = manifest.find("$metadataText = Read-BoundedStrictUtf8File")
 manifest_payload_guard = manifest.find("$payloadFiles[$name] = Resolve-OrdinaryNonReparseFile")
+manifest_metadata_read = manifest.find("$metadataText = Read-BoundedStrictUtf8File")
 manifest_signer = manifest.find("Assert-AuthenticodeSigner -Path $payloadFiles[$name].FullName")
 manifest_identity = manifest.find("$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')")
 manifest_zip_verify = manifest.find("Assert-ZipPayloadMatchesSignedStaging -ZipFile $zip -PackageRoot $package")
@@ -218,8 +218,8 @@ manifest_positions = (
     manifest_package_guard,
     manifest_zip_guard,
     manifest_metadata_guard,
-    manifest_metadata_read,
     manifest_payload_guard,
+    manifest_metadata_read,
     manifest_signer,
     manifest_identity,
     manifest_zip_verify,
@@ -230,15 +230,15 @@ if min(manifest_positions) < 0 or not (
     manifest_package_guard
     < manifest_zip_guard
     < manifest_metadata_guard
-    < manifest_metadata_read
     < manifest_payload_guard
+    < manifest_metadata_read
     < manifest_signer
     < manifest_identity
     < manifest_zip_verify
     < manifest_hash
     < manifest_publish
 ):
-    errors.append("manifest generation must ordinary-file bind package/ZIP/metadata/payload, bounded-read metadata, then bind both signed managed identities before ZIP verification/hash and atomic publication")
+    errors.append("manifest generation must ordinary-file bind package/ZIP/metadata/payload before bounded metadata materialization, then bind both signed managed identities before ZIP verification/hash and atomic publication")
 
 finalizer_signer = finalizer.find("Assert-AuthenticodeSigner -Path $path")
 finalizer_identity = finalizer.find("$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')")
