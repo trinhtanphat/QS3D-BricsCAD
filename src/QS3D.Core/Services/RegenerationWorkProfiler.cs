@@ -128,16 +128,23 @@ namespace QS3D.Core.Services
             var result = new List<T>();
             foreach (var value in values)
             {
+                if (knownCount.HasValue && result.Count >= knownCount.Value)
+                    throw CountMismatch(knownCount.Value, result.Count + 1, parameterName, label);
                 if (ReferenceEquals(value, null))
                     throw new ArgumentException("Regeneration work profile " + label + " collection cannot contain null entries.", parameterName);
                 if (result.Count >= maxCount)
                     throw CollectionTooLarge(maxCount, parameterName, label);
-                if (knownCount.HasValue && result.Count >= knownCount.Value)
-                    throw CountMismatch(knownCount.Value, result.Count + 1, parameterName, label);
                 result.Add(value);
             }
             if (knownCount.HasValue && result.Count != knownCount.Value)
                 throw CountMismatch(knownCount.Value, result.Count, parameterName, label);
+
+            var postTraversalKnownCount = ValidateKnownCountContract(values, maxCount, parameterName, label);
+            if (knownCount != postTraversalKnownCount)
+                throw new ArgumentException(
+                    "Regeneration work profile " + label + " collection known Count changed during traversal.",
+                    parameterName);
+
             return result.AsReadOnly();
         }
 
