@@ -20,8 +20,7 @@ namespace QS3D.Core.SmokeTests
             InvalidProvenanceFailsBeforeDirectoryCreation();
             InvalidSourceHandlePreservesExistingDestination();
             PresentationTextStillUsesOpenXmlSanitization();
-            CountStableRowReplacementFailsBeforePublication();
-            CountStableProvenanceMutationFailsBeforePublication();
+            CountStableCrossRowProvenanceMutationFailsBeforePublication();
         }
 
         private static void ValidWorkbookPreservesTraceAndNumericPayload()
@@ -130,32 +129,20 @@ namespace QS3D.Core.SmokeTests
             finally { SafeDelete(path); }
         }
 
-        private static void CountStableRowReplacementFailsBeforePublication()
+        private static void CountStableCrossRowProvenanceMutationFailsBeforePublication()
         {
-            var path = TempPath("row-replacement");
+            var path = TempPath("cross-row-provenance-mutation");
             try
             {
                 File.WriteAllText(path, "existing-workbook");
                 var first = ValidRow();
-                var replacement = ValidRow();
-                replacement.ProjectId = "PROJECT-REPLACED";
-                var rows = new RebindingRows(first, replacement, mutateProvenanceOnSecondRead: false);
+                var second = ValidRow();
+                second.ProjectId = "PROJECT-2";
+                var rows = new TraversalMutatingRows(first, second);
                 Throws<InvalidOperationException>(() => CurtainWallXlsxExporter.Export(path, rows));
-                Equal("existing-workbook", File.ReadAllText(path), "count-stable row replacement must preserve destination");
-            }
-            finally { SafeDelete(path); }
-        }
-
-        private static void CountStableProvenanceMutationFailsBeforePublication()
-        {
-            var path = TempPath("provenance-mutation");
-            try
-            {
-                File.WriteAllText(path, "existing-workbook");
-                var row = ValidRow();
-                var rows = new RebindingRows(row, row, mutateProvenanceOnSecondRead: true);
-                Throws<InvalidOperationException>(() => CurtainWallXlsxExporter.Export(path, rows));
-                Equal("existing-workbook", File.ReadAllText(path), "count-stable provenance mutation must preserve destination");
+                Equal("existing-workbook", File.ReadAllText(path), "count-stable cross-row provenance mutation must preserve destination");
+                if (rows.FirstReadCount != 1 || rows.SecondReadCount != 1)
+                    throw new Exception("Curtain XLSX mutation regression must preserve the single-read outer-row contract.");
             }
             finally { SafeDelete(path); }
         }
@@ -224,38 +211,44 @@ namespace QS3D.Core.SmokeTests
             try { if (Directory.Exists(path)) Directory.Delete(path, true); } catch { }
         }
 
-        private sealed class RebindingRows : IReadOnlyList<CurtainWallScheduleRow>
+        private sealed class TraversalMutatingRows : IReadOnlyList<CurtainWallScheduleRow>
         {
             private readonly CurtainWallScheduleRow _first;
             private readonly CurtainWallScheduleRow _second;
-            private readonly bool _mutateProvenanceOnSecondRead;
-            private int _reads;
 
-            internal RebindingRows(CurtainWallScheduleRow first, CurtainWallScheduleRow second, bool mutateProvenanceOnSecondRead)
+            internal TraversalMutatingRows(CurtainWallScheduleRow first, CurtainWallScheduleRow second)
             {
                 _first = first;
                 _second = second;
-                _mutateProvenanceOnSecondRead = mutateProvenanceOnSecondRead;
             }
 
-            public int Count => 1;
+            public int Count => 2;
+            public int FirstReadCount { get; private set; }
+            public int SecondReadCount { get; private set; }
 
             public CurtainWallScheduleRow this[int index]
             {
                 get
                 {
-                    if (index != 0) throw new ArgumentOutOfRangeException(nameof(index));
-                    _reads++;
-                    if (_reads == 1) return _first;
-                    if (_mutateProvenanceOnSecondRead) _first.ElementIds[0] = "CW-MUTATED";
-                    return _second;
+                    if (index == 0)
+                    {
+                        FirstReadCount++;
+                        if (FirstReadCount > 1) throw new InvalidOperationException("First caller-owned row index was read more than once.");
+                        return _first;
+                    }
+                    if (index == 1)
+                    {
+                        SecondReadCount++;
+                        if (SecondReadCount > 1) throw new InvalidOperationException("Second caller-owned row index was read more than once.");
+                        _first.ElementIds[0] = "CW-MUTATED";
+                        return _second;
+                    }
+                    throw new ArgumentOutOfRangeException(nameof(index));
                 }
             }
 
-            public IEnumerator<CurtainWallScheduleRow> GetEnumerator()
-            {
-                yield return _first;
-            }
+            public IEnumerator<CurtainWallScheduleRow> GetEnumerator() =>
+                throw new InvalidOperationException("Curtain XLSX exporter must not enumerate caller-owned rows during snapshot validation.");
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
