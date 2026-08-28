@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             DelimiterBearingElementIdsCannotCollapsePairIdentity();
+            EscapeCharacterAndDelimiterCompositionIsInjective();
             PairIdentityRemainsInputOrderIndependent();
         }
 
@@ -30,13 +31,34 @@ namespace QS3D.Core.SmokeTests
             if (result.Pairs.Count != 2)
                 throw new InvalidOperationException("DuplicatePairKeyIntegritySmoke: expected exactly two independent exact-geometry pairs.");
 
-            var keys = result.Pairs.Select(pair => pair.PairKey).ToArray();
-            if (string.Equals(keys[0], keys[1], StringComparison.Ordinal))
-                throw new InvalidOperationException(
-                    "DuplicatePairKeyIntegritySmoke: distinct duplicate pairs collapsed to the same PairKey: " + keys[0] + ".");
+            RequireUniqueKeys(result, "delimiter repartition");
+        }
 
-            if (keys.Distinct(StringComparer.Ordinal).Count() != result.Pairs.Count)
-                throw new InvalidOperationException("DuplicatePairKeyIntegritySmoke: PairKey must be injective for exact element-id pairs.");
+        private static void EscapeCharacterAndDelimiterCompositionIsInjective()
+        {
+            var service = new DuplicateDetectionService();
+            var firstBox = new AxisAlignedBox(20d, 0d, 0d, 21d, 1d, 1d);
+            var secondBox = new AxisAlignedBox(30d, 0d, 0d, 31d, 1d, 1d);
+            var result = service.Detect(new[]
+            {
+                Element("A", "LeadingDelimiter", firstBox),
+                Element("|A", "LeadingDelimiter", firstBox),
+                Element("A|", "TrailingDelimiter", secondBox),
+                Element("A", "TrailingDelimiter", secondBox)
+            });
+
+            if (result.Pairs.Count != 2)
+                throw new InvalidOperationException("DuplicatePairKeyIntegritySmoke: expected two escape-boundary pairs.");
+            RequireUniqueKeys(result, "escape/delimiter boundary");
+
+            var slashBox = new AxisAlignedBox(40d, 0d, 0d, 41d, 1d, 1d);
+            var slashResult = service.Detect(new[]
+            {
+                Element("A\\|B", "Slash", slashBox),
+                Element("C", "Slash", slashBox)
+            });
+            if (slashResult.Pairs.Count != 1 || slashResult.Pairs[0].PairKey.IndexOf("\\\\", StringComparison.Ordinal) < 0)
+                throw new InvalidOperationException("DuplicatePairKeyIntegritySmoke: escape characters must themselves be escaped in PairKey.");
         }
 
         private static void PairIdentityRemainsInputOrderIndependent()
@@ -58,6 +80,13 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("DuplicatePairKeyIntegritySmoke: expected one duplicate pair for ordering regression.");
             if (!string.Equals(first.Pairs[0].PairKey, second.Pairs[0].PairKey, StringComparison.Ordinal))
                 throw new InvalidOperationException("DuplicatePairKeyIntegritySmoke: PairKey changed with enumeration order.");
+        }
+
+        private static void RequireUniqueKeys(DuplicateDetectionResult result, string boundary)
+        {
+            var keys = result.Pairs.Select(pair => pair.PairKey).ToArray();
+            if (keys.Distinct(StringComparer.Ordinal).Count() != result.Pairs.Count)
+                throw new InvalidOperationException("DuplicatePairKeyIntegritySmoke: PairKey collision at " + boundary + ".");
         }
 
         private static CoordinationElement Element(string id, string category, AxisAlignedBox bounds)
