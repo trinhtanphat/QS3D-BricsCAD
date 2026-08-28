@@ -344,10 +344,10 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
-            var jsonRpc = ExtractString(request.Body, "jsonrpc");
-            var method = ExtractString(request.Body, "method");
-            var id = ExtractId(request.Body);
-            var hasId = HasProperty(request.Body, "id");
+            var jsonRpc = ExtractTopLevelString(request.Body, "jsonrpc");
+            var method = ExtractTopLevelString(request.Body, "method");
+            var id = ExtractTopLevelId(request.Body);
+            var hasId = HasTopLevelProperty(request.Body, "id");
             if (!string.Equals(jsonRpc, "2.0", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(method))
             {
                 WriteResponse(stream, 200, "OK", JsonRpcError(hasId ? id : "null", -32600, "Invalid JSON-RPC 2.0 request."), null);
@@ -361,7 +361,7 @@ namespace QS3D.BricsCAD.V25
                     WriteResponse(stream, 200, "OK", JsonRpcError("null", -32600, "initialize must include a JSON-RPC id."), null);
                     return;
                 }
-                var requested = ExtractString(request.Body, "protocolVersion");
+                var requested = ExtractTopLevelString(request.Body, "protocolVersion");
                 if (!string.Equals(requested, ProtocolVersion, StringComparison.Ordinal)
                     && !string.Equals(requested, LegacyProtocolVersion, StringComparison.Ordinal))
                 {
@@ -1347,26 +1347,43 @@ namespace QS3D.BricsCAD.V25
 
         private static double RequireDouble(string json, string property)
         {
-            var match = NumberMatch(json, property);
             double value;
-            if (!match.Success || !double.TryParse(match.Groups["value"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out value) || !IsFinite(value))
-                throw new InvalidOperationException(property + " must be a finite number.");
+            bool found;
+            string error;
+            if (!TryExtractTopLevelDouble(json, property, out value, out found, out error))
+                throw new InvalidOperationException(error);
+            if (!found) throw new InvalidOperationException(property + " must be a finite number.");
             return value;
         }
 
         private static double ExtractDouble(string json, string property, double fallback)
         {
-            var match = NumberMatch(json, property);
             double value;
-            if (!match.Success || !double.TryParse(match.Groups["value"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out value) || !IsFinite(value)) return fallback;
-            return value;
+            bool found;
+            string error;
+            if (!TryExtractTopLevelDouble(json, property, out value, out found, out error))
+                throw new InvalidOperationException(error);
+            return found ? value : fallback;
         }
 
-        private static Match NumberMatch(string json, string property)
+        private static bool TryExtractTopLevelDouble(
+            string json,
+            string property,
+            out double value,
+            out bool found,
+            out string error)
         {
-            return Regex.Match(json ?? string.Empty,
-                "\"" + Regex.Escape(property) + "\"\\s*:\\s*(?<value>-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?)",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            return McpTopLevelJson.TryExtractDouble(json, property, out value, out found, out error);
+        }
+
+        private static bool TryExtractTopLevelInteger(
+            string json,
+            string property,
+            out int value,
+            out bool found,
+            out string error)
+        {
+            return McpTopLevelJson.TryExtractInteger(json, property, out value, out found, out error);
         }
 
         private static bool TryExtractToolCall(string body, out string name, out string arguments, out string error)
@@ -1444,6 +1461,11 @@ namespace QS3D.BricsCAD.V25
             return McpTopLevelJson.HasProperty(json, property);
         }
 
+        private static string ExtractTopLevelId(string json)
+        {
+            return McpTopLevelJson.ExtractId(json);
+        }
+
         private static string ToolSuccess(string jsonValue)
         {
             var text = string.IsNullOrWhiteSpace(jsonValue) ? "{}" : jsonValue;
@@ -1463,41 +1485,33 @@ namespace QS3D.BricsCAD.V25
 
         private static string ExtractString(string json, string property)
         {
-            var match = Regex.Match(json ?? string.Empty,
-                "\"" + Regex.Escape(property) + "\"\\s*:\\s*\"(?<value>(?:\\\\.|[^\"])*)\"",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            return match.Success ? JsonUnescape(match.Groups["value"].Value) : string.Empty;
+            return ExtractTopLevelString(json, property);
         }
 
         private static bool ExtractBoolean(string json, string property)
         {
-            var match = Regex.Match(json ?? string.Empty,
-                "\"" + Regex.Escape(property) + "\"\\s*:\\s*(?<value>true|false)(?![A-Za-z0-9_])",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            return match.Success && string.Equals(match.Groups["value"].Value, "true", StringComparison.OrdinalIgnoreCase);
+            return ExtractTopLevelBoolean(json, property);
         }
 
         private static int ExtractInteger(string json, string property, int fallback, int minimum, int maximum)
         {
-            var match = Regex.Match(json ?? string.Empty,
-                "\"" + Regex.Escape(property) + "\"\\s*:\\s*(?<value>-?[0-9]+)(?![0-9.eE])",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             int value;
-            if (!match.Success || !int.TryParse(match.Groups["value"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out value)) return fallback;
+            bool found;
+            string error;
+            if (!TryExtractTopLevelInteger(json, property, out value, out found, out error))
+                throw new InvalidOperationException(error);
+            if (!found) return fallback;
             return Math.Max(minimum, Math.Min(maximum, value));
         }
 
         private static bool HasProperty(string json, string property)
         {
-            return Regex.IsMatch(json ?? string.Empty, "\"" + Regex.Escape(property) + "\"\\s*:", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            return HasTopLevelProperty(json, property);
         }
 
         private static string ExtractId(string json)
         {
-            var match = Regex.Match(json ?? string.Empty,
-                "\"id\"\\s*:\\s*(?<value>\"(?:\\\\.|[^\"])*\"|-?[0-9]+|null)(?![A-Za-z0-9_.])",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            return match.Success ? match.Groups["value"].Value : "null";
+            return ExtractTopLevelId(json);
         }
 
         private static string JsonUnescape(string value)
