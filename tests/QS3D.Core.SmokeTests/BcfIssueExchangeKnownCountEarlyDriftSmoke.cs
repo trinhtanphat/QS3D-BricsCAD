@@ -23,7 +23,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectTopicOverrunBeforeNullValidation()
         {
-            var source = new DishonestKnownCountCollection<BcfTopic>(
+            var source = new CorroboratedDishonestCountCollection<BcfTopic>(
                 reportedCount: 1,
                 new BcfTopic[] { ValidTopic(1), null! });
 
@@ -36,7 +36,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectViewpointOverrunBeforeNullValidation()
         {
-            var viewpoints = new DishonestKnownCountCollection<BcfViewpoint>(
+            var viewpoints = new CorroboratedDishonestCountCollection<BcfViewpoint>(
                 reportedCount: 1,
                 new BcfViewpoint[] { ValidViewpoint(10), null! });
 
@@ -58,7 +58,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectCommentOverrunBeforeNullValidation()
         {
-            var comments = new DishonestKnownCountCollection<BcfComment>(
+            var comments = new CorroboratedDishonestCountCollection<BcfComment>(
                 reportedCount: 1,
                 new BcfComment[] { ValidComment(20), null! });
 
@@ -80,7 +80,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectComponentOverrunBeforeNullValidation()
         {
-            var components = new DishonestKnownCountCollection<BcfComponentReference>(
+            var components = new CorroboratedDishonestCountCollection<BcfComponentReference>(
                 reportedCount: 1,
                 new BcfComponentReference[] { ValidComponent(30), null! });
 
@@ -93,7 +93,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectTopicUnderYieldAfterTraversal()
         {
-            var source = new DishonestKnownCountCollection<BcfTopic>(
+            var source = new CorroboratedDishonestCountCollection<BcfTopic>(
                 reportedCount: 2,
                 new[] { ValidTopic(40) });
 
@@ -187,36 +187,47 @@ namespace QS3D.Core.SmokeTests
             throw new InvalidOperationException(failureMessage);
         }
 
-        private static void RequireMoveNextCalls<T>(DishonestKnownCountCollection<T> source, int expected, string label)
+        private static void RequireMoveNextCalls<T>(CorroboratedDishonestCountCollection<T> source, int expected, string label)
         {
             if (source.MoveNextCalls != expected)
                 throw new InvalidOperationException(
                     "Unexpected MoveNext calls for " + label + ": expected " + expected + ", actual " + source.MoveNextCalls + ".");
         }
 
-        private sealed class DishonestKnownCountCollection<T> : IReadOnlyCollection<T>
+        private sealed class CorroboratedDishonestCountCollection<T> : ICollection<T>, IReadOnlyCollection<T>, ICollection
         {
             private readonly T[] _items;
             private readonly int _reportedCount;
 
-            internal DishonestKnownCountCollection(int reportedCount, T[] items)
+            internal CorroboratedDishonestCountCollection(int reportedCount, T[] items)
             {
                 _reportedCount = reportedCount;
                 _items = items ?? throw new ArgumentNullException(nameof(items));
             }
 
-            public int Count => _reportedCount;
+            int ICollection<T>.Count => _reportedCount;
+            int IReadOnlyCollection<T>.Count => _reportedCount;
+            int ICollection.Count => _reportedCount;
+            bool ICollection<T>.IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
             internal int MoveNextCalls { get; private set; }
 
             public IEnumerator<T> GetEnumerator() => new Enumerator(this);
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            void ICollection<T>.Add(T item) => throw new NotSupportedException();
+            void ICollection<T>.Clear() => throw new NotSupportedException();
+            bool ICollection<T>.Contains(T item) => Array.IndexOf(_items, item) >= 0;
+            void ICollection<T>.CopyTo(T[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+            bool ICollection<T>.Remove(T item) => throw new NotSupportedException();
+            void ICollection.CopyTo(Array array, int index) => ((ICollection)_items).CopyTo(array, index);
 
             private sealed class Enumerator : IEnumerator<T>
             {
-                private readonly DishonestKnownCountCollection<T> _owner;
+                private readonly CorroboratedDishonestCountCollection<T> _owner;
                 private int _index = -1;
 
-                internal Enumerator(DishonestKnownCountCollection<T> owner)
+                internal Enumerator(CorroboratedDishonestCountCollection<T> owner)
                 {
                     _owner = owner;
                 }
