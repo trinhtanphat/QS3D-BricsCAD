@@ -94,6 +94,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 if (!TryCleanup(() => { BltDrawRibbonAugmenter.Reset(); })) cleanupComplete = false;
                 if (!TryCleanup(() => { BltToolRibbonAugmenter.Reset(); })) cleanupComplete = false;
                 if (!TryCleanup(() => { BltToolRibbonCommandBinder.Reset(); })) cleanupComplete = false;
+                if (!TryCleanup(() => { McpRibbonCommandOverride.Reset(); })) cleanupComplete = false;
                 if (!TryCleanup(() => { BltToolRibbonIconPolisher.Reset(); })) cleanupComplete = false;
                 if (!TryCleanup(() => { BltRecognitionRibbonAugmenter.Reset(); })) cleanupComplete = false;
                 if (!TryCleanup(() => { BltRecognitionIconPolisher.Reset(); })) cleanupComplete = false;
@@ -303,6 +304,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
             // visual tree to verified runtime commands before the generic fallback wrapper runs.
             ready = BltToolRibbonAugmenter.TryInitialize() && ready;
             ready = BltToolRibbonCommandBinder.TryInitialize() && ready;
+
+            // Override only the four TOOL > MCP (AI) routes after the canonical TOOL binder has
+            // verified the complete tree and before RibbonCommandParameterFallback captures them.
+            ready = McpRibbonCommandOverride.TryInitialize() && ready;
 
             ready = BltRecognitionRibbonAugmenter.TryInitialize() && ready;
             ready = BltViewRibbonAugmenter.TryInitialize() && ready;
