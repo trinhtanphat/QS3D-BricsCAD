@@ -5,6 +5,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SERVER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpEmbeddedServer.cs"
 COMMANDS = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpConnectorRibbonCommands.cs"
+ONBOARDING = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareOnboarding.cs"
 OVERRIDE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "McpRibbonCommandOverride.cs"
 COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonInitializationCoordinator.cs"
 PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
@@ -31,6 +32,7 @@ def main() -> int:
     errors: list[str] = []
     server = read(SERVER, errors)
     commands = read(COMMANDS, errors)
+    onboarding = read(ONBOARDING, errors)
     override = read(OVERRIDE, errors)
     coordinator = read(COORDINATOR, errors)
     plugin = read(PLUGIN, errors)
@@ -72,7 +74,7 @@ def main() -> int:
     forbid(server, "cmd.exe", errors, "arbitrary cmd surface")
 
     expected_routes = {
-        'Prefix + "MCP_SETTINGS"': "QS3DMCPSETTINGSHTTP",
+        'Prefix + "MCP_SETTINGS"': "QS3DMCPSETUP",
         'Prefix + "MCP_DOCS"': "QS3DMCPDOCSHTTP",
         'Prefix + "AI_DASHBOARD"': "QS3DAIDASHBOARDHTTP",
         'Prefix + "MCP_CONNECTION"': "QS3DMCPCHECKHTTP",
@@ -91,6 +93,8 @@ def main() -> int:
     require(coordinator, "McpRibbonCommandOverride.Reset()", errors, "ribbon override teardown")
 
     require(plugin, "McpEmbeddedServer.Start();", errors, "embedded MCP startup")
+    require(plugin, "McpCloudflareTunnelManager.TryAutoStart();", errors, "saved named-tunnel auto-start")
+    require(plugin, "TryCleanup(McpCloudflareTunnelManager.StopForHostShutdown);", errors, "cloudflared teardown")
     require(plugin, "TryCleanup(McpEmbeddedServer.Stop);", errors, "embedded MCP teardown")
     require(plugin, 'ReportOptionalStartupFailure("MCP server", ex)', errors, "fail-soft MCP startup")
 
@@ -103,6 +107,19 @@ def main() -> int:
         "QS3DMCPSTOP",
     ):
         require(commands, f'[CommandMethod("{command}"', errors, f"CommandMethod {command}")
+
+    require(onboarding, '[CommandMethod("QS3DMCPSETUP"', errors, "click-first setup command")
+    require(onboarding, "McpCloudflareSetupWindow", errors, "MCP setup window")
+    require(onboarding, "OpenCloudflareTunnelDashboard", errors, "browser Cloudflare onboarding")
+    require(onboarding, "OpenChatGpt", errors, "browser ChatGPT handoff")
+    require(onboarding, "ProtectedData.Protect", errors, "DPAPI tunnel token protection")
+    require(onboarding, "DataProtectionScope.CurrentUser", errors, "per-Windows-user secret scope")
+    require(onboarding, 'startInfo.EnvironmentVariables["TUNNEL_TOKEN"]', errors, "token outside process command line")
+    require(onboarding, '"tunnel --no-autoupdate run"', errors, "remotely-managed named tunnel run")
+    require(onboarding, "trycloudflare.com", errors, "one-click quick tunnel test mode")
+    require(onboarding, "Mật khẩu Cloudflare chỉ nhập", errors, "provider-owned password entry guidance")
+    forbid(onboarding, "powershell.exe", errors, "PowerShell setup dependency")
+    forbid(onboarding, "cmd.exe", errors, "cmd setup dependency")
 
     # The probe methods live inside escaped C# JSON string literals. Match their source-level
     # representation so this gate verifies the actual requests instead of demanding unrelated
@@ -126,9 +143,9 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: QS3D ships a loopback-only authenticated Streamable-HTTP MCP endpoint inside "
-        "the BricsCAD plugin, TOOL/MCP routes to real protocol diagnostics, CAD work is marshalled "
-        "through the host application context, and no second MCP repository is a runtime dependency."
+        "PASS: QS3D ships a loopback-only authenticated Streamable-HTTP MCP endpoint, routes "
+        "TOOL/MCP settings to a click-first Cloudflare onboarding wizard, protects named-tunnel "
+        "tokens with Windows DPAPI, auto-starts saved tunnels, and requires no shell setup."
     )
     return 0
 
