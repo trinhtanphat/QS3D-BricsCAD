@@ -37,6 +37,8 @@ def main() -> int:
         "loopback public rejection": (resolver, "uri.IsLoopback"),
         "literal public-address validation": (resolver, "IPAddress.TryParse(uri.Host"),
         "private/link-local literal rejection": (resolver, "IsPrivateOrLocalAddress"),
+        "configured fallback snapshot": (resolver, "ConfiguredEnvironmentFallback"),
+        "provider publication isolated from fallback": (resolver, "NormalizeCandidate(ConfiguredEnvironmentFallback)"),
         "canonical MCP path": (resolver, 'path = "/mcp"'),
         "process endpoint synchronization": (resolver, "EnvironmentVariableTarget.Process"),
         "startup endpoint publication": (plugin, "McpPublicEndpointResolver.Resolve()"),
@@ -79,10 +81,10 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: MCP production source uses one validated HTTPS endpoint resolver, live/exact "
-        "Cloudflare tunnel identity checks, fail-closed DNS conflict handling, owner-bound "
-        "Quick Tunnel URL discovery, copy-ready ChatGPT configuration helpers, bounded network/session "
-        "surfaces and BricsCAD-confined emergency recovery."
+        "PASS: MCP production source uses one validated HTTPS endpoint resolver, isolated user "
+        "fallback state, live/exact Cloudflare tunnel identity checks, fail-closed DNS conflict "
+        "handling, owner-bound Quick Tunnel URL discovery, copy-ready ChatGPT configuration "
+        "helpers, bounded network/session surfaces and BricsCAD-confined emergency recovery."
     )
     return 0
 
