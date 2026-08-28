@@ -52,7 +52,7 @@ def main() -> int:
         "mutation confirmation": "confirmMutation=true",
         "window-relative click guard": "GetClientRect(hwnd, out rect)",
         "client-to-screen mapping": "ClientToScreen(hwnd, ref point)",
-        "foreground process verification": "GetWindowThreadProcessWindow",
+        "foreground process verification": "GetWindowThreadProcessId",
         "foreground window verification": "RequireSameForegroundCadWindow",
         "foreground acquisition": "RequireForegroundCadWindow",
         "Unicode SendInput": "SendUnicodeText(hwnd, text)",
