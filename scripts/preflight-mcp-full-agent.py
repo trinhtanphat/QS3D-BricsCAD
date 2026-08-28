@@ -94,18 +94,18 @@ def main() -> int:
             errors.append(f"missing full-drawing command capability: {command}")
 
     mutation_routes = (
-        'case "cad_create_line": return RequireMutation',
-        'case "cad_create_circle": return RequireMutation',
-        'case "cad_create_polyline": return RequireMutation',
-        'case "cad_create_text": return RequireMutation',
-        'case "cad_entity_transform": return RequireMutation',
-        'case "cad_entity_delete": return RequireMutation',
-        'case "cad_layer": return RequireMutation',
-        'case "cad_command_sequence": return RequireMutation',
-        'case "qs3d_run_command": return RequireMutation',
-        'case "cad_ui_click": return RequireMutation',
-        'case "cad_ui_type": return RequireMutation',
-        'case "cad_ui_key": return RequireMutation',
+        'case "cad_create_line": return RequireMutation(arguments, "cad_create_line",',
+        'case "cad_create_circle": return RequireMutation(arguments, "cad_create_circle",',
+        'case "cad_create_polyline": return RequireMutation(arguments, "cad_create_polyline",',
+        'case "cad_create_text": return RequireMutation(arguments, "cad_create_text",',
+        'case "cad_entity_transform": return RequireMutation(arguments, "cad_entity_transform",',
+        'case "cad_entity_delete": return RequireMutation(arguments, "cad_entity_delete",',
+        'case "cad_layer": return RequireMutation(arguments, "cad_layer",',
+        'case "cad_command_sequence": return RequireMutation(arguments, "cad_command_sequence",',
+        'case "qs3d_run_command": return RequireMutation(arguments, "qs3d_run_command",',
+        'case "cad_ui_click": return RequireMutation(arguments, "cad_ui_click",',
+        'case "cad_ui_type": return RequireMutation(arguments, "cad_ui_type",',
+        'case "cad_ui_key": return RequireMutation(arguments, "cad_ui_key",',
     )
     for route in mutation_routes:
         if route not in text:
