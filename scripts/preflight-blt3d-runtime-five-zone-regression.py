@@ -34,14 +34,22 @@ for token in (
     "private static readonly Guid PropertiesGuid",
     "private static PaletteSet? _properties;",
     "public static bool IsPropertiesVisible",
-    'new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)',
+    "_properties = CreatePaletteSet(",
+    '"QS3D — Thuộc tính",',
+    "PropertiesGuid,",
     "CreatePropertiesPaletteVisual()",
+    "palette = new PaletteSet(title, guid);",
+    "palette.AddVisual(visualTitle, visual, true);",
+    "try { palette.Dispose(); }",
     "_workspace.Dock = DockSides.Left;",
     "_right.Dock = DockSides.Right;",
     "viewport BricsCAD native ở giữa",
 ):
     if token not in palette:
-        errors.append("PaletteCoordinator owner-reference contract missing: " + token)
+        errors.append("PaletteCoordinator owner-reference rollback-safe contract missing: " + token)
+
+if '_properties = new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)' in palette:
+    errors.append("Properties PaletteSet must not be published before native configuration/AddVisual succeeds")
 
 bim_start = palette.find("public static bool ShowBimWorkspace()")
 bim_end = palette.find("public static void ShowDrawingManagement()", bim_start)
@@ -117,4 +125,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BIM activation keeps BricsCAD modelspace host-owned, restores side-by-side Model and Family/embedded-Properties columns on the left plus Management on the right, while dedicated Properties/Quantity stay opt-in capabilities.")
+print("PASS: BIM activation keeps BricsCAD modelspace host-owned, restores side-by-side Model and Family/embedded-Properties columns on the left plus Management on the right, while dedicated Properties construction is rollback-safe and Properties/Quantity stay opt-in capabilities.")

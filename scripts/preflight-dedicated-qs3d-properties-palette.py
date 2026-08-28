@@ -32,11 +32,24 @@ for token in (
     "private static readonly Guid PropertiesGuid",
     "private static PaletteSet? _properties;",
     "public static bool IsPropertiesVisible",
-    'new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)',
-    '_properties.AddVisual("Thuộc tính", _propertiesVisual, true);',
+    "_properties = CreatePaletteSet(",
+    '"QS3D — Thuộc tính",',
+    "PropertiesGuid,",
+    "DockSides.Left,",
+    "new DrawingSize(UserUiLayoutStore.PropertiesPaletteMinWidth, UserUiLayoutStore.PropertiesPaletteMinHeight),",
+    "new WpfSize(layout.PropertiesPaletteWidth, layout.PropertiesPaletteHeight),",
+    '"Thuộc tính",',
+    "_propertiesVisual);",
     "_properties.StateChanged += OnPropertiesPaletteStateChanged;",
     "_workspacePanel.CreatePropertiesPaletteVisual()",
-    "_properties.Dock = DockSides.Left;",
+    "private static PaletteSet CreatePaletteSet(",
+    "palette = new PaletteSet(title, guid);",
+    "palette.Dock = dock;",
+    "palette.MinimumSize = minimumSize;",
+    "palette.DeviceIndependentSize = initialSize;",
+    "palette.AddVisual(visualTitle, visual, true);",
+    "return palette;",
+    "try { palette.Dispose(); }",
     "PropertiesPaletteMinWidth",
     "PropertiesPaletteMinHeight",
     "layout.PropertiesPaletteWidth",
@@ -50,7 +63,15 @@ for token in (
     "_workspacePanel?.SetDedicatedPropertiesPaletteActive(e.NewState == StateEventIndex.Show);",
 ):
     if token not in palette:
-        errors.append("PaletteCoordinator optional dedicated Properties contract missing: " + token)
+        errors.append("PaletteCoordinator optional dedicated Properties rollback-safe contract missing: " + token)
+
+for forbidden in (
+    '_properties = new PaletteSet("QS3D — Thuộc tính", PropertiesGuid)',
+    '_properties.AddVisual("Thuộc tính", _propertiesVisual, true);',
+    "_properties.DeviceIndependentSize =",
+):
+    if forbidden in palette:
+        errors.append("dedicated Properties must not configure a native PaletteSet after static publication: " + forbidden)
 
 bim_start = palette.find("public static bool ShowBimWorkspace()")
 bim_end = palette.find("public static void ShowDrawingManagement()", bim_start)
@@ -132,4 +153,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: the dedicated QS3D Properties PaletteSet remains an optional lifecycle-owned single-editor host: default BIM embeds the editor, explicit host Show reparents it immediately, and Hide returns it without a second view/model/editor.")
+print("PASS: the dedicated QS3D Properties PaletteSet remains an optional lifecycle-owned single-editor host: native construction/configuration/AddVisual are rollback-safe before publication, default BIM embeds the editor, explicit host Show reparents it immediately, and Hide returns it without a second view/model/editor.")

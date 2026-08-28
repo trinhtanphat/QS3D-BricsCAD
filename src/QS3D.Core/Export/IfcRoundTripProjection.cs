@@ -85,6 +85,10 @@ namespace QS3D.Core.Export
             var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in dimensions)
             {
+                IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
+                    knownCount,
+                    items.Count,
+                    "IFC round-trip dimension");
                 if (items.Count == MaxNestedCollectionItems)
                     ThrowTooManyNestedItems("dimension");
                 if (item == null)
@@ -114,6 +118,10 @@ namespace QS3D.Core.Export
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var value in provenance)
             {
+                IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
+                    knownCount,
+                    items.Count,
+                    "IFC round-trip provenance");
                 if (items.Count == MaxNestedCollectionItems)
                     ThrowTooManyNestedItems("provenance");
                 var token = IfcRoundTripProjectionContract.RequireCanonicalToken(value, nameof(provenance));
@@ -203,6 +211,10 @@ namespace QS3D.Core.Export
             var items = new List<IfcRoundTripProjection>();
             foreach (var projection in projections)
             {
+                IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
+                    knownCount,
+                    items.Count,
+                    "IFC round-trip projection");
                 if (items.Count == MaxProjections)
                     ThrowTooManyProjections();
                 items.Add(projection);
@@ -346,6 +358,12 @@ namespace QS3D.Core.Export
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(parameterName, "Numeric values must be finite.");
             return value == 0d ? 0d : value;
+        }
+
+        internal static void RequireCanProcessNextKnownCount(int? knownCount, int observedCount, string collectionLabel)
+        {
+            if (knownCount.HasValue && observedCount >= knownCount.Value)
+                throw new InvalidOperationException(collectionLabel + " source Count was exceeded during traversal.");
         }
     }
 
