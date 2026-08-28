@@ -41,10 +41,10 @@ namespace QS3D.Core.SmokeTests
             var secondBox = new AxisAlignedBox(30d, 0d, 0d, 31d, 1d, 1d);
             var result = service.Detect(new[]
             {
-                Element("A", "LeadingDelimiter", firstBox),
-                Element("|A", "LeadingDelimiter", firstBox),
-                Element("A|", "TrailingDelimiter", secondBox),
-                Element("A", "TrailingDelimiter", secondBox)
+                Element("A", "DoubleDelimiter", firstBox),
+                Element("||", "DoubleDelimiter", firstBox),
+                Element("A|", "SplitDelimiter", secondBox),
+                Element("|", "SplitDelimiter", secondBox)
             });
 
             if (result.Pairs.Count != 2)
