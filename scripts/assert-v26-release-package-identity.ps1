@@ -17,7 +17,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $script:MaxMetadataBytes = 65536
-$script:StrictUtf8 = New-Object System.Text.UTF8Encoding($false, $true)
+$script:StrictUtf8 = [Text.UTF8Encoding]::new($false, $true)
 
 function Resolve-OrdinaryNonReparseFile {
     param(
