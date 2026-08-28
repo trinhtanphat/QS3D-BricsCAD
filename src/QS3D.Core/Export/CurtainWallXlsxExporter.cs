@@ -62,12 +62,7 @@ namespace QS3D.Core.Export
             if (rows.Count != rowCount)
                 throw new InvalidOperationException("Curtain XLSX export row count changed during snapshot.");
             for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
-            {
-                var currentSource = rows[rowIndex];
-                if (!ReferenceEquals(currentSource, sourceRows[rowIndex]))
-                    throw new InvalidOperationException("Curtain XLSX export row source changed during snapshot. Invalid row index: " + rowIndex + ".");
-                EnsureRowStable(currentSource, snapshot[rowIndex], rowIndex);
-            }
+                EnsureRowStable(sourceRows[rowIndex], snapshot[rowIndex], rowIndex);
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
