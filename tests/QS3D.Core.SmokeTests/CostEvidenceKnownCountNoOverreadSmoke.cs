@@ -111,13 +111,13 @@ namespace QS3D.Core.SmokeTests
 
         private static void NullAndDuplicateEvidenceRemainRejected()
         {
-            var nullRates = new CountProbeCollection<RateItem>(1, null!);
+            var nullRates = new CountProbeCollection<RateItem>(1, new RateItem[] { null! });
             Contains("null item", Capture<ArgumentException>(() => new RateBook("book", nullRates)).Message, "rate-book null evidence");
 
             var duplicateRates = new CountProbeCollection<RateItem>(2, Item("R-DUP"), Item("R-DUP"));
             Contains("Duplicate rate item id", Capture<ArgumentException>(() => new RateBook("book", duplicateRates)).Message, "rate-book duplicate evidence");
 
-            var nullLines = new CountProbeCollection<EstimateLine>(1, null!);
+            var nullLines = new CountProbeCollection<EstimateLine>(1, new EstimateLine[] { null! });
             Contains("null line", Capture<ArgumentException>(() => FrozenEstimateProjection.Create(nullLines)).Message, "projection null evidence");
 
             var duplicateLines = new CountProbeCollection<EstimateLine>(2, Line("L-DUP"), Line("L-DUP"));
