@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT / "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"
+HELPER = ROOT / "scripts/acquire-v25-compile-references.ps1"
 WORKFLOWS = {
     "V25 integration": ROOT / ".github/workflows/bricscad-v25.yml",
     "manual V25 release": ROOT / ".github/workflows/release-v25.yml",
@@ -67,15 +68,54 @@ if manual_marker not in manual:
     errors.append("manual V25 release reference gate is not synchronized with TD_MgdBrep.dll")
 
 cloud = workflow_text.get("cloud V25 release", "")
-cloud_markers = {
-    "BREP discovery": "-Filter 'TD_MgdBrep.dll'",
-    "BREP co-location": "(Join-Path $_ 'TD_MgdBrep.dll')",
-    "complete discovery count": "$brx.Count -lt 1 -or $td.Count -lt 1 -or $brep.Count -lt 1",
-    "complete validation list": "@('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')",
-}
-for label, marker in cloud_markers.items():
-    if marker not in cloud:
-        errors.append(f"cloud V25 release is missing {label} contract for TD_MgdBrep.dll")
+shared_helper_marker = ".\\scripts\\acquire-v25-compile-references.ps1"
+if shared_helper_marker in cloud:
+    cloud_markers = {
+        "shared helper result binding": '"BRICSCAD_V25_DIR=$bricsDir"',
+        "shared helper exact output selection": "Select-Object -Last 1",
+    }
+    for label, marker in cloud_markers.items():
+        if marker not in cloud:
+            errors.append(f"cloud V25 release is missing {label} contract")
+
+    if not HELPER.is_file():
+        errors.append("cloud V25 release delegates compile-reference acquisition but the shared helper is missing")
+    else:
+        try:
+            helper = HELPER.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            errors.append(f"cannot read shared V25 compile-reference helper: {exc}")
+        else:
+            for filename in sorted(required_files):
+                if filename not in helper:
+                    errors.append(
+                        f"shared V25 compile-reference helper does not validate project-required reference {filename}"
+                    )
+            helper_markers = {
+                "runtime candidate discovery": "-Filter 'BrxMgd.dll'",
+                "Brx co-location": "(Join-Path $_ 'BrxMgd.dll')",
+                "TD co-location": "(Join-Path $_ 'TD_Mgd.dll')",
+                "BREP co-location": "(Join-Path $_ 'TD_MgdBrep.dll')",
+                "fail-closed co-location result": "if ([string]::IsNullOrWhiteSpace($bricsDir))",
+                "resolved directory output": "Write-Output $bricsDir",
+            }
+            for label, marker in helper_markers.items():
+                if marker not in helper:
+                    errors.append(
+                        f"shared V25 compile-reference helper is missing {label} contract: {marker}"
+                    )
+else:
+    # Legacy inline acquisition remains accepted only when it still carries the
+    # complete compile-reference discovery/co-location contract itself.
+    cloud_markers = {
+        "BREP discovery": "-Filter 'TD_MgdBrep.dll'",
+        "BREP co-location": "(Join-Path $_ 'TD_MgdBrep.dll')",
+        "complete discovery count": "$brx.Count -lt 1 -or $td.Count -lt 1 -or $brep.Count -lt 1",
+        "complete validation list": "@('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')",
+    }
+    for label, marker in cloud_markers.items():
+        if marker not in cloud:
+            errors.append(f"cloud V25 release is missing {label} contract for TD_MgdBrep.dll")
 
 if errors:
     print("V25 compile-reference contract preflight FAILED:")
@@ -86,5 +126,5 @@ if errors:
 print(
     "V25 compile-reference contract preflight PASS: "
     + ", ".join(sorted(required_files))
-    + " are synchronized across integration, manual-release, and cloud-release gates."
+    + " are synchronized across integration, manual-release, and cloud-release gates/shared acquisition."
 )
