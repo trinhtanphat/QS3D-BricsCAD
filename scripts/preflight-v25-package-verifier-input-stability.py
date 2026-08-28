@@ -10,6 +10,14 @@ def require(text: str, token: str, label: str) -> None:
         raise SystemExit(f"FAIL v25 package verifier input stability: missing {label}: {token}")
 
 
+def require_count(text: str, token: str, expected: int, label: str) -> None:
+    actual = text.count(token)
+    if actual != expected:
+        raise SystemExit(
+            f"FAIL v25 package verifier input stability: {label} count changed: expected {expected}, got {actual}"
+        )
+
+
 def forbid(text: str, token: str, label: str) -> None:
     if token in text:
         raise SystemExit(f"FAIL v25 package verifier input stability: forbidden {label}: {token}")
@@ -20,6 +28,13 @@ def require_order(text: str, first: str, second: str, label: str) -> None:
     b = text.find(second)
     if a < 0 or b < 0 or a >= b:
         raise SystemExit(f"FAIL v25 package verifier input stability: ordering violated for {label}")
+
+
+def require_last_order(text: str, first: str, second: str, label: str) -> None:
+    a = text.rfind(first)
+    b = text.rfind(second)
+    if a < 0 or b < 0 or a >= b:
+        raise SystemExit(f"FAIL v25 package verifier input stability: final ordering violated for {label}")
 
 
 def validate(text: str) -> None:
@@ -50,6 +65,14 @@ def validate(text: str) -> None:
     ):
         require(text, token, label)
 
+    checksum_recheck = "$null = Assert-StableFileState -Expected $checksumState -Label 'V25 package checksum'"
+    require_count(
+        text,
+        checksum_recheck,
+        2,
+        "checksum generation rechecks (after checksum consumption and after archive consumption)",
+    )
+
     for token, label in (
         ("Get-Content -LiteralPath $resolvedChecksum", "unbounded path-reopening checksum read"),
         ("Get-FileHash -LiteralPath $resolvedZip", "path-reopening ZIP hash"),
@@ -62,6 +85,7 @@ def validate(text: str) -> None:
     require_order(text, "$checksumState = Get-StableFileState", "Read-BoundedStrictUtf8State -State $checksumState", "checksum capture before read")
     require_order(text, "$zipStream = Open-StableReadStream", "[IO.Compression.ZipArchive]::new($zipStream", "stable stream before archive")
     require_order(text, "$archive.Dispose()", "$null = Assert-StableFileState -Expected $zipState", "archive disposal before final ZIP recheck")
+    require_last_order(text, "$archive.Dispose()", checksum_recheck, "archive disposal before final checksum recheck")
 
 
 def mutation_lock(text: str) -> None:
