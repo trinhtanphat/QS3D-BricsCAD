@@ -433,11 +433,11 @@ namespace QS3D.Core.Persistence
             if (!string.Equals(source.Id, target.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot restore family state into a different family id.");
 
-            var properties = ProjectFamilyService.SnapshotProperties(source, "Snapshot", "snapshot materialization");
+            _ = ProjectFamilyService.SnapshotProperties(source, "Snapshot", "snapshot materialization");
             target.Name = source.Name;
             target.Category = source.Category;
             target.Properties.Clear();
-            foreach (var property in properties) target.Properties[property.Key] = property.Value;
+            foreach (var property in source.Properties) target.Properties[property.Key] = property.Value;
         }
 
         private static ProjectElement CloneElement(ProjectElement source)
@@ -466,7 +466,7 @@ namespace QS3D.Core.Persistence
 
             RequireCanonicalElementProperties(source);
             target.Properties.Clear();
-            foreach (var property in source.Properties) target.Properties[property.Key] = property.Value ?? string.Empty;
+            foreach (var property in source.Properties) target.Properties[property.Key] = property.Value;
 
             target.Quantities.Clear();
             foreach (var quantity in source.Quantities) target.SetQuantity(quantity.Key, quantity.Value);
