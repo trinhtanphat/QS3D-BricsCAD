@@ -18,7 +18,7 @@ namespace QS3D.Core.Geometry
             Handle = RequireCanonicalHandle(handle);
             if (!Finite(point.X) || !Finite(point.Y) || !Finite(elevation))
                 throw new ArgumentOutOfRangeException(nameof(point), "Grid intersection marker record coordinates must be finite.");
-            Point = point;
+            Point = new Point2(point.X == 0d ? 0d : point.X, point.Y == 0d ? 0d : point.Y);
             Elevation = elevation == 0d ? 0d : elevation;
         }
 
@@ -221,8 +221,13 @@ namespace QS3D.Core.Geometry
                 }
             }
 
-            try { return new GridIntersectionPairRecord(first, second, pairToken, entries); }
+            GridIntersectionPairRecord record;
+            try { record = new GridIntersectionPairRecord(first, second, pairToken, entries); }
             catch (ArgumentException ex) { throw new FormatException("Grid intersection pair record violates canonical ownership.", ex); }
+
+            if (!string.Equals(Encode(record), value, StringComparison.Ordinal))
+                throw new FormatException("Grid intersection pair record is not in canonical serialized form.");
+            return record;
         }
 
         private static string RequirePairToken(string value, string parameterName)

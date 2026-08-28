@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             OversizedMetadataKeyFailsWithoutPayloadDecode();
             MarkerOwnerShapeFailsAtEntryBoundary();
             DecodedMarkerValidationFailuresAreFormatErrors();
+            NonCanonicalSerializedAliasesFailClosed();
         }
 
         private static void EncodedGridIdExactBoundaryRoundTrips()
@@ -127,6 +128,48 @@ namespace QS3D.Core.SmokeTests
             Equal(1.25d, valid.Entries[0].Point.X, "Valid finite decoded marker X changed.");
             Equal(-2.5d, valid.Entries[0].Point.Y, "Valid finite decoded marker Y changed.");
             Equal(3.75d, valid.Entries[0].Elevation, "Valid finite decoded marker elevation changed.");
+        }
+
+        private static void NonCanonicalSerializedAliasesFailClosed()
+        {
+            const string firstId = "A";
+            const string secondId = "B";
+            var pair = GridIntersectionIdentityPlanner.BuildPairToken(firstId, secondId);
+            var key = GridIntersectionMarkerRecordCodec.MetadataKey(pair);
+            var owner = GridIntersectionIdentityPlanner.BuildIntersectionOwner(firstId, secondId, 0);
+            const string canonical = "1|QQ==|Qg==|0,";
+            var suffix = owner + ",A1,1,2,3";
+
+            RejectFormat(
+                () => GridIntersectionMarkerRecordCodec.Decode(key, "1|Q Q==|Qg==|0," + suffix),
+                "canonical serialized form");
+            RejectFormat(
+                () => GridIntersectionMarkerRecordCodec.Decode(key, "1|QQ==|Qg==|00," + suffix),
+                "canonical serialized form");
+            RejectFormat(
+                () => GridIntersectionMarkerRecordCodec.Decode(key, "1|QQ==|Qg==|+0," + suffix),
+                "canonical serialized form");
+            RejectFormat(
+                () => GridIntersectionMarkerRecordCodec.Decode(key, canonical + owner + ",A1,1.0,2,3"),
+                "canonical serialized form");
+            RejectFormat(
+                () => GridIntersectionMarkerRecordCodec.Decode(key, canonical + owner + ",A1,1E+0,2,3"),
+                "canonical serialized form");
+            RejectFormat(
+                () => GridIntersectionMarkerRecordCodec.Decode(key, canonical + owner + ",A1,-0,2,3"),
+                "canonical serialized form");
+
+            var record = new GridIntersectionPairRecord(
+                firstId,
+                secondId,
+                pair,
+                new[]
+                {
+                    new GridIntersectionMarkerRecordEntry(0, owner, "A1", new Point2(1, 2), 3)
+                });
+            var encoded = GridIntersectionMarkerRecordCodec.Encode(record);
+            var decoded = GridIntersectionMarkerRecordCodec.Decode(key, encoded);
+            Equal(encoded, GridIntersectionMarkerRecordCodec.Encode(decoded), "Canonical record text did not remain stable after round-trip.");
         }
 
         private static void RejectFormat(Action action, string expectedMessage)
