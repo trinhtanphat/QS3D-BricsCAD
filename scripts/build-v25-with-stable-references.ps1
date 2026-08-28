@@ -54,10 +54,11 @@ try {
         $locks.Add([IO.File]::Open($item.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read))
     }
 
+    # This verifier is a PowerShell script and fails by throwing under ErrorActionPreference=Stop.
+    # Do not consult $LASTEXITCODE here: it belongs to native processes and may be null or stale.
     & (Join-Path $PSScriptRoot 'assert-v25-compile-reference-state.ps1') `
         -StatePath $statePath `
         -BricsCadDir $snapshot
-    if ($LASTEXITCODE -ne 0) { throw 'V25 compile-reference snapshot state verification failed.' }
 
     [Environment]::SetEnvironmentVariable('BRICSCAD_V25_DIR', $snapshot, 'Process')
     $arguments = @('build', $project, '-c', $Configuration, "-p:Platform=$Platform")
@@ -67,7 +68,6 @@ try {
     & (Join-Path $PSScriptRoot 'assert-v25-compile-reference-state.ps1') `
         -StatePath $statePath `
         -BricsCadDir $snapshot
-    if ($LASTEXITCODE -ne 0) { throw 'V25 compile-reference snapshot changed during the build.' }
     if ($buildExitCode -ne 0) {
         throw "V25 build failed with exit code $buildExitCode."
     }
