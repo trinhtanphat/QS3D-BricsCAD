@@ -117,6 +117,12 @@ namespace QS3D.Core.Domain
             }
             if (knownCount.HasValue && observedCount != knownCount.Value)
                 throw MetadataTraversalCountMismatchError(knownCount.Value, observedCount);
+
+            var finalKnownCount = RequireSupportedKnownPersistenceCount(values);
+            if (knownCount.HasValue != finalKnownCount.HasValue ||
+                (knownCount.HasValue && knownCount.Value != finalKnownCount!.Value))
+                throw MetadataTraversalCountChangedError();
+
             ValidateReserved(next);
             _items.Clear();
             foreach (var item in next) _items.Add(item.Key, item.Value);
@@ -209,6 +215,11 @@ namespace QS3D.Core.Domain
         {
             return new InvalidOperationException(
                 "Project metadata persistence input Count does not match traversal (expected " + expected + ", observed " + observed + ").");
+        }
+
+        private static InvalidOperationException MetadataTraversalCountChangedError()
+        {
+            return new InvalidOperationException("Project metadata persistence input Count changed during traversal.");
         }
 
         private static InvalidOperationException MetadataCountError()
