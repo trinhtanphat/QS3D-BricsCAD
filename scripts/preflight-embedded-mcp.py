@@ -46,6 +46,10 @@ def main() -> int:
     require(server, 'PublicUrlEnvironment = "QS3D_MCP_PUBLIC_URL"', errors, "public URL display override")
     require(server, "ExecuteInApplicationContext", errors, "BricsCAD application-context dispatch")
     require(server, "ManualResetEventSlim", errors, "bounded CAD dispatch wait")
+    require(server, "ConstantTimeEquals", errors, "constant-time bearer comparison")
+    require(server, "MaxConcurrentClients", errors, "bounded concurrent MCP clients")
+    require(server, "Transfer-Encoding is not supported", errors, "HTTP request framing guard")
+    require(server, 'request.Method == "DELETE"', errors, "MCP session termination")
 
     for token in (
         '"initialize"',
@@ -74,6 +78,7 @@ def main() -> int:
     forbid(server, "Process.Start(", errors, "arbitrary process launch from network server")
     forbid(server, "PowerShell", errors, "arbitrary PowerShell surface")
     forbid(server, "cmd.exe", errors, "arbitrary cmd surface")
+    forbid(server, "mouse_event(", errors, "legacy global mouse injection")
 
     expected_routes = {
         'Prefix + "MCP_SETTINGS"': "QS3DMCPACCOUNTSETUP",
@@ -111,7 +116,7 @@ def main() -> int:
     ):
         require(commands, f'[CommandMethod("{command}"', errors, f"CommandMethod {command}")
 
-    # Default UX: browser authentication, then hidden cloudflared provisioning. No token/pw copy.
+    # Default UX: browser authentication, then hidden cloudflared provisioning. No token/password copy required.
     require(account_onboarding, '[CommandMethod("QS3DMCPACCOUNTSETUP"', errors, "browser-login setup command")
     require(account_onboarding, "McpCloudflareAccountSetupWindow", errors, "browser-login setup window")
     require(account_onboarding, '"tunnel login"', errors, "Cloudflare browser login")
@@ -131,21 +136,24 @@ def main() -> int:
     require(token_onboarding, "DataProtectionScope.CurrentUser", errors, "per-Windows-user fallback secret scope")
     require(token_onboarding, 'startInfo.EnvironmentVariables["TUNNEL_TOKEN"]', errors, "fallback token outside process command line")
     require(token_onboarding, "trycloudflare.com", errors, "Quick Tunnel test URL discovery")
+    require(token_onboarding, '"tunnel --no-autoupdate --url " + OriginUrl', errors, "Quick Tunnel loopback route")
     forbid(token_onboarding, "powershell.exe", errors, "fallback PowerShell setup dependency")
     forbid(token_onboarding, "cmd.exe", errors, "fallback cmd setup dependency")
 
-    # The probe methods live inside escaped C# JSON string literals.
+    # The local probe exercises a real MCP lifecycle including one tools/call and session termination.
     for source_token, label in (
         ('\\"method\\":\\"initialize\\"', "Ribbon protocol initialize probe"),
         ('\\"method\\":\\"notifications/initialized\\"', "Ribbon protocol initialized notification"),
         ('\\"method\\":\\"tools/list\\"', "Ribbon protocol tools/list probe"),
+        ('\\"method\\":\\"tools/call\\"', "Ribbon protocol tools/call probe"),
+        ('\\"name\\":\\"connector_info\\"', "Ribbon connector_info call"),
     ):
         require(commands, source_token, errors, label)
     require(commands, 'request.Headers["MCP-Protocol-Version"]', errors, "Ribbon protocol version header")
     require(commands, 'response.Headers["Mcp-Session-Id"]', errors, "Ribbon MCP session capture")
     require(commands, "McpEmbeddedServer.GetBearerToken()", errors, "Ribbon bearer authentication")
-    require(commands, "cloudflared tunnel --url http://127.0.0.1:8765", errors, "Cloudflare tunnel guide")
-    require(commands, "no second repository", errors, "single-repository guide")
+    require(commands, 'Send(endpoint, "DELETE"', errors, "Ribbon session cleanup")
+    require(commands, "No second repository", errors, "single-repository guide")
 
     if errors:
         print("Embedded MCP preflight FAILED:")
@@ -154,9 +162,10 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: QS3D embeds authenticated MCP and provides a zero-shell browser-login Cloudflare "
-        "wizard that creates/reuses a named tunnel, routes DNS, persists config, auto-starts with "
-        "BricsCAD, keeps provider passwords out of QS3D, and retains Quick Tunnel as test fallback."
+        "PASS: QS3D embeds authenticated MCP, full protocol/tool-call diagnostics and a zero-shell "
+        "browser-login Cloudflare wizard that creates/reuses a named tunnel, routes DNS, persists "
+        "config, auto-starts with BricsCAD, keeps provider passwords out of QS3D and retains Quick "
+        "Tunnel as a test fallback."
     )
     return 0
 
