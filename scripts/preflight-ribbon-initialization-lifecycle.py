@@ -111,8 +111,9 @@ else:
         "Qs3dRibbonTabGroupCoordinator.Reset",
     )
     for target in cleanup_targets:
-        guarded = "TryCleanup(" + target + ")"
-        if guarded not in stop_body:
+        method_group = "TryCleanup(" + target + ")"
+        block_lambda = "TryCleanup(() => { " + target + "(); })"
+        if method_group not in stop_body and block_lambda not in stop_body:
             errors.append("Ribbon Stop must isolate downstream teardown: " + target)
 
     if stop_body.count("TryCleanup(") < len(cleanup_targets):
