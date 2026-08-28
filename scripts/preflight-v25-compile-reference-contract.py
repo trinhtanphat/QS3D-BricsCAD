@@ -8,7 +8,8 @@ PROJECT = ROOT / "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"
 HELPER = ROOT / "scripts/acquire-v25-compile-references.ps1"
 SNAPSHOT_HELPER = ROOT / "scripts/snapshot-v25-compile-references.ps1"
 STATE_ASSERT = ROOT / "scripts/assert-v25-compile-reference-state.ps1"
-BUILD_TARGETS = ROOT / "Directory.Build.targets"
+BUILD_WRAPPER = ROOT / "scripts/build-v25-with-stable-references.ps1"
+CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
 WORKFLOWS = {
     "V25 integration": ROOT / ".github/workflows/bricscad-v25.yml",
     "manual V25 release": ROOT / ".github/workflows/release-v25.yml",
@@ -121,7 +122,8 @@ else:
 
 snapshot = read_required(SNAPSHOT_HELPER, "V25 compile-reference snapshot helper")
 state_assert = read_required(STATE_ASSERT, "V25 compile-reference state verifier")
-build_targets = read_required(BUILD_TARGETS, "repository build targets")
+build_wrapper = read_required(BUILD_WRAPPER, "V25 locked-reference build wrapper")
+ci_workflow = read_required(CI_WORKFLOW, "Shared CI workflow")
 
 if snapshot:
     snapshot_markers = {
@@ -190,36 +192,51 @@ if state_assert:
             "V25 compile-reference state ordering must be admit -> bounded materialize -> byte hash -> post-read rebind -> parse"
         )
 
-if build_targets:
-    target_markers = {
-        "V25-only target": "'$(MSBuildProjectName)' == 'QS3D.BricsCAD.V25'",
-        "pre-resolution boundary": 'BeforeTargets="ResolveAssemblyReferences"',
-        "post-resolution boundary": 'AfterTargets="ResolveAssemblyReferences"',
-        "snapshot helper invocation": "scripts\\snapshot-v25-compile-references.ps1",
-        "state verifier invocation": "scripts\\assert-v25-compile-reference-state.ps1",
-        "snapshot state path": "$(QS3DV25ReferenceStatePath)",
-        "Brx in-memory remap": '<Reference Update="BrxMgd">',
-        "TD in-memory remap": '<Reference Update="TD_Mgd">',
-        "BREP in-memory remap": '<Reference Update="TD_MgdBrep">',
-        "Brx snapshot HintPath": "$(QS3DV25ReferenceSnapshotDir)\\BrxMgd.dll",
-        "TD snapshot HintPath": "$(QS3DV25ReferenceSnapshotDir)\\TD_Mgd.dll",
-        "BREP snapshot HintPath": "$(QS3DV25ReferenceSnapshotDir)\\TD_MgdBrep.dll",
+if build_wrapper:
+    wrapper_markers = {
+        "three-reference lock contract": "@('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')",
+        "stable snapshot creation": "snapshot-v25-compile-references.ps1",
+        "state verifier": "assert-v25-compile-reference-state.ps1",
+        "write/delete denying lock": "[IO.FileShare]::Read",
+        "lock collection": "System.Collections.Generic.List[System.IO.FileStream]",
+        "process-only reference rebind": "[Environment]::SetEnvironmentVariable('BRICSCAD_V25_DIR', $snapshot, 'Process')",
+        "child dotnet build": "& dotnet @arguments",
+        "build result capture": "$buildExitCode = $LASTEXITCODE",
+        "environment restoration": "[Environment]::SetEnvironmentVariable('BRICSCAD_V25_DIR', $previousBricsCadDir, 'Process')",
+        "lock disposal": "$locks[$index].Dispose()",
     }
-    for label, marker in target_markers.items():
-        if marker not in build_targets:
-            errors.append(f"V25 build-boundary target is missing {label}: {marker}")
+    for label, marker in wrapper_markers.items():
+        if marker not in build_wrapper:
+            errors.append(f"V25 locked-reference build wrapper is missing {label}: {marker}")
 
-    snapshot_exec = build_targets.find("scripts\\snapshot-v25-compile-references.ps1")
-    first_assert = build_targets.find("scripts\\assert-v25-compile-reference-state.ps1")
-    remap = build_targets.find('<Reference Update="BrxMgd">')
-    after_boundary = build_targets.find('AfterTargets="ResolveAssemblyReferences"')
-    second_assert = build_targets.find("scripts\\assert-v25-compile-reference-state.ps1", first_assert + 1)
-    if min(snapshot_exec, first_assert, remap, after_boundary, second_assert) < 0 or not (
-        snapshot_exec < first_assert < remap < after_boundary < second_assert
+    snapshot_call = build_wrapper.find("snapshot-v25-compile-references.ps1")
+    lock_call = build_wrapper.find("[IO.File]::Open")
+    first_assert = build_wrapper.find("assert-v25-compile-reference-state.ps1")
+    child_build = build_wrapper.find("& dotnet @arguments")
+    second_assert = build_wrapper.find("assert-v25-compile-reference-state.ps1", first_assert + 1)
+    dispose = build_wrapper.find("$locks[$index].Dispose()")
+    if min(snapshot_call, lock_call, first_assert, child_build, second_assert, dispose) < 0 or not (
+        snapshot_call < lock_call < first_assert < child_build < second_assert < dispose
     ):
         errors.append(
-            "V25 build-boundary ordering must be snapshot -> pre-resolution verify -> HintPath remap -> post-resolution verify"
+            "V25 locked-reference build ordering must be snapshot -> acquire locks -> verify -> child build -> reverify -> dispose locks"
         )
+
+if ci_workflow:
+    ci_markers = {
+        "locked plugin build name": "Build BricsCAD V25 plugin against locked reference generations",
+        "locked local-qualification build name": "Build #3681 local V25 qualification harness against locked reference generations",
+        "shared wrapper invocation": ".\\scripts\\build-v25-with-stable-references.ps1",
+        "plugin snapshot": "qs3d-v25-plugin-reference-snapshot",
+        "local qualification snapshot": "qs3d-v25-local-qualification-reference-snapshot",
+        "plugin project": "src\\QS3D.BricsCAD.V25\\QS3D.BricsCAD.V25.csproj",
+        "qualification project": "tests\\QS3D.BricsCAD.V25.LocalQualification\\QS3D.BricsCAD.V25.LocalQualification.csproj",
+    }
+    for label, marker in ci_markers.items():
+        if marker not in ci_workflow:
+            errors.append(f"Shared CI is missing {label}: {marker}")
+    if ci_workflow.count(".\\scripts\\build-v25-with-stable-references.ps1") < 2:
+        errors.append("Shared CI must route both V25 hosted build boundaries through the locked-reference wrapper")
 
 if errors:
     print("V25 compile-reference contract preflight FAILED:")
@@ -230,5 +247,5 @@ if errors:
 print(
     "V25 compile-reference contract preflight PASS: "
     + ", ".join(sorted(required_files))
-    + " are synchronized across workflows and rebound to a verified stable per-build snapshot across assembly resolution."
+    + " are synchronized across workflows and Shared CI binds both hosted V25 builds to locked, verified reference snapshots."
 )
