@@ -60,6 +60,8 @@ else:
         errors.append("host lifecycle unsubscribe must continue attempting both native detach operations independently")
     if "_hostLifecycleSubscribed = false;" not in body:
         errors.append("unsubscribe must clear host lifecycle ownership state")
+    if re.search(r"if\s*\(\s*!_hostLifecycleSubscribed\s*\)\s*return\s*;", body):
+        errors.append("unsubscribe must retry both native detach operations even when a failed rollback left ownership unpublished")
 
 if errors:
     print("Start Center host subscription atomicity preflight FAILED:")
