@@ -270,6 +270,25 @@ namespace QS3D.Core.Persistence
                 RequireSupportedCount(element.DependsOn.Count, "element " + element.Id + " dependencies", MaximumSnapshotNestedEntries);
                 RequireSupportedCount(element.Properties.Count, "element " + element.Id + " properties", MaximumSnapshotNestedEntries);
                 RequireSupportedCount(element.Quantities.Count, "element " + element.Id + " quantities", MaximumSnapshotNestedEntries);
+                RequireCanonicalQuantities(element);
+            }
+        }
+
+        private static void RequireCanonicalQuantities(ProjectElement element)
+        {
+            foreach (var quantity in element.Quantities)
+            {
+                if (string.IsNullOrWhiteSpace(quantity.Key))
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with an empty quantity name.");
+                if (!string.Equals(quantity.Key, quantity.Key.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a non-canonical padded quantity name: " + quantity.Key + ".");
+                foreach (var ch in quantity.Key)
+                {
+                    if (char.IsControl(ch))
+                        throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a quantity name containing control characters.");
+                }
+                if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value) || quantity.Value < 0d)
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a non-finite or negative quantity: " + quantity.Key + ".");
             }
         }
 
@@ -375,7 +394,7 @@ namespace QS3D.Core.Persistence
             foreach (var property in source.Properties) target.Properties[property.Key] = property.Value;
 
             target.Quantities.Clear();
-            foreach (var quantity in source.Quantities) target.Quantities[quantity.Key] = quantity.Value;
+            foreach (var quantity in source.Quantities) target.SetQuantity(quantity.Key, quantity.Value);
 
             target.RestorePersistenceState(source.Dirty, source.UpdatedUtc);
         }
