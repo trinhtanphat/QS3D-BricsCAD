@@ -437,9 +437,9 @@ namespace QS3D.BricsCAD.V25
                     _lastError = string.Empty;
                 }
                 process.Exited += (_, __) => HandleProcessExit(process);
-                process.EnableRaisingEvents = true;
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
+                process.EnableRaisingEvents = true;
                 if (process.HasExited) HandleProcessExit(process);
                 return IsRunning;
             }
