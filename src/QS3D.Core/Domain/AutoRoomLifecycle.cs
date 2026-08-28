@@ -151,10 +151,14 @@ namespace QS3D.Core.Domain
             var selectedInputCount = 0;
             foreach (var raw in selectedSourceHandles)
             {
-                RequireCanProcessNextKnownCount("Auto Room selected source handle set", knownSelectedSourceHandleCount, selectedInputCount);
                 if (selectedInputCount >= MaxSourceHandleInputCount)
                     throw new InvalidOperationException(
                         "Auto Room source handles cannot exceed " + MaxSourceHandleInputCount + " input entries.");
+                if (selectedInputCount >= knownSelectedSourceHandleCount)
+                {
+                    selectedInputCount++;
+                    continue;
+                }
                 selectedInputCount++;
                 if (string.IsNullOrWhiteSpace(raw)) continue;
                 var canonical = GeneratedHandleIdentity.Normalize(raw);
