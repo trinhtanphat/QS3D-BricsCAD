@@ -6,7 +6,9 @@ Lane-Key: `issue-4352`
 Canonical PR: #4425  
 Canonical session handoff: `docs/agent-work-claims/issue-4352-chatgpt-mcp-session-handoff.md`
 
-The QS3D BricsCAD plugin embeds the MCP endpoint directly. A second MCP repository, Node runtime, PowerShell setup, or command-shell workflow is not required for end users. Future agents must read the canonical session handoff before changing this scope.
+QS3D embeds the MCP endpoint directly in the BricsCAD plugin. End users do not need a second MCP repository, Node runtime, PowerShell setup, or command-shell workflow.
+
+The active MCP implementation is modular: `McpEmbeddedServerV2.cs` owns loopback HTTP, bearer authentication, MCP protocol/session routing and tool schemas/results; `McpCadAgentRuntime.cs` owns BricsCAD database/editor operations, bounded command dispatch, BricsCAD-process-only UI input, emergency recovery and audit. The legacy monolithic `McpEmbeddedServer.cs` remains only as historical source and is explicitly excluded from V25 and V26 compilation.
 
 ## End-user path — no terminal
 
@@ -21,29 +23,31 @@ The default UI is `TOOL > MCP (AI) > Cài đặt MCP` or `AI Dashboard`. Both ro
 7. Click **Tự kiểm tra Agent (read-only)** for the built-in local MCP lifecycle/read-only sweep. Engineering/local agents can additionally run `scripts/test-mcp-loopback-readonly.py`; this script is not an end-user setup requirement and never prints the bearer token or calls mutation tools.
 8. Future BricsCAD starts reuse the Named Tunnel configuration and attempt automatic reconnect.
 
-Quick Tunnel remains a one-click test fallback only. The advanced token flow remains available only for users who already manage Cloudflare tunnels from the dashboard. No PowerShell or CMD is part of the normal setup.
+Quick Tunnel remains a one-click test fallback only. The advanced token flow remains available only for users who already manage Cloudflare tunnels from the dashboard. No PowerShell or CMD is part of normal setup.
 
 Agent Center also exposes **EMERGENCY STOP AGENT**, **Hủy command BricsCAD hiện tại (ESC x2)**, **Resume Agent**, protocol check, tunnel status, and the MCP audit folder.
 
 ## Managed cloudflared bootstrap
 
-`McpCloudflaredBootstrapper` installs the verified executable under `%LOCALAPPDATA%\QS3D\MCP\bin\cloudflared.exe`. The bootstrap belongs to local owner-facing UI code; the remote MCP server cannot invoke it.
+`McpCloudflaredBootstrapper` installs the verified executable under `%LOCALAPPDATA%\QS3D\MCP\bin\cloudflared.exe`. The bootstrap belongs to local owner-facing UI code; the network MCP transport cannot invoke it.
 
 Acceptance requires HTTPS download from the official Cloudflare Windows release asset, bounded download size, `WinVerifyTrust` verification, Cloudflare signer inspection, safe replacement/rollback, and local path persistence without putting tunnel credentials on a command line. QS3D deliberately lets Windows perform normal certificate-chain construction rather than forcing cache-only trust evaluation.
 
 ## Public endpoint contract
 
-`McpPublicEndpointResolver` is the single source for setup UI, Agent Center, dashboard, generated guide, and copy helpers. Resolution precedence is account-managed Named Tunnel, token/Quick Tunnel, then optional `QS3D_MCP_PUBLIC_URL` fallback.
+`McpPublicEndpointResolver` is the single source for setup UI, Agent Center, dashboard, generated guide, `connector_info`, and copy helpers. Resolution precedence is account-managed Named Tunnel, token/Quick Tunnel, then optional `QS3D_MCP_PUBLIC_URL` fallback.
 
-A displayed/copyable endpoint must be an absolute non-loopback `https://` URL with no user-info, query, or fragment. `/` is canonicalized to `/mcp`; unrelated paths are rejected. Provider-resolved endpoints are synchronized into current process state so `connector_info`, dashboard, and copy actions describe the same endpoint.
+A displayed/copyable endpoint must be an absolute non-loopback `https://` URL with no user-info, query, or fragment. `/` is canonicalized to `/mcp`; unrelated paths are rejected. Provider-resolved endpoints are synchronized into current process state so the GUI and remote tool describe the same endpoint.
 
 Convenience commands remain available but are not required by normal onboarding: `QS3DMCPAGENTCENTER`, `QS3DMCPCOPYURL`, `QS3DMCPCOPYTOKEN`, `QS3DMCPCOPYCONFIG`, and `QS3DMCPCHECKHTTP`.
 
 ## MCP transport and lifecycle
 
-The embedded service listens only on `127.0.0.1:8765` and exposes minimal `GET /healthz`, MCP JSON-RPC `POST /mcp`, authenticated session `DELETE /mcp`, and `OPTIONS /mcp`. `GET /mcp` returns `405` because the server does not emit server-initiated SSE notifications.
+The active `McpEmbeddedServerV2` service listens only on `127.0.0.1:8765` and exposes minimal `GET /healthz`, MCP JSON-RPC `POST /mcp`, authenticated session `DELETE /mcp`, and `OPTIONS /mcp`. `GET /mcp` returns `405` because the server does not emit server-initiated SSE notifications.
 
 The service supports MCP protocol `2025-06-18` with compatibility for `2025-03-26`: `initialize` returns `Mcp-Session-Id`, then the client sends `notifications/initialized` and uses `ping`, `tools/list`, and `tools/call`. Live sessions, concurrent clients, HTTP headers and bodies are bounded. Duplicate security-sensitive headers and `Transfer-Encoding` are rejected; MCP POST requires `application/json` plus bearer authentication.
+
+Generated bearer tokens contain 32 random bytes encoded as 64 hexadecimal characters. An explicit `QS3D_MCP_BEARER_TOKEN` override must be at least 32 characters. Tool successes expose both ordinary MCP text content and `structuredContent.data`, so ChatGPT can consume object/array results without reparsing human prose.
 
 The local protocol probe exercises real lifecycle calls, not only HTTP reachability. `scripts/test-mcp-loopback-readonly.py` additionally verifies bearer rejection, session creation/deletion, the required tool set, and bounded observation calls while keeping output sanitized.
 
@@ -51,9 +55,9 @@ The local protocol probe exercises real lifecycle calls, not only HTTP reachabil
 
 The production decision order is **direct CAD API first → bounded allowlisted native command workflow second → BricsCAD-process-only mouse/keyboard fallback last**.
 
-Read/observation tools include `connector_info`, `qs3d_status`, `cad_active_document`, `cad_selection`, `cad_database_snapshot`, `cad_entity_inspect`, `cad_view_state`, `cad_wait_idle`, `cad_command_catalog`, and `cad_audit_tail`.
+Read/observation tools include `connector_info`, `qs3d_status`, `cad_active_document`, `cad_selection`, `cad_database_snapshot`, `cad_entity_inspect`, `cad_view_state`, `cad_wait_idle`, `cad_sysvar`, `cad_command_catalog`, and `cad_audit_tail`.
 
-Direct transactional mutation tools include `cad_create_line`, `cad_create_circle`, `cad_create_polyline`, `cad_create_text`, `cad_entity_transform`, `cad_entity_delete`, `cad_layer`, and `qs3d_run_command`. Stable advanced/native workflows use `cad_command_sequence`. UI fallback uses `cad_ui_click`, `cad_ui_type`, and `cad_ui_key`. Recovery/control uses `cad_agent_stop`, `cad_agent_resume`, and `cad_cancel_command`.
+Direct transactional mutation tools include `cad_create_line`, `cad_create_circle`, `cad_create_arc`, `cad_create_polyline`, `cad_create_text`, `cad_create_mtext`, `cad_entity_transform`, `cad_entity_delete`, `cad_entity_set_layer`, `cad_layer`, and `qs3d_run_command`. Stable advanced/native workflows use `cad_command_sequence`. UI fallback uses `cad_ui_click`, `cad_ui_type`, and `cad_ui_key`. Recovery/control uses `cad_agent_stop`, `cad_agent_resume`, and `cad_cancel_command`.
 
 Every ordinary mutation requires top-level `confirmMutation=true`. `cad_agent_stop` and `cad_cancel_command` intentionally remain confirmation-free so an operator can always stop an active action.
 
@@ -61,11 +65,15 @@ Every ordinary mutation requires top-level `confirmMutation=true`. `cad_agent_st
 
 Database mutation is marshalled through `Application.DocumentManager.ExecuteInApplicationContext`. Direct entity changes use BricsCAD/Teigha transactions and document locks. Geometry values must be finite; handles, layer/text sizes, polyline vertices, database snapshot sizes and other caller-controlled values are bounded.
 
-`cad_entity_inspect` reads a known handle without requiring a whole-model snapshot. `cad_database_snapshot` returns a bounded ModelSpace view and reports whether more entities remain.
+`cad_entity_inspect` reads a known handle and returns type/layer/extents plus useful geometry/text details for supported entity types. `cad_database_snapshot` returns a bounded ModelSpace view and reports whether more entities remain. `cad_sysvar` is read-only and only exposes a fixed privacy-reviewed allowlist.
+
+Remote document identity is intentionally privacy-safe: active-document/status tools return a basename and booleans rather than the full local filesystem path or database handseed. `DWGNAME` is reduced to its filename before leaving the runtime.
 
 ### CAD dispatch timeout truth
 
-Queued CAD-context work is cancellation-marked when the caller's bounded wait expires, and delayed callbacks retain synchronization ownership so the server does not dispose a wait handle underneath a late callback. There is still one source-hardening item tracked in the canonical handoff: the narrow race where a callback can begin immediately before the timeout and finish after the network caller has already observed a timeout. Until that state transition is hardened, an MCP client **must not automatically retry a timed-out mutation**; inspect audit/database state first. Do not report this edge as closed merely because the use-after-dispose race is closed.
+`McpCadAgentRuntime` uses an atomic three-state dispatch transition: `Queued → Running` or `Queued → CancelledBeforeStart`. The application-context callback must atomically claim `Running` before executing work; a timeout can cancel only work that has not started. If the timeout observes that work already entered `Running`, the caller receives an explicit **completion is uncertain / do not retry automatically** error. This closes the previous check-then-act ambiguity without pretending a running BricsCAD mutation can be rolled back by a network timeout.
+
+A client receiving the uncertain-completion result must inspect entity/database/audit state before deciding the next action. This is intentional exactly-once safety behavior, not a transport retry signal.
 
 ## Bounded BricsCAD command workflow
 
@@ -77,7 +85,7 @@ It rejects forbidden control characters, excessive total/line size, continued in
 
 UI automation uses Windows `SendInput`. Before click/type/key injection, QS3D verifies that the target HWND belongs to the current BricsCAD process. Click coordinates are client-relative and checked against the verified target window before `ClientToScreen`; input aborts if foreground ownership changes during the sequence. Printable Unicode typing is bounded and `Alt+F4` is blocked.
 
-These tools are for BricsCAD dialogs, palettes, and ribbon actions when no stable API/command route exists. They are not desktop/browser-wide remote-control tools. The current production MCP deliberately does not expose remote screenshot/desktop capture; geometry/UI outcomes should be verified through database/entity/view state. Any future image tool requires a separately reviewed BricsCAD-window-only privacy boundary.
+These tools are for BricsCAD dialogs, palettes, and ribbon actions when no stable API/command route exists. They are not desktop/browser-wide remote-control tools. The production MCP deliberately does not expose remote desktop capture; geometry/UI outcomes should be verified through database/entity/view state. Any future image tool requires a separately reviewed BricsCAD-window-only privacy boundary.
 
 ## Emergency stop and audit
 
@@ -99,6 +107,8 @@ A capable ChatGPT client should run:
 
 `inspect drawing -> establish layers/styles -> create/modify geometry -> hatch/annotate/dimension -> blocks/xrefs -> layout/viewports -> verify database/view state -> correct with move/trim/undo -> save -> plot/export`
 
+Direct Arc and MText creation plus entity-layer reassignment reduce dependence on interactive commands for common drawing/annotation work. `cad_command_sequence` supplies the remaining complex native workflows, while mouse/keyboard is a last-resort UI bridge.
+
 A successful tool response is not proof the drawing is correct. Re-read entity/database/view state, correct/undo when needed, and save/plot only after verification.
 
 ## Security boundary
@@ -111,6 +121,6 @@ Remote MCP does not expose PowerShell, `cmd.exe`, arbitrary shell execution, arb
 
 Hosted source/CI can prove guards/builds but cannot prove licensed BricsCAD desktop behavior or a real ChatGPT-to-Cloudflare-to-BricsCAD session. Final runtime status remains `PENDING_LOCAL` until one exact candidate SHA passes the full matrix.
 
-The local agent must use a clean exact SHA and disposable drawings, then prove V25 and V26 plugin load; Agent Center routing; verified GUI cloudflared install/update; `scripts/test-mcp-loopback-readonly.py`; browser login/Named Tunnel/DNS/autoreconnect; stale-tunnel and DNS-conflict fail-closed behavior; Quick Tunnel discovery; public endpoint/token copy consistency; ChatGPT Web tool discovery; read/entity/view inspection; direct geometry create/edit/delete; bounded hatch/dimension/block/xref/layout/viewport/save/plot workflows; BricsCAD-process-only mouse/typing/keys and foreground-loss rejection; emergency stop/cancel/resume; tunnel-mode mutual exclusion; save/reopen round trip; and zero task-owned process residue.
+The local agent must use a clean exact SHA and disposable drawings, then prove V25 and V26 plugin load; active modular V2 server composition; Agent Center routing; verified GUI cloudflared install/update; `scripts/test-mcp-loopback-readonly.py`; browser login/Named Tunnel/DNS/autoreconnect; stale-tunnel and DNS-conflict fail-closed behavior; Quick Tunnel discovery; public endpoint/token copy consistency; ChatGPT Web tool discovery and structured results; read/entity/view/sysvar inspection; direct line/circle/arc/polyline/DBText/MText create/edit/delete/layer operations; bounded hatch/dimension/block/xref/layout/viewport/save/plot workflows; BricsCAD-process-only mouse/typing/keys and foreground-loss rejection; atomic timeout/no-auto-retry behavior; emergency stop/cancel/resume; tunnel-mode mutual exclusion; save/reopen round trip; and zero task-owned process residue.
 
 Committed evidence must never contain bearer tokens, Cloudflare credentials, private paths, customer/private DWGs, proprietary BricsCAD binaries, or unsanitized screenshots. Record exact tested SHA and sanitized outcomes in the single matching item in `docs/LOCAL-AGENT-INBOX.md`. Until that matrix passes, report `PENDING_LOCAL`, never `LOCAL_PASS`.
