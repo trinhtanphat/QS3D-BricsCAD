@@ -126,7 +126,7 @@ build_targets = read_required(BUILD_TARGETS, "repository build targets")
 if snapshot:
     snapshot_markers = {
         "three-reference contract": "@('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')",
-        "ordinary-file admission": "Assert-OrdinaryFile -Path $Path -Label $Label",
+        "ordinary-file admission": "must be an ordinary non-reparse file",
         "streaming SHA-256": "[Security.Cryptography.SHA256]::Create()",
         "source length binding": "$length = [int64]$first.Length",
         "source UTC timestamp binding": "$ticks = [int64]$first.LastWriteTimeUtc.Ticks",
@@ -139,6 +139,8 @@ if snapshot:
         "strict UTF-8 state write": "New-Object Text.UTF8Encoding($false, $true)",
         "reparse component admission": "Assert-NoExistingReparseComponent -Path $snapshot",
         "state containment": "StatePath must be contained by SnapshotDir",
+        "source-in-snapshot overlap rejection": "SnapshotDir must not equal or contain the V25 source reference directory.",
+        "snapshot-in-source overlap rejection": "SnapshotDir must not be located inside the V25 source reference directory.",
     }
     for label, marker in snapshot_markers.items():
         if marker not in snapshot:
@@ -160,7 +162,12 @@ if state_assert:
         "three-reference contract": "@('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')",
         "bounded state": "$maxStateBytes = 32768",
         "strict UTF-8 state read": "New-Object Text.UTF8Encoding($false, $true)",
-        "ordinary state admission": "Assert-OrdinaryFile -Path $StatePath",
+        "stable state admission": "$stateBefore = Get-CurrentStableState -Path $StatePath",
+        "bounded materialization": "[IO.File]::ReadAllBytes($stateBefore.path)",
+        "materialized-byte hash": "$materializedHash = Get-ByteArraySha256 -Bytes $rawBytes",
+        "post-read state rebind": "$stateAfter = Get-CurrentStableState -Path $StatePath",
+        "state ancestry admission": "Assert-NoExistingReparseComponent -Path $StatePath",
+        "schema version validation": "[int]$state.schemaVersion -ne 1",
         "independent current second hash": "$secondHash = Get-StreamingSha256 -Path $secondPath",
         "path revalidation": "[string]::Equals(([string]$expected.path), $current.path",
         "length revalidation": "[int64]$expected.length -ne $current.length",
@@ -171,10 +178,23 @@ if state_assert:
         if marker not in state_assert:
             errors.append(f"V25 compile-reference state verifier is missing {label}: {marker}")
 
+    before_read = state_assert.find("$stateBefore = Get-CurrentStableState -Path $StatePath")
+    materialize = state_assert.find("[IO.File]::ReadAllBytes($stateBefore.path)")
+    materialized_hash = state_assert.find("$materializedHash = Get-ByteArraySha256 -Bytes $rawBytes")
+    after_read = state_assert.find("$stateAfter = Get-CurrentStableState -Path $StatePath")
+    parse = state_assert.find("$state = $raw | ConvertFrom-Json")
+    if min(before_read, materialize, materialized_hash, after_read, parse) < 0 or not (
+        before_read < materialize < materialized_hash < after_read < parse
+    ):
+        errors.append(
+            "V25 compile-reference state ordering must be admit -> bounded materialize -> byte hash -> post-read rebind -> parse"
+        )
+
 if build_targets:
     target_markers = {
         "V25-only target": "'$(MSBuildProjectName)' == 'QS3D.BricsCAD.V25'",
-        "assembly-resolution boundary": 'BeforeTargets="ResolveAssemblyReferences"',
+        "pre-resolution boundary": 'BeforeTargets="ResolveAssemblyReferences"',
+        "post-resolution boundary": 'AfterTargets="ResolveAssemblyReferences"',
         "snapshot helper invocation": "scripts\\snapshot-v25-compile-references.ps1",
         "state verifier invocation": "scripts\\assert-v25-compile-reference-state.ps1",
         "snapshot state path": "$(QS3DV25ReferenceStatePath)",
@@ -190,11 +210,15 @@ if build_targets:
             errors.append(f"V25 build-boundary target is missing {label}: {marker}")
 
     snapshot_exec = build_targets.find("scripts\\snapshot-v25-compile-references.ps1")
-    assert_exec = build_targets.find("scripts\\assert-v25-compile-reference-state.ps1")
+    first_assert = build_targets.find("scripts\\assert-v25-compile-reference-state.ps1")
     remap = build_targets.find('<Reference Update="BrxMgd">')
-    if min(snapshot_exec, assert_exec, remap) < 0 or not (snapshot_exec < assert_exec < remap):
+    after_boundary = build_targets.find('AfterTargets="ResolveAssemblyReferences"')
+    second_assert = build_targets.find("scripts\\assert-v25-compile-reference-state.ps1", first_assert + 1)
+    if min(snapshot_exec, first_assert, remap, after_boundary, second_assert) < 0 or not (
+        snapshot_exec < first_assert < remap < after_boundary < second_assert
+    ):
         errors.append(
-            "V25 build-boundary ordering must be stable snapshot -> independent state verification -> Reference HintPath remap"
+            "V25 build-boundary ordering must be snapshot -> pre-resolution verify -> HintPath remap -> post-resolution verify"
         )
 
 if errors:
@@ -206,5 +230,5 @@ if errors:
 print(
     "V25 compile-reference contract preflight PASS: "
     + ", ".join(sorted(required_files))
-    + " are synchronized across workflows and are rebound to a verified stable per-build snapshot before assembly resolution."
+    + " are synchronized across workflows and rebound to a verified stable per-build snapshot across assembly resolution."
 )
