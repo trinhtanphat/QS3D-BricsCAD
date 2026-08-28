@@ -100,6 +100,10 @@ namespace QS3D.Core.Export
 
             if (knownCount.HasValue && items.Count != knownCount.Value)
                 throw new InvalidOperationException("IFC round-trip dimension source Count does not match enumerated dimension count.");
+            IfcRoundTripKnownCountContract.RequireStableAfterTraversal(
+                dimensions,
+                knownCount,
+                "IFC round-trip dimension");
 
             items.Sort(IfcRoundTripNumericPropertyComparer.Instance);
             return Array.AsReadOnly(items.ToArray());
@@ -131,6 +135,10 @@ namespace QS3D.Core.Export
 
             if (knownCount.HasValue && items.Count != knownCount.Value)
                 throw new InvalidOperationException("IFC round-trip provenance source Count does not match enumerated provenance count.");
+            IfcRoundTripKnownCountContract.RequireStableAfterTraversal(
+                provenance,
+                knownCount,
+                "IFC round-trip provenance");
             if (items.Count == 0) throw new ArgumentException("At least one provenance token is required.", nameof(provenance));
             items.Sort(StringComparer.Ordinal);
             return Array.AsReadOnly(items.ToArray());
@@ -222,6 +230,10 @@ namespace QS3D.Core.Export
 
             if (knownCount.HasValue && items.Count != knownCount.Value)
                 throw new InvalidOperationException("IFC round-trip projection source Count does not match enumerated projection count.");
+            IfcRoundTripKnownCountContract.RequireStableAfterTraversal(
+                projections,
+                knownCount,
+                "IFC round-trip projection");
 
             var ifcGlobalIds = new HashSet<string>(StringComparer.Ordinal);
             var qs3dElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
