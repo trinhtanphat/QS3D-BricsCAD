@@ -64,49 +64,97 @@ namespace QS3D.Core.Navigation
 
         private static IReadOnlyList<ElementCategory> NormalizeCategories(IEnumerable<ElementCategory>? values)
         {
+            var source = values ?? Enumerable.Empty<ElementCategory>();
+            const string label = "project browser workspace category filter";
+            var knownCount = ValidateKnownCounts(source, label, ProjectBrowserQueryPlanner.MaxFilterIds);
             var result = new SortedSet<ElementCategory>();
-            var count = 0;
-            foreach (var value in values ?? Enumerable.Empty<ElementCategory>())
+            var traversedCount = 0;
+            foreach (var value in source)
             {
-                if (count >= ProjectBrowserQueryPlanner.MaxFilterIds)
-                    throw new InvalidOperationException(
-                        "Project browser workspace category filter exceeds " + ProjectBrowserQueryPlanner.MaxFilterIds + " entries.");
-                count++;
+                if (traversedCount >= ProjectBrowserQueryPlanner.MaxFilterIds)
+                    throw TooManyValues(label, ProjectBrowserQueryPlanner.MaxFilterIds);
+                traversedCount++;
                 if (!Enum.IsDefined(typeof(ElementCategory), value))
                     throw new ArgumentOutOfRangeException(nameof(values), "Project browser workspace contains an undefined category.");
                 result.Add(value);
             }
+            ValidateTraversedCount(knownCount, traversedCount, label);
             return result.ToList().AsReadOnly();
         }
 
         private static IReadOnlyList<string> NormalizeIds(IEnumerable<string>? values, string label, int maxCount)
         {
+            var source = values ?? Enumerable.Empty<string>();
+            var knownCount = ValidateKnownCounts(source, label, maxCount);
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var raw in values ?? Enumerable.Empty<string>())
+            var traversedCount = 0;
+            foreach (var raw in source)
             {
-                if (result.Count >= maxCount) throw new InvalidOperationException(label + " list exceeds " + maxCount + " entries.");
+                if (traversedCount >= maxCount) throw TooManyValues(label, maxCount);
+                traversedCount++;
                 var value = RequiredCanonical(raw, label);
                 if (!seen.Add(value)) throw new InvalidOperationException("Duplicate " + label + ": " + value + ".");
                 result.Add(value);
             }
+            ValidateTraversedCount(knownCount, traversedCount, label);
             result.Sort(CompareCanonical);
             return result.AsReadOnly();
         }
 
         private static IReadOnlyList<string> NormalizePaths(IEnumerable<string>? values)
         {
+            var source = values ?? Enumerable.Empty<string>();
+            const string label = "project browser workspace expanded path";
+            const int maxCount = 50000;
+            var knownCount = ValidateKnownCounts(source, label, maxCount);
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var raw in values ?? Enumerable.Empty<string>())
+            var traversedCount = 0;
+            foreach (var raw in source)
             {
-                if (result.Count >= 50000) throw new InvalidOperationException("Project browser workspace expanded path list exceeds 50000 entries.");
-                var value = RequiredCanonical(raw, "project browser workspace expanded path");
+                if (traversedCount >= maxCount) throw TooManyValues(label, maxCount);
+                traversedCount++;
+                var value = RequiredCanonical(raw, label);
                 if (!seen.Add(value)) throw new InvalidOperationException("Duplicate project browser workspace expanded path: " + value + ".");
                 result.Add(value);
             }
+            ValidateTraversedCount(knownCount, traversedCount, label);
             result.Sort(StringComparer.Ordinal);
             return result.AsReadOnly();
+        }
+
+        private static int? ValidateKnownCounts<T>(IEnumerable<T> values, string label, int maxCount)
+        {
+            int? knownCount = null;
+            ValidateKnownCount(values is ICollection<T> collection ? collection.Count : (int?)null, label, maxCount, ref knownCount);
+            ValidateKnownCount(values is IReadOnlyCollection<T> readOnlyCollection ? readOnlyCollection.Count : (int?)null, label, maxCount, ref knownCount);
+            ValidateKnownCount(values is System.Collections.ICollection nonGenericCollection ? nonGenericCollection.Count : (int?)null, label, maxCount, ref knownCount);
+            return knownCount;
+        }
+
+        private static void ValidateKnownCount(int? count, string label, int maxCount, ref int? knownCount)
+        {
+            if (!count.HasValue) return;
+            if (count.Value < 0)
+                throw new InvalidOperationException(label + " exposes an invalid negative Count.");
+            if (count.Value > maxCount)
+                throw TooManyValues(label, maxCount);
+            if (knownCount.HasValue && knownCount.Value != count.Value)
+                throw new InvalidOperationException(label + " exposes conflicting Count contracts.");
+            knownCount = count.Value;
+        }
+
+        private static void ValidateTraversedCount(int? knownCount, int traversedCount, string label)
+        {
+            if (knownCount.HasValue && knownCount.Value != traversedCount)
+                throw new InvalidOperationException(
+                    label + " Count " + knownCount.Value + " does not match traversed value count " + traversedCount + ".");
+        }
+
+        private static InvalidOperationException TooManyValues(string label, int maxCount)
+        {
+            return new InvalidOperationException(label + " list exceeds " + maxCount + " entries.");
         }
 
         private static string NormalizePrimary(string? value, IReadOnlyList<string> selected)
