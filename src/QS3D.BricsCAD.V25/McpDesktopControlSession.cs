@@ -213,7 +213,8 @@ namespace QS3D.BricsCAD.V25
         private static bool IsSensitiveReadTool(string tool)
         {
             return string.Equals(tool, "desktop_clipboard_read", StringComparison.Ordinal)
-                   || string.Equals(tool, "desktop_screenshot", StringComparison.Ordinal);
+                   || string.Equals(tool, "desktop_screenshot", StringComparison.Ordinal)
+                   || string.Equals(tool, "desktop_sequence", StringComparison.Ordinal);
         }
 
         private static void CompleteGuardedAction(GuardedActionScope scope, string terminalState, string failureMessage)
