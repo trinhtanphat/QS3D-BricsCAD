@@ -35,8 +35,8 @@ namespace QS3D.BricsCAD.V25
         private static readonly ConcurrentDictionary<string, SessionState> Sessions =
             new ConcurrentDictionary<string, SessionState>(StringComparer.Ordinal);
 
-        private static TcpListener _listener;
-        private static Thread _listenerThread;
+        private static TcpListener? _listener;
+        private static Thread? _listenerThread;
         private static volatile bool _stopping;
         private static string _bearerToken = string.Empty;
         private static string _tokenSource = string.Empty;
@@ -73,7 +73,7 @@ namespace QS3D.BricsCAD.V25
 
         public static void Stop()
         {
-            Thread thread;
+            Thread? thread;
             lock (Sync)
             {
                 _stopping = true;
@@ -107,7 +107,7 @@ namespace QS3D.BricsCAD.V25
         {
             while (!_stopping)
             {
-                TcpClient client = null;
+                TcpClient? client = null;
                 try
                 {
                     var listener = _listener;
@@ -168,7 +168,7 @@ namespace QS3D.BricsCAD.V25
             finally { ClientSlots.Release(); }
         }
 
-        private static HttpRequest ReadRequest(NetworkStream stream)
+        private static HttpRequest? ReadRequest(NetworkStream stream)
         {
             var buffer = new byte[4096];
             using (var accumulated = new MemoryStream())
@@ -417,12 +417,12 @@ namespace QS3D.BricsCAD.V25
             }
 
             SessionState session;
-            string sessionError;
-            int sessionStatusCode;
-            if (!TryValidateSession(request.Headers, out session, out sessionError, out sessionStatusCode))
+            string sessionValidationError;
+            int sessionValidationStatusCode;
+            if (!TryValidateSession(request.Headers, out session, out sessionValidationError, out sessionValidationStatusCode))
             {
-                WriteResponse(stream, sessionStatusCode, sessionStatusCode == 404 ? "Not Found" : "Bad Request",
-                    JsonRpcError(hasId ? id : "null", -32002, sessionError), null);
+                WriteResponse(stream, sessionValidationStatusCode, sessionValidationStatusCode == 404 ? "Not Found" : "Bad Request",
+                    JsonRpcError(hasId ? id : "null", -32002, sessionValidationError), null);
                 return;
             }
 
@@ -727,7 +727,7 @@ namespace QS3D.BricsCAD.V25
             out string error,
             out int statusCode)
         {
-            state = null;
+            state = null!;
             error = string.Empty;
             statusCode = 400;
             string sessionId;
@@ -753,7 +753,7 @@ namespace QS3D.BricsCAD.V25
                 if (!Sessions.TryUpdate(sessionId, state, stored))
                 {
                     statusCode = 404;
-                    state = null;
+                    state = null!;
                     error = "Unknown or expired MCP session.";
                     return false;
                 }
@@ -800,7 +800,7 @@ namespace QS3D.BricsCAD.V25
                    + ",\"message\":\"" + JsonEscape(message ?? string.Empty) + "\"}}";
         }
 
-        private static void WriteResponse(NetworkStream stream, int statusCode, string reason, string body, IDictionary<string, string> extraHeaders)
+        private static void WriteResponse(NetworkStream stream, int statusCode, string reason, string body, IDictionary<string, string>? extraHeaders)
         {
             var payload = string.IsNullOrEmpty(body) ? new byte[0] : Encoding.UTF8.GetBytes(body);
             var header = new StringBuilder();
@@ -823,7 +823,7 @@ namespace QS3D.BricsCAD.V25
             stream.Flush();
         }
 
-        private static void TryWriteResponse(NetworkStream stream, int statusCode, string reason, string body, IDictionary<string, string> extraHeaders)
+        private static void TryWriteResponse(NetworkStream stream, int statusCode, string reason, string body, IDictionary<string, string>? extraHeaders)
         {
             try { WriteResponse(stream, statusCode, reason, body, extraHeaders); } catch { }
         }
