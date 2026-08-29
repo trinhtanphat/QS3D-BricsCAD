@@ -51,7 +51,7 @@ require(runtime, "McpDesktopControlSession.BeginGuardedAction", "runtime active 
 require(runtime, "desktop_clipboard_read", "clipboard read tool remains present")
 require(runtime, "desktop_screenshot", "screenshot tool remains present")
 
-# Completion Pack A tool surface. Approach B macro/sequence remains intentionally absent.
+# Completion Pack A tool surface.
 require(runtime, '"desktop_mouse_drag"', "bounded desktop drag tool")
 require(runtime, '"desktop_wait_for_window"', "bounded wait-for-window tool")
 require(runtime, "WaitForWindow", "wait-for-window routing")
@@ -62,8 +62,26 @@ require(runtime, "cropY", "screenshot crop y")
 require(runtime, "cropWidth", "screenshot crop width")
 require(runtime, "cropHeight", "screenshot crop height")
 require(runtime, "CHARACTER", "alphanumeric key audit redaction")
-forbid(runtime, '"desktop_sequence"', "Approach B desktop sequence tool")
-forbid(runtime, '"desktop_macro"', "Approach B desktop macro tool")
+
+# Completion Pack B: one bounded single-target desktop sequence surface.
+require(runtime, '"desktop_sequence"', "Approach B desktop sequence tool")
+require(runtime, "MaxSequenceSteps", "sequence step cap")
+require(runtime, "MaxSequenceMilliseconds", "sequence wall-clock cap")
+require(runtime, "MaxSequenceDelayMilliseconds", "sequence per-step delay cap")
+require(runtime, "MaxSequenceJsonCharacters", "sequence payload cap")
+require(runtime, "SequenceAllowedTools", "sequence primitive allowlist")
+require(runtime, "ParseSequenceSteps", "bounded sequence parser")
+require(runtime, "RunSequence", "bounded sequence executor")
+require(runtime, "stepsJson", "flat-transport encoded sequence payload")
+require(runtime, "SequenceStep", "sequence step record")
+require(runtime, "Sequence cannot include desktop_clipboard_read", "sequence clipboard-read prohibition")
+require(runtime, "Sequence step arguments must not contain windowHandle", "sequence target ownership")
+require(runtime, "confirmSensitiveRead=true is required for desktop_sequence screenshot steps", "sequence screenshot opt-in")
+require(runtime, "Sequence screenshot is forced to the bound target window", "sequence screenshot target binding")
+require(runtime, "Sequence execution is fail-fast", "sequence fail-fast contract")
+require(runtime, "Sequence does not roll back completed steps", "sequence partial-execution contract")
+require(runtime, "EnsureSequenceRunning", "sequence stop/duration check")
+forbid(runtime, '"desktop_macro"', "duplicate generic desktop macro alias")
 
 recovery = text(V25 / "McpProjectRecoveryService.cs")
 require(recovery, '"SAVETIME"', "BricsCAD autosave interval")
@@ -109,4 +127,4 @@ v26_entry = text(V26 / "PluginEntry.cs")
 for needle in ("McpEmbeddedServer.Start", "McpCloudflareAccountTunnelManager.TryAutoStart", "McpProjectRecoveryService.Start", "McpFirstRunExperience.Start"):
     require(v26_entry, needle, "V26 MCP lifecycle parity")
 
-print("PASS MCP guided onboarding + desktop Completion Pack A + recovery source contract")
+print("PASS MCP guided onboarding + desktop Completion Packs A/B + recovery source contract")
