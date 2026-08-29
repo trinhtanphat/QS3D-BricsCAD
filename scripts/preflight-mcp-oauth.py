@@ -74,7 +74,7 @@ def main() -> int:
     # Keep it authorization-server-only: the protected MCP resource still exposes just
     # the qs3d:mcp permission, while authorization may grant optional offline_access.
     require(oauth, 'OfflineAccessScope = "offline_access"', "offline-access scope declaration")
-    require(oauth, '"scopes_supported":[\"" + RequiredScope + "\",\"" + OfflineAccessScope + "\"]', "authorization-server offline_access discovery")
+    require(oauth, '\\"scopes_supported\\":[\\\"' + '" + RequiredScope + "' + '\\\",\\\"' + '" + OfflineAccessScope + "' + '\\\"]', "authorization-server offline_access discovery")
     require(oauth, "TryNormalizeAuthorizationScope", "offline-access authorization scope parser")
     require(oauth, "HasOfflineAccess", "offline-access grant detection")
     require(oauth, "includeRefreshToken", "refresh-token issuance gate")
