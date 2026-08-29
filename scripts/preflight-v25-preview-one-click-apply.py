@@ -23,10 +23,14 @@ def forbid(text, needle, rel):
 
 def main():
     installer_rel = "src/QS3D.BricsCAD.V25/Updates/VerifiedPreviewInstaller.cs"
+    downloader_rel = "src/QS3D.BricsCAD.V25/Updates/VerifiedReleaseDownloader.cs"
     window_rel = "src/QS3D.BricsCAD.V25/Updates/UpdateCenterWindow.cs"
+    preferences_rel = "src/QS3D.BricsCAD.V25/Updates/UpdatePreferences.cs"
 
     installer = read(installer_rel)
+    downloader = read(downloader_rel)
     window = read(window_rel)
+    preferences = read(preferences_rel)
 
     for needle in (
         "internal static class VerifiedPreviewInstaller",
@@ -40,20 +44,48 @@ def main():
         "StartsWith(stagingPrefix, StringComparison.OrdinalIgnoreCase)",
         "using (var currentProcess = Process.GetCurrentProcess())",
         "parentProcessId = currentProcess.Id;",
+        "currentProcess.MainModule?.FileName",
+        'startInfo.EnvironmentVariables["QS3D_PREVIEW_BRICSCAD"]',
         "WaitForExit",
         "File.Copy(sourcePath, backupPath, true)",
         "File.Replace",
         "Rollback",
+        "Restart-BricsCAD",
+        "Start-Process -FilePath $env:QS3D_PREVIEW_BRICSCAD",
     ):
         require(installer, needle, installer_rel)
 
     for needle in (
-        "await new VerifiedReleaseDownloader().DownloadAsync(release)",
+        "internal sealed class UpdateDownloadProgress",
+        "IProgress<UpdateDownloadProgress>",
+        "progress?.Report",
+        "ContentLength",
+        "BytesReceived",
+        "TotalBytes",
+    ):
+        require(downloader, needle, downloader_rel)
+
+    for needle in (
+        "await new VerifiedReleaseDownloader().DownloadAsync(release, progress)",
         "VerifiedPreviewInstaller.TrySchedule(verified.Path, verified.Sha256, out var installError)",
         '"Tải & cài đặt"',
         "SecureUpdateLauncher.TryRequestGracefulHostClose(out var closeError)",
+        "ProgressBar",
+        "UpdateDownloadProgress",
+        "ApplyDownloadProgress",
+        "Inlines.Add",
+        '"Phiên bản hiện tại"',
+        '"Phiên bản mới"',
+        '"BricsCAD sẽ tự mở lại"',
+        "private readonly CheckBox _updateOnCloseCheckBox;",
+        "IsChecked = UpdatePreferences.InstallOnExit",
+        "UpdatePreferences.TrySetInstallOnExit",
+        '"Gói preview + SHA-256 đã sẵn sàng"',
+        '"Tải, xác minh SHA-256, đóng BricsCAD an toàn, cài đặt rồi tự mở lại BricsCAD."',
     ):
         require(window, needle, window_rel)
+
+    require(preferences, "ReadBoolean(InstallOnExitValue, false)", preferences_rel)
 
     for needle in (
         "Process.Start(verified.Path",
@@ -66,9 +98,10 @@ def main():
         forbid(window, needle, window_rel)
 
     print(
-        "PASS: verified V25 preview package is staged and re-hashed, required adapter/Core payload is resolved safely, "
-        "replacement is deferred until the current BricsCAD process exits, current files are backed up with rollback, "
-        "and Update Center schedules install instead of merely revealing the downloaded ZIP."
+        "PASS: verified V25 preview package is staged and re-hashed, adapter/Core replacement remains deferred until BricsCAD exits, "
+        "rollback is preserved, the exact BricsCAD executable is restarted after apply/recovery, downloader progress is surfaced, "
+        "preview capability copy stays coherent with the primary action, update-on-close defaults OFF unless persisted by the user, "
+        "and Update Center presents highlighted version/progress state instead of merely revealing the downloaded ZIP."
     )
     return 0
 
