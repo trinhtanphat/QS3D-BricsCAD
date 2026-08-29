@@ -126,13 +126,13 @@ namespace QS3D.BricsCAD.V25
             };
         }
 
-        internal static string Call(string toolName, string arguments, Action ensureMutationRunning, Action<string> audit)
+        internal static string Call(string toolName, string arguments, Action? ensureMutationRunning, Action<string> audit)
         {
             var tool = toolName ?? string.Empty;
             if (!IsTool(tool)) throw new InvalidOperationException("Unknown MCP desktop tool: " + tool);
             var args = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
 
-            IDisposable guardedAction = null;
+            IDisposable? guardedAction = null;
             if (MutationTools.Contains(tool) || SensitiveTools.Contains(tool))
             {
                 McpDesktopControlSession.RequireLocalConsent(tool);
@@ -146,14 +146,14 @@ namespace QS3D.BricsCAD.V25
                     case "desktop_cursor_position": return CursorPositionJson();
                     case "desktop_window_list": return WindowListJson(Integer(args, "limit", 30, 1, MaxWindows));
                     case "desktop_foreground_window": return ForegroundWindowJson();
-                    case "desktop_window_focus": return FocusWindow(args, ensureMutationRunning, audit);
-                    case "desktop_mouse_move": return MouseMove(args, ensureMutationRunning, audit);
-                    case "desktop_mouse_click": return MouseClick(args, ensureMutationRunning, audit);
-                    case "desktop_mouse_scroll": return MouseScroll(args, ensureMutationRunning, audit);
-                    case "desktop_type": return TypeText(args, ensureMutationRunning, audit);
-                    case "desktop_key": return PressKey(args, ensureMutationRunning, audit);
+                    case "desktop_window_focus": return FocusWindow(args, RequireMutationCallback(ensureMutationRunning), audit);
+                    case "desktop_mouse_move": return MouseMove(args, RequireMutationCallback(ensureMutationRunning), audit);
+                    case "desktop_mouse_click": return MouseClick(args, RequireMutationCallback(ensureMutationRunning), audit);
+                    case "desktop_mouse_scroll": return MouseScroll(args, RequireMutationCallback(ensureMutationRunning), audit);
+                    case "desktop_type": return TypeText(args, RequireMutationCallback(ensureMutationRunning), audit);
+                    case "desktop_key": return PressKey(args, RequireMutationCallback(ensureMutationRunning), audit);
                     case "desktop_clipboard_read": return ClipboardRead(args, audit);
-                    case "desktop_clipboard_write": return ClipboardWrite(args, ensureMutationRunning, audit);
+                    case "desktop_clipboard_write": return ClipboardWrite(args, RequireMutationCallback(ensureMutationRunning), audit);
                     case "desktop_screenshot": return Screenshot(args, audit);
                     default: throw new InvalidOperationException("Unknown MCP desktop tool: " + tool);
                 }
@@ -534,7 +534,7 @@ namespace QS3D.BricsCAD.V25
 
         private static bool TryGetWindowInfo(IntPtr hwnd, bool requireTitle, out WindowInfo info)
         {
-            info = null;
+            info = new WindowInfo();
             try
             {
                 ValidateWindow(hwnd, true);
@@ -680,10 +680,11 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("confirmSensitiveRead=true is required for this desktop read.");
         }
 
-        private static void RequireMutationCallback(Action ensureMutationRunning)
+        private static Action RequireMutationCallback(Action? ensureMutationRunning)
         {
             if (ensureMutationRunning == null)
                 throw new InvalidOperationException("Desktop mutation execution context is unavailable.");
+            return ensureMutationRunning;
         }
 
         private static string RequiredText(string body, string property, int maximum)
@@ -722,8 +723,8 @@ namespace QS3D.BricsCAD.V25
 
         private static T RunSta<T>(Func<T> action)
         {
-            T result = default(T);
-            Exception error = null;
+            T result = default!;
+            Exception? error = null;
             var done = new ManualResetEventSlim(false);
             var thread = new Thread(delegate()
             {
