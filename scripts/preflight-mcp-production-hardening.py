@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+V25 = ROOT / "src" / "QS3D.BricsCAD.V25"
+SERVER = V25 / "McpEmbeddedServerV2.cs"
+RUNTIME = V25 / "McpCadAgentRuntime.cs"
+TOP_LEVEL_JSON = V25 / "McpTopLevelJson.cs"
+V25_PROJECT = V25 / "QS3D.BricsCAD.V25.csproj"
+V26_PROJECT = ROOT / "src" / "QS3D.BricsCAD.V26" / "QS3D.BricsCAD.V26.csproj"
+ACCOUNT = V25 / "McpCloudflareAccountOnboarding.cs"
+FALLBACK = V25 / "McpCloudflareOnboarding.cs"
+CONNECTOR = V25 / "McpConnectorRibbonCommands.cs"
+RESOLVER = V25 / "McpPublicEndpointResolver.cs"
+PLUGIN = V25 / "PluginEntry.cs"
+
+
+def read(path: Path) -> str:
+    if not path.is_file():
+        raise FileNotFoundError(str(path.relative_to(ROOT)))
+    return path.read_text(encoding="utf-8")
+
+
+def main() -> int:
+    errors: list[str] = []
+    try:
+        server = read(SERVER)
+        runtime = read(RUNTIME)
+        top_level_json = read(TOP_LEVEL_JSON)
+        v25_project = read(V25_PROJECT)
+        v26_project = read(V26_PROJECT)
+        account = read(ACCOUNT)
+        fallback = read(FALLBACK)
+        connector = read(CONNECTOR)
+        resolver = read(RESOLVER)
+        plugin = read(PLUGIN)
+    except FileNotFoundError as exc:
+        print("ERROR: missing", exc)
+        return 1
+
+    required = {
+        "resolver provider precedence": (resolver, "McpCloudflareAccountTunnelManager.PublicMcpUrl"),
+        "resolver quick/token precedence": (resolver, "McpCloudflareTunnelManager.PublicMcpUrl"),
+        "HTTPS-only public endpoint": (resolver, "Uri.UriSchemeHttps"),
+        "loopback public rejection": (resolver, "uri.IsLoopback"),
+        "literal public-address validation": (resolver, "IPAddress.TryParse(uri.Host"),
+        "private/link-local literal rejection": (resolver, "IsPrivateOrLocalAddress"),
+        "configured fallback snapshot": (resolver, "ConfiguredEnvironmentFallback"),
+        "provider publication isolated from fallback": (resolver, "NormalizeCandidate(ConfiguredEnvironmentFallback)"),
+        "canonical MCP path": (resolver, 'path = "/mcp"'),
+        "process endpoint synchronization": (resolver, "EnvironmentVariableTarget.Process"),
+        "startup endpoint publication": (plugin, "McpPublicEndpointResolver.Resolve()"),
+        "connector resolver use": (connector, "McpPublicEndpointResolver.Resolve()"),
+        "copy URL command": (connector, 'CommandMethod("QS3DMCPCOPYURL"'),
+        "copy token command": (connector, 'CommandMethod("QS3DMCPCOPYTOKEN"'),
+        "copy config command": (connector, 'CommandMethod("QS3DMCPCOPYCONFIG"'),
+        "legacy settings hide bearer value": (connector, "Bearer token: [hidden; use QS3DMCPCOPYTOKEN]"),
+        "generated guide starts from Agent Center": (connector, "1. Open MCP Agent Center from TOOL > MCP (AI)."),
+        "generated guide uses click-first installer": (connector, "2. Click the automatic cloudflared install/update button if needed."),
+        "live Cloudflare tunnel list": (account, 'RunCommand(executable, "tunnel list"'),
+        "exact tunnel-name comparison": (account, "string.Equals(parts[1], name, StringComparison.OrdinalIgnoreCase)"),
+        "missing tunnel credential fail-closed": (account, "máy này thiếu credential"),
+        "DNS conflict fail-closed": (account, "QS3D không tự bỏ qua xung đột DNS"),
+        "hostname-scoped ingress": (account, '"ingress:\\r\\n"'),
+        "canonical named config writer": (account, "WriteCanonicalConfig"),
+        "saved tunnel rewrites canonical config": (account, "WriteCanonicalConfig(id, hostname, credentials)"),
+        "provision writes canonical config": (account, "WriteCanonicalConfig(tunnelId, hostname, credentials)"),
+        "account setup verified one-click installer": (account, "McpCloudflaredBootstrapper.BeginInstall"),
+        "named public URL requires live process": (account, "PublicMcpUrl => IsRunning"),
+        "Quick Tunnel URL polling": (account, "DispatcherTimer"),
+        "Quick Tunnel bounded poll": (account, "_quickUrlPollTicks >= 20"),
+        "named tunnel output bound to process owner": (account, "HandleRunLine(process, args.Data, false)"),
+        "named stale-process output rejection": (account, "if (!ReferenceEquals(_process, process)) return;"),
+        "fallback process owner before exit events": (fallback, "EnableRaisingEvents = false"),
+        "fallback process exit cleanup": (fallback, "HandleProcessExit(Process process)"),
+        "fallback output bound to process owner": (fallback, "HandleLine(process, args.Data, discoverQuickUrl)"),
+        "fallback stale-process output rejection": (fallback, "if (!ReferenceEquals(_process, process)) return;"),
+        "fallback public URL requires live process": (fallback, "if (!IsRunning) return string.Empty;"),
+        "compiled transport loopback listener": (server, "IPAddress.Loopback"),
+        "compiled transport exact JSON media type": (server, "IsJsonContentType(contentType)"),
+        "compiled transport bounded sessions": (server, "MaxSessions = 128"),
+        "compiled transport bounded clients": (server, "MaxConcurrentClients = 16"),
+        "compiled transport runtime delegation": (server, "McpCadAgentRuntime.Call(tool, arguments)"),
+        "strict HTTP field-name validation": (server, "IsHttpFieldName(name)"),
+        "singleton Content-Type header": (server, 'string.Equals(name, "Content-Type", StringComparison.OrdinalIgnoreCase)'),
+        "singleton Transfer-Encoding header": (server, 'string.Equals(name, "Transfer-Encoding", StringComparison.OrdinalIgnoreCase)'),
+        "reject any Transfer-Encoding header": (server, 'if (headers.ContainsKey("Transfer-Encoding"))'),
+        "strict UTF-8 request body": (server, "StrictUtf8.GetString(body)"),
+        "invalid UTF-8 request rejection": (server, "Invalid UTF-8 in MCP HTTP body."),
+        "hard HTTP header terminator cap": (server, "if (headerEnd + 4 > MaxHeaderBytes)"),
+        "serialized MCP session state": (server, "private static readonly object SessionSync = new object();"),
+        "atomic session creation helper": (server, "private static bool TryCreateSession("),
+        "serialized session deletion helper": (server, "private static bool TryDeleteSession("),
+        "serialized session refresh": (server, "Sessions.TryUpdate(sessionId, state, stored)"),
+        "session validation status output": (server, "out int statusCode"),
+        "unknown session HTTP 404": (server, "statusCode = 404;"),
+        "404 session response": (server, 'sessionStatusCode == 404 ? "Not Found" : "Bad Request"'),
+        "top-level JSON trailing-comma rejection": (top_level_json, "JSON object cannot end with a trailing comma."),
+        "MCP arguments trailing-comma rejection": (top_level_json, "MCP arguments object cannot end with a trailing comma."),
+        "strict RFC JSON whitespace helper": (top_level_json, "IsJsonWhitespace(source[index])"),
+        "strict RFC JSON trim helper": (top_level_json, "TrimJsonWhitespace"),
+        "recursive JSON object grammar": (top_level_json, "private static bool TrySkipJsonObject("),
+        "recursive JSON array grammar": (top_level_json, "private static bool TrySkipJsonArray("),
+        "recursive JSON primitive grammar": (top_level_json, "private static bool TrySkipJsonPrimitive("),
+        "bounded recursive JSON depth": (top_level_json, "MaxJsonDepth = 64"),
+        "JSON-RPC numeric id support": (top_level_json, "if (IsJsonNumberToken(raw)) return raw;"),
+        "JSON-RPC invalid id rejection": (top_level_json, 'throw new InvalidOperationException("JSON-RPC id must be a string, number, or null.");'),
+        "runtime foreground ESC fallback": (runtime, "TrySendEscapeFallback()"),
+        "runtime emergency-stop latch": (runtime, "_automationStopped = true"),
+        "runtime queued dispatch state": (runtime, "CadWorkQueued = 0"),
+        "runtime running dispatch state": (runtime, "CadWorkRunning = 1"),
+        "runtime cancelled-before-start state": (runtime, "CadWorkCancelledBeforeStart = 2"),
+        "runtime atomic start claim": (runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkRunning, CadWorkQueued)"),
+        "runtime atomic timeout cancellation": (runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued)"),
+        "runtime uncertain timeout truth": (runtime, "completion is uncertain"),
+        "runtime no-auto-retry truth": (runtime, "Do not retry automatically"),
+        "V25 legacy monolith exclusion": (v25_project, '<Compile Remove="McpEmbeddedServer.cs" />'),
+        "V26 legacy monolith exclusion": (v26_project, "..\\QS3D.BricsCAD.V25\\McpEmbeddedServer.cs"),
+    }
+    for label, (text, token) in required.items():
+        if token not in text:
+            errors.append(f"missing {label}: {token}")
+
+    extract_string_start = top_level_json.find("internal static string ExtractString(")
+    extract_string_end = top_level_json.find("internal static bool ExtractBoolean(", extract_string_start)
+    if extract_string_start < 0 or extract_string_end < 0:
+        errors.append("cannot inspect MCP top-level string extraction")
+    else:
+        extract_string = top_level_json[extract_string_start:extract_string_end]
+        if "throw new InvalidOperationException(error);" in extract_string:
+            errors.append("MCP string extraction still throws parser errors instead of failing closed to caller validation")
+        if "return string.Empty;" not in extract_string:
+            errors.append("MCP string extraction lacks fail-closed empty-value behavior for malformed input")
+
+    create_session_start = server.find("private static bool TryCreateSession(")
+    create_session_end = server.find("private static bool TryDeleteSession(", create_session_start)
+    if create_session_start >= 0 and create_session_end > create_session_start:
+        create_session = server[create_session_start:create_session_end]
+        if "lock (SessionSync)" not in create_session or "Sessions.Count >= MaxSessions" not in create_session:
+            errors.append("MCP session creation is not atomically capacity-checked under SessionSync")
+
+    validate_session_start = server.find("private static bool TryValidateSession(")
+    validate_session_end = server.find("private static void CleanupSessionsLocked(", validate_session_start)
+    if validate_session_start >= 0 and validate_session_end > validate_session_start:
+        validate_session = server[validate_session_start:validate_session_end]
+        if "lock (SessionSync)" not in validate_session:
+            errors.append("MCP session validation/refresh is not serialized under SessionSync")
+
+    named_start = account.find("private static bool StartProcess")
+    named_exit = account.find("private static void HandleProcessExit", named_start)
+    if named_start < 0 or named_exit < 0:
+        errors.append("cannot inspect Named Tunnel process startup ordering")
+    else:
+        named_block = account[named_start:named_exit]
+        stdout_drain = named_block.find("process.BeginOutputReadLine();")
+        stderr_drain = named_block.find("process.BeginErrorReadLine();")
+        exit_events = named_block.find("process.EnableRaisingEvents = true;")
+        if min(stdout_drain, stderr_drain, exit_events) < 0 or max(stdout_drain, stderr_drain) > exit_events:
+            errors.append("Named Tunnel must begin stdout/stderr drain before enabling Exited callbacks")
+
+    if 'contentType.StartsWith("application/json"' in server:
+        errors.append("compiled MCP transport accepts application/json lookalike media types via prefix matching")
+    if "rawArguments.Trim()" in server or "var candidate = raw.Trim();" in server:
+        errors.append("compiled MCP transport must not re-normalize raw JSON object boundaries with string.Trim")
+    if "char.IsWhiteSpace(source[index])" in top_level_json:
+        errors.append("MCP JSON parser accepts non-RFC Unicode whitespace via char.IsWhiteSpace")
+    if ".Trim()" in top_level_json:
+        errors.append("MCP JSON parser must not normalize non-RFC Unicode whitespace via string.Trim")
+    if 'IndexOf("already exists"' in account:
+        errors.append("Cloudflare DNS conflict must not be silently accepted via 'already exists'")
+    if '"Bearer token: " + McpEmbeddedServer.GetBearerToken()' in connector:
+        errors.append("legacy settings must not render the raw bearer token; use explicit copy action")
+    if '"1. Run QS3DMCPACCOUNTSETUP.' in connector:
+        errors.append("generated guide must not make a typed BricsCAD setup command the default path")
+
+    for source_name, text in (("transport", server), ("runtime", runtime)):
+        for forbidden in ("powershell.exe", "cmd.exe", "Process.Start(", "mouse_event("):
+            if forbidden in text:
+                errors.append(f"compiled MCP {source_name} exposes forbidden OS execution/input token: {forbidden}")
+
+    if errors:
+        print("Production MCP hardening preflight FAILED:")
+        for error in errors:
+            print(" -", error)
+        return 1
+
+    print(
+        "PASS: compiled modular MCP transport/runtime use strict bounded HTTP framing/UTF-8, exact JSON "
+        "media type admission, strict recursive RFC JSON grammar, valid JSON-RPC ids and serialized "
+        "bounded session lifecycle with 404 expiry truth; CAD timeout/recovery and validated Cloudflare "
+        "endpoint/onboarding boundaries remain fail-closed."
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
