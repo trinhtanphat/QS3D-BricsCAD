@@ -27,4 +27,8 @@ Project `ChangeVersion` checks remain authoritative around Count admission, targ
 - streaming one-item target: accepted and assigned;
 - streaming 10,001-entry source: the 10,001st `MoveNext` is observed while `Current` is read only 10,000 times.
 
+## Carrier admission
+
+The first branch run failed before feature guards because the reservation Issue omitted the exact `Canonical carrier` field required by reservation protocol v2. Issue #4611 now binds the canonical branch explicitly; the same lane is retained and fresh CI must validate the corrected reservation plus this source/test package.
+
 No licensed BricsCAD runtime is required for this Core/domain contract.
