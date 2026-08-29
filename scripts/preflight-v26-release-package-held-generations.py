@@ -76,19 +76,17 @@ def main() -> int:
         DISPOSE,
     )
     for token in mutation_tokens:
-        mutated = source.replace(token, "MUTATED-V26-PACKAGE-GENERATION", 1)
+        mutated = source.replace(token, "MUTATED-V26-PACKAGE-GENERATION")
         if not validate(mutated):
             failures.append(f"mutation probe escaped V26 package held-generation guard: {token}")
 
-    # Recreate the old vulnerable shape and prove the guard rejects it.
+    # Recreate the old vulnerable metadata reopen shape and prove the guard rejects it.
     vulnerable = source.replace(
         HELD_METADATA,
         "Read-BoundedStrictUtf8File -File $metadataFile",
         1,
     )
     if not validate(vulnerable):
-        pass
-    else:
         failures.append("transient metadata reopen mutation escaped held-generation guard")
 
     if failures:
