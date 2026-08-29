@@ -138,31 +138,40 @@ namespace QS3D.Core.Domain
             var knownActiveRoomCount = activeRoomIds.Count;
             var active = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var activeInputCount = 0;
-            foreach (var rawRoomId in activeRoomIds)
+            using (var activeEnumerator = activeRoomIds.GetEnumerator())
             {
-                RequireCanProcessNextKnownCount("Auto Room active room id set", knownActiveRoomCount, activeInputCount);
-                activeInputCount++;
-                if (string.IsNullOrWhiteSpace(rawRoomId)) continue;
-                active.Add(rawRoomId.Trim());
+                while (activeEnumerator.MoveNext())
+                {
+                    RequireCanProcessNextKnownCount("Auto Room active room id set", knownActiveRoomCount, activeInputCount);
+                    var rawRoomId = activeEnumerator.Current;
+                    activeInputCount++;
+                    if (string.IsNullOrWhiteSpace(rawRoomId)) continue;
+                    active.Add(rawRoomId.Trim());
+                }
             }
             RequireKnownCountMatchesTraversal("Auto Room active room id set", knownActiveRoomCount, activeInputCount);
 
             var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var selectedInputCount = 0;
-            foreach (var raw in selectedSourceHandles)
+            using (var selectedEnumerator = selectedSourceHandles.GetEnumerator())
             {
-                if (selectedInputCount >= MaxSourceHandleInputCount)
-                    throw new InvalidOperationException(
-                        "Auto Room source handles cannot exceed " + MaxSourceHandleInputCount + " input entries.");
-                if (selectedInputCount >= knownSelectedSourceHandleCount)
+                while (selectedEnumerator.MoveNext())
                 {
+                    if (selectedInputCount >= MaxSourceHandleInputCount)
+                        throw new InvalidOperationException(
+                            "Auto Room source handles cannot exceed " + MaxSourceHandleInputCount + " input entries.");
+                    if (selectedInputCount >= knownSelectedSourceHandleCount)
+                    {
+                        selectedInputCount++;
+                        continue;
+                    }
+
+                    var raw = selectedEnumerator.Current;
                     selectedInputCount++;
-                    continue;
+                    if (string.IsNullOrWhiteSpace(raw)) continue;
+                    var canonical = GeneratedHandleIdentity.Normalize(raw);
+                    if (canonical.Length > 0) selected.Add(canonical);
                 }
-                selectedInputCount++;
-                if (string.IsNullOrWhiteSpace(raw)) continue;
-                var canonical = GeneratedHandleIdentity.Normalize(raw);
-                if (canonical.Length > 0) selected.Add(canonical);
             }
             RequireKnownCountMatchesTraversal("Auto Room selected source handle set", knownSelectedSourceHandleCount, selectedInputCount);
             if (project.ChangeVersion != inputVersion)
