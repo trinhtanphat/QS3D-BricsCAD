@@ -14,11 +14,33 @@ namespace QS3D.BricsCAD.V25
             public PublishedManager(CoordinationManagerWindow window, Document document)
             {
                 Window = window ?? throw new ArgumentNullException(nameof(window));
-                Document = document ?? throw new ArgumentNullException(nameof(document));
+                if (document == null) throw new ArgumentNullException(nameof(document));
+
+                var database = document.Database;
+                if (database == null || database.UnmanagedObject == IntPtr.Zero)
+                    throw new InvalidOperationException("Coordination Manager requires a live native BricsCAD database.");
+
+                NativeDatabaseIdentity = database.UnmanagedObject;
             }
 
             public CoordinationManagerWindow Window { get; }
-            public Document Document { get; }
+            public IntPtr NativeDatabaseIdentity { get; }
+
+            public bool Matches(Document document)
+            {
+                if (document == null) return false;
+                try
+                {
+                    var database = document.Database;
+                    return database != null &&
+                           database.UnmanagedObject != IntPtr.Zero &&
+                           database.UnmanagedObject == NativeDatabaseIdentity;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
         }
 
         [CommandMethod("QS3DCOORDINATIONMANAGER", CommandFlags.Modal)]
@@ -38,7 +60,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     if (previous.Window.IsLoaded)
                     {
-                        if (ReferenceEquals(previous.Document, document))
+                        if (previous.Matches(document))
                         {
                             try { previous.Window.Activate(); } catch { }
                             try { PaletteCoordinator.SetStatus("Coordination Manager đã mở cho project hiện hành."); } catch { }
