@@ -10,21 +10,28 @@ smoke = SMOKE.read_text(encoding="utf-8")
 
 required_source = [
     "using (var enumerator = rows.GetEnumerator())",
-    "while (enumerator.MoveNext())",
+    "while (true)",
+    "RequireKnownRowCountStable(rows, knownCount, knownCountSources);",
+    "if (!enumerator.MoveNext())",
     "if (knownCount.HasValue && rowIndex >= knownCount.Value)",
     "var row = enumerator.Current;",
     "SnapshotKnownRowCount(rows, out var currentKnownCountSources)",
-    "knownCountSources != currentKnownCountSources",
+    "expectedKnownCountSources != currentKnownCountSources",
     "Quantity report row input Count changed during enumeration.",
 ]
 for token in required_source:
     if token not in source:
         raise SystemExit(f"QuantityReportTotals Count-integrity source guard missing token: {token}")
 
-if source.index("if (knownCount.HasValue && rowIndex >= knownCount.Value)") > source.index("var row = enumerator.Current;"):
-    raise SystemExit("QuantityReportTotals must reject known-Count overrun before reading IEnumerator.Current")
-if "foreach (var row in rows)" in source:
-    raise SystemExit("QuantityReportTotals must not regress to foreach over caller-controlled rows")
+pre_move = source.index("RequireKnownRowCountStable(rows, knownCount, knownCountSources);")
+move = source.index("if (!enumerator.MoveNext())", pre_move)
+post_move = source.index("RequireKnownRowCountStable(rows, knownCount, knownCountSources);", move + 1)
+overrun = source.index("if (knownCount.HasValue && rowIndex >= knownCount.Value)", post_move)
+current = source.index("var row = enumerator.Current;", overrun)
+if not (pre_move < move < post_move < overrun < current):
+    raise SystemExit("QuantityReportTotals must rebind Count around MoveNext and reject known-Count overrun before IEnumerator.Current")
+if "foreach (var row in rows)" in source or "while (enumerator.MoveNext())" in source:
+    raise SystemExit("QuantityReportTotals must retain explicit pre/post-MoveNext Count admission")
 
 required_smoke = [
     "[ModuleInitializer]",
