@@ -552,3 +552,18 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 ## Close-out rule
 
 Closing all `OPEN` P0/P1 items does not automatically mean the product is commercially released. Release publication still follows `CI_POLICY.md` and requires the owner's separate explicit release authorization. This inbox only records local engineering qualification truth.
+
+## LOCAL-024 — #4352 ChatGPT MCP full-agent qualification
+
+- Priority: P0
+- Status: OPEN
+- Area: issue #4352; ChatGPT MCP embedded full-CAD agent / Cloudflare onboarding
+- Source/runner status: `SOURCE_READY / PENDING_LOCAL`
+- Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
+- Exact-source rule: Run only from a clean checkout of the exact candidate SHA that is intended for merge/release qualification; hosted/static CI is source evidence only.
+- Why local: Final acceptance requires licensed BricsCAD V25/V26, Windows desktop/UI input, a real Cloudflare account/tunnel/browser login, and ChatGPT MCP connectivity.
+- Scenario: Follow `docs/agent-work-claims/issue-4352-chatgpt-mcp-session-handoff.md` and `docs/MCP-FULL-CAD-AGENT.md`; prove embedded loopback MCP, authenticated protocol/read-only probe, Cloudflare Named Tunnel + Quick fallback, ChatGPT discovery, direct CAD API and bounded command/UI fallback, timeout uncertainty/no-auto-retry, emergency stop/resume/cancel, save/reopen, shutdown and cleanup on the exact candidate SHA.
+- Evidence required: exact candidate SHA; licensed BricsCAD V25/V26 host/plugin identity; sanitized MCP/Cloudflare/ChatGPT results; no bearer token, Cloudflare credential, private path, customer DWG, proprietary binary, raw Handle/ProjectId or unsanitized screenshot.
+- Evidence: `PENDING_LOCAL`
+- Related docs: `docs/agent-work-claims/issue-4352-chatgpt-mcp-session-handoff.md`; `docs/MCP-FULL-CAD-AGENT.md`; issue #4352.
+- Updated: 2026-08-29
