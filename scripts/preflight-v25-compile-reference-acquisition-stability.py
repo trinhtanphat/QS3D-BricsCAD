@@ -58,7 +58,11 @@ def main() -> int:
         "after administrative extraction",
         "Extracted V25 tree must not contain filesystem reparse points",
     ):
-        mutated = text.replace(token, f"MUTATED-{token}", 1)
+        # Replace the protected token with a sentinel that does not contain the
+        # original token. Prefixing the original token (for example
+        # MUTATED-<token>) leaves the protected substring present and makes the
+        # mutation test incapable of proving that validate() detects removal.
+        mutated = text.replace(token, "MUTATED-STABLE-ACQUISITION-MARKER")
         if not validate(mutated):
             failures.append(f"guard mutation escaped detection: {token}")
 
