@@ -115,6 +115,86 @@ function Get-StableFileState {
     }
 }
 
+function Get-StreamSha256 {
+    param([Parameter(Mandatory = $true)][System.IO.FileStream]$Stream)
+
+    $originalPosition = $Stream.Position
+    try {
+        $Stream.Position = 0
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try {
+            $bytes = $sha.ComputeHash($Stream)
+            return ([BitConverter]::ToString($bytes)).Replace('-', '').ToUpperInvariant()
+        }
+        finally { $sha.Dispose() }
+    }
+    finally {
+        $Stream.Position = $originalPosition
+    }
+}
+
+function Open-LockedReferenceState {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $first = Assert-OrdinaryFile -Path $Path -Label $Label
+    $canonicalBefore = Get-CanonicalAbsolutePath -Path $first.FullName
+    $lengthBefore = [int64]$first.Length
+    $ticksBefore = [int64]$first.LastWriteTimeUtc.Ticks
+    $stream = $null
+    try {
+        # FileShare.Read permits additional readers but denies write/delete/replace.
+        # Every required reference is held this way before any snapshot member is copied,
+        # so the three-file set is captured from one simultaneous admitted generation.
+        $stream = [IO.File]::Open(
+            $canonicalBefore,
+            [IO.FileMode]::Open,
+            [IO.FileAccess]::Read,
+            [IO.FileShare]::Read
+        )
+        $hash = Get-StreamSha256 -Stream $stream
+
+        $second = Assert-OrdinaryFile -Path $Path -Label $Label
+        $canonicalAfter = Get-CanonicalAbsolutePath -Path $second.FullName
+        if (-not [string]::Equals($canonicalBefore, $canonicalAfter, [StringComparison]::OrdinalIgnoreCase) -or
+            $lengthBefore -ne [int64]$second.Length -or
+            $ticksBefore -ne [int64]$second.LastWriteTimeUtc.Ticks -or
+            $stream.Length -ne $lengthBefore) {
+            throw "$Label changed while its locked generation was being admitted: $Path"
+        }
+
+        return [pscustomobject]@{
+            path = $canonicalBefore
+            length = $lengthBefore
+            lastWriteUtcTicks = $ticksBefore
+            sha256 = $hash
+            stream = $stream
+        }
+    }
+    catch {
+        if ($null -ne $stream) { $stream.Dispose() }
+        throw
+    }
+}
+
+function Assert-LockedReferenceState {
+    param(
+        [Parameter(Mandatory = $true)]$State,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $current = Assert-OrdinaryFile -Path $State.path -Label $Label
+    $canonical = Get-CanonicalAbsolutePath -Path $current.FullName
+    if (-not [string]::Equals($canonical, [string]$State.path, [StringComparison]::OrdinalIgnoreCase) -or
+        [int64]$current.Length -ne [int64]$State.length -or
+        [int64]$current.LastWriteTimeUtc.Ticks -ne [int64]$State.lastWriteUtcTicks -or
+        [int64]$State.stream.Length -ne [int64]$State.length) {
+        throw "$Label no longer matches its locked admitted generation."
+    }
+}
+
 $sourceDir = Get-CanonicalAbsolutePath -Path $BricsCadDir
 $snapshot = Get-CanonicalAbsolutePath -Path $SnapshotDir
 $state = Get-CanonicalAbsolutePath -Path $StatePath
@@ -155,48 +235,92 @@ else {
     New-Item -ItemType Directory -Path $snapshot | Out-Null
 }
 
+$locked = New-Object 'System.Collections.Generic.List[object]'
 $captured = @()
-foreach ($name in $requiredNames) {
-    $sourcePath = Join-Path $sourceDir $name
-    $before = Get-StableFileState -Path $sourcePath -Label "V25 compile reference $name"
-
-    $destinationPath = Join-Path $snapshot $name
-    [IO.File]::Copy($before.path, $destinationPath, $false)
-
-    $after = Get-StableFileState -Path $sourcePath -Label "V25 compile reference $name"
-    if (-not [string]::Equals($before.path, $after.path, [StringComparison]::OrdinalIgnoreCase) -or
-        $before.length -ne $after.length -or
-        $before.lastWriteUtcTicks -ne $after.lastWriteUtcTicks -or
-        -not [string]::Equals($before.sha256, $after.sha256, [StringComparison]::Ordinal)) {
-        throw "V25 compile reference changed while it was copied into the build snapshot: $name"
+try {
+    # Admission is deliberately a separate phase: hold all source reference
+    # generations simultaneously before copying the first snapshot member.
+    foreach ($name in $requiredNames) {
+        $sourcePath = Join-Path $sourceDir $name
+        $locked.Add([pscustomobject]@{
+            name = $name
+            state = Open-LockedReferenceState -Path $sourcePath -Label "V25 compile reference $name"
+        })
     }
 
-    $destination = Get-StableFileState -Path $destinationPath -Label "V25 compile-reference snapshot $name"
-    if ($destination.length -ne $before.length -or
-        -not [string]::Equals($destination.sha256, $before.sha256, [StringComparison]::Ordinal)) {
-        throw "V25 compile-reference snapshot bytes do not match the admitted source generation: $name"
+    foreach ($entry in $locked) {
+        Assert-LockedReferenceState -State $entry.state -Label "V25 compile reference $($entry.name)"
     }
 
-    $captured += [pscustomobject]@{
-        name = $name
-        path = $destination.path
-        length = $destination.length
-        lastWriteUtcTicks = $destination.lastWriteUtcTicks
-        sha256 = $destination.sha256
+    foreach ($entry in $locked) {
+        $source = $entry.state
+        $destinationPath = Join-Path $snapshot $entry.name
+        $destinationStream = [IO.File]::Open(
+            $destinationPath,
+            [IO.FileMode]::CreateNew,
+            [IO.FileAccess]::Write,
+            [IO.FileShare]::None
+        )
+        try {
+            $source.stream.Position = 0
+            $source.stream.CopyTo($destinationStream)
+            $destinationStream.Flush($true)
+        }
+        finally {
+            $destinationStream.Dispose()
+        }
+
+        Assert-LockedReferenceState -State $source -Label "V25 compile reference $($entry.name)"
+        $source.stream.Position = 0
+        $sourceHashAfterCopy = Get-StreamSha256 -Stream $source.stream
+        if (-not [string]::Equals($sourceHashAfterCopy, [string]$source.sha256, [StringComparison]::Ordinal)) {
+            throw "V25 compile reference changed while the locked set was being copied: $($entry.name)"
+        }
+
+        $destination = Get-StableFileState -Path $destinationPath -Label "V25 compile-reference snapshot $($entry.name)"
+        if ($destination.length -ne [int64]$source.length -or
+            -not [string]::Equals($destination.sha256, [string]$source.sha256, [StringComparison]::Ordinal)) {
+            throw "V25 compile-reference snapshot bytes do not match the admitted source generation: $($entry.name)"
+        }
+
+        $captured += [pscustomobject]@{
+            name = $entry.name
+            path = $destination.path
+            length = $destination.length
+            lastWriteUtcTicks = $destination.lastWriteUtcTicks
+            sha256 = $destination.sha256
+        }
+    }
+
+    # Rebind every source member while every lock is still held. The state file
+    # is published only after this whole-set check succeeds.
+    foreach ($entry in $locked) {
+        Assert-LockedReferenceState -State $entry.state -Label "V25 compile reference $($entry.name)"
+    }
+
+    $document = [pscustomobject]@{
+        schemaVersion = 1
+        bricsCadDir = $snapshot
+        references = $captured
+    }
+    $json = $document | ConvertTo-Json -Depth 5
+    $utf8 = New-Object Text.UTF8Encoding($false, $true)
+    [IO.File]::WriteAllText($state, $json, $utf8)
+    $stateItem = Assert-OrdinaryFile -Path $state -Label 'V25 compile-reference state'
+    if ($stateItem.Length -le 0 -or $stateItem.Length -gt $maxStateBytes) {
+        throw "V25 compile-reference state size is outside the accepted bound: $($stateItem.Length) bytes."
     }
 }
-
-$document = [pscustomobject]@{
-    schemaVersion = 1
-    bricsCadDir = $snapshot
-    references = $captured
+catch {
+    # A failed set capture must not leave a usable manifest that downstream build
+    # code could mistake for an admitted atomic reference generation.
+    Remove-Item -LiteralPath $state -Force -ErrorAction SilentlyContinue
+    throw
 }
-$json = $document | ConvertTo-Json -Depth 5
-$utf8 = New-Object Text.UTF8Encoding($false, $true)
-[IO.File]::WriteAllText($state, $json, $utf8)
-$stateItem = Assert-OrdinaryFile -Path $state -Label 'V25 compile-reference state'
-if ($stateItem.Length -le 0 -or $stateItem.Length -gt $maxStateBytes) {
-    throw "V25 compile-reference state size is outside the accepted bound: $($stateItem.Length) bytes."
+finally {
+    for ($index = $locked.Count - 1; $index -ge 0; $index--) {
+        $locked[$index].state.stream.Dispose()
+    }
 }
 
 Write-Output $snapshot
