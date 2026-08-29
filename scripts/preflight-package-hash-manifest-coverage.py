@@ -63,6 +63,7 @@ package_traversal_tokens = (
     "function Get-SafePackageFiles",
     "Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop",
     "[IO.FileAttributes]::ReparsePoint",
+    "Package staging contains a reparse-backed entry",
     "$files.Add($item)",
     "return @($files | Sort-Object FullName)",
     "$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object",
@@ -133,13 +134,13 @@ if update_source:
             "updater must verify the whole ZIP before extraction and delegate installation only afterwards")
 
 # Deterministic regression probes: the guard must reject both traversal bypass and a
-# producer that silently drops the safe hash enumeration contract.
+# producer that silently drops the staging reparse rejection used by safe hashing.
 def producer_safe(source):
     active = executable_lines(source)
     return (
         "function Get-SafePackageFiles" in source
         and "$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object" in source
-        and "[IO.FileAttributes]::ReparsePoint" in source
+        and "Package staging contains a reparse-backed entry" in source
         and "Get-ChildItem $dist -Recurse -File" not in active
     )
 
@@ -150,10 +151,10 @@ require(not producer_safe(package_source.replace(
     1,
 )), "package producer safe-traversal model must reject recursive pathname enumeration")
 require(not producer_safe(package_source.replace(
-    "[IO.FileAttributes]::ReparsePoint",
-    "[IO.FileAttributes]::Hidden",
+    "Package staging contains a reparse-backed entry",
+    "Package staging permits a reparse-backed entry",
     1,
-)), "package producer safe-traversal model must reject removal of reparse rejection")
+)), "package producer safe-traversal model must reject removal of staging reparse rejection")
 
 if errors:
     print("Package hash-manifest coverage preflight FAILED")
