@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -11,6 +12,47 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class MaterialUsageXlsxSmoke
     {
+        private sealed class PrimaryQuantityMutatingRows : IReadOnlyList<MaterialUsageRow>
+        {
+            private readonly MaterialUsageRow _row;
+            private int _countReads;
+
+            public PrimaryQuantityMutatingRows(MaterialUsageRow row)
+            {
+                _row = row ?? throw new ArgumentNullException(nameof(row));
+            }
+
+            public int Count
+            {
+                get
+                {
+                    _countReads++;
+                    if (_countReads == 2)
+                        _row.AreaM2 += 1d;
+                    return 1;
+                }
+            }
+
+            public MaterialUsageRow this[int index]
+            {
+                get
+                {
+                    if (index != 0) throw new ArgumentOutOfRangeException(nameof(index));
+                    return _row;
+                }
+            }
+
+            public IEnumerator<MaterialUsageRow> GetEnumerator()
+            {
+                yield return _row;
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return GetEnumerator();
+            }
+        }
+
         public static void Run()
         {
             var path = Path.Combine(Path.GetTempPath(), "qs3d-material-" + Guid.NewGuid().ToString("N") + ".xlsx");
@@ -69,6 +111,29 @@ namespace QS3D.Core.SmokeTests
                         if (xml.IndexOf('\uFFFD') < 0) throw new Exception("Material XLSX did not preserve the sanitized replacement marker.");
                     }
                 }
+
+                File.WriteAllText(path, "ORIGINAL");
+                var mutatingRow = new MaterialUsageRow
+                {
+                    MaterialName = "Snapshot material",
+                    UnitHint = "m²",
+                    AreaM2 = 7.5d
+                };
+                var rejected = false;
+                try
+                {
+                    MaterialUsageXlsxExporter.Export(path, new PrimaryQuantityMutatingRows(mutatingRow));
+                }
+                catch (InvalidOperationException ex)
+                {
+                    if (ex.Message.IndexOf("row values changed during snapshot traversal", StringComparison.Ordinal) < 0)
+                        throw;
+                    rejected = true;
+                }
+                if (!rejected)
+                    throw new Exception("Material XLSX did not reject PrimaryQuantity snapshot mutation after snapshot capture.");
+                if (!string.Equals(File.ReadAllText(path), "ORIGINAL", StringComparison.Ordinal))
+                    throw new Exception("Material XLSX replaced the existing destination after PrimaryQuantity snapshot mutation.");
             }
             finally
             {

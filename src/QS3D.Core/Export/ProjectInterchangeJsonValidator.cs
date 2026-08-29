@@ -154,6 +154,18 @@ namespace QS3D.Core.Export
             }
             var utf8 = StrictUtf8.GetBytes(json);
 
+            try
+            {
+                ValidateNoUnknownMembers(utf8, issues);
+            }
+            catch (Exception ex) when (ex is SerializationException || ex is XmlException)
+            {
+                issues.Error("JSON_PARSE", "Semantic snapshot JSON shape cannot be inspected: " + ex.Message, "$.");
+                return Result(null, issues);
+            }
+            if (issues.Items.Any(x => string.Equals(x.Code, "JSON_DUPLICATE_MEMBER", StringComparison.Ordinal)))
+                return Result(null, issues);
+
             SnapshotContract? snapshot;
             try
             {
@@ -177,15 +189,6 @@ namespace QS3D.Core.Export
                 return Result(null, issues);
             }
 
-            try
-            {
-                ValidateNoUnknownMembers(utf8, issues);
-            }
-            catch (Exception ex) when (ex is SerializationException || ex is XmlException)
-            {
-                issues.Error("JSON_PARSE", "Semantic snapshot JSON shape cannot be inspected: " + ex.Message, "$.");
-                return Result(null, issues);
-            }
             ValidateHeader(snapshot, issues);
             ValidateProject(snapshot.Project, issues);
             RequireCollection(snapshot.Zones, "zones", issues);
@@ -237,10 +240,13 @@ namespace QS3D.Core.Export
         private static void ValidateObjectMembers(XElement? value, string path, ISet<string> allowedMembers, IssueCollector issues)
         {
             if (value == null) return;
+            var observedMembers = new HashSet<string>(StringComparer.Ordinal);
             foreach (var member in value.Elements())
             {
                 if (issues.Full) return;
                 var name = JsonMemberName(member);
+                if (!observedMembers.Add(name))
+                    issues.Error("JSON_DUPLICATE_MEMBER", "Semantic snapshot contains a duplicate JSON member: " + name + ".", path);
                 if (!allowedMembers.Contains(name))
                     issues.Error("JSON_UNKNOWN_MEMBER", "Semantic snapshot contains a JSON member outside the supported v1 object contract: " + name + ".", path);
             }
