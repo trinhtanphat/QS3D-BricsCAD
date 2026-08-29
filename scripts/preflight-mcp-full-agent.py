@@ -64,7 +64,7 @@ def main() -> int:
         "MCP tools/list": 'string.Equals(method, "tools/list"',
         "MCP tools/call": 'string.Equals(method, "tools/call"',
         "MCP session termination": 'request.Method == "DELETE"',
-        "protocol/session binding": "MCP-Protocol-Version does not match initialized session",
+        "protocol/session binding": "MCP-Protocol-Version is invalid or does not match initialized session.",
         "canonical public endpoint": "McpPublicEndpointResolver.Resolve()",
         "runtime delegation": "McpCadAgentRuntime.Call(tool, arguments)",
         "structured tool results": '\"structuredContent\"',
