@@ -71,15 +71,19 @@ namespace QS3D.Core.Mep
             var normalized = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var tokenIndex = 0;
-            foreach (var token in tokens)
+            using (var enumerator = tokens.GetEnumerator())
             {
-                if (tokenIndex >= MepRecognitionLimits.MaxTokensPerRule)
-                    throw new ArgumentException(
-                        "Recognition rule may contain at most " + MepRecognitionLimits.MaxTokensPerRule + " tokens.",
-                        nameof(tokens));
-                tokenIndex++;
-                var value = RequireText(token, nameof(tokens));
-                if (seen.Add(value)) normalized.Add(value);
+                while (enumerator.MoveNext())
+                {
+                    if (tokenIndex >= MepRecognitionLimits.MaxTokensPerRule)
+                        throw new ArgumentException(
+                            "Recognition rule may contain at most " + MepRecognitionLimits.MaxTokensPerRule + " tokens.",
+                            nameof(tokens));
+                    var token = enumerator.Current;
+                    tokenIndex++;
+                    var value = RequireText(token, nameof(tokens));
+                    if (seen.Add(value)) normalized.Add(value);
+                }
             }
             if (normalized.Count == 0)
                 throw new ArgumentException("At least one recognition token is required.", nameof(tokens));
