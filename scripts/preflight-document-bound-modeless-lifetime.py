@@ -149,7 +149,12 @@ if not errors:
         window_source = text[window_key]
         if constructor not in source:
             errors.append(key + " launcher lost its explicit source Document constructor")
-        if "Application.ShowModelessWindow(IntPtr.Zero, window, true);" not in source:
+        if key == "zones":
+            if "var publishedWindow = candidate;" not in source:
+                errors.append("zones launcher must alias the exact candidate before attaching publication lifecycle")
+            if "Application.ShowModelessWindow(IntPtr.Zero, publishedWindow, true);" not in source:
+                errors.append("zones launcher must show the exact publication-tracked candidate instance")
+        elif "Application.ShowModelessWindow(IntPtr.Zero, window, true);" not in source:
             errors.append(key + " launcher must show the same registered window instance")
         if "DocumentBoundWindowLifetime.Attach(window, document);" in source:
             errors.append(key + " launcher must not duplicate lifetime attachment owned by the window constructor")

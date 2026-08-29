@@ -43,6 +43,7 @@ namespace QS3D.BricsCAD.V25
     {
         private const int MaxActivityEntries = 50;
         private const int MaxVisibleToasts = 4;
+        private static readonly TimeSpan OAuthMcpActivityFreshness = TimeSpan.FromMinutes(2);
 
         private enum ThemeMode { System, Dark, Light }
         private enum ToastKind { Info, Success, Warning, Error }
@@ -418,7 +419,7 @@ namespace QS3D.BricsCAD.V25
             actions.Children.Add(CreateActionButton("Copy MCP URL", (_, __) => CopyUrl(), ActionKind.Secondary));
             actions.Children.Add(CreateActionButton("Đã thêm MCP trong ChatGPT", (_, __) => MarkChatGptRegistered(), ActionKind.Secondary));
             AddGridCard(grid, CreateSectionCard("Kết nối", "Luồng production: embedded MCP → cloudflared → Cloudflare browser login → Named Tunnel → ChatGPT URL/OAuth.", actions), 0);
-            AddGridCard(grid, CreateSectionCard("Trạng thái kết nối", "QS3D không lưu password ChatGPT/Cloudflare và không scrape browser session.", _statusRows), 1);
+            AddGridCard(grid, CreateSectionCard("Trạng thái kết nối", "Transport sẵn sàng, đăng ký ChatGPT và OAuth MCP traffic là ba trạng thái riêng; QS3D không suy đoán kết nối chỉ từ public URL.", _statusRows), 1);
             return grid;
         }
 
@@ -1044,7 +1045,8 @@ namespace QS3D.BricsCAD.V25
             var publicUrl = McpCloudflareTunnelManager.PublicMcpUrl;
             if (!string.IsNullOrWhiteSpace(publicUrl))
             {
-                ShowToast(ToastKind.Success, "Quick Tunnel", "Public URL sẵn sàng: " + publicUrl);
+                ShowToast(ToastKind.Success, "Quick Tunnel",
+                    "Public URL đã có. Khi bấm Connect trong ChatGPT, hãy chờ OAuth + quét tool hoàn tất; Quick Tunnel chỉ để test: " + publicUrl);
                 StopQuickUrlPolling();
                 return;
             }
@@ -1094,7 +1096,8 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 McpAgentExperience.MarkChatGptRegistrationAcknowledged();
-                ShowToast(ToastKind.Success, "ChatGPT Connector", "Đã ghi nhận MCP URL hiện tại được thêm trong ChatGPT.");
+                ShowToast(ToastKind.Success, "ChatGPT Connector",
+                    "Đã ghi nhận bạn đã thêm MCP URL hiện tại. Đây là xác nhận cài đặt, chưa phải bằng chứng traffic; OAuth MCP traffic sẽ tự hiện khi ChatGPT gọi server.");
             }
             catch (Exception ex) { ShowToast(ToastKind.Error, "ChatGPT Connector", ex.Message); }
             RefreshStatus();
@@ -1306,11 +1309,19 @@ namespace QS3D.BricsCAD.V25
             var idleRemaining = McpDesktopControlSession.IdleRemaining;
             var idleText = desktopConsent ? FormatIdle(idleRemaining) : "—";
             var onboarding = McpAgentExperience.DetermineOnboarding();
+            var transportReady = mcpRunning && tunnelRunning && !string.IsNullOrWhiteSpace(publicUrl);
+            var chatGptRegistered = onboarding.ChatGptRegistrationAcknowledged;
+            var recentOAuthMcpActivity = mcpRunning && HasRecentOAuthMcpActivity(publicUrl);
+            var oauthMcpActivityText = FormatOAuthMcpActivity(publicUrl);
 
             _statusChips.Children.Clear();
             _statusChips.Children.Add(CreateStatusChip(mcpRunning ? "MCP online" : "MCP offline", mcpRunning));
             _statusChips.Children.Add(CreateStatusChip(tunnelRunning ? "Tunnel online" : "Tunnel offline", tunnelRunning));
-            _statusChips.Children.Add(CreateStatusChip(string.IsNullOrWhiteSpace(publicUrl) ? "Public URL chưa có" : "Public URL sẵn sàng", !string.IsNullOrWhiteSpace(publicUrl)));
+            _statusChips.Children.Add(CreateStatusChip(transportReady ? "Transport sẵn sàng" : "Transport chưa sẵn sàng", transportReady));
+            _statusChips.Children.Add(CreateStatusChip(
+                recentOAuthMcpActivity ? "ChatGPT OAuth traffic gần đây"
+                    : chatGptRegistered ? "ChatGPT đã đăng ký · chờ traffic" : "ChatGPT chưa xác nhận",
+                recentOAuthMcpActivity));
             _statusChips.Children.Add(CreateStatusChip("Desktop " + desktopState, desktopConsent));
 
             _statusRows.Children.Clear();
@@ -1321,6 +1332,9 @@ namespace QS3D.BricsCAD.V25
             _statusRows.Children.Add(CreateStatusRow("Named Tunnel", namedTunnelRunning ? "RUNNING" : "STOPPED", namedTunnelRunning ? _palette.Success : _palette.TextMuted));
             _statusRows.Children.Add(CreateStatusRow("Quick Tunnel", quickTunnelRunning ? "RUNNING / test only" : "STOPPED", quickTunnelRunning ? _palette.Warning : _palette.TextMuted));
             _statusRows.Children.Add(CreateStatusRow("Public MCP", string.IsNullOrWhiteSpace(publicUrl) ? "Chưa có public URL" : publicUrl));
+            _statusRows.Children.Add(CreateStatusRow("Transport sẵn sàng", transportReady ? "CÓ · MCP + tunnel + public URL" : "CHƯA", transportReady ? _palette.Success : _palette.Warning));
+            _statusRows.Children.Add(CreateStatusRow("ChatGPT đăng ký", chatGptRegistered ? "Đã xác nhận URL hiện tại" : "Chưa xác nhận", chatGptRegistered ? _palette.Success : _palette.TextMuted));
+            _statusRows.Children.Add(CreateStatusRow("OAuth MCP traffic", oauthMcpActivityText, recentOAuthMcpActivity ? _palette.Success : _palette.TextMuted));
             _statusRows.Children.Add(CreateStatusRow("Onboarding", onboarding.Title));
             _statusRows.Children.Add(CreateStatusRow("Desktop consent", desktopState, desktopConsent ? _palette.Success : _palette.Warning));
             _statusRows.Children.Add(CreateStatusRow("Idle còn", idleText));
@@ -1344,6 +1358,28 @@ namespace QS3D.BricsCAD.V25
                     + Environment.NewLine + "Bước tiếp: " + (string.IsNullOrWhiteSpace(McpAgentExperience.NextStep) ? "theo trạng thái onboarding hiện tại" : McpAgentExperience.NextStep);
             }
             if (_selectedTab == 3 && _logsHost != null) RenderActivityHistory();
+        }
+
+        private static bool HasRecentOAuthMcpActivity(string publicUrl)
+        {
+            if (string.IsNullOrWhiteSpace(publicUrl)) return false;
+            var lastUtc = McpEmbeddedServer.LastOAuthMcpActivityUtc;
+            if (lastUtc == DateTime.MinValue) return false;
+            if (!string.Equals(McpEmbeddedServer.LastOAuthMcpPublicUrl, publicUrl, StringComparison.OrdinalIgnoreCase)) return false;
+            var age = DateTime.UtcNow - lastUtc;
+            return age >= TimeSpan.Zero && age <= OAuthMcpActivityFreshness;
+        }
+
+        private static string FormatOAuthMcpActivity(string publicUrl)
+        {
+            var lastUtc = McpEmbeddedServer.LastOAuthMcpActivityUtc;
+            if (lastUtc == DateTime.MinValue) return "Chưa quan sát request /mcp đã xác thực bằng OAuth.";
+            if (string.IsNullOrWhiteSpace(publicUrl)
+                || !string.Equals(McpEmbeddedServer.LastOAuthMcpPublicUrl, publicUrl, StringComparison.OrdinalIgnoreCase))
+                return "Traffic OAuth gần nhất thuộc public URL trước; cần reconnect URL hiện tại.";
+            var method = string.IsNullOrWhiteSpace(McpEmbeddedServer.LastOAuthMcpMethod) ? "MCP" : McpEmbeddedServer.LastOAuthMcpMethod;
+            var prefix = HasRecentOAuthMcpActivity(publicUrl) ? "Gần đây" : "Đã thấy trước đó";
+            return prefix + " · " + method + " · " + lastUtc.ToLocalTime().ToString("HH:mm:ss");
         }
 
         private static string FormatIdle(TimeSpan remaining)

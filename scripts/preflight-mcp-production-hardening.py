@@ -97,7 +97,9 @@ def main() -> int:
         "reject any Transfer-Encoding header": (server, 'if (headers.ContainsKey("Transfer-Encoding"))'),
         "Origin validation helper": (server, "private static bool IsAllowedOrigin("),
         "Origin URI parsing": (server, "Uri.TryCreate(origin, UriKind.Absolute"),
-        "Origin loopback restriction": (server, "uri.IsLoopback"),
+        "Origin loopback admission": (server, "uri.IsLoopback"),
+        "Origin exact public resource admission": (server, "IsSameOriginAsPublicMcp(uri, publicMcpUrl)"),
+        "Origin public-resource comparator": (server, "private static bool IsSameOriginAsPublicMcp("),
         "Origin rejection HTTP 403": (server, 'WriteResponse(stream, 403, "Forbidden"'),
         "strict UTF-8 request body": (server, "StrictUtf8.GetString(body)"),
         "invalid UTF-8 request rejection": (server, "Invalid UTF-8 in MCP HTTP body."),
@@ -145,7 +147,7 @@ def main() -> int:
             errors.append(f"missing {label}: {token}")
 
     handle_request_start = server.find("private static void HandleRequest(")
-    origin_check = server.find("if (!IsAllowedOrigin(request.Headers))", handle_request_start)
+    origin_check = server.find("if (!IsAllowedOrigin(request.Headers, publicMcpUrl))", handle_request_start)
     health_route = server.find('request.Path, "/healthz"', handle_request_start)
     if handle_request_start < 0 or origin_check < 0 or health_route < 0 or origin_check > health_route:
         errors.append("MCP Origin validation must run before every route, including healthz")
@@ -301,7 +303,7 @@ def main() -> int:
 
     print(
         "PASS: compiled modular MCP transport/runtime use strict bounded HTTP framing/UTF-8, exact JSON "
-        "media type admission, loopback-only Origin validation, strict recursive RFC JSON grammar, valid JSON-RPC ids, "
+        "media type admission, loopback-or-exact-public-resource Origin validation, strict recursive RFC JSON grammar, valid JSON-RPC ids, "
         "serialized bounded sessions, epoch-invalidated mutation dispatch/UI input, canonical command-prefix rejection, "
         "strict negotiated protocol-version validation and 404 expiry truth; CAD timeout/recovery and validated "
         "Cloudflare endpoint/onboarding boundaries remain fail-closed."
