@@ -384,7 +384,7 @@ namespace QS3D.BricsCAD.V25
         {
             Action sequenceGuard = delegate
             {
-                EnsureSequenceRunning(hwnd, ensureMutationRunning, sequenceStarted, maxDuration);
+                EnsureSequenceStepRunning(hwnd, ensureMutationRunning, sequenceStarted, maxDuration);
             };
             sequenceGuard();
             var args = step.Arguments;
@@ -628,7 +628,7 @@ namespace QS3D.BricsCAD.V25
                     return "{\"found\":true,\"elapsedMs\":" + waitStarted.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture)
                            + ",\"window\":" + WindowJson(info) + "}";
                 if (waitStarted.ElapsedMilliseconds >= timeout)
-                    throw new TimeoutException("desktop_sequence wait step timed out before the bound target matched.");
+                    throw new TimeoutException("Sequence wait-for-target timed out before the bound target matched.");
                 var sleep = Math.Min(poll, SequenceDelaySliceMilliseconds);
                 Thread.Sleep(Math.Max(1, sleep));
             }
@@ -659,6 +659,11 @@ namespace QS3D.BricsCAD.V25
             if (started.ElapsedMilliseconds > maxDuration)
                 throw new TimeoutException("desktop_sequence exceeded its bounded maximum duration.");
             ValidateWindow(hwnd, true);
+        }
+
+        private static void EnsureSequenceStepRunning(IntPtr hwnd, Action ensureMutationRunning, Stopwatch started, int maxDuration)
+        {
+            EnsureSequenceRunning(hwnd, ensureMutationRunning, started, maxDuration);
         }
 
         private static void SkipSequenceWhitespace(string value, ref int index)
