@@ -80,6 +80,13 @@ if not errors:
         if needle not in review_text:
             errors.append("ReviewCommands must pass the source Document explicitly: " + needle)
 
+    # RevisionWindow intentionally does not retain the callback target because the current callback
+    # closes over the command's managed Document. Pin the only supported production callback to the
+    # canonical LocateCurrentElement workflow that the window mirrors with a fresh live Document.
+    canonical_revision_locate = 'Action<QuantityRevisionRow> locate = row => LocateCurrentElement(doc, row.ElementId, "Revision Locate");'
+    if canonical_revision_locate not in review_text:
+        errors.append("ReviewCommands Revision locate contract changed; update the window's action-local locate workflow deliberately")
+
     if "new ModelHealthWindow(document, issues" not in health_all_text:
         errors.append("HealthAllCommands must pass the source Document explicitly")
 
