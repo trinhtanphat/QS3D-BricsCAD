@@ -23,15 +23,19 @@ namespace QS3D.Core.Export
             var rowCount = RequireConsistentKnownCount(rows, MaxDataRows, "export rows");
 
             var snapshot = new List<DoorOpeningScheduleRow>(rowCount);
+            var sourceRows = new List<DoorOpeningScheduleRow>(rowCount);
             for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
             {
                 var sourceRow = rows[rowIndex];
                 if (sourceRow == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
+                sourceRows.Add(sourceRow);
                 snapshot.Add(SnapshotRow(sourceRow, rowIndex));
             }
             if (rows.Count != rowCount)
                 throw new InvalidOperationException("Door/opening XLSX export row count changed during snapshot.");
+            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+                EnsureRowStable(sourceRows[rowIndex], snapshot[rowIndex], rowIndex);
             ValidateCellText(snapshot);
             ValidateNumericValues(snapshot);
             ValidateProvenanceIntegrity(snapshot);
@@ -103,6 +107,45 @@ namespace QS3D.Core.Export
             }
             if (source.Count != count)
                 throw new InvalidOperationException("Door/opening XLSX " + label + " count changed during snapshot.");
+        }
+
+        private static void EnsureRowStable(DoorOpeningScheduleRow source, DoorOpeningScheduleRow snapshot, int rowIndex)
+        {
+            if (source == null ||
+                !string.Equals(source.ProjectId ?? string.Empty, snapshot.ProjectId, StringComparison.Ordinal) ||
+                !string.Equals(source.DrawingFingerprint ?? string.Empty, snapshot.DrawingFingerprint, StringComparison.Ordinal) ||
+                !string.Equals(source.Floor ?? string.Empty, snapshot.Floor, StringComparison.Ordinal) ||
+                !string.Equals(source.Category ?? string.Empty, snapshot.Category, StringComparison.Ordinal) ||
+                !string.Equals(source.FamilyName ?? string.Empty, snapshot.FamilyName, StringComparison.Ordinal) ||
+                !string.Equals(source.Material ?? string.Empty, snapshot.Material, StringComparison.Ordinal) ||
+                !source.WidthM.Equals(snapshot.WidthM) ||
+                !source.HeightM.Equals(snapshot.HeightM) ||
+                !source.SillHeightM.Equals(snapshot.SillHeightM) ||
+                !source.ThicknessM.Equals(snapshot.ThicknessM) ||
+                source.Count != snapshot.Count ||
+                !source.OpeningAreaM2.Equals(snapshot.OpeningAreaM2) ||
+                source.HostCount != snapshot.HostCount)
+                throw new InvalidOperationException("Door/opening XLSX export row values changed during snapshot traversal. Invalid row index: " + rowIndex + ".");
+
+            EnsureProvenanceStable(source.ElementIds, snapshot.ElementIds, rowIndex, "Element IDs");
+            EnsureProvenanceStable(source.HostIds, snapshot.HostIds, rowIndex, "Host IDs");
+            EnsureProvenanceStable(source.SourceHandles, snapshot.SourceHandles, rowIndex, "Source Handles");
+        }
+
+        private static void EnsureProvenanceStable(IList<string> source, IList<string> snapshot, int rowIndex, string fieldName)
+        {
+            if (source == null)
+                throw new InvalidOperationException("Door/opening XLSX export row " + rowIndex + " field " + fieldName + " became unavailable during snapshot traversal.");
+            var sourceCount = source.Count;
+            if (sourceCount != snapshot.Count)
+                throw new InvalidOperationException("Door/opening XLSX export row " + rowIndex + " field " + fieldName + " count changed during snapshot traversal.");
+            for (var index = 0; index < snapshot.Count; index++)
+            {
+                if (!string.Equals(source[index] ?? string.Empty, snapshot[index] ?? string.Empty, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Door/opening XLSX export row " + rowIndex + " field " + fieldName + " values changed during snapshot traversal.");
+            }
+            if (source.Count != sourceCount)
+                throw new InvalidOperationException("Door/opening XLSX export row " + rowIndex + " field " + fieldName + " count changed during snapshot traversal.");
         }
 
         private static int RequireConsistentKnownCount<T>(IEnumerable<T> source, int maximum, string label)
