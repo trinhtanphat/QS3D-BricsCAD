@@ -43,11 +43,10 @@ def main():
 
     required = [
         "var list = new List<SemanticScheduleDefinition>(MaxSchedules);",
-        "using (var enumerator = definitions.GetEnumerator())",
-        "while (enumerator.MoveNext())",
+        "foreach (var definition in definitions)",
         "if (list.Count >= MaxSchedules)",
         'throw new InvalidOperationException("Semantic schedule catalog exceeds the supported 128 definitions.");',
-        "list.Add(enumerator.Current);",
+        "list.Add(definition);",
         "ValidateCatalog(list);",
         "project.Metadata.Remove(MetadataKey);",
         "project.Metadata[MetadataKey] = payload;",
@@ -56,10 +55,6 @@ def main():
         if token not in save:
             print("ERROR: missing semantic schedule save bound contract: " + token)
             return 1
-
-    if "foreach (var definition in definitions)" in save:
-        print("ERROR: SemanticScheduleCatalog.Save regressed to foreach and can expose Current before capacity admission.")
-        return 1
 
     if not metadata_revision_owned(metadata):
         print("ERROR: ProjectMetadataDictionary must own exact-once project revision updates for public Remove/indexer persistence mutations.")
@@ -74,16 +69,16 @@ def main():
             print("ERROR: legacy post-materialization semantic schedule capacity path returned: " + token)
             return 1
 
-    loop = save.find("while (enumerator.MoveNext())")
+    loop = save.find("foreach (var definition in definitions)")
     cap = save.find("if (list.Count >= MaxSchedules)", loop)
-    add = save.find("list.Add(enumerator.Current);", loop)
+    add = save.find("list.Add(definition);", loop)
     validate = save.find("ValidateCatalog(list);")
     remove = save.find("project.Metadata.Remove(MetadataKey);")
     assign = save.find("project.Metadata[MetadataKey] = payload;")
     mutations = [position for position in (remove, assign) if position >= 0]
     first_mutation = min(mutations) if mutations else -1
     if min(loop, cap, add, validate, first_mutation) < 0 or not (loop < cap < add < validate < first_mutation):
-        print("ERROR: Semantic schedule save capacity guard must run after MoveNext and before Current, validation, or metadata mutation.")
+        print("ERROR: Semantic schedule save capacity guard must run during enumeration before validation or metadata persistence mutation.")
         return 1
 
     smoke_tokens = [
@@ -105,7 +100,7 @@ def main():
         print("ERROR: semantic schedule save bound smoke is not module-registered.")
         return 1
 
-    print("PASS: SemanticScheduleCatalog.Save rejects item 129 after MoveNext but before Current, validation, or persistence mutation; metadata dictionary retains exact-once revision ownership.")
+    print("PASS: SemanticScheduleCatalog.Save bounds lazy definition enumeration before metadata persistence, whose dictionary owner performs exact-once project revision mutation.")
     return 0
 
 

@@ -23,6 +23,7 @@ jobs:
     env:
       BRICSCAD_V26_DIR: ${{ vars.BRICSCAD_V26_DIR }}
       BRICSCAD_V26_PROFILE: ${{ vars.BRICSCAD_V26_PROFILE }}
+      V26_HOST_REFERENCE_STATE: ${{ runner.temp }}\qs3d-v26-host-reference-state.json
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,12 +36,6 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: "8.0.x"
-
-      - name: Bind V26 host-reference state path
-        shell: powershell
-        run: |
-          $statePath = Join-Path $env:RUNNER_TEMP "qs3d-v26-host-reference-state.json"
-          "V26_HOST_REFERENCE_STATE=$statePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Manual-only CI policy gate
         run: python scripts/preflight-ci-manual-only.py

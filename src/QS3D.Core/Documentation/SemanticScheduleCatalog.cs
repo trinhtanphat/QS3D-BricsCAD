@@ -67,32 +67,13 @@ namespace QS3D.Core.Documentation
                 while (enumerator.MoveNext())
                 {
                     if (result.Count >= maxCount) throw new InvalidOperationException(capacityError);
-                    if (knownCount.HasValue && result.Count >= knownCount.Value)
-                        throw new InvalidOperationException("Semantic schedule collection source known Count does not match completed traversal.");
                     result.Add(enumerator.Current);
                 }
             }
 
             if (knownCount.HasValue && result.Count != knownCount.Value)
                 throw new InvalidOperationException("Semantic schedule collection source known Count does not match completed traversal.");
-            ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "after traversal");
             return result.AsReadOnly();
-        }
-
-        private static void ValidateKnownCountEvidence<T>(
-            IEnumerable<T> values,
-            int maxCount,
-            string capacityError,
-            int? expectedCount,
-            string phase)
-        {
-            int? observed = null;
-            ValidateKnownCount(values as ICollection<T>, maxCount, capacityError, ref observed);
-            ValidateKnownCount(values as IReadOnlyCollection<T>, maxCount, capacityError, ref observed);
-            ValidateKnownCount(values as System.Collections.ICollection, maxCount, capacityError, ref observed);
-            if (expectedCount.HasValue && observed.HasValue && observed.Value != expectedCount.Value)
-                throw new InvalidOperationException(
-                    "Semantic schedule collection source known Count changed or conflicted " + phase + ".");
         }
 
         private static void ValidateKnownCount<T>(ICollection<T>? values, int maxCount, string capacityError, ref int? knownCount)
@@ -165,14 +146,11 @@ namespace QS3D.Core.Documentation
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (definitions == null) throw new ArgumentNullException(nameof(definitions));
             var list = new List<SemanticScheduleDefinition>(MaxSchedules);
-            using (var enumerator = definitions.GetEnumerator())
+            foreach (var definition in definitions)
             {
-                while (enumerator.MoveNext())
-                {
-                    if (list.Count >= MaxSchedules)
-                        throw new InvalidOperationException("Semantic schedule catalog exceeds the supported 128 definitions.");
-                    list.Add(enumerator.Current);
-                }
+                if (list.Count >= MaxSchedules)
+                    throw new InvalidOperationException("Semantic schedule catalog exceeds the supported 128 definitions.");
+                list.Add(definition);
             }
             ValidateCatalog(list);
             if (list.Count == 0)

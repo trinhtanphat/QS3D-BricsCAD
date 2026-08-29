@@ -428,7 +428,6 @@ namespace QS3D.BricsCAD.V25.UI
             private object? _objectIsolationModeBefore;
             private ViewSnapshot? _viewBeforeSection;
             private bool _destroyed;
-            private bool _disposeInProgress;
             private bool _disposed;
 
             public TransientReviewSession(Document document)
@@ -503,11 +502,8 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (_highlighted.Count == 0) return;
                 var pending = _highlighted.ToArray();
-                if (_destroyed)
-                {
-                    _highlighted.Clear();
-                    return;
-                }
+                _highlighted.Clear();
+                if (_destroyed) return;
 
                 using (_document.LockDocument())
                 using (var transaction = _document.Database.TransactionManager.StartTransaction())
@@ -526,8 +522,6 @@ namespace QS3D.BricsCAD.V25.UI
                     }
                     transaction.Commit();
                 }
-
-                _highlighted.Clear();
             }
 
             public void Isolate(IReadOnlyList<ObjectId> ids)
@@ -555,16 +549,16 @@ namespace QS3D.BricsCAD.V25.UI
             public void RestoreIsolation()
             {
                 if (!_isolationActive) return;
-                if (_destroyed)
+                try
+                {
+                    if (!_destroyed)
+                        _document.SendStringToExecute("_.UNISOLATEOBJECTS ", true, false, false);
+                }
+                finally
                 {
                     _isolationActive = false;
                     RestoreObjectIsolationModeBestEffort();
-                    return;
                 }
-
-                _document.SendStringToExecute("_.UNISOLATEOBJECTS ", true, false, false);
-                _isolationActive = false;
-                RestoreObjectIsolationModeBestEffort();
             }
 
             public void ApplySectionFocus(IReadOnlyList<ObjectId> ids)
@@ -735,17 +729,13 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)
             {
-                Exception? cleanupFailure = null;
-                try { ClearHighlight(); } catch (Exception ex) { cleanupFailure = ex; }
-                try { RestoreIsolation(); } catch (Exception ex) { cleanupFailure = cleanupFailure ?? ex; }
+                try { ClearHighlight(); } catch { _highlighted.Clear(); }
+                try { RestoreIsolation(); } catch { _isolationActive = false; RestoreObjectIsolationModeBestEffort(); }
                 try { RestoreSectionView(); }
-                catch (Exception ex)
+                catch
                 {
-                    cleanupFailure = cleanupFailure ?? ex;
+                    if (throwOnSectionRestoreFailure) throw;
                 }
-
-                if (throwOnSectionRestoreFailure && cleanupFailure != null)
-                    throw cleanupFailure;
             }
 
             public void AbandonDestroyedDocumentState()
@@ -773,18 +763,9 @@ namespace QS3D.BricsCAD.V25.UI
 
             public void Dispose()
             {
-                if (_disposed || _disposeInProgress) return;
-
-                _disposeInProgress = true;
-                try
-                {
-                    ResetTransientStateBestEffort(true);
-                    _disposed = true;
-                }
-                finally
-                {
-                    _disposeInProgress = false;
-                }
+                if (_disposed) return;
+                ResetTransientStateBestEffort(true);
+                _disposed = true;
             }
 
             private sealed class ViewSnapshot
