@@ -73,8 +73,7 @@ namespace QS3D.Core.Rebar
                 throw new InvalidOperationException("Rebar schedule input known Count does not match traversal.");
 
             var finalInputCount = ValidateKnownInputCount(inputs, nameof(inputs));
-            if (expectedInputCount.HasValue != finalInputCount.HasValue ||
-                (expectedInputCount.HasValue && finalInputCount.Value != expectedInputCount.Value))
+            if (expectedInputCount != finalInputCount)
                 throw new InvalidOperationException("Rebar schedule input known Count changed during traversal.");
 
             ValidateAggregate(rows);
