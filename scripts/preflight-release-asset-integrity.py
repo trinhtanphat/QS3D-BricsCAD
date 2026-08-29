@@ -95,14 +95,14 @@ def main() -> int:
     download_pos = text.find("gh release download $env:RELEASE_TAG", tag_pos)
     set_pos = text.find("Draft release asset set mismatch.", download_pos)
     hash_pos = text.find("Draft release asset SHA-256 mismatch for $name; release remains a draft.", set_pos)
-    checksum_pos = text.find("Downloaded draft ZIP fails its SHA-256 checksum.", hash_pos)
-    copy_pos = text.find("-Operation Copy", checksum_pos)
-    signature_pos = text.find("verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", copy_pos)
+    copy_pos = text.find("-Operation Copy -Path $remoteZip -Destination $heldRemoteZip", hash_pos)
+    checksum_pos = text.find("Downloaded draft ZIP fails its SHA-256 checksum.", copy_pos)
+    signature_pos = text.find("verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", checksum_pos)
     publish_pos = text.find("gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --draft=false", signature_pos)
-    positions = (create_pos, tag_pos, download_pos, set_pos, hash_pos, checksum_pos, copy_pos, signature_pos, publish_pos)
-    require(min(positions) >= 0 and list(positions) == sorted(positions), "V25 release must create draft -> bind exact tag -> download exact asset set -> held hash/checksum -> held ZIP copy -> signature verify -> publish")
+    positions = (create_pos, tag_pos, download_pos, set_pos, hash_pos, copy_pos, checksum_pos, signature_pos, publish_pos)
+    require(min(positions) >= 0 and list(positions) == sorted(positions), "V25 release must create draft -> bind exact tag -> download exact asset set -> held asset hash -> stable ZIP copy -> stable-copy checksum -> signature verify -> publish")
 
-    print("PASS: V25 commercial publication remains draft-first, exact-tag-bound, exact-asset-set-bound, held-generation hash/copy verified, Authenticode verified, and only then published.")
+    print("PASS: V25 commercial publication remains draft-first, exact-tag-bound, exact-asset-set-bound, held-generation hash verified, stable ZIP copy/checksum verified, Authenticode verified, and only then published.")
     return 0
 
 
