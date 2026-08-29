@@ -265,6 +265,7 @@ namespace QS3D.BricsCAD.V25
                    || string.Equals(name, "Content-Type", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Transfer-Encoding", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Authorization", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(name, "Origin", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Mcp-Session-Id", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "MCP-Protocol-Version", StringComparison.OrdinalIgnoreCase);
         }
@@ -295,8 +296,32 @@ namespace QS3D.BricsCAD.V25
             return string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsAllowedOrigin(IDictionary<string, string> headers)
+        {
+            string origin;
+            if (!headers.TryGetValue("Origin", out origin)) return true;
+            if (string.IsNullOrWhiteSpace(origin)) return false;
+
+            Uri uri;
+            if (!Uri.TryCreate(origin, UriKind.Absolute, out uri)) return false;
+            if (!string.IsNullOrEmpty(uri.UserInfo)
+                || !string.IsNullOrEmpty(uri.Query)
+                || !string.IsNullOrEmpty(uri.Fragment))
+                return false;
+            if (!string.IsNullOrEmpty(uri.AbsolutePath) && uri.AbsolutePath != "/") return false;
+            if (!string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                return false;
+            return uri.IsLoopback;
+        }
+
         private static void HandleRequest(NetworkStream stream, HttpRequest request)
         {
+            if (!IsAllowedOrigin(request.Headers))
+            {
+                WriteResponse(stream, 403, "Forbidden", "{\"error\":\"invalid MCP Origin\"}", null);
+                return;
+            }
             if (request.Method == "GET" && string.Equals(request.Path, "/healthz", StringComparison.OrdinalIgnoreCase))
             {
                 WriteResponse(stream, 200, "OK", "{\"ok\":true,\"service\":\"qs3d-bricscad-mcp\",\"running\":true,\"version\":\"embedded-5\"}", null);
