@@ -72,14 +72,14 @@ namespace QS3D.Core.Export
             return snapshot;
         }
 
-        private static void ValidateProjectedRowCapacity(IReadOnlyList<QuantityExplanation> explanations)
+        private static void ValidateProjectedRowCapacity(IReadOnlyList<QuantityExplanation> snapshot)
         {
             long projectedRows = 0;
-            for (var index = 0; index < explanations.Count; index++)
+            for (var index = 0; index < snapshot.Count; index++)
             {
-                var explanation = explanations[index];
+                var explanation = snapshot[index];
                 if (explanation == null)
-                    throw new ArgumentException("Quantity explanations cannot contain null entries.", nameof(explanations));
+                    throw new ArgumentException("Quantity explanations cannot contain null entries.", nameof(snapshot));
 
                 projectedRows = AddProjectedRows(
                     projectedRows,
