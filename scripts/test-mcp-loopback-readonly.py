@@ -262,11 +262,14 @@ def main() -> int:
             delete_status, _, _ = request(endpoint, "DELETE", None, args.timeout, token=token, session=session)
             if delete_status != 204:
                 raise ProbeError("MCP session DELETE did not return 204.")
+            stale_delete_status, _, _ = request(endpoint, "DELETE", None, args.timeout, token=token, session=session)
+            if stale_delete_status != 404:
+                raise ProbeError("terminated MCP session reuse was not rejected with HTTP 404.")
             session = ""
 
             print("PASS: QS3D embedded MCP read-only loopback qualification")
             print(f" protocol={PROTOCOL}; server=qs3d-bricscad; tools={len(names)}")
-            print(" auth_rejection=PASS; initialize=PASS; notification=PASS; ping=PASS; session_delete=PASS")
+            print(" auth_rejection=PASS; initialize=PASS; notification=PASS; ping=PASS; session_delete=PASS; stale_session_404=PASS")
             print(" readonly_tools=" + ",".join(f"{name}:{read_results[name]}" for name, _ in READ_ONLY_TOOLS))
             print(" secret_output=NONE; mutation_calls=0")
             return 0
