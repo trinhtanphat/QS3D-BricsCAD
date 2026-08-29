@@ -225,6 +225,8 @@ namespace QS3D.Core.Export
                 throw new InvalidOperationException("IFC round-trip projection source exposes conflicting known Count values.");
 
             var items = new List<IfcRoundTripProjection>();
+            var ifcGlobalIds = new HashSet<string>(StringComparer.Ordinal);
+            var qs3dElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             using (var enumerator = projections.GetEnumerator())
             {
                 while (enumerator.MoveNext())
@@ -236,6 +238,9 @@ namespace QS3D.Core.Export
                     if (items.Count == MaxProjections)
                         ThrowTooManyProjections();
                     var projection = enumerator.Current;
+                    if (projection == null) throw new ArgumentException("Projection collection cannot contain null entries.", nameof(projections));
+                    if (!ifcGlobalIds.Add(projection.IfcGlobalId)) throw new InvalidOperationException("Duplicate IFC global identity: " + projection.IfcGlobalId);
+                    if (!qs3dElementIds.Add(projection.Qs3dElementId)) throw new InvalidOperationException("Duplicate QS3D element identity: " + projection.Qs3dElementId);
                     items.Add(projection);
                 }
             }
@@ -247,15 +252,6 @@ namespace QS3D.Core.Export
                 knownCount,
                 "IFC round-trip projection");
 
-            var ifcGlobalIds = new HashSet<string>(StringComparer.Ordinal);
-            var qs3dElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (var index = 0; index < items.Count; index++)
-            {
-                var item = items[index];
-                if (item == null) throw new ArgumentException("Projection collection cannot contain null entries.", nameof(projections));
-                if (!ifcGlobalIds.Add(item.IfcGlobalId)) throw new InvalidOperationException("Duplicate IFC global identity: " + item.IfcGlobalId);
-                if (!qs3dElementIds.Add(item.Qs3dElementId)) throw new InvalidOperationException("Duplicate QS3D element identity: " + item.Qs3dElementId);
-            }
             items.Sort(IfcRoundTripProjectionComparer.CanonicalOrder);
             return new IfcRoundTripProjectionSet(Array.AsReadOnly(items.ToArray()));
         }
