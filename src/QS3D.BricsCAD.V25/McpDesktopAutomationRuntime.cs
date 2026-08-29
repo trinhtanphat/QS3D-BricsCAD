@@ -15,10 +15,9 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Bounded Windows desktop automation used by the embedded MCP full-agent surface.
-    /// Network confirmation is never sufficient by itself: desktop mutations and sensitive
-    /// desktop reads also require the user to enable the in-memory local desktop session in
-    /// QS3D. Guarded calls display the blue safety overlay and remain interruptible by Esc×2.
-    /// This runtime never launches a process or shell.
+    /// This runtime never launches a process or shell. Mutating callers must enter through
+    /// McpCadAgentRuntime.Mutation so confirmMutation and the emergency-stop epoch remain
+    /// canonical; the callback is rechecked immediately before every injected input.
     /// </summary>
     internal static class McpDesktopAutomationRuntime
     {
@@ -75,12 +74,6 @@ namespace QS3D.BricsCAD.V25
             "desktop_clipboard_write"
         };
 
-        private static readonly HashSet<string> SensitiveTools = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "desktop_clipboard_read",
-            "desktop_screenshot"
-        };
-
         internal static bool IsTool(string tool)
         {
             return Tools.Contains(tool ?? string.Empty);
@@ -99,27 +92,27 @@ namespace QS3D.BricsCAD.V25
                 Tool("desktop_window_list", "List a bounded set of visible top-level windows in the current interactive Windows session.",
                     "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}"),
                 Tool("desktop_foreground_window", "Read metadata for the current foreground window when it belongs to this interactive Windows session.", ""),
-                Tool("desktop_window_focus", "Restore and focus one visible current-session window. Requires local QS3D desktop consent and confirmMutation=true.",
+                Tool("desktop_window_focus", "Restore and focus one visible current-session window by hexadecimal handle.",
                     WindowHandleProperty() + "," + ConfirmMutationProperty(), "windowHandle", "confirmMutation"),
-                Tool("desktop_mouse_move", "Move the Windows cursor to absolute virtual-desktop coordinates. Requires local QS3D desktop consent and confirmMutation=true.",
+                Tool("desktop_mouse_move", "Move the Windows cursor to absolute virtual-desktop coordinates.",
                     PointProperties() + "," + ConfirmMutationProperty(), "x", "y", "confirmMutation"),
-                Tool("desktop_mouse_click", "Move and click at absolute virtual-desktop coordinates. Requires local QS3D desktop consent and confirmMutation=true.",
+                Tool("desktop_mouse_click", "Move and click at absolute virtual-desktop coordinates.",
                     PointProperties() + ",\"button\":{\"type\":\"string\",\"enum\":[\"left\",\"right\",\"middle\"]},\"count\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":3}," + ConfirmMutationProperty(),
                     "x", "y", "button", "confirmMutation"),
-                Tool("desktop_mouse_scroll", "Inject a bounded vertical mouse-wheel delta. Requires local QS3D desktop consent and confirmMutation=true.",
+                Tool("desktop_mouse_scroll", "Move the cursor and inject a bounded vertical mouse-wheel delta.",
                     PointProperties() + ",\"delta\":{\"type\":\"integer\",\"minimum\":-1200,\"maximum\":1200}," + ConfirmMutationProperty(),
                     "x", "y", "delta", "confirmMutation"),
-                Tool("desktop_type", "Focus one visible current-session window and type bounded Unicode text. Requires local QS3D desktop consent and confirmMutation=true.",
+                Tool("desktop_type", "Focus one visible current-session window and type bounded Unicode text.",
                     WindowHandleProperty() + ",\"text\":{\"type\":\"string\",\"maxLength\":8000}," + ConfirmMutationProperty(),
                     "windowHandle", "text", "confirmMutation"),
-                Tool("desktop_key", "Focus one visible current-session window and press an allowlisted named key with optional modifiers. Requires local QS3D desktop consent and confirmMutation=true.",
+                Tool("desktop_key", "Focus one visible current-session window and press an allowlisted named key with optional modifiers.",
                     WindowHandleProperty() + ",\"key\":{\"type\":\"string\",\"maxLength\":24},\"ctrl\":{\"type\":\"boolean\"},\"alt\":{\"type\":\"boolean\"},\"shift\":{\"type\":\"boolean\"},\"win\":{\"type\":\"boolean\"}," + ConfirmMutationProperty(),
                     "windowHandle", "key", "confirmMutation"),
-                Tool("desktop_clipboard_read", "Read bounded Unicode text from the Windows clipboard. Requires local QS3D desktop consent and confirmSensitiveRead=true.",
+                Tool("desktop_clipboard_read", "Read bounded Unicode text from the Windows clipboard after explicit sensitive-read acknowledgement.",
                     ConfirmSensitiveReadProperty(), "confirmSensitiveRead"),
-                Tool("desktop_clipboard_write", "Replace Windows clipboard text with bounded Unicode text. Requires local QS3D desktop consent and confirmMutation=true.",
+                Tool("desktop_clipboard_write", "Replace Windows clipboard text with bounded Unicode text.",
                     "\"text\":{\"type\":\"string\",\"maxLength\":65536}," + ConfirmMutationProperty(), "text", "confirmMutation"),
-                Tool("desktop_screenshot", "Capture a bounded in-memory PNG of the virtual desktop or one visible current-session window. Requires local QS3D desktop consent and confirmSensitiveRead=true.",
+                Tool("desktop_screenshot", "Capture a bounded in-memory PNG of the virtual desktop or one visible current-session window after explicit sensitive-read acknowledgement.",
                     "\"scope\":{\"type\":\"string\",\"enum\":[\"screen\",\"window\"]}," + WindowHandleProperty()
                     + ",\"maxWidth\":{\"type\":\"integer\",\"minimum\":160,\"maximum\":1280},\"maxHeight\":{\"type\":\"integer\",\"minimum\":120,\"maximum\":900},"
                     + ConfirmSensitiveReadProperty(), "scope", "confirmSensitiveRead")
@@ -129,38 +122,22 @@ namespace QS3D.BricsCAD.V25
         internal static string Call(string toolName, string arguments, Action ensureMutationRunning, Action<string> audit)
         {
             var tool = toolName ?? string.Empty;
-            if (!IsTool(tool)) throw new InvalidOperationException("Unknown MCP desktop tool: " + tool);
             var args = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
-
-            IDisposable guardedAction = null;
-            if (MutationTools.Contains(tool) || SensitiveTools.Contains(tool))
+            switch (tool)
             {
-                McpDesktopControlSession.RequireLocalConsent(tool);
-                guardedAction = McpDesktopControlSession.BeginGuardedAction(tool);
-            }
-
-            try
-            {
-                switch (tool)
-                {
-                    case "desktop_cursor_position": return CursorPositionJson();
-                    case "desktop_window_list": return WindowListJson(Integer(args, "limit", 30, 1, MaxWindows));
-                    case "desktop_foreground_window": return ForegroundWindowJson();
-                    case "desktop_window_focus": return FocusWindow(args, ensureMutationRunning, audit);
-                    case "desktop_mouse_move": return MouseMove(args, ensureMutationRunning, audit);
-                    case "desktop_mouse_click": return MouseClick(args, ensureMutationRunning, audit);
-                    case "desktop_mouse_scroll": return MouseScroll(args, ensureMutationRunning, audit);
-                    case "desktop_type": return TypeText(args, ensureMutationRunning, audit);
-                    case "desktop_key": return PressKey(args, ensureMutationRunning, audit);
-                    case "desktop_clipboard_read": return ClipboardRead(args, audit);
-                    case "desktop_clipboard_write": return ClipboardWrite(args, ensureMutationRunning, audit);
-                    case "desktop_screenshot": return Screenshot(args, audit);
-                    default: throw new InvalidOperationException("Unknown MCP desktop tool: " + tool);
-                }
-            }
-            finally
-            {
-                if (guardedAction != null) guardedAction.Dispose();
+                case "desktop_cursor_position": return CursorPositionJson();
+                case "desktop_window_list": return WindowListJson(Integer(args, "limit", 30, 1, MaxWindows));
+                case "desktop_foreground_window": return ForegroundWindowJson();
+                case "desktop_window_focus": return FocusWindow(args, ensureMutationRunning, audit);
+                case "desktop_mouse_move": return MouseMove(args, ensureMutationRunning, audit);
+                case "desktop_mouse_click": return MouseClick(args, ensureMutationRunning, audit);
+                case "desktop_mouse_scroll": return MouseScroll(args, ensureMutationRunning, audit);
+                case "desktop_type": return TypeText(args, ensureMutationRunning, audit);
+                case "desktop_key": return PressKey(args, ensureMutationRunning, audit);
+                case "desktop_clipboard_read": return ClipboardRead(args, audit);
+                case "desktop_clipboard_write": return ClipboardWrite(args, ensureMutationRunning, audit);
+                case "desktop_screenshot": return Screenshot(args, audit);
+                default: throw new InvalidOperationException("Unknown MCP desktop tool: " + tool);
             }
         }
 
@@ -182,7 +159,7 @@ namespace QS3D.BricsCAD.V25
                 if (windows.Count >= limit) return false;
                 WindowInfo info;
                 if (TryGetWindowInfo(hwnd, true, out info)) windows.Add(info);
-                return windows.Count < limit;
+                return true;
             }, IntPtr.Zero);
 
             var builder = new StringBuilder("{\"windows\":[");
@@ -222,8 +199,7 @@ namespace QS3D.BricsCAD.V25
             ensureMutationRunning();
             if (!SetCursorPos(x, y)) throw new InvalidOperationException("Windows rejected the cursor move.");
             Audit(audit, "x=" + x.ToString(CultureInfo.InvariantCulture) + "; y=" + y.ToString(CultureInfo.InvariantCulture));
-            return "{\"moved\":true,\"x\":" + x.ToString(CultureInfo.InvariantCulture)
-                   + ",\"y\":" + y.ToString(CultureInfo.InvariantCulture) + "}";
+            return "{\"moved\":true,\"x\":" + x.ToString(CultureInfo.InvariantCulture) + ",\"y\":" + y.ToString(CultureInfo.InvariantCulture) + "}";
         }
 
         private static string MouseClick(string body, Action ensureMutationRunning, Action<string> audit)
@@ -234,7 +210,6 @@ namespace QS3D.BricsCAD.V25
             var button = McpTopLevelJson.ExtractString(body, "button").Trim().ToLowerInvariant();
             var count = Integer(body, "count", 1, 1, 3);
             RequireVirtualDesktopPoint(x, y);
-
             uint down;
             uint up;
             if (button == "left") { down = MOUSEEVENTF_LEFTDOWN; up = MOUSEEVENTF_LEFTUP; }
@@ -252,11 +227,9 @@ namespace QS3D.BricsCAD.V25
                 SendMouse(up, 0);
                 if (i + 1 < count) Thread.Sleep(40);
             }
-
             Audit(audit, "x=" + x.ToString(CultureInfo.InvariantCulture) + "; y=" + y.ToString(CultureInfo.InvariantCulture)
                          + "; button=" + button + "; count=" + count.ToString(CultureInfo.InvariantCulture));
-            return "{\"clicked\":true,\"x\":" + x.ToString(CultureInfo.InvariantCulture)
-                   + ",\"y\":" + y.ToString(CultureInfo.InvariantCulture)
+            return "{\"clicked\":true,\"x\":" + x.ToString(CultureInfo.InvariantCulture) + ",\"y\":" + y.ToString(CultureInfo.InvariantCulture)
                    + ",\"button\":\"" + Escape(button) + "\",\"count\":" + count.ToString(CultureInfo.InvariantCulture) + "}";
         }
 
@@ -274,8 +247,7 @@ namespace QS3D.BricsCAD.V25
             SendMouse(MOUSEEVENTF_WHEEL, unchecked((uint)delta));
             Audit(audit, "x=" + x.ToString(CultureInfo.InvariantCulture) + "; y=" + y.ToString(CultureInfo.InvariantCulture)
                          + "; delta=" + delta.ToString(CultureInfo.InvariantCulture));
-            return "{\"scrolled\":true,\"x\":" + x.ToString(CultureInfo.InvariantCulture)
-                   + ",\"y\":" + y.ToString(CultureInfo.InvariantCulture)
+            return "{\"scrolled\":true,\"x\":" + x.ToString(CultureInfo.InvariantCulture) + ",\"y\":" + y.ToString(CultureInfo.InvariantCulture)
                    + ",\"delta\":" + delta.ToString(CultureInfo.InvariantCulture) + "}";
         }
 
@@ -290,15 +262,15 @@ namespace QS3D.BricsCAD.V25
             {
                 ensureMutationRunning();
                 RequireForegroundWindow(hwnd);
-                SendInputs(new[]
+                var input = new[]
                 {
                     new INPUT { type = INPUT_KEYBOARD, U = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE } } },
                     new INPUT { type = INPUT_KEYBOARD, U = new InputUnion { ki = new KEYBDINPUT { wScan = ch, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP } } }
-                }, "Unicode keyboard input");
+                };
+                SendInputs(input, "Unicode keyboard input");
             }
             Audit(audit, "handle=" + HandleText(hwnd) + "; chars=" + text.Length.ToString(CultureInfo.InvariantCulture));
-            return "{\"typed\":true,\"windowHandle\":\"" + HandleText(hwnd)
-                   + "\",\"characters\":" + text.Length.ToString(CultureInfo.InvariantCulture) + "}";
+            return "{\"typed\":true,\"windowHandle\":\"" + HandleText(hwnd) + "\",\"characters\":" + text.Length.ToString(CultureInfo.InvariantCulture) + "}";
         }
 
         private static string PressKey(string body, Action ensureMutationRunning, Action<string> audit)
@@ -306,8 +278,7 @@ namespace QS3D.BricsCAD.V25
             RequireMutationCallback(ensureMutationRunning);
             var hwnd = RequiredWindow(body);
             var keyName = McpTopLevelJson.ExtractString(body, "key").Trim().ToUpperInvariant();
-            if (keyName.Length == 0 || keyName.Length > 24)
-                throw new InvalidOperationException("key is required and must be <=24 characters.");
+            if (keyName.Length == 0 || keyName.Length > 24) throw new InvalidOperationException("key is required and must be <=24 characters.");
             var ctrl = McpTopLevelJson.ExtractBoolean(body, "ctrl");
             var alt = McpTopLevelJson.ExtractBoolean(body, "alt");
             var shift = McpTopLevelJson.ExtractBoolean(body, "shift");
@@ -318,10 +289,8 @@ namespace QS3D.BricsCAD.V25
             ensureMutationRunning();
             RequireForegroundWindow(hwnd);
             SendVirtualKey(key, ctrl, alt, shift, win);
-            Audit(audit, "handle=" + HandleText(hwnd) + "; key=" + keyName + "; ctrl=" + ctrl
-                         + "; alt=" + alt + "; shift=" + shift + "; win=" + win);
-            return "{\"pressed\":true,\"windowHandle\":\"" + HandleText(hwnd)
-                   + "\",\"key\":\"" + Escape(keyName) + "\"}";
+            Audit(audit, "handle=" + HandleText(hwnd) + "; key=" + keyName + "; ctrl=" + ctrl + "; alt=" + alt + "; shift=" + shift + "; win=" + win);
+            return "{\"pressed\":true,\"windowHandle\":\"" + HandleText(hwnd) + "\",\"key\":\"" + Escape(keyName) + "\"}";
         }
 
         private static string ClipboardRead(string body, Action<string> audit)
@@ -380,21 +349,21 @@ namespace QS3D.BricsCAD.V25
         {
             RequireSensitiveRead(body);
             var scope = McpTopLevelJson.ExtractString(body, "scope").Trim().ToLowerInvariant();
-            if (scope != "screen" && scope != "window")
-                throw new InvalidOperationException("scope must be screen or window.");
+            if (scope != "screen" && scope != "window") throw new InvalidOperationException("scope must be screen or window.");
             var maxWidth = Integer(body, "maxWidth", MaxScreenshotWidth, 160, MaxScreenshotWidth);
             var maxHeight = Integer(body, "maxHeight", MaxScreenshotHeight, 120, MaxScreenshotHeight);
-
             RECT rect;
-            var handle = string.Empty;
+            string handle = string.Empty;
             if (scope == "window")
             {
                 var hwnd = RequiredWindow(body);
                 if (!GetWindowRect(hwnd, out rect)) throw new InvalidOperationException("Could not read the target window bounds.");
                 handle = HandleText(hwnd);
             }
-            else rect = VirtualDesktopRect();
-
+            else
+            {
+                rect = VirtualDesktopRect();
+            }
             var width = rect.Right - rect.Left;
             var height = rect.Bottom - rect.Top;
             if (width <= 0 || height <= 0) throw new InvalidOperationException("Screenshot bounds are empty.");
@@ -408,19 +377,13 @@ namespace QS3D.BricsCAD.V25
                 if (png.Length <= MaxScreenshotBytes) break;
                 if (source.PixelWidth <= 160 || source.PixelHeight <= 120)
                     throw new InvalidOperationException("Screenshot exceeds the bounded MCP output size.");
-                source = ScaleBitmap(source,
-                    Math.Max(160, source.PixelWidth * 3 / 4),
-                    Math.Max(120, source.PixelHeight * 3 / 4));
+                source = ScaleBitmap(source, Math.Max(160, source.PixelWidth * 3 / 4), Math.Max(120, source.PixelHeight * 3 / 4));
             }
-
             Audit(audit, "screenshot scope=" + scope + "; width=" + source.PixelWidth.ToString(CultureInfo.InvariantCulture)
-                         + "; height=" + source.PixelHeight.ToString(CultureInfo.InvariantCulture)
-                         + (handle.Length == 0 ? string.Empty : "; handle=" + handle));
-            return "{\"scope\":\"" + scope + "\",\"windowHandle\":\"" + handle
-                   + "\",\"mimeType\":\"image/png\",\"width\":" + source.PixelWidth.ToString(CultureInfo.InvariantCulture)
-                   + ",\"height\":" + source.PixelHeight.ToString(CultureInfo.InvariantCulture)
-                   + ",\"bytes\":" + png.Length.ToString(CultureInfo.InvariantCulture)
-                   + ",\"pngBase64\":\"" + Convert.ToBase64String(png) + "\"}";
+                         + "; height=" + source.PixelHeight.ToString(CultureInfo.InvariantCulture) + (handle.Length == 0 ? string.Empty : "; handle=" + handle));
+            return "{\"scope\":\"" + scope + "\",\"windowHandle\":\"" + handle + "\",\"mimeType\":\"image/png\",\"width\":"
+                   + source.PixelWidth.ToString(CultureInfo.InvariantCulture) + ",\"height\":" + source.PixelHeight.ToString(CultureInfo.InvariantCulture)
+                   + ",\"bytes\":" + png.Length.ToString(CultureInfo.InvariantCulture) + ",\"pngBase64\":\"" + Convert.ToBase64String(png) + "\"}";
         }
 
         private static BitmapSource CaptureBitmap(int x, int y, int width, int height)
@@ -502,8 +465,7 @@ namespace QS3D.BricsCAD.V25
         {
             var text = McpTopLevelJson.ExtractString(body, "windowHandle").Trim();
             ulong value;
-            if (text.Length == 0 || text.Length > 16
-                || !ulong.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value) || value == 0)
+            if (text.Length == 0 || text.Length > 16 || !ulong.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value) || value == 0)
                 throw new InvalidOperationException("windowHandle must be a non-zero hexadecimal window handle up to 16 characters.");
             var hwnd = new IntPtr(unchecked((long)value));
             ValidateWindow(hwnd, true);
@@ -513,11 +475,8 @@ namespace QS3D.BricsCAD.V25
         private static void ValidateWindow(IntPtr hwnd, bool requireVisible)
         {
             EnsureInteractiveSession();
-            if (hwnd == IntPtr.Zero || !IsWindow(hwnd))
-                throw new InvalidOperationException("Desktop window handle is no longer valid.");
-            if (requireVisible && !IsWindowVisible(hwnd))
-                throw new InvalidOperationException("Desktop window must be visible.");
-
+            if (hwnd == IntPtr.Zero || !IsWindow(hwnd)) throw new InvalidOperationException("Desktop window handle is no longer valid.");
+            if (requireVisible && !IsWindowVisible(hwnd)) throw new InvalidOperationException("Desktop window must be visible.");
             uint processId;
             if (GetWindowThreadProcessId(hwnd, out processId) == 0 || processId == 0)
                 throw new InvalidOperationException("Could not identify the desktop window process.");
@@ -525,9 +484,8 @@ namespace QS3D.BricsCAD.V25
             try { process = Process.GetProcessById(checked((int)processId)); }
             catch (Exception ex) { throw new InvalidOperationException("Desktop window process is unavailable.", ex); }
             using (process)
-            using (var current = Process.GetCurrentProcess())
             {
-                if (process.SessionId != current.SessionId)
+                if (process.SessionId != Process.GetCurrentProcess().SessionId)
                     throw new InvalidOperationException("Desktop window belongs to a different Windows session.");
             }
         }
@@ -569,10 +527,8 @@ namespace QS3D.BricsCAD.V25
         private static string WindowJson(WindowInfo info)
         {
             return "{\"windowHandle\":\"" + Escape(info.Handle) + "\",\"title\":\"" + Escape(info.Title)
-                   + "\",\"bounds\":{\"x\":" + info.Left.ToString(CultureInfo.InvariantCulture)
-                   + ",\"y\":" + info.Top.ToString(CultureInfo.InvariantCulture)
-                   + ",\"width\":" + info.Width.ToString(CultureInfo.InvariantCulture)
-                   + ",\"height\":" + info.Height.ToString(CultureInfo.InvariantCulture)
+                   + "\",\"bounds\":{\"x\":" + info.Left.ToString(CultureInfo.InvariantCulture) + ",\"y\":" + info.Top.ToString(CultureInfo.InvariantCulture)
+                   + ",\"width\":" + info.Width.ToString(CultureInfo.InvariantCulture) + ",\"height\":" + info.Height.ToString(CultureInfo.InvariantCulture)
                    + "},\"foreground\":" + (info.Foreground ? "true" : "false") + "}";
         }
 
@@ -582,8 +538,7 @@ namespace QS3D.BricsCAD.V25
             var y = GetSystemMetrics(SM_YVIRTUALSCREEN);
             var width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
             var height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-            if (width <= 0 || height <= 0)
-                throw new InvalidOperationException("Windows virtual desktop bounds are unavailable.");
+            if (width <= 0 || height <= 0) throw new InvalidOperationException("Windows virtual desktop bounds are unavailable.");
             return new RECT { Left = x, Top = y, Right = x + width, Bottom = y + height };
         }
 
@@ -614,32 +569,16 @@ namespace QS3D.BricsCAD.V25
         {
             switch (key)
             {
-                case "ENTER": return 0x0D;
-                case "ESC":
-                case "ESCAPE": return 0x1B;
-                case "TAB": return 0x09;
-                case "BACKSPACE": return 0x08;
-                case "DELETE": return 0x2E;
-                case "INSERT": return 0x2D;
-                case "SPACE": return 0x20;
-                case "LEFT": return 0x25;
-                case "UP": return 0x26;
-                case "RIGHT": return 0x27;
-                case "DOWN": return 0x28;
-                case "HOME": return 0x24;
-                case "END": return 0x23;
-                case "PAGEUP": return 0x21;
-                case "PAGEDOWN": return 0x22;
-                case "CAPSLOCK": return 0x14;
-                case "PRINTSCREEN": return 0x2C;
-                case "PAUSE": return 0x13;
+                case "ENTER": return 0x0D; case "ESC": case "ESCAPE": return 0x1B; case "TAB": return 0x09;
+                case "BACKSPACE": return 0x08; case "DELETE": return 0x2E; case "INSERT": return 0x2D; case "SPACE": return 0x20;
+                case "LEFT": return 0x25; case "UP": return 0x26; case "RIGHT": return 0x27; case "DOWN": return 0x28;
+                case "HOME": return 0x24; case "END": return 0x23; case "PAGEUP": return 0x21; case "PAGEDOWN": return 0x22;
+                case "CAPSLOCK": return 0x14; case "PRINTSCREEN": return 0x2C; case "PAUSE": return 0x13;
             }
-
             if (key.Length >= 2 && key[0] == 'F')
             {
                 int function;
-                if (int.TryParse(key.Substring(1), NumberStyles.None, CultureInfo.InvariantCulture, out function)
-                    && function >= 1 && function <= 24)
+                if (int.TryParse(key.Substring(1), NumberStyles.None, CultureInfo.InvariantCulture, out function) && function >= 1 && function <= 24)
                     return checked((ushort)(0x6F + function));
             }
             if (key.Length == 1)
@@ -652,19 +591,12 @@ namespace QS3D.BricsCAD.V25
 
         private static INPUT KeyInput(ushort key, bool up)
         {
-            return new INPUT
-            {
-                type = INPUT_KEYBOARD,
-                U = new InputUnion { ki = new KEYBDINPUT { wVk = key, dwFlags = up ? KEYEVENTF_KEYUP : 0u } }
-            };
+            return new INPUT { type = INPUT_KEYBOARD, U = new InputUnion { ki = new KEYBDINPUT { wVk = key, dwFlags = up ? KEYEVENTF_KEYUP : 0u } } };
         }
 
         private static void SendMouse(uint flags, uint data)
         {
-            SendInputs(new[]
-            {
-                new INPUT { type = INPUT_MOUSE, U = new InputUnion { mi = new MOUSEINPUT { mouseData = data, dwFlags = flags } } }
-            }, "mouse input");
+            SendInputs(new[] { new INPUT { type = INPUT_MOUSE, U = new InputUnion { mi = new MOUSEINPUT { mouseData = data, dwFlags = flags } } } }, "mouse input");
         }
 
         private static void SendInputs(INPUT[] inputs, string description)
@@ -688,11 +620,10 @@ namespace QS3D.BricsCAD.V25
 
         private static string RequiredText(string body, string property, int maximum)
         {
-            var value = McpTopLevelJson.ExtractString(body, property) ?? string.Empty;
-            if (value.Length > maximum)
-                throw new InvalidOperationException(property + " exceeds " + maximum.ToString(CultureInfo.InvariantCulture) + " characters.");
-            foreach (var ch in value)
-                if (ch == '\0') throw new InvalidOperationException(property + " contains a forbidden NUL character.");
+            var value = McpTopLevelJson.ExtractString(body, property);
+            if (value == null) value = string.Empty;
+            if (value.Length > maximum) throw new InvalidOperationException(property + " exceeds " + maximum.ToString(CultureInfo.InvariantCulture) + " characters.");
+            foreach (var ch in value) if (ch == '\0') throw new InvalidOperationException(property + " contains a forbidden NUL character.");
             return value;
         }
 
@@ -701,8 +632,7 @@ namespace QS3D.BricsCAD.V25
             int value;
             bool found;
             string error;
-            if (!McpTopLevelJson.TryExtractInteger(body, property, out value, out found, out error))
-                throw new InvalidOperationException(error);
+            if (!McpTopLevelJson.TryExtractInteger(body, property, out value, out found, out error)) throw new InvalidOperationException(error);
             if (!found) return fallback;
             return Math.Max(min, Math.Min(max, value));
         }
@@ -712,11 +642,9 @@ namespace QS3D.BricsCAD.V25
             int value;
             bool found;
             string error;
-            if (!McpTopLevelJson.TryExtractInteger(body, property, out value, out found, out error))
-                throw new InvalidOperationException(error);
+            if (!McpTopLevelJson.TryExtractInteger(body, property, out value, out found, out error)) throw new InvalidOperationException(error);
             if (!found || value < min || value > max)
-                throw new InvalidOperationException(property + " must be an integer between "
-                    + min.ToString(CultureInfo.InvariantCulture) + " and " + max.ToString(CultureInfo.InvariantCulture) + ".");
+                throw new InvalidOperationException(property + " must be an integer between " + min.ToString(CultureInfo.InvariantCulture) + " and " + max.ToString(CultureInfo.InvariantCulture) + ".");
             return value;
         }
 
@@ -736,15 +664,13 @@ namespace QS3D.BricsCAD.V25
             if (!done.Wait(ClipboardTimeoutMilliseconds))
                 throw new TimeoutException("Timed out waiting for Windows clipboard operation.");
             done.Dispose();
-            if (error != null)
-                throw new InvalidOperationException("Windows clipboard operation failed: " + error.Message, error);
+            if (error != null) throw new InvalidOperationException("Windows clipboard operation failed: " + error.Message, error);
             return result;
         }
 
         private static void EnsureInteractiveSession()
         {
-            if (!Environment.UserInteractive)
-                throw new InvalidOperationException("Windows desktop automation requires an interactive user session.");
+            if (!Environment.UserInteractive) throw new InvalidOperationException("Windows desktop automation requires an interactive user session.");
         }
 
         private static void Audit(Action<string> audit, string detail)

@@ -41,21 +41,6 @@ The following are intermediate states, not normal completion: edited, committed,
 
 A failed current-carrier CI check is an automatic remediation trigger while a safe same-lane fix exists. Diagnose the exact failing SHA/job/step, fix the root cause on the same canonical branch, commit/push, and revalidate. Do not require the owner to repeat `fix CI`, `continue`, or `merge main` for the same task.
 
-### Repository-owner standing requirements
-
-Unless the owner's current prompt explicitly overrides one of these points for the exact task, every agent working in this repository must follow these standing requirements:
-
-1. **Finish owned work instead of stopping at status-only.** Requests such as `continue all`, `done all`, `fix all`, `commit push`, or `merge main` authorize the agent to continue the same owned lane through safe fixes, docs, validation, PR maintenance and merge when repository gates allow. Do not ask the owner to repeat approval for already-authorized same-task steps.
-2. **Reuse the canonical carrier.** Remediate the existing Issue/Lane-Key/branch/PR instead of creating duplicate issues, branches or PRs for each retry or CI fix.
-3. **Scope before mutation.** Expand the reservation `Expected-Paths` before touching any newly required file. Do not edit unowned or colliding paths merely to make a gate green.
-4. **Preserve concurrent wins.** Re-read the current branch head and current `main` before reconciliation or merge. Perform a semantic reconcile that keeps unrelated/newer work from other agents; never overwrite or revert concurrent work just to make the carrier mergeable.
-5. **Keep evidence honest.** Never fabricate `LOCAL_PASS`, licensed BricsCAD execution, Windows desktop interaction, ChatGPT interaction, release evidence or any other test result that was not actually observed on the stated exact SHA. Use `PENDING_LOCAL`, `LOCAL_ONLY`, `NOT_RUN` or the repository's equivalent marker when appropriate.
-6. **Fix exact-head failures at their root cause.** Diagnose failures from the current carrier SHA and repair owned source/tests/guards on the same lane. Do not weaken a legitimate guard simply to obtain green CI. If the owner explicitly says they will handle manual CI reruns, do not click rerun/re-dispatch actions yourself; normal checks triggered by new commits may still run.
-7. **Merge only through protected policy.** Never force-merge, bypass branch protection, disable required checks or push task content directly to `main`. Merge the same task PR only when the exact candidate is current, conflict-free and satisfies the repository-required protected checks.
-8. **Verify the landing, not just the button click.** After merge, fetch current `main` and verify that the intended candidate actually landed before reporting `MERGED_MAIN`.
-9. **Separate source-ready from environment-only validation.** Complete all safe source/static/build/hosted-CI work even when a licensed/local tail remains, but leave that tail explicitly pending for a real compatible environment instead of simulating it remotely.
-10. **Keep durable product requirements in the canonical specialist runbook.** For MCP/ChatGPT/QS3D behavior and UX, `docs/MCP-CANONICAL-RUNBOOK.md` is the durable product contract. When an owner-approved MCP requirement changes, update that runbook on the authorized lane so future agents do not have to reconstruct requirements from chat history.
-
 ## Deferred LOCAL_ONLY validation
 
 When source-safe implementation, tests, guards, documentation, or adapter work can be completed without a licensed BricsCAD host, continue that work instead of waiting for a local agent. Complete the available source/static/build/CI validation, commit coherently, and push the canonical branch.

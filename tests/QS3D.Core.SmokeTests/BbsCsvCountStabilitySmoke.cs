@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             UnderYieldRejectsAgainstAdmittedCount();
             ConflictingInterfacesRejectBeforeEnumeration();
             OversizedKnownCountRejectsBeforeEnumeration();
+            RowMutationRejectsAfterTraversalBeforeProjection();
             StableKnownCountPreservesOutput();
             PureStreamingSourceRemainsSupported();
         }
@@ -58,6 +59,20 @@ namespace QS3D.Core.SmokeTests
             var source = new HostileCollection(new[] { CanonicalRow() }, 10001, 10001, 10001);
             Throws<ArgumentOutOfRangeException>(() => RebarCsvExporter.ToCsv(source));
             Equal(0, source.MoveNextCalls);
+        }
+
+        private static void RowMutationRejectsAfterTraversalBeforeProjection()
+        {
+            var first = CanonicalRow();
+            first.BarMark = "ORIGINAL";
+            var second = CanonicalRow();
+            second.ElementId = "COUNT-E2";
+            second.BarMark = "COUNT-B2";
+            var source = new RowMutatingEnumerable(first, second);
+
+            ThrowsRowIntegrity(() => RebarCsvExporter.ToCsv(source));
+            Equal("MUTATED", first.BarMark);
+            Equal(2, source.CurrentReads);
         }
 
         private static void StableKnownCountPreservesOutput()
@@ -114,6 +129,17 @@ namespace QS3D.Core.SmokeTests
             throw new InvalidOperationException("Expected BBS CSV Count-integrity rejection.");
         }
 
+        private static void ThrowsRowIntegrity(Action action)
+        {
+            try { action(); }
+            catch (InvalidOperationException ex)
+            {
+                True(ex.Message.IndexOf("row values changed", StringComparison.OrdinalIgnoreCase) >= 0);
+                return;
+            }
+            throw new InvalidOperationException("Expected BBS CSV row-stability rejection.");
+        }
+
         private static void Throws<T>(Action action) where T : Exception
         {
             try { action(); }
@@ -130,6 +156,31 @@ namespace QS3D.Core.SmokeTests
         {
             if (!EqualityComparer<T>.Default.Equals(expected, actual))
                 throw new InvalidOperationException("Expected " + expected + " but got " + actual + ".");
+        }
+
+        private sealed class RowMutatingEnumerable : IEnumerable<RebarScheduleRow>
+        {
+            private readonly RebarScheduleRow _first;
+            private readonly RebarScheduleRow _second;
+
+            internal RowMutatingEnumerable(RebarScheduleRow first, RebarScheduleRow second)
+            {
+                _first = first;
+                _second = second;
+            }
+
+            internal int CurrentReads { get; private set; }
+
+            public IEnumerator<RebarScheduleRow> GetEnumerator()
+            {
+                CurrentReads++;
+                yield return _first;
+                _first.BarMark = "MUTATED";
+                CurrentReads++;
+                yield return _second;
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private sealed class HostileCollection : ICollection<RebarScheduleRow>, IReadOnlyCollection<RebarScheduleRow>, ICollection
