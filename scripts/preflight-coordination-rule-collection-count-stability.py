@@ -18,8 +18,11 @@ if source.is_file():
     method = text[start:end] if start >= 0 and end > start else ""
     required = (
         "var hasKnownCount = TryGetKnownCount(items, out var knownCount);",
-        "foreach (var item in items)",
-        "if (hasKnownCount && observedCount == knownCount)",
+        "using (var enumerator = items.GetEnumerator())",
+        "while (enumerator.MoveNext())",
+        "if (hasKnownCount && observedCount >= knownCount)",
+        "if (observedCount >= MaximumEntries)",
+        "var item = enumerator.Current;",
         "if (hasKnownCount && knownCount != observedCount)",
         "var stillHasKnownCount = TryGetKnownCount(items, out var reboundKnownCount);",
         "reboundKnownCount != knownCount",
@@ -27,11 +30,11 @@ if source.is_file():
     )
     positions = [method.find(token) for token in required]
     if not method or any(position < 0 for position in positions) or positions != sorted(positions):
-        errors.append("MaterializeBounded must reject known-count overrun/under-yield and rebind Count after exact traversal before returning the snapshot.")
+        errors.append("MaterializeBounded must bind Count before traversal, reject overrun/streaming overflow before Current, reject under-yield, rebind Count, then return the immutable snapshot.")
     if method.count("TryGetKnownCount(items, out var") < 2:
         errors.append("MaterializeBounded must bind supported Count evidence both before and after caller-controlled traversal.")
-    if "observedCount == MaximumEntries" not in method:
-        errors.append("MaterializeBounded must preserve the independent 10,000-entry streaming ceiling.")
+    if "foreach (var item in items)" in method:
+        errors.append("MaterializeBounded must not use foreach because cardinality admission must occur before Current is read.")
 
 if smoke.is_file():
     text = smoke.read_text(encoding="utf-8")
@@ -60,4 +63,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: coordination bounded materialization rebinds deterministic Count evidence after exact traversal.")
+print("PASS: coordination bounded materialization rebinds deterministic Count evidence and rejects overflow before Current.")
