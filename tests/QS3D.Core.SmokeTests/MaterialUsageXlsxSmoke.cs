@@ -28,7 +28,7 @@ namespace QS3D.Core.SmokeTests
                 {
                     _countReads++;
                     if (_countReads == 2)
-                        _row.PrimaryQuantity += 1d;
+                        _row.AreaM2 += 1d;
                     return 1;
                 }
             }
@@ -117,7 +117,7 @@ namespace QS3D.Core.SmokeTests
                 {
                     MaterialName = "Snapshot material",
                     UnitHint = "m²",
-                    PrimaryQuantity = 7.5d
+                    AreaM2 = 7.5d
                 };
                 var rejected = false;
                 try
@@ -131,7 +131,7 @@ namespace QS3D.Core.SmokeTests
                     rejected = true;
                 }
                 if (!rejected)
-                    throw new Exception("Material XLSX did not reject PrimaryQuantity mutation after snapshot capture.");
+                    throw new Exception("Material XLSX did not reject PrimaryQuantity snapshot mutation after snapshot capture.");
                 if (!string.Equals(File.ReadAllText(path), "ORIGINAL", StringComparison.Ordinal))
                     throw new Exception("Material XLSX replaced the existing destination after PrimaryQuantity snapshot mutation.");
             }
