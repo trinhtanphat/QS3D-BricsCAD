@@ -79,6 +79,7 @@ namespace QS3D.Core.SmokeTests
                     MaximumClearPanelHeightM = 0d
                 };
                 row.ElementIds.Add("CW-WHITESPACE-1");
+                row.SourceHandles.Add("CW-WHITESPACE-HANDLE-1");
                 CurtainWallXlsxExporter.Export(path, new[] { row });
 
                 using (var archive = ZipFile.OpenRead(path))
