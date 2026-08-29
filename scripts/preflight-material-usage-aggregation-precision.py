@@ -8,7 +8,8 @@ required_source = [
     "StableAccumulator",
     "FinalizeQuantities()",
     "QuantityReportMath.NonNegative(value, label)",
-    "lost a non-zero compensation",
+    "_sawSwallowedContribution",
+    "lost a non-zero swallowed contribution",
     "group.Row.ElementIds.Add(element.Id)",
     "ReportingRowProvenance.AppendSourceHandles(group.Row.SourceHandles, element.SourceHandles)",
 ]
@@ -22,6 +23,8 @@ required_smoke = [
     'Build("NetWallAreaM2", 1e16, 1d, 1d)',
     'Build("NetVolumeM3", 1e16, 1d, 1d)',
     'Build("WeightKg", 1e16, 1d, 1d)',
+    "PreservesOrdinaryDecimalAggregation",
+    'BuildTwo("NetVolumeM3", 2.8d, 1.6d)',
     "row.ElementCount != 2",
 ]
 for token in required_smoke:
