@@ -82,6 +82,12 @@ Before substantive work, read from current `origin/main`:
 
 Current source wins over stale historical handoffs for implementation truth. `docs/LOCAL-AGENT-INBOX.md` is the live LOCAL_ONLY priority index when older local documents disagree on status/priority.
 
+### Mandatory MCP / ChatGPT / Cloudflare bootstrap
+
+If the owner prompt, Issue, changed paths, or lane involves **MCP, ChatGPT Web/custom MCP, Cloudflare Tunnel, AI drawing automation, `QS3DMCP*`, TOOL > MCP (AI), or BricsCAD mouse/keyboard automation**, the agent must read `docs/MCP-CANONICAL-RUNBOOK.md` immediately after the mandatory repository governance bootstrap and before changing MCP source.
+
+`docs/MCP-CANONICAL-RUNBOOK.md` is the durable navigation/source-of-truth for the one-repository embedded MCP architecture, exact source-file map, click/browser-login onboarding, current tool model, safety boundaries, LOCAL_ONLY matrix and continuation rules. Do not reconstruct MCP architecture from old chat transcripts, the historical `QS3D-CAD-MCP` repository, stale handoffs, or isolated feature docs when the canonical runbook/current source already defines the lane.
+
 ## Mandatory work registration and single-carrier rule
 
 Before implementation, every normal agent must:
