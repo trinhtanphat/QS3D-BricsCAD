@@ -14,8 +14,8 @@ namespace QS3D.BricsCAD.V25
         private static readonly TimeSpan InitialDelay = TimeSpan.FromSeconds(4);
         private static readonly TimeSpan ReminderInterval = TimeSpan.FromDays(2);
         private static readonly object Sync = new object();
-        private static DispatcherTimer _timer;
-        private static McpToastNotificationWindow _toast;
+        private static DispatcherTimer? _timer;
+        private static McpToastNotificationWindow? _toast;
 
         private static string MarkerPath
         {
@@ -47,8 +47,8 @@ namespace QS3D.BricsCAD.V25
 
         public static void Stop()
         {
-            DispatcherTimer timer;
-            McpToastNotificationWindow toast;
+            DispatcherTimer? timer;
+            McpToastNotificationWindow? toast;
             lock (Sync)
             {
                 timer = _timer;
@@ -66,7 +66,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void OnTick(object sender, EventArgs e)
         {
-            DispatcherTimer timer;
+            DispatcherTimer? timer;
             lock (Sync)
             {
                 timer = _timer;
@@ -118,7 +118,7 @@ namespace QS3D.BricsCAD.V25
         {
             try
             {
-                var toast = default(McpToastNotificationWindow);
+                McpToastNotificationWindow? toast = null;
                 lock (Sync)
                 {
                     toast = _toast;
