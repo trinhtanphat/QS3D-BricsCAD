@@ -332,9 +332,12 @@ namespace QS3D.BricsCAD.V25
                     WriteResponse(stream, 400, "Bad Request", JsonRpcError("null", -32002, "Mcp-Session-Id is required."), null);
                     return;
                 }
-                if (!TryDeleteSession(sessionId))
+                string sessionError;
+                int sessionStatusCode;
+                if (!TryDeleteSession(request.Headers, sessionId, out sessionError, out sessionStatusCode))
                 {
-                    WriteResponse(stream, 404, "Not Found", JsonRpcError("null", -32002, "Unknown or expired MCP session."), null);
+                    WriteResponse(stream, sessionStatusCode, sessionStatusCode == 404 ? "Not Found" : "Bad Request",
+                        JsonRpcError("null", -32002, sessionError), null);
                     return;
                 }
                 WriteResponse(stream, 204, "No Content", string.Empty, null);
@@ -662,13 +665,34 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static bool TryDeleteSession(string sessionId)
+        private static bool TryDeleteSession(
+            IDictionary<string, string> headers,
+            string sessionId,
+            out string error,
+            out int statusCode)
         {
+            error = string.Empty;
+            statusCode = 400;
             lock (SessionSync)
             {
                 CleanupSessionsLocked();
+                SessionState stored;
+                if (!Sessions.TryGetValue(sessionId, out stored))
+                {
+                    statusCode = 404;
+                    error = "Unknown or expired MCP session.";
+                    return false;
+                }
+                if (!TryValidateProtocolVersionHeader(headers, stored.ProtocolVersion, out error))
+                    return false;
                 SessionState ignored;
-                return Sessions.TryRemove(sessionId, out ignored);
+                if (!Sessions.TryRemove(sessionId, out ignored))
+                {
+                    statusCode = 404;
+                    error = "Unknown or expired MCP session.";
+                    return false;
+                }
+                return true;
             }
         }
 
@@ -698,14 +722,8 @@ namespace QS3D.BricsCAD.V25
                     error = "Unknown or expired MCP session.";
                     return false;
                 }
-                string version;
-                if (headers.TryGetValue("MCP-Protocol-Version", out version)
-                    && !string.IsNullOrWhiteSpace(version)
-                    && !string.Equals(version, stored.ProtocolVersion, StringComparison.Ordinal))
-                {
-                    error = "MCP-Protocol-Version does not match initialized session.";
+                if (!TryValidateProtocolVersionHeader(headers, stored.ProtocolVersion, out error))
                     return false;
-                }
                 state = new SessionState(DateTime.UtcNow, stored.ProtocolVersion);
                 if (!Sessions.TryUpdate(sessionId, state, stored))
                 {
@@ -716,6 +734,22 @@ namespace QS3D.BricsCAD.V25
                 }
                 return true;
             }
+        }
+
+        private static bool TryValidateProtocolVersionHeader(
+            IDictionary<string, string> headers,
+            string expectedProtocolVersion,
+            out string error)
+        {
+            error = string.Empty;
+            string version;
+            if (!headers.TryGetValue("MCP-Protocol-Version", out version)) return true;
+            if (!string.Equals(version, expectedProtocolVersion, StringComparison.Ordinal))
+            {
+                error = "MCP-Protocol-Version is invalid or does not match initialized session.";
+                return false;
+            }
+            return true;
         }
 
         private static void CleanupSessionsLocked()
