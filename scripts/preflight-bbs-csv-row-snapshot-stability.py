@@ -33,7 +33,7 @@ if "QIdentity(sourceRow." in source or "Append(Q(sourceRow." in source:
 required_smoke = [
     "RowMutationRejectsAfterTraversalBeforeProjection",
     "RowMutatingEnumerable",
-    '_first.BarMark = "MUTATED";',
+    "_first.BarMark = \"MUTATED\";",
     "ThrowsRowIntegrity",
     "StableKnownCountPreservesOutput",
     "PureStreamingSourceRemainsSupported",
