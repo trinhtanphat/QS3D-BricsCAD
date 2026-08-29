@@ -165,7 +165,7 @@ Use `docs/MCP-FULL-CAD-AGENT.md` for the detailed matrix. At minimum prove on on
 
 Never commit bearer tokens, Cloudflare credentials, private paths, customer/private DWGs, proprietary binaries or unsanitized screenshots.
 
-## Future-agent procedure
+## Future-agent operating procedure
 
 1. Do repository governance bootstrap.
 2. Read `docs/MCP-CANONICAL-RUNBOOK.md` first.
