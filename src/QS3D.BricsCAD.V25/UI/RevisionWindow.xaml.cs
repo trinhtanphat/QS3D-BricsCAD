@@ -5,8 +5,8 @@ using System.Windows;
 using System.Windows.Input;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.Cad;
-using QS3D.BricsCAD.V25.Services;
 using QS3D.Core.Revisions;
+using QS3D.Core.Services;
 using BcadApplication = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
