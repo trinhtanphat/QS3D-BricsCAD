@@ -13,11 +13,11 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
-            KnownCountOverrunRejectsBeforeUnexpectedCurrent();
+            KnownCountOverrunRejectsUnexpectedCurrentWhileCompletingBoundedTraversal();
             HonestCountedAndStreamingInputsRemainSupported();
         }
 
-        private static void KnownCountOverrunRejectsBeforeUnexpectedCurrent()
+        private static void KnownCountOverrunRejectsUnexpectedCurrentWhileCompletingBoundedTraversal()
         {
             var fixture = NewFixture();
             var source = new OverrunTargets(fixture.Element);
@@ -27,9 +27,9 @@ namespace QS3D.Core.SmokeTests
             var error = Capture<InvalidOperationException>(() =>
                 ProjectFloorService.Assign(fixture.Project, fixture.TargetFloor.Id, source));
 
-            Contains("known count", error.Message, "known Count overrun must fail closed");
-            Equal(2, source.MoveNextCalls, "overrun must be detected by the second MoveNext");
-            Equal(1, source.CurrentReads, "unexpected item must be rejected before Current is read");
+            Contains("known count", error.Message, "known Count overrun must fail closed after bounded traversal completes");
+            Equal(3, source.MoveNextCalls, "two yielded entries plus terminal MoveNext must be observed to preserve hard-cap precedence");
+            Equal(1, source.CurrentReads, "entry beyond advertised Count must never expose Current");
             Equal(beforeVersion, fixture.Project.ChangeVersion, "rejection must not mutate project version");
             Equal(beforeFloor, fixture.Element.FloorId, "rejection must not mutate element floor");
         }
