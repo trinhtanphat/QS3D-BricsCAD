@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Bricscad.ApplicationServices;
 using Application = Bricscad.ApplicationServices.Application;
@@ -41,106 +42,339 @@ namespace QS3D.BricsCAD.V25
 
     internal sealed class McpAgentControlCenterWindow : Window
     {
-        private readonly TextBlock _status = new TextBlock
+        private static readonly Brush SurfaceBrush = CreateBrush(0xF4, 0xF7, 0xFB);
+        private static readonly Brush CardBrush = CreateBrush(0xFF, 0xFF, 0xFF);
+        private static readonly Brush CardBorderBrush = CreateBrush(0xDC, 0xE4, 0xEF);
+        private static readonly Brush TextBrush = CreateBrush(0x17, 0x20, 0x33);
+        private static readonly Brush MutedTextBrush = CreateBrush(0x66, 0x70, 0x85);
+        private static readonly Brush PrimaryBrush = CreateBrush(0x25, 0x63, 0xEB);
+        private static readonly Brush PrimarySoftBrush = CreateBrush(0xEA, 0xF2, 0xFF);
+        private static readonly Brush SuccessBrush = CreateBrush(0x15, 0x80, 0x3D);
+        private static readonly Brush SuccessSoftBrush = CreateBrush(0xE9, 0xF8, 0xEF);
+        private static readonly Brush DangerBrush = CreateBrush(0xB4, 0x23, 0x18);
+        private static readonly Brush DangerSoftBrush = CreateBrush(0xFD, 0xEC, 0xEC);
+        private static readonly Brush NeutralBrush = CreateBrush(0xF2, 0xF4, 0xF7);
+
+        private readonly StackPanel _statusRows = new StackPanel();
+        private readonly WrapPanel _statusChips = new WrapPanel
         {
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 10, 0, 10)
+            Margin = new Thickness(0, 12, 0, 0)
         };
         private readonly TextBlock _activity = new TextBlock
         {
+            Text = "Sẵn sàng. Chọn một tác vụ để bắt đầu.",
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 8, 0, 8)
+            Foreground = TextBrush,
+            FontSize = 13,
+            LineHeight = 20
         };
         private int _localOperationActive;
         private DispatcherTimer? _quickUrlTimer;
         private int _quickUrlPollTicks;
 
+        private enum ActionKind
+        {
+            Primary,
+            Secondary,
+            Danger
+        }
+
         public McpAgentControlCenterWindow()
         {
             Title = "QS3D - ChatGPT MCP Agent Center";
-            Width = 720;
-            Height = 760;
-            MinWidth = 620;
+            Width = 980;
+            Height = 780;
+            MinWidth = 780;
             MinHeight = 620;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            Background = SurfaceBrush;
+            Foreground = TextBrush;
+            UseLayoutRounding = true;
+            SnapsToDevicePixels = true;
             Closed += (_, __) => StopQuickUrlPolling();
 
-            var panel = new StackPanel { Margin = new Thickness(18) };
-            panel.Children.Add(new TextBlock
-            {
-                Text = "ChatGPT ↔ QS3D ↔ BricsCAD",
-                FontSize = 20,
-                FontWeight = FontWeights.Bold,
-                Margin = new Thickness(0, 0, 0, 4)
-            });
-            panel.Children.Add(new TextBlock
-            {
-                Text = "Mọi thao tác setup chính đều bằng nút bấm. Cloudflare username/password chỉ nhập trên trang đăng nhập Cloudflare trong browser; QS3D không hỏi và không lưu password.",
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 0, 0, 12)
-            });
-
-            panel.Children.Add(Section("1. Cài đặt / kết nối"));
-            panel.Children.Add(Button("Cài / cập nhật Cloudflare Tunnel tự động", InstallCloudflared));
-            panel.Children.Add(Button("Đăng nhập Cloudflare + tạo Named Tunnel", (_, __) => OpenAccountSetup()));
-            panel.Children.Add(Button("Khởi động lại Named Tunnel đã lưu", (_, __) => StartNamedTunnel()));
-            panel.Children.Add(Button("Quick Tunnel (chỉ test)", (_, __) => StartQuickTunnel()));
-            panel.Children.Add(Button("Dừng tất cả tunnel", (_, __) => StopTunnels()));
-
-            panel.Children.Add(Section("2. ChatGPT connector"));
-            panel.Children.Add(Button("Copy MCP URL", (_, __) => CopyUrl()));
-            panel.Children.Add(Button("Copy Bearer Token", (_, __) => CopyToken()));
-            panel.Children.Add(Button("Copy URL + Authorization", (_, __) => CopyConfig()));
-            panel.Children.Add(Button("Mở ChatGPT", (_, __) => McpCloudflareAccountTunnelManager.OpenChatGpt()));
-            panel.Children.Add(Button("Kiểm tra MCP protocol", (_, __) => CheckProtocol()));
-            panel.Children.Add(Button("Tự kiểm tra Agent (read-only)", (_, __) => RunReadOnlySelfTest()));
-
-            panel.Children.Add(Section("3. Điều khiển Agent"));
-            var stop = Button("EMERGENCY STOP AGENT", (_, __) => InvokeControlTool("cad_agent_stop", "{}"));
-            stop.FontWeight = FontWeights.Bold;
-            stop.MinHeight = 42;
-            panel.Children.Add(stop);
-            panel.Children.Add(Button("Hủy command BricsCAD hiện tại (ESC x2)", (_, __) => InvokeControlTool("cad_cancel_command", "{}")));
-            panel.Children.Add(Button("Resume Agent", (_, __) => InvokeControlTool("cad_agent_resume", "{\"confirmMutation\":true}")));
-            panel.Children.Add(Button("Mở thư mục audit MCP", (_, __) => OpenAuditFolder()));
-
-            panel.Children.Add(Section("Trạng thái"));
-            panel.Children.Add(_status);
-            panel.Children.Add(_activity);
-            panel.Children.Add(Button("Refresh", (_, __) => RefreshStatus()));
-            panel.Children.Add(Button("Đóng", (_, __) => Close()));
-
-            Content = new ScrollViewer
-            {
-                Content = panel,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
-            };
+            Content = CreateDashboardShell();
             RefreshStatus();
         }
 
-        private static TextBlock Section(string text)
+        private UIElement CreateDashboardShell()
         {
-            return new TextBlock
+            var root = new StackPanel
             {
-                Text = text,
-                FontWeight = FontWeights.SemiBold,
-                FontSize = 15,
-                Margin = new Thickness(0, 12, 0, 4)
+                Margin = new Thickness(24, 22, 24, 18)
+            };
+
+            root.Children.Add(CreateHeader());
+
+            var dashboard = new Grid
+            {
+                Margin = new Thickness(-6, 12, -6, 0)
+            };
+            dashboard.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            dashboard.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            dashboard.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            dashboard.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var setupActions = new StackPanel();
+            setupActions.Children.Add(CreateActionButton("Cài / cập nhật Cloudflare Tunnel", InstallCloudflared, ActionKind.Primary));
+            setupActions.Children.Add(CreateActionButton("Đăng nhập Cloudflare + tạo Named Tunnel", (_, __) => OpenAccountSetup(), ActionKind.Secondary));
+            setupActions.Children.Add(CreateActionButton("Khởi động Named Tunnel đã lưu", (_, __) => StartNamedTunnel(), ActionKind.Secondary));
+            setupActions.Children.Add(CreateActionButton("Quick Tunnel · chỉ dùng để test", (_, __) => StartQuickTunnel(), ActionKind.Secondary));
+            setupActions.Children.Add(CreateActionButton("Dừng tất cả tunnel", (_, __) => StopTunnels(), ActionKind.Secondary));
+            var setupCard = CreateCard("Kết nối Cloudflare",
+                "Thiết lập public MCP endpoint theo luồng click-first. Mật khẩu chỉ nhập trên trang Cloudflare trong browser.",
+                setupActions);
+            Grid.SetRow(setupCard, 0);
+            Grid.SetColumn(setupCard, 0);
+            dashboard.Children.Add(setupCard);
+
+            var connectorActions = new StackPanel();
+            connectorActions.Children.Add(CreateActionButton("Mở ChatGPT", (_, __) => McpCloudflareAccountTunnelManager.OpenChatGpt(), ActionKind.Primary));
+            connectorActions.Children.Add(CreateActionButton("Copy MCP URL", (_, __) => CopyUrl(), ActionKind.Secondary));
+            connectorActions.Children.Add(CreateActionButton("Copy Bearer Token", (_, __) => CopyToken(), ActionKind.Secondary));
+            connectorActions.Children.Add(CreateActionButton("Copy URL + Authorization", (_, __) => CopyConfig(), ActionKind.Secondary));
+            connectorActions.Children.Add(CreateActionButton("Kiểm tra MCP protocol", (_, __) => CheckProtocol(), ActionKind.Secondary));
+            connectorActions.Children.Add(CreateActionButton("Tự kiểm tra Agent · read-only", (_, __) => RunReadOnlySelfTest(), ActionKind.Secondary));
+            var connectorCard = CreateCard("ChatGPT Connector",
+                "Copy thông tin kết nối, mở ChatGPT và kiểm tra MCP mà không cần PowerShell hay CMD.",
+                connectorActions);
+            Grid.SetRow(connectorCard, 0);
+            Grid.SetColumn(connectorCard, 1);
+            dashboard.Children.Add(connectorCard);
+
+            var agentActions = new StackPanel();
+            agentActions.Children.Add(CreateActionButton("EMERGENCY STOP AGENT", (_, __) => InvokeControlTool("cad_agent_stop", "{}"), ActionKind.Danger));
+            agentActions.Children.Add(CreateActionButton("Hủy command BricsCAD hiện tại · ESC x2", (_, __) => InvokeControlTool("cad_cancel_command", "{}"), ActionKind.Secondary));
+            agentActions.Children.Add(CreateActionButton("Resume Agent", (_, __) => InvokeControlTool("cad_agent_resume", "{\"confirmMutation\":true}"), ActionKind.Primary));
+            agentActions.Children.Add(CreateActionButton("Mở thư mục audit MCP", (_, __) => OpenAuditFolder(), ActionKind.Secondary));
+            var agentCard = CreateCard("Điều khiển Agent",
+                "Các điều khiển vận hành luôn nằm riêng và dễ nhận biết. Emergency Stop/ESC vẫn khả dụng khi self-test đang chạy.",
+                agentActions);
+            Grid.SetRow(agentCard, 1);
+            Grid.SetColumn(agentCard, 0);
+            dashboard.Children.Add(agentCard);
+
+            var statusCard = CreateCard("Trạng thái hệ thống",
+                "Thông tin MCP, tunnel và endpoint hiện tại được gom thành các dòng ngắn để quét nhanh.",
+                _statusRows);
+            Grid.SetRow(statusCard, 1);
+            Grid.SetColumn(statusCard, 1);
+            dashboard.Children.Add(statusCard);
+
+            root.Children.Add(dashboard);
+            root.Children.Add(CreateActivityPanel());
+            root.Children.Add(CreateFooter());
+
+            return new ScrollViewer
+            {
+                Content = root,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
             };
         }
 
-        private static Button Button(string text, RoutedEventHandler handler)
+        private UIElement CreateHeader()
+        {
+            var panel = new StackPanel();
+            panel.Children.Add(new TextBlock
+            {
+                Text = "QS3D · ChatGPT MCP Agent Center",
+                FontSize = 25,
+                FontWeight = FontWeights.Bold,
+                Foreground = TextBrush
+            });
+            panel.Children.Add(new TextBlock
+            {
+                Text = "ChatGPT ↔ QS3D ↔ BricsCAD",
+                FontSize = 13,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = PrimaryBrush,
+                Margin = new Thickness(0, 4, 0, 0)
+            });
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Thiết lập kết nối, kiểm tra Agent và xử lý tình huống khẩn cấp từ một màn hình duy nhất.",
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = MutedTextBrush,
+                FontSize = 13,
+                Margin = new Thickness(0, 7, 0, 0)
+            });
+            panel.Children.Add(_statusChips);
+            return panel;
+        }
+
+        private static Border CreateCard(string title, string description, UIElement body)
+        {
+            var content = new StackPanel();
+            content.Children.Add(new TextBlock
+            {
+                Text = title,
+                FontSize = 16,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = TextBrush
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = description,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = MutedTextBrush,
+                FontSize = 12,
+                LineHeight = 18,
+                Margin = new Thickness(0, 5, 0, 12)
+            });
+            content.Children.Add(body);
+
+            return new Border
+            {
+                Background = CardBrush,
+                BorderBrush = CardBorderBrush,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(18),
+                Margin = new Thickness(6),
+                Child = content
+            };
+        }
+
+        private static Button CreateActionButton(string text, RoutedEventHandler handler, ActionKind kind)
         {
             var button = new Button
             {
                 Content = text,
-                Margin = new Thickness(0, 3, 0, 3),
-                MinHeight = 32,
+                MinHeight = kind == ActionKind.Danger ? 44 : 38,
+                Margin = new Thickness(0, 0, 0, 8),
+                Padding = new Thickness(12, 7, 12, 7),
                 HorizontalContentAlignment = HorizontalAlignment.Left,
-                Padding = new Thickness(10, 4, 10, 4)
+                FontSize = 12.5,
+                FontWeight = FontWeights.SemiBold,
+                BorderThickness = new Thickness(1)
             };
+
+            if (kind == ActionKind.Primary)
+            {
+                button.Background = PrimaryBrush;
+                button.BorderBrush = PrimaryBrush;
+                button.Foreground = Brushes.White;
+            }
+            else if (kind == ActionKind.Danger)
+            {
+                button.Background = DangerSoftBrush;
+                button.BorderBrush = CreateBrush(0xFD, 0xB0, 0xA8);
+                button.Foreground = DangerBrush;
+            }
+            else
+            {
+                button.Background = CardBrush;
+                button.BorderBrush = CardBorderBrush;
+                button.Foreground = TextBrush;
+            }
+
             button.Click += handler;
             return button;
+        }
+
+        private static Border CreateStatusChip(string text, bool active)
+        {
+            return new Border
+            {
+                Background = active ? SuccessSoftBrush : NeutralBrush,
+                BorderBrush = active ? CreateBrush(0xAB, 0xEF, 0xC6) : CardBorderBrush,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(9, 4, 9, 4),
+                Margin = new Thickness(0, 0, 7, 6),
+                Child = new TextBlock
+                {
+                    Text = (active ? "● " : "○ ") + text,
+                    FontSize = 11.5,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = active ? SuccessBrush : MutedTextBrush
+                }
+            };
+        }
+
+        private static UIElement CreateStatusRow(string label, string value, Brush? valueBrush = null)
+        {
+            var row = new Grid
+            {
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(122) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            var labelBlock = new TextBlock
+            {
+                Text = label,
+                FontSize = 11.5,
+                Foreground = MutedTextBrush,
+                VerticalAlignment = VerticalAlignment.Top
+            };
+            var valueBlock = new TextBlock
+            {
+                Text = value,
+                FontSize = 11.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = valueBrush ?? TextBrush,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Top
+            };
+            Grid.SetColumn(valueBlock, 1);
+            row.Children.Add(labelBlock);
+            row.Children.Add(valueBlock);
+            return row;
+        }
+
+        private UIElement CreateActivityPanel()
+        {
+            var content = new StackPanel();
+            content.Children.Add(new TextBlock
+            {
+                Text = "Hoạt động gần nhất",
+                FontSize = 13,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = TextBrush,
+                Margin = new Thickness(0, 0, 0, 5)
+            });
+            content.Children.Add(_activity);
+
+            return new Border
+            {
+                Background = PrimarySoftBrush,
+                BorderBrush = CreateBrush(0xBF, 0xD3, 0xFF),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(16, 13, 16, 13),
+                Margin = new Thickness(0, 12, 0, 0),
+                Child = content
+            };
+        }
+
+        private UIElement CreateFooter()
+        {
+            var footer = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 14, 0, 0)
+            };
+            var refresh = CreateActionButton("Refresh", (_, __) => RefreshStatus(), ActionKind.Secondary);
+            refresh.MinWidth = 92;
+            refresh.HorizontalContentAlignment = HorizontalAlignment.Center;
+            refresh.Margin = new Thickness(0, 0, 8, 0);
+            var close = CreateActionButton("Đóng", (_, __) => Close(), ActionKind.Secondary);
+            close.MinWidth = 92;
+            close.HorizontalContentAlignment = HorizontalAlignment.Center;
+            close.Margin = new Thickness(0);
+            footer.Children.Add(refresh);
+            footer.Children.Add(close);
+            return footer;
+        }
+
+        private static Brush CreateBrush(byte red, byte green, byte blue)
+        {
+            var brush = new SolidColorBrush(Color.FromRgb(red, green, blue));
+            brush.Freeze();
+            return brush;
         }
 
         private void InstallCloudflared(object? sender, RoutedEventArgs args)
@@ -372,15 +606,27 @@ namespace QS3D.BricsCAD.V25
         private void RefreshStatus()
         {
             var publicUrl = McpPublicEndpointResolver.Resolve();
-            _status.Text =
-                "MCP embedded: " + (McpEmbeddedServer.IsRunning ? "RUNNING" : "STOPPED")
-                + "\nLocal endpoint: " + McpEmbeddedServer.Endpoint
-                + "\nCloudflare installed: " + (!string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.CloudflaredPath))
-                + "\nCloudflare browser login: " + McpCloudflareAccountTunnelManager.IsAuthenticated
-                + "\nNamed Tunnel: " + (McpCloudflareAccountTunnelManager.IsRunning ? "RUNNING" : "STOPPED")
-                + "\nFallback/Quick Tunnel: " + (McpCloudflareTunnelManager.IsRunning ? "RUNNING" : "STOPPED")
-                + "\nPublic MCP: " + (string.IsNullOrWhiteSpace(publicUrl) ? "chưa có" : publicUrl)
-                + "\nAgent: " + McpEmbeddedServer.Describe();
+            var mcpRunning = McpEmbeddedServer.IsRunning;
+            var namedTunnelRunning = McpCloudflareAccountTunnelManager.IsRunning;
+            var quickTunnelRunning = McpCloudflareTunnelManager.IsRunning;
+            var tunnelRunning = namedTunnelRunning || quickTunnelRunning;
+            var cloudflaredInstalled = !string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.CloudflaredPath);
+            var authenticated = McpCloudflareAccountTunnelManager.IsAuthenticated;
+
+            _statusChips.Children.Clear();
+            _statusChips.Children.Add(CreateStatusChip(mcpRunning ? "MCP online" : "MCP offline", mcpRunning));
+            _statusChips.Children.Add(CreateStatusChip(tunnelRunning ? "Tunnel online" : "Tunnel offline", tunnelRunning));
+            _statusChips.Children.Add(CreateStatusChip(string.IsNullOrWhiteSpace(publicUrl) ? "Public URL chưa có" : "Public URL sẵn sàng", !string.IsNullOrWhiteSpace(publicUrl)));
+
+            _statusRows.Children.Clear();
+            _statusRows.Children.Add(CreateStatusRow("MCP embedded", mcpRunning ? "RUNNING" : "STOPPED", mcpRunning ? SuccessBrush : MutedTextBrush));
+            _statusRows.Children.Add(CreateStatusRow("Local endpoint", McpEmbeddedServer.Endpoint.ToString()));
+            _statusRows.Children.Add(CreateStatusRow("Cloudflare", cloudflaredInstalled ? "Đã cài" : "Chưa cài", cloudflaredInstalled ? SuccessBrush : MutedTextBrush));
+            _statusRows.Children.Add(CreateStatusRow("Browser login", authenticated ? "Đã đăng nhập" : "Chưa đăng nhập", authenticated ? SuccessBrush : MutedTextBrush));
+            _statusRows.Children.Add(CreateStatusRow("Named Tunnel", namedTunnelRunning ? "RUNNING" : "STOPPED", namedTunnelRunning ? SuccessBrush : MutedTextBrush));
+            _statusRows.Children.Add(CreateStatusRow("Quick Tunnel", quickTunnelRunning ? "RUNNING" : "STOPPED", quickTunnelRunning ? SuccessBrush : MutedTextBrush));
+            _statusRows.Children.Add(CreateStatusRow("Public MCP", string.IsNullOrWhiteSpace(publicUrl) ? "Chưa có public URL" : publicUrl));
+            _statusRows.Children.Add(CreateStatusRow("Agent", McpEmbeddedServer.Describe()));
         }
     }
 
