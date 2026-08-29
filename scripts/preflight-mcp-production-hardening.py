@@ -96,6 +96,8 @@ def main() -> int:
         "recursive JSON array grammar": (top_level_json, "private static bool TrySkipJsonArray("),
         "recursive JSON primitive grammar": (top_level_json, "private static bool TrySkipJsonPrimitive("),
         "bounded recursive JSON depth": (top_level_json, "MaxJsonDepth = 64"),
+        "JSON-RPC numeric id support": (top_level_json, "if (IsJsonNumberToken(raw)) return raw;"),
+        "JSON-RPC invalid id rejection": (top_level_json, 'throw new InvalidOperationException("JSON-RPC id must be a string, number, or null.");'),
         "runtime foreground ESC fallback": (runtime, "TrySendEscapeFallback()"),
         "runtime emergency-stop latch": (runtime, "_automationStopped = true"),
         "runtime queued dispatch state": (runtime, "CadWorkQueued = 0"),
@@ -164,9 +166,10 @@ def main() -> int:
     print(
         "PASS: compiled modular MCP transport/runtime use strict HTTP framing/UTF-8, exact JSON media "
         "type admission and strict bounded recursive RFC JSON grammar/whitespace, fail-closed string "
-        "extraction, bounded authenticated session handling, atomic CAD timeout truth, BricsCAD-confined "
-        "recovery, one validated HTTPS endpoint resolver, live-only Cloudflare provider URLs, exact tunnel "
-        "identity, canonical named-tunnel config regeneration and verified click-first redacted onboarding."
+        "extraction and valid JSON-RPC ids, bounded authenticated session handling, atomic CAD timeout "
+        "truth, BricsCAD-confined recovery, one validated HTTPS endpoint resolver, live-only Cloudflare "
+        "provider URLs, exact tunnel identity, canonical named-tunnel config regeneration and verified "
+        "click-first redacted onboarding."
     )
     return 0
 
