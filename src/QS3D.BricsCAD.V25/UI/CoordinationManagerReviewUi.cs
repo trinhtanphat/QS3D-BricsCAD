@@ -535,6 +535,7 @@ namespace QS3D.BricsCAD.V25.UI
                 RequireTargets(ids);
                 if (_isolationActive) RestoreIsolation();
 
+                var impliedSelectionBefore = CadSelectionGuard.ReadImpliedSelection(_document);
                 var modeBefore = Bricscad.ApplicationServices.Application.GetSystemVariable("OBJECTISOLATIONMODE");
                 try
                 {
@@ -544,6 +545,7 @@ namespace QS3D.BricsCAD.V25.UI
                 }
                 catch
                 {
+                    RestoreImpliedSelectionBestEffort(impliedSelectionBefore);
                     RestoreObjectIsolationModeBestEffort(modeBefore);
                     throw;
                 }
@@ -755,6 +757,12 @@ namespace QS3D.BricsCAD.V25.UI
                 _isolationActive = false;
                 _viewBeforeSection = null;
                 RestoreObjectIsolationModeBestEffort();
+            }
+
+            private void RestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)
+            {
+                if (impliedSelectionBefore == null || _destroyed) return;
+                try { _document.Editor.SetImpliedSelection(impliedSelectionBefore); } catch { }
             }
 
             private void RestoreObjectIsolationModeBestEffort()

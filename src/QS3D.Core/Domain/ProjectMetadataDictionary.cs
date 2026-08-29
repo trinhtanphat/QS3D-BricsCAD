@@ -105,15 +105,21 @@ namespace QS3D.Core.Domain
             var knownCount = RequireSupportedKnownPersistenceCount(values);
             var next = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var observedCount = 0;
-            foreach (var item in values)
+            using (var enumerator = values.GetEnumerator())
             {
-                if (knownCount.HasValue && observedCount >= knownCount.Value)
-                    throw MetadataTraversalCountMismatchError(knownCount.Value, observedCount + 1);
-                observedCount++;
-                if (item.Key == null) throw new ArgumentNullException(nameof(values), "Project metadata contains a null key.");
-                if (next.ContainsKey(item.Key)) throw new ArgumentException("Project metadata contains a duplicate key: " + item.Key + ".", nameof(values));
-                if (next.Count >= MaximumEntries) throw MetadataCountError();
-                next.Add(item.Key, item.Value ?? string.Empty);
+                while (enumerator.MoveNext())
+                {
+                    if (knownCount.HasValue && observedCount >= knownCount.Value)
+                        throw MetadataTraversalCountMismatchError(knownCount.Value, observedCount + 1);
+                    if (observedCount >= MaximumEntries)
+                        throw MetadataCountError();
+
+                    var item = enumerator.Current;
+                    observedCount++;
+                    if (item.Key == null) throw new ArgumentNullException(nameof(values), "Project metadata contains a null key.");
+                    if (next.ContainsKey(item.Key)) throw new ArgumentException("Project metadata contains a duplicate key: " + item.Key + ".", nameof(values));
+                    next.Add(item.Key, item.Value ?? string.Empty);
+                }
             }
             if (knownCount.HasValue && observedCount != knownCount.Value)
                 throw MetadataTraversalCountMismatchError(knownCount.Value, observedCount);
