@@ -24,8 +24,6 @@ required_source = [
 
 missing = [token for token in required_smoke if token not in smoke]
 missing += [token for token in required_source if token not in source]
-if "preflight-commercial-known-count-overrun.py" not in str(ROOT / "scripts/preflight-commercial-known-count-overrun.py"):
-    missing.append("historical commercial known-count guard")
 if missing:
     raise SystemExit("Commercial transient known-Count stability preflight failed; missing: " + ", ".join(missing))
 
@@ -48,7 +46,7 @@ if not snapshot_loop < snapshot_rebound < snapshot_overrun < snapshot_current:
 
 # Historical N+1/null precedence must remain explicitly pinned.
 for token in [
-    "Commercial known-Count overrun guard must precede record semantic validation",
+    "Commercial audit known-Count overrun guard must precede record semantic validation",
     "Commercial snapshot known-Count overrun guard must precede item semantic validation",
 ]:
     if token not in legacy_guard:
