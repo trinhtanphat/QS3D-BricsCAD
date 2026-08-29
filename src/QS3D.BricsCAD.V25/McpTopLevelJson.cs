@@ -103,6 +103,12 @@ namespace QS3D.BricsCAD.V25
                 if (source[index] == ',')
                 {
                     index++;
+                    SkipWhitespace(source, ref index);
+                    if (index >= source.Length || source[index] == '}')
+                    {
+                        error = "JSON object cannot end with a trailing comma.";
+                        return false;
+                    }
                     continue;
                 }
                 if (source[index] != '}')
@@ -312,6 +318,12 @@ namespace QS3D.BricsCAD.V25
                 if (source[index] == ',')
                 {
                     index++;
+                    SkipWhitespace(source, ref index);
+                    if (index >= source.Length || source[index] == '}')
+                    {
+                        error = "MCP arguments object cannot end with a trailing comma.";
+                        return false;
+                    }
                     continue;
                 }
                 if (source[index] != '}')
