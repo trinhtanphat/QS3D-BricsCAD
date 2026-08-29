@@ -367,6 +367,7 @@ namespace QS3D.BricsCAD.V25.UI
             private void OnWindowClosing(object sender, CancelEventArgs e)
             {
                 if (!_attached || _disposeInProgress || _disposed) return;
+                if (e.Cancel) return;
 
                 var cleanupFailure = _session.TryResetTransientStateBestEffort();
                 if (cleanupFailure == null && !_session.HasTransientState)
