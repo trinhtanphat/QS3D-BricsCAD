@@ -1,85 +1,96 @@
 # ChatGPT Web ↔ QS3D embedded MCP
 
-Status: SOURCE_READY / PENDING_LOCAL
-Canonical issue: #4352
-Lane-Key: `issue-4352`
+Status: SOURCE_READY / PENDING_LOCAL  
+Canonical issue: #4352  
+OAuth integration issue: #4584  
+Lane-Key: `issue-4584`
 
-`QS3D-BricsCAD` is the only shipping repository/package required for this integration. The MCP server, Cloudflare onboarding, Agent Center, CAD tools, safety controls, and local audit surface are embedded in the BricsCAD plugin. A second MCP repository, Node runtime, PowerShell, CMD, or manual terminal setup is not part of the normal end-user path.
+`QS3D-BricsCAD` is the only shipping repository/package required for this integration. The MCP server, OAuth authorization server, Cloudflare onboarding, Agent Center, CAD tools, safety controls, and local audit surface are embedded in the BricsCAD plugin. A second MCP repository, Node runtime, PowerShell, CMD, or manual terminal setup is not part of the normal end-user path.
 
-The detailed full-CAD contract and runtime qualification matrix are maintained in `docs/MCP-FULL-CAD-AGENT.md`.
+The canonical Ribbon entry remains `QS3DMCPAGENTCENTER`; `McpPublicEndpointResolver` remains the single validated source of the public HTTPS `/mcp` endpoint.
 
 ## Runtime architecture
 
 ```text
-ChatGPT / custom MCP client
+ChatGPT Web / custom MCP
         |
-        | HTTPS + Bearer
+        | HTTPS + OAuth 2.1 access token
         v
 Cloudflare Named Tunnel
         |
-        | hostname-scoped ingress
         v
-http://127.0.0.1:8765/mcp
+http://127.0.0.1:8765
         |
-        v
+        +-- /.well-known/oauth-protected-resource[/mcp]
+        +-- /.well-known/oauth-authorization-server
+        +-- /oauth/register        (DCR)
+        +-- /oauth/authorize       (authorization code + PKCE S256)
+        +-- /oauth/token
+        +-- /mcp                   (Streamable HTTP MCP)
+                |
+                v
 QS3D.BricsCAD.V25.dll / QS3D.BricsCAD.V26.dll
-  embedded MCP server
-        |
-        | ExecuteInApplicationContext
-        v
-BricsCAD document/editor/database + bounded UI fallback
+  -> McpCadAgentRuntime
+  -> BricsCAD document/editor/database
 ```
 
-The embedded service never binds a public/LAN socket. It listens only on `127.0.0.1:8765`; public access is delegated to the configured HTTPS tunnel.
+The embedded service binds only `127.0.0.1:8765`. Public HTTPS is owned by the QS3D-managed Cloudflare tunnel.
 
-## Default click-first setup
+Production uses a persistent **Named Tunnel**. A Quick Tunnel is supported for temporary testing, but its `trycloudflare.com` hostname can change; OAuth clients/tokens are intentionally resource-bound, so a changed public URL requires a fresh ChatGPT connection.
 
-Open **TOOL > MCP (AI) > Cài đặt MCP** or **AI Dashboard**. Both Ribbon actions route to `QS3DMCPAGENTCENTER`.
+## Normal ChatGPT setup — basic screen only
 
-From Agent Center the operator can:
+The target normal-user flow is:
 
-1. install or update the official Windows `cloudflared` binary automatically;
-2. complete Cloudflare login in the provider-owned browser page;
-3. create/reuse the `qs3d-bricscad` Named Tunnel and DNS route;
-4. start a Quick Tunnel only as a temporary test fallback;
-5. copy the validated MCP URL, Bearer token, or ready URL + Authorization block;
-6. open ChatGPT;
-7. run the MCP protocol check;
-8. run the read-only Agent self-test;
-9. emergency-stop the Agent, send ESC twice to BricsCAD, or resume explicitly;
-10. open the local MCP audit folder.
+1. Open BricsCAD + QS3D.
+2. Open **TOOL > MCP (AI) > Agent Center**.
+3. Confirm the embedded MCP is `RUNNING` and run the read-only MCP protocol/self-test checks.
+4. Use **Cloudflare browser login + Named Tunnel** for production, or **Quick Tunnel** for a temporary local test.
+5. Copy the current public HTTPS MCP URL, for example `https://qs3d.example.com/mcp`.
+6. In ChatGPT's **basic custom MCP/plugin screen**, enter that URL and choose **OAuth**.
+7. Do **not** open/fill Advanced OAuth for the normal flow. QS3D advertises Dynamic Client Registration itself.
+8. Create/connect the plugin. ChatGPT discovers OAuth metadata, dynamically registers its connector callback, starts authorization-code + PKCE S256, requests `qs3d:mcp` and may request `offline_access`, and sends the authorization request to QS3D.
+9. QS3D displays a local approval prompt inside BricsCAD. Approve only when the ChatGPT connection is expected.
+10. ChatGPT exchanges the one-time code for an access token and then calls `/mcp` with `Authorization: Bearer <OAuth access token>`. When `offline_access` was granted, QS3D also returns a rotating refresh token so ChatGPT can renew the connection while the same BricsCAD process remains alive.
 
-Cloudflare username/password are entered only on Cloudflare's browser page. QS3D does not request or persist those credentials.
+QS3D never asks for a ChatGPT password or Cloudflare password. Cloudflare credentials are entered only on Cloudflare's provider-owned browser page.
 
-## Managed cloudflared bootstrap
+## OAuth discovery and protocol contract
 
-The click-first installer downloads the official Cloudflare Windows amd64 executable to the current user's QS3D local-data folder. Before adopting the binary, QS3D applies conservative file-size bounds, Windows `WinVerifyTrust` Authenticode validation, and signer inspection requiring Cloudflare identity.
+The public tunnel exposes these endpoints through the same embedded listener:
 
-A failed replacement does not intentionally destroy the previous working managed binary. Windows is allowed to build the signer certificate chain normally; cache-only certificate validation is not used because it can false-negative on a clean machine missing an intermediate certificate cache entry.
+```text
+GET  /.well-known/oauth-protected-resource
+GET  /.well-known/oauth-protected-resource/mcp
+GET  /.well-known/oauth-authorization-server
+POST /oauth/register
+GET  /oauth/authorize
+POST /oauth/token
+```
 
-The network MCP server cannot invoke the installer or launch arbitrary processes.
+The implementation supports:
 
-## Public endpoint contract
+- OAuth 2.1-style authorization-code flow;
+- public clients (`token_endpoint_auth_method=none`);
+- Dynamic Client Registration for the ChatGPT connector;
+- PKCE `S256` only;
+- exact ChatGPT connector callback allowlisting under `https://chatgpt.com/connector/oauth/<id>`;
+- one-time authorization codes with replay protection;
+- required MCP permission `qs3d:mcp` plus optional authorization-server scope `offline_access`;
+- protected-resource metadata and `WWW-Authenticate` advertise only `qs3d:mcp`, never `offline_access`;
+- short-lived access tokens; refresh tokens are issued only when `offline_access` is granted;
+- refresh-token rotation: every successful refresh consumes the old token and returns a new one; replay of the consumed token is rejected;
+- refresh-token scope cannot be elevated during refresh;
+- refresh tokens are process-bound; restarting BricsCAD invalidates old refresh tokens and requires ChatGPT to authorize again;
+- token/client/code binding to the exact public MCP resource;
+- access tokens carry only the `qs3d:mcp` MCP permission even when the authorization grant also contains `offline_access`;
+- signed opaque tokens with HMAC-SHA256 and constant-time verification;
+- explicit local BricsCAD approval before a code is issued;
+- strict duplicate/malformed form/query handling and bounded registration metadata.
 
-`McpPublicEndpointResolver` is the single source of truth for copy/display/status paths. Resolution precedence is:
+The legacy generated static bearer token remains available only for local/backward-compatible engineering paths. It is **not** the normal ChatGPT plugin authentication path and is never exposed through an OAuth token.
 
-1. account-managed Named Tunnel;
-2. token/Quick fallback tunnel;
-3. optional `QS3D_MCP_PUBLIC_URL` environment fallback.
-
-A copyable public endpoint must be an absolute HTTPS URL with no user-info, query, or fragment and with canonical path `/mcp`. Localhost/loopback and private, link-local, documentation, multicast, or otherwise non-public literal IP addresses are rejected. Hostname-based provider URLs remain supported.
-
-Provider-resolved URLs are synchronized into the current process so `connector_info`, Agent Center, Ribbon helpers, and generated guidance report the same endpoint.
-
-## Cloudflare tunnel ownership
-
-Named-browser, token, and Quick Tunnel modes hand ownership to one another rather than intentionally running multiple forwarders for the same loopback MCP endpoint.
-
-The account-managed Named Tunnel uses hostname-scoped ingress to `http://127.0.0.1:8765` and a final `http_status:404` rule. Reuse requires live provider tunnel identity plus matching local credentials; a stale local UUID alone is not trusted. DNS-route conflicts fail closed rather than treating a generic “already exists” response as success.
-
-Long-lived `cloudflared` processes establish QS3D ownership before exit events are enabled. Quick Tunnel URLs are ephemeral; if the fallback process exits, its cached `trycloudflare.com` URL is cleared so Agent Center does not keep presenting a dead temporary endpoint.
-
-## MCP transport and authentication
+## MCP transport
 
 Local endpoints:
 
@@ -88,92 +99,54 @@ MCP:    http://127.0.0.1:8765/mcp
 Health: http://127.0.0.1:8765/healthz
 ```
 
-`POST /mcp` requires `Authorization: Bearer <token>`. Token precedence is an explicit sufficiently long `QS3D_MCP_BEARER_TOKEN`, then the generated per-user token file, then an ephemeral in-process token only if the token file cannot be used.
+`/mcp` accepts either:
 
-The server supports MCP protocol `2025-06-18` with compatibility for `2025-03-26`. A client initializes, receives `Mcp-Session-Id`, sends `notifications/initialized`, then uses `ping`, `tools/list`, and `tools/call`. Session and concurrent-client counts are bounded, sessions expire, and `DELETE /mcp` closes the session.
+- a validated OAuth access token for the current public MCP resource; or
+- the existing static engineering bearer for backward compatibility.
 
-HTTP request/header/body sizes are bounded. Security-sensitive duplicate headers and `Transfer-Encoding` are rejected, and Bearer comparison is constant-time.
+An unauthenticated MCP request returns HTTP `401` with a `WWW-Authenticate: Bearer` challenge containing protected-resource metadata when a valid public endpoint is available. That lets ChatGPT discover the OAuth server automatically.
 
-## Agent Center local checks
+The server continues to enforce bounded HTTP headers/body/session/concurrency state, exact JSON media-type admission, duplicate security-sensitive-header rejection, transfer-encoding rejection, Streamable-HTTP Origin/DNS-rebinding defense, MCP session/protocol validation, and top-level mutation confirmation.
 
-The protocol check and read-only Agent self-test execute their local HTTP work on a worker thread rather than blocking the WPF button thread. CAD-observation tools can therefore marshal back through `Application.DocumentManager.ExecuteInApplicationContext` without the Agent Center synchronously occupying the host UI thread.
+## Local qualification — what must be tested on the exact candidate SHA
 
-Observation self-tests are serialized so users cannot accidentally stack multiple local probes. Emergency Stop and ESC cancel remain deliberately outside that observation slot so recovery controls stay actionable while a read-only check is in progress.
+Hosted CI can prove source guards and compilation only. Before claiming `LOCAL_PASS`, test the exact candidate on real Windows + licensed BricsCAD V25/V26 + Cloudflare + ChatGPT:
 
-The read-only self-test discovers the expected full tool surface and calls observation tools only; it must not mutate the drawing.
+1. Load the exact candidate DLL in V25 and V26 and confirm MCP reports `RUNNING`.
+2. Run Agent Center **MCP protocol check** and **read-only Agent self-test**; both must pass.
+3. Start the public tunnel and confirm the displayed public URL ends in `/mcp` and is HTTPS.
+4. Request `https://<public-host>/.well-known/oauth-protected-resource/mcp`; verify it names the current public `/mcp` resource, authorization server, and only the `qs3d:mcp` resource scope.
+5. Request `https://<public-host>/.well-known/oauth-authorization-server`; verify authorization, token, registration, PKCE S256, `qs3d:mcp`, and optional `offline_access` metadata are present.
+6. In ChatGPT create the QS3D custom MCP using only **URL + OAuth** on the basic screen; leave Advanced OAuth untouched.
+7. Verify ChatGPT DCR succeeds and the local BricsCAD OAuth approval dialog appears.
+8. Deny once and verify authorization fails without granting MCP access.
+9. Retry, approve, and verify ChatGPT completes OAuth then discovers `tools/list` successfully.
+10. Call read-only tools such as `connector_info`, `qs3d_status`, `cad_active_document`, and `cad_database_snapshot`.
+11. Verify an authorization without `offline_access` returns no refresh token. Then authorize with `offline_access`, refresh once, verify a new refresh token is returned, and verify replaying the consumed old refresh token fails.
+12. Verify refresh requests cannot add or change scopes and resource-mismatched access/refresh tokens are rejected.
+13. Restart BricsCAD and verify the process-bound old refresh token no longer works; reconnect/authorize again.
+14. On a disposable drawing, test one confirmed mutation, then verify audit + Emergency Stop/cancel boundaries.
+15. Restart a Quick Tunnel and verify the old resource-bound OAuth connection no longer silently authorizes the new URL; reconnect. For production, repeat with a stable Named Tunnel and verify restart/autostart preserves the hostname.
+16. Verify the legacy static bearer still works only as the documented local/backward-compatible engineering path.
+17. Save/reopen the disposable drawing and shut BricsCAD down cleanly.
 
-## Full CAD tool surface
+Do not record or commit access tokens, refresh tokens, the legacy bearer, Cloudflare credentials, private paths, customer/private DWGs, proprietary binaries, or unsanitized screenshots.
 
-Read/inspection:
+## Source verification
 
-- `connector_info`
-- `qs3d_status`
-- `cad_active_document`
-- `cad_selection`
-- `cad_database_snapshot`
-- `cad_entity_inspect`
-- `cad_view_state`
-- `cad_wait_idle`
-- `cad_command_catalog`
-- `cad_audit_tail`
+OAuth/DCR source invariants are guarded by:
 
-Direct native CAD mutation:
+```text
+python scripts/preflight-mcp-oauth.py
+python scripts/preflight-mcp-tools-list-json.py
+```
 
-- `cad_create_line`
-- `cad_create_circle`
-- `cad_create_polyline`
-- `cad_create_text`
-- `cad_entity_transform`
-- `cad_entity_delete`
-- `cad_layer`
-- `qs3d_run_command`
-
-Bounded native workflow:
-
-- `cad_command_sequence`
-
-BricsCAD-window-only UI fallback:
-
-- `cad_ui_click`
-- `cad_ui_type`
-- `cad_ui_key`
-
-Recovery/control:
-
-- `cad_agent_stop`
-- `cad_agent_resume`
-- `cad_cancel_command`
-
-Ordinary mutation/UI tools require `confirmMutation=true` and are refused while the Agent emergency-stop latch is active. Stop and cancel intentionally remain available without mutation confirmation.
-
-## Security boundary
-
-Direct database work uses document locks and Teigha/BricsCAD transactions. Geometry values must be finite; entity handles, layer names, text, snapshots, command inputs, and other externally supplied values are bounded.
-
-`cad_command_sequence` accepts one explicit BricsCAD command from an allowlist plus bounded prompt inputs. It rejects control-character injection, command chaining after a blank terminator, and known CAD/QS3D command names injected as later prompt lines.
-
-Mouse/keyboard fallback uses Windows `SendInput` only after verifying the target belongs to the current BricsCAD process. Coordinates are client-relative and checked before conversion to screen coordinates. Input stops if the foreground window changes; the MCP tools are not desktop-wide remote control.
-
-The network MCP server exposes no arbitrary shell, process execution, tunnel setup, browser launch, or cloudflared installation tool.
-
-## Local audit and recovery
-
-Mutations are recorded to the bounded rotating local MCP audit JSONL file. Audit details are sanitized and typed UI text itself is not persisted as an audit detail.
-
-Emergency Stop latches autonomous mutation/UI tools off and attempts ESC twice through CAD context, with a foreground-process-verified keyboard fallback when the application-context route is unavailable. Resume requires explicit mutation confirmation.
+The first guard verifies discovery, DCR, PKCE, offline-access/refresh issuance, refresh rotation/replay rejection, token binding, callback allowlisting, local consent, transport wiring and net48 compatibility. The second reconstructs the generated MCP `tools/list` payload and parses it as JSON, including the `cad_entity_transform.confirmMutation` schema regression.
 
 ## Qualification boundary
 
-Source implementation remains `PENDING_LOCAL`. Do not promote hosted source checks or compilation evidence into runtime `LOCAL_PASS`.
+`SOURCE_IMPLEMENTED` means the OAuth/MCP source and hosted contracts exist on the candidate branch. It is not licensed runtime proof.
 
-The exact candidate SHA must still be qualified on real Windows + licensed BricsCAD V25/V26 + Cloudflare + ChatGPT. The local matrix in `docs/MCP-FULL-CAD-AGENT.md` covers browser login, Named Tunnel, Quick Tunnel lifecycle, tool discovery, disposable-DWG creation/editing, bounded command workflows, BricsCAD-only mouse/keyboard fallback, emergency recovery, save/reopen, and plot.
+`LOCAL_PASS` requires the exact tested SHA to pass the V25/V26 + Cloudflare + ChatGPT matrix above with sanitized evidence in `LOCAL-024`.
 
-Additional edge cases that must be exercised locally include:
-
-- keep Agent Center responsive while the read-only self-test is active and prove Emergency Stop/ESC remains actionable;
-- terminate a Quick Tunnel after its URL appears and prove the stale temporary public URL disappears;
-- verify private/link-local literal values supplied through `QS3D_MCP_PUBLIC_URL` are rejected;
-- verify a failed managed-cloudflared replacement preserves the previous working binary;
-- verify starting one tunnel mode does not leave another QS3D-owned forwarder running.
-
-Until that exact-SHA runtime matrix passes, report the feature as `SOURCE_READY / PENDING_LOCAL`, never `LOCAL_PASS`.
+`MERGED_MAIN` is a separate source-integration state. It requires the repository's PR/main policy and exact-head protected CI. An explicit owner merge authorization may integrate source while `LOCAL-024` remains `PENDING_LOCAL`; that never converts hosted CI into licensed runtime proof and must never be reported as `LOCAL_PASS`.
