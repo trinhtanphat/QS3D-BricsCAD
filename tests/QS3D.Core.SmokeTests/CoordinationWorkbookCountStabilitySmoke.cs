@@ -175,7 +175,7 @@ namespace QS3D.Core.SmokeTests
                 get
                 {
                     _countReads++;
-                    return _countReads >= 3 ? 2 : 1;
+                    return _countReads >= 4 ? 2 : 1;
                 }
             }
 
