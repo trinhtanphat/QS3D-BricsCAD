@@ -47,12 +47,14 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 var count = 0;
-                var primary = 0d;
+                var primaryAccumulator = new QuantityReportMath.FiniteAccumulator();
                 foreach (var row in rows)
                 {
                     count = QuantityReportMath.AddCount(count, row.Count);
-                    primary = QuantityReportMath.Add(primary, row.PrimaryQuantity, "HT_Phòng export primary quantity");
+                    var primaryQuantity = QuantityReportMath.NonNegative(row.PrimaryQuantity, "HT_Phòng export primary quantity");
+                    primaryAccumulator.Add(primaryQuantity, "HT_Phòng export primary quantity");
                 }
+                var primary = primaryAccumulator.Value("HT_Phòng export primary quantity");
 
                 RoomFinishXlsxExporter.Export(dialog.FileName, rows);
 
