@@ -18,11 +18,17 @@ namespace QS3D.Core.Geometry
             EnsureFiniteBounds();
         }
 
+        private CurtainOpeningRect(double value)
+        {
+            Value = value;
+        }
+
         public double X_M { get; }
         public double Z_M { get; }
         public double WidthM { get; }
         public double HeightM { get; }
         public double ClearanceM { get; }
+        private double Value { get; }
 
         internal double BaseRight => X_M + WidthM;
         internal double BaseTop => Z_M + HeightM;
@@ -102,8 +108,12 @@ namespace QS3D.Core.Geometry
                 : new List<CurtainWallRect>();
             using (var frameEnumerator = frames.GetEnumerator())
             {
-                while (frameEnumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableKnownCount(frames, frameKnownCount, frameKnownCountSources, MaxOutputFragments, "frame");
+                    if (!frameEnumerator.MoveNext())
+                        break;
+                    RequireStableKnownCount(frames, frameKnownCount, frameKnownCountSources, MaxOutputFragments, "frame");
                     if (frameKnownCount.HasValue && result.Count >= frameKnownCount.Value)
                         throw new InvalidOperationException("Curtain frame collection count changed during enumeration.");
                     if (result.Count >= MaxOutputFragments)
@@ -121,8 +131,12 @@ namespace QS3D.Core.Geometry
                 : new List<CurtainOpeningRect>();
             using (var openingEnumerator = openings.GetEnumerator())
             {
-                while (openingEnumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableKnownCount(openings, openingKnownCount, openingKnownCountSources, MaxOpenings, "opening");
+                    if (!openingEnumerator.MoveNext())
+                        break;
+                    RequireStableKnownCount(openings, openingKnownCount, openingKnownCountSources, MaxOpenings, "opening");
                     if (openingKnownCount.HasValue && cuts.Count >= openingKnownCount.Value)
                         throw new InvalidOperationException("Curtain opening collection count changed during enumeration.");
                     if (cuts.Count >= MaxOpenings)
