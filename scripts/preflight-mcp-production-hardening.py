@@ -85,6 +85,7 @@ def main() -> int:
         "top-level JSON trailing-comma rejection": (top_level_json, "JSON object cannot end with a trailing comma."),
         "MCP arguments trailing-comma rejection": (top_level_json, "MCP arguments object cannot end with a trailing comma."),
         "strict RFC JSON whitespace helper": (top_level_json, "IsJsonWhitespace(source[index])"),
+        "strict RFC JSON trim helper": (top_level_json, "TrimJsonWhitespace"),
         "runtime foreground ESC fallback": (runtime, "TrySendEscapeFallback()"),
         "runtime emergency-stop latch": (runtime, "_automationStopped = true"),
         "runtime queued dispatch state": (runtime, "CadWorkQueued = 0"),
@@ -117,6 +118,8 @@ def main() -> int:
         errors.append("compiled MCP transport accepts application/json lookalike media types via prefix matching")
     if "char.IsWhiteSpace(source[index])" in top_level_json:
         errors.append("MCP JSON parser accepts non-RFC Unicode whitespace via char.IsWhiteSpace")
+    if ".Trim()" in top_level_json:
+        errors.append("MCP JSON parser must not normalize non-RFC Unicode whitespace via string.Trim")
     if 'IndexOf("already exists"' in account:
         errors.append("Cloudflare DNS conflict must not be silently accepted via 'already exists'")
     if '"Bearer token: " + McpEmbeddedServer.GetBearerToken()' in connector:
