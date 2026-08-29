@@ -20,7 +20,7 @@ namespace QS3D.BricsCAD.V25.Updates
         private static readonly Brush Warning = new SolidColorBrush(Color.FromRgb(245, 184, 83));
         private static readonly Brush CardBackground = new SolidColorBrush(Color.FromRgb(31, 38, 49));
         private static readonly Brush PanelBackground = new SolidColorBrush(Color.FromRgb(19, 24, 32));
-        private static readonly Brush Border = new SolidColorBrush(Color.FromRgb(54, 65, 82));
+        private static readonly Brush BorderStroke = new SolidColorBrush(Color.FromRgb(54, 65, 82));
 
         private readonly TextBlock _title;
         private readonly TextBlock _status;
@@ -99,7 +99,7 @@ namespace QS3D.BricsCAD.V25.Updates
             var stateCard = new Border
             {
                 Background = CardBackground,
-                BorderBrush = Border,
+                BorderBrush = BorderStroke,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(17, 15, 17, 15),
@@ -210,7 +210,7 @@ namespace QS3D.BricsCAD.V25.Updates
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 Background = PanelBackground,
                 Foreground = new SolidColorBrush(Color.FromRgb(216, 224, 237)),
-                BorderBrush = Border,
+                BorderBrush = BorderStroke,
                 BorderThickness = new Thickness(1),
                 Padding = new Thickness(13, 11, 13, 11),
                 FontFamily = new FontFamily("Consolas"),
@@ -305,7 +305,7 @@ namespace QS3D.BricsCAD.V25.Updates
             else
 #endif
             {
-                _status.Foreground = result.State == UpdateState.Failed ? Warning : TextPrimary;
+                _status.Foreground = result.State == UpdateState.Error ? Warning : TextPrimary;
             }
 
             _refreshButton.IsEnabled = !_previewDownloading && !previewScheduled && !checking && result.State != UpdateState.Scheduled;
@@ -360,7 +360,7 @@ namespace QS3D.BricsCAD.V25.Updates
                 {
                     if (checking) SetProgress("Đang kiểm tra GitHub Releases…", 12, true);
                     else if (result.State == UpdateState.UpToDate) SetProgress("Đang dùng phiên bản mới nhất", 100, false);
-                    else if (result.State == UpdateState.Failed) SetProgress("Kiểm tra cập nhật gặp lỗi", 0, false);
+                    else if (result.State == UpdateState.Error) SetProgress("Kiểm tra cập nhật gặp lỗi", 0, false);
                     else SetProgress("Sẵn sàng", 0, false);
                 }
             }
