@@ -82,7 +82,7 @@ def main() -> int:
         "bounded screenshot output": "MaxScreenshotBytes",
         "bounded screenshot dimensions": "MaxScreenshotWidth",
         "window-title privacy bound": "MaxWindowTitleLength",
-        "typed-text privacy audit": '"chars="',
+        "typed-text privacy audit": '"; chars="',
     }
     for label, token in required.items():
         if token not in desktop:
