@@ -97,6 +97,7 @@ namespace QS3D.Core.Commercial
             {
                 while (enumerator.MoveNext())
                 {
+                    RequireStableKnownCountDuringTraversal(records, knownCount);
                     CommercialGuard.RequireCanProcessNext(knownCount, snapshot.Count, "Commercial audit batch source");
                     if (snapshot.Count == remainingCapacity)
                         throw new InvalidOperationException("Commercial audit log supports at most 10000 events.");
@@ -135,6 +136,22 @@ namespace QS3D.Core.Commercial
         {
             if (!eventIds.Add(eventId))
                 throw new InvalidOperationException("Commercial audit log contains duplicate event id: " + eventId + ".");
+        }
+
+        private static void RequireStableKnownCountDuringTraversal(
+            IEnumerable<CommercialAuditRecord> records,
+            int? admittedCount)
+        {
+            if (!admittedCount.HasValue)
+                return;
+
+            var reboundCount = TryGetKnownCount(records, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (negativeKnownCount)
+                throw new InvalidOperationException("Commercial audit batch source exposes an invalid negative known Count value during traversal.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Commercial audit batch source exposes conflicting known Count values during traversal.");
+            if (!reboundCount.HasValue || reboundCount.Value != admittedCount.Value)
+                throw new InvalidOperationException("Commercial audit batch source known Count changed during traversal.");
         }
 
         private static void RequireStableKnownCount(
@@ -267,6 +284,7 @@ namespace QS3D.Core.Commercial
             {
                 while (enumerator.MoveNext())
                 {
+                    RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);
                     RequireCanProcessNext(knownCount, result.Count, paramName);
                     if (result.Count == maximum)
                         throw new InvalidOperationException(paramName + " supports at most " + maximum + " entries.");
@@ -289,6 +307,21 @@ namespace QS3D.Core.Commercial
         {
             if (knownCount.HasValue && observedCount >= knownCount.Value)
                 throw new InvalidOperationException(label + " known Count was exceeded during traversal.");
+        }
+
+        private static void RequireStableSnapshotKnownCountDuringTraversal<T>(
+            IEnumerable<T> source,
+            int? admittedCount,
+            string paramName,
+            int maximum)
+            where T : class
+        {
+            if (!admittedCount.HasValue)
+                return;
+
+            var reboundCount = SnapshotKnownCount(source, paramName, maximum);
+            if (!reboundCount.HasValue || reboundCount.Value != admittedCount.Value)
+                throw new InvalidOperationException(paramName + " known Count changed during traversal.");
         }
 
         private static void RequireStableSnapshotKnownCount<T>(
