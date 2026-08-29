@@ -209,20 +209,31 @@ namespace QS3D.Core.Features
 
             var expectedCount = SnapshotKnownCount(availability);
             var observed = 0;
-            foreach (var state in availability)
+            using (var enumerator = availability.GetEnumerator())
             {
-                if (observed == Definitions.Length)
-                    throw TooManyAvailabilityStates();
-                observed++;
-                if (state == null) throw new InvalidOperationException("Feature action availability cannot contain null values.");
-                if (!Enum.IsDefined(typeof(FeatureActionId), state.ActionId))
-                    throw new InvalidOperationException("Feature action availability contains an unsupported action id: " + state.ActionId + ".");
-                if (result.ContainsKey(state.ActionId))
-                    throw new InvalidOperationException("Feature action availability contains duplicate action ids: " + state.ActionId);
-                result.Add(state.ActionId, state);
+                while (enumerator.MoveNext())
+                {
+                    if (observed == Definitions.Length)
+                        throw TooManyAvailabilityStates();
+                    if (expectedCount.HasValue && observed >= expectedCount.Value)
+                        throw AvailabilityCountMismatch(expectedCount.Value, observed + 1);
+
+                    var state = enumerator.Current;
+                    observed++;
+                    if (state == null) throw new InvalidOperationException("Feature action availability cannot contain null values.");
+                    if (!Enum.IsDefined(typeof(FeatureActionId), state.ActionId))
+                        throw new InvalidOperationException("Feature action availability contains an unsupported action id: " + state.ActionId + ".");
+                    if (result.ContainsKey(state.ActionId))
+                        throw new InvalidOperationException("Feature action availability contains duplicate action ids: " + state.ActionId);
+                    result.Add(state.ActionId, state);
+                }
             }
 
             if (expectedCount.HasValue && observed != expectedCount.Value)
+                throw AvailabilityCountMismatch(expectedCount.Value, observed);
+
+            var reboundCount = SnapshotKnownCount(availability);
+            if (expectedCount != reboundCount)
                 throw new InvalidOperationException("Feature action availability count changed during enumeration.");
             return result;
         }
@@ -249,6 +260,11 @@ namespace QS3D.Core.Features
                 throw new InvalidOperationException("Feature action availability exposes conflicting known counts.");
             expected = count;
         }
+
+        private static InvalidOperationException AvailabilityCountMismatch(int reportedCount, int observedCount) =>
+            new InvalidOperationException(
+                "Feature action availability count changed during enumeration; Count reported " + reportedCount +
+                " states but traversal observed " + observedCount + ".");
 
         private static InvalidOperationException TooManyAvailabilityStates() =>
             new InvalidOperationException("Feature action availability supports at most " + Definitions.Length + " states.");
