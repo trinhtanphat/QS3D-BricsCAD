@@ -443,17 +443,58 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 RequireTargets(ids);
                 ClearHighlight();
-                using (_document.LockDocument())
-                using (var transaction = _document.Database.TransactionManager.StartTransaction())
+                var pending = new List<ObjectId>();
+                try
                 {
-                    foreach (var id in ids)
+                    using (_document.LockDocument())
+                    using (var transaction = _document.Database.TransactionManager.StartTransaction())
                     {
-                        var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity
-                            ?? throw new InvalidOperationException("Resolved CAD object is not an Entity.");
-                        entity.Highlight();
-                        _highlighted.Add(id);
+                        foreach (var id in ids)
+                        {
+                            var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity
+                                ?? throw new InvalidOperationException("Resolved CAD object is not an Entity.");
+                            entity.Highlight();
+                            pending.Add(id);
+                        }
+                        transaction.Commit();
                     }
-                    transaction.Commit();
+
+                    _highlighted.AddRange(pending);
+                }
+                catch
+                {
+                    UnhighlightAttemptBestEffort(pending);
+                    throw;
+                }
+            }
+
+            private void UnhighlightAttemptBestEffort(IReadOnlyList<ObjectId> pending)
+            {
+                if (pending == null || pending.Count == 0 || _destroyed) return;
+
+                try
+                {
+                    using (_document.LockDocument())
+                    using (var transaction = _document.Database.TransactionManager.StartTransaction())
+                    {
+                        foreach (var id in pending)
+                        {
+                            try
+                            {
+                                var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
+                                entity?.Unhighlight();
+                            }
+                            catch
+                            {
+                                // One stale/erased native object must not prevent rollback of the rest.
+                            }
+                        }
+                        transaction.Commit();
+                    }
+                }
+                catch
+                {
+                    // Compensation is bounded best-effort and must never mask the original failure.
                 }
             }
 
@@ -488,10 +529,20 @@ namespace QS3D.BricsCAD.V25.UI
                 RequireTargets(ids);
                 if (_isolationActive) RestoreIsolation();
 
-                _objectIsolationModeBefore = Bricscad.ApplicationServices.Application.GetSystemVariable("OBJECTISOLATIONMODE");
-                Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", 0);
-                _document.Editor.SetImpliedSelection(ids.ToArray());
-                _document.SendStringToExecute("_.ISOLATEOBJECTS ", true, false, false);
+                var modeBefore = Bricscad.ApplicationServices.Application.GetSystemVariable("OBJECTISOLATIONMODE");
+                try
+                {
+                    Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", 0);
+                    _document.Editor.SetImpliedSelection(ids.ToArray());
+                    _document.SendStringToExecute("_.ISOLATEOBJECTS ", true, false, false);
+                }
+                catch
+                {
+                    RestoreObjectIsolationModeBestEffort(modeBefore);
+                    throw;
+                }
+
+                _objectIsolationModeBefore = modeBefore;
                 _isolationActive = true;
             }
 
@@ -526,7 +577,7 @@ namespace QS3D.BricsCAD.V25.UI
 
                 using (var view = _document.Editor.GetCurrentView())
                 {
-                    _viewBeforeSection = ViewSnapshot.Capture(view);
+                    var viewBeforeSection = ViewSnapshot.Capture(view);
                     var direction = view.ViewDirection.GetNormal();
                     var distances = Corners(bounds)
                         .Select(point => (point - center).DotProduct(direction))
@@ -555,7 +606,16 @@ namespace QS3D.BricsCAD.V25.UI
                     view.FrontClipDistance = maxDistance;
                     view.BackClipEnabled = true;
                     view.FrontClipEnabled = true;
-                    _document.Editor.SetCurrentView(view);
+                    try
+                    {
+                        _document.Editor.SetCurrentView(view);
+                    }
+                    catch
+                    {
+                        RestoreSectionViewBestEffort(viewBeforeSection);
+                        throw;
+                    }
+                    _viewBeforeSection = viewBeforeSection;
                 }
             }
 
@@ -563,13 +623,35 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (_viewBeforeSection == null) return;
                 var snapshot = _viewBeforeSection;
-                _viewBeforeSection = null;
-                if (_destroyed) return;
+                if (_destroyed)
+                {
+                    _viewBeforeSection = null;
+                    return;
+                }
 
                 using (var view = _document.Editor.GetCurrentView())
                 {
                     snapshot.Apply(view);
                     _document.Editor.SetCurrentView(view);
+                }
+
+                _viewBeforeSection = null;
+            }
+
+            private void RestoreSectionViewBestEffort(ViewSnapshot snapshot)
+            {
+                if (snapshot == null || _destroyed) return;
+                try
+                {
+                    using (var view = _document.Editor.GetCurrentView())
+                    {
+                        snapshot.Apply(view);
+                        _document.Editor.SetCurrentView(view);
+                    }
+                }
+                catch
+                {
+                    // Compensation is bounded best-effort and must not mask native apply failure.
                 }
             }
 
@@ -642,9 +724,18 @@ namespace QS3D.BricsCAD.V25.UI
 
             public void ResetTransientStateBestEffort()
             {
+                ResetTransientStateBestEffort(false);
+            }
+
+            private void ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)
+            {
                 try { ClearHighlight(); } catch { _highlighted.Clear(); }
                 try { RestoreIsolation(); } catch { _isolationActive = false; RestoreObjectIsolationModeBestEffort(); }
-                try { RestoreSectionView(); } catch { _viewBeforeSection = null; }
+                try { RestoreSectionView(); }
+                catch
+                {
+                    if (throwOnSectionRestoreFailure) throw;
+                }
             }
 
             public void AbandonDestroyedDocumentState()
@@ -661,14 +752,20 @@ namespace QS3D.BricsCAD.V25.UI
                 if (_objectIsolationModeBefore == null) return;
                 var value = _objectIsolationModeBefore;
                 _objectIsolationModeBefore = null;
-                try { Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", value); } catch { }
+                RestoreObjectIsolationModeBestEffort(value);
+            }
+
+            private void RestoreObjectIsolationModeBestEffort(object? modeBefore)
+            {
+                if (modeBefore == null) return;
+                try { Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", modeBefore); } catch { }
             }
 
             public void Dispose()
             {
                 if (_disposed) return;
+                ResetTransientStateBestEffort(true);
                 _disposed = true;
-                ResetTransientStateBestEffort();
             }
 
             private sealed class ViewSnapshot

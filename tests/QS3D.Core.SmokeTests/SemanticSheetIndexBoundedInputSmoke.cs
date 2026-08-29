@@ -15,7 +15,7 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsKnownCollectionBeforeEnumeration();
             RejectsKnownReadOnlyCollectionBeforeEnumeration();
-            RejectsDishonestCountAtFirstDisallowedSheet();
+            RejectsDishonestKnownCountAtFirstOverrun();
             AcceptsExactBoundAndKeepsDeterministicOrdering();
             PreservesNullIndexDiagnostic();
             PreservesDuplicateIdentityDiagnostics();
@@ -37,11 +37,11 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("SemanticSheetIndexBoundedInputSmoke enumerated a known oversized IReadOnlyCollection.");
         }
 
-        private static void RejectsDishonestCountAtFirstDisallowedSheet()
+        private static void RejectsDishonestKnownCountAtFirstOverrun()
         {
             var source = new DishonestCollection(Limit + 5);
-            ThrowsLimit(() => SemanticSheetIndexBuilder.Build(source), "dishonest ICollection");
-            Equal(Limit + 1, source.Seen, "dishonest collection enumeration count");
+            ThrowsCountMismatch(() => SemanticSheetIndexBuilder.Build(source), "dishonest ICollection");
+            Equal(2, source.Seen, "dishonest collection enumeration count");
         }
 
         private static void AcceptsExactBoundAndKeepsDeterministicOrdering()
@@ -127,6 +127,22 @@ namespace QS3D.Core.SmokeTests
                     ex.Message.IndexOf("at most", StringComparison.OrdinalIgnoreCase) >= 0)
                     return;
                 throw new InvalidOperationException("SemanticSheetIndexBoundedInputSmoke " + label + " returned the wrong limit diagnostic: " + ex.Message, ex);
+            }
+
+            throw new InvalidOperationException("SemanticSheetIndexBoundedInputSmoke " + label + " did not fail closed.");
+        }
+
+        private static void ThrowsCountMismatch(Action action, string label)
+        {
+            try
+            {
+                action();
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("traversal count does not match its known count", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return;
+                throw new InvalidOperationException("SemanticSheetIndexBoundedInputSmoke " + label + " returned the wrong Count diagnostic: " + ex.Message, ex);
             }
 
             throw new InvalidOperationException("SemanticSheetIndexBoundedInputSmoke " + label + " did not fail closed.");

@@ -51,8 +51,8 @@ namespace QS3D.Core.Export
                 rowCount++;
                 if (row == null) throw new ArgumentException("Rebar procurement CSV cannot contain a null row.", nameof(rows));
                 sb.Append(Q(row.AlgorithmId)).Append(',')
-                    .Append(QIdentity(row.GroupId, "group id")).Append(',')
-                    .Append(Q(row.Grade)).Append(',')
+                    .Append(QSemanticIdentity(row.GroupId, "group id")).Append(',')
+                    .Append(QSemanticIdentity(row.Grade, "grade")).Append(',')
                     .Append(F(row.DiameterMm)).Append(',')
                     .Append(F(row.StockLengthM)).Append(',')
                     .Append(row.RequiredCutCount.ToString(CultureInfo.InvariantCulture)).Append(',')
@@ -82,7 +82,7 @@ namespace QS3D.Core.Export
             return value.ToString("R", CultureInfo.InvariantCulture);
         }
 
-        private static string QIdentity(string value, string label)
+        private static string QSemanticIdentity(string value, string label)
         {
             var safe = value ?? string.Empty;
             var probe = safe.TrimStart();
