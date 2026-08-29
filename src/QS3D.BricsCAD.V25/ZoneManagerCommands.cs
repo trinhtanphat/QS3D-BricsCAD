@@ -11,6 +11,8 @@ namespace QS3D.BricsCAD.V25
 
         private sealed class PublishedManager
         {
+            private readonly WeakReference<Document> _document;
+
             public PublishedManager(ZoneManagerWindow window, Document document)
             {
                 Window = window ?? throw new ArgumentNullException(nameof(window));
@@ -21,6 +23,7 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Zone Manager requires a live native BricsCAD database.");
 
                 NativeDatabaseIdentity = database.UnmanagedObject;
+                _document = new WeakReference<Document>(document);
             }
 
             public ZoneManagerWindow Window { get; }
@@ -41,6 +44,13 @@ namespace QS3D.BricsCAD.V25
                     return false;
                 }
             }
+
+            public bool MatchesManagedWrapper(Document document)
+            {
+                return document != null &&
+                       _document.TryGetTarget(out var ownedDocument) &&
+                       ReferenceEquals(ownedDocument, document);
+            }
         }
 
         [CommandMethod("QS3DZONES", CommandFlags.Modal)]
@@ -59,7 +69,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     if (previous.Window.IsLoaded)
                     {
-                        if (previous.Matches(document))
+                        if (previous.Matches(document) && previous.MatchesManagedWrapper(document))
                         {
                             try { previous.Window.Activate(); } catch { }
                             try { PaletteCoordinator.SetStatus("Zone Manager đã mở cho bản vẽ hiện hành."); } catch { }
@@ -70,15 +80,16 @@ namespace QS3D.BricsCAD.V25
                         catch (Exception closeError)
                         {
                             throw new InvalidOperationException(
-                                "Không thể đóng Zone Manager của document trước; không mở instance thứ hai.",
+                                "Không thể đóng Zone Manager trước; không mở instance thứ hai.",
                                 closeError);
                         }
 
-                        // Window.Close() can return without terminal Closed when any Closing
-                        // subscriber vetoes. Static ownership is released only by Closed.
+                        // A native-database match with managed-wrapper drift must replace the
+                        // old wrapper-bound window. Close() can also be vetoed. In either case,
+                        // construction is forbidden until terminal Closed releases publication.
                         if (ReferenceEquals(_published, previous))
                             throw new InvalidOperationException(
-                                "Zone Manager của document trước vẫn đang mở; hãy hoàn tất cleanup/close trước khi mở manager cho document khác.");
+                                "Zone Manager trước vẫn đang mở; hãy hoàn tất cleanup/close trước khi mở manager hiện hành.");
                     }
                     else if (ReferenceEquals(_published, previous))
                     {

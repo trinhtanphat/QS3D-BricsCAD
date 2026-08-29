@@ -35,7 +35,9 @@ checks = {
     ],
     required[3]: [
         'CommandMethod("QS3DZONES"', "candidate = new ZoneManagerWindow(document)", "ShowModelessWindow",
-        "private static PublishedManager? _published", "NativeDatabaseIdentity", "database.UnmanagedObject == NativeDatabaseIdentity",
+        "private static PublishedManager? _published", "private readonly WeakReference<Document> _document",
+        "NativeDatabaseIdentity", "database.UnmanagedObject == NativeDatabaseIdentity",
+        "previous.Matches(document) && previous.MatchesManagedWrapper(document)",
         "previous.Window.Activate()", "previous.Window.Close()", "publishedWindow.Closed", "_published = published",
     ],
     required[4]: [
@@ -60,4 +62,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Core-backed Zone semantics and native-database-affine, veto-safe single-instance Zone Manager are present.")
+print("PASS: Core-backed Zone semantics and native-database-affine, wrapper-bound, veto-safe single-instance Zone Manager are present.")
