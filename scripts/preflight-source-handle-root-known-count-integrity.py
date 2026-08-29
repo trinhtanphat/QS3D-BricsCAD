@@ -20,6 +20,7 @@ if source.is_file():
         "var knownCount = TryGetKnownCount(elementIds",
         "using (var enumerator = elementIds.GetEnumerator())",
         "while (enumerator.MoveNext())",
+        "RequireStableKnownCountDuringTraversal(elementIds, knownCount);",
         "inputCount >= knownCount.Value",
         "var rawId = enumerator.Current;",
         "inputCount != knownCount.Value",
@@ -28,7 +29,7 @@ if source.is_file():
     )
     positions = [materialize.find(token) for token in required_order]
     if not materialize or any(pos < 0 for pos in positions) or positions != sorted(positions):
-        errors.append("Locate root selection must enforce MoveNext -> known-Count guard -> Current and rebind Count before return.")
+        errors.append("Locate root selection must enforce MoveNext -> traversal Count rebound -> known-Count guard -> Current and rebind Count before return.")
     if "foreach (var rawId in elementIds)" in materialize:
         errors.append("Locate root selection must not use outer foreach because it can observe Current before Count-overrun rejection.")
     for token in (
@@ -40,6 +41,8 @@ if source.is_file():
         "!reboundCount.HasValue || reboundCount.Value != admittedCount.Value",
         "MaxRootElementIdInputCount",
         "non-canonical semantic element id",
+        "invalid negative known Count value during traversal",
+        "conflicting known Count values during traversal",
     ):
         if token not in materialize:
             errors.append("Locate root Count-integrity implementation missing contract token: " + token)
@@ -72,4 +75,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Locate root materialization rejects Count overrun before Current and revalidates deterministic Count evidence.")
+print("PASS: Locate root materialization rejects transient Count drift and Count overrun before Current and revalidates deterministic Count evidence.")

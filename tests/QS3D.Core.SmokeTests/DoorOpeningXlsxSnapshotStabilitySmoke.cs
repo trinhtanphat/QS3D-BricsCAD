@@ -119,7 +119,7 @@ namespace QS3D.Core.SmokeTests
                 get
                 {
                     _countReads++;
-                    if (_countReads == 2) _mutate();
+                    if (_countReads == 4) _mutate();
                     return 1;
                 }
             }
