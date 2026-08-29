@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 
 namespace QS3D.BricsCAD.V25
 {
@@ -57,9 +58,35 @@ namespace QS3D.BricsCAD.V25
         public bool ChatGptRegistrationAcknowledged { get; private set; }
     }
 
+    internal sealed class McpDesktopActionContext
+    {
+        public McpDesktopActionContext(string actionId, DateTime startedUtc, string category, string action)
+        {
+            ActionId = actionId ?? string.Empty;
+            StartedUtc = startedUtc;
+            Category = category ?? string.Empty;
+            Action = action ?? string.Empty;
+        }
+
+        public string ActionId { get; private set; }
+        public DateTime StartedUtc { get; private set; }
+        public string Category { get; private set; }
+        public string Action { get; private set; }
+    }
+
     internal sealed class McpExperienceEvent
     {
-        public McpExperienceEvent(DateTime utc, string level, string category, string message, string currentAction, string nextStep)
+        public McpExperienceEvent(
+            DateTime utc,
+            string level,
+            string category,
+            string message,
+            string currentAction,
+            string nextStep,
+            string actionId,
+            DateTime? startedUtc,
+            long durationMilliseconds,
+            string terminalState)
         {
             Utc = utc;
             Level = level ?? string.Empty;
@@ -67,6 +94,10 @@ namespace QS3D.BricsCAD.V25
             Message = message ?? string.Empty;
             CurrentAction = currentAction ?? string.Empty;
             NextStep = nextStep ?? string.Empty;
+            ActionId = actionId ?? string.Empty;
+            StartedUtc = startedUtc;
+            DurationMilliseconds = Math.Max(0, durationMilliseconds);
+            TerminalState = terminalState ?? string.Empty;
         }
 
         public DateTime Utc { get; private set; }
@@ -75,12 +106,16 @@ namespace QS3D.BricsCAD.V25
         public string Message { get; private set; }
         public string CurrentAction { get; private set; }
         public string NextStep { get; private set; }
+        public string ActionId { get; private set; }
+        public DateTime? StartedUtc { get; private set; }
+        public long DurationMilliseconds { get; private set; }
+        public string TerminalState { get; private set; }
     }
 
     /// <summary>
-    /// Bounded local mirror of MCP/onboarding/recovery activity. This is intentionally
-    /// operational metadata only; callers must not publish bearer/OAuth tokens, typed text,
-    /// clipboard contents, screenshots or document contents into this timeline.
+    /// Bounded local mirror of MCP/onboarding/recovery activity. Operational metadata only:
+    /// callers must never publish bearer/OAuth tokens, typed text, clipboard contents,
+    /// screenshot pixels or document contents into this timeline.
     /// </summary>
     internal static class McpAgentExperience
     {
@@ -91,6 +126,10 @@ namespace QS3D.BricsCAD.V25
         private static string _currentAction = string.Empty;
         private static string _nextStep = string.Empty;
         private static string _lastError = string.Empty;
+        private static string _lastActionId = string.Empty;
+        private static string _lastTerminalState = string.Empty;
+        private static long _lastDurationMilliseconds;
+        private static long _actionSequence;
         private static DateTime _updatedUtc = DateTime.UtcNow;
 
         private static string StateDirectory
@@ -109,6 +148,9 @@ namespace QS3D.BricsCAD.V25
         public static string CurrentAction { get { lock (Sync) return _currentAction; } }
         public static string NextStep { get { lock (Sync) return _nextStep; } }
         public static string LastError { get { lock (Sync) return _lastError; } }
+        public static string LastActionId { get { lock (Sync) return _lastActionId; } }
+        public static string LastTerminalState { get { lock (Sync) return _lastTerminalState; } }
+        public static long LastDurationMilliseconds { get { lock (Sync) return _lastDurationMilliseconds; } }
         public static DateTime UpdatedUtc { get { lock (Sync) return _updatedUtc; } }
 
         public static void Info(string category, string message, string currentAction, string nextStep)
@@ -139,6 +181,46 @@ namespace QS3D.BricsCAD.V25
         public static void ActionFinished(string category, string message, string nextStep)
         {
             Publish("success", category, message, string.Empty, nextStep, false);
+        }
+
+        public static McpDesktopActionContext StartDesktopAction(string category, string action, string nextStep)
+        {
+            var now = DateTime.UtcNow;
+            var sequence = Interlocked.Increment(ref _actionSequence);
+            var actionId = "A" + sequence.ToString("X8", CultureInfo.InvariantCulture);
+            var context = new McpDesktopActionContext(actionId, now, Bounded(category), Bounded(action));
+            PublishEvent(new McpExperienceEvent(
+                now,
+                "active",
+                Bounded(category),
+                "Desktop action started",
+                Bounded(action),
+                Bounded(nextStep),
+                actionId,
+                now,
+                0,
+                "running"), false);
+            return context;
+        }
+
+        public static void CompleteDesktopAction(McpDesktopActionContext context, string message, string nextStep, string terminalState)
+        {
+            if (context == null) return;
+            var now = DateTime.UtcNow;
+            var terminal = NormalizeTerminalState(terminalState);
+            var duration = Math.Max(0L, (long)(now - context.StartedUtc).TotalMilliseconds);
+            var level = terminal == "success" ? "success" : terminal == "failed" ? "error" : "warning";
+            PublishEvent(new McpExperienceEvent(
+                now,
+                level,
+                Bounded(context.Category),
+                Bounded(message),
+                string.Empty,
+                Bounded(nextStep),
+                Bounded(context.ActionId),
+                context.StartedUtc,
+                duration,
+                terminal), terminal == "failed");
         }
 
         public static McpExperienceEvent[] Recent(int limit)
@@ -264,23 +346,44 @@ namespace QS3D.BricsCAD.V25
 
         private static void Publish(string level, string category, string message, string currentAction, string nextStep, bool error)
         {
-            var item = new McpExperienceEvent(
+            PublishEvent(new McpExperienceEvent(
                 DateTime.UtcNow,
                 Bounded(level),
                 Bounded(category),
                 Bounded(message),
                 Bounded(currentAction),
-                Bounded(nextStep));
+                Bounded(nextStep),
+                string.Empty,
+                null,
+                0,
+                string.Empty), error);
+        }
+
+        private static void PublishEvent(McpExperienceEvent item, bool error)
+        {
             lock (Sync)
             {
                 while (Events.Count >= MaxEvents) Events.Dequeue();
                 Events.Enqueue(item);
                 _currentAction = item.CurrentAction;
                 _nextStep = item.NextStep;
+                if (!string.IsNullOrWhiteSpace(item.ActionId))
+                {
+                    _lastActionId = item.ActionId;
+                    _lastTerminalState = item.TerminalState;
+                    _lastDurationMilliseconds = item.DurationMilliseconds;
+                }
                 if (error) _lastError = item.Message;
-                else if (string.Equals(level, "success", StringComparison.Ordinal)) _lastError = string.Empty;
+                else if (string.Equals(item.Level, "success", StringComparison.Ordinal)) _lastError = string.Empty;
                 _updatedUtc = item.Utc;
             }
+        }
+
+        private static string NormalizeTerminalState(string value)
+        {
+            value = (value ?? string.Empty).Trim().ToLowerInvariant();
+            if (value == "success" || value == "failed" || value == "cancelled") return value;
+            return "cancelled";
         }
 
         private static string Bounded(string value)
