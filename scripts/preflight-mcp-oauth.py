@@ -102,6 +102,15 @@ def main() -> int:
     require(oauth, "ProcessNonce", "authorization-code process binding")
     require(oauth, "TryAdd", "single-use authorization-code consumption")
 
+    # MCP OAuth public-client refresh tokens MUST rotate. Make each refresh credential
+    # one-use and process-bound so a consumed token cannot be replayed, including after a
+    # BricsCAD process restart where the process nonce necessarily changes.
+    require(oauth, "ConsumedRefreshTokens", "refresh-token replay cache")
+    require(oauth, "CleanupConsumedRefreshTokens();", "bounded refresh-token replay-cache cleanup")
+    require(oauth, "ConsumedRefreshTokens.TryAdd(HashForCache(refresh), expiry)", "single-use refresh-token consumption")
+    require(oauth, '"refresh token was already used"', "refresh-token replay rejection")
+    require(oauth, "fields.Length != 7", "process-bound refresh-token payload")
+
     # Security-sensitive query/form parsing must reject duplicates and malformed percent encoding.
     require(oauth, "ParseFormEncoded", "strict query/form parser")
     require(oauth, "duplicate OAuth parameter", "duplicate parameter rejection")
