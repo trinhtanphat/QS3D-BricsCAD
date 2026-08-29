@@ -72,13 +72,15 @@ jobs:
       - name: Deterministic Core smoke tests
         run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
 
-      - name: Revalidate V26 host reference generations before plugin build
+      - name: Build BricsCAD V26 plugin against held reference generations
         shell: powershell
         run: |
-          & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR -VerifyStatePath $env:V26_HOST_REFERENCE_STATE | Out-Null
-
-      - name: Build BricsCAD V26 plugin
-        run: dotnet build src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj -c Release -p:Platform=x64
+          & .\scripts\build-v26-with-stable-references.ps1 `
+            -BricsCadDir $env:BRICSCAD_V26_DIR `
+            -StatePath $env:V26_HOST_REFERENCE_STATE `
+            -ProjectPath 'src\QS3D.BricsCAD.V26\QS3D.BricsCAD.V26.csproj' `
+            -Configuration Release `
+            -Platform x64
 
       - name: Licensed V26 NETLOAD runtime gate
         if: ${{ inputs.run_runtime }}
