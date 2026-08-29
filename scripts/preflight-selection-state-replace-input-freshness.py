@@ -11,7 +11,11 @@ for token in (
     "ids is ICollection<string> collection",
     "ids is IReadOnlyCollection<string> readOnlyCollection",
     "var enumerationVersion = _changeVersion;",
-    "foreach (var raw in ids)",
+    "using (var enumerator = ids.GetEnumerator())",
+    "while (enumerator.MoveNext())",
+    "if (knownCount.HasValue && inputCount >= knownCount.Value)",
+    "if (inputCount >= MaxInputCount)",
+    "var raw = enumerator.Current;",
     "if (_changeVersion != enumerationVersion)",
     "if (_ids.SetEquals(next)) return;",
     "var nextVersion = checked(_changeVersion + 1L);",
@@ -26,15 +30,34 @@ replace = source[replace_start:clear_start]
 clear = source[clear_start:]
 
 capture_pos = replace.index("var enumerationVersion = _changeVersion;")
-enumeration_pos = replace.index("foreach (var raw in ids)", capture_pos)
-freshness_pos = replace.index("if (_changeVersion != enumerationVersion)", enumeration_pos)
+enumerator_pos = replace.index("using (var enumerator = ids.GetEnumerator())", capture_pos)
+move_next_pos = replace.index("while (enumerator.MoveNext())", enumerator_pos)
+known_guard_pos = replace.index("if (knownCount.HasValue && inputCount >= knownCount.Value)", move_next_pos)
+cap_guard_pos = replace.index("if (inputCount >= MaxInputCount)", known_guard_pos)
+current_pos = replace.index("var raw = enumerator.Current;", cap_guard_pos)
+freshness_pos = replace.index("if (_changeVersion != enumerationVersion)", current_pos)
 noop_pos = replace.index("if (_ids.SetEquals(next)) return;", freshness_pos)
 next_version_pos = replace.index("var nextVersion = checked(_changeVersion + 1L);", noop_pos)
 clear_ids_pos = replace.index("_ids.Clear();", next_version_pos)
 revision_apply_pos = replace.index("_changeVersion = nextVersion;", clear_ids_pos)
 event_pos = replace.index("Changed?.Invoke(this, EventArgs.Empty);", revision_apply_pos)
-assert capture_pos < enumeration_pos < freshness_pos < noop_pos < next_version_pos < clear_ids_pos < revision_apply_pos < event_pos, (
-    "SelectionState.Replace freshness/mutation ordering changed"
+assert (
+    capture_pos
+    < enumerator_pos
+    < move_next_pos
+    < known_guard_pos
+    < cap_guard_pos
+    < current_pos
+    < freshness_pos
+    < noop_pos
+    < next_version_pos
+    < clear_ids_pos
+    < revision_apply_pos
+    < event_pos
+), "SelectionState.Replace freshness/mutation ordering changed"
+
+assert "foreach (var raw in ids)" not in replace, (
+    "SelectionState.Replace caller-controlled traversal must not regress to foreach before Count admission"
 )
 
 clear_next_version_pos = clear.index("var nextVersion = checked(_changeVersion + 1L);")
