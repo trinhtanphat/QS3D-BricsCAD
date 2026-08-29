@@ -15,20 +15,25 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Bounded Windows desktop automation used by the embedded MCP full-agent surface.
-    /// Network confirmation is never sufficient by itself: desktop mutations and sensitive
-    /// desktop reads also require the user to enable the in-memory local desktop session in
-    /// QS3D. Guarded calls display the blue safety overlay and remain interruptible by Esc×2.
-    /// This runtime never launches a process or shell.
+    /// Desktop mutation/sensitive reads require local consent in addition to MCP confirmation.
+    /// This runtime exposes explicit tools only; it never launches a process, shell or generic macro.
     /// </summary>
     internal static class McpDesktopAutomationRuntime
     {
         private const int MaxWindows = 100;
         private const int MaxWindowTitleLength = 512;
+        private const int MaxWaitTitleLength = 160;
         private const int MaxTypedCharacters = 8000;
         private const int MaxClipboardCharacters = 65536;
         private const int MaxScreenshotWidth = 1280;
         private const int MaxScreenshotHeight = 900;
         private const int MaxScreenshotBytes = 3 * 1024 * 1024;
+        private const int MaxWaitMilliseconds = 15000;
+        private const int MinWaitPollMilliseconds = 50;
+        private const int MaxWaitPollMilliseconds = 1000;
+        private const int MinDragMilliseconds = 50;
+        private const int MaxDragMilliseconds = 3000;
+        private const int DragStepMilliseconds = 25;
         private const int ClipboardTimeoutMilliseconds = 5000;
         private const uint INPUT_MOUSE = 0;
         private const uint INPUT_KEYBOARD = 1;
@@ -53,10 +58,12 @@ namespace QS3D.BricsCAD.V25
             "desktop_cursor_position",
             "desktop_window_list",
             "desktop_foreground_window",
+            "desktop_wait_for_window",
             "desktop_window_focus",
             "desktop_mouse_move",
             "desktop_mouse_click",
             "desktop_mouse_scroll",
+            "desktop_mouse_drag",
             "desktop_type",
             "desktop_key",
             "desktop_clipboard_read",
@@ -70,6 +77,7 @@ namespace QS3D.BricsCAD.V25
             "desktop_mouse_move",
             "desktop_mouse_click",
             "desktop_mouse_scroll",
+            "desktop_mouse_drag",
             "desktop_type",
             "desktop_key",
             "desktop_clipboard_write"
@@ -99,16 +107,21 @@ namespace QS3D.BricsCAD.V25
                 Tool("desktop_window_list", "List a bounded set of visible top-level windows in the current interactive Windows session.",
                     "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}"),
                 Tool("desktop_foreground_window", "Read metadata for the current foreground window when it belongs to this interactive Windows session.", ""),
+                Tool("desktop_wait_for_window", "Wait up to 15 seconds for a visible current-session top-level window matching an exact handle and/or bounded title substring. Read-only; never focuses or clicks.",
+                    WindowHandleProperty() + ",\"titleContains\":{\"type\":\"string\",\"maxLength\":160},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":15000},\"pollIntervalMs\":{\"type\":\"integer\",\"minimum\":50,\"maximum\":1000}"),
                 Tool("desktop_window_focus", "Restore and focus one visible current-session window. Requires local QS3D desktop consent and confirmMutation=true.",
                     WindowHandleProperty() + "," + ConfirmMutationProperty(), "windowHandle", "confirmMutation"),
                 Tool("desktop_mouse_move", "Move the Windows cursor to absolute virtual-desktop coordinates. Requires local QS3D desktop consent and confirmMutation=true.",
                     PointProperties() + "," + ConfirmMutationProperty(), "x", "y", "confirmMutation"),
-                Tool("desktop_mouse_click", "Move and click at absolute virtual-desktop coordinates. Requires local QS3D desktop consent and confirmMutation=true.",
-                    PointProperties() + ",\"button\":{\"type\":\"string\",\"enum\":[\"left\",\"right\",\"middle\"]},\"count\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":3}," + ConfirmMutationProperty(),
-                    "x", "y", "button", "confirmMutation"),
-                Tool("desktop_mouse_scroll", "Inject a bounded vertical mouse-wheel delta. Requires local QS3D desktop consent and confirmMutation=true.",
-                    PointProperties() + ",\"delta\":{\"type\":\"integer\",\"minimum\":-1200,\"maximum\":1200}," + ConfirmMutationProperty(),
-                    "x", "y", "delta", "confirmMutation"),
+                Tool("desktop_mouse_click", "Focus one exact visible current-session window and click a point inside its current bounds. Requires local QS3D desktop consent and confirmMutation=true.",
+                    WindowHandleProperty() + "," + PointProperties() + ",\"button\":{\"type\":\"string\",\"enum\":[\"left\",\"right\",\"middle\"]},\"count\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":3}," + ConfirmMutationProperty(),
+                    "windowHandle", "x", "y", "button", "confirmMutation"),
+                Tool("desktop_mouse_scroll", "Focus one exact visible current-session window and inject a bounded vertical wheel delta at a point inside its current bounds. Requires local QS3D desktop consent and confirmMutation=true.",
+                    WindowHandleProperty() + "," + PointProperties() + ",\"delta\":{\"type\":\"integer\",\"minimum\":-1200,\"maximum\":1200}," + ConfirmMutationProperty(),
+                    "windowHandle", "x", "y", "delta", "confirmMutation"),
+                Tool("desktop_mouse_drag", "Drag inside one exact visible current-session window with bounded duration and continuous target/emergency-stop revalidation. Requires local QS3D desktop consent and confirmMutation=true.",
+                    WindowHandleProperty() + ",\"startX\":{\"type\":\"integer\"},\"startY\":{\"type\":\"integer\"},\"endX\":{\"type\":\"integer\"},\"endY\":{\"type\":\"integer\"},\"button\":{\"type\":\"string\",\"enum\":[\"left\",\"right\",\"middle\"]},\"durationMs\":{\"type\":\"integer\",\"minimum\":50,\"maximum\":3000}," + ConfirmMutationProperty(),
+                    "windowHandle", "startX", "startY", "endX", "endY", "button", "confirmMutation"),
                 Tool("desktop_type", "Focus one visible current-session window and type bounded Unicode text. Requires local QS3D desktop consent and confirmMutation=true.",
                     WindowHandleProperty() + ",\"text\":{\"type\":\"string\",\"maxLength\":8000}," + ConfirmMutationProperty(),
                     "windowHandle", "text", "confirmMutation"),
@@ -119,8 +132,9 @@ namespace QS3D.BricsCAD.V25
                     ConfirmSensitiveReadProperty(), "confirmSensitiveRead"),
                 Tool("desktop_clipboard_write", "Replace Windows clipboard text with bounded Unicode text. Requires local QS3D desktop consent and confirmMutation=true.",
                     "\"text\":{\"type\":\"string\",\"maxLength\":65536}," + ConfirmMutationProperty(), "text", "confirmMutation"),
-                Tool("desktop_screenshot", "Capture a bounded in-memory PNG of the virtual desktop or one visible current-session window. Requires local QS3D desktop consent and confirmSensitiveRead=true.",
+                Tool("desktop_screenshot", "Capture a bounded in-memory PNG of the virtual desktop or one visible current-session window, optionally cropped relative to the selected source. Requires local QS3D desktop consent and confirmSensitiveRead=true.",
                     "\"scope\":{\"type\":\"string\",\"enum\":[\"screen\",\"window\"]}," + WindowHandleProperty()
+                    + ",\"cropX\":{\"type\":\"integer\"},\"cropY\":{\"type\":\"integer\"},\"cropWidth\":{\"type\":\"integer\",\"minimum\":1},\"cropHeight\":{\"type\":\"integer\",\"minimum\":1}"
                     + ",\"maxWidth\":{\"type\":\"integer\",\"minimum\":160,\"maximum\":1280},\"maxHeight\":{\"type\":\"integer\",\"minimum\":120,\"maximum\":900},"
                     + ConfirmSensitiveReadProperty(), "scope", "confirmSensitiveRead")
             };
@@ -132,7 +146,7 @@ namespace QS3D.BricsCAD.V25
             if (!IsTool(tool)) throw new InvalidOperationException("Unknown MCP desktop tool: " + tool);
             var args = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
 
-            IDisposable? guardedAction = null;
+            McpDesktopControlSession.GuardedActionScope? guardedAction = null;
             if (MutationTools.Contains(tool) || SensitiveTools.Contains(tool))
             {
                 McpDesktopControlSession.RequireLocalConsent(tool);
@@ -141,22 +155,32 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                string result;
                 switch (tool)
                 {
-                    case "desktop_cursor_position": return CursorPositionJson();
-                    case "desktop_window_list": return WindowListJson(Integer(args, "limit", 30, 1, MaxWindows));
-                    case "desktop_foreground_window": return ForegroundWindowJson();
-                    case "desktop_window_focus": return FocusWindow(args, RequireMutationCallback(ensureMutationRunning), audit);
-                    case "desktop_mouse_move": return MouseMove(args, RequireMutationCallback(ensureMutationRunning), audit);
-                    case "desktop_mouse_click": return MouseClick(args, RequireMutationCallback(ensureMutationRunning), audit);
-                    case "desktop_mouse_scroll": return MouseScroll(args, RequireMutationCallback(ensureMutationRunning), audit);
-                    case "desktop_type": return TypeText(args, RequireMutationCallback(ensureMutationRunning), audit);
-                    case "desktop_key": return PressKey(args, RequireMutationCallback(ensureMutationRunning), audit);
-                    case "desktop_clipboard_read": return ClipboardRead(args, audit);
-                    case "desktop_clipboard_write": return ClipboardWrite(args, RequireMutationCallback(ensureMutationRunning), audit);
-                    case "desktop_screenshot": return Screenshot(args, audit);
+                    case "desktop_cursor_position": result = CursorPositionJson(); break;
+                    case "desktop_window_list": result = WindowListJson(Integer(args, "limit", 30, 1, MaxWindows)); break;
+                    case "desktop_foreground_window": result = ForegroundWindowJson(); break;
+                    case "desktop_wait_for_window": result = WaitForWindow(args); break;
+                    case "desktop_window_focus": result = FocusWindow(args, RequireMutationCallback(ensureMutationRunning), audit); break;
+                    case "desktop_mouse_move": result = MouseMove(args, RequireMutationCallback(ensureMutationRunning), audit); break;
+                    case "desktop_mouse_click": result = MouseClick(args, RequireMutationCallback(ensureMutationRunning), audit); break;
+                    case "desktop_mouse_scroll": result = MouseScroll(args, RequireMutationCallback(ensureMutationRunning), audit); break;
+                    case "desktop_mouse_drag": result = MouseDrag(args, RequireMutationCallback(ensureMutationRunning), audit); break;
+                    case "desktop_type": result = TypeText(args, RequireMutationCallback(ensureMutationRunning), audit); break;
+                    case "desktop_key": result = PressKey(args, RequireMutationCallback(ensureMutationRunning), audit); break;
+                    case "desktop_clipboard_read": result = ClipboardRead(args, audit); break;
+                    case "desktop_clipboard_write": result = ClipboardWrite(args, RequireMutationCallback(ensureMutationRunning), audit); break;
+                    case "desktop_screenshot": result = Screenshot(args, audit); break;
                     default: throw new InvalidOperationException("Unknown MCP desktop tool: " + tool);
                 }
+                if (guardedAction != null) guardedAction.MarkSuccess();
+                return result;
+            }
+            catch (Exception ex)
+            {
+                if (guardedAction != null) guardedAction.MarkFailed(ex);
+                throw;
             }
             finally
             {
@@ -176,6 +200,18 @@ namespace QS3D.BricsCAD.V25
         private static string WindowListJson(int limit)
         {
             EnsureInteractiveSession();
+            var windows = EnumerateWindows(limit);
+            var builder = new StringBuilder("{\"windows\":[");
+            for (var i = 0; i < windows.Count; i++)
+            {
+                if (i > 0) builder.Append(',');
+                builder.Append(WindowJson(windows[i]));
+            }
+            return builder.Append("]}").ToString();
+        }
+
+        private static List<WindowInfo> EnumerateWindows(int limit)
+        {
             var windows = new List<WindowInfo>();
             EnumWindows(delegate(IntPtr hwnd, IntPtr lParam)
             {
@@ -184,14 +220,7 @@ namespace QS3D.BricsCAD.V25
                 if (TryGetWindowInfo(hwnd, true, out info)) windows.Add(info);
                 return windows.Count < limit;
             }, IntPtr.Zero);
-
-            var builder = new StringBuilder("{\"windows\":[");
-            for (var i = 0; i < windows.Count; i++)
-            {
-                if (i > 0) builder.Append(',');
-                builder.Append(WindowJson(windows[i]));
-            }
-            return builder.Append("]}").ToString();
+            return windows;
         }
 
         private static string ForegroundWindowJson()
@@ -203,9 +232,57 @@ namespace QS3D.BricsCAD.V25
             return "{\"window\":" + WindowJson(info) + "}";
         }
 
+        private static string WaitForWindow(string body)
+        {
+            EnsureInteractiveSession();
+            var titleContains = McpTopLevelJson.ExtractString(body, "titleContains").Trim();
+            if (titleContains.Length > MaxWaitTitleLength)
+                throw new InvalidOperationException("titleContains exceeds " + MaxWaitTitleLength.ToString(CultureInfo.InvariantCulture) + " characters.");
+            var handleText = McpTopLevelJson.ExtractString(body, "windowHandle").Trim();
+            var hasHandle = handleText.Length > 0;
+            IntPtr expected = IntPtr.Zero;
+            if (hasHandle) expected = ParseWindowHandle(handleText);
+            if (!hasHandle && titleContains.Length == 0)
+                throw new InvalidOperationException("desktop_wait_for_window requires windowHandle and/or titleContains.");
+
+            var timeout = Integer(body, "timeoutMs", 5000, 0, MaxWaitMilliseconds);
+            var poll = Integer(body, "pollIntervalMs", 100, MinWaitPollMilliseconds, MaxWaitPollMilliseconds);
+            var started = Stopwatch.StartNew();
+            while (true)
+            {
+                WindowInfo match;
+                if (TryFindWindow(expected, hasHandle, titleContains, out match))
+                    return "{\"found\":true,\"elapsedMs\":" + started.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture)
+                           + ",\"window\":" + WindowJson(match) + "}";
+                if (started.ElapsedMilliseconds >= timeout)
+                    return "{\"found\":false,\"elapsedMs\":" + started.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture) + "}";
+                Thread.Sleep(Math.Min(poll, Math.Max(1, timeout - (int)Math.Min(timeout, started.ElapsedMilliseconds))));
+            }
+        }
+
+        private static bool TryFindWindow(IntPtr expected, bool hasHandle, string titleContains, out WindowInfo match)
+        {
+            match = new WindowInfo();
+            if (hasHandle)
+            {
+                WindowInfo info;
+                if (!TryGetWindowInfo(expected, false, out info)) return false;
+                if (titleContains.Length != 0 && info.Title.IndexOf(titleContains, StringComparison.OrdinalIgnoreCase) < 0) return false;
+                match = info;
+                return true;
+            }
+
+            foreach (var info in EnumerateWindows(MaxWindows))
+            {
+                if (info.Title.IndexOf(titleContains, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                match = info;
+                return true;
+            }
+            return false;
+        }
+
         private static string FocusWindow(string body, Action ensureMutationRunning, Action<string> audit)
         {
-            RequireMutationCallback(ensureMutationRunning);
             var hwnd = RequiredWindow(body);
             ensureMutationRunning();
             FocusAndVerify(hwnd);
@@ -215,7 +292,6 @@ namespace QS3D.BricsCAD.V25
 
         private static string MouseMove(string body, Action ensureMutationRunning, Action<string> audit)
         {
-            RequireMutationCallback(ensureMutationRunning);
             var x = IntegerRequired(body, "x", -1000000, 1000000);
             var y = IntegerRequired(body, "y", -1000000, 1000000);
             RequireVirtualDesktopPoint(x, y);
@@ -228,60 +304,108 @@ namespace QS3D.BricsCAD.V25
 
         private static string MouseClick(string body, Action ensureMutationRunning, Action<string> audit)
         {
-            RequireMutationCallback(ensureMutationRunning);
+            var hwnd = RequiredWindow(body);
             var x = IntegerRequired(body, "x", -1000000, 1000000);
             var y = IntegerRequired(body, "y", -1000000, 1000000);
-            var button = McpTopLevelJson.ExtractString(body, "button").Trim().ToLowerInvariant();
+            var button = RequiredMouseButton(body, out var down, out var up);
             var count = Integer(body, "count", 1, 1, 3);
-            RequireVirtualDesktopPoint(x, y);
-
-            uint down;
-            uint up;
-            if (button == "left") { down = MOUSEEVENTF_LEFTDOWN; up = MOUSEEVENTF_LEFTUP; }
-            else if (button == "right") { down = MOUSEEVENTF_RIGHTDOWN; up = MOUSEEVENTF_RIGHTUP; }
-            else if (button == "middle") { down = MOUSEEVENTF_MIDDLEDOWN; up = MOUSEEVENTF_MIDDLEUP; }
-            else throw new InvalidOperationException("button must be left, right or middle.");
-
+            RequirePointInsideWindow(hwnd, x, y);
             ensureMutationRunning();
-            if (!SetCursorPos(x, y)) throw new InvalidOperationException("Windows rejected the cursor move before click.");
+            FocusAndVerify(hwnd);
+
             for (var i = 0; i < count; i++)
             {
-                ensureMutationRunning();
+                EnsureTargetReady(hwnd, x, y, ensureMutationRunning);
+                if (!SetCursorPos(x, y)) throw new InvalidOperationException("Windows rejected the cursor move before click.");
+                EnsureTargetReady(hwnd, x, y, ensureMutationRunning);
                 SendMouse(down, 0);
-                ensureMutationRunning();
+                EnsureTargetReady(hwnd, x, y, ensureMutationRunning);
                 SendMouse(up, 0);
                 if (i + 1 < count) Thread.Sleep(40);
             }
 
-            Audit(audit, "x=" + x.ToString(CultureInfo.InvariantCulture) + "; y=" + y.ToString(CultureInfo.InvariantCulture)
-                         + "; button=" + button + "; count=" + count.ToString(CultureInfo.InvariantCulture));
-            return "{\"clicked\":true,\"x\":" + x.ToString(CultureInfo.InvariantCulture)
-                   + ",\"y\":" + y.ToString(CultureInfo.InvariantCulture)
+            Audit(audit, "handle=" + HandleText(hwnd) + "; x=" + x.ToString(CultureInfo.InvariantCulture)
+                         + "; y=" + y.ToString(CultureInfo.InvariantCulture) + "; button=" + button
+                         + "; count=" + count.ToString(CultureInfo.InvariantCulture));
+            return "{\"clicked\":true,\"windowHandle\":\"" + HandleText(hwnd) + "\",\"x\":"
+                   + x.ToString(CultureInfo.InvariantCulture) + ",\"y\":" + y.ToString(CultureInfo.InvariantCulture)
                    + ",\"button\":\"" + Escape(button) + "\",\"count\":" + count.ToString(CultureInfo.InvariantCulture) + "}";
         }
 
         private static string MouseScroll(string body, Action ensureMutationRunning, Action<string> audit)
         {
-            RequireMutationCallback(ensureMutationRunning);
+            var hwnd = RequiredWindow(body);
             var x = IntegerRequired(body, "x", -1000000, 1000000);
             var y = IntegerRequired(body, "y", -1000000, 1000000);
             var delta = IntegerRequired(body, "delta", -1200, 1200);
             if (delta == 0) throw new InvalidOperationException("delta must be non-zero.");
-            RequireVirtualDesktopPoint(x, y);
+            RequirePointInsideWindow(hwnd, x, y);
             ensureMutationRunning();
+            FocusAndVerify(hwnd);
+            EnsureTargetReady(hwnd, x, y, ensureMutationRunning);
             if (!SetCursorPos(x, y)) throw new InvalidOperationException("Windows rejected the cursor move before scroll.");
-            ensureMutationRunning();
+            EnsureTargetReady(hwnd, x, y, ensureMutationRunning);
             SendMouse(MOUSEEVENTF_WHEEL, unchecked((uint)delta));
-            Audit(audit, "x=" + x.ToString(CultureInfo.InvariantCulture) + "; y=" + y.ToString(CultureInfo.InvariantCulture)
-                         + "; delta=" + delta.ToString(CultureInfo.InvariantCulture));
-            return "{\"scrolled\":true,\"x\":" + x.ToString(CultureInfo.InvariantCulture)
-                   + ",\"y\":" + y.ToString(CultureInfo.InvariantCulture)
+            Audit(audit, "handle=" + HandleText(hwnd) + "; x=" + x.ToString(CultureInfo.InvariantCulture)
+                         + "; y=" + y.ToString(CultureInfo.InvariantCulture) + "; delta=" + delta.ToString(CultureInfo.InvariantCulture));
+            return "{\"scrolled\":true,\"windowHandle\":\"" + HandleText(hwnd) + "\",\"x\":"
+                   + x.ToString(CultureInfo.InvariantCulture) + ",\"y\":" + y.ToString(CultureInfo.InvariantCulture)
                    + ",\"delta\":" + delta.ToString(CultureInfo.InvariantCulture) + "}";
+        }
+
+        private static string MouseDrag(string body, Action ensureMutationRunning, Action<string> audit)
+        {
+            var hwnd = RequiredWindow(body);
+            var startX = IntegerRequired(body, "startX", -1000000, 1000000);
+            var startY = IntegerRequired(body, "startY", -1000000, 1000000);
+            var endX = IntegerRequired(body, "endX", -1000000, 1000000);
+            var endY = IntegerRequired(body, "endY", -1000000, 1000000);
+            var duration = Integer(body, "durationMs", 350, MinDragMilliseconds, MaxDragMilliseconds);
+            var button = RequiredMouseButton(body, out var down, out var up);
+            RequirePointInsideWindow(hwnd, startX, startY);
+            RequirePointInsideWindow(hwnd, endX, endY);
+            ensureMutationRunning();
+            FocusAndVerify(hwnd);
+            EnsureTargetReady(hwnd, startX, startY, ensureMutationRunning);
+            if (!SetCursorPos(startX, startY)) throw new InvalidOperationException("Windows rejected the drag start cursor move.");
+
+            var buttonDown = false;
+            try
+            {
+                EnsureTargetReady(hwnd, startX, startY, ensureMutationRunning);
+                SendMouse(down, 0);
+                buttonDown = true;
+                var steps = Math.Max(2, Math.Min(120, (duration + DragStepMilliseconds - 1) / DragStepMilliseconds));
+                var sleep = Math.Max(1, duration / steps);
+                for (var i = 1; i <= steps; i++)
+                {
+                    var x = startX + (int)Math.Round((endX - startX) * (i / (double)steps));
+                    var y = startY + (int)Math.Round((endY - startY) * (i / (double)steps));
+                    EnsureTargetReady(hwnd, x, y, ensureMutationRunning);
+                    if (!SetCursorPos(x, y)) throw new InvalidOperationException("Windows rejected an intermediate drag cursor move.");
+                    if (i < steps) Thread.Sleep(sleep);
+                }
+                EnsureTargetReady(hwnd, endX, endY, ensureMutationRunning);
+                SendMouse(up, 0);
+                buttonDown = false;
+            }
+            finally
+            {
+                if (buttonDown)
+                {
+                    try { SendMouse(up, 0); } catch { }
+                }
+            }
+
+            Audit(audit, "handle=" + HandleText(hwnd) + "; start=" + startX.ToString(CultureInfo.InvariantCulture) + ","
+                         + startY.ToString(CultureInfo.InvariantCulture) + "; end=" + endX.ToString(CultureInfo.InvariantCulture) + ","
+                         + endY.ToString(CultureInfo.InvariantCulture) + "; button=" + button + "; durationMs=" + duration.ToString(CultureInfo.InvariantCulture));
+            return "{\"dragged\":true,\"windowHandle\":\"" + HandleText(hwnd) + "\",\"button\":\"" + Escape(button)
+                   + "\",\"durationMs\":" + duration.ToString(CultureInfo.InvariantCulture) + "}";
         }
 
         private static string TypeText(string body, Action ensureMutationRunning, Action<string> audit)
         {
-            RequireMutationCallback(ensureMutationRunning);
             var hwnd = RequiredWindow(body);
             var text = RequiredText(body, "text", MaxTypedCharacters);
             ensureMutationRunning();
@@ -303,7 +427,6 @@ namespace QS3D.BricsCAD.V25
 
         private static string PressKey(string body, Action ensureMutationRunning, Action<string> audit)
         {
-            RequireMutationCallback(ensureMutationRunning);
             var hwnd = RequiredWindow(body);
             var keyName = McpTopLevelJson.ExtractString(body, "key").Trim().ToUpperInvariant();
             if (keyName.Length == 0 || keyName.Length > 24)
@@ -318,10 +441,16 @@ namespace QS3D.BricsCAD.V25
             ensureMutationRunning();
             RequireForegroundWindow(hwnd);
             SendVirtualKey(key, ctrl, alt, shift, win);
-            Audit(audit, "handle=" + HandleText(hwnd) + "; key=" + keyName + "; ctrl=" + ctrl
+            var auditKey = IsCharacterKey(keyName) ? "CHARACTER" : keyName;
+            Audit(audit, "handle=" + HandleText(hwnd) + "; key=" + auditKey + "; ctrl=" + ctrl
                          + "; alt=" + alt + "; shift=" + shift + "; win=" + win);
             return "{\"pressed\":true,\"windowHandle\":\"" + HandleText(hwnd)
-                   + "\",\"key\":\"" + Escape(keyName) + "\"}";
+                   + "\",\"keyType\":\"" + (IsCharacterKey(keyName) ? "character" : "named") + "\"}";
+        }
+
+        private static bool IsCharacterKey(string keyName)
+        {
+            return keyName.Length == 1 && ((keyName[0] >= 'A' && keyName[0] <= 'Z') || (keyName[0] >= '0' && keyName[0] <= '9'));
         }
 
         private static string ClipboardRead(string body, Action<string> audit)
@@ -351,7 +480,6 @@ namespace QS3D.BricsCAD.V25
 
         private static string ClipboardWrite(string body, Action ensureMutationRunning, Action<string> audit)
         {
-            RequireMutationCallback(ensureMutationRunning);
             var text = RequiredText(body, "text", MaxClipboardCharacters);
             ensureMutationRunning();
             RunSta(delegate
@@ -385,16 +513,17 @@ namespace QS3D.BricsCAD.V25
             var maxWidth = Integer(body, "maxWidth", MaxScreenshotWidth, 160, MaxScreenshotWidth);
             var maxHeight = Integer(body, "maxHeight", MaxScreenshotHeight, 120, MaxScreenshotHeight);
 
-            RECT rect;
+            RECT sourceRect;
             var handle = string.Empty;
             if (scope == "window")
             {
                 var hwnd = RequiredWindow(body);
-                if (!GetWindowRect(hwnd, out rect)) throw new InvalidOperationException("Could not read the target window bounds.");
+                if (!GetWindowRect(hwnd, out sourceRect)) throw new InvalidOperationException("Could not read the target window bounds.");
                 handle = HandleText(hwnd);
             }
-            else rect = VirtualDesktopRect();
+            else sourceRect = VirtualDesktopRect();
 
+            var rect = ApplyScreenshotCrop(body, sourceRect);
             var width = rect.Right - rect.Left;
             var height = rect.Bottom - rect.Top;
             if (width <= 0 || height <= 0) throw new InvalidOperationException("Screenshot bounds are empty.");
@@ -421,6 +550,29 @@ namespace QS3D.BricsCAD.V25
                    + ",\"height\":" + source.PixelHeight.ToString(CultureInfo.InvariantCulture)
                    + ",\"bytes\":" + png.Length.ToString(CultureInfo.InvariantCulture)
                    + ",\"pngBase64\":\"" + Convert.ToBase64String(png) + "\"}";
+        }
+
+        private static RECT ApplyScreenshotCrop(string body, RECT source)
+        {
+            int cropX, cropY, cropWidth, cropHeight;
+            bool hasX, hasY, hasWidth, hasHeight;
+            string error;
+            if (!McpTopLevelJson.TryExtractInteger(body, "cropX", out cropX, out hasX, out error)) throw new InvalidOperationException(error);
+            if (!McpTopLevelJson.TryExtractInteger(body, "cropY", out cropY, out hasY, out error)) throw new InvalidOperationException(error);
+            if (!McpTopLevelJson.TryExtractInteger(body, "cropWidth", out cropWidth, out hasWidth, out error)) throw new InvalidOperationException(error);
+            if (!McpTopLevelJson.TryExtractInteger(body, "cropHeight", out cropHeight, out hasHeight, out error)) throw new InvalidOperationException(error);
+            var any = hasX || hasY || hasWidth || hasHeight;
+            if (!any) return source;
+            if (!(hasX && hasY && hasWidth && hasHeight) || cropWidth <= 0 || cropHeight <= 0)
+                throw new InvalidOperationException("cropX, cropY, cropWidth and cropHeight must all be provided; crop dimensions must be > 0.");
+
+            var left = Math.Max((long)source.Left, (long)source.Left + cropX);
+            var top = Math.Max((long)source.Top, (long)source.Top + cropY);
+            var right = Math.Min((long)source.Right, (long)source.Left + cropX + cropWidth);
+            var bottom = Math.Min((long)source.Bottom, (long)source.Top + cropY + cropHeight);
+            if (right <= left || bottom <= top)
+                throw new InvalidOperationException("Screenshot crop does not intersect the selected source bounds.");
+            return new RECT { Left = checked((int)left), Top = checked((int)top), Right = checked((int)right), Bottom = checked((int)bottom) };
         }
 
         private static BitmapSource CaptureBitmap(int x, int y, int width, int height)
@@ -491,6 +643,13 @@ namespace QS3D.BricsCAD.V25
             throw new InvalidOperationException("Requested desktop window did not become foreground; input was not sent.");
         }
 
+        private static void EnsureTargetReady(IntPtr hwnd, int x, int y, Action ensureMutationRunning)
+        {
+            ensureMutationRunning();
+            RequireForegroundWindow(hwnd);
+            RequirePointInsideWindow(hwnd, x, y);
+        }
+
         private static void RequireForegroundWindow(IntPtr expected)
         {
             ValidateWindow(expected, true);
@@ -498,16 +657,32 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Desktop foreground window changed; input stopped before injection.");
         }
 
+        private static void RequirePointInsideWindow(IntPtr hwnd, int x, int y)
+        {
+            ValidateWindow(hwnd, true);
+            RECT rect;
+            if (!GetWindowRect(hwnd, out rect)) throw new InvalidOperationException("Could not revalidate target window bounds.");
+            if (x < rect.Left || x >= rect.Right || y < rect.Top || y >= rect.Bottom)
+                throw new InvalidOperationException("Desktop input point must stay inside the current target window bounds.");
+            RequireVirtualDesktopPoint(x, y);
+        }
+
         private static IntPtr RequiredWindow(string body)
         {
             var text = McpTopLevelJson.ExtractString(body, "windowHandle").Trim();
+            if (text.Length == 0) throw new InvalidOperationException("windowHandle is required.");
+            var hwnd = ParseWindowHandle(text);
+            ValidateWindow(hwnd, true);
+            return hwnd;
+        }
+
+        private static IntPtr ParseWindowHandle(string text)
+        {
             ulong value;
             if (text.Length == 0 || text.Length > 16
                 || !ulong.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value) || value == 0)
                 throw new InvalidOperationException("windowHandle must be a non-zero hexadecimal window handle up to 16 characters.");
-            var hwnd = new IntPtr(unchecked((long)value));
-            ValidateWindow(hwnd, true);
-            return hwnd;
+            return new IntPtr(unchecked((long)value));
         }
 
         private static void ValidateWindow(IntPtr hwnd, bool requireVisible)
@@ -592,6 +767,16 @@ namespace QS3D.BricsCAD.V25
             var rect = VirtualDesktopRect();
             if (x < rect.Left || x >= rect.Right || y < rect.Top || y >= rect.Bottom)
                 throw new InvalidOperationException("Desktop coordinates must stay inside the Windows virtual desktop.");
+        }
+
+        private static string RequiredMouseButton(string body, out uint down, out uint up)
+        {
+            var button = McpTopLevelJson.ExtractString(body, "button").Trim().ToLowerInvariant();
+            if (button == "left") { down = MOUSEEVENTF_LEFTDOWN; up = MOUSEEVENTF_LEFTUP; }
+            else if (button == "right") { down = MOUSEEVENTF_RIGHTDOWN; up = MOUSEEVENTF_RIGHTUP; }
+            else if (button == "middle") { down = MOUSEEVENTF_MIDDLEDOWN; up = MOUSEEVENTF_MIDDLEUP; }
+            else throw new InvalidOperationException("button must be left, right or middle.");
+            return button;
         }
 
         private static void SendVirtualKey(ushort key, bool ctrl, bool alt, bool shift, bool win)
