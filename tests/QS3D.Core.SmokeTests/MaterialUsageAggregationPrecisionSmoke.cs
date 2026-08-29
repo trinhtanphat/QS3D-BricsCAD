@@ -15,7 +15,10 @@ namespace QS3D.Core.SmokeTests
             PreservesRepresentableAreaContributions();
             PreservesRepresentableVolumeContributions();
             PreservesRepresentableMassContributions();
+            PreservesAcrossInputOrder();
             PreservesOrdinaryAggregationAndProvenance();
+            RejectsUnrepresentableFinalLoss();
+            RejectsInvalidAndOverflowingInputs();
         }
 
         private static void PreservesRepresentableLengthContributions()
@@ -42,6 +45,12 @@ namespace QS3D.Core.SmokeTests
             Exact(10000000000000002d, row.MassKg, "MassKg");
         }
 
+        private static void PreservesAcrossInputOrder()
+        {
+            var row = Build("LengthM", 1d, 1e16, 1d);
+            Exact(10000000000000002d, row.LengthM, "LengthM input order");
+        }
+
         private static void PreservesOrdinaryAggregationAndProvenance()
         {
             var project = Project();
@@ -56,12 +65,32 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Material Usage compensated aggregation changed element provenance/order.");
         }
 
+        private static void RejectsUnrepresentableFinalLoss()
+        {
+            Expect<OverflowException>(() => BuildTwo("LengthM", 1e16, 1d), "half-ULP final compensation");
+        }
+
+        private static void RejectsInvalidAndOverflowingInputs()
+        {
+            Expect<InvalidOperationException>(() => BuildTwo("LengthM", -1d, 1d), "negative contribution");
+            Expect<InvalidOperationException>(() => BuildTwo("LengthM", double.NaN, 1d), "non-finite contribution");
+            Expect<OverflowException>(() => BuildTwo("LengthM", double.MaxValue, double.MaxValue), "overflowing aggregate");
+        }
+
         private static MaterialUsageRow Build(string quantityKey, double first, double second, double third)
         {
             var project = Project();
             Add(project, "a", quantityKey, first);
             Add(project, "b", quantityKey, second);
             Add(project, "c", quantityKey, third);
+            return MaterialUsageScheduleBuilder.Build(project).Single();
+        }
+
+        private static MaterialUsageRow BuildTwo(string quantityKey, double first, double second)
+        {
+            var project = Project();
+            Add(project, "a", quantityKey, first);
+            Add(project, "b", quantityKey, second);
             return MaterialUsageScheduleBuilder.Build(project).Single();
         }
 
@@ -87,6 +116,20 @@ namespace QS3D.Core.SmokeTests
         {
             if (actual != expected)
                 throw new InvalidOperationException("Unexpected Material Usage " + label + ": expected " + expected + ", got " + actual + ".");
+        }
+
+        private static void Expect<TException>(Action action, string scenario) where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException("Expected " + typeof(TException).Name + " for Material Usage " + scenario + ".");
         }
     }
 }
