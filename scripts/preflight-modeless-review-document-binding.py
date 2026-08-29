@@ -4,6 +4,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 ADAPTER = ROOT / "src/QS3D.BricsCAD.V25"
+V26_PROJECT = ROOT / "src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj"
 errors = []
 
 recognition = ADAPTER / "UI/RecognitionWindow.xaml.cs"
@@ -12,7 +13,7 @@ health = ADAPTER / "UI/ModelHealthWindow.xaml.cs"
 review_commands = ADAPTER / "ReviewCommands.cs"
 health_all = ADAPTER / "HealthAllCommands.cs"
 
-required_files = [recognition, revision, health, review_commands, health_all]
+required_files = [recognition, revision, health, review_commands, health_all, V26_PROJECT]
 for path in required_files:
     if not path.is_file():
         errors.append("missing required modeless binding source: " + str(path.relative_to(ROOT)))
@@ -23,6 +24,7 @@ if not errors:
     health_text = health.read_text(encoding="utf-8")
     review_text = review_commands.read_text(encoding="utf-8")
     health_all_text = health_all.read_text(encoding="utf-8")
+    v26_project_text = V26_PROJECT.read_text(encoding="utf-8")
 
     for needle in (
         "RecognitionWindow(Document document",
@@ -34,15 +36,34 @@ if not errors:
     if "_document = BcadApplication.DocumentManager.MdiActiveDocument" in recognition_text:
         errors.append("RecognitionWindow must not capture ambient MdiActiveDocument in its constructor")
 
+    # Revision keeps constructor-time source binding for lifecycle ownership, but modeless
+    # interaction must not retain/dereference the managed Document wrapper after the command returns.
     for needle in (
         "RevisionWindow(Document document",
-        "_document = document ?? throw new ArgumentNullException(nameof(document));",
-        "ReferenceEquals(BcadApplication.DocumentManager.MdiActiveDocument, _document)",
+        "_nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
+        "_canLocate = locate != null;",
+        "DocumentBoundWindowLifetime.Attach(this, document);",
+        "BcadApplication.DocumentManager.MdiActiveDocument",
+        "database.UnmanagedObject == _nativeDatabaseIdentity",
+        "var document = EnsureActiveAndCurrent();",
+        "LocateCurrentElement(document, row);",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
     ):
         if needle not in revision_text:
-            errors.append("RevisionWindow explicit document contract missing: " + needle)
-    if "_document = BcadApplication.DocumentManager.MdiActiveDocument" in revision_text:
-        errors.append("RevisionWindow must not capture ambient MdiActiveDocument in its constructor")
+            errors.append("RevisionWindow live document-affinity contract missing: " + needle)
+
+    for forbidden in (
+        "private readonly Document _document",
+        "private readonly Action<QuantityRevisionRow>? _locate",
+        "_locate = locate",
+        "ReferenceEquals(BcadApplication.DocumentManager.MdiActiveDocument, _document)",
+        "ProjectContextCoordinator.TryGetReadOnly(_document",
+    ):
+        if forbidden in revision_text:
+            errors.append("RevisionWindow must not retain/dereference stale managed document state: " + forbidden)
+
+    if "if (!TryGetBoundActiveDocument(out var document)) return;" not in revision_text:
+        errors.append("RevisionWindow activation refresh must ignore temporary cross-DWG activation rather than marking the source snapshot stale")
 
     for needle in (
         "ModelHealthWindow(Document document",
@@ -61,6 +82,10 @@ if not errors:
 
     if "new ModelHealthWindow(document, issues" not in health_all_text:
         errors.append("HealthAllCommands must pass the source Document explicitly")
+
+    # V26 intentionally compiles the hardened V25 adapter source instead of carrying a drift-prone copy.
+    if '<Compile Include="..\\QS3D.BricsCAD.V25\\**\\*.cs"' not in v26_project_text:
+        errors.append("V26 must continue compiling the shared V25 adapter source for modeless document-lifetime parity")
 
     explicit_doc_first = r"doc(?:ument)?\b"
 
@@ -94,4 +119,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: Recognition, Revision and every production Model Health window are explicitly bound to the source BricsCAD Document; modeless locate/apply actions cannot silently retarget a newly active DWG.")
+print("PASS: Recognition and Model Health retain their current explicit source-document contracts; Revision is lifecycle-bound at construction but uses stable native database identity plus action-time live Document resolution, with shared V26 source parity.")
