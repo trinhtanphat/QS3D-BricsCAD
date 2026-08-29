@@ -1,6 +1,6 @@
 # MCP Agent Center Tabs, Toast, and Theme Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. This file now records the actual execution state after PR #4634 plus the bounded post-merge audit follow-up #4647.
 
 **Goal:** Redesign the BricsCAD V25 MCP Agent Center into a five-destination tabbed operations center with toast notifications and System/Dark/Light theming while preserving MCP/Cloudflare/Agent semantics.
 
@@ -9,6 +9,17 @@
 **Tech Stack:** C# / .NET Framework 4.8, WPF programmatic controls/templates, Microsoft.Win32 system-theme registry, Microsoft.Win32.SystemEvents, Python source preflight, GitHub shared branch/PR CI.
 
 **Spec:** `docs/superpowers/specs/2026-08-29-mcp-agent-center-tabs-toast-theme-design.md`
+
+## Execution evidence
+
+- Original source-contract TDD RED was established before the #4623 production implementation.
+- Final #4623 canonical branch head: `22c58449a777642db86c518a570424b86f8bc702`.
+- Final exact-head branch CI: run `33254203722` — `preflight` SUCCESS; Core build SUCCESS; deterministic smoke SUCCESS; trusted V25 references SUCCESS; V25 plugin build SUCCESS; final Build SUCCESS.
+- Final protected/current-candidate PR CI: run `33254205416` — the same required gates SUCCESS.
+- PR #4634 merged to `main` as `6976e0d6b2117cc3b98e5c10615569876600fba1`.
+- Issue #4623 is `COMPLETED / MERGED_MAIN`.
+- Post-merge audit #4647 found one bounded contract gap: the keyboard-focus trigger owns border/thickness but does not yet explicitly own foreground/background. The production source path is currently reserved earlier by active Issue #4629, so #4647 must not mutate it concurrently. The exact two-setter correction is handed off to #4629; #4647 owns the stricter source guard and close-out docs.
+- Licensed BricsCAD rendering/HiDPI/live-theme qualification remains `LOCAL-024 / PENDING_LOCAL`; hosted CI is never `LOCAL_PASS`.
 
 ## Global Constraints
 
@@ -26,23 +37,17 @@
 - Modify: `scripts/preflight-mcp-agent-center-uiux.py`
 - Test target: `src/QS3D.BricsCAD.V25/McpAgentControlCenter.cs`
 
-**Interfaces:**
-- Consumes: current Agent Center source.
-- Produces: a source contract that requires the approved tabs/theme/toast/button-state design and preserves existing MCP actions.
+- [x] **Step 1: Replace old flat-dashboard requirements with the new contract**
 
-- [ ] **Step 1: Replace old flat-dashboard requirements with the new contract**
+The source contract requires `ThemeMode`, `System`, `Dark`, `Light`, `AppsUseLightTheme`, `SystemEvents.UserPreferenceChanged`, five page labels/builders, `_toastHost`, `ToastKind`, `MaxActivityEntries = 50`, `ControlTemplate`, hover/pressed/focus/disabled triggers, and `ShowToast`. Existing install/account/public-endpoint/protocol/self-test/emergency/cancel/resume/ThreadPool behavior remains guarded. Legacy `CreateActivityPanel()` and blocking Agent Center `MessageBox.Show` are forbidden.
 
-Require source tokens for `ThemeMode`, `System`, `Dark`, `Light`, `AppsUseLightTheme`, `SystemEvents.UserPreferenceChanged`, five page labels/builders, `_toastHost`, `ToastKind`, `MaxActivityEntries = 50`, `ControlTemplate`, `IsMouseOver`, `IsPressed`, `IsKeyboardFocused`, `IsEnabled`, and `ShowToast`. Preserve requirements for install/account/public-endpoint/protocol/self-test/emergency/cancel/resume/ThreadPool.
+- [x] **Step 2: Commit the test-only change**
 
-Add a forbidden legacy token check for `CreateActivityPanel()` and keep forbidden terminal/UI dependencies.
+The initial #4623 contract was committed test-first before production implementation.
 
-- [ ] **Step 2: Commit the test-only change**
+- [x] **Step 3: Verify RED on the exact test-only branch head**
 
-Commit message: `test(mcp): specify tabbed themed Agent Center contract`.
-
-- [ ] **Step 3: Verify RED on the exact test-only branch head**
-
-Run through automatic branch CI/source preflight. Expected: `preflight` fails specifically because current production source lacks the new theme/tab/toast/template contract. Confirm the failure is not reservation metadata, syntax, or unrelated CI damage.
+The original #4623 source contract was proven RED for the newly required UI architecture before production implementation; reservation/governance failures were not accepted as RED evidence.
 
 ---
 
@@ -52,121 +57,95 @@ Run through automatic branch CI/source preflight. Expected: `preflight` fails sp
 - Modify: `src/QS3D.BricsCAD.V25/McpAgentControlCenter.cs`
 - Test: `scripts/preflight-mcp-agent-center-uiux.py`
 
-**Interfaces:**
-- Consumes: `ThemeMode`, current WPF action handlers.
-- Produces: `ThemePalette`, `ResolveEffectiveDarkTheme()`, `SetThemeMode(ThemeMode)`, `ApplyThemeAndRebuild()`, `CreateButtonStyle(...)`, custom `ControlTemplate`.
+- [x] **Step 1: Add theme state/types and Windows system-theme resolution**
 
-- [ ] **Step 1: Add theme state/types and Windows system-theme resolution**
+Implemented `ThemeMode { System, Dark, Light }`, semantic palettes, System default, `AppsUseLightTheme` lookup, and scoped `SystemEvents.UserPreferenceChanged` handling.
 
-Add `ThemeMode { System, Dark, Light }`, a semantic `ThemePalette` with light/dark factories, logical mode initialized to `System`, registry lookup at `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize` / `AppsUseLightTheme`, and `SystemEvents.UserPreferenceChanged` subscription/unsubscription scoped to the window lifetime.
+- [ ] **Step 2: Complete QS3D-owned button-state color ownership — FOLLOW-UP #4647 / SOURCE OWNER #4629**
 
-- [ ] **Step 2: Add QS3D-owned button template/style**
+The rounded QS3D `ControlTemplate`, normal/hover/pressed/disabled states, selected navigation/theme states and focus border are implemented and merged. Post-merge review found one remaining deterministic-state detail: `Button.IsKeyboardFocusedProperty` must also explicitly set `Control.BackgroundProperty` to computed `background` and `Control.ForegroundProperty` to computed `foreground`, in addition to `_palette.FocusBorder` and focus thickness. Active Issue #4629 reserved `src/QS3D.BricsCAD.V25/McpAgentControlCenter.cs` earlier, so this two-setter production correction is owned by #4629 and #4647 must not overwrite it.
 
-Create a rounded Border + ContentPresenter `ControlTemplate`. Add explicit triggers for `Button.IsMouseOverProperty`, `Button.IsPressedProperty`, `Button.IsKeyboardFocusedProperty`, and `Button.IsEnabledProperty == false`. Set foreground/background/border in every state. Add selected-state styling for navigation/theme-choice buttons without relying on OS chrome.
+- [x] **Step 3: Add the System/Dark/Light selector to the header**
 
-- [ ] **Step 3: Add the System/Dark/Light selector to the header**
+Three compact theme-choice buttons are present; System responds to Windows theme events while explicit Dark/Light ignores later system-theme changes.
 
-Render three compact theme-choice buttons and rebuild the shell after selection while retaining current selected page/history. In `System`, respond to Windows user-preference changes; explicit Dark/Light ignores later system-theme events.
+- [x] **Step 4: Run focused preflight for the original #4623 contract**
 
-- [ ] **Step 4: Run focused preflight**
-
-Expected: theme/button requirements now pass; tab/toast requirements may remain failing until Task 3.
+The #4623 UIUX source guard passed before PR #4634 merged. A stricter post-merge focus-color guard is being established under #4647 and must not be called GREEN until the #4629-owned source correction lands.
 
 ---
 
 ### Task 3: Replace the flat dashboard with five navigation destinations and toast/history UI
 
-**Files:**
-- Modify: `src/QS3D.BricsCAD.V25/McpAgentControlCenter.cs`
-- Test: `scripts/preflight-mcp-agent-center-uiux.py`
+- [x] **Step 1: Build the layered shell and navigation**
 
-**Interfaces:**
-- Consumes: current action handlers, `ThemePalette`, styled button factory.
-- Produces: `CreateTabNavigation()`, `CreateOverviewPage()`, `CreateCloudflarePage()`, `CreateConnectorPage()`, `CreateAgentControlPage()`, `CreateLogsPage()`, `ShowToast(...)`, `AddActivityEntry(...)`.
+Root Grid + high-Z right-aligned toast host, header/status chips, navigation, active-page host, vertical scrolling and compact footer are implemented.
 
-- [ ] **Step 1: Build the layered shell and navigation**
+- [x] **Step 2: Implement the five pages**
 
-Use a root `Grid` with main content plus high-Z right-aligned `_toastHost`. Main content contains header/status chips, navigation, an active-page host, and compact footer. Keep vertical scrolling and disable horizontal scrolling.
+`Tổng quan`, `Cloudflare`, `ChatGPT Connector`, `Điều khiển Agent`, and `Logs` are implemented.
 
-- [ ] **Step 2: Implement the five pages**
+- [x] **Step 3: Add bounded activity history**
 
-`Tổng quan`: connection summary + quick path. `Cloudflare`: setup/tunnel actions + state. `ChatGPT Connector`: copy/open/test actions + safe endpoint summary. `Điều khiển Agent`: isolated emergency section plus recovery/audit. `Logs`: newest-first activity history.
+`MaxActivityEntries = 50`, newest-first timestamp/severity/message history and trimming are implemented; bearer-token values are not rendered into history.
 
-- [ ] **Step 3: Add bounded activity history**
+- [x] **Step 4: Add toast overlay behavior**
 
-Add `MaxActivityEntries = 50`, timestamp/severity/message entries, trimming after insertion, and logs page rendering. Never render the bearer token itself.
+Info/Success/Warning/Error, close action, bounded width, max four visible cards, DispatcherTimer lifetimes (4/4/7/8 seconds), and timer cleanup are implemented.
 
-- [ ] **Step 4: Add toast overlay behavior**
+- [x] **Step 5: Remove the fixed recent-activity panel**
 
-Add Info/Success/Warning/Error types, close action, bounded width, maximum four visible cards, automatic DispatcherTimer dismissal (4/4/7/8 seconds), and close-time timer cleanup.
+Legacy `_activity` / `CreateActivityPanel()` behavior was removed from the Agent Center window.
 
-- [ ] **Step 5: Remove the fixed recent-activity panel**
+- [x] **Step 6: Run focused preflight**
 
-Delete `_activity` UI field usage and `CreateActivityPanel()` from the production window.
-
-- [ ] **Step 6: Run focused preflight**
-
-Expected: new visual-architecture contract passes while preserved behavior checks remain green.
+The #4623 visual-architecture contract passed before protected merge.
 
 ---
 
 ### Task 4: Migrate operation feedback to toast/history without changing semantics
 
-**Files:**
-- Modify: `src/QS3D.BricsCAD.V25/McpAgentControlCenter.cs`
-- Test: `scripts/preflight-mcp-agent-center-uiux.py`
+- [x] **Step 1: Convert install/tunnel feedback**
+- [x] **Step 2: Convert copy/connector feedback**
+- [x] **Step 3: Convert local-operation feedback while preserving serialization/emergency bypass**
+- [x] **Step 4: Convert audit/open errors**
+- [x] **Step 5: Run focused preflight and inspect source diff**
 
-**Interfaces:**
-- Consumes: existing InstallCloudflared/OpenAccountSetup/StartNamedTunnel/StartQuickTunnel/StopTunnels/Copy*/CheckProtocol/RunReadOnlySelfTest/InvokeControlTool/OpenAuditFolder handlers.
-- Produces: toast/history feedback for every routine Agent Center operation.
-
-- [ ] **Step 1: Convert install/tunnel feedback**
-
-Use Info while pending, Success on successful state changes/public URL, Warning for not-ready conditions, and Error for exceptions/failures. Refresh status after state-changing callbacks exactly as before.
-
-- [ ] **Step 2: Convert copy/connector feedback**
-
-Copy actions show success toast/history; missing public URL shows warning instead of a routine blocking MessageBox. Bearer secret is copied but never displayed/logged.
-
-- [ ] **Step 3: Convert local-operation feedback**
-
-Keep `_localOperationActive` serialization and `ThreadPool.QueueUserWorkItem`. Emergency stop/cancel continue to bypass the serialized observation slot. Classify thrown exceptions or returned `FAIL`/`ERROR` prefixes as Error; otherwise Success; retain full returned result in bounded UI history.
-
-- [ ] **Step 4: Convert audit/open errors**
-
-Use error toast/history for Agent Center failures while preserving the underlying path/open behavior.
-
-- [ ] **Step 5: Run focused preflight and inspect source diff**
-
-Expected: `PASS MCP Agent Center UIUX contract`; no MCP transport/tool semantics changed; only reserved paths differ from baseline.
+PR #4634 preserved the existing MCP/Cloudflare/Agent calls while replacing routine Agent Center feedback with toast/history UI. Protected CI passed on the exact final candidate.
 
 ---
 
 ### Task 5: Validate, reconcile, PR, and merge
 
-**Files:**
-- Validate all changed reserved paths.
+- [x] **Step 1: Push final coherent implementation head and obtain exact-head branch CI** — run `33254203722` SUCCESS.
+- [x] **Step 2: Refresh/reconcile current `main` non-force and rerun exact-head CI** — final head `22c58449a777642db86c518a570424b86f8bc702`.
+- [x] **Step 3: Open one canonical PR** — PR #4634 with reservation metadata.
+- [x] **Step 4: Require protected current-candidate checks** — run `33254205416` SUCCESS.
+- [x] **Step 5: Merge same task PR and verify resulting main SHA** — merge `6976e0d6b2117cc3b98e5c10615569876600fba1`; Issue #4623 closed `COMPLETED / MERGED_MAIN`.
 
-**Interfaces:**
-- Consumes: exact canonical branch head.
-- Produces: green exact-head branch CI, current protected PR candidate, and merged `main`.
+---
 
-- [ ] **Step 1: Push final coherent implementation head and wait for exact-head branch CI**
+## Post-merge close-out — Issue #4647
 
-Required: shared branch `preflight` and `core` SUCCESS on the exact current SHA. If red, diagnose and fix the same carrier before proceeding.
+- [x] Audit the approved design against current production source rather than relying only on old CI.
+- [x] Identify focus-state explicit foreground/background ownership as the bounded remaining source-contract gap.
+- [x] Add stricter test-first guard requirements in commit `0bfe98490b09086517c25d024e8b21a710d4b69a`.
+- [x] Reject run `33256695063` attempt 1 as invalid RED because reservation failed before the feature guard.
+- [x] Diagnose reservation root cause: earlier active Issue #4629 owns `src/QS3D.BricsCAD.V25/McpAgentControlCenter.cs`.
+- [x] Remove that production path from #4647 reservation and hand off the exact two-setter source correction to #4629 without concurrent mutation.
+- [ ] Obtain a valid stricter-contract RED where reservation passes and the Agent Center feature guard fails specifically for missing focus background/foreground ownership.
+- [ ] After #4629 lands/releases the source path, reconcile current `main` and verify the stricter Agent Center guard GREEN.
+- [ ] Obtain fresh exact-head shared branch CI and protected PR CI for #4647, merge its guard/docs close-out, and record final SHA evidence.
 
-- [ ] **Step 2: Refresh current `main` and compare scope**
+## Licensed visual/runtime qualification — LOCAL-024
 
-If main moved, reconcile the canonical branch non-force, preserving all intended changes and avoiding unrelated carriers. Re-run exact-head branch CI after any new head.
+These rows remain intentionally open. Do not mark them complete from source inspection or hosted CI.
 
-- [ ] **Step 3: Open one canonical PR**
-
-PR metadata must include `Lane-Key: issue-4623`, canonical owner/session, canonical carrier, and `Supersedes: none`.
-
-- [ ] **Step 4: Require protected current-candidate checks**
-
-Wait for protected `preflight` and `core` SUCCESS on the current candidate; re-sync/revalidate if strict freshness requires it.
-
-- [ ] **Step 5: Merge the same task PR and verify resulting main SHA**
-
-Use the owner standing same-task merge authorization. Do not bypass protection. Update Issue #4623 to `COMPLETED` / `MERGED_MAIN` with exact branch head, PR, CI evidence, resulting main SHA, and LOCAL_ONLY rendering caveat.
+- [ ] **PENDING_LOCAL:** launch `QS3DMCPAGENTCENTER` in licensed BricsCAD on the exact frozen candidate.
+- [ ] **PENDING_LOCAL:** verify System / Dark / Light, including live Windows app-theme switching in System mode and explicit override persistence.
+- [ ] **PENDING_LOCAL:** verify 1040×780 and minimum 780×620, long URL wrapping, and no clipping/overlap.
+- [ ] **PENDING_LOCAL:** verify 100% / 125% / 150% DPI where available.
+- [ ] **PENDING_LOCAL:** visually exercise Primary / Secondary / Danger / Utility / Navigation / ThemeChoice across Normal / Hover / Pressed / KeyboardFocus / Disabled with readable foreground/background/border.
+- [ ] **PENDING_LOCAL:** verify Info / Success / Warning / Error toast stack, close, max-four behavior, lifetimes, theme readability and bounded Logs history.
+- [ ] **PENDING_LOCAL:** verify no bearer-token/Authorization secret value leaks to toast/history.
+- [ ] **PENDING_LOCAL:** record exact Git SHA/ProductVersion/plugin identity, Windows theme/scaling and sanitized evidence; only a real licensed execution may produce `LOCAL_PASS`.
