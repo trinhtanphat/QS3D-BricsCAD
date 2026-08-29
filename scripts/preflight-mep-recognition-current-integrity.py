@@ -37,7 +37,9 @@ ordered(
     token_block,
     (
         "using (var enumerator = tokens.GetEnumerator())",
-        "while (enumerator.MoveNext())",
+        "while (true)",
+        "if (!enumerator.MoveNext())",
+        "if (knownCount.HasValue && tokenIndex >= knownCount.Value)",
         "if (tokenIndex >= MepRecognitionLimits.MaxTokensPerRule)",
         "var token = enumerator.Current;",
         "tokenIndex++;",
@@ -49,7 +51,9 @@ ordered(
     rule_block,
     (
         "using (var enumerator = rules.GetEnumerator())",
-        "while (enumerator.MoveNext())",
+        "while (true)",
+        "if (!enumerator.MoveNext())",
+        "if (knownCount.HasValue && index >= knownCount.Value)",
         "if (index >= MepRecognitionLimits.MaxRules)",
         "var rule = enumerator.Current;",
         "if (rule == null)",
@@ -62,9 +66,10 @@ ordered(
 for forbidden in (
     "foreach (var token in tokens)",
     "foreach (var rule in rules)",
+    "while (enumerator.MoveNext())",
 ):
-    if forbidden in source:
-        fail("caller-controlled Current may be read before the ceiling guard: " + forbidden)
+    if forbidden in token_block or forbidden in rule_block:
+        fail("caller-controlled Current ordering may bypass a pre-Current guard: " + forbidden)
 
 for token in (
     "TokenLimitRejectsBeforeReadingOverrunCurrent",
@@ -75,8 +80,10 @@ for token in (
     "MepRecognitionLimits.MaxRules, source.CurrentReads",
     "MEP token limit must reject element 101 before reading caller Current.",
     "MEP rule limit must reject element 501 before reading caller Current.",
+    "TokenKnownCountOverrunRejectsBeforeCurrent",
+    "RuleKnownCountOverrunRejectsBeforeCurrent",
 ):
     if token not in smoke:
         fail("deterministic smoke evidence missing: " + token)
 
-print("PASS MEP recognition rule/token limit Current integrity")
+print("PASS MEP recognition rule/token Current integrity")
