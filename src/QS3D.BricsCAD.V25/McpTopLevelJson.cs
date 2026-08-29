@@ -12,6 +12,8 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     internal static class McpTopLevelJson
     {
+        private const int MaxJsonDepth = 64;
+
         internal static bool TryFindPropertyValue(
             string json,
             string property,
@@ -437,6 +439,11 @@ namespace QS3D.BricsCAD.V25
             return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
         }
 
+        private static bool IsJsonValueDelimiter(char ch)
+        {
+            return IsJsonWhitespace(ch) || ch == ',' || ch == '}' || ch == ']';
+        }
+
         private static void SkipWhitespace(string source, ref int index)
         {
             while (index < source.Length && IsJsonWhitespace(source[index])) index++;
@@ -516,10 +523,20 @@ namespace QS3D.BricsCAD.V25
 
         private static bool TrySkipValue(string source, ref int index, out string error)
         {
+            return TrySkipJsonValue(source, ref index, 0, out error);
+        }
+
+        private static bool TrySkipJsonValue(string source, ref int index, int depth, out string error)
+        {
             error = string.Empty;
             if (index >= source.Length)
             {
                 error = "JSON property value is missing.";
+                return false;
+            }
+            if (depth > MaxJsonDepth)
+            {
+                error = "JSON nesting exceeds the supported depth.";
                 return false;
             }
 
@@ -528,49 +545,135 @@ namespace QS3D.BricsCAD.V25
                 string ignored;
                 return TryReadString(source, ref index, out ignored, out error);
             }
+            if (source[index] == '{') return TrySkipJsonObject(source, ref index, depth + 1, out error);
+            if (source[index] == '[') return TrySkipJsonArray(source, ref index, depth + 1, out error);
+            return TrySkipJsonPrimitive(source, ref index, out error);
+        }
 
-            if (source[index] == '{' || source[index] == '[')
+        private static bool TrySkipJsonObject(string source, ref int index, int depth, out string error)
+        {
+            error = string.Empty;
+            if (depth > MaxJsonDepth)
             {
-                var closers = new Stack<char>();
-                closers.Push(source[index] == '{' ? '}' : ']');
+                error = "JSON nesting exceeds the supported depth.";
+                return false;
+            }
+            index++;
+            SkipWhitespace(source, ref index);
+            if (index >= source.Length)
+            {
+                error = "JSON object ended unexpectedly.";
+                return false;
+            }
+            if (source[index] == '}')
+            {
                 index++;
-                while (index < source.Length && closers.Count > 0)
-                {
-                    var ch = source[index];
-                    if (ch == '"')
-                    {
-                        string ignored;
-                        if (!TryReadString(source, ref index, out ignored, out error)) return false;
-                        continue;
-                    }
-                    if (ch == '{') { closers.Push('}'); index++; continue; }
-                    if (ch == '[') { closers.Push(']'); index++; continue; }
-                    if (ch == '}' || ch == ']')
-                    {
-                        if (closers.Peek() != ch)
-                        {
-                            error = "JSON nested value has mismatched delimiters.";
-                            return false;
-                        }
-                        closers.Pop();
-                        index++;
-                        continue;
-                    }
-                    index++;
-                }
-                if (closers.Count != 0)
-                {
-                    error = "JSON nested value is unterminated.";
-                    return false;
-                }
                 return true;
             }
 
-            var start = index;
-            while (index < source.Length && source[index] != ',' && source[index] != '}') index++;
-            if (TrimJsonWhitespace(source.Substring(start, index - start)).Length == 0)
+            while (true)
             {
-                error = "JSON property value is missing.";
+                if (index >= source.Length || source[index] != '"')
+                {
+                    error = "JSON object property name must be a string.";
+                    return false;
+                }
+                string ignoredName;
+                if (!TryReadString(source, ref index, out ignoredName, out error)) return false;
+                SkipWhitespace(source, ref index);
+                if (index >= source.Length || source[index] != ':')
+                {
+                    error = "JSON object property is missing ':'.";
+                    return false;
+                }
+                index++;
+                SkipWhitespace(source, ref index);
+                if (!TrySkipJsonValue(source, ref index, depth, out error)) return false;
+                SkipWhitespace(source, ref index);
+                if (index >= source.Length)
+                {
+                    error = "JSON object ended unexpectedly.";
+                    return false;
+                }
+                if (source[index] == '}')
+                {
+                    index++;
+                    return true;
+                }
+                if (source[index] != ',')
+                {
+                    error = "JSON object requires ',' or '}' after a property value.";
+                    return false;
+                }
+                index++;
+                SkipWhitespace(source, ref index);
+                if (index >= source.Length || source[index] == '}')
+                {
+                    error = "JSON object cannot end with a trailing comma.";
+                    return false;
+                }
+            }
+        }
+
+        private static bool TrySkipJsonArray(string source, ref int index, int depth, out string error)
+        {
+            error = string.Empty;
+            if (depth > MaxJsonDepth)
+            {
+                error = "JSON nesting exceeds the supported depth.";
+                return false;
+            }
+            index++;
+            SkipWhitespace(source, ref index);
+            if (index >= source.Length)
+            {
+                error = "JSON array ended unexpectedly.";
+                return false;
+            }
+            if (source[index] == ']')
+            {
+                index++;
+                return true;
+            }
+
+            while (true)
+            {
+                if (!TrySkipJsonValue(source, ref index, depth, out error)) return false;
+                SkipWhitespace(source, ref index);
+                if (index >= source.Length)
+                {
+                    error = "JSON array ended unexpectedly.";
+                    return false;
+                }
+                if (source[index] == ']')
+                {
+                    index++;
+                    return true;
+                }
+                if (source[index] != ',')
+                {
+                    error = "JSON array requires ',' or ']' after a value.";
+                    return false;
+                }
+                index++;
+                SkipWhitespace(source, ref index);
+                if (index >= source.Length || source[index] == ']')
+                {
+                    error = "JSON array cannot end with a trailing comma.";
+                    return false;
+                }
+            }
+        }
+
+        private static bool TrySkipJsonPrimitive(string source, ref int index, out string error)
+        {
+            error = string.Empty;
+            var start = index;
+            while (index < source.Length && !IsJsonValueDelimiter(source[index])) index++;
+            var token = source.Substring(start, index - start);
+            if (!IsJsonPrimitiveToken(token))
+            {
+                error = "JSON primitive value is invalid.";
                 return false;
             }
             return true;
