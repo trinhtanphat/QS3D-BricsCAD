@@ -47,11 +47,15 @@ The active `McpEmbeddedServerV2` service listens only on `127.0.0.1:8765` and ex
 
 The service supports MCP protocol `2025-06-18` with compatibility for `2025-03-26`: `initialize` returns `Mcp-Session-Id`, then the client sends `notifications/initialized` and uses `ping`, `tools/list`, and `tools/call`. Live sessions, concurrent clients, HTTP headers and bodies are bounded. Duplicate security-sensitive headers and `Transfer-Encoding` are rejected; MCP POST requires `application/json` plus bearer authentication.
 
+`Origin` is treated as a security-sensitive singleton and validated before every route to prevent loopback DNS-rebinding attacks. Requests that omit `Origin` remain valid for non-browser MCP/tunnel clients. When an `Origin` header is present, it must be a clean absolute HTTP/HTTPS loopback origin; malformed, opaque/`null`, user-info/query/fragment/path-bearing, or non-loopback origins are rejected with HTTP `403`.
+
+For an initialized session, an explicitly supplied `MCP-Protocol-Version` must exactly match the negotiated version stored in that session. Empty/mismatched versions are HTTP `400`. DELETE performs the same version check atomically with session lookup/removal; rejecting a bad-version DELETE must leave the session alive, while an unknown/expired/already-terminated session is HTTP `404`.
+
 Mutation authorization is top-level only: nested `confirmMutation=true` does not authorize a mutation, and duplicate top-level `confirmMutation` is rejected fail-closed by the top-level JSON parser. The exact media-type gate rejects lookalikes such as `application/jsonevil`; `application/json` with optional parameters remains accepted.
 
 Generated bearer tokens contain 32 random bytes encoded as 64 hexadecimal characters. An explicit `QS3D_MCP_BEARER_TOKEN` override must be at least 32 characters. Tool successes expose both ordinary MCP text content and `structuredContent.data`, so ChatGPT can consume object/array results without reparsing human prose.
 
-The local protocol probe exercises real lifecycle calls, not only HTTP reachability. `scripts/test-mcp-loopback-readonly.py` additionally verifies bearer rejection, session creation/deletion, the required tool set, and bounded observation calls while keeping output sanitized.
+The local protocol probe exercises real lifecycle calls, not only HTTP reachability. `scripts/test-mcp-loopback-readonly.py` additionally verifies hostile/opaque Origin rejection with loopback-Origin acceptance, bearer rejection, negotiated protocol-version mismatch rejection without accidental session termination, session creation/deletion, terminated-session HTTP `404`, the required tool set, and bounded observation calls while keeping output sanitized.
 
 ## Agent tool model
 
@@ -115,7 +119,7 @@ A successful tool response is not proof the drawing is correct. Re-read entity/d
 
 ## Security boundary
 
-The listener binds to loopback only and public access comes through the configured tunnel. `/mcp` requires constant-time bearer comparison. The service bounds HTTP input, concurrent clients, sessions, snapshots, command prompt input, and audit storage; it has mutation confirmation, process-confined UI input, a CAD command allowlist, emergency stop, and local audit evidence.
+The listener binds to loopback only and public access comes through the configured tunnel. `/mcp` requires constant-time bearer comparison. Present `Origin` headers are restricted to clean loopback HTTP/HTTPS origins before routing. The service bounds HTTP input, concurrent clients, sessions, snapshots, command prompt input, and audit storage; it has mutation confirmation, process-confined UI input, a CAD command allowlist, emergency stop, and local audit evidence.
 
 Remote MCP does not expose PowerShell, `cmd.exe`, arbitrary shell execution, arbitrary process launch, tunnel setup, cloudflared installation, or desktop-wide input/capture. Cloudflare username/password are entered only in Cloudflare's browser flow. QS3D stores provider-issued tunnel material, its MCP bearer token, and non-secret local configuration needed for reconnect.
 
@@ -123,6 +127,6 @@ Remote MCP does not expose PowerShell, `cmd.exe`, arbitrary shell execution, arb
 
 Hosted source/CI can prove guards/builds but cannot prove licensed BricsCAD desktop behavior or a real ChatGPT-to-Cloudflare-to-BricsCAD session. Final runtime status remains `PENDING_LOCAL` until one exact candidate SHA passes the full matrix.
 
-The local agent must use a clean exact SHA and disposable drawings, then prove V25 and V26 plugin load; active modular V2 server composition; Agent Center routing; verified GUI cloudflared install/update; `scripts/test-mcp-loopback-readonly.py`; browser login/Named Tunnel/DNS/autoreconnect; stale-tunnel and DNS-conflict fail-closed behavior; Quick Tunnel discovery; public endpoint/token copy consistency; ChatGPT Web tool discovery and structured results; read/entity/view/sysvar inspection; direct line/circle/arc/polyline/DBText/MText create/edit/delete/layer operations; bounded hatch/dimension/block/xref/layout/viewport/save/plot workflows; BricsCAD-process-only mouse/typing/keys and foreground-loss rejection; atomic timeout/no-auto-retry behavior; emergency stop/cancel/resume; tunnel-mode mutual exclusion; save/reopen round trip; and zero task-owned process residue.
+The local agent must use a clean exact SHA and disposable drawings, then prove V25 and V26 plugin load; active modular V2 server composition; Agent Center routing; verified GUI cloudflared install/update; `scripts/test-mcp-loopback-readonly.py` including Origin 403/loopback admission, negotiated protocol-version mismatch 400, rejected-DELETE session preservation and stale-session 404; browser login/Named Tunnel/DNS/autoreconnect; stale-tunnel and DNS-conflict fail-closed behavior; Quick Tunnel discovery; public endpoint/token copy consistency; ChatGPT Web tool discovery and structured results; read/entity/view/sysvar inspection; direct line/circle/arc/polyline/DBText/MText create/edit/delete/layer operations; bounded hatch/dimension/block/xref/layout/viewport/save/plot workflows; BricsCAD-process-only mouse/typing/keys and foreground-loss rejection; atomic timeout/no-auto-retry behavior; emergency stop/cancel/resume; tunnel-mode mutual exclusion; save/reopen round trip; and zero task-owned process residue.
 
 Committed evidence must never contain bearer tokens, Cloudflare credentials, private paths, customer/private DWGs, proprietary BricsCAD binaries, or unsanitized screenshots. Record exact tested SHA and sanitized outcomes in the single matching item in `docs/LOCAL-AGENT-INBOX.md`. Until that matrix passes, report `PENDING_LOCAL`, never `LOCAL_PASS`.
