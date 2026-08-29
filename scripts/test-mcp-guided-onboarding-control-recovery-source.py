@@ -93,6 +93,16 @@ require(recovery, "MaxSnapshotsPerProject", "bounded recovery retention")
 require(recovery, "RecoverLatestToCopy", "non-destructive restore-to-copy")
 require(recovery, "FileShare.ReadWrite | FileShare.Delete", "live DWG read sharing")
 
+# Public MCP transport must distinguish endpoint readiness from real OAuth client traffic.
+embedded = text(V25 / "McpEmbeddedServerV2.cs")
+require(embedded, "IsAllowedOrigin(request.Headers, publicMcpUrl)", "public-resource-aware MCP Origin validation")
+require(embedded, "IsSameOriginAsPublicMcp", "exact validated public MCP Origin allowlist")
+require(embedded, "LastOAuthMcpActivityUtc", "privacy-safe OAuth MCP activity timestamp")
+require(embedded, "LastOAuthMcpMethod", "privacy-safe OAuth MCP activity method")
+require(embedded, "LastOAuthMcpPublicUrl", "OAuth MCP activity resource binding")
+require(embedded, "RecordOAuthMcpActivity", "OAuth MCP activity recorder")
+require(embedded, "out bool oauthAccessToken", "legacy-bearer versus OAuth authorization distinction")
+
 experience = text(V25 / "McpAgentExperience.cs")
 require(experience, "MaxEvents", "bounded local event timeline")
 require(experience, "DetermineOnboarding", "onboarding state machine")
@@ -116,6 +126,10 @@ require(ui, "Resume desktop", "local resume control")
 require(ui, "Idle còn", "desktop idle countdown copy")
 require(ui, "Action ID", "desktop action-id display")
 require(ui, "Kiểm tra drawing/backup", "post-stop recovery guidance")
+require(ui, '"Transport sẵn sàng"', "transport readiness status distinct from ChatGPT connectivity")
+require(ui, '"ChatGPT đăng ký"', "ChatGPT registration acknowledgement status")
+require(ui, '"OAuth MCP traffic"', "observed OAuth MCP traffic status")
+require(ui, "HasRecentOAuthMcpActivity", "live OAuth MCP traffic calculation")
 forbid(ui, "MessageBox.Show", "blocking Agent Center MessageBox")
 
 first_run = text(V25 / "McpFirstRunExperience.cs")
@@ -130,4 +144,4 @@ v26_entry = text(V26 / "PluginEntry.cs")
 for needle in ("McpEmbeddedServer.Start", "McpCloudflareAccountTunnelManager.TryAutoStart", "McpProjectRecoveryService.Start", "McpFirstRunExperience.Start"):
     require(v26_entry, needle, "V26 MCP lifecycle parity")
 
-print("PASS MCP guided onboarding + desktop Completion Packs A/B + recovery source contract")
+print("PASS MCP guided onboarding + desktop Completion Packs A/B + recovery + connectivity source contract")

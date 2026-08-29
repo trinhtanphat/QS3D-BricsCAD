@@ -207,6 +207,8 @@ namespace QS3D.Core.Navigation
             var count = 0;
             foreach (var raw in expandedPaths)
             {
+                if (knownCount.HasValue && count >= knownCount.Value)
+                    throw new InvalidOperationException("Project browser expanded node path Count does not match traversal count.");
                 count++;
                 if (count > MaxExpandedPaths)
                     throw new InvalidOperationException("Project browser supports at most " + MaxExpandedPaths + " expanded node paths.");
