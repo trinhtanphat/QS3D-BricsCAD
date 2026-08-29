@@ -135,6 +135,7 @@ namespace QS3D.Core.Reporting
         {
             private double _sum;
             private double _compensation;
+            private bool _sawSwallowedContribution;
 
             public void Add(double value, string label)
             {
@@ -145,6 +146,9 @@ namespace QS3D.Core.Reporting
                 var result = _sum + incoming;
                 if (double.IsNaN(result) || double.IsInfinity(result))
                     throw new OverflowException("Material usage aggregate overflow: " + label + ".");
+
+                if ((incoming != 0d && result == _sum) || (_sum != 0d && result == incoming))
+                    _sawSwallowedContribution = true;
 
                 var correction = Math.Abs(_sum) >= Math.Abs(incoming)
                     ? (_sum - result) + incoming
@@ -164,8 +168,8 @@ namespace QS3D.Core.Reporting
                 var result = _sum + _compensation;
                 if (double.IsNaN(result) || double.IsInfinity(result))
                     throw new OverflowException("Material usage aggregate overflow: " + label + ".");
-                if (_compensation != 0d && result == _sum && !IsStrictlyBelowHalfUlp(_sum, _compensation))
-                    throw new OverflowException("Material usage aggregate lost a non-zero compensation at floating-point precision: " + label + ".");
+                if (_sawSwallowedContribution && _compensation != 0d && result == _sum && !IsStrictlyBelowHalfUlp(_sum, _compensation))
+                    throw new OverflowException("Material usage aggregate lost a non-zero swallowed contribution at floating-point precision: " + label + ".");
                 if (_sum != 0d && result == _compensation)
                     throw new OverflowException("Material usage aggregate lost a non-zero accumulated value at floating-point precision: " + label + ".");
                 return result == 0d ? 0d : result;
