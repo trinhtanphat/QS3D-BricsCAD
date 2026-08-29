@@ -75,9 +75,11 @@ Database mutation is marshalled through `Application.DocumentManager.ExecuteInAp
 
 Remote document identity is intentionally privacy-safe: active-document/status tools return a basename and booleans rather than the full local filesystem path or database handseed. `DWGNAME` is reduced to its filename before leaving the runtime.
 
-### CAD dispatch timeout truth
+### CAD dispatch timeout and stop-epoch truth
 
 `McpCadAgentRuntime` uses an atomic three-state dispatch transition: `Queued → Running` or `Queued → CancelledBeforeStart`. The application-context callback must atomically claim `Running` before executing work; a timeout can cancel only work that has not started. If the timeout observes that work already entered `Running`, the caller receives an explicit **completion is uncertain / do not retry automatically** error. This closes the previous check-then-act ambiguity without pretending a running BricsCAD mutation can be rolled back by a network timeout.
+
+Each confirmed mutation is also bound to the current automation epoch. Emergency Stop, server stop/restart and Resume advance/invalidate that epoch. Mutation-aware CAD dispatch re-checks the captured epoch inside the application-context callback before executing the mutation. A mutation queued before Stop therefore stays stale even if the operator subsequently resumes automation; it must be resubmitted and reconfirmed as new work.
 
 A client receiving the uncertain-completion result must inspect entity/database/audit state before deciding the next action. This is intentional exactly-once safety behavior, not a transport retry signal.
 
@@ -85,17 +87,19 @@ A client receiving the uncertain-completion result must inspect entity/database/
 
 `cad_command_sequence` accepts one command from an explicit BricsCAD allowlist plus bounded newline-delimited prompt input. Coverage includes drawing/editing, hatch, dimensions, blocks/inserts, xrefs, layout/viewports, plot, open/save/save-as, undo/redo, cleanup, and selected 3D/native workflows.
 
-It rejects forbidden control characters, excessive total/line size, continued input after a blank command terminator, and known CAD/QS3D command names injected as later prompt lines. It is not a shell, PowerShell surface, command prompt, or arbitrary process launcher. Direct API tools remain preferred when they can express the requested operation deterministically.
+It rejects forbidden control characters, excessive total/line size, continued input after a blank command terminator, and known CAD/QS3D command names injected as later prompt lines. Before command recognition it repeatedly canonicalizes leading AutoCAD global/English prefixes (`.` and `_`), so mixed spellings such as `._LINE`, `_._LINE`, or equivalent repeated prefixes remain command-like and are rejected as injected prompt input. It is not a shell, PowerShell surface, command prompt, or arbitrary process launcher. Direct API tools remain preferred when they can express the requested operation deterministically.
 
 ## BricsCAD-only UI fallback
 
 UI automation uses Windows `SendInput`. Before click/type/key injection, QS3D verifies that the target HWND belongs to the current BricsCAD process. Click coordinates are client-relative and checked against the verified target window before `ClientToScreen`; input aborts if foreground ownership changes during the sequence. Printable Unicode typing is bounded and `Alt+F4` is blocked.
 
+UI input is mutation-epoch-aware. Click/key injection re-checks the active mutation close to injection, and long Unicode typing re-checks before every character. Emergency Stop therefore prevents stale UI work from continuing merely because the UI tool had already passed its initial confirmation gate.
+
 These tools are for BricsCAD dialogs, palettes, and ribbon actions when no stable API/command route exists. They are not desktop/browser-wide remote-control tools. The production MCP deliberately does not expose remote desktop capture; geometry/UI outcomes should be verified through database/entity/view state. Any future image tool requires a separately reviewed BricsCAD-window-only privacy boundary.
 
 ## Emergency stop and audit
 
-`cad_agent_stop` immediately latches autonomous mutation/UI tools off and attempts ESC twice through CAD application context. If that path is unavailable or times out, the fallback sends ESC only after foreground/process ownership is verified as current BricsCAD. `cad_cancel_command` uses the same two-path cancellation model without changing the persistent stopped flag. `cad_agent_resume` requires `confirmMutation=true`.
+`cad_agent_stop` immediately invalidates the current mutation epoch, latches autonomous mutation/UI tools off and attempts ESC twice through CAD application context. If that path is unavailable or times out, the fallback sends ESC only after foreground/process ownership is verified as current BricsCAD. `cad_cancel_command` uses the same two-path cancellation model without changing the persistent stopped flag. `cad_agent_resume` requires `confirmMutation=true` and advances the epoch before admitting new mutation work.
 
 Mutations are recorded to `%APPDATA%\QS3D\mcp-agent-audit.jsonl`. Audit storage is bounded/rotated and details are sanitized; typed text itself is not persisted in audit detail.
 
@@ -127,6 +131,6 @@ Remote MCP does not expose PowerShell, `cmd.exe`, arbitrary shell execution, arb
 
 Hosted source/CI can prove guards/builds but cannot prove licensed BricsCAD desktop behavior or a real ChatGPT-to-Cloudflare-to-BricsCAD session. Final runtime status remains `PENDING_LOCAL` until one exact candidate SHA passes the full matrix.
 
-The local agent must use a clean exact SHA and disposable drawings, then prove V25 and V26 plugin load; active modular V2 server composition; Agent Center routing; verified GUI cloudflared install/update; `scripts/test-mcp-loopback-readonly.py` including Origin 403/loopback admission, negotiated protocol-version mismatch 400, rejected-DELETE session preservation and stale-session 404; browser login/Named Tunnel/DNS/autoreconnect; stale-tunnel and DNS-conflict fail-closed behavior; Quick Tunnel discovery; public endpoint/token copy consistency; ChatGPT Web tool discovery and structured results; read/entity/view/sysvar inspection; direct line/circle/arc/polyline/DBText/MText create/edit/delete/layer operations; bounded hatch/dimension/block/xref/layout/viewport/save/plot workflows; BricsCAD-process-only mouse/typing/keys and foreground-loss rejection; atomic timeout/no-auto-retry behavior; emergency stop/cancel/resume; tunnel-mode mutual exclusion; save/reopen round trip; and zero task-owned process residue.
+The local agent must use a clean exact SHA and disposable drawings, then prove V25 and V26 plugin load; active modular V2 server composition; Agent Center routing; verified GUI cloudflared install/update; `scripts/test-mcp-loopback-readonly.py` including Origin 403/loopback admission, negotiated protocol-version mismatch 400, rejected-DELETE session preservation and stale-session 404; browser login/Named Tunnel/DNS/autoreconnect; stale-tunnel and DNS-conflict fail-closed behavior; Quick Tunnel discovery and stale-URL clearing; public endpoint/token copy consistency; ChatGPT Web tool discovery and structured results; read/entity/view/sysvar inspection; direct line/circle/arc/polyline/DBText/MText create/edit/delete/layer operations; bounded hatch/dimension/block/xref/layout/viewport/save/plot workflows; mixed-prefix `cad_command_sequence` injection negatives such as `._LINE` / `_._LINE`; BricsCAD-process-only mouse/typing/keys and foreground-loss rejection; a busy-CAD queued-mutation Stop→Resume regression proving the stale pre-stop mutation never executes; a long UI input Stop regression proving further injection ceases; atomic timeout/no-auto-retry behavior; emergency stop/cancel/resume for newly submitted work; tunnel-mode mutual exclusion; save/reopen round trip; and zero task-owned process residue.
 
 Committed evidence must never contain bearer tokens, Cloudflare credentials, private paths, customer/private DWGs, proprietary BricsCAD binaries, or unsanitized screenshots. Record exact tested SHA and sanitized outcomes in the single matching item in `docs/LOCAL-AGENT-INBOX.md`. Until that matrix passes, report `PENDING_LOCAL`, never `LOCAL_PASS`.
