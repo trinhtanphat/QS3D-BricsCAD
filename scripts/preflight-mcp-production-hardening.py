@@ -84,6 +84,7 @@ def main() -> int:
         "compiled transport runtime delegation": (server, "McpCadAgentRuntime.Call(tool, arguments)"),
         "top-level JSON trailing-comma rejection": (top_level_json, "JSON object cannot end with a trailing comma."),
         "MCP arguments trailing-comma rejection": (top_level_json, "MCP arguments object cannot end with a trailing comma."),
+        "strict RFC JSON whitespace helper": (top_level_json, "IsJsonWhitespace(source[index])"),
         "runtime foreground ESC fallback": (runtime, "TrySendEscapeFallback()"),
         "runtime emergency-stop latch": (runtime, "_automationStopped = true"),
         "runtime queued dispatch state": (runtime, "CadWorkQueued = 0"),
@@ -114,6 +115,8 @@ def main() -> int:
 
     if 'contentType.StartsWith("application/json"' in server:
         errors.append("compiled MCP transport accepts application/json lookalike media types via prefix matching")
+    if "char.IsWhiteSpace(source[index])" in top_level_json:
+        errors.append("MCP JSON parser accepts non-RFC Unicode whitespace via char.IsWhiteSpace")
     if 'IndexOf("already exists"' in account:
         errors.append("Cloudflare DNS conflict must not be silently accepted via 'already exists'")
     if '"Bearer token: " + McpEmbeddedServer.GetBearerToken()' in connector:
@@ -134,10 +137,10 @@ def main() -> int:
 
     print(
         "PASS: compiled modular MCP transport/runtime use exact JSON media-type admission and "
-        "strict top-level JSON object framing, bounded authenticated session handling, atomic CAD "
-        "timeout truth, BricsCAD-confined recovery, one validated HTTPS endpoint resolver, live-only "
-        "Cloudflare provider URLs, exact tunnel identity, canonical named-tunnel config regeneration "
-        "and verified click-first redacted onboarding."
+        "strict RFC JSON object framing/whitespace, bounded authenticated session handling, atomic "
+        "CAD timeout truth, BricsCAD-confined recovery, one validated HTTPS endpoint resolver, "
+        "live-only Cloudflare provider URLs, exact tunnel identity, canonical named-tunnel config "
+        "regeneration and verified click-first redacted onboarding."
     )
     return 0
 
