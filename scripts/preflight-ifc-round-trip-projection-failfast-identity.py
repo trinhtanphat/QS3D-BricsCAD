@@ -20,6 +20,8 @@ else:
         "var ifcGlobalIds = new HashSet<string>(StringComparer.Ordinal);",
         "var qs3dElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);",
         "while (enumerator.MoveNext())",
+        "IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(",
+        "if (items.Count == MaxProjections)",
         "var projection = enumerator.Current;",
         'if (projection == null) throw new ArgumentException("Projection collection cannot contain null entries.", nameof(projections));',
         "if (!ifcGlobalIds.Add(projection.IfcGlobalId))",
@@ -28,9 +30,9 @@ else:
     )
     positions = [window.find(token) for token in required_order]
     if any(position < 0 for position in positions):
-        failures.append("projection-set traversal is missing fail-fast null/identity tokens: " + str(positions))
+        failures.append("projection-set traversal is missing admission/fail-fast identity tokens: " + str(positions))
     elif positions != sorted(positions):
-        failures.append("projection-set traversal does not validate semantic identity before snapshot append: " + str(positions))
+        failures.append("projection-set traversal must enforce MoveNext -> Count/capacity admission -> Current -> semantic identity -> append: " + str(positions))
 
     if "for (var index = 0; index < items.Count; index++)" in window:
         failures.append("projection-set semantic validation regressed to post-traversal scan")
