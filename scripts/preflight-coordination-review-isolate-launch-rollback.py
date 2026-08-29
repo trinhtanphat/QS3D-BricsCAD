@@ -18,7 +18,8 @@ body = match.group("body")
 
 required = [
     "RequireTargets(ids);",
-    "if (_isolationActive) RestoreIsolation();",
+    "if (HasIsolation)",
+    "RestoreIsolation();",
     "Application.GetSystemVariable(\"OBJECTISOLATIONMODE\")",
     "Application.SetSystemVariable(\"OBJECTISOLATIONMODE\", 0);",
     "_document.Editor.SetImpliedSelection(ids.ToArray());",
@@ -27,6 +28,15 @@ required = [
 for token in required:
     if token not in body:
         raise SystemExit(f"FAIL coordination isolate launch rollback: missing established behavior: {token}")
+
+# Isolation cleanup ownership includes both command ownership and a pending
+# OBJECTISOLATIONMODE compensation. Drain it before capturing attempt-local
+# launch state so stale restore ownership cannot be overwritten by a new launch.
+ownership_gate = body.find("if (HasIsolation)")
+restore = body.find("RestoreIsolation();", ownership_gate)
+mode_capture = body.find('Application.GetSystemVariable("OBJECTISOLATIONMODE")')
+if not (0 <= ownership_gate < restore < mode_capture):
+    raise SystemExit("FAIL coordination isolate launch rollback: prior isolation ownership must be drained before launch state capture")
 
 if "try" not in body or "catch" not in body:
     raise SystemExit("FAIL coordination isolate launch rollback: launch mutation is not protected by a synchronous rollback boundary")

@@ -23,40 +23,45 @@ namespace QS3D.Core.Services
         public void Rebuild(IEnumerable<ProjectElement> elements)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
-            var knownCount = RejectKnownOversizedInput(elements, "Dependency graph rebuild");
+            var knownCount = RejectKnownOversizedInput(elements, "Dependency graph rebuild", out var knownCountSources);
 
             var next = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
             var nextElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var processedDependencies = new List<KeyValuePair<ProjectElement, HashSet<string>>>();
             var enumerationVersion = _rebuildVersion;
             var elementCount = 0;
-            foreach (var element in elements)
+            using (var enumerator = elements.GetEnumerator())
             {
-                RequireTraversalCapacity(knownCount, elementCount, "Dependency graph rebuild");
-                elementCount++;
-                if (elementCount > MaxElementInputCount)
-                    throw new InvalidOperationException("Dependency graph rebuild exceeds the supported " + MaxElementInputCount + " element limit.");
-                if (element == null) throw new InvalidOperationException("Dependency graph cannot contain a null semantic element.");
-                if (nextElements.ContainsKey(element.Id))
-                    throw new InvalidOperationException("Dependency graph contains duplicate semantic element id: " + element.Id);
-                nextElements.Add(element.Id, element);
-
-                ValidateDependencies(element);
-                var dependencySnapshot = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var source in element.DependsOn)
+                while (enumerator.MoveNext())
                 {
-                    dependencySnapshot.Add(source);
-                    if (!next.TryGetValue(source, out var set))
+                    RequireTraversalCapacity(knownCount, elementCount, "Dependency graph rebuild");
+                    if (elementCount >= MaxElementInputCount)
+                        throw new InvalidOperationException("Dependency graph rebuild exceeds the supported " + MaxElementInputCount + " element limit.");
+                    var element = enumerator.Current;
+                    elementCount++;
+                    if (element == null) throw new InvalidOperationException("Dependency graph cannot contain a null semantic element.");
+                    if (nextElements.ContainsKey(element.Id))
+                        throw new InvalidOperationException("Dependency graph contains duplicate semantic element id: " + element.Id);
+                    nextElements.Add(element.Id, element);
+
+                    ValidateDependencies(element);
+                    var dependencySnapshot = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var source in element.DependsOn)
                     {
-                        set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        next[source] = set;
+                        dependencySnapshot.Add(source);
+                        if (!next.TryGetValue(source, out var set))
+                        {
+                            set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            next[source] = set;
+                        }
+                        set.Add(element.Id);
                     }
-                    set.Add(element.Id);
+                    processedDependencies.Add(new KeyValuePair<ProjectElement, HashSet<string>>(element, dependencySnapshot));
                 }
-                processedDependencies.Add(new KeyValuePair<ProjectElement, HashSet<string>>(element, dependencySnapshot));
             }
 
             RequireObservedCount(knownCount, elementCount, "Dependency graph rebuild");
+            RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency graph rebuild");
 
             foreach (var processed in processedDependencies)
             {
@@ -134,18 +139,23 @@ namespace QS3D.Core.Services
         public IReadOnlyList<ProjectElement> TopologicalDirtyOrder(IEnumerable<ProjectElement> elements)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
-            var knownCount = RejectKnownOversizedInput(elements, "Dependency ordering");
+            var knownCount = RejectKnownOversizedInput(elements, "Dependency ordering", out var knownCountSources);
             var materialized = new List<ProjectElement>();
-            foreach (var element in elements)
+            using (var enumerator = elements.GetEnumerator())
             {
-                RequireTraversalCapacity(knownCount, materialized.Count, "Dependency ordering");
-                if (materialized.Count >= MaxElementInputCount)
-                    throw new InvalidOperationException("Dependency ordering exceeds the supported " + MaxElementInputCount + " element limit.");
-                if (element == null) throw new InvalidOperationException("Dependency ordering cannot contain a null semantic element.");
-                materialized.Add(element);
+                while (enumerator.MoveNext())
+                {
+                    RequireTraversalCapacity(knownCount, materialized.Count, "Dependency ordering");
+                    if (materialized.Count >= MaxElementInputCount)
+                        throw new InvalidOperationException("Dependency ordering exceeds the supported " + MaxElementInputCount + " element limit.");
+                    var element = enumerator.Current;
+                    if (element == null) throw new InvalidOperationException("Dependency ordering cannot contain a null semantic element.");
+                    materialized.Add(element);
+                }
             }
 
             RequireObservedCount(knownCount, materialized.Count, "Dependency ordering");
+            RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency ordering");
 
             foreach (var element in materialized)
                 ValidateDependencies(element);
@@ -195,7 +205,7 @@ namespace QS3D.Core.Services
             return result.AsReadOnly();
         }
 
-        private static int? RejectKnownOversizedInput(IEnumerable<ProjectElement> elements, string operation)
+        private static int? RejectKnownOversizedInput(IEnumerable<ProjectElement> elements, string operation, out int knownCountSources)
         {
             var genericCount = elements is ICollection<ProjectElement> collection ? (int?)collection.Count : null;
             var readOnlyCount = elements is IReadOnlyCollection<ProjectElement> readOnlyCollection ? (int?)readOnlyCollection.Count : null;
@@ -205,6 +215,12 @@ namespace QS3D.Core.Services
             ValidateKnownCount(readOnlyCount, operation);
             ValidateKnownCount(nonGenericCount, operation);
 
+            var sources = 0;
+            if (genericCount.HasValue) sources |= 1;
+            if (readOnlyCount.HasValue) sources |= 2;
+            if (nonGenericCount.HasValue) sources |= 4;
+            knownCountSources = sources;
+
             var expected = genericCount ?? readOnlyCount ?? nonGenericCount;
             if (!expected.HasValue) return null;
             if ((genericCount.HasValue && genericCount.Value != expected.Value) ||
@@ -212,6 +228,17 @@ namespace QS3D.Core.Services
                 (nonGenericCount.HasValue && nonGenericCount.Value != expected.Value))
                 throw new InvalidOperationException(operation + " reports conflicting known element counts.");
             return expected;
+        }
+
+        private static void RequireStableKnownCount(
+            IEnumerable<ProjectElement> elements,
+            int? initialKnownCount,
+            int initialKnownCountSources,
+            string operation)
+        {
+            var currentKnownCount = RejectKnownOversizedInput(elements, operation, out var currentKnownCountSources);
+            if (currentKnownCount != initialKnownCount || currentKnownCountSources != initialKnownCountSources)
+                throw TraversalCountError(operation);
         }
 
         private static void RequireTraversalCapacity(int? knownCount, int observedCount, string operation)
