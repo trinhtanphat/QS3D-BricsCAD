@@ -41,6 +41,9 @@ namespace QS3D.BricsCAD.V25
         private static string _bearerToken = string.Empty;
         private static string _tokenSource = string.Empty;
         private static string _lastError = string.Empty;
+        private static DateTime _lastOAuthMcpActivityUtc = DateTime.MinValue;
+        private static string _lastOAuthMcpMethod = string.Empty;
+        private static string _lastOAuthMcpPublicUrl = string.Empty;
 
         public static Uri Endpoint { get { return new Uri("http://127.0.0.1:" + Port.ToString(CultureInfo.InvariantCulture) + "/mcp"); } }
         public static Uri HealthEndpoint { get { return new Uri("http://127.0.0.1:" + Port.ToString(CultureInfo.InvariantCulture) + "/healthz"); } }
@@ -50,6 +53,9 @@ namespace QS3D.BricsCAD.V25
         public static string LastError { get { lock (Sync) return _lastError; } }
         public static string TokenSource { get { EnsureBearerToken(); lock (Sync) return _tokenSource; } }
         public static string PublicUrl { get { return McpPublicEndpointResolver.Resolve(); } }
+        public static DateTime LastOAuthMcpActivityUtc { get { lock (Sync) return _lastOAuthMcpActivityUtc; } }
+        public static string LastOAuthMcpMethod { get { lock (Sync) return _lastOAuthMcpMethod; } }
+        public static string LastOAuthMcpPublicUrl { get { lock (Sync) return _lastOAuthMcpPublicUrl; } }
 
         public static void Start()
         {
@@ -59,6 +65,9 @@ namespace QS3D.BricsCAD.V25
                 EnsureBearerToken();
                 _stopping = false;
                 _lastError = string.Empty;
+                _lastOAuthMcpActivityUtc = DateTime.MinValue;
+                _lastOAuthMcpMethod = string.Empty;
+                _lastOAuthMcpPublicUrl = string.Empty;
                 McpCadAgentRuntime.ResetForServerStart();
                 var listener = new TcpListener(IPAddress.Loopback, Port);
                 listener.Server.NoDelay = true;
@@ -297,7 +306,7 @@ namespace QS3D.BricsCAD.V25
             return string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static bool IsAllowedOrigin(IDictionary<string, string> headers)
+        private static bool IsAllowedOrigin(IDictionary<string, string> headers, string publicMcpUrl)
         {
             string origin;
             if (!headers.TryGetValue("Origin", out origin)) return true;
@@ -313,7 +322,18 @@ namespace QS3D.BricsCAD.V25
             if (!string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
                 return false;
-            return uri.IsLoopback;
+            return uri.IsLoopback || IsSameOriginAsPublicMcp(uri, publicMcpUrl);
+        }
+
+        private static bool IsSameOriginAsPublicMcp(Uri origin, string publicMcpUrl)
+        {
+            if (origin == null || string.IsNullOrWhiteSpace(publicMcpUrl)) return false;
+            Uri publicUri;
+            if (!Uri.TryCreate(publicMcpUrl.Trim(), UriKind.Absolute, out publicUri)) return false;
+            if (!string.Equals(publicUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) return false;
+            return string.Equals(origin.Scheme, publicUri.Scheme, StringComparison.OrdinalIgnoreCase)
+                   && string.Equals(origin.DnsSafeHost, publicUri.DnsSafeHost, StringComparison.OrdinalIgnoreCase)
+                   && origin.Port == publicUri.Port;
         }
 
         private static void HandleRequest(NetworkStream stream, HttpRequest request)
@@ -335,7 +355,7 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
-            if (!IsAllowedOrigin(request.Headers))
+            if (!IsAllowedOrigin(request.Headers, publicMcpUrl))
             {
                 WriteResponse(stream, 403, "Forbidden", "{\"error\":\"invalid MCP Origin\"}", null);
                 return;
@@ -361,12 +381,14 @@ namespace QS3D.BricsCAD.V25
                 WriteResponse(stream, 404, "Not Found", "{\"error\":\"not found\"}", null);
                 return;
             }
-            if (!Authorize(request.Headers, publicMcpUrl))
+            bool oauthAccessToken;
+            if (!Authorize(request.Headers, publicMcpUrl, out oauthAccessToken))
             {
                 WriteResponse(stream, 401, "Unauthorized", JsonRpcError("null", -32001, "Bearer authorization required."),
                     new Dictionary<string, string> { ["WWW-Authenticate"] = McpOAuthAuthorizationServer.BuildBearerChallenge(publicMcpUrl) });
                 return;
             }
+            if (oauthAccessToken) RecordOAuthMcpActivity(request.Method, publicMcpUrl);
             if (request.Method == "DELETE")
             {
                 string sessionId;
@@ -681,14 +703,31 @@ namespace QS3D.BricsCAD.V25
             return McpTopLevelJson.TryFindPropertyValue(json, property, out raw, out found, out error);
         }
 
-        private static bool Authorize(IDictionary<string, string> headers, string publicMcpUrl)
+        private static bool Authorize(IDictionary<string, string> headers, string publicMcpUrl, out bool oauthAccessToken)
         {
+            oauthAccessToken = false;
             string authorization;
             if (!headers.TryGetValue("Authorization", out authorization)) return false;
             const string prefix = "Bearer ";
             if (!authorization.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
             if (ConstantTimeEquals(authorization.Substring(prefix.Length).Trim(), GetBearerToken())) return true;
-            return McpOAuthAuthorizationServer.TryValidateAccessToken(headers, publicMcpUrl, GetBearerToken());
+            if (!McpOAuthAuthorizationServer.TryValidateAccessToken(headers, publicMcpUrl, GetBearerToken())) return false;
+            oauthAccessToken = true;
+            return true;
+        }
+
+        private static void RecordOAuthMcpActivity(string method, string publicMcpUrl)
+        {
+            var safeMethod = (method ?? string.Empty).Trim().ToUpperInvariant();
+            if (safeMethod.Length > 16) safeMethod = safeMethod.Substring(0, 16);
+            var safePublicUrl = (publicMcpUrl ?? string.Empty).Trim();
+            if (safePublicUrl.Length > 2048) safePublicUrl = safePublicUrl.Substring(0, 2048);
+            lock (Sync)
+            {
+                _lastOAuthMcpActivityUtc = DateTime.UtcNow;
+                _lastOAuthMcpMethod = safeMethod;
+                _lastOAuthMcpPublicUrl = safePublicUrl;
+            }
         }
 
         private static bool TryCreateSession(string protocolVersion, out string sessionId)
