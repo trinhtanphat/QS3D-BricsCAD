@@ -27,8 +27,9 @@ if SCHEDULE.is_file():
         "private struct CompensatedNonNegativeTotal",
         "var incoming = RebarMath.NonNegative(value, label);",
         "var correction = Math.Abs(_sum) >= Math.Abs(incoming)",
-        "if (_compensation != 0d && result == _sum && !IsStrictlyBelowHalfUlp(_sum, _compensation))",
-        "private static bool IsStrictlyBelowHalfUlp(double current, double compensation)",
+        "if (_compensation != 0d && result == _sum && !IsAtMostHalfUlp(_sum, _compensation))",
+        "private static bool IsAtMostHalfUlp(double current, double compensation)",
+        "return Math.Abs(compensation) <= spacing / 2d;",
     )
     for token in required:
         if token not in text:
@@ -36,9 +37,10 @@ if SCHEDULE.is_file():
     for forbidden in (
         'totalLength = RebarMath.Add(totalLength, row.TotalLengthM, "BBS aggregate length")',
         'totalWeight = RebarMath.Add(totalWeight, row.TotalWeightKg, "BBS aggregate weight")',
+        "IsStrictlyBelowHalfUlp",
     ):
         if forbidden in text:
-            errors.append("BBS aggregate precision regressed to pairwise Core accumulation: " + forbidden)
+            errors.append("BBS aggregate precision regressed to pairwise/over-strict accumulation: " + forbidden)
 
 if COMMANDS.is_file():
     text = COMMANDS.read_text(encoding="utf-8")
@@ -86,4 +88,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: BBS schedule validation, XLSX/CSV status and modeless totals share one compensated finite aggregate contract.")
+print("PASS: BBS schedule validation, XLSX/CSV status and modeless totals share one compensated finite aggregate contract with ordinary half-ULP rounding preserved.")
