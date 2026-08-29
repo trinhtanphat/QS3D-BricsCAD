@@ -88,6 +88,133 @@ function Get-OrdinaryFileOrNull {
     return $item
 }
 
+function Open-PinnedMsiReadLock {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExpectedSha256
+    )
+
+    $item = Get-OrdinaryFileOrNull -Path $Path -Label 'BricsCAD V25 MSI'
+    if ($null -eq $item) {
+        throw 'Pinned BricsCAD V25 MSI disappeared before stable-generation admission.'
+    }
+    if ($item.Length -le 1048576) {
+        throw 'Pinned BricsCAD V25 MSI is unexpectedly small.'
+    }
+
+    $canonicalBefore = Get-CanonicalAbsolutePath -Path $item.FullName
+    $lengthBefore = [int64]$item.Length
+    $lastWriteTicksBefore = [int64]$item.LastWriteTimeUtc.Ticks
+    $stream = $null
+    $sha = $null
+    try {
+        # FileShare.Read deliberately denies write/delete/replace while trust
+        # metadata and msiexec consume the admitted generation by path.
+        $stream = [IO.File]::Open(
+            $canonicalBefore,
+            [IO.FileMode]::Open,
+            [IO.FileAccess]::Read,
+            [IO.FileShare]::Read
+        )
+        $sha = [Security.Cryptography.SHA256]::Create()
+        $hashBytes = $sha.ComputeHash($stream)
+        $actual = ([BitConverter]::ToString($hashBytes)).Replace('-', '').ToUpperInvariant()
+        $stream.Position = 0
+
+        $itemAfter = Get-OrdinaryFileOrNull -Path $Path -Label 'BricsCAD V25 MSI'
+        if ($null -eq $itemAfter) {
+            throw 'Pinned BricsCAD V25 MSI disappeared during stable-generation admission.'
+        }
+        $canonicalAfter = Get-CanonicalAbsolutePath -Path $itemAfter.FullName
+        if (-not (Test-CanonicalPathEqual -Left $canonicalBefore -Right $canonicalAfter)) {
+            throw 'Pinned BricsCAD V25 MSI resolved to a different path during stable-generation admission.'
+        }
+        if ([int64]$itemAfter.Length -ne $lengthBefore -or [int64]$itemAfter.LastWriteTimeUtc.Ticks -ne $lastWriteTicksBefore) {
+            throw 'Pinned BricsCAD V25 MSI changed during stable-generation admission.'
+        }
+        if ($stream.Length -ne $lengthBefore) {
+            throw 'Pinned BricsCAD V25 MSI stream length changed during stable-generation admission.'
+        }
+        if (-not [string]::Equals($actual, $ExpectedSha256, [StringComparison]::Ordinal)) {
+            throw "Pinned BricsCAD V25 MSI SHA256 changed before trust consumption: $actual"
+        }
+
+        return [pscustomobject]@{
+            Path = $canonicalBefore
+            Sha256 = $actual
+            Length = $lengthBefore
+            LastWriteUtcTicks = $lastWriteTicksBefore
+            Stream = $stream
+        }
+    }
+    catch {
+        if ($null -ne $stream) { $stream.Dispose() }
+        throw
+    }
+    finally {
+        if ($null -ne $sha) { $sha.Dispose() }
+    }
+}
+
+function Assert-PinnedMsiStable {
+    param(
+        [Parameter(Mandatory = $true)]$State,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $item = Get-OrdinaryFileOrNull -Path $State.Path -Label 'BricsCAD V25 MSI'
+    if ($null -eq $item) {
+        throw "Pinned BricsCAD V25 MSI disappeared $Label."
+    }
+    $canonical = Get-CanonicalAbsolutePath -Path $item.FullName
+    if (-not (Test-CanonicalPathEqual -Left $canonical -Right $State.Path)) {
+        throw "Pinned BricsCAD V25 MSI resolved to a different path $Label."
+    }
+    if ([int64]$item.Length -ne [int64]$State.Length -or
+        [int64]$item.LastWriteTimeUtc.Ticks -ne [int64]$State.LastWriteUtcTicks -or
+        [int64]$State.Stream.Length -ne [int64]$State.Length) {
+        throw "Pinned BricsCAD V25 MSI generation changed $Label."
+    }
+}
+
+function Get-OrdinaryFilesByNameUnderRoot {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $rootItem = Get-Item -LiteralPath $Root -Force
+    if (-not $rootItem.PSIsContainer) {
+        throw "Extraction root is not a directory: $Root"
+    }
+    if (($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Extraction root must not be a filesystem reparse point: $Root"
+    }
+
+    $stack = New-Object 'System.Collections.Generic.Stack[string]'
+    $matches = New-Object 'System.Collections.Generic.List[System.IO.FileInfo]'
+    $stack.Push($rootItem.FullName)
+    while ($stack.Count -gt 0) {
+        $directory = $stack.Pop()
+        foreach ($entry in @(Get-ChildItem -LiteralPath $directory -Force)) {
+            if (($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Extracted V25 tree must not contain filesystem reparse points: $($entry.FullName)"
+            }
+            if ($entry.PSIsContainer) {
+                $stack.Push($entry.FullName)
+                continue
+            }
+            if ($entry -isnot [IO.FileInfo]) {
+                throw "Extracted V25 tree contains an unsupported filesystem entry: $($entry.FullName)"
+            }
+            if ([string]::Equals($entry.Name, $Name, [StringComparison]::OrdinalIgnoreCase)) {
+                $matches.Add($entry)
+            }
+        }
+    }
+    return @($matches)
+}
+
 function Stop-OwnedProcessTree {
     param(
         [Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process,
@@ -193,63 +320,75 @@ if ([string]::IsNullOrWhiteSpace($sourceName) -or -not (Test-PinnedMsi)) {
     throw 'Unable to obtain the exact pinned BricsCAD V25.2.10 x64 installer.'
 }
 
-$actualHash = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToUpperInvariant()
-$signature = Get-AuthenticodeSignature -FilePath $msi
-if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or -not $signature.SignerCertificate) {
-    throw "BricsCAD V25 MSI Authenticode signature is not valid: $($signature.Status)."
-}
-$signerSubject = [string]$signature.SignerCertificate.Subject
-if ($signerSubject -notmatch '(^|,\s*)(CN|O)=Bricsys(,|$)') {
-    throw "BricsCAD V25 MSI signer is not Bricsys: $signerSubject"
-}
-
-$installer = New-Object -ComObject WindowsInstaller.Installer
-$database = $installer.OpenDatabase($msi, 0)
-$versionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
-$versionView.Execute()
-$versionRecord = $versionView.Fetch()
-$productVersion = if ($versionRecord) { [string]$versionRecord.StringData(1) } else { [string]::Empty }
-$nameView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductName''')
-$nameView.Execute()
-$nameRecord = $nameView.Fetch()
-$productName = if ($nameRecord) { [string]$nameRecord.StringData(1) } else { [string]::Empty }
-if ($productVersion -notmatch '^25\.2\.10(?:\.|$)') {
-    throw "Downloaded MSI is not the pinned BricsCAD V25.2.10 product. ProductVersion=$productVersion"
-}
-if ($productName -notmatch 'BricsCAD') {
-    throw "Downloaded MSI ProductName is not BricsCAD: $productName"
-}
-
-$msiLog = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-v25-admin-' + [Guid]::NewGuid().ToString('N') + '.log')
+$msiState = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected
 try {
-    $arguments = @('/a', ('"' + $msi + '"'), '/qn', '/norestart', ('TARGETDIR="' + $extract + '"'), 'REBOOT=ReallySuppress', '/L*v', ('"' + $msiLog + '"'))
-    Write-Host 'Starting BricsCAD V25 MSI administrative extraction (15-minute process timeout)...'
-    $process = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -PassThru
-    $exited = $process.WaitForExit(900000)
-    if (-not $exited) {
-        $cleanupFailure = $null
-        try {
-            Stop-OwnedProcessTree -Process $process -CleanupTimeoutMs 10000
-        }
-        catch {
-            $cleanupFailure = $_.Exception.Message
-        }
-        if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
-        if (-not [string]::IsNullOrWhiteSpace([string]$cleanupFailure)) {
-            throw "BricsCAD V25 MSI administrative extraction timed out after 15 minutes; owned process-tree cleanup failed: $cleanupFailure"
-        }
-        throw 'BricsCAD V25 MSI administrative extraction timed out after 15 minutes; owned process tree terminated.'
+    $actualHash = [string]$msiState.Sha256
+    Assert-PinnedMsiStable -State $msiState -Label 'before Authenticode verification'
+
+    $signature = Get-AuthenticodeSignature -FilePath $msiState.Path
+    if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or -not $signature.SignerCertificate) {
+        throw "BricsCAD V25 MSI Authenticode signature is not valid: $($signature.Status)."
     }
-    if ($process.ExitCode -notin @(0, 3010)) {
-        if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
-        throw "BricsCAD V25 MSI administrative extraction failed with exit code $($process.ExitCode)."
+    $signerSubject = [string]$signature.SignerCertificate.Subject
+    if ($signerSubject -notmatch '(^|,\s*)(CN|O)=Bricsys(,|$)') {
+        throw "BricsCAD V25 MSI signer is not Bricsys: $signerSubject"
+    }
+    Assert-PinnedMsiStable -State $msiState -Label 'after Authenticode verification'
+
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $installer.OpenDatabase($msiState.Path, 0)
+    $versionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
+    $versionView.Execute()
+    $versionRecord = $versionView.Fetch()
+    $productVersion = if ($versionRecord) { [string]$versionRecord.StringData(1) } else { [string]::Empty }
+    $nameView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductName''')
+    $nameView.Execute()
+    $nameRecord = $nameView.Fetch()
+    $productName = if ($nameRecord) { [string]$nameRecord.StringData(1) } else { [string]::Empty }
+    if ($productVersion -notmatch '^25\.2\.10(?:\.|$)') {
+        throw "Downloaded MSI is not the pinned BricsCAD V25.2.10 product. ProductVersion=$productVersion"
+    }
+    if ($productName -notmatch 'BricsCAD') {
+        throw "Downloaded MSI ProductName is not BricsCAD: $productName"
+    }
+    Assert-PinnedMsiStable -State $msiState -Label 'after Windows Installer metadata verification'
+
+    $msiLog = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-v25-admin-' + [Guid]::NewGuid().ToString('N') + '.log')
+    try {
+        Assert-PinnedMsiStable -State $msiState -Label 'immediately before administrative extraction'
+        $arguments = @('/a', ('"' + $msiState.Path + '"'), '/qn', '/norestart', ('TARGETDIR="' + $extract + '"'), 'REBOOT=ReallySuppress', '/L*v', ('"' + $msiLog + '"'))
+        Write-Host 'Starting BricsCAD V25 MSI administrative extraction (15-minute process timeout)...'
+        $process = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -PassThru
+        $exited = $process.WaitForExit(900000)
+        if (-not $exited) {
+            $cleanupFailure = $null
+            try {
+                Stop-OwnedProcessTree -Process $process -CleanupTimeoutMs 10000
+            }
+            catch {
+                $cleanupFailure = $_.Exception.Message
+            }
+            if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
+            if (-not [string]::IsNullOrWhiteSpace([string]$cleanupFailure)) {
+                throw "BricsCAD V25 MSI administrative extraction timed out after 15 minutes; owned process-tree cleanup failed: $cleanupFailure"
+            }
+            throw 'BricsCAD V25 MSI administrative extraction timed out after 15 minutes; owned process tree terminated.'
+        }
+        if ($process.ExitCode -notin @(0, 3010)) {
+            if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
+            throw "BricsCAD V25 MSI administrative extraction failed with exit code $($process.ExitCode)."
+        }
+        Assert-PinnedMsiStable -State $msiState -Label 'after administrative extraction'
+    }
+    finally {
+        Remove-Item -LiteralPath $msiLog -Force -ErrorAction SilentlyContinue
     }
 }
 finally {
-    Remove-Item -LiteralPath $msiLog -Force -ErrorAction SilentlyContinue
+    $msiState.Stream.Dispose()
 }
 
-$brx = @(Get-ChildItem -LiteralPath $extract -Recurse -File -Filter 'BrxMgd.dll')
+$brx = @(Get-OrdinaryFilesByNameUnderRoot -Root $extract -Name 'BrxMgd.dll')
 $candidateDirs = @($brx | ForEach-Object { $_.Directory.FullName } | Sort-Object -Unique)
 $bricsDir = $candidateDirs | Where-Object {
     (Test-Path -LiteralPath (Join-Path $_ 'BrxMgd.dll') -PathType Leaf) -and
