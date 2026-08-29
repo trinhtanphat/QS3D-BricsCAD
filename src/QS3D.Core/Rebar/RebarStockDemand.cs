@@ -83,25 +83,39 @@ namespace QS3D.Core.Rebar
             var requiredLength = new CompensatedFiniteSum();
             var allowanceLength = new CompensatedFiniteSum();
 
-            foreach (var cut in requiredCuts)
+            using (var cutEnumerator = requiredCuts.GetEnumerator())
             {
-                if (cuts.Count >= MaxCutRequirements)
-                    throw new ArgumentOutOfRangeException(nameof(requiredCuts), "Rebar stock demand exceeds the supported cut-requirement bound.");
-                if (cut == null)
-                    throw new ArgumentException("Required cuts must not contain null entries.", nameof(requiredCuts));
-                if (!identities.Add(cut.CutId))
-                    throw new ArgumentException("Required cut identities must be unique (case-insensitive): " + cut.CutId + ".", nameof(requiredCuts));
+                while (cutEnumerator.MoveNext())
+                {
+                    if (cuts.Count == knownRequiredCutCount)
+                        throw new InvalidOperationException("Rebar stock demand requiredCuts yielded more entries than its admitted known Count.");
+                    if (cuts.Count >= MaxCutRequirements)
+                        throw new ArgumentOutOfRangeException(nameof(requiredCuts), "Rebar stock demand exceeds the supported cut-requirement bound.");
 
-                cuts.Add(cut);
-                checked { cutCount += cut.Quantity; }
+                    var cut = cutEnumerator.Current;
+                    if (cut == null)
+                        throw new ArgumentException("Required cuts must not contain null entries.", nameof(requiredCuts));
+                    if (!identities.Add(cut.CutId))
+                        throw new ArgumentException("Required cut identities must be unique (case-insensitive): " + cut.CutId + ".", nameof(requiredCuts));
 
-                requiredLength.Add(
-                    RebarMath.Multiply(cut.LengthM, cut.Quantity, "required rebar cut length"),
-                    "total required rebar cut length");
-                allowanceLength.Add(
-                    RebarMath.Multiply(allowancePolicy.AllowancePerRequiredCutM, cut.Quantity, "required rebar cut allowance"),
-                    "total required rebar cut allowance");
+                    cuts.Add(cut);
+                    checked { cutCount += cut.Quantity; }
+
+                    requiredLength.Add(
+                        RebarMath.Multiply(cut.LengthM, cut.Quantity, "required rebar cut length"),
+                        "total required rebar cut length");
+                    allowanceLength.Add(
+                        RebarMath.Multiply(allowancePolicy.AllowancePerRequiredCutM, cut.Quantity, "required rebar cut allowance"),
+                        "total required rebar cut allowance");
+                }
             }
+
+            if (cuts.Count != knownRequiredCutCount)
+                throw new InvalidOperationException("Rebar stock demand requiredCuts yielded fewer entries than its admitted known Count.");
+
+            var reboundRequiredCutCount = ValidateKnownRequiredCutCount(requiredCuts, nameof(requiredCuts));
+            if (reboundRequiredCutCount != knownRequiredCutCount)
+                throw new InvalidOperationException("Rebar stock demand requiredCuts changed known Count during traversal.");
 
             if (cuts.Count == 0)
                 throw new ArgumentException("At least one required cut is required.", nameof(requiredCuts));
