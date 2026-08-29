@@ -13,6 +13,8 @@ $required = @('QS3D.BricsCAD.V26.dll', 'QS3D.BricsCAD.V26.runtimeconfig.json', '
 $forbidden = @('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')
 $sampleSource = Join-Path $root 'samples/generated'
 $generator = Join-Path $PSScriptRoot 'new-v26-script-from-v25.ps1'
+$script:MaxPackageTextBytes = 8MB
+$script:StrictUtf8 = [Text.UTF8Encoding]::new($false, $true)
 
 function Get-CanonicalFullPath {
     param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Label)
@@ -95,6 +97,111 @@ function Assert-SafeInputFile {
         throw "$Label must be an ordinary non-reparse file: $fullPath"
     }
     return $fullPath
+}
+
+function Open-HeldPackageInput {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    $fullPath = Assert-SafeInputFile -Path $Path -RepositoryRoot $RepositoryRoot -Label $Label
+    $initial = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
+    $stream = [IO.File]::Open($fullPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        $reboundPath = Assert-SafeInputFile -Path $fullPath -RepositoryRoot $RepositoryRoot -Label $Label
+        $rebound = Get-Item -LiteralPath $reboundPath -Force -ErrorAction Stop
+        if (-not [string]::Equals($initial.FullName, $rebound.FullName, [StringComparison]::OrdinalIgnoreCase) -or
+            $initial.Length -ne $stream.Length -or $rebound.Length -ne $stream.Length -or
+            $initial.LastWriteTimeUtc.Ticks -ne $rebound.LastWriteTimeUtc.Ticks) {
+            throw "$Label changed while its held generation was being admitted."
+        }
+        return [pscustomobject]@{
+            Path = $rebound.FullName
+            Length = [int64]$stream.Length
+            LastWriteUtcTicks = [int64]$rebound.LastWriteTimeUtc.Ticks
+            Stream = $stream
+        }
+    }
+    catch {
+        $stream.Dispose()
+        throw
+    }
+}
+
+function Assert-HeldPathBinding {
+    param(
+        [Parameter(Mandatory = $true)][pscustomobject]$Held,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    $path = Assert-SafeInputFile -Path $Held.Path -RepositoryRoot $RepositoryRoot -Label $Label
+    $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+    if (-not [string]::Equals($Held.Path, $item.FullName, [StringComparison]::OrdinalIgnoreCase) -or
+        $Held.Length -ne $item.Length -or $Held.Length -ne $Held.Stream.Length -or
+        $Held.LastWriteUtcTicks -ne $item.LastWriteTimeUtc.Ticks) {
+        throw "$Label pathname no longer resolves to the held admitted generation."
+    }
+}
+
+function Read-HeldPackageText {
+    param(
+        [Parameter(Mandatory = $true)][pscustomobject]$Held,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    if ($Held.Stream.Length -gt $script:MaxPackageTextBytes) { throw "$Label exceeds the $($script:MaxPackageTextBytes)-byte package text limit." }
+    $Held.Stream.Position = 0
+    $reader = [IO.StreamReader]::new($Held.Stream, $script:StrictUtf8, $true, 4096, $true)
+    try { return $reader.ReadToEnd() }
+    catch [Text.DecoderFallbackException] { throw "$Label is not strict UTF-8." }
+    finally {
+        $reader.Dispose()
+        $Held.Stream.Position = 0
+    }
+}
+
+function Invoke-WithHeldPackageInput {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][scriptblock]$Action
+    )
+    $held = Open-HeldPackageInput -Path $Path -RepositoryRoot $root -Label $Label
+    try {
+        Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label $Label
+        $result = & $Action $held.Path
+        if (-not $?) { throw "$Label consumer failed." }
+        Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label $Label
+        return $result
+    }
+    finally { $held.Stream.Dispose() }
+}
+
+function Copy-HeldPackageInput {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourcePath,
+        [Parameter(Mandatory = $true)][string]$DestinationPath,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    $held = Open-HeldPackageInput -Path $SourcePath -RepositoryRoot $root -Label $Label
+    try {
+        $destination = Assert-SafeOutputFileTarget -Path $DestinationPath -RepositoryRoot $root -Label ("$Label destination")
+        Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label $Label
+        $output = [IO.File]::Open($destination, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        try {
+            $held.Stream.Position = 0
+            $held.Stream.CopyTo($output)
+            $output.Flush($true)
+        }
+        finally { $output.Dispose() }
+        Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label $Label
+    }
+    finally { $held.Stream.Dispose() }
+}
+
+function Open-HeldStagedManagedFile {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Label)
+    return Open-HeldPackageInput -Path $Path -RepositoryRoot $root -Label $Label
 }
 
 function Get-SafeSourceFiles {
@@ -208,13 +315,18 @@ function Get-SafePackageFiles {
 
 function Read-ProjectProductVersion {
     param([Parameter(Mandatory = $true)][string]$ProjectPath)
-    $ProjectPath = Assert-SafeInputFile -Path $ProjectPath -RepositoryRoot $root -Label 'project file'
-    [xml]$project = Get-Content -LiteralPath $ProjectPath -Raw
-    $versions = @($project.Project.PropertyGroup | ForEach-Object { [string]$_.Version } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    if ($versions.Count -ne 1) { throw "Project must declare exactly one Version value: $ProjectPath" }
-    $value = [string]$versions[0]
-    if (-not [string]::Equals($value, $value.Trim(), [StringComparison]::Ordinal)) { throw "Project Version must not contain leading or trailing whitespace: $ProjectPath" }
-    return $value
+    $held = Open-HeldPackageInput -Path $ProjectPath -RepositoryRoot $root -Label 'project file'
+    try {
+        Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label 'project file'
+        [xml]$project = Read-HeldPackageText -Held $held -Label 'project file'
+        Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label 'project file'
+        $versions = @($project.Project.PropertyGroup | ForEach-Object { [string]$_.Version } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        if ($versions.Count -ne 1) { throw "Project must declare exactly one Version value: $ProjectPath" }
+        $value = [string]$versions[0]
+        if (-not [string]::Equals($value, $value.Trim(), [StringComparison]::Ordinal)) { throw "Project Version must not contain leading or trailing whitespace: $ProjectPath" }
+        return $value
+    }
+    finally { $held.Stream.Dispose() }
 }
 
 function Convert-ToStrictSemVerText {
@@ -250,9 +362,14 @@ function Assert-ManagedIdentity {
 
 function Add-CommandMethodsFromSource {
     param([Parameter(Mandatory = $true)][string]$Path)
-    $Path = Assert-SafeInputFile -Path $Path -RepositoryRoot $root -Label 'V26 command source'
-    $text = Get-Content -LiteralPath $Path -Raw
-    [regex]::Matches($text, '\[CommandMethod\("([^\"]+)"') | ForEach-Object { $script:commands += $_.Groups[1].Value.ToUpperInvariant() }
+    $held = Open-HeldPackageInput -Path $Path -RepositoryRoot $root -Label 'V26 command source'
+    try {
+        Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label 'V26 command source'
+        $text = Read-HeldPackageText -Held $held -Label 'V26 command source'
+        Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label 'V26 command source'
+        [regex]::Matches($text, '\[CommandMethod\("([^\"]+)"') | ForEach-Object { $script:commands += $_.Groups[1].Value.ToUpperInvariant() }
+    }
+    finally { $held.Stream.Dispose() }
 }
 
 $root = Assert-OrdinaryDirectory -Path $root -Label 'repository root'
@@ -282,7 +399,7 @@ $dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Labe
 
 foreach ($name in $required) {
     $path = Assert-SafeInputFile -Path (Join-Path $source $name) -RepositoryRoot $root -Label ("V26 build artifact $name")
-    Copy-Item -LiteralPath $path -Destination (Join-Path $dist $name)
+    Copy-HeldPackageInput -SourcePath $path -DestinationPath (Join-Path $dist $name) -Label ("V26 build artifact $name")
 }
 
 $generatedScripts = [ordered]@{
@@ -290,25 +407,31 @@ $generatedScripts = [ordered]@{
     'uninstall-v25-autoload.ps1' = 'uninstall-v26-autoload.ps1'
     'update-v25.ps1' = 'update-v26.ps1'
 }
-foreach ($sourceScript in $generatedScripts.Keys) {
-    $sourceScriptPath = Assert-SafeInputFile -Path (Join-Path $PSScriptRoot $sourceScript) -RepositoryRoot $root -Label ("V26 generator input $sourceScript")
-    $output = Join-Path $dist $generatedScripts[$sourceScript]
-    & $generator -SourceScript ([IO.Path]::GetFileName($sourceScriptPath)) -OutputPath $output
-    if (-not $?) { throw "Failed to generate V26 release script from $sourceScript" }
-    $generatedText = Get-Content -LiteralPath $output -Raw
-    if ($generatedText -match '(?i)v25') { throw "Generated V26 release script leaked a V25 token: $output" }
-}
+Invoke-WithHeldPackageInput -Path $generator -Label 'V26 script transformer' -Action {
+    param($heldGeneratorPath)
+    foreach ($sourceScript in $generatedScripts.Keys) {
+        $sourceScriptPath = Assert-SafeInputFile -Path (Join-Path $PSScriptRoot $sourceScript) -RepositoryRoot $root -Label ("V26 generator input $sourceScript")
+        $output = Join-Path $dist $generatedScripts[$sourceScript]
+        Invoke-WithHeldPackageInput -Path $sourceScriptPath -Label ("V26 generator input $sourceScript") -Action {
+            param($heldSourcePath)
+            & $heldGeneratorPath -SourceScript ([IO.Path]::GetFileName($heldSourcePath)) -OutputPath $output
+            if (-not $?) { throw "Failed to generate V26 release script from $sourceScript" }
+        } | Out-Null
+        $generatedText = Get-Content -LiteralPath $output -Raw
+        if ($generatedText -match '(?i)v25') { throw "Generated V26 release script leaked a V25 token: $output" }
+    }
+} | Out-Null
 
 $sampleDestination = Join-Path $dist 'Samples'
 New-Item -ItemType Directory -Path $sampleDestination -Force | Out-Null
 foreach ($sampleName in @('README.md','QS3D-Sample.dxf','QS3D-Sample.qsdb','QS3D-Quantity-Template.xlsx','QS3D-Architecture.qstemplate')) {
     $samplePath = Assert-SafeInputFile -Path (Join-Path $sampleSource $sampleName) -RepositoryRoot $root -Label ("synthetic sample $sampleName")
-    Copy-Item -LiteralPath $samplePath -Destination (Join-Path $sampleDestination $sampleName)
+    Copy-HeldPackageInput -SourcePath $samplePath -DestinationPath (Join-Path $sampleDestination $sampleName) -Label ("synthetic sample $sampleName")
 }
 $sampleDwg = Join-Path $sampleSource 'QS3D-Sample.dwg'
 if (Test-Path -LiteralPath $sampleDwg) {
     $sampleDwg = Assert-SafeInputFile -Path $sampleDwg -RepositoryRoot $root -Label 'synthetic sample QS3D-Sample.dwg'
-    Copy-Item -LiteralPath $sampleDwg -Destination (Join-Path $sampleDestination 'QS3D-Sample.dwg')
+    Copy-HeldPackageInput -SourcePath $sampleDwg -DestinationPath (Join-Path $sampleDestination 'QS3D-Sample.dwg') -Label 'synthetic sample QS3D-Sample.dwg'
 }
 
 $commands = @()
@@ -323,11 +446,30 @@ $commands | Set-Content -LiteralPath (Join-Path $dist 'COMMANDS.txt') -Encoding 
 
 $pluginPath = Join-Path $dist 'QS3D.BricsCAD.V26.dll'
 $corePath = Join-Path $dist 'QS3D.Core.dll'
-$signature = Get-AuthenticodeSignature -FilePath $pluginPath
-try { $assemblyVersion = [Reflection.AssemblyName]::GetAssemblyName($pluginPath).Version } catch { throw "Could not read QS3D V26 plugin assembly version: $($_.Exception.Message)" }
-if (-not $assemblyVersion) { throw 'Could not read QS3D V26 plugin assembly version.' }
-Assert-ManagedIdentity -Path $pluginPath -ExpectedAssemblyVersion $assemblyVersion -ExpectedProductVersion $productVersion -Label 'QS3D.BricsCAD.V26.dll'
-Assert-ManagedIdentity -Path $corePath -ExpectedAssemblyVersion $assemblyVersion -ExpectedProductVersion $productVersion -Label 'QS3D.Core.dll'
+$heldPlugin = $null
+$heldCore = $null
+try {
+    $heldPlugin = Open-HeldStagedManagedFile -Path $pluginPath -Label 'QS3D.BricsCAD.V26.dll'
+    $heldCore = Open-HeldStagedManagedFile -Path $corePath -Label 'QS3D.Core.dll'
+
+    Assert-HeldPathBinding -Held $heldPlugin -RepositoryRoot $root -Label 'QS3D.BricsCAD.V26.dll'
+    $signature = Get-AuthenticodeSignature -FilePath $heldPlugin.Path
+    Assert-HeldPathBinding -Held $heldPlugin -RepositoryRoot $root -Label 'QS3D.BricsCAD.V26.dll'
+    try { $assemblyVersion = [Reflection.AssemblyName]::GetAssemblyName($heldPlugin.Path).Version } catch { throw "Could not read QS3D V26 plugin assembly version: $($_.Exception.Message)" }
+    if (-not $assemblyVersion) { throw 'Could not read QS3D V26 plugin assembly version.' }
+    Assert-ManagedIdentity -Path $heldPlugin.Path -ExpectedAssemblyVersion $assemblyVersion -ExpectedProductVersion $productVersion -Label 'QS3D.BricsCAD.V26.dll'
+    Assert-HeldPathBinding -Held $heldPlugin -RepositoryRoot $root -Label 'QS3D.BricsCAD.V26.dll'
+
+    Assert-HeldPathBinding -Held $heldCore -RepositoryRoot $root -Label 'QS3D.Core.dll'
+    try { $coreAssemblyVersion = [Reflection.AssemblyName]::GetAssemblyName($heldCore.Path).Version } catch { throw "Could not read QS3D Core assembly version: $($_.Exception.Message)" }
+    if (-not $coreAssemblyVersion -or $coreAssemblyVersion -ne $assemblyVersion) { throw "QS3D Core assembly version $coreAssemblyVersion does not match expected $assemblyVersion." }
+    Assert-ManagedIdentity -Path $heldCore.Path -ExpectedAssemblyVersion $assemblyVersion -ExpectedProductVersion $productVersion -Label 'QS3D.Core.dll'
+    Assert-HeldPathBinding -Held $heldCore -RepositoryRoot $root -Label 'QS3D.Core.dll'
+}
+finally {
+    if ($null -ne $heldCore) { $heldCore.Stream.Dispose() }
+    if ($null -ne $heldPlugin) { $heldPlugin.Stream.Dispose() }
+}
 
 $metadata = [ordered]@{
     product = 'QS3D'
