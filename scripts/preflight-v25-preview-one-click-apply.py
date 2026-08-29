@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Reservation-v2: keep the preview apply guard aligned with the rendered Run-based version highlights.
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
