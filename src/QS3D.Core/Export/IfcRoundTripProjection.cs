@@ -83,19 +83,23 @@ namespace QS3D.Core.Export
                 ? new List<IfcRoundTripNumericProperty>(knownCount.Value)
                 : new List<IfcRoundTripNumericProperty>();
             var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in dimensions)
+            using (var enumerator = dimensions.GetEnumerator())
             {
-                IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
-                    knownCount,
-                    items.Count,
-                    "IFC round-trip dimension");
-                if (items.Count == MaxNestedCollectionItems)
-                    ThrowTooManyNestedItems("dimension");
-                if (item == null)
-                    throw new ArgumentException("Dimension collection cannot contain null entries.", nameof(dimensions));
-                if (!seenNames.Add(item.Name))
-                    throw new ArgumentException("Duplicate dimension name: " + item.Name, nameof(dimensions));
-                items.Add(item);
+                while (enumerator.MoveNext())
+                {
+                    IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
+                        knownCount,
+                        items.Count,
+                        "IFC round-trip dimension");
+                    if (items.Count == MaxNestedCollectionItems)
+                        ThrowTooManyNestedItems("dimension");
+                    var item = enumerator.Current;
+                    if (item == null)
+                        throw new ArgumentException("Dimension collection cannot contain null entries.", nameof(dimensions));
+                    if (!seenNames.Add(item.Name))
+                        throw new ArgumentException("Duplicate dimension name: " + item.Name, nameof(dimensions));
+                    items.Add(item);
+                }
             }
 
             if (knownCount.HasValue && items.Count != knownCount.Value)
@@ -120,17 +124,21 @@ namespace QS3D.Core.Export
                 ? new List<string>(knownCount.Value)
                 : new List<string>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var value in provenance)
+            using (var enumerator = provenance.GetEnumerator())
             {
-                IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
-                    knownCount,
-                    items.Count,
-                    "IFC round-trip provenance");
-                if (items.Count == MaxNestedCollectionItems)
-                    ThrowTooManyNestedItems("provenance");
-                var token = IfcRoundTripProjectionContract.RequireCanonicalToken(value, nameof(provenance));
-                if (!seen.Add(token)) throw new ArgumentException("Duplicate provenance token: " + token, nameof(provenance));
-                items.Add(token);
+                while (enumerator.MoveNext())
+                {
+                    IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
+                        knownCount,
+                        items.Count,
+                        "IFC round-trip provenance");
+                    if (items.Count == MaxNestedCollectionItems)
+                        ThrowTooManyNestedItems("provenance");
+                    var value = enumerator.Current;
+                    var token = IfcRoundTripProjectionContract.RequireCanonicalToken(value, nameof(provenance));
+                    if (!seen.Add(token)) throw new ArgumentException("Duplicate provenance token: " + token, nameof(provenance));
+                    items.Add(token);
+                }
             }
 
             if (knownCount.HasValue && items.Count != knownCount.Value)
@@ -217,15 +225,19 @@ namespace QS3D.Core.Export
                 throw new InvalidOperationException("IFC round-trip projection source exposes conflicting known Count values.");
 
             var items = new List<IfcRoundTripProjection>();
-            foreach (var projection in projections)
+            using (var enumerator = projections.GetEnumerator())
             {
-                IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
-                    knownCount,
-                    items.Count,
-                    "IFC round-trip projection");
-                if (items.Count == MaxProjections)
-                    ThrowTooManyProjections();
-                items.Add(projection);
+                while (enumerator.MoveNext())
+                {
+                    IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
+                        knownCount,
+                        items.Count,
+                        "IFC round-trip projection");
+                    if (items.Count == MaxProjections)
+                        ThrowTooManyProjections();
+                    var projection = enumerator.Current;
+                    items.Add(projection);
+                }
             }
 
             if (knownCount.HasValue && items.Count != knownCount.Value)

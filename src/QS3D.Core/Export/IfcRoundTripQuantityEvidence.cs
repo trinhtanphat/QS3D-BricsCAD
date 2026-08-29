@@ -71,17 +71,21 @@ namespace QS3D.Core.Export
                 throw new InvalidOperationException("IFC round-trip quantity evidence source exposes conflicting known Count values.");
 
             var candidates = new List<IfcRoundTripQuantityEvidence>();
-            foreach (var candidate in evidence)
+            using (var enumerator = evidence.GetEnumerator())
             {
-                IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
-                    knownCount,
-                    candidates.Count,
-                    "IFC round-trip quantity evidence");
-                if (candidates.Count == MaxCandidates)
-                    ThrowTooManyCandidates();
-                if (candidate == null)
-                    throw new ArgumentException("Quantity evidence collection cannot contain null entries.", nameof(evidence));
-                candidates.Add(candidate);
+                while (enumerator.MoveNext())
+                {
+                    IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
+                        knownCount,
+                        candidates.Count,
+                        "IFC round-trip quantity evidence");
+                    if (candidates.Count == MaxCandidates)
+                        ThrowTooManyCandidates();
+                    var candidate = enumerator.Current;
+                    if (candidate == null)
+                        throw new ArgumentException("Quantity evidence collection cannot contain null entries.", nameof(evidence));
+                    candidates.Add(candidate);
+                }
             }
 
             if (knownCount.HasValue && candidates.Count != knownCount.Value)

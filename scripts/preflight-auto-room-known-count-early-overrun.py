@@ -26,20 +26,23 @@ for token in (
     if token not in source:
         errors.append("Auto Room source missing Count-integrity contract: " + token)
 
-active_guard = source.find('RequireCanProcessNextKnownCount("Auto Room active room id set"')
-active_increment = source.find("activeInputCount++;", active_guard)
-active_semantic = source.find("string.IsNullOrWhiteSpace(rawRoomId)", active_guard)
-if not (0 <= active_guard < active_increment < active_semantic):
-    errors.append("active-room known-count guard must precede increment/semantic processing")
+active_move = source.find("while (activeEnumerator.MoveNext())")
+active_guard = source.find('RequireCanProcessNextKnownCount("Auto Room active room id set"', active_move)
+active_current = source.find("var rawRoomId = activeEnumerator.Current;", active_move)
+active_increment = source.find("activeInputCount++;", active_move)
+active_semantic = source.find("string.IsNullOrWhiteSpace(rawRoomId)", active_move)
+if not (0 <= active_move < active_guard < active_current < active_increment < active_semantic):
+    errors.append("active-room known-count guard must precede Current/increment/semantic processing")
 
-selected_loop = source.find("foreach (var raw in selectedSourceHandles)")
+selected_loop = source.find("while (selectedEnumerator.MoveNext())")
 selected_capacity = source.find("selectedInputCount >= MaxSourceHandleInputCount", selected_loop)
 selected_drift = source.find("selectedInputCount >= knownSelectedSourceHandleCount", selected_loop)
 selected_continue = source.find("continue;", selected_drift)
+selected_current = source.find("var raw = selectedEnumerator.Current;", selected_loop)
 selected_normalize = source.find("GeneratedHandleIdentity.Normalize(raw)", selected_loop)
 selected_final = source.find('RequireKnownCountMatchesTraversal("Auto Room selected source handle set"', selected_loop)
-if not (0 <= selected_loop < selected_capacity < selected_drift < selected_continue < selected_normalize < selected_final):
-    errors.append("selected-source drift quarantine must follow hard-bound enforcement and precede handle normalization/final Count mismatch")
+if not (0 <= selected_loop < selected_capacity < selected_drift < selected_continue < selected_current < selected_normalize < selected_final):
+    errors.append("selected-source drift quarantine must follow hard-bound enforcement and precede Current/handle normalization/final Count mismatch")
 
 for token in (
     "ActiveOverYieldFailsAtFirstUnexpectedItem();",
@@ -69,4 +72,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Auto Room active-room overrun fails before processing; selected-source drift is quarantined before normalization while the independent 5000-entry hard bound retains precedence.")
+print("PASS: Auto Room active-room overrun fails before Current processing; selected-source drift is quarantined before Current/normalization while the independent 5000-entry hard bound retains precedence.")

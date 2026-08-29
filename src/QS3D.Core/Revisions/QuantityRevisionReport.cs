@@ -66,6 +66,8 @@ namespace QS3D.Core.Revisions
             var index = 0;
             foreach (var row in rows)
             {
+                if (knownCount.HasValue && index >= knownCount.Value)
+                    throw KnownSummaryCountTraversalMismatch(knownCount.Value, index + 1);
                 if (row == null)
                     throw new ArgumentException("Quantity revision summary contains a null row at index " + index + ".", nameof(rows));
                 if (!string.IsNullOrEmpty(row.QuantityName) && row.QuantityName.Any(char.IsControl))
@@ -79,9 +81,13 @@ namespace QS3D.Core.Revisions
             }
 
             if (knownCount.HasValue && index != knownCount.Value)
+                throw KnownSummaryCountTraversalMismatch(knownCount.Value, index);
+
+            var finalKnownCount = SnapshotKnownSummaryCount(rows);
+            if (knownCount != finalKnownCount)
                 throw new InvalidOperationException(
-                    "Quantity revision summary input changed during enumeration; Count reported " + knownCount.Value +
-                    " rows but traversal produced " + index + ".");
+                    "Quantity revision summary input known Count changed during traversal from " +
+                    FormatKnownCount(knownCount) + " to " + FormatKnownCount(finalKnownCount) + ".");
 
             var result = new List<QuantityRevisionSummary>();
             foreach (var group in summarizable.GroupBy(x => x.QuantityName, StringComparer.OrdinalIgnoreCase).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
@@ -124,6 +130,16 @@ namespace QS3D.Core.Revisions
                     "Quantity revision summary input exposes conflicting known Counts: " + knownCount.Value + " and " + count + ".");
             knownCount = count;
         }
+
+        private static InvalidOperationException KnownSummaryCountTraversalMismatch(int knownCount, int observedCount)
+        {
+            return new InvalidOperationException(
+                "Quantity revision summary input changed during enumeration; Count reported " + knownCount +
+                " rows but traversal produced " + observedCount + ".");
+        }
+
+        private static string FormatKnownCount(int? knownCount) =>
+            knownCount.HasValue ? knownCount.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "<none>";
 
         private static void ValidateProjectIdentityCompatibility(RevisionSnapshot before, RevisionSnapshot after)
         {
