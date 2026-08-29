@@ -12,6 +12,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 OAUTH = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpOAuthAuthorizationServer.cs"
 CONSENT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpOAuthConsent.cs"
+EMBEDDED = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpEmbeddedServerV2.cs"
 
 
 def fail(message: str) -> None:
@@ -34,9 +35,12 @@ def main() -> int:
         fail("OAuth authorization-server source is missing: " + str(OAUTH.relative_to(ROOT)))
     if not CONSENT.is_file():
         fail("local BricsCAD consent source is missing: " + str(CONSENT.relative_to(ROOT)))
+    if not EMBEDDED.is_file():
+        fail("embedded MCP transport source is missing: " + str(EMBEDDED.relative_to(ROOT)))
 
     oauth = OAUTH.read_text(encoding="utf-8")
     consent = CONSENT.read_text(encoding="utf-8")
+    embedded = EMBEDDED.read_text(encoding="utf-8")
 
     # OAuth/MCP discovery required by ChatGPT custom MCP. Property names appear escaped
     # inside C# JSON string literals, so assert their exact identifiers rather than an
@@ -73,8 +77,6 @@ def main() -> int:
     reject(oauth, "StartsWith(\"https://chatgpt.com/\"", "over-broad ChatGPT redirect allowlist")
 
     # Every DCR string array must be parsed as an array with immutable count/length bounds.
-    # In particular, do not accidentally mutate maxItems while walking values: that turns
-    # a nominal cap into a moving target and makes oversized registrations effectively unbounded.
     require(oauth, "TryParseJsonStringArray(rawRedirects", "redirect URI array parsing")
     require(oauth, "TryParseJsonStringArray(rawGrantTypes", "grant type array parsing")
     require(oauth, "TryParseJsonStringArray(rawResponseTypes", "response type array parsing")
@@ -125,6 +127,21 @@ def main() -> int:
     require(consent, "YesNo", "explicit approve/deny choice")
     reject(consent, "Process.Start", "consent UI process-launch boundary")
 
+    # The shipping HTTP transport must preserve the raw query for /oauth/authorize,
+    # dispatch OAuth discovery/DCR/token endpoints before the /mcp-only router, and accept
+    # either the legacy engineering bearer or a validated OAuth access token.
+    for needle in (
+        "public string Query",
+        "McpOAuthAuthorizationServer.TryHandle(",
+        "request.Query",
+        "McpOAuthAuthorizationServer.TryValidateAccessToken(",
+        "McpOAuthAuthorizationServer.BuildBearerChallenge(",
+        "oauthResponse.ContentType",
+        "WWW-Authenticate",
+    ):
+        require(embedded, needle, "OAuth transport wiring")
+    reject(embedded, '["WWW-Authenticate"] = "Bearer"', "legacy bare challenge after OAuth wiring")
+
     # Keep the implementation shareable by V25 net48 and V26 net8 source composition.
     for modern_only in ("Convert.ToHexString", "RandomNumberGenerator.GetBytes(", "CryptographicOperations.FixedTimeEquals"):
         reject(oauth, modern_only, "net48 compatibility")
@@ -133,7 +150,7 @@ def main() -> int:
     if re.search(r"Console\.(Write|WriteLine).*token", oauth, re.IGNORECASE):
         fail("OAuth source must not print token material")
 
-    print("PASS embedded MCP OAuth 2.1/DCR source contract")
+    print("PASS embedded MCP OAuth 2.1/DCR source + transport contract")
     return 0
 
 
