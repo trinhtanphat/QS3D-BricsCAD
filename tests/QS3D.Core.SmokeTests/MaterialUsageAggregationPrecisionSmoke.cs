@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             PreservesRepresentableMassContributions();
             PreservesAcrossInputOrder();
             PreservesOrdinaryAggregationAndProvenance();
+            PreservesOrdinaryDecimalAggregation();
             RejectsUnrepresentableFinalLoss();
             RejectsInvalidAndOverflowingInputs();
         }
@@ -63,6 +64,12 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Material Usage compensated aggregation changed ElementCount.");
             if (row.ElementIds.Count != 2 || row.ElementIds[0] != "a" || row.ElementIds[1] != "b")
                 throw new InvalidOperationException("Material Usage compensated aggregation changed element provenance/order.");
+        }
+
+        private static void PreservesOrdinaryDecimalAggregation()
+        {
+            var row = BuildTwo("NetVolumeM3", 2.8d, 1.6d);
+            Exact(4.4d, row.VolumeM3, "ordinary decimal VolumeM3");
         }
 
         private static void RejectsUnrepresentableFinalLoss()
