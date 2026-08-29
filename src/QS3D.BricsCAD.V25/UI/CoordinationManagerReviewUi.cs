@@ -223,17 +223,18 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (!_attached || _disposeInProgress || _disposed) return;
 
+                var cleanupBarrierBefore = _cleanupBarrier;
                 try
                 {
                     effect();
-                    _cleanupBarrier = _session.HasTransientState;
+                    _cleanupBarrier = cleanupBarrierBefore && _session.HasTransientState;
                     SetStatus(_cleanupBarrier
                         ? actionName + " • cleanup còn pending; review mới vẫn bị khóa."
                         : actionName + " • transient review state đã được dọn sạch.");
                 }
                 catch (Exception ex)
                 {
-                    _cleanupBarrier = _session.HasTransientState;
+                    _cleanupBarrier = cleanupBarrierBefore && _session.HasTransientState;
                     SetStatus(actionName + " bị từ chối: " + ex.Message);
                 }
                 finally
