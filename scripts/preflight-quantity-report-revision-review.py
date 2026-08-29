@@ -57,7 +57,9 @@ for forbidden in (
 
 for token in (
     "public static IReadOnlyList<QuantityReportRow> Detail(ProjectState project)",
-    "QuantityReportMath.Add",
+    "var volumeStates = new Dictionary<string, CompensatedSum>",
+    "private static double MaterializeStrict(",
+    "Lost material compensated contribution",
 ):
     if token not in builder:
         errors.append("authoritative ProjectQuantityReportBuilder contract is missing: " + token)
@@ -102,4 +104,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: quantity report revision review reuses the authoritative BQ detail builder and RevisionService, uses stable semantic keys, rejects identity/finite/overflow hazards, and remains CAD-independent/read-only.")
+print("PASS: quantity report revision review reuses the authoritative compensated BQ detail builder and RevisionService, uses stable semantic keys, rejects identity/finite/overflow hazards, and remains CAD-independent/read-only.")
