@@ -160,7 +160,7 @@ helper_mutations = {
     "leaf reparse rejection": helper.replace("$item.Attributes -band [IO.FileAttributes]::ReparsePoint", "$item.Attributes -band [IO.FileAttributes]::Normal", 1),
     "parent reparse rejection": helper.replace("$cursor.Attributes -band [IO.FileAttributes]::ReparsePoint", "$cursor.Attributes -band [IO.FileAttributes]::Normal", 1),
     "streaming fingerprint": helper.replace("[Security.Cryptography.SHA256]::Create()", "[Security.Cryptography.MD5]::Create()", 1),
-    "generation share mode": helper.replace("[IO.FileShare]::Read", "[IO.FileShare]::ReadWrite", 1),
+    "generation share mode": helper.replace("[IO.FileShare]::Read", "[IO.FileShare]::Write", 1),
     "held fingerprint": helper.replace("$hash = Get-HeldStreamingSha256 -Stream $stream -Label $Label", "$hash = 'UNBOUND'", 1),
     "metadata generation lock": helper.replace("$metadataHeld = Open-LockedStableFile", "$metadataHeld = Resolve-OrdinaryNonReparseFile", 1),
     "plugin generation lock": helper.replace("$pluginHeld = Open-LockedStableFile", "$pluginHeld = Resolve-OrdinaryNonReparseFile", 1),
