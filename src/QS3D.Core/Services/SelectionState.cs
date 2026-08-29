@@ -47,7 +47,14 @@ namespace QS3D.Core.Services
                 }
             }
 
-            RequireStableKnownCount(ids, knownCount);
+            var finalKnownCount = ResolveKnownCount(ids);
+            if (knownCount.HasValue != finalKnownCount.HasValue ||
+                (knownCount.HasValue && knownCount.Value != finalKnownCount!.Value))
+                throw new InvalidOperationException(
+                    "Semantic selection known Count changed during traversal from " +
+                    (knownCount.HasValue ? knownCount.Value.ToString() : "<none>") + " to " +
+                    (finalKnownCount.HasValue ? finalKnownCount.Value.ToString() : "<none>") + ".");
+
             if (_changeVersion != enumerationVersion)
                 throw new InvalidOperationException("Selection changed while replacement element ids were being enumerated. Retry replacement against the current selection state.");
             if (knownCount.HasValue && inputCount != knownCount.Value)
