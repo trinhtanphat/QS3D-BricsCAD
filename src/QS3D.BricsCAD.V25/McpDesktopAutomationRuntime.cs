@@ -16,7 +16,7 @@ namespace QS3D.BricsCAD.V25
     /// <summary>
     /// Bounded Windows desktop automation used by the embedded MCP full-agent surface.
     /// Desktop mutation/sensitive reads require local consent in addition to MCP confirmation.
-    /// This runtime exposes explicit tools only; it never launches a process, shell or generic macro.
+    /// This runtime exposes explicit tools plus one bounded single-target sequence; it never launches a process, shell or script.
     /// </summary>
     internal static class McpDesktopAutomationRuntime
     {
@@ -35,6 +35,13 @@ namespace QS3D.BricsCAD.V25
         private const int MaxDragMilliseconds = 3000;
         private const int DragStepMilliseconds = 25;
         private const int ClipboardTimeoutMilliseconds = 5000;
+        private const int MaxSequenceSteps = 12;
+        private const int MaxSequenceMilliseconds = 30000;
+        private const int MaxSequenceDelayMilliseconds = 2000;
+        private const int MaxSequenceJsonCharacters = 32768;
+        private const int MaxSequenceStepArgumentsCharacters = 8192;
+        private const int SequenceDelaySliceMilliseconds = 50;
+        private const int MaxSequenceScreenshots = 1;
         private const uint INPUT_MOUSE = 0;
         private const uint INPUT_KEYBOARD = 1;
         private const uint KEYEVENTF_KEYUP = 0x0002;
@@ -68,7 +75,8 @@ namespace QS3D.BricsCAD.V25
             "desktop_key",
             "desktop_clipboard_read",
             "desktop_clipboard_write",
-            "desktop_screenshot"
+            "desktop_screenshot",
+            "desktop_sequence"
         };
 
         private static readonly HashSet<string> MutationTools = new HashSet<string>(StringComparer.Ordinal)
@@ -80,12 +88,27 @@ namespace QS3D.BricsCAD.V25
             "desktop_mouse_drag",
             "desktop_type",
             "desktop_key",
-            "desktop_clipboard_write"
+            "desktop_clipboard_write",
+            "desktop_sequence"
         };
 
         private static readonly HashSet<string> SensitiveTools = new HashSet<string>(StringComparer.Ordinal)
         {
             "desktop_clipboard_read",
+            "desktop_screenshot"
+        };
+
+        private static readonly HashSet<string> SequenceAllowedTools = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "desktop_window_focus",
+            "desktop_mouse_move",
+            "desktop_mouse_click",
+            "desktop_mouse_scroll",
+            "desktop_mouse_drag",
+            "desktop_type",
+            "desktop_key",
+            "desktop_clipboard_write",
+            "desktop_wait_for_window",
             "desktop_screenshot"
         };
 
@@ -136,7 +159,13 @@ namespace QS3D.BricsCAD.V25
                     "\"scope\":{\"type\":\"string\",\"enum\":[\"screen\",\"window\"]}," + WindowHandleProperty()
                     + ",\"cropX\":{\"type\":\"integer\"},\"cropY\":{\"type\":\"integer\"},\"cropWidth\":{\"type\":\"integer\",\"minimum\":1},\"cropHeight\":{\"type\":\"integer\",\"minimum\":1}"
                     + ",\"maxWidth\":{\"type\":\"integer\",\"minimum\":160,\"maximum\":1280},\"maxHeight\":{\"type\":\"integer\",\"minimum\":120,\"maximum\":900},"
-                    + ConfirmSensitiveReadProperty(), "scope", "confirmSensitiveRead")
+                    + ConfirmSensitiveReadProperty(), "scope", "confirmSensitiveRead"),
+                Tool("desktop_sequence", "Execute up to 12 fail-fast desktop UI steps against one exact visible current-session window for at most 30 seconds. Requires local consent and confirmMutation=true; target-window screenshots additionally require confirmSensitiveRead=true.",
+                    WindowHandleProperty()
+                    + ",\"stepsJson\":{\"type\":\"string\",\"maxLength\":32768}"
+                    + ",\"maxDurationMs\":{\"type\":\"integer\",\"minimum\":1000,\"maximum\":30000},"
+                    + ConfirmMutationProperty() + "," + ConfirmSensitiveReadProperty(),
+                    "windowHandle", "stepsJson", "confirmMutation")
             };
         }
 
@@ -172,6 +201,7 @@ namespace QS3D.BricsCAD.V25
                     case "desktop_clipboard_read": result = ClipboardRead(args, audit); break;
                     case "desktop_clipboard_write": result = ClipboardWrite(args, RequireMutationCallback(ensureMutationRunning), audit); break;
                     case "desktop_screenshot": result = Screenshot(args, audit); break;
+                    case "desktop_sequence": result = RunSequence(args, RequireMutationCallback(ensureMutationRunning), audit); break;
                     default: throw new InvalidOperationException("Unknown MCP desktop tool: " + tool);
                 }
                 if (guardedAction != null) guardedAction.MarkSuccess();
@@ -279,6 +309,359 @@ namespace QS3D.BricsCAD.V25
                 return true;
             }
             return false;
+        }
+
+        private static string RunSequence(string body, Action ensureMutationRunning, Action<string> audit)
+        {
+            var hwnd = RequiredWindow(body);
+            var steps = ParseSequenceSteps(body);
+            if (steps.Count == 0) throw new InvalidOperationException("desktop_sequence requires at least one step.");
+            var maxDuration = StrictOptionalInteger(body, "maxDurationMs", 15000, 1000, MaxSequenceMilliseconds);
+            var sensitiveConfirmed = McpTopLevelJson.ExtractBoolean(body, "confirmSensitiveRead");
+            var screenshotCount = 0;
+            foreach (var step in steps)
+            {
+                if (string.Equals(step.Tool, "desktop_screenshot", StringComparison.Ordinal)) screenshotCount++;
+            }
+            if (screenshotCount > MaxSequenceScreenshots)
+                throw new InvalidOperationException("desktop_sequence permits at most one screenshot step to keep output bounded.");
+            if (screenshotCount > 0 && !sensitiveConfirmed)
+                throw new InvalidOperationException("confirmSensitiveRead=true is required for desktop_sequence screenshot steps.");
+
+            var started = Stopwatch.StartNew();
+            EnsureSequenceRunning(hwnd, ensureMutationRunning, started, maxDuration);
+            var results = new StringBuilder("{\"executed\":true,\"windowHandle\":\"")
+                .Append(HandleText(hwnd)).Append("\",\"results\":[");
+            var completed = 0;
+            for (var i = 0; i < steps.Count; i++)
+            {
+                var step = steps[i];
+                try
+                {
+                    EnsureSequenceRunning(hwnd, ensureMutationRunning, started, maxDuration);
+                    var result = ExecuteSequenceStep(step, hwnd, sensitiveConfirmed, ensureMutationRunning, audit, started, maxDuration);
+                    // Recheck after every step. Sensitive payloads are not returned if consent/epoch changed during capture/read.
+                    EnsureSequenceRunning(hwnd, ensureMutationRunning, started, maxDuration);
+                    if (completed > 0) results.Append(',');
+                    results.Append("{\"index\":").Append(i + 1)
+                        .Append(",\"tool\":\"").Append(Escape(step.Tool)).Append("\",\"result\":")
+                        .Append(result).Append('}');
+                    completed++;
+                    Audit(audit, "sequence step=" + (i + 1).ToString(CultureInfo.InvariantCulture)
+                                 + "; tool=" + step.Tool + "; status=success");
+                    if (step.DelayAfterMilliseconds > 0)
+                        DelaySequence(hwnd, step.DelayAfterMilliseconds, ensureMutationRunning, started, maxDuration);
+                }
+                catch (Exception ex)
+                {
+                    Audit(audit, "sequence step=" + (i + 1).ToString(CultureInfo.InvariantCulture)
+                                 + "; tool=" + step.Tool + "; status=failed; completed="
+                                 + completed.ToString(CultureInfo.InvariantCulture) + "; durationMs="
+                                 + started.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture));
+                    throw new InvalidOperationException(
+                        "desktop_sequence failed at step " + (i + 1).ToString(CultureInfo.InvariantCulture)
+                        + " (" + step.Tool + ") after " + completed.ToString(CultureInfo.InvariantCulture)
+                        + " completed step(s). Sequence execution is fail-fast. Sequence does not roll back completed steps. Cause: "
+                        + ex.Message, ex);
+                }
+            }
+
+            EnsureSequenceRunning(hwnd, ensureMutationRunning, started, maxDuration);
+            var duration = started.ElapsedMilliseconds;
+            Audit(audit, "sequence status=success; completed=" + completed.ToString(CultureInfo.InvariantCulture)
+                         + "; durationMs=" + duration.ToString(CultureInfo.InvariantCulture));
+            return results.Append("],\"stepsCompleted\":").Append(completed)
+                .Append(",\"durationMs\":").Append(duration).Append('}').ToString();
+        }
+
+        private static string ExecuteSequenceStep(
+            SequenceStep step,
+            IntPtr hwnd,
+            bool sensitiveConfirmed,
+            Action ensureMutationRunning,
+            Action<string> audit,
+            Stopwatch sequenceStarted,
+            int maxDuration)
+        {
+            EnsureSequenceRunning(hwnd, ensureMutationRunning, sequenceStarted, maxDuration);
+            var args = step.Arguments;
+            switch (step.Tool)
+            {
+                case "desktop_window_focus":
+                    return FocusWindow(WithSequenceWindow(args, hwnd), ensureMutationRunning, audit);
+                case "desktop_mouse_move":
+                {
+                    var x = IntegerRequired(args, "x", -1000000, 1000000);
+                    var y = IntegerRequired(args, "y", -1000000, 1000000);
+                    RequirePointInsideWindow(hwnd, x, y);
+                    ensureMutationRunning();
+                    FocusAndVerify(hwnd);
+                    EnsureTargetReady(hwnd, x, y, ensureMutationRunning);
+                    return MouseMove(args, ensureMutationRunning, audit);
+                }
+                case "desktop_mouse_click":
+                    return MouseClick(WithSequenceWindow(args, hwnd), ensureMutationRunning, audit);
+                case "desktop_mouse_scroll":
+                    return MouseScroll(WithSequenceWindow(args, hwnd), ensureMutationRunning, audit);
+                case "desktop_mouse_drag":
+                    return MouseDrag(WithSequenceWindow(args, hwnd), ensureMutationRunning, audit);
+                case "desktop_type":
+                    return TypeText(WithSequenceWindow(args, hwnd), ensureMutationRunning, audit);
+                case "desktop_key":
+                    return PressKey(WithSequenceWindow(args, hwnd), ensureMutationRunning, audit);
+                case "desktop_clipboard_write":
+                    return ClipboardWrite(args, ensureMutationRunning, audit);
+                case "desktop_wait_for_window":
+                    return WaitForSequenceTarget(args, hwnd, ensureMutationRunning, sequenceStarted, maxDuration);
+                case "desktop_screenshot":
+                    if (!sensitiveConfirmed)
+                        throw new InvalidOperationException("confirmSensitiveRead=true is required for desktop_sequence screenshot steps.");
+                    return Screenshot(WithSequenceScreenshot(args, hwnd), audit);
+                default:
+                    throw new InvalidOperationException("Sequence step tool is not allowlisted: " + step.Tool + ".");
+            }
+        }
+
+        private static List<SequenceStep> ParseSequenceSteps(string body)
+        {
+            var raw = McpTopLevelJson.ExtractString(body, "stepsJson");
+            if (string.IsNullOrWhiteSpace(raw))
+                throw new InvalidOperationException("stepsJson is required and must contain a JSON array of sequence steps.");
+            if (raw.Length > MaxSequenceJsonCharacters)
+                throw new InvalidOperationException("stepsJson exceeds " + MaxSequenceJsonCharacters.ToString(CultureInfo.InvariantCulture) + " characters.");
+
+            var steps = new List<SequenceStep>();
+            var index = 0;
+            SkipSequenceWhitespace(raw, ref index);
+            if (index >= raw.Length || raw[index] != '[')
+                throw new InvalidOperationException("stepsJson must be a JSON array.");
+            index++;
+            while (true)
+            {
+                SkipSequenceWhitespace(raw, ref index);
+                if (index >= raw.Length) throw new InvalidOperationException("stepsJson ended unexpectedly.");
+                if (raw[index] == ']')
+                {
+                    index++;
+                    SkipSequenceWhitespace(raw, ref index);
+                    if (index != raw.Length) throw new InvalidOperationException("Unexpected content after stepsJson array.");
+                    break;
+                }
+                if (steps.Count >= MaxSequenceSteps)
+                    throw new InvalidOperationException("desktop_sequence exceeds the maximum of " + MaxSequenceSteps.ToString(CultureInfo.InvariantCulture) + " steps.");
+
+                var stepJson = ReadSequenceStepObject(raw, ref index);
+                var tool = McpTopLevelJson.ExtractString(stepJson, "tool").Trim();
+                if (tool.Length == 0) throw new InvalidOperationException("Each sequence step requires tool.");
+                if (string.Equals(tool, "desktop_clipboard_read", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Sequence cannot include desktop_clipboard_read.");
+                if (!SequenceAllowedTools.Contains(tool))
+                    throw new InvalidOperationException("Sequence step tool is not allowlisted: " + tool + ".");
+
+                var hasArguments = McpTopLevelJson.HasProperty(stepJson, "arguments");
+                var arguments = hasArguments ? McpTopLevelJson.ExtractString(stepJson, "arguments") : "{}";
+                if (hasArguments && string.IsNullOrWhiteSpace(arguments))
+                    throw new InvalidOperationException("Sequence step arguments must be a JSON object string.");
+                arguments = ValidateSequenceArguments(arguments);
+                if (McpTopLevelJson.HasProperty(arguments, "windowHandle"))
+                    throw new InvalidOperationException("Sequence step arguments must not contain windowHandle; the sequence owns the exact target.");
+                if (McpTopLevelJson.HasProperty(arguments, "confirmMutation"))
+                    throw new InvalidOperationException("Sequence step arguments must not contain confirmMutation; the sequence owns mutation confirmation.");
+                if (McpTopLevelJson.HasProperty(arguments, "confirmSensitiveRead"))
+                    throw new InvalidOperationException("Sequence step arguments must not contain confirmSensitiveRead; the sequence owns sensitive-read confirmation.");
+                if (string.Equals(tool, "desktop_screenshot", StringComparison.Ordinal)
+                    && McpTopLevelJson.HasProperty(arguments, "scope"))
+                    throw new InvalidOperationException("Sequence screenshot is forced to the bound target window; step scope must be omitted.");
+
+                var delay = StrictOptionalInteger(stepJson, "delayAfterMs", 0, 0, MaxSequenceDelayMilliseconds);
+                steps.Add(new SequenceStep { Tool = tool, Arguments = arguments, DelayAfterMilliseconds = delay });
+
+                SkipSequenceWhitespace(raw, ref index);
+                if (index >= raw.Length) throw new InvalidOperationException("stepsJson ended unexpectedly after a step.");
+                if (raw[index] == ',')
+                {
+                    index++;
+                    SkipSequenceWhitespace(raw, ref index);
+                    if (index >= raw.Length || raw[index] == ']')
+                        throw new InvalidOperationException("stepsJson cannot contain a trailing comma.");
+                    continue;
+                }
+                if (raw[index] != ']')
+                    throw new InvalidOperationException("stepsJson requires ',' or ']' after each step.");
+            }
+            return steps;
+        }
+
+        private static string ReadSequenceStepObject(string source, ref int index)
+        {
+            if (index >= source.Length || source[index] != '{')
+                throw new InvalidOperationException("Each stepsJson element must be a flat JSON object.");
+            var start = index;
+            var depth = 0;
+            var inString = false;
+            var escaped = false;
+            while (index < source.Length)
+            {
+                var ch = source[index++];
+                if (inString)
+                {
+                    if (escaped) { escaped = false; continue; }
+                    if (ch == '\\') { escaped = true; continue; }
+                    if (ch == '"') inString = false;
+                    continue;
+                }
+                if (ch == '"') { inString = true; continue; }
+                if (ch == '[') throw new InvalidOperationException("Sequence step records must be flat JSON objects; nested arrays are not allowed.");
+                if (ch == '{')
+                {
+                    depth++;
+                    if (depth > 1) throw new InvalidOperationException("Sequence step records must be flat JSON objects; nested objects are not allowed.");
+                    continue;
+                }
+                if (ch == '}')
+                {
+                    depth--;
+                    if (depth < 0) throw new InvalidOperationException("Invalid stepsJson object boundary.");
+                    if (depth == 0) return source.Substring(start, index - start);
+                }
+            }
+            throw new InvalidOperationException("Unterminated sequence step object.");
+        }
+
+        private static string ValidateSequenceArguments(string arguments)
+        {
+            var value = (arguments ?? string.Empty).Trim();
+            if (value.Length == 0) value = "{}";
+            if (value.Length > MaxSequenceStepArgumentsCharacters)
+                throw new InvalidOperationException("Sequence step arguments exceed " + MaxSequenceStepArgumentsCharacters.ToString(CultureInfo.InvariantCulture) + " characters.");
+            if (value.Length < 2 || value[0] != '{' || value[value.Length - 1] != '}')
+                throw new InvalidOperationException("Sequence step arguments must be a flat JSON object string.");
+
+            var depth = 0;
+            var inString = false;
+            var escaped = false;
+            for (var i = 0; i < value.Length; i++)
+            {
+                var ch = value[i];
+                if (inString)
+                {
+                    if (escaped) { escaped = false; continue; }
+                    if (ch == '\\') { escaped = true; continue; }
+                    if (ch == '"') inString = false;
+                    continue;
+                }
+                if (ch == '"') { inString = true; continue; }
+                if (ch == '[' || ch == ']')
+                    throw new InvalidOperationException("Sequence step arguments must be flat JSON scalars; arrays are not allowed.");
+                if (ch == '{')
+                {
+                    depth++;
+                    if (depth > 1) throw new InvalidOperationException("Sequence step arguments must be flat JSON scalars; nested objects are not allowed.");
+                }
+                else if (ch == '}')
+                {
+                    depth--;
+                    if (depth < 0) throw new InvalidOperationException("Sequence step arguments contain an invalid object boundary.");
+                    if (depth == 0 && i != value.Length - 1)
+                        throw new InvalidOperationException("Unexpected content after sequence step arguments object.");
+                }
+            }
+            if (inString || escaped || depth != 0)
+                throw new InvalidOperationException("Sequence step arguments contain unterminated JSON content.");
+
+            // Force a full top-level scan before any security-sensitive property injection.
+            string ignoredRaw, scanError;
+            bool ignoredFound;
+            if (!McpTopLevelJson.TryFindPropertyValue(value, "__qs3d_sequence_validation__", out ignoredRaw, out ignoredFound, out scanError))
+                throw new InvalidOperationException(scanError);
+            return value;
+        }
+
+        private static string WithSequenceWindow(string arguments, IntPtr hwnd)
+        {
+            return AddSequenceProperty(arguments, "windowHandle", "\"" + HandleText(hwnd) + "\"");
+        }
+
+        private static string WithSequenceScreenshot(string arguments, IntPtr hwnd)
+        {
+            var value = AddSequenceProperty(arguments, "scope", "\"window\"");
+            value = AddSequenceProperty(value, "windowHandle", "\"" + HandleText(hwnd) + "\"");
+            value = AddSequenceProperty(value, "confirmSensitiveRead", "true");
+            return value;
+        }
+
+        private static string AddSequenceProperty(string arguments, string name, string rawJsonValue)
+        {
+            var value = ValidateSequenceArguments(arguments);
+            if (McpTopLevelJson.HasProperty(value, name))
+                throw new InvalidOperationException("Sequence executor owns argument property: " + name + ".");
+            if (value == "{}") return "{\"" + Escape(name) + "\":" + rawJsonValue + "}";
+            return value.Substring(0, value.Length - 1) + ",\"" + Escape(name) + "\":" + rawJsonValue + "}";
+        }
+
+        private static string WaitForSequenceTarget(
+            string arguments,
+            IntPtr hwnd,
+            Action ensureMutationRunning,
+            Stopwatch sequenceStarted,
+            int maxDuration)
+        {
+            var titleContains = McpTopLevelJson.ExtractString(arguments, "titleContains").Trim();
+            if (titleContains.Length > MaxWaitTitleLength)
+                throw new InvalidOperationException("titleContains exceeds " + MaxWaitTitleLength.ToString(CultureInfo.InvariantCulture) + " characters.");
+            var timeout = StrictOptionalInteger(arguments, "timeoutMs", 5000, 0, MaxWaitMilliseconds);
+            var poll = StrictOptionalInteger(arguments, "pollIntervalMs", 100, MinWaitPollMilliseconds, MaxWaitPollMilliseconds);
+            var waitStarted = Stopwatch.StartNew();
+            while (true)
+            {
+                EnsureSequenceRunning(hwnd, ensureMutationRunning, sequenceStarted, maxDuration);
+                WindowInfo info;
+                if (TryGetWindowInfo(hwnd, false, out info)
+                    && (titleContains.Length == 0 || info.Title.IndexOf(titleContains, StringComparison.OrdinalIgnoreCase) >= 0))
+                    return "{\"found\":true,\"elapsedMs\":" + waitStarted.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture)
+                           + ",\"window\":" + WindowJson(info) + "}";
+                if (waitStarted.ElapsedMilliseconds >= timeout)
+                    return "{\"found\":false,\"elapsedMs\":" + waitStarted.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture) + "}";
+                var sleep = Math.Min(poll, SequenceDelaySliceMilliseconds);
+                Thread.Sleep(Math.Max(1, sleep));
+            }
+        }
+
+        private static void DelaySequence(
+            IntPtr hwnd,
+            int milliseconds,
+            Action ensureMutationRunning,
+            Stopwatch sequenceStarted,
+            int maxDuration)
+        {
+            var remaining = milliseconds;
+            while (remaining > 0)
+            {
+                EnsureSequenceRunning(hwnd, ensureMutationRunning, sequenceStarted, maxDuration);
+                var slice = Math.Min(SequenceDelaySliceMilliseconds, remaining);
+                Thread.Sleep(slice);
+                remaining -= slice;
+            }
+            EnsureSequenceRunning(hwnd, ensureMutationRunning, sequenceStarted, maxDuration);
+        }
+
+        private static void EnsureSequenceRunning(IntPtr hwnd, Action ensureMutationRunning, Stopwatch started, int maxDuration)
+        {
+            ensureMutationRunning();
+            McpDesktopControlSession.RequireLocalConsent("desktop_sequence");
+            if (started.ElapsedMilliseconds > maxDuration)
+                throw new TimeoutException("desktop_sequence exceeded its bounded maximum duration.");
+            ValidateWindow(hwnd, true);
+        }
+
+        private static void SkipSequenceWhitespace(string value, ref int index)
+        {
+            while (index < value.Length)
+            {
+                var ch = value[index];
+                if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') break;
+                index++;
+            }
         }
 
         private static string FocusWindow(string body, Action ensureMutationRunning, Action<string> audit)
@@ -893,6 +1276,20 @@ namespace QS3D.BricsCAD.V25
             return Math.Max(min, Math.Min(max, value));
         }
 
+        private static int StrictOptionalInteger(string body, string property, int fallback, int min, int max)
+        {
+            int value;
+            bool found;
+            string error;
+            if (!McpTopLevelJson.TryExtractInteger(body, property, out value, out found, out error))
+                throw new InvalidOperationException(error);
+            if (!found) return fallback;
+            if (value < min || value > max)
+                throw new InvalidOperationException(property + " must be an integer between "
+                    + min.ToString(CultureInfo.InvariantCulture) + " and " + max.ToString(CultureInfo.InvariantCulture) + ".");
+            return value;
+        }
+
         private static int IntegerRequired(string body, string property, int min, int max)
         {
             int value;
@@ -976,6 +1373,13 @@ namespace QS3D.BricsCAD.V25
         private static string Escape(string value)
         {
             return McpEmbeddedServer.JsonEscape(value ?? string.Empty);
+        }
+
+        private sealed class SequenceStep
+        {
+            public string Tool = string.Empty;
+            public string Arguments = "{}";
+            public int DelayAfterMilliseconds;
         }
 
         private sealed class WindowInfo
