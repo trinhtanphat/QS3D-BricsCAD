@@ -9,6 +9,9 @@ BUILD_WORKFLOW = ROOT / ".github" / "workflows" / "bricscad-v26.yml"
 RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release-v26.yml"
 
 CALL = r"& .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR"
+HELD_BUILD_CALL = r"& .\scripts\build-v26-with-stable-references.ps1"
+HELD_BUILD_STATE = "-StatePath $env:V26_HOST_REFERENCE_STATE"
+DIRECT_BUILD = "dotnet build src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj"
 REPARSE_TOKEN = "[IO.FileAttributes]::ReparsePoint"
 ROOTED_TOKEN = "if (-not [IO.Path]::IsPathRooted($trimmed))"
 STATE_CAPTURE_TOKEN = "function Get-StableHostFileState"
@@ -26,6 +29,11 @@ def fail(message: str) -> None:
 def require(text: str, token: str, label: str) -> None:
     if token not in text:
         fail(f"{label}: missing {token!r}")
+
+
+def require_absent(text: str, token: str, label: str) -> None:
+    if token in text:
+        fail(f"{label}: forbidden stale token remains {token!r}")
 
 
 def require_before(text: str, first: str, second: str, label: str) -> None:
@@ -84,24 +92,23 @@ def validate_helper(text: str) -> None:
     require_before(text, STATE_CAPTURE_TOKEN, STATE_ASSERT_TOKEN, "stable-state capture before revalidation")
 
 
-def validate_workflow(text: str, label: str, expected_verify_count: int) -> None:
+def validate_workflow(text: str, label: str, expected_runtime_verify_count: int) -> None:
     require(text, CALL, label)
     require(text, "BRICSCAD_V26_DIR", label)
     require(text, "V26_HOST_REFERENCE_STATE", label)
     require(text, STATE_WRITE_TOKEN, label)
-    require(text, STATE_VERIFY_TOKEN, label)
-    actual_verify_count = text.count(STATE_VERIFY_TOKEN)
-    if actual_verify_count < expected_verify_count:
-        fail(f"{label}: expected at least {expected_verify_count} host-generation revalidations, found {actual_verify_count}")
+    require(text, HELD_BUILD_CALL, label)
+    require(text, HELD_BUILD_STATE, label)
+    require_absent(text, DIRECT_BUILD, label)
+    require_before(text, STATE_WRITE_TOKEN, HELD_BUILD_CALL, f"{label} capture before held-reference plugin build")
 
-    build = "dotnet build src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj"
-    require(text, build, label)
-    require_before(text, STATE_WRITE_TOKEN, STATE_VERIFY_TOKEN, f"{label} capture before revalidation")
-    require_before(text, STATE_VERIFY_TOKEN, build, f"{label} stable-generation revalidation before plugin build")
+    actual_verify_count = text.count(STATE_VERIFY_TOKEN)
+    if actual_verify_count < expected_runtime_verify_count:
+        fail(f"{label}: expected at least {expected_runtime_verify_count} runtime host-generation revalidations, found {actual_verify_count}")
 
     runtime = "test-bricscad-v26-runtime.ps1"
     if runtime in text:
-        require_between(text, STATE_VERIFY_TOKEN, build, runtime, f"{label} runtime revalidation after plugin build")
+        require_between(text, STATE_VERIFY_TOKEN, HELD_BUILD_CALL, runtime, f"{label} runtime revalidation after held-reference plugin build")
     if label == "manual V26 release workflow":
         signed_runtime_anchor = "Real V26 runtime validation for signed release payload"
         require_between(text, STATE_VERIFY_TOKEN, signed_runtime_anchor, runtime, f"{label} signed-runtime revalidation")
@@ -126,8 +133,8 @@ def main() -> None:
     release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
 
     validate_helper(helper)
-    validate_workflow(build, "manual V26 build workflow", 2)
-    validate_workflow(release, "manual V26 release workflow", 3)
+    validate_workflow(build, "manual V26 build workflow", 1)
+    validate_workflow(release, "manual V26 release workflow", 2)
 
     expect_rejected(validate_helper, helper.replace(ROOTED_TOKEN, "if ($false)", 1), "removed absolute-root rejection")
     expect_rejected(validate_helper, helper.replace(REPARSE_TOKEN, "[IO.FileAttributes]::Archive"), "removed reparse attribute checks")
@@ -136,14 +143,16 @@ def main() -> None:
     expect_rejected(validate_helper, helper.replace(STATE_ASSERT_TOKEN, "function Ignore-StableHostFileState", 1), "removed stable host-file revalidation")
     expect_rejected(validate_helper, helper.replace(SECOND_CAPTURE_HASH_TOKEN, "$secondHash = $firstHash", 1), "removed second-generation hash capture")
     expect_rejected(validate_helper, helper.replace(CURRENT_VERIFY_HASH_TOKEN, "$currentHash = [string]$Expected.Sha256", 1), "removed current-generation verification hash")
-    expect_rejected(lambda text: validate_workflow(text, "manual V26 build workflow", 2), remove_last(build, STATE_VERIFY_TOKEN), "removed build-workflow runtime revalidation")
-    expect_rejected(lambda text: validate_workflow(text, "manual V26 release workflow", 3), remove_last(release, STATE_VERIFY_TOKEN), "removed release-workflow signed-runtime revalidation")
+    expect_rejected(lambda text: validate_workflow(text, "manual V26 build workflow", 1), build.replace(HELD_BUILD_CALL, "& .\\scripts\\missing-held-build.ps1", 1), "removed build-workflow held-reference boundary")
+    expect_rejected(lambda text: validate_workflow(text, "manual V26 release workflow", 2), release.replace(HELD_BUILD_CALL, "& .\\scripts\\missing-held-build.ps1", 1), "removed release-workflow held-reference boundary")
+    expect_rejected(lambda text: validate_workflow(text, "manual V26 build workflow", 1), remove_last(build, STATE_VERIFY_TOKEN), "removed build-workflow runtime revalidation")
+    expect_rejected(lambda text: validate_workflow(text, "manual V26 release workflow", 2), remove_last(release, STATE_VERIFY_TOKEN), "removed release-workflow signed-runtime revalidation")
 
     print("PASS V26 host reference path/generation-safety contract")
-    print(" - both V26 workflows capture admitted host-reference generations and revalidate every plugin-build/runtime consumption boundary")
+    print(" - both V26 workflows capture admitted host-reference generations and route plugin compilation through the held-reference wrapper")
     print(" - configured host roots must be absolute before canonicalization")
     print(" - host path components and required V26 leaves reject filesystem reparse aliases")
-    print(" - required host leaves are independently re-resolved and re-hashed across admission/consumption boundaries")
+    print(" - required host leaves are independently re-resolved and re-hashed across admission/runtime consumption boundaries")
 
 
 if __name__ == "__main__":
