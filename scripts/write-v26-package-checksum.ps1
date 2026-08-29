@@ -68,6 +68,9 @@ function Read-BoundedChecksumBytes {
 
 $package = Resolve-OrdinaryNonReparseFile -Path $PackagePath -Label 'V26 package ZIP'
 if (-not [string]::Equals($package.Name, $script:ExpectedPackageName, [StringComparison]::Ordinal)) { throw "V26 checksum source must be named $($script:ExpectedPackageName): $($package.Name)" }
+$packageCanonicalPath = $package.FullName
+$packageLength = [int64]$package.Length
+$packageLastWriteUtcTicks = [int64]$package.LastWriteTimeUtc.Ticks
 
 $outputFullPath = [IO.Path]::GetFullPath($OutputPath)
 if (-not [string]::Equals([IO.Path]::GetFileName($outputFullPath), $script:ExpectedChecksumName, [StringComparison]::Ordinal)) { throw "V26 checksum destination must be named $($script:ExpectedChecksumName): $outputFullPath" }
@@ -78,8 +81,16 @@ $hadExistingOutput = Assert-SafeExistingOutputLeaf -Path $outputFullPath
 $originalOutputBytes = $null
 if ($hadExistingOutput) { $originalOutputBytes = Read-BoundedChecksumBytes -Path $outputFullPath -Label 'Existing V26 checksum destination snapshot' }
 
-$stream = [IO.File]::Open($package.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+$stream = [IO.File]::Open($packageCanonicalPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
 try {
+    $reboundPackage = Resolve-OrdinaryNonReparseFile -Path $packageCanonicalPath -Label 'V26 package ZIP after open'
+    if (-not [string]::Equals($packageCanonicalPath, $reboundPackage.FullName, [StringComparison]::OrdinalIgnoreCase) -or
+        $packageLength -ne [int64]$stream.Length -or
+        $packageLength -ne [int64]$reboundPackage.Length -or
+        $packageLastWriteUtcTicks -ne [int64]$reboundPackage.LastWriteTimeUtc.Ticks) {
+        throw 'V26 package ZIP changed between checksum admission and held-stream binding.'
+    }
+
     $sha256 = [Security.Cryptography.SHA256]::Create()
     try { $digestBytes = $sha256.ComputeHash($stream) } finally { $sha256.Dispose() }
 } finally { $stream.Dispose() }
@@ -169,4 +180,4 @@ finally {
 if (Test-Path -LiteralPath $tempPath) { throw "V26 checksum staging residue remains: $tempPath" }
 if (Test-Path -LiteralPath $backupPath) { throw "V26 checksum backup residue remains: $backupPath" }
 
-[pscustomobject]@{ PackagePath = $package.FullName; OutputPath = $outputFullPath; Sha256 = $hash; Record = $record }
+[pscustomobject]@{ PackagePath = $packageCanonicalPath; OutputPath = $outputFullPath; Sha256 = $hash; Record = $record }

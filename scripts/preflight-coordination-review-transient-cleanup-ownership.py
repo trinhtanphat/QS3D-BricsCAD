@@ -46,8 +46,15 @@ if queue < 0 or release < 0 or release < queue:
 if "finally" in restore_isolation:
     raise SystemExit("RestoreIsolation must not erase retry ownership from an unconditional finally block")
 
+try_reset = method_body(
+    "public Exception? TryResetTransientStateBestEffort()",
+    "private Exception? ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)",
+)
+if "return ResetTransientStateBestEffort(false);" not in try_reset:
+    raise SystemExit("TryResetTransientStateBestEffort must surface the aggregate cleanup result without changing best-effort semantics")
+
 reset = method_body(
-    "private void ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)",
+    "private Exception? ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)",
     "public void AbandonDestroyedDocumentState()",
 )
 if "catch { _isolationActive = false;" in reset:
@@ -59,13 +66,14 @@ for token in (
     "cleanupFailure = cleanupFailure ?? ex;",
     "if (throwOnSectionRestoreFailure && cleanupFailure != null)",
     "throw cleanupFailure;",
+    "return cleanupFailure;",
 ):
     if token not in reset:
-        raise SystemExit(f"dispose cleanup must aggregate retry-sensitive cleanup failure: {token}")
+        raise SystemExit(f"dispose/row-change cleanup must preserve aggregate retry-sensitive cleanup result: {token}")
 
 abandon = method_body(
     "public void AbandonDestroyedDocumentState()",
-    "private void RestoreObjectIsolationModeBestEffort()",
+    "private void RestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)",
 )
 for token in ("_destroyed = true;", "_highlighted.Clear();", "_isolationActive = false;", "_viewBeforeSection = null;"):
     if token not in abandon:

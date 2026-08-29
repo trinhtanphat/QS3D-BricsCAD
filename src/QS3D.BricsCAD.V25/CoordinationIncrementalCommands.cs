@@ -191,13 +191,23 @@ namespace QS3D.BricsCAD.V25
                     try { extents = solid.GeometricExtents; }
                     catch { continue; }
                     if (!HasFiniteExtents(extents)) continue;
+                    if (!entitySnapshot.SurfaceAreaDrawingUnitsSquared.HasValue ||
+                        !entitySnapshot.VolumeDrawingUnitsCubed.HasValue)
+                        throw new InvalidOperationException(
+                            "Coordination changed-only không thể fingerprint đầy đủ Solid3d " + handle +
+                            "; surface-area/volume metric không khả dụng nên cache exact-clash không được tái sử dụng.");
 
                     if (!aggregateByElement.TryGetValue(binding.ElementId, out var aggregate))
                     {
                         aggregate = new ElementAggregate(binding);
                         aggregateByElement.Add(binding.ElementId, aggregate);
                     }
-                    aggregate.Add(handle, entitySnapshot.Layer, extents);
+                    aggregate.Add(
+                        handle,
+                        entitySnapshot.Layer,
+                        entitySnapshot.SurfaceAreaDrawingUnitsSquared.Value,
+                        entitySnapshot.VolumeDrawingUnitsCubed.Value,
+                        extents);
                 }
                 transaction.Commit();
             }
@@ -346,9 +356,19 @@ namespace QS3D.BricsCAD.V25
 
             internal SemanticBinding Binding { get; }
 
-            internal void Add(string handle, string layer, Extents3d extents)
+            internal void Add(
+                string handle,
+                string layer,
+                double surfaceAreaDrawingUnitsSquared,
+                double volumeDrawingUnitsCubed,
+                Extents3d extents)
             {
-                var evidence = new ComponentEvidence(handle, layer, extents);
+                var evidence = new ComponentEvidence(
+                    handle,
+                    layer,
+                    surfaceAreaDrawingUnitsSquared,
+                    volumeDrawingUnitsCubed,
+                    extents);
                 _components.Add(evidence);
                 if (!_hasBounds)
                 {
@@ -376,7 +396,7 @@ namespace QS3D.BricsCAD.V25
             private string BuildRevision()
             {
                 var text = new StringBuilder();
-                text.Append("QS3D_COORD_LIVE_V1\n")
+                text.Append("QS3D_COORD_LIVE_V2\n")
                     .Append(Binding.ElementId).Append('\n')
                     .Append(Binding.Category).Append('\n')
                     .Append(Binding.Floor).Append('\n');
@@ -394,20 +414,31 @@ namespace QS3D.BricsCAD.V25
 
         private sealed class ComponentEvidence
         {
-            internal ComponentEvidence(string handle, string layer, Extents3d extents)
+            internal ComponentEvidence(
+                string handle,
+                string layer,
+                double surfaceAreaDrawingUnitsSquared,
+                double volumeDrawingUnitsCubed,
+                Extents3d extents)
             {
                 Handle = handle;
                 Layer = (layer ?? string.Empty).Trim();
+                SurfaceAreaDrawingUnitsSquared = surfaceAreaDrawingUnitsSquared;
+                VolumeDrawingUnitsCubed = volumeDrawingUnitsCubed;
                 Extents = extents;
             }
 
             internal string Handle { get; }
             private string Layer { get; }
+            private double SurfaceAreaDrawingUnitsSquared { get; }
+            private double VolumeDrawingUnitsCubed { get; }
             private Extents3d Extents { get; }
 
             internal void AppendTo(StringBuilder text)
             {
                 text.Append(Handle).Append('|').Append(Layer).Append('|')
+                    .Append(R(SurfaceAreaDrawingUnitsSquared)).Append('|')
+                    .Append(R(VolumeDrawingUnitsCubed)).Append('|')
                     .Append(R(Extents.MinPoint.X)).Append('|').Append(R(Extents.MinPoint.Y)).Append('|').Append(R(Extents.MinPoint.Z)).Append('|')
                     .Append(R(Extents.MaxPoint.X)).Append('|').Append(R(Extents.MaxPoint.Y)).Append('|').Append(R(Extents.MaxPoint.Z)).Append('\n');
             }

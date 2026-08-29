@@ -63,12 +63,12 @@ if "ResetTransientStateBestEffort(false);" not in reset_public.group("body"):
     raise SystemExit("FAIL coordination section restore ownership: public reset must delegate to non-throwing section cleanup mode")
 
 reset_core = re.search(
-    r"private void ResetTransientStateBestEffort\(bool throwOnSectionRestoreFailure\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*public void AbandonDestroyedDocumentState",
+    r"private Exception\? ResetTransientStateBestEffort\(bool throwOnSectionRestoreFailure\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*public void AbandonDestroyedDocumentState",
     text,
     re.S,
 )
 if not reset_core:
-    raise SystemExit("FAIL coordination section restore ownership: retry-aware reset core overload is missing")
+    raise SystemExit("FAIL coordination section restore ownership: retry-aware result-bearing reset core overload is missing")
 core_body = reset_core.group("body")
 for token in (
     "Exception? cleanupFailure = null;",
@@ -78,9 +78,10 @@ for token in (
     "cleanupFailure = cleanupFailure ?? ex;",
     "if (throwOnSectionRestoreFailure && cleanupFailure != null)",
     "throw cleanupFailure;",
+    "return cleanupFailure;",
 ):
     if token not in core_body:
-        raise SystemExit(f"FAIL coordination section restore ownership: retry-aware reset must retain first cleanup failure while attempting all cleanup: {token}")
+        raise SystemExit(f"FAIL coordination section restore ownership: retry-aware reset must retain and surface first cleanup failure while attempting all cleanup: {token}")
 if "_viewBeforeSection = null" in core_body:
     raise SystemExit("FAIL coordination section restore ownership: reset core must never erase section retry ownership on live restore failure")
 
