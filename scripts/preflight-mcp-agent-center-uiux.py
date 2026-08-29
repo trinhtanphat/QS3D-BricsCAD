@@ -68,6 +68,14 @@ def main() -> int:
         "button trigger precedence": "Trigger precedence is intentional: focus -> hover -> pressed -> disabled.",
         "responsive scrolling": "HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled",
         "compact footer": "CreateFooter()",
+        "transport readiness state": '"Transport sẵn sàng"',
+        "ChatGPT registration state": '"ChatGPT đăng ký"',
+        "OAuth MCP traffic state": '"OAuth MCP traffic"',
+        "recent OAuth activity classifier": "HasRecentOAuthMcpActivity(",
+        "OAuth activity formatting": "FormatOAuthMcpActivity(",
+        "OAuth public URL binding": "McpEmbeddedServer.LastOAuthMcpPublicUrl",
+        "OAuth request timestamp": "McpEmbeddedServer.LastOAuthMcpActivityUtc",
+        "registration acknowledgement is distinct": "Đây là xác nhận cài đặt, chưa phải bằng chứng traffic",
     }
     for label, token in required.items():
         if token not in text:
@@ -114,7 +122,7 @@ def main() -> int:
             print("ERROR:", error)
         return 1
 
-    print("PASS MCP Agent Center UIUX four-tab/toast/theme/local-consent contract")
+    print("PASS MCP Agent Center UIUX four-tab/toast/theme/local-consent/connectivity contract")
     return 0
 
 
