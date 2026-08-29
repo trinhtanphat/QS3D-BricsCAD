@@ -24,11 +24,13 @@ def forbid(text, needle, rel):
 def main():
     installer_rel = "src/QS3D.BricsCAD.V25/Updates/VerifiedPreviewInstaller.cs"
     downloader_rel = "src/QS3D.BricsCAD.V25/Updates/VerifiedReleaseDownloader.cs"
+    release_client_rel = "src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs"
     window_rel = "src/QS3D.BricsCAD.V25/Updates/UpdateCenterWindow.cs"
     preferences_rel = "src/QS3D.BricsCAD.V25/Updates/UpdatePreferences.cs"
 
     installer = read(installer_rel)
     downloader = read(downloader_rel)
+    release_client = read(release_client_rel)
     window = read(window_rel)
     preferences = read(preferences_rel)
 
@@ -62,8 +64,25 @@ def main():
         "ContentLength",
         "BytesReceived",
         "TotalBytes",
+        "CreateFriendlyNetworkException",
+        'response.StatusCode == HttpStatusCode.Forbidden',
+        'response.Headers["X-RateLimit-Remaining"]',
+        'response.Headers["X-RateLimit-Reset"]',
+        'response.Headers["Retry-After"]',
     ):
         require(downloader, needle, downloader_rel)
+
+    for needle in (
+        'request.Headers["X-GitHub-Api-Version"] = "2022-11-28"',
+        'response.Headers["X-RateLimit-Remaining"]',
+        'response.Headers["X-RateLimit-Reset"]',
+        'response.Headers["Retry-After"]',
+        "TryGetFreshCache",
+        "TryGetStaleCache",
+        "SetCache",
+        "GitHub đang giới hạn",
+    ):
+        require(release_client, needle, release_client_rel)
 
     for needle in (
         "await new VerifiedReleaseDownloader().DownloadAsync(release, progress)",
@@ -101,6 +120,7 @@ def main():
         "PASS: verified V25 preview package is staged and re-hashed, adapter/Core replacement remains deferred until BricsCAD exits, "
         "rollback is preserved, the exact BricsCAD executable is restarted after apply/recovery, downloader progress is surfaced, "
         "preview capability copy stays coherent with the primary action, update-on-close defaults OFF unless persisted by the user, "
+        "GitHub 403/rate-limit responses are bounded and recover from a recent safe release snapshot when possible, "
         "and Update Center presents highlighted version/progress state instead of merely revealing the downloaded ZIP."
     )
     return 0
