@@ -16,6 +16,9 @@ namespace QS3D.Core.SmokeTests
             CategoryOverrunRejectsBeforeSecondCurrent();
             UnderYieldStillFailsClosed();
             PostTraversalCountDriftStillFailsClosed();
+            TransientTargetCountGrowthRejectsBeforeCurrent();
+            TransientItemCountShrinkRejectsBeforeCurrent();
+            TransientCategoryNegativeCountRejectsBeforeCurrent();
             StreamingCeilingRejectsBeforeOverflowCurrent();
             HonestCountedInputsRemainAccepted();
         }
@@ -73,8 +76,44 @@ namespace QS3D.Core.SmokeTests
             var error = Capture<ArgumentException>(() => NewProfile(source, EmptyItems(), EmptyCategories(), 3));
             Contains("known Count changed during traversal", error.Message,
                 "Post-traversal Count drift must remain rejected.");
-            Equal(2, source.CountReads, "Count evidence must be read before and after traversal.");
+            Equal(5, source.CountReads, "Count evidence must be rebound at traversal boundaries and after traversal.");
             Equal(1, source.CurrentReads, "Drift validation must not introduce extra Current reads.");
+        }
+
+        private static void TransientTargetCountGrowthRejectsBeforeCurrent()
+        {
+            var source = new TransientCountProbeCollection<string>(1, 2, "A");
+            var error = Capture<ArgumentException>(() => NewProfile(source, EmptyItems(), EmptyCategories(), 3));
+            Contains("known Count changed during traversal", error.Message,
+                "Target Count growth after MoveNext must fail closed immediately.");
+            Equal(1, source.MoveNextCalls, "Target transient drift must stop at the first successful MoveNext.");
+            Equal(0, source.CurrentReads, "Target transient drift must reject before Current under changed Count evidence.");
+            Equal(3, source.CountReads, "Target Count must be sampled at admission, before MoveNext, and after successful MoveNext.");
+        }
+
+        private static void TransientItemCountShrinkRejectsBeforeCurrent()
+        {
+            var source = new TransientCountProbeCollection<RegenerationWorkItem>(2, 1, Item(0, "A"));
+            var error = Capture<ArgumentException>(() => NewProfile(Array.Empty<string>(), source, EmptyCategories(), 3));
+            Contains("known Count changed during traversal", error.Message,
+                "Work-item Count shrink after MoveNext must fail closed immediately.");
+            Equal(1, source.MoveNextCalls, "Work-item transient drift must stop at the first successful MoveNext.");
+            Equal(0, source.CurrentReads, "Work-item transient drift must reject before Current under changed Count evidence.");
+            Equal(3, source.CountReads, "Work-item Count must be sampled at admission, before MoveNext, and after successful MoveNext.");
+        }
+
+        private static void TransientCategoryNegativeCountRejectsBeforeCurrent()
+        {
+            var source = new TransientCountProbeCollection<RegenerationCategoryWork>(
+                1,
+                -1,
+                Category(ElementCategory.ArchitecturalWall));
+            var error = Capture<ArgumentException>(() => NewProfile(Array.Empty<string>(), EmptyItems(), source, 3));
+            Contains("reports an invalid negative known Count", error.Message,
+                "Category Count becoming negative after MoveNext must fail closed immediately.");
+            Equal(1, source.MoveNextCalls, "Category transient negative Count must stop at the first successful MoveNext.");
+            Equal(0, source.CurrentReads, "Category transient negative Count must reject before Current.");
+            Equal(3, source.CountReads, "Category Count must be sampled at admission, before MoveNext, and after successful MoveNext.");
         }
 
         private static void StreamingCeilingRejectsBeforeOverflowCurrent()
@@ -97,9 +136,9 @@ namespace QS3D.Core.SmokeTests
             Equal(1, profile.TargetElementIds.Count, "Honest target input must remain accepted.");
             Equal(1, profile.Items.Count, "Honest work-item input must remain accepted.");
             Equal(1, profile.Categories.Count, "Honest category input must remain accepted.");
-            Equal(2, targets.CountReads, "Honest target Count must be rebound after traversal.");
-            Equal(2, items.CountReads, "Honest item Count must be rebound after traversal.");
-            Equal(2, categories.CountReads, "Honest category Count must be rebound after traversal.");
+            Equal(5, targets.CountReads, "Honest target Count must remain stable across every traversal boundary.");
+            Equal(5, items.CountReads, "Honest item Count must remain stable across every traversal boundary.");
+            Equal(5, categories.CountReads, "Honest category Count must remain stable across every traversal boundary.");
         }
 
         private static RegenerationWorkProfile NewProfile(
@@ -210,6 +249,73 @@ namespace QS3D.Core.SmokeTests
                     if (_index < _owner._items.Length) return true;
                     _owner._completed = true;
                     return false;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
+
+            public void Add(T item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Contains(T item) => throw new NotSupportedException();
+            public void CopyTo(T[] array, int arrayIndex) => throw new NotSupportedException();
+            public bool Remove(T item) => throw new NotSupportedException();
+        }
+
+        private sealed class TransientCountProbeCollection<T> : ICollection<T>
+        {
+            private readonly T[] _items;
+            private readonly int _initialCount;
+            private readonly int _transientCount;
+            private bool _afterMoveNext;
+
+            internal TransientCountProbeCollection(int initialCount, int transientCount, params T[] items)
+            {
+                _initialCount = initialCount;
+                _transientCount = transientCount;
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+            }
+
+            public int Count
+            {
+                get
+                {
+                    CountReads++;
+                    return _afterMoveNext ? _transientCount : _initialCount;
+                }
+            }
+
+            public bool IsReadOnly => true;
+            internal int CountReads { get; private set; }
+            internal int MoveNextCalls { get; private set; }
+            internal int CurrentReads { get; private set; }
+
+            public IEnumerator<T> GetEnumerator() => new ProbeEnumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class ProbeEnumerator : IEnumerator<T>
+            {
+                private readonly TransientCountProbeCollection<T> _owner;
+                private int _index = -1;
+
+                internal ProbeEnumerator(TransientCountProbeCollection<T> owner) { _owner = owner; }
+
+                public T Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        return _owner._items[_index];
+                    }
+                }
+                object IEnumerator.Current => Current!;
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    _index++;
+                    _owner._afterMoveNext = true;
+                    return _index < _owner._items.Length;
                 }
 
                 public void Reset() => throw new NotSupportedException();
