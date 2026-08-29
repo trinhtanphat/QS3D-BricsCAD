@@ -18,8 +18,10 @@ if source.is_file():
     method = text[start:end] if start >= 0 and end > start else ""
     required = (
         "var knownCount = RequireSupportedKnownPersistenceCount(values);",
-        "foreach (var item in values)",
+        "using (var enumerator = values.GetEnumerator())",
+        "while (enumerator.MoveNext())",
         "if (knownCount.HasValue && observedCount >= knownCount.Value)",
+        "var item = enumerator.Current;",
         "if (knownCount.HasValue && observedCount != knownCount.Value)",
         "var finalKnownCount = RequireSupportedKnownPersistenceCount(values);",
         "throw MetadataTraversalCountChangedError();",
@@ -28,9 +30,11 @@ if source.is_file():
     )
     positions = [method.find(token) for token in required]
     if not method or any(position < 0 for position in positions) or positions != sorted(positions):
-        errors.append("ReplacePersistenceState must rebind Count after exact traversal and reject drift before reserved validation/publication.")
+        errors.append("ReplacePersistenceState must explicitly traverse the input, then rebind Count after exact traversal and reject drift before reserved validation/publication.")
     if method.count("RequireSupportedKnownPersistenceCount(values)") < 2:
         errors.append("ReplacePersistenceState must bind supported Count evidence both before and after caller-controlled traversal.")
+    if "foreach (var item in values)" in method:
+        errors.append("ReplacePersistenceState must not regress to foreach traversal because the Count guard must execute before caller-controlled Current.")
 
 if smoke.is_file():
     text = smoke.read_text(encoding="utf-8")
@@ -58,4 +62,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: metadata replacement rebinds deterministic Count evidence after traversal before publication.")
+print("PASS: metadata replacement explicitly traverses caller input and rebinds deterministic Count evidence before publication.")
