@@ -88,10 +88,15 @@ def main() -> int:
         "reject any Transfer-Encoding header": (server, 'if (headers.ContainsKey("Transfer-Encoding"))'),
         "strict UTF-8 request body": (server, "StrictUtf8.GetString(body)"),
         "invalid UTF-8 request rejection": (server, "Invalid UTF-8 in MCP HTTP body."),
+        "initialize parser error conversion": (server, "TryExtractInitializeProtocolVersion"),
+        "initialize parser JSON-RPC error": (server, "JsonRpcError(id, -32602, initializeError)"),
         "top-level JSON trailing-comma rejection": (top_level_json, "JSON object cannot end with a trailing comma."),
         "MCP arguments trailing-comma rejection": (top_level_json, "MCP arguments object cannot end with a trailing comma."),
         "strict RFC JSON whitespace helper": (top_level_json, "IsJsonWhitespace(source[index])"),
         "strict RFC JSON trim helper": (top_level_json, "TrimJsonWhitespace"),
+        "recursive JSON object grammar": (top_level_json, "private static bool TrySkipJsonObject("),
+        "recursive JSON array grammar": (top_level_json, "private static bool TrySkipJsonArray("),
+        "recursive JSON primitive grammar": (top_level_json, "private static bool TrySkipJsonPrimitive("),
         "runtime foreground ESC fallback": (runtime, "TrySendEscapeFallback()"),
         "runtime emergency-stop latch": (runtime, "_automationStopped = true"),
         "runtime queued dispatch state": (runtime, "CadWorkQueued = 0"),
@@ -148,10 +153,10 @@ def main() -> int:
 
     print(
         "PASS: compiled modular MCP transport/runtime use strict HTTP framing/UTF-8, exact JSON media "
-        "type admission and strict RFC JSON object framing/whitespace, bounded authenticated session "
-        "handling, atomic CAD timeout truth, BricsCAD-confined recovery, one validated HTTPS endpoint "
-        "resolver, live-only Cloudflare provider URLs, exact tunnel identity, canonical named-tunnel "
-        "config regeneration and verified click-first redacted onboarding."
+        "type admission and strict recursive RFC JSON grammar/whitespace, bounded authenticated session "
+        "handling, fail-closed initialize parsing, atomic CAD timeout truth, BricsCAD-confined recovery, "
+        "one validated HTTPS endpoint resolver, live-only Cloudflare provider URLs, exact tunnel identity, "
+        "canonical named-tunnel config regeneration and verified click-first redacted onboarding."
     )
     return 0
 
