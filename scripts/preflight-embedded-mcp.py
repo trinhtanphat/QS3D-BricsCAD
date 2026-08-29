@@ -3,16 +3,21 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-SERVER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpEmbeddedServer.cs"
-COMMANDS = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpConnectorRibbonCommands.cs"
-TOKEN_ONBOARDING = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareOnboarding.cs"
-ACCOUNT_ONBOARDING = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareAccountOnboarding.cs"
-AGENT_CENTER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpAgentControlCenter.cs"
-BOOTSTRAPPER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflaredBootstrapper.cs"
-PUBLIC_ENDPOINT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpPublicEndpointResolver.cs"
-OVERRIDE = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "McpRibbonCommandOverride.cs"
-COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "Ribbon" / "RibbonInitializationCoordinator.cs"
-PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
+V25 = ROOT / "src" / "QS3D.BricsCAD.V25"
+SERVER = V25 / "McpEmbeddedServerV2.cs"
+RUNTIME = V25 / "McpCadAgentRuntime.cs"
+LEGACY_SERVER = V25 / "McpEmbeddedServer.cs"
+COMMANDS = V25 / "McpConnectorRibbonCommands.cs"
+TOKEN_ONBOARDING = V25 / "McpCloudflareOnboarding.cs"
+ACCOUNT_ONBOARDING = V25 / "McpCloudflareAccountOnboarding.cs"
+AGENT_CENTER = V25 / "McpAgentControlCenter.cs"
+BOOTSTRAPPER = V25 / "McpCloudflaredBootstrapper.cs"
+PUBLIC_ENDPOINT = V25 / "McpPublicEndpointResolver.cs"
+OVERRIDE = V25 / "Ribbon" / "McpRibbonCommandOverride.cs"
+COORDINATOR = V25 / "Ribbon" / "RibbonInitializationCoordinator.cs"
+PLUGIN = V25 / "PluginEntry.cs"
+V25_PROJECT = V25 / "QS3D.BricsCAD.V25.csproj"
+V26_PROJECT = ROOT / "src" / "QS3D.BricsCAD.V26" / "QS3D.BricsCAD.V26.csproj"
 INTEGRATION_DOC = ROOT / "docs" / "CHATGPT-MCP-INTEGRATION.md"
 
 
@@ -36,6 +41,8 @@ def read(path: Path, errors: list[str]) -> str:
 def main() -> int:
     errors: list[str] = []
     server = read(SERVER, errors)
+    runtime = read(RUNTIME, errors)
+    legacy_server = read(LEGACY_SERVER, errors)
     commands = read(COMMANDS, errors)
     token_onboarding = read(TOKEN_ONBOARDING, errors)
     account_onboarding = read(ACCOUNT_ONBOARDING, errors)
@@ -45,20 +52,23 @@ def main() -> int:
     override = read(OVERRIDE, errors)
     coordinator = read(COORDINATOR, errors)
     plugin = read(PLUGIN, errors)
+    v25_project = read(V25_PROJECT, errors)
+    v26_project = read(V26_PROJECT, errors)
     integration_doc = read(INTEGRATION_DOC, errors)
 
-    require(server, "internal static class McpEmbeddedServer", errors, "embedded server")
+    # Active transport is the modular V2 source. The monolith may stay in history only.
+    require(server, "internal static class McpEmbeddedServer", errors, "embedded V2 server")
     require(server, "new TcpListener(IPAddress.Loopback, Port)", errors, "loopback-only listener")
     require(server, 'TokenFileName = "mcp-bearer-token.txt"', errors, "local bearer token file")
     require(server, 'BearerEnvironment = "QS3D_MCP_BEARER_TOKEN"', errors, "bearer environment override")
-    require(server, 'PublicUrlEnvironment = "QS3D_MCP_PUBLIC_URL"', errors, "public URL display override")
-    require(server, "ExecuteInApplicationContext", errors, "BricsCAD application-context dispatch")
-    require(server, "ManualResetEventSlim", errors, "bounded CAD dispatch wait")
     require(server, "ConstantTimeEquals", errors, "constant-time bearer comparison")
     require(server, "MaxConcurrentClients", errors, "bounded concurrent MCP clients")
     require(server, "MaxSessions", errors, "bounded MCP sessions")
     require(server, "Transfer-Encoding is not supported", errors, "HTTP request framing guard")
+    require(server, "IsJsonContentType", errors, "exact JSON media-type parser")
+    forbid(server, 'contentType.StartsWith("application/json"', errors, "JSON media-type prefix acceptance")
     require(server, 'request.Method == "DELETE"', errors, "MCP session termination")
+    require(server, "McpCadAgentRuntime.Call(tool, arguments)", errors, "CAD runtime delegation")
 
     for token in (
         '"initialize"',
@@ -82,13 +92,30 @@ def main() -> int:
     ):
         require(server, f'"{tool}"', errors, f"MCP tool {tool}")
 
-    require(server, "confirmMutation=true", errors, "explicit mutation gate")
-    require(server, '"^QS3D[A-Za-z0-9_]*$"', errors, "QS3D-only command allowlist")
-    require(server, "SendStringToExecute(command + \"\\n\"", errors, "guarded QS3D command dispatch")
-    forbid(server, "Process.Start(", errors, "arbitrary process launch from network server")
-    forbid(server, "PowerShell", errors, "arbitrary PowerShell surface")
-    forbid(server, "cmd.exe", errors, "arbitrary cmd surface")
-    forbid(server, "mouse_event(", errors, "legacy global mouse injection")
+    # CAD/editor behavior lives behind the transport in McpCadAgentRuntime.
+    require(runtime, "ExecuteInApplicationContext", errors, "BricsCAD application-context dispatch")
+    require(runtime, "ManualResetEventSlim", errors, "bounded CAD dispatch wait")
+    require(runtime, 'McpTopLevelJson.ExtractBoolean(body, "confirmMutation")', errors, "top-level mutation gate")
+    require(runtime, '"^QS3D[A-Za-z0-9_]*$"', errors, "QS3D-only command allowlist")
+    require(runtime, "SendStringToExecute(command + \"\\n\"", errors, "guarded QS3D command dispatch")
+    require(runtime, "CadWorkQueued = 0", errors, "CAD dispatch queued state")
+    require(runtime, "CadWorkRunning = 1", errors, "CAD dispatch running state")
+    require(runtime, "CadWorkCancelledBeforeStart = 2", errors, "CAD dispatch cancelled-before-start state")
+    require(runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkRunning, CadWorkQueued)", errors, "atomic CAD start claim")
+    require(runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued)", errors, "atomic timeout cancellation")
+    require(runtime, "completion is uncertain", errors, "timeout completion uncertainty")
+    require(runtime, "Do not retry automatically", errors, "timeout no-auto-retry contract")
+
+    for text, surface in ((server, "network MCP transport"), (runtime, "CAD runtime")):
+        forbid(text, "Process.Start(", errors, f"arbitrary process launch from {surface}")
+        forbid(text, "powershell.exe", errors, f"PowerShell surface in {surface}")
+        forbid(text, "cmd.exe", errors, f"cmd surface in {surface}")
+        forbid(text, "mouse_event(", errors, f"legacy global mouse injection in {surface}")
+
+    require(v25_project, '<Compile Remove="McpEmbeddedServer.cs" />', errors, "V25 legacy-server exclusion")
+    require(v26_project, "..\\QS3D.BricsCAD.V25\\McpEmbeddedServer.cs", errors, "V26 legacy-server exclusion")
+    if not legacy_server:
+        errors.append("legacy MCP source unexpectedly missing; historical source should remain excluded, not silently renamed")
 
     expected_routes = {
         'Prefix + "MCP_SETTINGS"': "QS3DMCPAGENTCENTER",
@@ -116,15 +143,8 @@ def main() -> int:
     require(plugin, 'ReportOptionalStartupFailure("MCP server", ex)', errors, "fail-soft MCP startup")
 
     for command in (
-        "QS3DMCPSETTINGSHTTP",
-        "QS3DMCPDOCSHTTP",
-        "QS3DMCPCHECKHTTP",
-        "QS3DAIDASHBOARDHTTP",
-        "QS3DMCPSTART",
-        "QS3DMCPSTOP",
-        "QS3DMCPCOPYURL",
-        "QS3DMCPCOPYTOKEN",
-        "QS3DMCPCOPYCONFIG",
+        "QS3DMCPSETTINGSHTTP", "QS3DMCPDOCSHTTP", "QS3DMCPCHECKHTTP", "QS3DAIDASHBOARDHTTP",
+        "QS3DMCPSTART", "QS3DMCPSTOP", "QS3DMCPCOPYURL", "QS3DMCPCOPYTOKEN", "QS3DMCPCOPYCONFIG",
     ):
         require(commands, f'[CommandMethod("{command}"', errors, f"CommandMethod {command}")
 
@@ -145,7 +165,7 @@ def main() -> int:
     forbid(agent_center, "cmd.exe", errors, "cmd user workflow")
 
     # Public URLs are normalized once: HTTPS only, public literal address, canonical /mcp.
-    require(public_endpoint, "internal static class McpPublicEndpointResolver", errors, "public endpoint resolver")
+    require(public_endpoint, 'PublicUrlEnvironment = "QS3D_MCP_PUBLIC_URL"', errors, "public URL fallback")
     require(public_endpoint, "Uri.UriSchemeHttps", errors, "HTTPS-only public endpoint")
     require(public_endpoint, "uri.IsLoopback", errors, "loopback public endpoint rejection")
     require(public_endpoint, "IPAddress.TryParse(uri.Host", errors, "literal public-address validation")
@@ -184,8 +204,7 @@ def main() -> int:
     forbid(account_onboarding, "powershell.exe", errors, "PowerShell setup dependency")
     forbid(account_onboarding, "cmd.exe", errors, "cmd setup dependency")
 
-    # Advanced fallback remains available for dashboard-issued remote tokens, but even this GUI
-    # uses the same verified local bootstrapper and bounded Quick URL discovery.
+    # Advanced fallback remains available for dashboard-issued remote tokens.
     require(token_onboarding, "ProtectedData.Protect", errors, "DPAPI fallback tunnel token protection")
     require(token_onboarding, "DataProtectionScope.CurrentUser", errors, "per-Windows-user fallback secret scope")
     require(token_onboarding, 'startInfo.EnvironmentVariables["TUNNEL_TOKEN"]', errors, "fallback token outside process command line")
@@ -201,7 +220,7 @@ def main() -> int:
     forbid(token_onboarding, "powershell.exe", errors, "fallback PowerShell setup dependency")
     forbid(token_onboarding, "cmd.exe", errors, "fallback cmd setup dependency")
 
-    # The local Ribbon probe exercises a real MCP lifecycle including one tools/call and cleanup.
+    # Local Ribbon probe exercises a real MCP lifecycle including one tools/call and cleanup.
     for source_token, label in (
         ('\\"method\\":\\"initialize\\"', "Ribbon protocol initialize probe"),
         ('\\"method\\":\\"notifications/initialized\\"', "Ribbon protocol initialized notification"),
@@ -217,7 +236,7 @@ def main() -> int:
     require(commands, "No second repository", errors, "single-repository guide")
     require(commands, "McpPublicEndpointResolver.Resolve()", errors, "commands use validated public endpoint")
 
-    # The user-facing integration note must match the canonical issue-4352 click-first contract.
+    # User-facing integration note must match canonical issue-4352 click-first contract.
     require(integration_doc, "Status: SOURCE_READY / PENDING_LOCAL", errors, "integration doc qualification status")
     require(integration_doc, "Canonical issue: #4352", errors, "integration doc canonical issue")
     require(integration_doc, "QS3DMCPAGENTCENTER", errors, "integration doc Agent Center path")
@@ -233,11 +252,11 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: QS3D embeds authenticated MCP plus a unified click-first Agent Center with "
-        "verified one-click cloudflared bootstrap across default/advanced GUI paths, provider-browser "
-        "login, named/Quick tunnel management with bounded URL discovery, a single HTTPS /mcp "
-        "endpoint resolver, ChatGPT copy/open actions, read-only MCP self-test and emergency controls "
-        "without PowerShell/CMD user setup."
+        "PASS: active modular MCP v2 provides bounded authenticated loopback transport with exact "
+        "JSON media-type handling; McpCadAgentRuntime owns atomic CAD dispatch/mutation and "
+        "BricsCAD-confined recovery. Click-first verified Cloudflare onboarding, canonical HTTPS "
+        "/mcp resolution, Ribbon routing and sanitized local protocol controls remain wired while "
+        "the legacy monolith is excluded from V25/V26 compilation."
     )
     return 0
 
