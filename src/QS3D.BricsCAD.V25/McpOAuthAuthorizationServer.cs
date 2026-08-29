@@ -40,6 +40,8 @@ namespace QS3D.BricsCAD.V25
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private static readonly ConcurrentDictionary<string, long> ConsumedAuthorizationCodes =
             new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
+        private static readonly ConcurrentDictionary<string, long> ConsumedRefreshTokens =
+            new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
         private static readonly string ProcessNonce = CreateRandomToken(24);
 
         internal static bool TryHandle(
@@ -384,19 +386,26 @@ namespace QS3D.BricsCAD.V25
             if (!Required(values, "refresh_token", out refresh))
                 return OAuthError(400, "Bad Request", "invalid_grant", "refresh token is required");
             string[] fields;
-            long ignored;
-            if (!TryReadSignedToken(refresh, "refresh", signingSecret, out fields, out ignored) || fields.Length != 6)
+            long expiry;
+            if (!TryReadSignedToken(refresh, "refresh", signingSecret, out fields, out expiry) || fields.Length != 7)
                 return OAuthError(400, "Bad Request", "invalid_grant", "refresh token is invalid or expired");
+            string processNonce;
             string tokenClient;
             string tokenResource;
             string tokenScope;
-            if (!TryDecodeField(fields[3], out tokenClient)
-                || !TryDecodeField(fields[4], out tokenResource)
-                || !TryDecodeField(fields[5], out tokenScope)
+            if (!TryDecodeField(fields[3], out processNonce)
+                || !TryDecodeField(fields[4], out tokenClient)
+                || !TryDecodeField(fields[5], out tokenResource)
+                || !TryDecodeField(fields[6], out tokenScope)
+                || !ConstantTimeEquals(processNonce, ProcessNonce)
                 || !ConstantTimeEquals(tokenClient, clientId)
                 || !ConstantTimeEquals(tokenResource, resource)
                 || !ConstantTimeEquals(tokenScope, RequiredScope))
                 return OAuthError(400, "Bad Request", "invalid_grant", "refresh token binding check failed");
+
+            CleanupConsumedRefreshTokens();
+            if (!ConsumedRefreshTokens.TryAdd(HashForCache(refresh), expiry))
+                return OAuthError(400, "Bad Request", "invalid_grant", "refresh token was already used");
             return IssueTokenPair(clientId, resource, signingSecret);
         }
 
@@ -409,7 +418,7 @@ namespace QS3D.BricsCAD.V25
                 new[] { "v1", "access", accessExpiry.ToString(CultureInfo.InvariantCulture), EncodeField(clientId), EncodeField(resource), EncodeField(RequiredScope) },
                 signingSecret);
             var refresh = CreateSignedToken(
-                new[] { "v1", "refresh", refreshExpiry.ToString(CultureInfo.InvariantCulture), EncodeField(clientId), EncodeField(resource), EncodeField(RequiredScope) },
+                new[] { "v1", "refresh", refreshExpiry.ToString(CultureInfo.InvariantCulture), EncodeField(ProcessNonce), EncodeField(clientId), EncodeField(resource), EncodeField(RequiredScope) },
                 signingSecret);
             var response = Json(200, "OK",
                 "{\"access_token\":\"" + JsonEscape(access) + "\","
@@ -914,6 +923,24 @@ namespace QS3D.BricsCAD.V25
                 long ignored;
                 ConsumedAuthorizationCodes.TryRemove(pair.Key, out ignored);
                 if (ConsumedAuthorizationCodes.Count <= 768) break;
+            }
+        }
+
+        private static void CleanupConsumedRefreshTokens()
+        {
+            if (ConsumedRefreshTokens.Count < 256) return;
+            var now = UnixNow();
+            foreach (var pair in ConsumedRefreshTokens)
+            {
+                long ignored;
+                if (pair.Value <= now) ConsumedRefreshTokens.TryRemove(pair.Key, out ignored);
+            }
+            if (ConsumedRefreshTokens.Count <= 1024) return;
+            foreach (var pair in ConsumedRefreshTokens)
+            {
+                long ignored;
+                ConsumedRefreshTokens.TryRemove(pair.Key, out ignored);
+                if (ConsumedRefreshTokens.Count <= 768) break;
             }
         }
 
