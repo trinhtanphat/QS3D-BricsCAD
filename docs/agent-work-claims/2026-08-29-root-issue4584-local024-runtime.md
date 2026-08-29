@@ -19,6 +19,11 @@
 
 Run one exclusive licensed BricsCAD V25 cell using the unchanged runtime loader/probe, then exercise the #4584/LOCAL-024 MCP contract: embedded loopback health and read-only protocol probe, Agent Center/self-test, OAuth discovery/DCR/PKCE/consent/replay/refresh/resource binding where the local account/browser state permits, legacy bearer compatibility, one confirmed disposable-DWG mutation with stop/cancel/recovery, save/reopen and clean shutdown. V26 is a separate lane and may only be reported if a source-clean V26 binary is available.
 
+The additive holder `scripts/test-mcp-v25-local-cell.ps1` keeps that single exact
+NETLOAD host alive after the canonical generic V25 probe, waits for loopback MCP,
+and records only sanitized readiness/cleanup fields. It is a local harness, not a
+replacement for the canonical runtime runner.
+
 ## Safety and evidence boundary
 
 - Fresh three-sample `bricscad.exe=0` and `cloudflared.exe=0` is required before reservation.
@@ -29,4 +34,4 @@ Run one exclusive licensed BricsCAD V25 cell using the unchanged runtime loader/
 
 ## Current result
 
-`PENDING_LOCAL` — registration complete; host reservation and runtime cell not yet started.
+`PENDING_LOCAL` — registration and holder preparation complete; host reservation and runtime cell not yet started.
