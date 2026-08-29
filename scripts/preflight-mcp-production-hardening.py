@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 V25 = ROOT / "src" / "QS3D.BricsCAD.V25"
 SERVER = V25 / "McpEmbeddedServerV2.cs"
 RUNTIME = V25 / "McpCadAgentRuntime.cs"
+TOP_LEVEL_JSON = V25 / "McpTopLevelJson.cs"
 V25_PROJECT = V25 / "QS3D.BricsCAD.V25.csproj"
 V26_PROJECT = ROOT / "src" / "QS3D.BricsCAD.V26" / "QS3D.BricsCAD.V26.csproj"
 ACCOUNT = V25 / "McpCloudflareAccountOnboarding.cs"
@@ -26,6 +27,7 @@ def main() -> int:
     try:
         server = read(SERVER)
         runtime = read(RUNTIME)
+        top_level_json = read(TOP_LEVEL_JSON)
         v25_project = read(V25_PROJECT)
         v26_project = read(V26_PROJECT)
         account = read(ACCOUNT)
@@ -80,6 +82,8 @@ def main() -> int:
         "compiled transport bounded sessions": (server, "MaxSessions = 128"),
         "compiled transport bounded clients": (server, "MaxConcurrentClients = 16"),
         "compiled transport runtime delegation": (server, "McpCadAgentRuntime.Call(tool, arguments)"),
+        "top-level JSON trailing-comma rejection": (top_level_json, "JSON object cannot end with a trailing comma."),
+        "MCP arguments trailing-comma rejection": (top_level_json, "MCP arguments object cannot end with a trailing comma."),
         "runtime foreground ESC fallback": (runtime, "TrySendEscapeFallback()"),
         "runtime emergency-stop latch": (runtime, "_automationStopped = true"),
         "runtime queued dispatch state": (runtime, "CadWorkQueued = 0"),
@@ -129,10 +133,11 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: compiled modular MCP transport/runtime use exact JSON media-type admission, bounded "
-        "authenticated session handling, atomic CAD timeout truth, BricsCAD-confined recovery, one "
-        "validated HTTPS endpoint resolver, live-only Cloudflare provider URLs, exact tunnel identity, "
-        "canonical named-tunnel config regeneration and verified click-first redacted onboarding."
+        "PASS: compiled modular MCP transport/runtime use exact JSON media-type admission and "
+        "strict top-level JSON object framing, bounded authenticated session handling, atomic CAD "
+        "timeout truth, BricsCAD-confined recovery, one validated HTTPS endpoint resolver, live-only "
+        "Cloudflare provider URLs, exact tunnel identity, canonical named-tunnel config regeneration "
+        "and verified click-first redacted onboarding."
     )
     return 0
 
