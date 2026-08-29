@@ -302,11 +302,14 @@ namespace QS3D.Core.Export
             {
                 while (enumerator.MoveNext())
                 {
-                    if (knownCount.HasValue && observedCount >= knownCount.Value)
+                    if (corroboratedKnownCount && knownCount.HasValue && observedCount >= knownCount.Value)
+                        throw new ArgumentException("BCF collection Count does not match enumerated item count.", parameterName);
+                    if (!corroboratedKnownCount && values is ICollection<T> && knownCount.HasValue && observedCount >= knownCount.Value)
                         throw new ArgumentException("BCF collection Count does not match enumerated item count.", parameterName);
                     if (observedCount >= maximumCount)
                         throw new ArgumentException(overflowMessage, parameterName);
-                    items.Add(enumerator.Current);
+                    var value = enumerator.Current;
+                    items.Add(value);
                     observedCount++;
                 }
             }
