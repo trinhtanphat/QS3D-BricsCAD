@@ -35,8 +35,8 @@ namespace QS3D.BricsCAD.V25
         private static int _activeScopes;
         private static string _activeTool = string.Empty;
         private static string _activeActionId = string.Empty;
-        private static Dispatcher _dispatcher;
-        private static McpDesktopControlOverlayWindow _overlay;
+        private static Dispatcher? _dispatcher;
+        private static McpDesktopControlOverlayWindow? _overlay;
 
         public static bool IsEnabled
         {
@@ -404,14 +404,19 @@ namespace QS3D.BricsCAD.V25
             {
                 try
                 {
-                    if (_overlay == null)
+                    var overlay = _overlay;
+                    if (overlay == null)
                     {
-                        _overlay = new McpDesktopControlOverlayWindow();
-                        _overlay.Closed += (_, __) => _overlay = null;
+                        overlay = new McpDesktopControlOverlayWindow();
+                        overlay.Closed += (_, __) =>
+                        {
+                            if (ReferenceEquals(_overlay, overlay)) _overlay = null;
+                        };
+                        _overlay = overlay;
                     }
-                    _overlay.SetTool(tool, actionId);
-                    if (!_overlay.IsVisible) _overlay.Show();
-                    _overlay.Topmost = true;
+                    overlay.SetTool(tool, actionId);
+                    if (!overlay.IsVisible) overlay.Show();
+                    overlay.Topmost = true;
                 }
                 catch { }
             }), DispatcherPriority.Send);
@@ -423,7 +428,12 @@ namespace QS3D.BricsCAD.V25
             if (dispatcher == null) return;
             dispatcher.BeginInvoke(new Action(() =>
             {
-                try { if (_overlay != null && _overlay.IsVisible) _overlay.Hide(); } catch { }
+                try
+                {
+                    var overlay = _overlay;
+                    if (overlay != null && overlay.IsVisible) overlay.Hide();
+                }
+                catch { }
             }), DispatcherPriority.Send);
         }
 
@@ -431,15 +441,18 @@ namespace QS3D.BricsCAD.V25
         {
             lock (Sync)
             {
-                if (_dispatcher != null && !_dispatcher.HasShutdownStarted) return _dispatcher;
+                var existing = _dispatcher;
+                if (existing != null && !existing.HasShutdownStarted) return existing;
+                Dispatcher dispatcher;
                 try
                 {
-                    _dispatcher = System.Windows.Application.Current == null
+                    dispatcher = System.Windows.Application.Current == null
                         ? Dispatcher.CurrentDispatcher
                         : System.Windows.Application.Current.Dispatcher;
                 }
-                catch { _dispatcher = Dispatcher.CurrentDispatcher; }
-                return _dispatcher;
+                catch { dispatcher = Dispatcher.CurrentDispatcher; }
+                _dispatcher = dispatcher;
+                return dispatcher;
             }
         }
 
@@ -516,7 +529,7 @@ namespace QS3D.BricsCAD.V25
         private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern IntPtr GetModuleHandle(string moduleName);
+        private static extern IntPtr GetModuleHandle(string? moduleName);
     }
 
     /// <summary>
