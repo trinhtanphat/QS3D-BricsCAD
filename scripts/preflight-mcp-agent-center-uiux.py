@@ -35,28 +35,37 @@ def main() -> int:
         "semantic theme palette": "ThemePalette",
         "theme selector": "CreateThemeSelector(",
         "tab navigation": "CreateTabNavigation(",
-        "overview page": "CreateOverviewPage(",
-        "cloudflare page": "CreateCloudflarePage(",
-        "connector page": "CreateConnectorPage(",
-        "agent control page": "CreateAgentControlPage(",
-        "logs page": "CreateLogsPage(",
-        "overview label": '"Tổng quan"',
-        "cloudflare label": '"Cloudflare"',
-        "connector label": '"ChatGPT Connector"',
-        "agent label": '"Điều khiển Agent"',
-        "logs label": '"Logs"',
+        "active page dispatcher": "CreateActivePage(",
+        "connection page": "CreateConnectionPage(",
+        "agent page": "CreateAgentPage(",
+        "recovery page": "CreateRecoveryPage(",
+        "advanced page": "CreateAdvancedPage(",
+        "connection tab label": 'CreateNavigationButton("Kết nối", 0)',
+        "agent tab label": 'CreateNavigationButton("Agent", 1)',
+        "recovery tab label": 'CreateNavigationButton("Backup & khôi phục", 2)',
+        "advanced tab label": 'CreateNavigationButton("Nâng cao", 3)',
+        "four-tab upper bound": "index > 3",
         "toast host": "_toastHost",
         "toast kinds": "enum ToastKind",
         "toast presenter": "ShowToast(",
+        "toast dismissal": "DismissToast(",
         "activity history": "AddActivityEntry(",
         "bounded activity history": "MaxActivityEntries = 50",
         "bounded visible toasts": "MaxVisibleToasts = 4",
         "toast timers": "DispatcherTimer",
+        "toast retained Tick handler": "TimerHandler",
+        "toast timer stop": "visual.Timer.Stop()",
+        "toast Tick handler detach": "visual.Timer.Tick -= visual.TimerHandler",
         "custom button template": "new ControlTemplate(typeof(Button))",
         "button hover trigger": "Button.IsMouseOverProperty",
         "button pressed trigger": "Button.IsPressedProperty",
         "button keyboard focus trigger": "Button.IsKeyboardFocusedProperty",
         "button disabled trigger": "Button.IsEnabledProperty",
+        "focus owns background": "focus.Setters.Add(new Setter(Control.BackgroundProperty, background))",
+        "focus owns foreground": "focus.Setters.Add(new Setter(Control.ForegroundProperty, foreground))",
+        "focus owns border": "focus.Setters.Add(new Setter(Control.BorderBrushProperty, _palette.FocusBorder))",
+        "focus owns thickness": "focus.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(2)))",
+        "button trigger precedence": "Trigger precedence is intentional: focus -> hover -> pressed -> disabled.",
         "responsive scrolling": "HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled",
         "compact footer": "CreateFooter()",
     }
@@ -70,9 +79,11 @@ def main() -> int:
         "canonical public endpoint": "McpPublicEndpointResolver.Resolve()",
         "protocol probe": "McpProtocolProbe.Check",
         "read-only self test": "RunReadOnlySelfTest",
-        "emergency stop": 'InvokeControlTool("cad_agent_stop"',
+        "emergency stop wrapper": "EmergencyStop()",
+        "emergency stop tool": 'InvokeControlTool("cad_agent_stop"',
         "cancel command": 'InvokeControlTool("cad_cancel_command"',
-        "resume agent": 'InvokeControlTool("cad_agent_resume"',
+        "local-only desktop resume": "McpDesktopControlSession.ResumeFromLocalUser()",
+        "local-only desktop pause": "McpDesktopControlSession.PauseFromLocalUser(",
         "worker-thread operations": "ThreadPool.QueueUserWorkItem",
         "serialized local checks": "Interlocked.CompareExchange(ref _localOperationActive, 1, 0)",
     }
@@ -87,6 +98,12 @@ def main() -> int:
         "legacy fixed activity panel": "CreateActivityPanel()",
         "legacy activity text field": "_activity.Text",
         "blocking Agent Center message box": "MessageBox.Show(",
+        "legacy overview page": "CreateOverviewPage(",
+        "legacy standalone Cloudflare page": "CreateCloudflarePage(",
+        "legacy standalone connector page": "CreateConnectorPage(",
+        "legacy standalone Agent control page": "CreateAgentControlPage(",
+        "legacy standalone logs page": "CreateLogsPage(",
+        "remote/direct UI desktop resume tool": 'InvokeControlTool("cad_agent_resume"',
     }
     for label, token in forbidden.items():
         if token in text:
@@ -97,7 +114,7 @@ def main() -> int:
             print("ERROR:", error)
         return 1
 
-    print("PASS MCP Agent Center UIUX tabs/toast/theme contract")
+    print("PASS MCP Agent Center UIUX four-tab/toast/theme/local-consent contract")
     return 0
 
 
