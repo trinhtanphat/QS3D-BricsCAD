@@ -28,7 +28,7 @@ namespace QS3D.BricsCAD.V25
                 return false;
             }
 
-            var source = (json ?? string.Empty).Trim();
+            var source = TrimJsonWhitespace(json ?? string.Empty);
             if (source.Length < 2 || source[0] != '{')
             {
                 error = "JSON value must be an object.";
@@ -73,7 +73,7 @@ namespace QS3D.BricsCAD.V25
                 SkipWhitespace(source, ref index);
                 var valueStart = index;
                 if (!TrySkipValue(source, ref index, out error)) return false;
-                var candidate = source.Substring(valueStart, index - valueStart).Trim();
+                var candidate = TrimJsonWhitespace(source.Substring(valueStart, index - valueStart));
 
                 if (string.Equals(name, property, StringComparison.OrdinalIgnoreCase))
                 {
@@ -222,7 +222,7 @@ namespace QS3D.BricsCAD.V25
         {
             canonical = string.Empty;
             error = string.Empty;
-            var source = (json ?? string.Empty).Trim();
+            var source = TrimJsonWhitespace(json ?? string.Empty);
             if (source.Length < 2 || source[0] != '{')
             {
                 error = "MCP arguments must be a JSON object.";
@@ -296,7 +296,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     var start = index;
                     while (index < source.Length && source[index] != ',' && source[index] != '}') index++;
-                    var token = source.Substring(start, index - start).Trim();
+                    var token = TrimJsonWhitespace(source.Substring(start, index - start));
                     if (!IsJsonPrimitiveToken(token))
                     {
                         error = "MCP argument value must be a JSON string, boolean, null, or number.";
@@ -417,6 +417,19 @@ namespace QS3D.BricsCAD.V25
                 if (index == exponentStart) return false;
             }
             return index == token.Length;
+        }
+
+        private static string TrimJsonWhitespace(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return string.Empty;
+            var start = 0;
+            while (start < value.Length && IsJsonWhitespace(value[start])) start++;
+            if (start == value.Length) return string.Empty;
+            var end = value.Length - 1;
+            while (end >= start && IsJsonWhitespace(value[end])) end--;
+            return start == 0 && end == value.Length - 1
+                ? value
+                : value.Substring(start, end - start + 1);
         }
 
         private static bool IsJsonWhitespace(char ch)
@@ -555,7 +568,7 @@ namespace QS3D.BricsCAD.V25
 
             var start = index;
             while (index < source.Length && source[index] != ',' && source[index] != '}') index++;
-            if (source.Substring(start, index - start).Trim().Length == 0)
+            if (TrimJsonWhitespace(source.Substring(start, index - start)).Length == 0)
             {
                 error = "JSON property value is missing.";
                 return false;
