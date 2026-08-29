@@ -236,9 +236,10 @@ def main() -> int:
     require(commands, "No second repository", errors, "single-repository guide")
     require(commands, "McpPublicEndpointResolver.Resolve()", errors, "commands use validated public endpoint")
 
-    # User-facing integration note must match canonical issue-4352 click-first contract.
-    require(integration_doc, "Status: SOURCE_READY / PENDING_LOCAL", errors, "integration doc qualification status")
-    require(integration_doc, "Canonical issue: #4352", errors, "integration doc canonical issue")
+    # User-facing integration note must match the current layered click-first contract.
+    require(integration_doc, "Status: SOURCE_TRACKED / PENDING_LOCAL", errors, "integration doc qualification status")
+    require(integration_doc, "Parent MCP issue: #4352", errors, "integration doc parent MCP issue")
+    require(integration_doc, "Desktop/guided-control extension: #4629", errors, "integration doc desktop extension issue")
     require(integration_doc, "QS3DMCPAGENTCENTER", errors, "integration doc Agent Center path")
     require(integration_doc, "McpPublicEndpointResolver", errors, "integration doc public endpoint contract")
     require(integration_doc, "PENDING_LOCAL", errors, "integration doc local qualification boundary")
