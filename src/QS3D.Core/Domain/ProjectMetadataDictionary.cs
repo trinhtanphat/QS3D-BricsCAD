@@ -112,8 +112,12 @@ namespace QS3D.Core.Domain
             var observedCount = 0;
             using (var enumerator = values.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableKnownPersistenceCount(values, knownCount);
+                    if (!enumerator.MoveNext()) break;
+                    RequireStableKnownPersistenceCount(values, knownCount);
+
                     if (knownCount.HasValue && observedCount >= knownCount.Value)
                         throw MetadataTraversalCountMismatchError(knownCount.Value, observedCount + 1);
                     if (observedCount >= MaximumEntries)
@@ -126,6 +130,7 @@ namespace QS3D.Core.Domain
                     next.Add(item.Key, item.Value ?? string.Empty);
                 }
             }
+            RequireStableKnownPersistenceCount(values, knownCount);
             if (knownCount.HasValue && observedCount != knownCount.Value)
                 throw MetadataTraversalCountMismatchError(knownCount.Value, observedCount);
 
@@ -220,6 +225,16 @@ namespace QS3D.Core.Domain
             if (hasConflict)
                 throw new InvalidOperationException("Project metadata persistence input exposes conflicting Count contracts.");
             return knownCount;
+        }
+
+        private static void RequireStableKnownPersistenceCount(
+            IEnumerable<KeyValuePair<string, string>> values,
+            int? expectedCount)
+        {
+            if (!expectedCount.HasValue) return;
+            var observedCount = RequireSupportedKnownPersistenceCount(values);
+            if (!observedCount.HasValue || observedCount.Value != expectedCount.Value)
+                throw MetadataTraversalCountChangedError();
         }
 
         private static InvalidOperationException MetadataTraversalCountMismatchError(int expected, int observed)
