@@ -199,7 +199,11 @@ namespace QS3D.Core.Export
                 if (!_bound) throw new InvalidOperationException("Door/opening XLSX " + _label + " count contract was not admitted.");
                 var observed = Observe(source, phase);
                 if (observed != Value)
+                {
+                    if (string.Equals(_label, "export rows", StringComparison.Ordinal))
+                        throw new InvalidOperationException("Door/opening XLSX row count changed during snapshot " + phase + ". Expected " + Value + " but observed " + observed + ".");
                     throw new InvalidOperationException("Door/opening XLSX " + _label + " count changed " + phase + ". Expected " + Value + " but observed " + observed + ".");
+                }
             }
 
             private int Observe(IEnumerable<T> source, string phase)
