@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v25.yml"
+HELPER = ROOT / "scripts" / "verify-v25-held-file.ps1"
 
 
 def require(condition: bool, message: str) -> None:
@@ -24,7 +25,10 @@ def tag_targets_sha(*, exact_refs, peeled_refs, expected_sha: str) -> bool:
 def main() -> int:
     if not WORKFLOW.is_file():
         raise AssertionError("missing .github/workflows/release-v25.yml")
+    if not HELPER.is_file():
+        raise AssertionError("missing scripts/verify-v25-held-file.ps1")
     text = WORKFLOW.read_text(encoding="utf-8")
+    helper = HELPER.read_text(encoding="utf-8")
 
     required_tokens = (
         "$assetNames = @('QS3D-BricsCAD-V25.zip','QS3D-BricsCAD-V25.zip.sha256','QS3D-BricsCAD-V25.update.json','QS3D-BricsCAD-V25.provenance.json')",
@@ -38,8 +42,9 @@ def main() -> int:
         "gh release download $env:RELEASE_TAG",
         "$downloadedNames = @(Get-ChildItem -LiteralPath $downloadRoot -File | ForEach-Object Name | Sort-Object)",
         "Draft release asset set mismatch.",
-        "$localHash = (Get-FileHash -LiteralPath (Join-Path $dist $name) -Algorithm SHA256).Hash",
-        "$remoteHash = (Get-FileHash -LiteralPath (Join-Path $downloadRoot $name) -Algorithm SHA256).Hash",
+        "scripts\\verify-v25-held-file.ps1",
+        "-Operation Hash",
+        "-Operation Copy",
         "Draft release asset SHA-256 mismatch for $name; release remains a draft.",
         "Downloaded draft checksum is malformed.",
         "Downloaded draft ZIP fails its SHA-256 checksum.",
@@ -49,6 +54,24 @@ def main() -> int:
     )
     for token in required_tokens:
         require(token in text, "V25 release publication integrity guard missing token: " + token)
+
+    helper_tokens = (
+        "[IO.FileShare]::Read",
+        "$rebound = Get-Item -LiteralPath $canonical",
+        "[int64]$stream.Length -ne $admittedLength",
+        "$sha.ComputeHash($held.Stream)",
+        "$held.Stream.CopyTo($output)",
+    )
+    for token in helper_tokens:
+        require(token in helper, "V25 release held-generation helper missing token: " + token)
+
+    forbidden = (
+        "$localHash = (Get-FileHash -LiteralPath (Join-Path $dist $name) -Algorithm SHA256).Hash",
+        "$remoteHash = (Get-FileHash -LiteralPath (Join-Path $downloadRoot $name) -Algorithm SHA256).Hash",
+        "if ((Get-FileHash -LiteralPath $remoteZip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Matches[1])",
+    )
+    for token in forbidden:
+        require(token not in text, "V25 release publication regressed to pathname-only draft verification: " + token)
 
     for local_hash, remote_hash, expected, label in (
         ("AA" * 32, "aa" * 32, True, "exact downloaded bytes"),
@@ -73,12 +96,13 @@ def main() -> int:
     set_pos = text.find("Draft release asset set mismatch.", download_pos)
     hash_pos = text.find("Draft release asset SHA-256 mismatch for $name; release remains a draft.", set_pos)
     checksum_pos = text.find("Downloaded draft ZIP fails its SHA-256 checksum.", hash_pos)
-    signature_pos = text.find("verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", checksum_pos)
+    copy_pos = text.find("-Operation Copy", checksum_pos)
+    signature_pos = text.find("verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", copy_pos)
     publish_pos = text.find("gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --draft=false", signature_pos)
-    positions = (create_pos, tag_pos, download_pos, set_pos, hash_pos, checksum_pos, signature_pos, publish_pos)
-    require(min(positions) >= 0 and list(positions) == sorted(positions), "V25 release must create draft -> bind exact tag -> download exact asset set -> hash/checksum/signature verify -> publish")
+    positions = (create_pos, tag_pos, download_pos, set_pos, hash_pos, checksum_pos, copy_pos, signature_pos, publish_pos)
+    require(min(positions) >= 0 and list(positions) == sorted(positions), "V25 release must create draft -> bind exact tag -> download exact asset set -> held hash/checksum -> held ZIP copy -> signature verify -> publish")
 
-    print("PASS: V25 commercial publication remains draft-first, binds the remote tag to the exact workflow SHA, re-downloads the exact asset set, verifies SHA-256/checksum/Authenticode, and only then publishes.")
+    print("PASS: V25 commercial publication remains draft-first, exact-tag-bound, exact-asset-set-bound, held-generation hash/copy verified, Authenticode verified, and only then published.")
     return 0
 
 
