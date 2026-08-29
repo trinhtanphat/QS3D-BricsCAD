@@ -14,8 +14,8 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-def require(text: str, marker: str, label: str) -> int:
-    index = text.find(marker)
+def require(text: str, marker: str, label: str, start: int = 0) -> int:
+    index = text.find(marker, start)
     if index < 0:
         fail(f"missing {label}: {marker}")
     return index
@@ -36,35 +36,33 @@ bound_smoke = BOUND_SMOKE.read_text(encoding="utf-8")
 runbook = RUNBOOK.read_text(encoding="utf-8")
 
 helper = require(source, "private static void RequireCanObserveNext(", "early Count guard helper")
-require(source[helper:], "observedCount >= knownCount.Value", "known-Count overrun predicate")
-require(source[helper:], "input count changed during enumeration.", "count-drift diagnostic")
+require(source, "observedCount >= knownCount.Value", "known-Count overrun predicate", helper)
+require(source, "input count changed during enumeration.", "count-drift diagnostic", helper)
 
-object_method = require(source, "private static IReadOnlyList<ProjectElement> OwnedDistinct(", "object-target materializer")
-object_tail = source[object_method:]
-object_using = require(object_tail, "using (var enumerator = elements.GetEnumerator())", "object explicit enumerator")
-object_pre = require(object_tail[object_using:], "RequireKnownCountStable(elements, knownCount, knownCountSources, \"Bulk edit target collection\");", "object pre-MoveNext Count rebound")
-object_move = require(object_tail[object_using:], "if (!enumerator.MoveNext())", "object MoveNext")
-object_post = object_tail.find("RequireKnownCountStable(elements, knownCount, knownCountSources, \"Bulk edit target collection\");", object_using + object_move + 1)
-if object_post < 0:
-    fail("missing object post-MoveNext Count rebound")
-object_guard = object_tail.find("RequireCanObserveNext(knownCount, inputCount, \"Bulk edit target collection\");", object_post)
-object_current = object_tail.find("var element = enumerator.Current;", object_guard)
-object_null = object_tail.find("if (element == null)", object_current)
-if min(object_guard, object_current, object_null) < 0 or not (object_pre < object_move < object_post < object_guard < object_current < object_null):
+object_start = require(source, "private static IReadOnlyList<ProjectElement> OwnedDistinct(", "object-target materializer")
+object_end = require(source, "private static void RequireCurrentElementOwnership", "object-target materializer end", object_start)
+object_segment = source[object_start:object_end]
+object_using = require(object_segment, "using (var enumerator = elements.GetEnumerator())", "object explicit enumerator")
+object_pre = require(object_segment, "RequireKnownCountStable(elements, knownCount, knownCountSources, \"Bulk edit target collection\");", "object pre-MoveNext Count rebound", object_using)
+object_move = require(object_segment, "if (!enumerator.MoveNext())", "object MoveNext", object_pre)
+object_post = require(object_segment, "RequireKnownCountStable(elements, knownCount, knownCountSources, \"Bulk edit target collection\");", "object post-MoveNext Count rebound", object_move + 1)
+object_guard = require(object_segment, "RequireCanObserveNext(knownCount, inputCount, \"Bulk edit target collection\");", "object early Count guard", object_post)
+object_current = require(object_segment, "var element = enumerator.Current;", "object Current read", object_guard)
+object_null = require(object_segment, "if (element == null)", "object null validation", object_current)
+if not (object_using < object_pre < object_move < object_post < object_guard < object_current < object_null):
     fail("object-target traversal must reject Count overrun before reading unexpected IEnumerator.Current and before target validation")
 
-id_helper = require(source, "private static IReadOnlyList<string> MaterializeBounded", "target-id materializer")
-id_tail = source[id_helper:]
-id_using = require(id_tail, "using (var enumerator = values.GetEnumerator())", "id explicit enumerator")
-id_pre = require(id_tail[id_using:], "RequireKnownCountStable(values, knownCount, knownCountSources, label);", "id pre-MoveNext Count rebound")
-id_move = require(id_tail[id_using:], "if (!enumerator.MoveNext())", "id MoveNext")
-id_post = id_tail.find("RequireKnownCountStable(values, knownCount, knownCountSources, label);", id_using + id_move + 1)
-if id_post < 0:
-    fail("missing id post-MoveNext Count rebound")
-id_guard = id_tail.find("RequireCanObserveNext(knownCount, inputCount, label);", id_post)
-id_current = id_tail.find("var value = enumerator.Current;", id_guard)
-id_append = id_tail.find("result.Add(value);", id_current)
-if min(id_guard, id_current, id_append) < 0 or not (id_pre < id_move < id_post < id_guard < id_current < id_append):
+id_start = require(source, "private static IReadOnlyList<string> MaterializeBounded", "target-id materializer")
+id_end = require(source, "private static int? SnapshotKnownCount", "target-id materializer end", id_start)
+id_segment = source[id_start:id_end]
+id_using = require(id_segment, "using (var enumerator = values.GetEnumerator())", "id explicit enumerator")
+id_pre = require(id_segment, "RequireKnownCountStable(values, knownCount, knownCountSources, label);", "id pre-MoveNext Count rebound", id_using)
+id_move = require(id_segment, "if (!enumerator.MoveNext())", "id MoveNext", id_pre)
+id_post = require(id_segment, "RequireKnownCountStable(values, knownCount, knownCountSources, label);", "id post-MoveNext Count rebound", id_move + 1)
+id_guard = require(id_segment, "RequireCanObserveNext(knownCount, inputCount, label);", "id early Count guard", id_post)
+id_current = require(id_segment, "var value = enumerator.Current;", "id Current read", id_guard)
+id_append = require(id_segment, "result.Add(value);", "id append", id_current)
+if not (id_using < id_pre < id_move < id_post < id_guard < id_current < id_append):
     fail("target-id traversal must reject Count overrun before reading/materializing unexpected IEnumerator.Current")
 
 if "foreach (var element in elements)" in source:
@@ -73,7 +71,7 @@ if "foreach (var value in values)" in source:
     fail("caller-controlled target IDs must not regress to foreach")
 
 require(source, "RequireObservedCount(knownCount, inputCount, \"Bulk edit target collection\");", "object under-yield check")
-require(source[id_helper:], "RequireObservedCount(knownCount, inputCount, label);", "id under-yield check")
+require(source, "RequireObservedCount(knownCount, inputCount, label);", "id under-yield check", id_start)
 require(source, "if (inputCount >= MaxTargetInputCount)", "independent streaming maximum")
 require(source, "reports conflicting known input counts.", "known-Count conflict preflight")
 
