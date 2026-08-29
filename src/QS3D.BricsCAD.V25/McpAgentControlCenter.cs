@@ -526,7 +526,7 @@ namespace QS3D.BricsCAD.V25
             advanced.Children.Add(CreateActionButton("Mở thư mục audit MCP", (_, __) => OpenAuditFolder(), ActionKind.Secondary));
             advanced.Children.Add(new TextBlock
             {
-                Text = "Nâng cao: static bearer + Quick Tunnel chỉ dùng debug/backward compatibility. Production ChatGPT dùng Named Tunnel + OAuth/DCR. Completion Pack A dùng explicit desktop tools; desktop_sequence/desktop_macro (Approach B) chưa được expose.",
+                Text = "Nâng cao: static bearer + Quick Tunnel chỉ dùng debug/backward compatibility. Production ChatGPT dùng Named Tunnel + OAuth/DCR. Completion Pack A dùng explicit desktop tools; Approach B expose một desktop_sequence bounded single-target; desktop_macro không được expose.",
                 Foreground = _palette.TextSecondary,
                 TextWrapping = TextWrapping.Wrap,
                 FontSize = 11.5,
