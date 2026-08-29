@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             RejectsNegativeKnownCountBeforeFilesystemMutation();
             RejectsOversizedKnownCountBeforeFilesystemMutation();
             RejectsPostSnapshotCountDriftBeforeReplacingDestination();
+            RejectsPostSnapshotPrimaryQuantityDriftBeforeReplacingDestination();
             AcceptsHonestMultiInterfaceSource();
         }
 
@@ -77,6 +78,24 @@ namespace QS3D.Core.SmokeTests
             finally { DeleteDirectory(directory); }
         }
 
+        private static void RejectsPostSnapshotPrimaryQuantityDriftBeforeReplacingDestination()
+        {
+            var directory = NewDirectory();
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "material-usage.xlsx");
+            File.WriteAllText(path, "existing-destination");
+            var rows = new CountContractRows(1, 1, 1, false, true);
+            try
+            {
+                Throws<InvalidOperationException>(() => MaterialUsageXlsxExporter.Export(path, rows));
+                Equal("existing-destination", File.ReadAllText(path));
+                var files = Directory.GetFiles(directory);
+                if (files.Length != 1 || !string.Equals(files[0], path, StringComparison.Ordinal))
+                    throw new Exception("PrimaryQuantity-drift refusal left unexpected temp/output residue.");
+            }
+            finally { DeleteDirectory(directory); }
+        }
+
         private static void AcceptsHonestMultiInterfaceSource()
         {
             var directory = NewDirectory();
@@ -102,6 +121,7 @@ namespace QS3D.Core.SmokeTests
                 Category = "Slab",
                 FamilyName = "Slab 200",
                 ElementCount = 1,
+                PrimaryQuantity = 2.5d,
                 AreaM2 = 10d,
                 VolumeM3 = 2.5d,
                 MassKg = 6000d,
@@ -144,14 +164,21 @@ namespace QS3D.Core.SmokeTests
             private readonly int _genericCount;
             private readonly int _nonGenericCount;
             private readonly bool _driftAfterRead;
+            private readonly bool _driftPrimaryQuantityAfterRead;
             private bool _readOccurred;
 
-            public CountContractRows(int readOnlyCount, int genericCount, int nonGenericCount, bool driftAfterRead)
+            public CountContractRows(
+                int readOnlyCount,
+                int genericCount,
+                int nonGenericCount,
+                bool driftAfterRead,
+                bool driftPrimaryQuantityAfterRead = false)
             {
                 _readOnlyCount = readOnlyCount;
                 _genericCount = genericCount;
                 _nonGenericCount = nonGenericCount;
                 _driftAfterRead = driftAfterRead;
+                _driftPrimaryQuantityAfterRead = driftPrimaryQuantityAfterRead;
             }
 
             int IReadOnlyCollection<MaterialUsageRow>.Count => Current(_readOnlyCount);
@@ -170,6 +197,8 @@ namespace QS3D.Core.SmokeTests
 
             private int Current(int initial)
             {
+                if (_driftPrimaryQuantityAfterRead && _readOccurred)
+                    _items[0].PrimaryQuantity = 7.5d;
                 return _driftAfterRead && _readOccurred ? 0 : initial;
             }
 
