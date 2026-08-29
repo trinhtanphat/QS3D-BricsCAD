@@ -41,13 +41,14 @@ def main() -> int:
     bind_helper = require(exporter, "private static KnownCountContract<T> BindKnownCount<T>(IEnumerable<T> source, int maximum, string label)", "bound known-count helper")
     compatibility_helper = require(exporter, "private static int RequireConsistentKnownCount<T>(IEnumerable<T> source, int maximum, string label)", "nested compatibility known-count helper")
     contract = require(exporter, "private sealed class KnownCountContract<T>", "known-count contract")
-    read_only = require(exporter, "source is IReadOnlyCollection<T>", "IReadOnlyCollection known-count source")
-    generic = require(exporter, "source is ICollection<T>", "generic ICollection known-count source")
-    non_generic = require(exporter, "source is ICollection", "non-generic ICollection known-count source")
-    conflict = require(exporter, "exposes conflicting known collection counts", "known-count conflict rejection")
-    negative = require(exporter, "count must be non-negative", "known-count negative rejection")
-    maximum = require(exporter, "count exceeds the supported maximum", "known-count maximum rejection")
-    deterministic_required = require(exporter, "must expose a deterministic collection count", "known-count interface requirement")
+    contract_text = exporter[contract:]
+    read_only = contract + require(contract_text, "if (_readOnlyCount) observe(((IReadOnlyCollection<T>)source).Count);", "IReadOnlyCollection known-count read")
+    generic = contract + require(contract_text, "if (_genericCount) observe(((ICollection<T>)source).Count);", "generic ICollection known-count read")
+    non_generic = contract + require(contract_text, "if (_nonGenericCount) observe(((ICollection)source).Count);", "non-generic ICollection known-count read")
+    conflict = contract + require(contract_text, "exposes conflicting known collection counts", "known-count conflict rejection")
+    negative = contract + require(contract_text, "count must be non-negative", "known-count negative rejection")
+    maximum = contract + require(contract_text, "count exceeds the supported maximum", "known-count maximum rejection")
+    deterministic_required = contract + require(contract_text, "must expose a deterministic collection count", "known-count interface requirement")
 
     if not (row_count < row_loop < before_indexer < row_read < after_indexer < row_snapshot < after_snapshot < final_bind < cell_validation < path_resolution):
         raise SystemExit("FAIL: top-level Count contract must surround every caller row indexer/snapshot and remain before validation/filesystem output")
@@ -55,10 +56,8 @@ def main() -> int:
         raise SystemExit("FAIL: top-level row source must retain a single caller indexer read per traversal iteration")
     if not (nested_count < nested_loop < nested_bind < nested_failure):
         raise SystemExit("FAIL: nested ElementIds/HostIds count binding must remain around indexed traversal")
-    if not (bind_helper < compatibility_helper < contract):
-        raise SystemExit("FAIL: known-count helpers/contract ordering is not deterministic")
-    if min(read_only, generic, non_generic, conflict, negative, maximum, deterministic_required) < contract:
-        raise SystemExit("FAIL: supported Count-source and rejection rules must remain implemented by the bound contract")
+    if not (bind_helper < compatibility_helper < contract < min(read_only, generic, non_generic, conflict, negative, maximum, deterministic_required)):
+        raise SystemExit("FAIL: known-count helpers must delegate to a contract that owns all Count reads and rejection rules")
 
     for token in (
         "DoorOpeningXlsxExporter.Export(destination, new CountDriftingRows(ValidRow()))",
