@@ -126,8 +126,7 @@ namespace QS3D.BricsCAD.V25
             string raw;
             bool found;
             string error;
-            if (!TryFindPropertyValue(json, property, out raw, out found, out error))
-                throw new InvalidOperationException(error);
+            if (!TryFindPropertyValue(json, property, out raw, out found, out error)) return string.Empty;
             if (!found) return string.Empty;
             var index = 0;
             string value;
