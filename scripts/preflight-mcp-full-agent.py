@@ -271,13 +271,40 @@ def main() -> int:
 
     if '<Compile Remove="McpEmbeddedServer.cs" />' not in v25_project:
         errors.append("V25 build does not exclude legacy monolithic McpEmbeddedServer.cs")
-    if "..\\QS3D.BricsCAD.V25\\McpEmbeddedServer.cs" not in v26_project:
-        errors.append("V26 shared-source build does not exclude legacy monolithic McpEmbeddedServer.cs")
-    for source_name in ("McpEmbeddedServerV2.cs", "McpCadAgentRuntime.cs"):
-        if source_name in v25_project and source_name in v25_project.replace('<Compile Remove="McpEmbeddedServer.cs" />', ''):
-            pass  # default SDK inclusion is intentional; no explicit duplicate include required.
-    if "McpEmbeddedServerV2.cs" in v26_project and "Exclude=" not in v26_project:
-        errors.append("unexpected V26 source composition")
+    for line in v25_project.splitlines():
+        stripped = line.strip()
+        if '<Compile Remove="' in stripped and "Mcp" in stripped and 'McpEmbeddedServer.cs' not in stripped:
+            errors.append(f"V25 build excludes active MCP source: {stripped}")
+
+    shared_compile_prefix = r'<Compile Include="..\QS3D.BricsCAD.V25\**\*.cs"'
+    shared_start = v26_project.find(shared_compile_prefix)
+    if shared_start < 0:
+        errors.append("V26 project no longer shares the V25 adapter source glob")
+    else:
+        tag_end = v26_project.find(">", shared_start)
+        exclude_marker = 'Exclude="'
+        exclude_start = v26_project.find(exclude_marker, shared_start)
+        if exclude_start < 0 or (tag_end >= 0 and exclude_start > tag_end):
+            errors.append("V26 shared-source Compile item has no explicit exclusion contract")
+        else:
+            exclude_start += len(exclude_marker)
+            exclude_end = v26_project.find('"', exclude_start)
+            if exclude_end < 0:
+                errors.append("V26 shared-source Compile exclusion contract is malformed")
+            else:
+                exclusions = {
+                    item.strip().lower()
+                    for item in v26_project[exclude_start:exclude_end].split(";")
+                    if item.strip()
+                }
+                legacy_path = r"..\QS3D.BricsCAD.V25\McpEmbeddedServer.cs".lower()
+                if legacy_path not in exclusions:
+                    errors.append("V26 shared-source build does not exclude legacy monolithic McpEmbeddedServer.cs")
+                for exclusion in exclusions:
+                    if "mcp" in exclusion and exclusion != legacy_path:
+                        errors.append(
+                            "V26 shared-source build excludes non-legacy MCP source/pattern: " + exclusion
+                        )
 
     if errors:
         print("Full MCP CAD agent preflight FAILED:")
