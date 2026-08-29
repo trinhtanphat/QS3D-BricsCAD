@@ -36,12 +36,18 @@ def main() -> int:
         "no terminal UX": "PowerShell, CMD",
         "provider-owned password boundary": "QS3D must never ask for, inspect, log, or store the Cloudflare password",
         "loopback endpoint": "127.0.0.1:8765/mcp",
+        "active compiled transport": "`McpEmbeddedServerV2.cs` — active compiled transport",
+        "legacy transport exclusion": "`McpEmbeddedServer.cs` — historical source only",
         "API-first policy": "direct CAD API tool first",
         "bounded command surface": "cad_command_sequence",
         "mouse fallback": "cad_ui_click",
         "keyboard fallback": "cad_ui_type",
         "emergency stop": "cad_agent_stop",
         "mutation confirmation": "confirmMutation=true",
+        "nested confirmation rejection": "nested `confirmMutation=true`",
+        "duplicate confirmation rejection": "duplicate top-level `confirmMutation`",
+        "JSON media-type lookalike rejection": "`application/jsonevil`",
+        "timeout source audit complete": "timeout source audit: COMPLETE",
         "local-only truth": "PENDING_LOCAL",
         "V25/V26 runtime": "licensed V25/V26",
         "future-agent procedure": "Future-agent operating procedure",
@@ -59,6 +65,9 @@ def main() -> int:
         "cad_entity_inspect",
         "cad_agent_stop",
         "PENDING_LOCAL",
+        "nested `confirmMutation=true`",
+        "duplicate top-level `confirmMutation`",
+        "`application/jsonevil`",
     )
     for token in required_runbook:
         if token not in runbook:
@@ -113,8 +122,9 @@ def main() -> int:
     print(
         "PASS: #4352 has one canonical cross-agent handoff and one matching P0 LOCAL_ONLY "
         "queue item covering the single-repository embedded MCP architecture, click-first "
-        "Cloudflare onboarding, full CAD/UI agent surface, security boundaries, future-agent "
-        "procedure and exact-SHA licensed V25/V26 + Cloudflare + ChatGPT qualification tail."
+        "Cloudflare onboarding, full CAD/UI agent surface, security boundaries, fail-closed "
+        "parser/media-type cases, future-agent procedure and exact-SHA licensed V25/V26 + "
+        "Cloudflare + ChatGPT qualification tail."
     )
     return 0
 
