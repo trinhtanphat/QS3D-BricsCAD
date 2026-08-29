@@ -12,7 +12,9 @@ for token in (
     "ids is IReadOnlyCollection<string> readOnlyCollection",
     "var enumerationVersion = _changeVersion;",
     "using (var enumerator = ids.GetEnumerator())",
-    "while (enumerator.MoveNext())",
+    "while (true)",
+    "RequireStableKnownCount(ids, knownCount);",
+    "if (!enumerator.MoveNext()) break;",
     "if (knownCount.HasValue && inputCount >= knownCount.Value)",
     "if (inputCount >= MaxInputCount)",
     "var raw = enumerator.Current;",
@@ -31,8 +33,11 @@ clear = source[clear_start:]
 
 capture_pos = replace.index("var enumerationVersion = _changeVersion;")
 enumerator_pos = replace.index("using (var enumerator = ids.GetEnumerator())", capture_pos)
-move_next_pos = replace.index("while (enumerator.MoveNext())", enumerator_pos)
-known_guard_pos = replace.index("if (knownCount.HasValue && inputCount >= knownCount.Value)", move_next_pos)
+loop_pos = replace.index("while (true)", enumerator_pos)
+pre_move_count_pos = replace.index("RequireStableKnownCount(ids, knownCount);", loop_pos)
+move_next_pos = replace.index("if (!enumerator.MoveNext()) break;", pre_move_count_pos)
+post_move_count_pos = replace.index("RequireStableKnownCount(ids, knownCount);", pre_move_count_pos + 1)
+known_guard_pos = replace.index("if (knownCount.HasValue && inputCount >= knownCount.Value)", post_move_count_pos)
 cap_guard_pos = replace.index("if (inputCount >= MaxInputCount)", known_guard_pos)
 current_pos = replace.index("var raw = enumerator.Current;", cap_guard_pos)
 freshness_pos = replace.index("if (_changeVersion != enumerationVersion)", current_pos)
@@ -44,7 +49,10 @@ event_pos = replace.index("Changed?.Invoke(this, EventArgs.Empty);", revision_ap
 assert (
     capture_pos
     < enumerator_pos
+    < loop_pos
+    < pre_move_count_pos
     < move_next_pos
+    < post_move_count_pos
     < known_guard_pos
     < cap_guard_pos
     < current_pos
@@ -56,6 +64,9 @@ assert (
     < event_pos
 ), "SelectionState.Replace freshness/mutation ordering changed"
 
+assert "while (enumerator.MoveNext())" not in replace, (
+    "SelectionState.Replace must preserve Count validation before and after caller-controlled MoveNext"
+)
 assert "foreach (var raw in ids)" not in replace, (
     "SelectionState.Replace caller-controlled traversal must not regress to foreach before Count admission"
 )
@@ -82,4 +93,4 @@ for token in (
 assert "[ModuleInitializer]" in registration, "SelectionState freshness smoke is not registered"
 assert "SelectionStateReplaceInputFreshnessSmoke.Run();" in registration, "SelectionState freshness smoke registration drifted"
 
-print("PASS: SelectionState replacement input freshness contract is locked")
+print("PASS: SelectionState replacement input freshness contract is locked with pre/post-MoveNext Count stability")
