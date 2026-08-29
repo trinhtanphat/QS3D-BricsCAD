@@ -24,6 +24,9 @@ def main() -> int:
         "tools list": '"tools/list"',
         "session id": 'headers.get("mcp-session-id"',
         "session delete": 'request(endpoint, "DELETE"',
+        "terminated session retry": "stale_delete_status",
+        "terminated session HTTP 404": "stale_delete_status != 404",
+        "terminated session result marker": "stale_session_404=PASS",
         "single repository assertion": 'value.get("singleRepository") is not True',
         "full CAD assertion": 'value.get("fullCadAgent") is not True',
         "sanitized secret result": 'secret_output=NONE; mutation_calls=0',
@@ -65,8 +68,8 @@ def main() -> int:
 
     print(
         "PASS: local MCP loopback probe is loopback-only, exercises auth/session/tool discovery "
-        "and bounded read-only CAD observation, performs no mutation, launches no shell, and "
-        "does not print bearer material."
+        "and terminated-session 404 truth plus bounded read-only CAD observation, performs no mutation, "
+        "launches no shell, and does not print bearer material."
     )
     return 0
 
