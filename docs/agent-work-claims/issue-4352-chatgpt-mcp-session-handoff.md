@@ -88,7 +88,7 @@ The bounded command catalog covers representative drawing/editing, hatch, dimens
 - Origin/DNS-rebinding checks;
 - MCP initialize/session/protocol-version handling and session DELETE truth;
 - top-level-only mutation confirmation, including duplicate/nested fail-closed behavior;
-- ordinary mutation requires `confirmMutation=true`;
+- ordinary mutation requires top-level `confirmMutation=true`;
 - each confirmed mutation is bound to an automation epoch; stop/restart/resume invalidates older work and queued CAD mutation re-checks its captured epoch before application-context execution;
 - long UI typing/click/key paths re-check the current mutation epoch close to injection so Emergency Stop prevents further stale input;
 - bounded command inputs and known chaining/control-character rejection;
