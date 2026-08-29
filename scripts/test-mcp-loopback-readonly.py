@@ -19,6 +19,7 @@ import urllib.request
 from typing import Any
 
 PROTOCOL = "2025-06-18"
+INVALID_PROTOCOL = "2024-11-05"
 DEFAULT_ENDPOINT = "http://127.0.0.1:8765/mcp"
 REQUIRED_TOOLS = {
     "connector_info",
@@ -87,6 +88,7 @@ def request(
     timeout: float,
     token: str | None = None,
     session: str | None = None,
+    protocol_version: str = PROTOCOL,
 ) -> tuple[int, dict[str, str], bytes]:
     payload = b"" if body is None else json.dumps(body, separators=(",", ":")).encode("utf-8")
     headers = {"Accept": "application/json, text/event-stream"}
@@ -96,7 +98,7 @@ def request(
         headers["Authorization"] = "Bearer " + token
     if session:
         headers["Mcp-Session-Id"] = session
-        headers["MCP-Protocol-Version"] = PROTOCOL
+        headers["MCP-Protocol-Version"] = protocol_version
     req = urllib.request.Request(url, data=payload if body is not None else None, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -144,11 +146,20 @@ def rpc_post(
     method: str,
     params: dict[str, Any],
     timeout: float,
+    protocol_version: str = PROTOCOL,
 ) -> tuple[int, dict[str, str], dict[str, Any] | None]:
     body: dict[str, Any] = {"jsonrpc": "2.0", "method": method, "params": params}
     if request_id is not None:
         body["id"] = request_id
-    status, headers, raw = request(endpoint, "POST", body, timeout, token=token, session=session)
+    status, headers, raw = request(
+        endpoint,
+        "POST",
+        body,
+        timeout,
+        token=token,
+        session=session,
+        protocol_version=protocol_version,
+    )
     if not raw:
         return status, headers, None
     return status, headers, parse_json(raw, method)
@@ -228,15 +239,28 @@ def main() -> int:
             raise ProbeError("initialize did not return Mcp-Session-Id.")
 
         try:
+            invalid_post_status, _, _ = rpc_post(
+                endpoint,
+                token,
+                session,
+                3,
+                "ping",
+                {},
+                args.timeout,
+                protocol_version=INVALID_PROTOCOL,
+            )
+            if invalid_post_status != 400:
+                raise ProbeError("mismatched MCP-Protocol-Version POST was not rejected with HTTP 400.")
+
             notify_status, _, _ = rpc_post(endpoint, token, session, None, "notifications/initialized", {}, args.timeout)
             if notify_status != 202:
                 raise ProbeError("notifications/initialized was not accepted.")
 
-            ping_status, _, ping = rpc_post(endpoint, token, session, 3, "ping", {}, args.timeout)
+            ping_status, _, ping = rpc_post(endpoint, token, session, 4, "ping", {}, args.timeout)
             if ping_status != 200 or ping is None or "error" in ping:
                 raise ProbeError("MCP ping failed.")
 
-            tools_status, _, tools_envelope = rpc_post(endpoint, token, session, 4, "tools/list", {}, args.timeout)
+            tools_status, _, tools_envelope = rpc_post(endpoint, token, session, 5, "tools/list", {}, args.timeout)
             if tools_status != 200 or tools_envelope is None:
                 raise ProbeError("tools/list failed.")
             tools_result = tools_envelope.get("result")
@@ -259,6 +283,30 @@ def main() -> int:
                     raise ProbeError("connector_info did not report fullCadAgent=true.")
                 read_results[name] = "PASS"
 
+            invalid_delete_status, _, _ = request(
+                endpoint,
+                "DELETE",
+                None,
+                args.timeout,
+                token=token,
+                session=session,
+                protocol_version=INVALID_PROTOCOL,
+            )
+            if invalid_delete_status != 400:
+                raise ProbeError("mismatched MCP-Protocol-Version DELETE was not rejected with HTTP 400.")
+
+            after_invalid_delete_status, _, after_invalid_delete_ping = rpc_post(
+                endpoint,
+                token,
+                session,
+                request_id,
+                "ping",
+                {},
+                args.timeout,
+            )
+            if after_invalid_delete_status != 200 or after_invalid_delete_ping is None or "error" in after_invalid_delete_ping:
+                raise ProbeError("protocol-rejected DELETE incorrectly terminated the live MCP session.")
+
             delete_status, _, _ = request(endpoint, "DELETE", None, args.timeout, token=token, session=session)
             if delete_status != 204:
                 raise ProbeError("MCP session DELETE did not return 204.")
@@ -269,7 +317,11 @@ def main() -> int:
 
             print("PASS: QS3D embedded MCP read-only loopback qualification")
             print(f" protocol={PROTOCOL}; server=qs3d-bricscad; tools={len(names)}")
-            print(" auth_rejection=PASS; initialize=PASS; notification=PASS; ping=PASS; session_delete=PASS; stale_session_404=PASS")
+            print(
+                " auth_rejection=PASS; initialize=PASS; protocol_version_post_400=PASS; notification=PASS; "
+                "ping=PASS; protocol_version_delete_400=PASS; delete_preserves_session=PASS; "
+                "session_delete=PASS; stale_session_404=PASS"
+            )
             print(" readonly_tools=" + ",".join(f"{name}:{read_results[name]}" for name, _ in READ_ONLY_TOOLS))
             print(" secret_output=NONE; mutation_calls=0")
             return 0
