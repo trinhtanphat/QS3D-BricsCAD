@@ -61,8 +61,20 @@ if not reset_core:
 core_body = reset_core.group("body")
 if "RestoreSectionView();" not in core_body:
     raise SystemExit("FAIL coordination section restore ownership: reset core must attempt section-view restore")
-if not re.search(r"catch\s*\{\s*if\s*\(throwOnSectionRestoreFailure\)\s*throw;\s*\}", core_body, re.S):
-    raise SystemExit("FAIL coordination section restore ownership: reset core must preserve ownership and optionally rethrow the original section restore failure")
+# The cleanup implementation may need to preserve failures from highlight/isolation as well
+# as section restore. Pin the stronger semantic contract instead of a single catch shape:
+# every cleanup is attempted, the first failure is retained, and dispose mode rethrows it.
+for token in (
+    "Exception? cleanupFailure = null;",
+    "try { ClearHighlight(); } catch (Exception ex) { cleanupFailure = ex; }",
+    "try { RestoreIsolation(); } catch (Exception ex) { cleanupFailure = cleanupFailure ?? ex; }",
+    "try { RestoreSectionView(); }",
+    "cleanupFailure = cleanupFailure ?? ex;",
+    "if (throwOnSectionRestoreFailure && cleanupFailure != null)",
+    "throw cleanupFailure;",
+):
+    if token not in core_body:
+        raise SystemExit(f"FAIL coordination section restore ownership: retry-aware reset must retain first cleanup failure while attempting all cleanup: {token}")
 if "_viewBeforeSection = null" in core_body:
     raise SystemExit("FAIL coordination section restore ownership: reset core must never erase section retry ownership on live restore failure")
 
