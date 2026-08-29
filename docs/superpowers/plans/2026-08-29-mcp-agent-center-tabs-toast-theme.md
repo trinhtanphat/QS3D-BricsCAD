@@ -19,6 +19,7 @@
 - PR #4634 merged to `main` as `6976e0d6b2117cc3b98e5c10615569876600fba1`.
 - Issue #4623 is `COMPLETED / MERGED_MAIN`.
 - Post-merge audit #4647 found one bounded contract gap: the keyboard-focus trigger owns border/thickness but does not yet explicitly own foreground/background. The production source path is currently reserved earlier by active Issue #4629, so #4647 must not mutate it concurrently. The exact two-setter correction is handed off to #4629; #4647 owns the stricter source guard and close-out docs.
+- A valid stricter-contract RED is recorded by run `33256695063` attempt 2 / preflight job `99112494141`: reservation SUCCESS, Generic source guard SUCCESS, `All discovered feature source guards` FAILURE. Attempt 1 is intentionally excluded because reservation failed before the feature guard.
 - Licensed BricsCAD rendering/HiDPI/live-theme qualification remains `LOCAL-024 / PENDING_LOCAL`; hosted CI is never `LOCAL_PASS`.
 
 ## Global Constraints
@@ -71,7 +72,7 @@ Three compact theme-choice buttons are present; System responds to Windows theme
 
 - [x] **Step 4: Run focused preflight for the original #4623 contract**
 
-The #4623 UIUX source guard passed before PR #4634 merged. A stricter post-merge focus-color guard is being established under #4647 and must not be called GREEN until the #4629-owned source correction lands.
+The #4623 UIUX source guard passed before PR #4634 merged. The stricter post-merge focus-color guard is now proven RED under #4647 and must not be called GREEN until the #4629-owned source correction lands.
 
 ---
 
@@ -133,13 +134,13 @@ PR #4634 preserved the existing MCP/Cloudflare/Agent calls while replacing routi
 - [x] Reject run `33256695063` attempt 1 as invalid RED because reservation failed before the feature guard.
 - [x] Diagnose reservation root cause: earlier active Issue #4629 owns `src/QS3D.BricsCAD.V25/McpAgentControlCenter.cs`.
 - [x] Remove that production path from #4647 reservation and hand off the exact two-setter source correction to #4629 without concurrent mutation.
-- [ ] Obtain a valid stricter-contract RED where reservation passes and the Agent Center feature guard fails specifically for missing focus background/foreground ownership.
+- [x] Obtain a valid stricter-contract RED — run `33256695063` attempt 2 / job `99112494141`: reservation SUCCESS, Generic source guard SUCCESS, `All discovered feature source guards` FAILURE while the two required focus setters are absent.
 - [ ] After #4629 lands/releases the source path, reconcile current `main` and verify the stricter Agent Center guard GREEN.
 - [ ] Obtain fresh exact-head shared branch CI and protected PR CI for #4647, merge its guard/docs close-out, and record final SHA evidence.
 
 ## Licensed visual/runtime qualification — LOCAL-024
 
-These rows remain intentionally open. Do not mark them complete from source inspection or hosted CI.
+These rows remain intentionally open. The detailed matrix is registered on canonical local-evidence parent Issue #72; #4647 does not reserve the shared local inbox file. Do not mark these complete from source inspection or hosted CI.
 
 - [ ] **PENDING_LOCAL:** launch `QS3DMCPAGENTCENTER` in licensed BricsCAD on the exact frozen candidate.
 - [ ] **PENDING_LOCAL:** verify System / Dark / Light, including live Windows app-theme switching in System mode and explicit override persistence.
