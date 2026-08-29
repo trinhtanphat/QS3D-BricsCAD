@@ -82,7 +82,7 @@ if not errors:
         errors.append("mutation probe accepted pathname reopening for local release asset hash")
     if not check(workflow_text, helper_text.replace("[IO.FileShare]::Read", "[IO.FileShare]::ReadWrite", 1)):
         errors.append("mutation probe accepted writable sharing for held release generation")
-    if not check(workflow_text, helper_text.replace("Assert-NoReparseAncestor", "Assert-Ancestor", 1)):
+    if not check(workflow_text, helper_text.replace("Assert-NoReparseAncestor", "Assert-Ancestor")):
         errors.append("mutation probe accepted loss of reparse-ancestor rejection")
 
 print("QS3D V26 release asset held-generation preflight")
