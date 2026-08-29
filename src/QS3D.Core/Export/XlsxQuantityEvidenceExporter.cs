@@ -35,13 +35,41 @@ namespace QS3D.Core.Export
             if (explanations == null)
                 throw new ArgumentNullException(nameof(explanations));
 
-            ValidateProjectedRowCapacity(explanations);
-            var rows = QuantityEvidenceExportProjection.CreateMany(explanations);
+            var snapshot = SnapshotExplanations(explanations);
+            ValidateProjectedRowCapacity(snapshot);
+            var rows = QuantityEvidenceExportProjection.CreateMany(snapshot);
             if (rows.Count > MaxDataRows)
                 throw new ArgumentOutOfRangeException(nameof(explanations), "Quantity evidence XLSX export supports at most " + MaxDataRows + " data rows.");
 
             ValidateRows(rows);
             WritePackage(path, rows);
+        }
+
+        private static IReadOnlyList<QuantityExplanation> SnapshotExplanations(
+            IReadOnlyList<QuantityExplanation> explanations)
+        {
+            var count = explanations.Count;
+            if (count < 0)
+                throw new ArgumentOutOfRangeException(nameof(explanations), "Quantity evidence XLSX explanation count must be non-negative.");
+            if (count > MaxDataRows)
+                throw new ArgumentOutOfRangeException(nameof(explanations), "Quantity evidence XLSX export supports at most " + MaxDataRows + " explanations.");
+
+            var snapshot = new QuantityExplanation[count];
+            for (var index = 0; index < count; index++)
+            {
+                if (explanations.Count != count)
+                    throw new InvalidOperationException("Quantity evidence XLSX explanation count changed during snapshot.");
+
+                var explanation = explanations[index];
+                if (explanation == null)
+                    throw new ArgumentException("Quantity explanations cannot contain null entries.", nameof(explanations));
+                snapshot[index] = explanation;
+            }
+
+            if (explanations.Count != count)
+                throw new InvalidOperationException("Quantity evidence XLSX explanation count changed during snapshot.");
+
+            return snapshot;
         }
 
         private static void ValidateProjectedRowCapacity(IReadOnlyList<QuantityExplanation> explanations)
