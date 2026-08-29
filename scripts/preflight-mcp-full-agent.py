@@ -217,7 +217,7 @@ def main() -> int:
         "RunReadOnlySelfTest",
         'InvokeControlTool("cad_agent_stop"',
         'InvokeControlTool("cad_cancel_command"',
-        'InvokeControlTool("cad_agent_resume"',
+        "McpDesktopControlSession.ResumeFromLocalUser()",
         "OpenChatGpt",
         "ThreadPool.QueueUserWorkItem",
         "Interlocked.CompareExchange(ref _localOperationActive",

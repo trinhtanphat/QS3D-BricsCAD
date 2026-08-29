@@ -109,7 +109,15 @@ namespace QS3D.BricsCAD.V25
                 case "cad_agent_resume": return ResumeAgent(args);
                 case "cad_audit_tail": return ReadAuditTail(Integer(args, "limit", 25, 1, 100));
                 case "cad_cancel_command": return CancelCurrentCommand();
-                default: throw new InvalidOperationException("Unknown MCP CAD tool: " + tool);
+                default:
+                    if (McpDesktopAutomationRuntime.IsTool(tool))
+                    {
+                        if (McpDesktopAutomationRuntime.RequiresMutation(tool))
+                            return Mutation(args, tool, () => McpDesktopAutomationRuntime.Call(
+                                tool, args, EnsureCurrentMutationRunning, detail => Audit(tool, detail)));
+                        return McpDesktopAutomationRuntime.Call(tool, args, null, detail => Audit(tool, detail));
+                    }
+                    throw new InvalidOperationException("Unknown MCP CAD tool: " + tool);
             }
         }
 

@@ -47,23 +47,76 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 var panels = 0;
-                var glass = 0d;
-                var frame = 0d;
+                var glass = new CompensatedStatusTotal();
+                var frame = new CompensatedStatusTotal();
                 foreach (var row in rows)
                 {
                     panels = QuantityReportMath.AddCount(panels, row.PanelCount);
-                    glass = QuantityReportMath.Add(glass, row.NetGlassAreaM2, "Curtain export net glass area");
-                    frame = QuantityReportMath.Add(frame, row.FrameLengthM, "Curtain export frame length");
+                    glass.Add(row.NetGlassAreaM2, "Curtain export net glass area");
+                    frame.Add(row.FrameLengthM, "Curtain export frame length");
                 }
+                var glassTotal = glass.Value("Curtain export net glass area");
+                var frameTotal = frame.Value("Curtain export frame length");
 
                 CurtainWallXlsxExporter.Export(dialog.FileName, rows);
 
-                var status = "Curtain XLSX: " + rows.Count + " nhóm • " + panels + " panel • " + glass.ToString("0.###") + " m² kính net • " + frame.ToString("0.###") + " m khung.";
+                var status = "Curtain XLSX: " + rows.Count + " nhóm • " + panels + " panel • " + glassTotal.ToString("0.###") + " m² kính net • " + frameTotal.ToString("0.###") + " m khung.";
                 FinalizeUi(document, status, dialog.FileName);
             }
             catch (System.Exception)
             {
                 Report(document, "QS3DCURTAINXLSX lỗi: không thể xuất bảng Vách Kính.");
+            }
+        }
+
+        private sealed class CompensatedStatusTotal
+        {
+            private double _sum;
+            private double _compensation;
+
+            internal void Add(double value, string label)
+            {
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+                var incoming = QuantityReportMath.NonNegative(value, label);
+
+                var result = _sum + incoming;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Curtain export status total overflowed: " + label + ".");
+
+                var correction = Math.Abs(_sum) >= Math.Abs(incoming)
+                    ? (_sum - result) + incoming
+                    : (incoming - result) + _sum;
+                var nextCompensation = _compensation + correction;
+                if (double.IsNaN(nextCompensation) || double.IsInfinity(nextCompensation))
+                    throw new OverflowException("Curtain export status compensation overflowed: " + label + ".");
+
+                _sum = result == 0d ? 0d : result;
+                _compensation = nextCompensation == 0d ? 0d : nextCompensation;
+            }
+
+            internal double Value(string label)
+            {
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+                var result = _sum + _compensation;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Curtain export status total overflowed: " + label + ".");
+                if (_compensation != 0d && result == _sum && !IsStrictlyBelowHalfUlp(_sum, _compensation))
+                    throw new OverflowException("Curtain export status total lost a non-zero compensation at floating-point precision: " + label + ".");
+                if (_sum != 0d && result == _compensation)
+                    throw new OverflowException("Curtain export status total lost a non-zero accumulated value at floating-point precision: " + label + ".");
+                return result == 0d ? 0d : result;
+            }
+
+            private static bool IsStrictlyBelowHalfUlp(double current, double compensation)
+            {
+                if (current <= 0d || compensation == 0d) return false;
+                var currentBits = BitConverter.DoubleToInt64Bits(current);
+                var adjacentBits = compensation > 0d ? currentBits + 1L : currentBits - 1L;
+                var adjacent = BitConverter.Int64BitsToDouble(adjacentBits);
+                var spacing = Math.Abs(adjacent - current);
+                return Math.Abs(compensation) < spacing / 2d;
             }
         }
 
