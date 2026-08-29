@@ -70,6 +70,21 @@ def main() -> int:
         if token not in text:
             errors.append(f"Agent Center UI missing {label}: {token}")
 
+    trigger_order = [
+        ("focus", "style.Triggers.Add(focus);"),
+        ("hover", "style.Triggers.Add(hover);"),
+        ("pressed", "style.Triggers.Add(pressed);"),
+        ("disabled", "style.Triggers.Add(disabled);"),
+    ]
+    trigger_positions = [(label, text.find(token)) for label, token in trigger_order]
+    if all(position >= 0 for _, position in trigger_positions):
+        positions = [position for _, position in trigger_positions]
+        if positions != sorted(positions):
+            errors.append(
+                "Agent Center button trigger precedence must be focus -> hover -> pressed -> disabled "
+                "so focused buttons own base colors without masking hover/pressed/disabled states"
+            )
+
     preserved = {
         "install flow": "McpCloudflaredBootstrapper.BeginInstall",
         "browser account setup": "McpCloudflareAccountSetupWindow",
