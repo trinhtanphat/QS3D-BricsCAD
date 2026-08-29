@@ -84,7 +84,7 @@ namespace QS3D.BricsCAD.V25
                     + "\"grant_types_supported\":[\"" + AuthorizationCodeGrant + "\",\"" + RefreshTokenGrant + "\"],"
                     + "\"token_endpoint_auth_methods_supported\":[\"" + TokenEndpointAuthMethod + "\"],"
                     + "\"code_challenge_methods_supported\":[\"S256\"],"
-                    + "\"scopes_supported\":[\"" + RequiredScope + "\"]}");
+                    + "\"scopes_supported\":[\"" + RequiredScope + "\",\"" + OfflineAccessScope + "\"]}");
                 return true;
             }
 
@@ -136,6 +136,11 @@ namespace QS3D.BricsCAD.V25
 
             return false;
         }
+
+        // offline_access is an authorization-server grant hint, not an MCP resource permission.
+        // Keep this declaration after protected-resource metadata so source guards can prove the
+        // protected resource advertises only the actual qs3d:mcp permission.
+        internal const string OfflineAccessScope = "offline_access";
 
         internal static bool TryValidateAccessToken(
             IDictionary<string, string> headers,
@@ -277,13 +282,14 @@ namespace QS3D.BricsCAD.V25
                 return RedirectOAuthError(redirect, values, "unsupported_response_type", "only authorization code is supported");
             if (!ConstantTimeEquals(requestedResource, resource))
                 return RedirectOAuthError(redirect, values, "invalid_target", "resource does not match the active QS3D MCP endpoint");
-            if (!ConstantTimeEquals(NormalizeScope(scope), RequiredScope))
+            string normalizedScope;
+            if (!TryNormalizeAuthorizationScope(scope, out normalizedScope))
                 return RedirectOAuthError(redirect, values, "invalid_scope", "requested scope is not supported");
             if (!string.Equals(challengeMethod, "S256", StringComparison.Ordinal)
                 || !IsValidPkceChallenge(challenge))
                 return RedirectOAuthError(redirect, values, "invalid_request", "PKCE S256 is required");
 
-            var consent = McpOAuthConsent.RequestApproval(resource, RequiredScope);
+            var consent = McpOAuthConsent.RequestApproval(resource, normalizedScope);
             if (consent == McpOAuthConsentResult.Denied)
                 return RedirectOAuthError(redirect, values, "access_denied", "local QS3D authorization was denied");
             if (consent != McpOAuthConsentResult.Approved)
@@ -294,7 +300,7 @@ namespace QS3D.BricsCAD.V25
                 new[]
                 {
                     "v1", "code", expires.ToString(CultureInfo.InvariantCulture), EncodeField(ProcessNonce),
-                    EncodeField(clientId), EncodeField(resource), EncodeField(redirect), EncodeField(RequiredScope), EncodeField(challenge)
+                    EncodeField(clientId), EncodeField(resource), EncodeField(redirect), EncodeField(normalizedScope), EncodeField(challenge)
                 },
                 signingSecret);
             var location = redirect + "?code=" + Uri.EscapeDataString(code);
@@ -362,18 +368,21 @@ namespace QS3D.BricsCAD.V25
                 || !TryDecodeField(fields[7], out codeScope)
                 || !TryDecodeField(fields[8], out challenge))
                 return OAuthError(400, "Bad Request", "invalid_grant", "authorization code payload is invalid");
-            if (!ConstantTimeEquals(processNonce, ProcessNonce)
+            string normalizedCodeScope;
+            if (!TryNormalizeAuthorizationScope(codeScope, out normalizedCodeScope)
+                || !ConstantTimeEquals(codeScope, normalizedCodeScope)
+                || !ConstantTimeEquals(processNonce, ProcessNonce)
                 || !ConstantTimeEquals(codeClient, clientId)
                 || !ConstantTimeEquals(codeResource, resource)
                 || !ConstantTimeEquals(codeRedirect, redirect)
-                || !ConstantTimeEquals(codeScope, RequiredScope)
                 || !ConstantTimeEquals(ComputePkceChallenge(verifier), challenge))
                 return OAuthError(400, "Bad Request", "invalid_grant", "authorization code binding check failed");
 
             CleanupConsumedCodes();
             if (!ConsumedAuthorizationCodes.TryAdd(HashForCache(code), expiry))
                 return OAuthError(400, "Bad Request", "invalid_grant", "authorization code was already used");
-            return IssueTokenPair(clientId, resource, signingSecret);
+            var includeRefreshToken = HasOfflineAccess(normalizedCodeScope);
+            return IssueTokenPair(clientId, resource, signingSecret, normalizedCodeScope, includeRefreshToken);
         }
 
         private static McpOAuthHttpResponse ExchangeRefreshToken(
@@ -396,36 +405,65 @@ namespace QS3D.BricsCAD.V25
             if (!TryDecodeField(fields[3], out processNonce)
                 || !TryDecodeField(fields[4], out tokenClient)
                 || !TryDecodeField(fields[5], out tokenResource)
-                || !TryDecodeField(fields[6], out tokenScope)
+                || !TryDecodeField(fields[6], out tokenScope))
+                return OAuthError(400, "Bad Request", "invalid_grant", "refresh token binding check failed");
+            string normalizedTokenScope;
+            if (!TryNormalizeAuthorizationScope(tokenScope, out normalizedTokenScope)
+                || !ConstantTimeEquals(tokenScope, normalizedTokenScope)
+                || !HasOfflineAccess(normalizedTokenScope)
                 || !ConstantTimeEquals(processNonce, ProcessNonce)
                 || !ConstantTimeEquals(tokenClient, clientId)
-                || !ConstantTimeEquals(tokenResource, resource)
-                || !ConstantTimeEquals(tokenScope, RequiredScope))
+                || !ConstantTimeEquals(tokenResource, resource))
                 return OAuthError(400, "Bad Request", "invalid_grant", "refresh token binding check failed");
+
+            var grantedScope = normalizedTokenScope;
+            string requestedScope;
+            if (values.TryGetValue("scope", out requestedScope))
+            {
+                string normalizedRequestedScope;
+                if (!TryNormalizeAuthorizationScope(requestedScope, out normalizedRequestedScope)
+                    || (HasOfflineAccess(normalizedRequestedScope) && !HasOfflineAccess(normalizedTokenScope)))
+                    return OAuthError(400, "Bad Request", "invalid_scope", "requested refresh scope exceeds the original grant");
+                grantedScope = normalizedRequestedScope;
+            }
 
             CleanupConsumedRefreshTokens();
             if (!ConsumedRefreshTokens.TryAdd(HashForCache(refresh), expiry))
                 return OAuthError(400, "Bad Request", "invalid_grant", "refresh token was already used");
-            return IssueTokenPair(clientId, resource, signingSecret);
+            var includeRefreshToken = HasOfflineAccess(grantedScope);
+            return IssueTokenPair(clientId, resource, signingSecret, grantedScope, includeRefreshToken);
         }
 
-        private static McpOAuthHttpResponse IssueTokenPair(string clientId, string resource, string signingSecret)
+        private static McpOAuthHttpResponse IssueTokenPair(
+            string clientId,
+            string resource,
+            string signingSecret,
+            string grantedScope,
+            bool includeRefreshToken)
         {
+            string normalizedScope;
+            if (!TryNormalizeAuthorizationScope(grantedScope, out normalizedScope)
+                || !ConstantTimeEquals(grantedScope, normalizedScope))
+                return OAuthError(400, "Bad Request", "invalid_scope", "granted OAuth scope is invalid");
+
             var now = UnixNow();
             var accessExpiry = now + (long)AccessTokenLifetime.TotalSeconds;
-            var refreshExpiry = now + (long)RefreshTokenLifetime.TotalSeconds;
             var access = CreateSignedToken(
                 new[] { "v1", "access", accessExpiry.ToString(CultureInfo.InvariantCulture), EncodeField(clientId), EncodeField(resource), EncodeField(RequiredScope) },
                 signingSecret);
-            var refresh = CreateSignedToken(
-                new[] { "v1", "refresh", refreshExpiry.ToString(CultureInfo.InvariantCulture), EncodeField(ProcessNonce), EncodeField(clientId), EncodeField(resource), EncodeField(RequiredScope) },
-                signingSecret);
-            var response = Json(200, "OK",
-                "{\"access_token\":\"" + JsonEscape(access) + "\","
-                + "\"token_type\":\"Bearer\","
-                + "\"expires_in\":" + ((long)AccessTokenLifetime.TotalSeconds).ToString(CultureInfo.InvariantCulture) + ","
-                + "\"refresh_token\":\"" + JsonEscape(refresh) + "\","
-                + "\"scope\":\"" + RequiredScope + "\"}");
+            var body = "{\"access_token\":\"" + JsonEscape(access) + "\","
+                       + "\"token_type\":\"Bearer\","
+                       + "\"expires_in\":" + ((long)AccessTokenLifetime.TotalSeconds).ToString(CultureInfo.InvariantCulture);
+            if (includeRefreshToken)
+            {
+                var refreshExpiry = now + (long)RefreshTokenLifetime.TotalSeconds;
+                var refresh = CreateSignedToken(
+                    new[] { "v1", "refresh", refreshExpiry.ToString(CultureInfo.InvariantCulture), EncodeField(ProcessNonce), EncodeField(clientId), EncodeField(resource), EncodeField(normalizedScope) },
+                    signingSecret);
+                body += ",\"refresh_token\":\"" + JsonEscape(refresh) + "\"";
+            }
+            body += ",\"scope\":\"" + JsonEscape(normalizedScope) + "\"}";
+            var response = Json(200, "OK", body);
             response.Headers["Cache-Control"] = "no-store";
             response.Headers["Pragma"] = "no-cache";
             return response;
@@ -721,12 +759,37 @@ namespace QS3D.BricsCAD.V25
             return values != null && values.TryGetValue(name, out value) && !string.IsNullOrWhiteSpace(value);
         }
 
-        private static string NormalizeScope(string value)
+        private static bool TryNormalizeAuthorizationScope(string value, out string normalized)
         {
-            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+            normalized = string.Empty;
+            if (string.IsNullOrWhiteSpace(value)) return false;
             var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length != 1) return string.Empty;
-            return parts[0];
+            var hasRequired = false;
+            var hasOffline = false;
+            foreach (var part in parts)
+            {
+                if (string.Equals(part, RequiredScope, StringComparison.Ordinal))
+                {
+                    if (hasRequired) return false;
+                    hasRequired = true;
+                    continue;
+                }
+                if (string.Equals(part, OfflineAccessScope, StringComparison.Ordinal))
+                {
+                    if (hasOffline) return false;
+                    hasOffline = true;
+                    continue;
+                }
+                return false;
+            }
+            if (!hasRequired) return false;
+            normalized = hasOffline ? RequiredScope + " " + OfflineAccessScope : RequiredScope;
+            return true;
+        }
+
+        private static bool HasOfflineAccess(string normalizedScope)
+        {
+            return ConstantTimeEquals(normalizedScope, RequiredScope + " " + OfflineAccessScope);
         }
 
         private static bool IsJsonContentType(IDictionary<string, string> headers)
