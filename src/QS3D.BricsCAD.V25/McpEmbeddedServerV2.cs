@@ -29,6 +29,7 @@ namespace QS3D.BricsCAD.V25
         private const string TokenFileName = "mcp-bearer-token.txt";
 
         private static readonly object Sync = new object();
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private static readonly SemaphoreSlim ClientSlots = new SemaphoreSlim(MaxConcurrentClients, MaxConcurrentClients);
         private static readonly ConcurrentDictionary<string, SessionState> Sessions =
             new ConcurrentDictionary<string, SessionState>(StringComparer.Ordinal);
@@ -201,17 +202,16 @@ namespace QS3D.BricsCAD.V25
                     if (lines[i].Length == 0) continue;
                     var separator = lines[i].IndexOf(':');
                     if (separator <= 0) throw new HttpProtocolException(400, "Bad Request", "Malformed HTTP header.");
-                    var name = lines[i].Substring(0, separator).Trim();
+                    var name = lines[i].Substring(0, separator);
                     var value = lines[i].Substring(separator + 1).Trim();
-                    if (name.Length == 0 || value.IndexOfAny(new[] { '\r', '\n' }) >= 0)
+                    if (!IsHttpFieldName(name) || value.IndexOfAny(new[] { '\r', '\n' }) >= 0)
                         throw new HttpProtocolException(400, "Bad Request", "Malformed HTTP header.");
                     if (headers.ContainsKey(name) && IsCriticalSingletonHeader(name))
                         throw new HttpProtocolException(400, "Bad Request", "Duplicate security-sensitive HTTP header.");
                     headers[name] = value;
                 }
 
-                string transferEncoding;
-                if (headers.TryGetValue("Transfer-Encoding", out transferEncoding) && !string.IsNullOrWhiteSpace(transferEncoding))
+                if (headers.ContainsKey("Transfer-Encoding"))
                     throw new HttpProtocolException(400, "Bad Request", "Transfer-Encoding is not supported; use Content-Length.");
 
                 var contentLength = 0;
@@ -235,11 +235,17 @@ namespace QS3D.BricsCAD.V25
                     written += read;
                 }
 
+                string bodyText;
+                try { bodyText = contentLength == 0 ? string.Empty : StrictUtf8.GetString(body); }
+                catch (DecoderFallbackException)
+                {
+                    throw new HttpProtocolException(400, "Bad Request", "Invalid UTF-8 in MCP HTTP body.");
+                }
+
                 var path = requestParts[1].Trim();
                 var query = path.IndexOf('?');
                 if (query >= 0) path = path.Substring(0, query);
-                return new HttpRequest(requestParts[0].Trim().ToUpperInvariant(), path, headers,
-                    contentLength == 0 ? string.Empty : Encoding.UTF8.GetString(body));
+                return new HttpRequest(requestParts[0].Trim().ToUpperInvariant(), path, headers, bodyText);
             }
         }
 
@@ -253,9 +259,29 @@ namespace QS3D.BricsCAD.V25
         private static bool IsCriticalSingletonHeader(string name)
         {
             return string.Equals(name, "Content-Length", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(name, "Content-Type", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(name, "Transfer-Encoding", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Authorization", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Mcp-Session-Id", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "MCP-Protocol-Version", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsHttpFieldName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            foreach (var ch in name)
+            {
+                if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')) continue;
+                switch (ch)
+                {
+                    case '!': case '#': case '$': case '%': case '&': case '\'': case '*': case '+':
+                    case '-': case '.': case '^': case '_': case '`': case '|': case '~':
+                        continue;
+                    default:
+                        return false;
+                }
+            }
+            return true;
         }
 
         private static bool IsJsonContentType(string contentType)
@@ -566,7 +592,7 @@ namespace QS3D.BricsCAD.V25
                 if (!TryFindPropertyValue(parameters, "arguments", out rawArguments, out found, out error)) return false;
                 if (found)
                 {
-                    var candidate = rawArguments.Trim();
+                    var candidate = rawArguments;
                     if (candidate.Length < 2 || candidate[0] != '{' || candidate[candidate.Length - 1] != '}')
                     {
                         error = "tools/call params.arguments must be an object.";
@@ -591,7 +617,7 @@ namespace QS3D.BricsCAD.V25
             string error;
             if (!TryFindPropertyValue(json, property, out raw, out found, out error)) return false;
             if (!found) return false;
-            var candidate = raw.Trim();
+            var candidate = raw;
             if (candidate.Length < 2 || candidate[0] != '{' || candidate[candidate.Length - 1] != '}') return false;
             objectJson = candidate;
             return true;
