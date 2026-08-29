@@ -54,21 +54,22 @@ else:
         snapshot = bbs.find(bbs_snapshot_token)
         regenerate = bbs.find(bbs_regenerate_token)
         build = bbs.find(bbs_build_token)
-        aggregate = bbs.find('QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS command total weight")')
+        aggregate = bbs.find('var totals = RebarScheduleBuilder.CalculateTotals(rows);')
         dialog = bbs.find("var dialog = new SaveFileDialog")
         confirm = bbs.find("if (dialog.ShowDialog() != true) return;", dialog + 1)
         export = bbs.find("XlsxRebarScheduleExporter.Export(dialog.FileName, rows);", confirm + 1)
         if min(project, snapshot, regenerate, build, aggregate, dialog, confirm, export) < 0:
             errors.append("BBS XLSX export missing read-only/snapshot/regenerate/build/aggregate/save/export contract token")
         elif not project < snapshot < regenerate < build < aggregate < dialog < confirm < export:
-            errors.append("BBS XLSX must validate fresh detached rows and finite aggregate before SaveFileDialog, then export only after Save confirmation")
+            errors.append("BBS XLSX must validate fresh detached rows and canonical finite aggregate before SaveFileDialog, then export only after Save confirmation")
         for forbidden in (
             "ProjectContextCoordinator.GetOrCreate(doc)",
             "RegenerateProject(project);",
             "ProjectRebarScheduleBuilder.Build(project)",
+            'QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS command total weight")',
         ):
             if forbidden in bbs:
-                errors.append("BBS read-only export must not mutate/create live project state: " + forbidden)
+                errors.append("BBS read-only export must not mutate/create live project state or restore pairwise status aggregation: " + forbidden)
         before_confirm = bbs[:confirm if confirm >= 0 else 0]
         if "XlsxRebarScheduleExporter.Export(" in before_confirm:
             errors.append("BBS XLSX must not write the export before Save confirmation")
@@ -80,4 +81,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: ED2 and BBS validate existing detached exportability before SaveFileDialog, regenerate only detached snapshots, write only after confirmation, and leave live semantic state read-only.")
+print("PASS: ED2 and BBS validate existing detached exportability before SaveFileDialog, BBS uses canonical compensated totals, writes occur only after confirmation, and live semantic state stays read-only.")
