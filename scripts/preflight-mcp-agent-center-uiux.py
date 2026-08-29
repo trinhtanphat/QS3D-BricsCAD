@@ -83,7 +83,7 @@ def main() -> int:
         "emergency stop tool": 'InvokeControlTool("cad_agent_stop"',
         "cancel command": 'InvokeControlTool("cad_cancel_command"',
         "local-only desktop resume": "McpDesktopControlSession.ResumeFromLocalUser()",
-        "local-only desktop pause": "McpDesktopControlSession.PauseFromLocalUser()",
+        "local-only desktop pause": "McpDesktopControlSession.PauseFromLocalUser(",
         "worker-thread operations": "ThreadPool.QueueUserWorkItem",
         "serialized local checks": "Interlocked.CompareExchange(ref _localOperationActive, 1, 0)",
     }
