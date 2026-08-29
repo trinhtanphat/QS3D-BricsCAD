@@ -35,7 +35,7 @@ for name in FILES:
     text = path.read_text(encoding="utf-8")
     expected_attach = (
         "DocumentBoundWindowLifetime.Attach(this, document);"
-        if name == "AuditLogWindow.xaml.cs"
+        if name in ("AuditLogWindow.xaml.cs", "RevisionWindow.xaml.cs")
         else "DocumentBoundWindowLifetime.Attach(this, _document);"
     )
     if expected_attach not in text:
@@ -124,6 +124,20 @@ if health.is_file():
     if "ReferenceEquals(current, _projectAtOpen)" in text:
         errors.append("ModelHealthWindow must compare semantic snapshot stamps, not ProjectState object identity; read-only sidecar loads may produce equivalent detached instances.")
 
+revision = UI / "RevisionWindow.xaml.cs"
+if revision.is_file():
+    text = revision.read_text(encoding="utf-8")
+    for token in (
+        "private readonly IntPtr _nativeDatabaseIdentity;",
+        "database.UnmanagedObject == _nativeDatabaseIdentity",
+        "TryGetBoundActiveDocument(out var document)",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
+    ):
+        if token not in text:
+            errors.append("RevisionWindow missing live-wrapper document-lifetime token: " + token)
+    if re.search(r"\b(?:private|protected|public|internal)\s+(?:readonly\s+)?Document\s+_[A-Za-z0-9_]+\s*;", text):
+        errors.append("RevisionWindow must not retain a managed Document wrapper across modeless lifetime")
+
 manager_contracts = [
     ("FamilyManagerWindow.xaml.cs", "FamilyManagerCommands.cs", "new FamilyManagerWindow(document)"),
     ("FloorLevelWindow.xaml.cs", "FloorLevelCommands.cs", "new FloorLevelWindow(document)"),
@@ -196,4 +210,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: document-bound modeless windows close with their DWG; Audit resolves a fresh live wrapper from stable native identity, Health/Project Tools and manager refreshes remain read-only, manager writes bind existing canonical projects, modeless command callers avoid duplicate lifetime attachment, Model Health uses semantic snapshot stamps, Curtain re-resolves selected Family, and Rebar Mesh rejects replaced project state.")
+print("PASS: document-bound modeless windows close with their DWG; Audit and Revision resolve fresh live wrappers from stable native identity, Health/Project Tools and manager refreshes remain read-only, manager writes bind existing canonical projects, and unrelated modeless contracts remain intact.")
