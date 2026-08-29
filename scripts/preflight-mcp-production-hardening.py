@@ -85,7 +85,12 @@ def main() -> int:
         "strict HTTP field-name validation": (server, "IsHttpFieldName(name)"),
         "singleton Content-Type header": (server, 'string.Equals(name, "Content-Type", StringComparison.OrdinalIgnoreCase)'),
         "singleton Transfer-Encoding header": (server, 'string.Equals(name, "Transfer-Encoding", StringComparison.OrdinalIgnoreCase)'),
+        "singleton Origin header": (server, 'string.Equals(name, "Origin", StringComparison.OrdinalIgnoreCase)'),
         "reject any Transfer-Encoding header": (server, 'if (headers.ContainsKey("Transfer-Encoding"))'),
+        "Origin validation helper": (server, "private static bool IsAllowedOrigin("),
+        "Origin URI parsing": (server, "Uri.TryCreate(origin, UriKind.Absolute"),
+        "Origin loopback restriction": (server, "uri.IsLoopback"),
+        "Origin rejection HTTP 403": (server, 'WriteResponse(stream, 403, "Forbidden"'),
         "strict UTF-8 request body": (server, "StrictUtf8.GetString(body)"),
         "invalid UTF-8 request rejection": (server, "Invalid UTF-8 in MCP HTTP body."),
         "hard HTTP header terminator cap": (server, "if (headerEnd + 4 > MaxHeaderBytes)"),
@@ -122,6 +127,12 @@ def main() -> int:
     for label, (text, token) in required.items():
         if token not in text:
             errors.append(f"missing {label}: {token}")
+
+    handle_request_start = server.find("private static void HandleRequest(")
+    origin_check = server.find("if (!IsAllowedOrigin(request.Headers))", handle_request_start)
+    health_route = server.find('request.Path, "/healthz"', handle_request_start)
+    if handle_request_start < 0 or origin_check < 0 or health_route < 0 or origin_check > health_route:
+        errors.append("MCP Origin validation must run before every route, including healthz")
 
     extract_string_start = top_level_json.find("internal static string ExtractString(")
     extract_string_end = top_level_json.find("internal static bool ExtractBoolean(", extract_string_start)
@@ -233,8 +244,8 @@ def main() -> int:
 
     print(
         "PASS: compiled modular MCP transport/runtime use strict bounded HTTP framing/UTF-8, exact JSON "
-        "media type admission, strict recursive RFC JSON grammar, valid JSON-RPC ids and serialized "
-        "bounded session lifecycle with strict negotiated protocol-version validation and 404 expiry truth; "
+        "media type admission, loopback-only Origin validation, strict recursive RFC JSON grammar, valid JSON-RPC ids "
+        "and serialized bounded session lifecycle with strict negotiated protocol-version validation and 404 expiry truth; "
         "CAD timeout/recovery and validated Cloudflare endpoint/onboarding boundaries remain fail-closed."
     )
     return 0
