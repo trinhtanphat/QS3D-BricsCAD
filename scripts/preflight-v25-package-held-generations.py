@@ -66,7 +66,7 @@ for token in (
 # Deterministic mutation probes: each regression must remove a contract token that
 # the reference inspector requires, proving the guard fails closed on shortcuts.
 mutations = (
-    text.replace("[IO.FileShare]::Read", "[IO.FileShare]::ReadWrite", 1),
+    text.replace("[IO.FileShare]::Read", "[IO.FileShare]::Write", 1),
     text.replace("Copy-HeldPackageInput -SourcePath $path -DestinationPath (Join-Path $dist $name)", "Copy-Item -LiteralPath $path -Destination (Join-Path $dist $name)", 1),
     text.replace("Read-HeldSourceText -Path $_.FullName -Label 'V25 command source'", "Get-Content -LiteralPath $_.FullName -Raw", 1),
     text.replace("[xml]$project = Read-HeldPackageText -Held $held -Label 'project file'", "[xml]$project = Get-Content -LiteralPath $ProjectPath -Raw", 1),
