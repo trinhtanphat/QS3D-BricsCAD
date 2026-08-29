@@ -155,6 +155,8 @@ namespace QS3D.Core.Export
         private const int IntegerStyle = 2;
         private const int WrappedStyle = 3;
         private const int MaxRows = 1048575;
+        private static readonly DateTimeOffset DeterministicZipEntryTimestamp =
+            new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
         public static void Export(string path, IReadOnlyList<CoordinationClashExportRow> rows)
         {
@@ -351,6 +353,7 @@ namespace QS3D.Core.Export
         private static void WriteEntry(ZipArchive archive, string name, string content)
         {
             var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
+            entry.LastWriteTime = DeterministicZipEntryTimestamp;
             using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false))) writer.Write(content);
         }
 

@@ -235,6 +235,9 @@ namespace QS3D.Core.Export
             ValidateArrayObjectMembers(Member(root, "floors"), "$.floors", FloorMembers, issues);
             ValidateArrayObjectMembers(Member(root, "families"), "$.families", FamilyMembers, issues);
             ValidateArrayObjectMembers(Member(root, "elements"), "$.elements", ElementMembers, issues);
+            ValidateArrayMapDuplicateMembers(Member(root, "families"), "$.families", "properties", issues);
+            ValidateArrayMapDuplicateMembers(Member(root, "elements"), "$.elements", "properties", issues);
+            ValidateArrayMapDuplicateMembers(Member(root, "elements"), "$.elements", "quantities", issues);
         }
 
         private static void ValidateObjectMembers(XElement? value, string path, ISet<string> allowedMembers, IssueCollector issues)
@@ -261,6 +264,32 @@ namespace QS3D.Core.Export
                 if (issues.Full) return;
                 ValidateObjectMembers(item, path + "[" + index.ToString(CultureInfo.InvariantCulture) + "]", allowedMembers, issues);
                 index++;
+            }
+        }
+
+        private static void ValidateArrayMapDuplicateMembers(XElement? value, string path, string mapName, IssueCollector issues)
+        {
+            if (value == null) return;
+            var index = 0;
+            foreach (var item in value.Elements())
+            {
+                if (issues.Full) return;
+                var itemPath = path + "[" + index.ToString(CultureInfo.InvariantCulture) + "]";
+                ValidateMapDuplicateMembers(Member(item, mapName), itemPath + "." + mapName, issues);
+                index++;
+            }
+        }
+
+        private static void ValidateMapDuplicateMembers(XElement? value, string path, IssueCollector issues)
+        {
+            if (value == null) return;
+            var observedMembers = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var member in value.Elements())
+            {
+                if (issues.Full) return;
+                var name = JsonMemberName(member);
+                if (!observedMembers.Add(name))
+                    issues.Error("JSON_DUPLICATE_MEMBER", "Semantic snapshot contains a duplicate JSON map member: " + name + ".", path);
             }
         }
 
