@@ -93,7 +93,7 @@ def main() -> int:
         acquire,
         (
             "Get-FileHash",
-            "Get-AuthenticodeSignature",
+            "Get-AuthenticodeSignature -FilePath $msiState.Path",
             "WindowsInstaller.Installer",
             "ProductVersion",
             "ProductName",
@@ -101,6 +101,12 @@ def main() -> int:
             "TD_Mgd.dll",
             "TD_MgdBrep.dll",
             "^25\\.2\\.10(?:\\.|$)",
+            "Open-PinnedMsiReadLock",
+            "[IO.FileShare]::Read",
+            "$sha.ComputeHash($stream)",
+            "Assert-PinnedMsiStable",
+            "Get-OrdinaryFilesByNameUnderRoot",
+            "Extracted V25 tree must not contain filesystem reparse points",
             "Write-Output $bricsDir",
         ),
         "V25 managed-reference acquisition",
@@ -117,6 +123,7 @@ def main() -> int:
     print(" - preview version synchronization is workspace-only")
     print(" - source HEAD/provenance remains an exact protected-main commit")
     print(" - canonical core check compiles V25 through locked, verified reference generations with immutable Action refs")
+    print(" - V25 MSI digest/signature/metadata/extraction are bound to one held generation")
     return 0
 
 
