@@ -97,7 +97,7 @@ namespace QS3D.Core.Commercial
             {
                 while (enumerator.MoveNext())
                 {
-                    RequireCanProcessNext(knownCount, snapshot.Count, "Commercial audit batch source");
+                    CommercialGuard.RequireCanProcessNext(knownCount, snapshot.Count, "Commercial audit batch source");
                     if (snapshot.Count == remainingCapacity)
                         throw new InvalidOperationException("Commercial audit log supports at most 10000 events.");
 
