@@ -47,6 +47,8 @@ The active `McpEmbeddedServerV2` service listens only on `127.0.0.1:8765` and ex
 
 The service supports MCP protocol `2025-06-18` with compatibility for `2025-03-26`: `initialize` returns `Mcp-Session-Id`, then the client sends `notifications/initialized` and uses `ping`, `tools/list`, and `tools/call`. Live sessions, concurrent clients, HTTP headers and bodies are bounded. Duplicate security-sensitive headers and `Transfer-Encoding` are rejected; MCP POST requires `application/json` plus bearer authentication.
 
+Mutation authorization is top-level only: nested `confirmMutation=true` does not authorize a mutation, and duplicate top-level `confirmMutation` is rejected fail-closed by the top-level JSON parser. The exact media-type gate rejects lookalikes such as `application/jsonevil`; `application/json` with optional parameters remains accepted.
+
 Generated bearer tokens contain 32 random bytes encoded as 64 hexadecimal characters. An explicit `QS3D_MCP_BEARER_TOKEN` override must be at least 32 characters. Tool successes expose both ordinary MCP text content and `structuredContent.data`, so ChatGPT can consume object/array results without reparsing human prose.
 
 The local protocol probe exercises real lifecycle calls, not only HTTP reachability. `scripts/test-mcp-loopback-readonly.py` additionally verifies bearer rejection, session creation/deletion, the required tool set, and bounded observation calls while keeping output sanitized.
