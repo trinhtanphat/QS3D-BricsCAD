@@ -96,8 +96,32 @@ if shared_helper_marker in cloud:
                 errors.append(
                     f"shared V25 compile-reference helper does not validate project-required reference {filename}"
                 )
+
+        legacy_runtime_discovery = "-Filter 'BrxMgd.dll'"
+        hardened_runtime_discovery = "Get-OrdinaryFilesByNameUnderRoot -Root $extract -Name 'BrxMgd.dll'"
+        hardened_discovery_helper = "function Get-OrdinaryFilesByNameUnderRoot"
+        hardened_reparse_rejection = "Extracted V25 tree must not contain filesystem reparse points"
+        if hardened_discovery_helper in helper:
+            if hardened_runtime_discovery not in helper:
+                errors.append(
+                    "shared V25 compile-reference helper is missing hardened non-reparse runtime candidate discovery: "
+                    + hardened_runtime_discovery
+                )
+            if hardened_reparse_rejection not in helper:
+                errors.append(
+                    "shared V25 compile-reference helper is missing extracted-tree reparse rejection: "
+                    + hardened_reparse_rejection
+                )
+            if legacy_runtime_discovery in helper:
+                errors.append(
+                    "shared V25 compile-reference helper retains retired recursive Brx discovery after hardened discovery was introduced"
+                )
+        elif legacy_runtime_discovery not in helper:
+            errors.append(
+                "shared V25 compile-reference helper is missing both legacy and hardened runtime candidate discovery contracts"
+            )
+
         helper_markers = {
-            "runtime candidate discovery": "Get-OrdinaryFilesByNameUnderRoot -Root $extract -Name 'BrxMgd.dll'",
             "Brx co-location": "(Join-Path $_ 'BrxMgd.dll')",
             "TD co-location": "(Join-Path $_ 'TD_Mgd.dll')",
             "BREP co-location": "(Join-Path $_ 'TD_MgdBrep.dll')",
