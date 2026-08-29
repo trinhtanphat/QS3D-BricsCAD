@@ -419,9 +419,14 @@ namespace QS3D.BricsCAD.V25
             return index == token.Length;
         }
 
+        private static bool IsJsonWhitespace(char ch)
+        {
+            return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
+        }
+
         private static void SkipWhitespace(string source, ref int index)
         {
-            while (index < source.Length && char.IsWhiteSpace(source[index])) index++;
+            while (index < source.Length && IsJsonWhitespace(source[index])) index++;
         }
 
         private static bool TryReadString(string source, ref int index, out string value, out string error)
