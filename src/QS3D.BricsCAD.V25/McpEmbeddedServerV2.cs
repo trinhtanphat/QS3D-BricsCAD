@@ -833,7 +833,7 @@ namespace QS3D.BricsCAD.V25
                 .Append("\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n");
             if (payload.Length > 0)
             {
-                var safeContentType = string.IsNullOrWhiteSpace(contentType) ? "application/json; charset=utf-8" : contentType.Trim();
+                var safeContentType = string.IsNullOrWhiteSpace(contentType) ? "application/json; charset=utf-8" : contentType!.Trim();
                 if (safeContentType.Length > 128 || safeContentType.IndexOfAny(new[] { '\r', '\n' }) >= 0)
                     safeContentType = "application/json; charset=utf-8";
                 header.Append("Content-Type: ").Append(safeContentType).Append("\r\n");
