@@ -47,10 +47,14 @@ def main():
     assert gate.normalize_lane_key("Issue: 2305") == "issue-2305"
     assert gate.normalize_lane_key("issue-2305 <!-- template hint -->") == "issue-2305"
     assert gate.normalize_lane_key("BATCH-UI-AUG17") == "batch-ui-aug17"
+    assert gate.normalize_lane_key("`issue-2305`") == "issue-2305"
+    assert gate.normalize_lane_key("**issue-2305**") == "issue-2305"
+    assert gate.normalize_lane_key("`BATCH-UI-AUG17`") == "batch-ui-aug17"
     expect_raises(lambda: gate.normalize_lane_key("x"), "3-81")
     expect_raises(lambda: gate.normalize_lane_key("bad/key"), "3-81")
 
     assert gate.extract_lane_key("Lane-Key: issue-2305\nIssue: #999") == "issue-2305"
+    assert gate.extract_lane_key("Lane-Key: `issue-2305`\nIssue: #999") == "issue-2305"
     assert gate.extract_lane_key("Issue: #2305\n") == "issue-2305"
     assert gate.extract_lane_key("Fixes #2305") == "issue-2305"
     assert gate.extract_lane_key("No task metadata") is None
