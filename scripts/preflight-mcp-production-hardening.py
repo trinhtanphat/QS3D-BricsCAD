@@ -88,6 +88,14 @@ def main() -> int:
         "reject any Transfer-Encoding header": (server, 'if (headers.ContainsKey("Transfer-Encoding"))'),
         "strict UTF-8 request body": (server, "StrictUtf8.GetString(body)"),
         "invalid UTF-8 request rejection": (server, "Invalid UTF-8 in MCP HTTP body."),
+        "hard HTTP header terminator cap": (server, "if (headerEnd + 4 > MaxHeaderBytes)"),
+        "serialized MCP session state": (server, "private static readonly object SessionSync = new object();"),
+        "atomic session creation helper": (server, "private static bool TryCreateSession("),
+        "serialized session deletion helper": (server, "private static bool TryDeleteSession("),
+        "serialized session refresh": (server, "Sessions.TryUpdate(sessionId, state, stored)"),
+        "session validation status output": (server, "out int statusCode"),
+        "unknown session HTTP 404": (server, "statusCode = 404;"),
+        "404 session response": (server, 'sessionStatusCode == 404 ? "Not Found" : "Bad Request"'),
         "top-level JSON trailing-comma rejection": (top_level_json, "JSON object cannot end with a trailing comma."),
         "MCP arguments trailing-comma rejection": (top_level_json, "MCP arguments object cannot end with a trailing comma."),
         "strict RFC JSON whitespace helper": (top_level_json, "IsJsonWhitespace(source[index])"),
@@ -124,6 +132,20 @@ def main() -> int:
             errors.append("MCP string extraction still throws parser errors instead of failing closed to caller validation")
         if "return string.Empty;" not in extract_string:
             errors.append("MCP string extraction lacks fail-closed empty-value behavior for malformed input")
+
+    create_session_start = server.find("private static bool TryCreateSession(")
+    create_session_end = server.find("private static bool TryDeleteSession(", create_session_start)
+    if create_session_start >= 0 and create_session_end > create_session_start:
+        create_session = server[create_session_start:create_session_end]
+        if "lock (SessionSync)" not in create_session or "Sessions.Count >= MaxSessions" not in create_session:
+            errors.append("MCP session creation is not atomically capacity-checked under SessionSync")
+
+    validate_session_start = server.find("private static bool TryValidateSession(")
+    validate_session_end = server.find("private static void CleanupSessionsLocked(", validate_session_start)
+    if validate_session_start >= 0 and validate_session_end > validate_session_start:
+        validate_session = server[validate_session_start:validate_session_end]
+        if "lock (SessionSync)" not in validate_session:
+            errors.append("MCP session validation/refresh is not serialized under SessionSync")
 
     named_start = account.find("private static bool StartProcess")
     named_exit = account.find("private static void HandleProcessExit", named_start)
@@ -164,12 +186,10 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: compiled modular MCP transport/runtime use strict HTTP framing/UTF-8, exact JSON media "
-        "type admission and strict bounded recursive RFC JSON grammar/whitespace, fail-closed string "
-        "extraction and valid JSON-RPC ids, bounded authenticated session handling, atomic CAD timeout "
-        "truth, BricsCAD-confined recovery, one validated HTTPS endpoint resolver, live-only Cloudflare "
-        "provider URLs, exact tunnel identity, canonical named-tunnel config regeneration and verified "
-        "click-first redacted onboarding."
+        "PASS: compiled modular MCP transport/runtime use strict bounded HTTP framing/UTF-8, exact JSON "
+        "media type admission, strict recursive RFC JSON grammar, valid JSON-RPC ids and serialized "
+        "bounded session lifecycle with 404 expiry truth; CAD timeout/recovery and validated Cloudflare "
+        "endpoint/onboarding boundaries remain fail-closed."
     )
     return 0
 
