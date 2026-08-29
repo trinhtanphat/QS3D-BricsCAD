@@ -33,15 +33,21 @@ handler = re.search(
 require(handler is not None, "cancellable OnWindowClosing handler was not found")
 if handler is not None:
     body = handler.group("body")
-    require("if (!_attached || _disposeInProgress || _disposed) return;" in body,
+    live_guard = "if (!_attached || _disposeInProgress || _disposed) return;"
+    pre_cancel_guard = "if (e.Cancel) return;"
+    require(live_guard in body,
             "close admission must be inert outside an attached live controller")
+    live_pos = body.find(live_guard)
+    pre_cancel_pos = body.find(pre_cancel_guard)
     cleanup_pos = body.find("var cleanupFailure = _session.TryResetTransientStateBestEffort();")
     debt_pos = body.find("_session.HasTransientState")
     cancel_pos = body.find("e.Cancel = true;")
     barrier_pos = body.find("_cleanupBarrier = true;")
     state_pos = body.find("UpdateActionState();")
-    require(cleanup_pos >= 0 and debt_pos > cleanup_pos,
-            "close admission must consume cleanup failure and retained transient ownership")
+    require(pre_cancel_pos > live_pos,
+            "incoming Closing cancellation must be respected after the controller liveness guard")
+    require(cleanup_pos > pre_cancel_pos and debt_pos > cleanup_pos,
+            "pre-cancelled close must return before any transient cleanup or ownership inspection")
     require(cancel_pos > debt_pos and barrier_pos > debt_pos,
             "failed close cleanup must cancel close and preserve an explicit cleanup barrier")
     require(state_pos > barrier_pos,
@@ -61,8 +67,6 @@ if attach is not None:
     require(0 <= closing < closed,
             "cancellable Closing admission must be acquired before terminal Closed handling")
 
-# Destroyed-document cleanup is an explicit abandon boundary and must still be able
-# to close without a cancellable native cleanup attempt against a destroyed host.
 destroyed = re.search(
     r"private void OnDocumentToBeDestroyed\(object sender, DocumentCollectionEventArgs e\)\s*\{(?P<body>.*?)\n\s*\}",
     text,
@@ -82,4 +86,4 @@ if errors:
         print(" - " + error)
     sys.exit(1)
 
-print("PASS Coordination review window close retains retry ownership until transient cleanup is complete")
+print("PASS Coordination review window close retains retry ownership and respects prior cancellation")
