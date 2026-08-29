@@ -120,7 +120,8 @@ def main():
         "if (current.Release.HasVerifiedPreviewPackage)",
         "await DownloadPreviewAsync(current.Release);",
         "var verified = await new VerifiedReleaseDownloader().DownloadAsync(release);",
-        'Process.Start(new ProcessStartInfo("explorer.exe", "/select,\\\"" + path + "\\\"") { UseShellExecute = true });',
+        "VerifiedPreviewInstaller.TrySchedule(verified.Path, verified.Sha256, out var installError)",
+        "SecureUpdateLauncher.TryRequestGracefulHostClose(out var closeError)",
         "await ScheduleUpdateAsync();",
     ):
         require(window, needle, window_rel)
@@ -132,6 +133,8 @@ def main():
         "File.Open(verified.Path",
         "SecureUpdateLauncher.Launch(_downloadedPackagePath",
         "SecureUpdateLauncher.Launch(verified.Path",
+        "RevealDownloadedFile(",
+        'Process.Start(new ProcessStartInfo("explorer.exe"',
     ):
         forbid(window, needle, window_rel)
 
@@ -151,8 +154,8 @@ def main():
         "uses bounded request/read-write timeouts, validates every bounded HTTPS GitHub redirect hop and final response URI, rejects URI user-info, "
         "verifies SHA-256 before retaining the ZIP, escapes Windows reserved release-tag cache segments, bounds the readable cache prefix, appends a "
         "SHA-256 identity of the exact release tag to prevent case/sanitization cache collisions, stages under LocalApplicationData, exposes the Update "
-        "Center directly from Start Center without command dispatch, and only reveals unsigned preview packages while the existing signed-manifest "
-        "scheduling path remains separate."
+        "Center directly from Start Center without command dispatch, and hands the verified preview to the bounded post-exit installer while the "
+        "existing signed-manifest scheduling path remains separate."
     )
     return 0
 

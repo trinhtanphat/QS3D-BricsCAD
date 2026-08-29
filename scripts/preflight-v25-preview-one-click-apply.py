@@ -38,7 +38,8 @@ def main():
         "ZipArchive",
         "GetFullPath",
         "StartsWith(stagingPrefix, StringComparison.OrdinalIgnoreCase)",
-        "Process.GetCurrentProcess().Id",
+        "using (var currentProcess = Process.GetCurrentProcess())",
+        "parentProcessId = currentProcess.Id;",
         "WaitForExit",
         "File.Copy(sourcePath, backupPath, true)",
         "File.Replace",
@@ -59,6 +60,8 @@ def main():
         "Process.Start(_downloadedPackagePath",
         "File.Copy(verified.Path, Assembly.GetExecutingAssembly().Location",
         "File.Copy(_downloadedPackagePath, Assembly.GetExecutingAssembly().Location",
+        "RevealDownloadedFile(",
+        'Process.Start(new ProcessStartInfo("explorer.exe"',
     ):
         forbid(window, needle, window_rel)
 
