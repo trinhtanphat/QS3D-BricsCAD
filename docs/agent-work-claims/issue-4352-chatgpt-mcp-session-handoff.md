@@ -58,6 +58,8 @@ The active modular service implements Streamable-HTTP request/response behavior 
 
 `/mcp` requires bearer authentication. The bearer secret is either a sufficiently long `QS3D_MCP_BEARER_TOKEN` environment override or a cryptographically generated 32-byte token persisted in the QS3D application-data directory; it is never a Cloudflare account password. The listener binds only to `IPAddress.Loopback`.
 
+Mutation confirmation is top-level only: nested `confirmMutation=true` never authorizes a mutation, and duplicate top-level `confirmMutation` is rejected fail-closed by the top-level JSON parser. HTTP media-type admission rejects lookalikes such as `application/jsonevil`; only `application/json` with optional parameters is admitted.
+
 Remote MCP must never expose PowerShell, `cmd.exe`, arbitrary shell execution, arbitrary program launch, arbitrary desktop input, or unbounded CAD script execution. Keep request parsing fail-closed, reject malformed/duplicate security-sensitive headers, reject unsupported transfer encoding and JSON media-type lookalikes, and preserve no-store/nosniff response headers.
 
 ## 4. Tool surface and agent decision order
