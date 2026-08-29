@@ -45,6 +45,20 @@ namespace QS3D.Core.Rebar
         public string FabricationDetailingRevision { get; set; } = string.Empty;
     }
 
+    public sealed class RebarScheduleTotals
+    {
+        internal RebarScheduleTotals(int quantity, double totalLengthM, double totalWeightKg)
+        {
+            Quantity = quantity;
+            TotalLengthM = totalLengthM;
+            TotalWeightKg = totalWeightKg;
+        }
+
+        public int Quantity { get; }
+        public double TotalLengthM { get; }
+        public double TotalWeightKg { get; }
+    }
+
     public static class RebarScheduleBuilder
     {
         private const int MaxRowCount = 10000;
@@ -78,6 +92,27 @@ namespace QS3D.Core.Rebar
 
             ValidateAggregate(rows);
             return rows.AsReadOnly();
+        }
+
+        public static RebarScheduleTotals CalculateTotals(IReadOnlyList<RebarScheduleRow> rows)
+        {
+            if (rows == null) throw new ArgumentNullException(nameof(rows));
+            var quantity = 0;
+            var totalLength = new CompensatedNonNegativeTotal();
+            var totalWeight = new CompensatedNonNegativeTotal();
+            foreach (var row in rows)
+            {
+                if (row == null) throw new InvalidOperationException("BBS row cannot be null.");
+                if (row.Quantity < 0) throw new InvalidOperationException("BBS row quantity cannot be negative.");
+                try { quantity = checked(quantity + row.Quantity); }
+                catch (OverflowException ex) { throw new OverflowException("BBS total bar quantity exceeds Int32 capacity.", ex); }
+                totalLength.Add(row.TotalLengthM, "BBS aggregate length");
+                totalWeight.Add(row.TotalWeightKg, "BBS aggregate weight");
+            }
+
+            var length = totalLength.Value("BBS aggregate length");
+            var weight = totalWeight.Value("BBS aggregate weight");
+            return new RebarScheduleTotals(quantity, length, weight);
         }
 
         private static void Append(RebarScheduleInput input, ICollection<RebarScheduleRow> rows, string inputParameterName)
@@ -186,17 +221,7 @@ namespace QS3D.Core.Rebar
 
         private static void ValidateAggregate(IReadOnlyList<RebarScheduleRow> rows)
         {
-            var quantity = 0;
-            var totalLength = 0d;
-            var totalWeight = 0d;
-            foreach (var row in rows)
-            {
-                if (row == null) throw new InvalidOperationException("BBS row cannot be null.");
-                try { quantity = checked(quantity + row.Quantity); }
-                catch (OverflowException ex) { throw new OverflowException("BBS total bar quantity exceeds Int32 capacity.", ex); }
-                totalLength = RebarMath.Add(totalLength, row.TotalLengthM, "BBS aggregate length");
-                totalWeight = RebarMath.Add(totalWeight, row.TotalWeightKg, "BBS aggregate weight");
-            }
+            CalculateTotals(rows);
         }
 
         private static int ResolveQuantity(RebarGroup group, RebarScheduleInput input)
@@ -214,6 +239,57 @@ namespace QS3D.Core.Rebar
                 return checked((int)rounded + 1);
             }
             throw new InvalidOperationException("Rebar quantity cannot be inferred. Provide count notation, spacing + distribution length, or CountOverride.");
+        }
+
+        private struct CompensatedNonNegativeTotal
+        {
+            private double _sum;
+            private double _compensation;
+
+            internal void Add(double value, string label)
+            {
+                RebarMath.Finite(_sum, label + "/sum");
+                RebarMath.Finite(_compensation, label + "/compensation");
+                var incoming = RebarMath.NonNegative(value, label);
+
+                var result = _sum + incoming;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("BBS aggregate overflow: " + label + ".");
+
+                var correction = Math.Abs(_sum) >= Math.Abs(incoming)
+                    ? (_sum - result) + incoming
+                    : (incoming - result) + _sum;
+                var nextCompensation = _compensation + correction;
+                if (double.IsNaN(nextCompensation) || double.IsInfinity(nextCompensation))
+                    throw new OverflowException("BBS aggregate compensation overflow: " + label + ".");
+
+                _sum = result == 0d ? 0d : result;
+                _compensation = nextCompensation == 0d ? 0d : nextCompensation;
+            }
+
+            internal double Value(string label)
+            {
+                RebarMath.Finite(_sum, label + "/sum");
+                RebarMath.Finite(_compensation, label + "/compensation");
+                var result = _sum + _compensation;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("BBS aggregate overflow: " + label + ".");
+                if (_compensation != 0d && result == _sum && !IsAtMostHalfUlp(_sum, _compensation))
+                    throw new OverflowException("BBS aggregate lost a non-zero compensation at floating-point precision: " + label + ".");
+                if (_sum != 0d && result == _compensation)
+                    throw new OverflowException("BBS aggregate lost a non-zero accumulated value at floating-point precision: " + label + ".");
+                return result == 0d ? 0d : result;
+            }
+
+            private static bool IsAtMostHalfUlp(double current, double compensation)
+            {
+                if (current <= 0d || compensation == 0d) return false;
+                var currentBits = BitConverter.DoubleToInt64Bits(current);
+                var adjacentBits = compensation > 0d ? currentBits + 1L : currentBits - 1L;
+                var adjacent = BitConverter.Int64BitsToDouble(adjacentBits);
+                var spacing = Math.Abs(adjacent - current);
+                return Math.Abs(compensation) <= spacing / 2d;
+            }
         }
 
         private struct CompensatedFiniteSum

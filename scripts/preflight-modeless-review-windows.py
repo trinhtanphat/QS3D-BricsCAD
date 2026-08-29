@@ -74,8 +74,16 @@ if bbs.is_file():
     for needle in ('EnsureActive("định vị BBS")', 'EnsureActive("xuất BBS XLSX")'):
         if needle not in text:
             errors.append("BBS modeless action missing active-DWG guard: " + needle)
-    if "QuantityReportMath.AddCount" not in text or "QuantityReportMath.Add" not in text:
-        errors.append("BBS modeless totals must use checked finite aggregation")
+    for needle in (
+        "RebarScheduleBuilder.CalculateTotals(_rows)",
+        "totals.Quantity",
+        "totals.TotalLengthM",
+        "totals.TotalWeightKg",
+    ):
+        if needle not in text:
+            errors.append("BBS modeless totals missing canonical compensated aggregation token: " + needle)
+    if "QuantityReportMath.Add(" in text or "QuantityReportMath.AddCount(" in text:
+        errors.append("BBS modeless totals must not restore legacy pairwise aggregation")
     if ".Sum(" in text:
         errors.append("BBS modeless totals must not use unchecked LINQ Sum")
 
@@ -104,4 +112,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Recognition/BQ/BBS/Revision/Health modeless actions stay bound to their source DWG; Revision uses stable native identity and action-time live Document resolution, Recognition surfaces atomic failures, BQ refreshes before export, and BBS totals remain checked.")
+print("PASS: Recognition/BQ/BBS/Revision/Health modeless actions stay bound to their source DWG; Revision uses stable native identity and action-time live Document resolution, Recognition surfaces atomic failures, BQ refreshes before export, and BBS totals use canonical compensated checked aggregation.")

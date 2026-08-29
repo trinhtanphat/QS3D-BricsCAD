@@ -16,7 +16,8 @@ else:
         'ProjectStateSnapshot.CreateDetachedCopy(project)',
         'RegenerateDirty(snapshot)',
         'ProjectRebarScheduleBuilder.Build(snapshot)',
-        'QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS CSV total weight")',
+        'var totals = RebarScheduleBuilder.CalculateTotals(rows);',
+        'totals.TotalWeightKg.ToString("0.###")',
         'if (dialog.ShowDialog() != true) return;',
         'RebarCsvExporter.Export(dialog.FileName, rows);',
         'Report(document, "QS3DBBSCSV lỗi: không thể xuất BBS CSV.");',
@@ -28,6 +29,7 @@ else:
             errors.append("BBS CSV error-redaction contract missing token: " + token)
 
     forbidden = (
+        'QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS CSV total weight")',
         'catch (System.Exception ex)',
         'ex.Message',
         'QS3DBBSCSV lỗi: " +',
@@ -35,7 +37,7 @@ else:
     )
     for token in forbidden:
         if token in text:
-            errors.append("BBS CSV must not reflect exception detail: " + token)
+            errors.append("BBS CSV must not reflect exception detail or restore pairwise status aggregation: " + token)
 
 if errors:
     for error in errors:
@@ -43,4 +45,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: BBS CSV keeps detached validated export and best-effort post-commit UI behavior without reflecting exception details.")
+print("PASS: BBS CSV keeps detached canonical-aggregate export and best-effort post-commit UI behavior without reflecting exception details.")

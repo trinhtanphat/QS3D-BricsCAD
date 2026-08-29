@@ -37,17 +37,8 @@ namespace QS3D.BricsCAD.V25.UI
             Grid.ItemsSource = null;
             Grid.ItemsSource = _rows;
 
-            var quantity = 0;
-            var totalLengthM = 0d;
-            var totalWeightKg = 0d;
-            foreach (var row in _rows)
-            {
-                if (row == null) throw new InvalidOperationException("BBS không được chứa dòng null.");
-                quantity = QuantityReportMath.AddCount(quantity, row.Quantity);
-                totalLengthM = QuantityReportMath.Add(totalLengthM, row.TotalLengthM, "BBS visible total length");
-                totalWeightKg = QuantityReportMath.Add(totalWeightKg, row.TotalWeightKg, "BBS visible total weight");
-            }
-            Totals.Text = "TỔNG: " + quantity + " thanh • " + totalLengthM.ToString("N3") + " m • " + totalWeightKg.ToString("N3") + " kg";
+            var totals = RebarScheduleBuilder.CalculateTotals(_rows);
+            Totals.Text = "TỔNG: " + totals.Quantity + " thanh • " + totals.TotalLengthM.ToString("N3") + " m • " + totals.TotalWeightKg.ToString("N3") + " kg";
         }
 
         private void OnLocateClick(object sender, RoutedEventArgs e) => Locate();

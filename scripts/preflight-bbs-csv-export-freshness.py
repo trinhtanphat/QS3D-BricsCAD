@@ -15,16 +15,16 @@ else:
     regen = text.find("RegenerateDirty(snapshot)", snapshot + 1)
     build = text.find("ProjectRebarScheduleBuilder.Build(snapshot)", regen + 1)
     rows = text.find("rows.Count == 0", build + 1)
-    total = text.find('QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS CSV total weight")', rows + 1)
-    dialog = text.find("var dialog = new SaveFileDialog", total + 1)
+    totals = text.find("RebarScheduleBuilder.CalculateTotals(rows)", rows + 1)
+    dialog = text.find("var dialog = new SaveFileDialog", totals + 1)
     confirmed = text.find("if (dialog.ShowDialog() != true) return;", dialog + 1)
     export = text.find("RebarCsvExporter.Export(dialog.FileName, rows)", confirmed + 1)
     finalize = text.find("FinalizeUi(document, status);", export + 1)
 
-    if min(project, snapshot, regen, build, rows, total, dialog, confirmed, export, finalize) < 0:
-        errors.append("BbsCsvCommands.cs missing read-only-project/detached-regenerate/build-validation/save/export contract token")
-    elif not project < snapshot < regen < build < rows < total < dialog < confirmed < export < finalize:
-        errors.append("BBS CSV must validate fresh detached exportability before SaveFileDialog, then export only after Save confirmation")
+    if min(project, snapshot, regen, build, rows, totals, dialog, confirmed, export, finalize) < 0:
+        errors.append("BbsCsvCommands.cs missing read-only-project/detached-regenerate/build/canonical-total/save/export contract token")
+    elif not project < snapshot < regen < build < rows < totals < dialog < confirmed < export < finalize:
+        errors.append("BBS CSV must validate fresh detached exportability and canonical compensated totals before SaveFileDialog, then export only after Save confirmation")
 
     pre_confirm = text[:confirmed if confirmed >= 0 else 0]
     if "RebarCsvExporter.Export(" in pre_confirm:
@@ -35,9 +35,10 @@ else:
         "ExistingProjectMutationContext",
         "RegenerateDirty(project)",
         "ProjectRebarScheduleBuilder.Build(project)",
+        'QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS CSV total weight")',
     ):
         if forbidden in text:
-            errors.append("BBS CSV read-only export must not mutate/bind the live project: " + forbidden)
+            errors.append("BBS CSV read-only export must not restore live mutation or legacy pairwise aggregation: " + forbidden)
 
     if "FinalizeUi(document, status);" not in text:
         errors.append("BBS CSV post-export UI reporting must remain isolated through FinalizeUi")
@@ -49,4 +50,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: BBS CSV resolves existing state read-only, regenerates/builds and validates a detached snapshot before SaveFileDialog, writes only after confirmation, and isolates post-export UI reporting.")
+print("PASS: BBS CSV resolves existing state read-only, regenerates/builds and validates a detached snapshot with canonical compensated totals before SaveFileDialog, writes only after confirmation, and isolates post-export UI reporting.")

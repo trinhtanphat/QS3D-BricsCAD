@@ -18,16 +18,17 @@ for path in (COMMANDS, WINDOW, EXPORTER, SCHEDULE, REBAR_MATH, REGRESSION):
 if COMMANDS.is_file():
     text = COMMANDS.read_text(encoding="utf-8")
     required = (
-        'var totalWeight = 0d;',
-        'QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS command total weight")',
-        'if (row == null) throw new CommandUserException("BBS không được chứa dòng null.");',
+        'var totals = RebarScheduleBuilder.CalculateTotals(rows);',
+        'totals.TotalWeightKg.ToString("0.###")',
     )
     for token in required:
         if token not in text:
             errors.append("QS3DBBS missing safe aggregate token: " + token)
     if "rows.Sum(x => x.TotalWeightKg)" in text:
         errors.append("QS3DBBS must not use unchecked LINQ Sum for total weight")
-    total_index = text.find('QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS command total weight")')
+    if 'QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS command total weight")' in text:
+        errors.append("QS3DBBS must not restore pairwise status aggregation after canonical BBS validation")
+    total_index = text.find('var totals = RebarScheduleBuilder.CalculateTotals(rows);')
     dialog_index = text.find('Title = "Xuất Bar Bending Schedule"')
     confirm_index = text.find("if (dialog.ShowDialog() != true) return;", dialog_index + 1)
     export_index = text.find("XlsxRebarScheduleExporter.Export(dialog.FileName, rows);")
@@ -36,8 +37,16 @@ if COMMANDS.is_file():
 
 if WINDOW.is_file():
     text = WINDOW.read_text(encoding="utf-8")
-    if 'QuantityReportMath.Add(totalWeightKg, row.TotalWeightKg, "BBS visible total weight")' not in text:
-        errors.append("BBS modeless visible total must remain on QuantityReportMath.Add")
+    for token in (
+        'var totals = RebarScheduleBuilder.CalculateTotals(_rows);',
+        'totals.Quantity',
+        'totals.TotalLengthM',
+        'totals.TotalWeightKg',
+    ):
+        if token not in text:
+            errors.append("BBS modeless visible total missing canonical aggregate token: " + token)
+    if 'QuantityReportMath.Add(totalWeightKg, row.TotalWeightKg, "BBS visible total weight")' in text:
+        errors.append("BBS modeless visible total must not restore pairwise status aggregation")
 
 if EXPORTER.is_file():
     text = EXPORTER.read_text(encoding="utf-8")
@@ -48,6 +57,15 @@ if EXPORTER.is_file():
 
 if SCHEDULE.is_file():
     text = SCHEDULE.read_text(encoding="utf-8")
+    for token in (
+        'if (row == null) throw new InvalidOperationException("BBS row cannot be null.");',
+        'var totalLength = new CompensatedNonNegativeTotal();',
+        'var totalWeight = new CompensatedNonNegativeTotal();',
+        'var length = totalLength.Value("BBS aggregate length");',
+        'var weight = totalWeight.Value("BBS aggregate weight");',
+    ):
+        if token not in text:
+            errors.append("BBS canonical aggregate missing safety token: " + token)
     if 'RebarMath.CeilingNearInteger(intervals, "spacing interval count")' not in text:
         errors.append("BBS spacing count must use the shared bounded-ULP interval ceiling")
     if "Math.Max(1d, Math.Abs(intervals)) * 1e-12d" in text:
@@ -82,4 +100,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] QS3DBBS validates exportability and finite aggregate weight before SaveFileDialog, writes only after confirmation, uses bounded-ULP spacing counts, and matches modeless BBS arithmetic")
+print("[PASS] QS3DBBS validates canonical compensated aggregate totals before SaveFileDialog, writes only after confirmation, uses bounded-ULP spacing counts, and matches modeless BBS arithmetic")

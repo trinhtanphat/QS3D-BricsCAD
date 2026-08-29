@@ -4,6 +4,12 @@ namespace QS3D.Core.Rebar
 {
     internal static class RebarMath
     {
+        public static void Finite(double value, string label)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new OverflowException("Rebar value must be finite: " + label);
+        }
+
         public static double NonNegative(double value, string label)
         {
             if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)

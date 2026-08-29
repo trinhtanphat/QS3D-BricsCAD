@@ -20,7 +20,7 @@ for token in (
     "RegenerateDirty(snapshot)",
     "ProjectRebarScheduleBuilder.Build(snapshot)",
     "rows.Count == 0",
-    'QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS CSV total weight")',
+    "var totals = RebarScheduleBuilder.CalculateTotals(rows);",
     "var dialog = new SaveFileDialog",
     "if (dialog.ShowDialog() != true) return;",
     "RebarCsvExporter.Export(dialog.FileName, rows)",
@@ -37,21 +37,23 @@ if "RegenerateDirty(project)" in source:
     errors.append("BBS CSV export must not regenerate the live/read-only project")
 if "ProjectRebarScheduleBuilder.Build(project)" in source:
     errors.append("BBS CSV export must build from the detached snapshot, not the live/read-only project")
+if 'QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS CSV total weight")' in source:
+    errors.append("BBS CSV export must not restore pairwise status aggregation after canonical validation")
 
 lookup = source.find("ProjectContextCoordinator.TryGetReadOnly(document, out var project)")
 snapshot = source.find("ProjectStateSnapshot.CreateDetachedCopy(project)", lookup + 1)
 regenerate = source.find("RegenerateDirty(snapshot)", snapshot + 1)
 build = source.find("ProjectRebarScheduleBuilder.Build(snapshot)", regenerate + 1)
 rows = source.find("rows.Count == 0", build + 1)
-total = source.find('QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS CSV total weight")', rows + 1)
-dialog = source.find("var dialog = new SaveFileDialog", total + 1)
+aggregate = source.find("var totals = RebarScheduleBuilder.CalculateTotals(rows);", rows + 1)
+dialog = source.find("var dialog = new SaveFileDialog", aggregate + 1)
 confirm = source.find("if (dialog.ShowDialog() != true) return;", dialog + 1)
 export = source.find("RebarCsvExporter.Export(dialog.FileName, rows)", confirm + 1)
 finalize = source.find("FinalizeUi(document, status)", export + 1)
-if min(lookup, snapshot, regenerate, build, rows, total, dialog, confirm, export, finalize) < 0:
-    errors.append("BBS CSV lifecycle is missing an existing-project/detached-validation/save/export stage")
-elif not lookup < snapshot < regenerate < build < rows < total < dialog < confirm < export < finalize:
-    errors.append("BBS CSV lifecycle order must be existing project -> detached copy -> regenerate -> build/validate -> Save dialog -> confirm -> export -> best-effort UI")
+if min(lookup, snapshot, regenerate, build, rows, aggregate, dialog, confirm, export, finalize) < 0:
+    errors.append("BBS CSV lifecycle is missing an existing-project/detached-validation/canonical-aggregate/save/export stage")
+elif not lookup < snapshot < regenerate < build < rows < aggregate < dialog < confirm < export < finalize:
+    errors.append("BBS CSV lifecycle order must be existing project -> detached copy -> regenerate -> build/validate -> canonical aggregate -> Save dialog -> confirm -> export -> best-effort UI")
 
 finalize_start = source.find("private static void FinalizeUi")
 if finalize_start >= 0:
@@ -65,4 +67,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DBBSCSV validates an existing project on a detached regenerated snapshot before SaveFileDialog, writes only after confirmation, and isolates UI failures after export.")
+print("PASS: QS3DBBSCSV validates an existing project on a detached regenerated snapshot, validates canonical compensated totals before SaveFileDialog, writes only after confirmation, and isolates UI failures after export.")
