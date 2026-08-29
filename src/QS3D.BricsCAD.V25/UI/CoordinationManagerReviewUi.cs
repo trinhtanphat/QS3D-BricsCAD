@@ -217,7 +217,6 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 RunValidated("Restore View", ids => _session.RestoreSectionView());
             }
-
             private void RunValidated(string actionName, Action<IReadOnlyList<ObjectId>> effect)
             {
                 if (!_attached || _disposeInProgress || _disposed) return;
@@ -437,7 +436,7 @@ namespace QS3D.BricsCAD.V25.UI
             }
 
             public bool HasHighlight => _highlighted.Count > 0;
-            public bool HasIsolation => _isolationActive;
+            public bool HasIsolation => _isolationActive || _objectIsolationModeBefore != null;
             public bool HasSectionView => _viewBeforeSection != null;
 
             public void Highlight(IReadOnlyList<ObjectId> ids)
@@ -533,7 +532,12 @@ namespace QS3D.BricsCAD.V25.UI
             public void Isolate(IReadOnlyList<ObjectId> ids)
             {
                 RequireTargets(ids);
-                if (_isolationActive) RestoreIsolation();
+                if (HasIsolation)
+                {
+                    RestoreIsolation();
+                    if (HasIsolation)
+                        throw new InvalidOperationException("Previous isolation cleanup is still pending.");
+                }
 
                 var impliedSelectionBefore = CadSelectionGuard.ReadImpliedSelection(_document);
                 var modeBefore = Bricscad.ApplicationServices.Application.GetSystemVariable("OBJECTISOLATIONMODE");
@@ -546,7 +550,7 @@ namespace QS3D.BricsCAD.V25.UI
                 catch
                 {
                     RestoreImpliedSelectionBestEffort(impliedSelectionBefore);
-                    RestoreObjectIsolationModeBestEffort(modeBefore);
+                    TryRestoreObjectIsolationModeBestEffort(modeBefore);
                     throw;
                 }
 
@@ -556,7 +560,11 @@ namespace QS3D.BricsCAD.V25.UI
 
             public void RestoreIsolation()
             {
-                if (!_isolationActive) return;
+                if (!_isolationActive)
+                {
+                    RestoreObjectIsolationModeBestEffort();
+                    return;
+                }
                 if (_destroyed)
                 {
                     _isolationActive = false;
@@ -757,6 +765,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _isolationActive = false;
                 _viewBeforeSection = null;
                 RestoreObjectIsolationModeBestEffort();
+                _objectIsolationModeBefore = null;
             }
 
             private void RestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)
@@ -769,14 +778,22 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (_objectIsolationModeBefore == null) return;
                 var value = _objectIsolationModeBefore;
-                _objectIsolationModeBefore = null;
-                RestoreObjectIsolationModeBestEffort(value);
+                if (TryRestoreObjectIsolationModeBestEffort(value))
+                    _objectIsolationModeBefore = null;
             }
 
-            private void RestoreObjectIsolationModeBestEffort(object? modeBefore)
+            private bool TryRestoreObjectIsolationModeBestEffort(object? modeBefore)
             {
-                if (modeBefore == null) return;
-                try { Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", modeBefore); } catch { }
+                if (modeBefore == null) return true;
+                try
+                {
+                    Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", modeBefore);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
             }
 
             public void Dispose()

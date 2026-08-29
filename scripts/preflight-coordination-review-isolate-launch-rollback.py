@@ -18,7 +18,8 @@ body = match.group("body")
 
 required = [
     "RequireTargets(ids);",
-    "if (_isolationActive) RestoreIsolation();",
+    "if (HasIsolation)",
+    "RestoreIsolation();",
     "Application.GetSystemVariable(\"OBJECTISOLATIONMODE\")",
     "Application.SetSystemVariable(\"OBJECTISOLATIONMODE\", 0);",
     "_document.Editor.SetImpliedSelection(ids.ToArray());",
@@ -27,6 +28,15 @@ required = [
 for token in required:
     if token not in body:
         raise SystemExit(f"FAIL coordination isolate launch rollback: missing established behavior: {token}")
+
+# Isolation cleanup ownership includes both command ownership and a pending
+# OBJECTISOLATIONMODE compensation. Drain it before capturing attempt-local
+# launch state so stale restore ownership cannot be overwritten by a new launch.
+ownership_gate = body.find("if (HasIsolation)")
+restore = body.find("RestoreIsolation();", ownership_gate)
+mode_capture = body.find('Application.GetSystemVariable("OBJECTISOLATIONMODE")')
+if not (0 <= ownership_gate < restore < mode_capture):
+    raise SystemExit("FAIL coordination isolate launch rollback: prior isolation ownership must be drained before launch state capture")
 
 if "try" not in body or "catch" not in body:
     raise SystemExit("FAIL coordination isolate launch rollback: launch mutation is not protected by a synchronous rollback boundary")
@@ -38,7 +48,7 @@ catch = re.search(r"catch\s*\{(?P<catch>.*?)\n\s*\}", body, re.S)
 if not catch:
     raise SystemExit("FAIL coordination isolate launch rollback: rollback catch block missing")
 catch_body = catch.group("catch")
-if "RestoreObjectIsolationModeBestEffort(modeBefore)" not in catch_body:
+if "TryRestoreObjectIsolationModeBestEffort(modeBefore)" not in catch_body:
     raise SystemExit("FAIL coordination isolate launch rollback: synchronous failure does not restore attempt-local OBJECTISOLATIONMODE")
 if "throw;" not in catch_body:
     raise SystemExit("FAIL coordination isolate launch rollback: original launch failure must be rethrown after compensation")
@@ -51,7 +61,7 @@ if send_index < 0 or mode_publish < 0 or active_publish < 0:
 if mode_publish < send_index or active_publish < send_index:
     raise SystemExit("FAIL coordination isolate launch rollback: persistent isolation ownership is published before native command queueing succeeds")
 
-if not re.search(r"private void RestoreObjectIsolationModeBestEffort\(object\? modeBefore\)", text):
+if not re.search(r"private bool TryRestoreObjectIsolationModeBestEffort\(object\? modeBefore\)", text):
     raise SystemExit("FAIL coordination isolate launch rollback: compensation helper must accept attempt-local mode without publishing session ownership")
 
 print("PASS coordination review isolate synchronous launch rollback atomicity")
