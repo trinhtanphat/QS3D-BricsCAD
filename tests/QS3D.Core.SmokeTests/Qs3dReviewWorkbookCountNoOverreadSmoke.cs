@@ -84,7 +84,8 @@ namespace QS3D.Core.SmokeTests
                 BindingFlags.NonPublic | BindingFlags.Static)
                 ?? throw new InvalidOperationException("Review workbook SnapshotCounted helper is missing.");
             var closed = method.MakeGenericMethod(typeof(int));
-            return (IReadOnlyList<int>)(closed.Invoke(null, new object[] { source, "smoke" })
+            var admittedCount = source.Count;
+            return (IReadOnlyList<int>)(closed.Invoke(null, new object[] { source, admittedCount, "smoke" })
                 ?? throw new InvalidOperationException("Review workbook SnapshotCounted returned null."));
         }
 
