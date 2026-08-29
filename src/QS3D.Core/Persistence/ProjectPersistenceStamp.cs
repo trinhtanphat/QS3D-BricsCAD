@@ -321,8 +321,12 @@ namespace QS3D.Core.Persistence
         {
             RequireSupportedCount(candidate, collectionLabel);
             if (candidate != knownCount)
+            {
+                if (string.Equals(phase, "before traversal", StringComparison.Ordinal))
+                    ThrowKnownCountMismatch(collectionLabel);
                 throw new InvalidOperationException(
                     "Persistence stamp " + collectionLabel + " count changed or conflicted " + phase + ".");
+            }
             if (observed.HasValue && observed.Value != candidate)
                 throw new InvalidOperationException(
                     "Persistence stamp " + collectionLabel + " exposes conflicting count evidence " + phase + ".");
