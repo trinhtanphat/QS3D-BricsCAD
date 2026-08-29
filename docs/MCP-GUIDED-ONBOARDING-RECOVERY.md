@@ -13,11 +13,11 @@ No second MCP repository, Node runtime, PowerShell/CMD setup, ChatGPT password c
 
 ## Completion Pack decision
 
-The owner selected **Approach A** for #4629 / PR #4632 and asked that both choices remain documented for future agents.
+The owner approved both completion phases for #4629 / PR #4632 and asked that both decisions remain documented for future agents.
 
-### Approach A — selected/current
+### Approach A — selected / source implemented
 
-Approach A keeps every desktop capability explicit and individually bounded:
+Approach A keeps each desktop primitive explicit and individually bounded:
 
 - `desktop_mouse_drag` — exact-window bounded drag with continuous target/emergency-stop revalidation;
 - `desktop_wait_for_window` — bounded read-only wait for a visible current-session window;
@@ -27,9 +27,23 @@ Approach A keeps every desktop capability explicit and individually bounded:
 - local timeline includes bounded Action ID, duration and terminal state;
 - Agent Center shows waiting/active/paused/expired/re-enable guidance and recovery hints.
 
-### Approach B — deferred/future
+### Approach B — selected / bounded sequence
 
-A generic `desktop_sequence` / `desktop_macro` executor could batch focus/click/type/wait/screenshot steps in one MCP call. It is intentionally **not exposed by this PR** because batching increases audit, cancellation and stale-UI risk. A future implementation needs its own design/reservation and must preserve per-step exact-target checks, bounded sequence/time, local consent, Esc×2, mutation-epoch checks and audit. It must never become arbitrary shell/process/script execution.
+Approach B adds exactly one higher-level batching surface: **`desktop_sequence`**. It is a bounded convenience layer over the existing primitives, not a generic macro/scripting engine.
+
+- one exact visible current-session `windowHandle` per sequence;
+- maximum 12 steps;
+- maximum 30 seconds total duration;
+- maximum 2000 ms delay after any step;
+- fail-fast on first error, no `continueOnError` and no atomic rollback;
+- no recursion/nested sequence and no `desktop_macro` alias;
+- no shell/process/script/plugin/filesystem dispatch;
+- no clipboard read inside sequence;
+- optional screenshot is forced to the bound target window, limited to one per sequence and requires outer `confirmSensitiveRead=true` before execution;
+- Esc×2, Pause, consent revocation, target invalidation or mutation-epoch change aborts subsequent execution;
+- partial completion is explicit in result/audit.
+
+When a workflow needs a new dialog/application handle, ChatGPT obtains that handle with normal observation/wait tools and submits a new sequence. One sequence never silently switches target windows.
 
 ## Control Center
 
@@ -62,9 +76,9 @@ Cloudflare and ChatGPT identity stay in the system browser/provider flow. QS3D s
 
 The static engineering bearer remains compatibility/debug functionality under **Nâng cao**. It is not the normal ChatGPT onboarding path.
 
-## Desktop tool surface — Approach A
+## Desktop tool surface — Approaches A + B
 
-The explicit current desktop surface is 14 tools:
+The current desktop surface is **15 tools**: 14 explicit Approach-A primitives plus the bounded `desktop_sequence` tool from Approach B.
 
 Read-only/observation:
 
@@ -83,6 +97,7 @@ Mutation/input:
 - `desktop_type`
 - `desktop_key`
 - `desktop_clipboard_write`
+- `desktop_sequence`
 
 Sensitive reads:
 
@@ -94,6 +109,23 @@ Sensitive reads:
 Click/scroll/drag require an exact `windowHandle`; the target must still be visible/current-session, coordinates must remain inside current target bounds, and foreground ownership is revalidated immediately around input injection. Drag duration is bounded and the target/emergency-stop state is rechecked throughout the gesture.
 
 Screenshot crop is relative to the selected source (window or virtual desktop). If any crop field is supplied, all four crop fields are required; invalid/empty intersections are rejected before capture, and the normal screenshot dimension/payload caps still apply.
+
+### `desktop_sequence` request shape
+
+The top-level MCP argument object stays flat. `stepsJson` therefore contains the step array as a string; each step's `arguments` is also a flat JSON-object string.
+
+```json
+{
+  "windowHandle": "1A02BC",
+  "stepsJson": "[{\"tool\":\"desktop_mouse_click\",\"arguments\":\"{\\\"x\\\":500,\\\"y\\\":300,\\\"button\\\":\\\"left\\\"}\",\"delayAfterMs\":100},{\"tool\":\"desktop_key\",\"arguments\":\"{\\\"key\\\":\\\"TAB\\\"}\"}]",
+  "maxDurationMs": 15000,
+  "confirmMutation": true
+}
+```
+
+Sequence step arguments cannot inject `windowHandle`, `confirmMutation` or `confirmSensitiveRead`; QS3D owns those security-sensitive properties. A screenshot step additionally requires outer `confirmSensitiveRead=true` and is forced to `scope=window` for the sequence target.
+
+Allowed sequence steps are focus, mouse move/click/scroll/drag, type, key/hotkey, clipboard write, wait for the same target and target-window screenshot. `desktop_clipboard_read`, nested sequence, generic observation tools, CAD/QS3D/plugin dispatch, filesystem and shell/process/script operations are rejected.
 
 ## Local desktop consent
 
@@ -107,7 +139,7 @@ The `desktop_*` MCP namespace can cross application boundaries, so network confi
 - user can explicitly **Pause desktop** and **Resume desktop** locally;
 - there is no MCP tool that can remotely enable/resume local consent.
 
-While a guarded desktop action is active, QS3D shows a click-through **blue desktop border/banner** naming the current MCP tool and its bounded Action ID.
+While a guarded desktop action or sequence is active, QS3D shows a click-through **blue desktop border/banner** naming the current MCP tool and its bounded Action ID.
 
 A physical **Esc twice within 1.2 seconds**:
 
@@ -115,7 +147,8 @@ A physical **Esc twice within 1.2 seconds**:
 2. advances the MCP emergency-stop epoch;
 3. hides the control overlay;
 4. requests cancellation of the active BricsCAD command;
-5. requires a local user to Resume desktop before cross-application automation resumes.
+5. prevents subsequent sequence steps/input;
+6. requires a local user to Resume desktop before cross-application automation resumes.
 
 After `PAUSED`, `EXPIRED`, cancellation or failure, the Agent tab tells the user to **Kiểm tra drawing/backup** before resuming desktop control.
 
@@ -123,12 +156,13 @@ After `PAUSED`, `EXPIRED`, cancellation or failure, the Agent tab tells the user
 
 ChatGPT remains the conversation UI. QS3D does **not** scrape ChatGPT Web or attempt to mirror arbitrary assistant prose.
 
-Instead QS3D maintains a bounded local operational timeline for onboarding, tunnel, MCP action, recovery and error events. Desktop action entries can contain:
+Instead QS3D maintains a bounded local operational timeline for onboarding, tunnel, MCP action/sequence, recovery and error events. Desktop action entries can contain:
 
 - bounded Action ID;
 - UTC start/end-derived duration;
 - terminal state (`running`, `success`, `failed`, `cancelled`);
-- current action and next recommended step.
+- current action and next recommended step;
+- bounded sequence step index/tool/completed-count/duration metadata.
 
 They must never persist typed text, clipboard contents, screenshot pixels, OAuth/bearer tokens or private DWG contents.
 
@@ -183,15 +217,18 @@ When onboarding is incomplete, QS3D may show a non-blocking, rate-limited toast 
 ## Security invariants
 
 - no password or browser-cookie scraping;
-- no arbitrary remote shell/process-launch or generic desktop macro tool;
-- `desktop_sequence` / `desktop_macro` are absent in Approach A;
+- no arbitrary remote shell/process/script launch or unrestricted plugin dispatch;
+- one bounded `desktop_sequence`; no `desktop_macro` alias or nested sequence;
+- no `desktop_clipboard_read` inside sequence;
+- sequence is one target window, <=12 steps, <=30 seconds, <=2000 ms per delay and fail-fast;
+- sequence screenshot is target-window-only and requires explicit sensitive-read acknowledgement before execution;
 - desktop input limited to visible top-level windows in the current interactive Windows session;
 - exact target/foreground revalidation for targeted mouse/keyboard interaction;
 - bounded cursor/window/text/click/scroll/drag/wait/screenshot/clipboard surfaces;
 - single alphanumeric `desktop_key` values are audited as non-content `CHARACTER`, not the caller character;
-- typed text, clipboard contents and screenshot pixels are not persisted in the MCP mutation audit;
+- typed text, clipboard contents and screenshot pixels are not persisted in MCP mutation audit;
 - local desktop consent cannot be remotely enabled/resumed;
-- Esc×2 remains a local emergency control;
+- Esc×2 remains a local emergency control and aborts future sequence steps;
 - recovery does not overwrite the active source DWG automatically.
 
 ## LOCAL_ONLY qualification
@@ -204,17 +241,19 @@ The exact intended merged/release SHA remains `PENDING_LOCAL` under `LOCAL-024` 
 2. guided four-tab Agent Center and first-run toast;
 3. Cloudflare provider-browser login + persistent Named Tunnel;
 4. ChatGPT URL + OAuth/DCR connection;
-5. `tools/list` including all 14 Approach A `desktop_*` tools and no `desktop_sequence`/macro;
+5. `tools/list` including all 15 current desktop tools and no `desktop_macro` alias;
 6. read-only CAD plus cursor/window observation;
 7. `desktop_wait_for_window` success + timeout behavior;
 8. local desktop-consent OFF rejection, Resume, Pause and 10-minute idle-expiry behavior;
-9. blue overlay with Action ID while guarded desktop tools run;
+9. blue overlay with Action ID while guarded desktop tools/sequence run;
 10. clipboard/screenshot sensitive-read gating plus cropped screenshot on disposable content;
 11. exact-window click/scroll and bounded drag on disposable content;
 12. desktop keyboard/type behavior with audit redaction;
-13. physical Esc×2 emergency stop and local Resume requirement;
-14. action ID/duration/terminal-state timeline without sensitive payloads;
-15. BricsCAD autosave/BAK policy plus versioned backup/recovery-to-copy;
-16. one disposable CAD mutation, audit, save/reopen and clean shutdown.
+13. bounded single-target `desktop_sequence` success on disposable UI;
+14. sequence rejection for >12 steps, >30 seconds, target injection/switching, nested sequence, clipboard read and screenshot without sensitive acknowledgement;
+15. physical Esc×2 mid-sequence with fail-fast partial-completion reporting and local Resume requirement;
+16. action ID/duration/terminal-state timeline without sensitive payloads;
+17. BricsCAD autosave/BAK policy plus versioned backup/recovery-to-copy;
+18. one disposable CAD mutation, audit, save/reopen and clean shutdown.
 
 Do not record credentials, OAuth/static bearer tokens, private DWG paths/content, clipboard contents, typed secrets or unsanitized screenshots in committed evidence.
