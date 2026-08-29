@@ -156,7 +156,7 @@ def main() -> int:
     require(agent_center, "RunReadOnlySelfTest", errors, "read-only end-to-end self-test")
     require(agent_center, 'InvokeControlTool("cad_agent_stop"', errors, "click emergency stop")
     require(agent_center, 'InvokeControlTool("cad_cancel_command"', errors, "click command cancel")
-    require(agent_center, 'InvokeControlTool("cad_agent_resume"', errors, "click explicit resume")
+    require(agent_center, "McpDesktopControlSession.ResumeFromLocalUser()", errors, "local-only explicit resume")
     require(agent_center, "OpenChatGpt", errors, "ChatGPT browser handoff")
     require(agent_center, "ThreadPool.QueueUserWorkItem", errors, "non-blocking Agent Center MCP operation")
     require(agent_center, "Interlocked.CompareExchange(ref _localOperationActive", errors, "serialized observation self-test")
