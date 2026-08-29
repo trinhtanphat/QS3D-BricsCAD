@@ -18,17 +18,11 @@ namespace QS3D.Core.Geometry
             EnsureFiniteBounds();
         }
 
-        private CurtainOpeningRect(double value)
-        {
-            Value = value;
-        }
-
         public double X_M { get; }
         public double Z_M { get; }
         public double WidthM { get; }
         public double HeightM { get; }
         public double ClearanceM { get; }
-        private double Value { get; }
 
         internal double BaseRight => X_M + WidthM;
         internal double BaseTop => Z_M + HeightM;
