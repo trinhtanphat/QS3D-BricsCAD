@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / "src/QS3D.Core/Reporting/ReportingRowProvenance.cs"
+SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ReportingRowProvenanceTraversalIntegritySmoke.cs"
+RUNBOOK = ROOT / "docs/FEATURE-RUNBOOKS/reporting-row-provenance-traversal-integrity.md"
+
+for path in (SOURCE, SMOKE, RUNBOOK):
+    if not path.is_file():
+        raise SystemExit("reporting provenance traversal-integrity file missing: " + str(path.relative_to(ROOT)))
+
+source = SOURCE.read_text(encoding="utf-8")
+smoke = SMOKE.read_text(encoding="utf-8")
+runbook = RUNBOOK.read_text(encoding="utf-8")
+
+required_source = (
+    "private const int MaxSourceHandleEntries = 10000;",
+    "var knownCount = ResolveKnownCount(sourceHandles);",
+    "var staged = new List<string>();",
+    "using (var enumerator = sourceHandles.GetEnumerator())",
+    "while (true)",
+    "RequireStableKnownCount(sourceHandles, knownCount);",
+    "if (!enumerator.MoveNext()) break;",
+    "if (knownCount.HasValue && index >= knownCount.Value)",
+    "if (index >= MaxSourceHandleEntries)",
+    "var raw = enumerator.Current;",
+    "if (knownCount.HasValue && index != knownCount.Value)",
+    "foreach (var handle in staged) target.Add(handle);",
+)
+missing = [token for token in required_source if token not in source]
+if missing:
+    raise SystemExit("reporting provenance traversal-integrity source token(s) missing: " + repr(missing))
+
+append_start = source.index("internal static void AppendSourceHandles")
+helper_start = source.index("private static HashSet<string> SnapshotTargetIdentities", append_start)
+append = source[append_start:helper_start]
+pre_move = append.index("RequireStableKnownCount(sourceHandles, knownCount);")
+move_next = append.index("if (!enumerator.MoveNext()) break;", pre_move)
+post_move = append.index("RequireStableKnownCount(sourceHandles, knownCount);", pre_move + 1)
+known_guard = append.index("if (knownCount.HasValue && index >= knownCount.Value)", post_move)
+cap_guard = append.index("if (index >= MaxSourceHandleEntries)", known_guard)
+current = append.index("var raw = enumerator.Current;", cap_guard)
+stage = append.index("staged.Add(handle);", current)
+final_stability = append.rindex("RequireStableKnownCount(sourceHandles, knownCount);")
+cardinality = append.index("if (knownCount.HasValue && index != knownCount.Value)", final_stability)
+publish = append.index("foreach (var handle in staged) target.Add(handle);", cardinality)
+if not (pre_move < move_next < post_move < known_guard < cap_guard < current < stage < final_stability < cardinality < publish):
+    raise SystemExit("reporting provenance traversal/publication ordering changed")
+if "foreach (var raw in sourceHandles)" in append:
+    raise SystemExit("reporting provenance regressed to direct foreach traversal/publication")
+if "target.Add(handle);\n                index++;" in append:
+    raise SystemExit("reporting provenance regressed to per-entry target publication during traversal")
+
+required_smoke = (
+    "LateMalformedEntryPublishesNothing",
+    "LateDuplicatePublishesNothing",
+    "EnumeratorFailurePublishesNothing",
+    "KnownCountOverrunRejectsBeforeExtraCurrent",
+    "KnownCountUnderYieldPublishesNothing",
+    "CountDriftAfterCurrentFailsBeforeNextMoveNext",
+    "MoveNextInducedCountDriftFailsBeforeCurrent",
+    "StableCountedSourcePublishesAtomically",
+    "StreamingSourceRemainsSupported",
+    "StreamingHardCapRejectsBeforeExtraCurrent",
+    "[ModuleInitializer]",
+)
+missing = [token for token in required_smoke if token not in smoke]
+if missing:
+    raise SystemExit("reporting provenance traversal-integrity smoke token(s) missing: " + repr(missing))
+
+for token in ("atomic", "known Count", "before `Current`", "zero partial"):
+    if token not in runbook:
+        raise SystemExit("reporting provenance traversal-integrity runbook token missing: " + token)
+
+print("PASS reporting row provenance hostile traversal atomicity and bounds")
