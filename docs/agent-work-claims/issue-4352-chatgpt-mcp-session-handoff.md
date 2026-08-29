@@ -89,7 +89,10 @@ The bounded command catalog covers representative drawing/editing, hatch, dimens
 - MCP initialize/session/protocol-version handling and session DELETE truth;
 - top-level-only mutation confirmation, including duplicate/nested fail-closed behavior;
 - ordinary mutation requires `confirmMutation=true`;
+- each confirmed mutation is bound to an automation epoch; stop/restart/resume invalidates older work and queued CAD mutation re-checks its captured epoch before application-context execution;
+- long UI typing/click/key paths re-check the current mutation epoch close to injection so Emergency Stop prevents further stale input;
 - bounded command inputs and known chaining/control-character rejection;
+- repeated leading AutoCAD global/English prefixes (`.` and `_`) are canonicalized before command checks, closing mixed-prefix injection such as `._LINE` / `_._LINE`;
 - `QS3D*` command-name boundary;
 - BricsCAD-process-only mouse/keyboard with foreground revalidation;
 - Alt+F4 blocked;
@@ -124,7 +127,9 @@ Advanced token mode uses DPAPI protection. Quick Tunnel remains test-only. Saved
 - [x] Direct read/inspection surface.
 - [x] Direct line/circle/arc/polyline/DBText/MText + transform/delete/re-layer/layer mutation surface.
 - [x] Bounded native command bridge covering full-drawing workflow classes.
+- [x] Mixed-prefix command canonicalization prevents alternate-spelling known-command injection.
 - [x] BricsCAD-process-only mouse/keyboard fallback.
+- [x] Epoch-invalidated Emergency Stop/restart/resume prevents stale queued mutation and stale long UI input from continuing after Stop.
 - [x] Emergency stop/resume/cancel.
 - [x] Timeout/late-CAD-callback no-blind-retry semantics.
 - [x] Audit hardening.
@@ -133,7 +138,7 @@ Advanced token mode uses DPAPI protection. Quick Tunnel remains test-only. Saved
 - [x] Quick/token fallback.
 - [x] Canonical public endpoint resolver.
 - [x] Sanitized read-only loopback protocol probe.
-- [x] MCP source guards/runbooks.
+- [x] MCP source guards/runbooks, including production hardening guards for stop epochs and command canonicalization.
 - [x] `docs/MCP-CANONICAL-RUNBOOK.md` now gives every future agent one start point and explicitly distinguishes ACTIVE vs LEGACY source.
 - [ ] Exact final runtime candidate still needs licensed local end-to-end proof before `LOCAL_PASS`.
 
@@ -150,10 +155,13 @@ Use `docs/MCP-FULL-CAD-AGENT.md` for the detailed matrix. At minimum prove on on
 5. Direct read/inspect tools.
 6. Direct line/circle/arc/polyline/DBText/MText + layer/transform/delete/re-layer tools.
 7. Representative hatch/dimension/block/insert/xref/layout/viewport/save/save-as/plot/undo-redo native command workflows.
-8. BricsCAD-process-only click/type/key rejection and success boundaries.
-9. Timeout uncertainty/no-auto-retry behavior.
-10. Emergency stop/resume/cancel.
-11. Save/reopen final disposable drawing and clean shutdown/no task-owned residue.
+8. Mixed-prefix injection negative: later prompt lines such as `._LINE` / `_._LINE` must be rejected before native command dispatch.
+9. BricsCAD-process-only click/type/key rejection and success boundaries.
+10. Stop-epoch regression: queue a confirmed mutation while CAD application context is intentionally busy, issue Emergency Stop before it starts, then Resume; the stale queued mutation must never execute after resume.
+11. During a long disposable UI typing/click sequence, issue Stop and prove further input injection ceases while recovery controls remain actionable.
+12. Timeout uncertainty/no-auto-retry behavior.
+13. Emergency stop/resume/cancel for newly submitted work.
+14. Save/reopen final disposable drawing and clean shutdown/no task-owned residue.
 
 Never commit bearer tokens, Cloudflare credentials, private paths, customer/private DWGs, proprietary binaries or unsanitized screenshots.
 
@@ -169,7 +177,7 @@ Never commit bearer tokens, Cloudflare credentials, private paths, customer/priv
 8. Preserve one-repo/click-first/API-first/BricsCAD-only boundaries.
 9. Update relevant MCP preflight/docs when behavior changes.
 10. Update `LOCAL-024` when the real-runtime scenario/status changes.
-11. The owner is handling CI checks for the current iteration; source-focused agents must not manufacture stale-green claims or spend the lane repeatedly polling CI unless explicitly asked.
+11. Source-side CI may prove compilation/contracts only; it never replaces the exact-SHA licensed realtime matrix.
 12. Merge/release follows normal protected-main policy; no direct-main shortcut.
 
 ## Durable handoff for the next session
