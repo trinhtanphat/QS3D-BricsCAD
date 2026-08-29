@@ -175,19 +175,14 @@ namespace QS3D.BricsCAD.V25
                 RegenerateProject(previewProject);
                 var rows = ProjectRebarScheduleBuilder.Build(previewProject);
                 if (rows.Count == 0) { doc.Editor.WriteMessage("\nQS3D BBS: chưa có cấu kiện nào khai báo RebarNotation."); return; }
-                var totalWeight = 0d;
-                foreach (var row in rows)
-                {
-                    if (row == null) throw new CommandUserException("BBS không được chứa dòng null.");
-                    totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS command total weight");
-                }
+                var totals = RebarScheduleBuilder.CalculateTotals(rows);
 
                 var drawingName = string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name);
                 var dialog = new SaveFileDialog { Title = "Xuất Bar Bending Schedule", Filter = "Excel Workbook (*.xlsx)|*.xlsx", DefaultExt = ".xlsx", AddExtension = true, OverwritePrompt = true, FileName = drawingName + "-BBS.xlsx" };
                 if (dialog.ShowDialog() != true) return;
 
                 XlsxRebarScheduleExporter.Export(dialog.FileName, rows);
-                var status = "BBS: " + rows.Count + " bar mark • " + totalWeight.ToString("0.###") + " kg • " + dialog.FileName;
+                var status = "BBS: " + rows.Count + " bar mark • " + totals.TotalWeightKg.ToString("0.###") + " kg • " + dialog.FileName;
                 FinalizeExportUi(doc, status);
             });
         }
