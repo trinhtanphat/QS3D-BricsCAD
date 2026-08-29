@@ -41,11 +41,24 @@ cleanup_body = text[cleanup_start:cleanup_end]
 if cleanup_start < 0 or cleanup_end < 0:
     print("ERROR: cleanup retry boundary was not found", file=sys.stderr)
     raise SystemExit(1)
-if cleanup_body.count("_cleanupBarrier = _session.HasTransientState;") < 2:
-    print("ERROR: RunCleanup must recompute the barrier from owned transient state after both success and failure", file=sys.stderr)
+required_cleanup = [
+    "var cleanupBarrierBefore = _cleanupBarrier;",
+    "_cleanupBarrier = cleanupBarrierBefore && _session.HasTransientState;",
+]
+missing_cleanup = [token for token in required_cleanup if token not in cleanup_body]
+if missing_cleanup:
+    print("ERROR: RunCleanup must preserve cross-row barrier provenance while retrying owned cleanup:", file=sys.stderr)
+    for token in missing_cleanup:
+        print(f" - {token}", file=sys.stderr)
+    raise SystemExit(1)
+if cleanup_body.count("_cleanupBarrier = cleanupBarrierBefore && _session.HasTransientState;") < 2:
+    print("ERROR: RunCleanup must resolve the prior cross-row barrier after both success and failure", file=sys.stderr)
+    raise SystemExit(1)
+if "_cleanupBarrier = _session.HasTransientState;" in cleanup_body:
+    print("ERROR: same-row cleanup must not invent a cross-row barrier from unrelated transient state", file=sys.stderr)
     raise SystemExit(1)
 if "cleanupFailure" in cleanup_body:
-    print("ERROR: RunCleanup must not inherit row-change failure state; retry admission is based on remaining owned transient state", file=sys.stderr)
+    print("ERROR: RunCleanup must not inherit row-change failure state; retry admission is based on prior barrier provenance plus remaining ownership", file=sys.stderr)
     raise SystemExit(1)
 
 validated_start = cleanup_end
