@@ -206,7 +206,7 @@ namespace QS3D.BricsCAD.V25
             if (!TryFindPropertyValue(json, "id", out raw, out found, out error))
                 throw new InvalidOperationException(error);
             if (!found || string.Equals(raw, "null", StringComparison.Ordinal)) return "null";
-            if (IsJsonIntegerToken(raw)) return raw;
+            if (IsJsonNumberToken(raw)) return raw;
             if (raw.Length >= 2 && raw[0] == '"')
             {
                 var index = 0;
@@ -216,7 +216,7 @@ namespace QS3D.BricsCAD.V25
                 if (index != raw.Length) return "null";
                 return QuoteJsonString(value, false);
             }
-            return "null";
+            throw new InvalidOperationException("JSON-RPC id must be a string, number, or null.");
         }
 
         private static bool TryCanonicalizeFlatObject(string json, out string canonical, out string error)
