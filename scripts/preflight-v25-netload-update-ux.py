@@ -1,3 +1,4 @@
+# Reservation-v2 scope includes this shared UX compatibility guard for #4675.
 from pathlib import Path
 import sys
 
