@@ -72,6 +72,15 @@ def main() -> int:
     require(oauth, "redirect_uris", "DCR redirect registration")
     reject(oauth, "StartsWith(\"https://chatgpt.com/\"", "over-broad ChatGPT redirect allowlist")
 
+    # Every DCR string array must be parsed as an array with immutable count/length bounds.
+    # In particular, do not accidentally mutate maxItems while walking values: that turns
+    # a nominal cap into a moving target and makes oversized registrations effectively unbounded.
+    require(oauth, "TryParseJsonStringArray(rawRedirects", "redirect URI array parsing")
+    require(oauth, "TryParseJsonStringArray(rawGrantTypes", "grant type array parsing")
+    require(oauth, "TryParseJsonStringArray(rawResponseTypes", "response type array parsing")
+    require(oauth, "maxItemLength", "DCR per-item length bound")
+    reject(oauth, "++maxItems", "mutable DCR array count bound")
+
     # Every credential is resource/client/scope bound and short-lived where appropriate.
     for needle in (
         "AccessTokenLifetime",
