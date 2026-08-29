@@ -37,13 +37,15 @@ for token in (
 ):
     require(token, source, "production Count contract")
 
-for constructor_marker, enumerator_marker, count_marker, index_marker, current_marker, label in (
+for constructor_marker, enumerator_marker, count_marker, index_marker, overrun_marker, current_marker, under_yield_marker, label in (
     (
         "if (tokens == null) throw new ArgumentNullException(nameof(tokens));",
         "using (var enumerator = tokens.GetEnumerator())",
         "tokens, knownCount, MepRecognitionLimits.MaxTokensPerRule",
         "if (knownCount.HasValue && tokenIndex >= knownCount.Value)",
+        "knownCount.Value, tokenIndex + 1",
         "var token = enumerator.Current;",
+        "knownCount.Value, tokenIndex, nameof(tokens)",
         "token traversal",
     ),
     (
@@ -51,7 +53,9 @@ for constructor_marker, enumerator_marker, count_marker, index_marker, current_m
         "using (var enumerator = rules.GetEnumerator())",
         "rules, knownCount, MepRecognitionLimits.MaxRules",
         "if (knownCount.HasValue && index >= knownCount.Value)",
+        "knownCount.Value, index + 1",
         "var rule = enumerator.Current;",
+        "knownCount.Value, index, nameof(rules)",
         "rule traversal",
     ),
 ):
@@ -69,8 +73,9 @@ for constructor_marker, enumerator_marker, count_marker, index_marker, current_m
             "if (!enumerator.MoveNext())",
             count_marker,
             index_marker,
+            overrun_marker,
             current_marker,
-            "CountMismatch(",
+            under_yield_marker,
             count_marker,
         ),
         label,
