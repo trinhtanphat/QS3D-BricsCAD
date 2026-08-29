@@ -12,11 +12,12 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Local-only approval boundary for desktop-wide MCP input/sensitive reads.
-    /// Consent is deliberately process-memory-only and cannot be enabled through MCP.
+    /// Consent is process-memory-only, expires after idle time and cannot be enabled through MCP.
     /// </summary>
     internal static class McpDesktopControlSession
     {
         internal static readonly TimeSpan DoubleEscapeWindow = TimeSpan.FromMilliseconds(1200);
+        internal static readonly TimeSpan ConsentIdleTimeout = TimeSpan.FromMinutes(10);
         private const int WH_KEYBOARD_LL = 13;
         private const int WM_KEYDOWN = 0x0100;
         private const int WM_SYSKEYDOWN = 0x0104;
@@ -26,28 +27,76 @@ namespace QS3D.BricsCAD.V25
         private static readonly object Sync = new object();
         private static readonly LowLevelKeyboardProc KeyboardCallback = KeyboardHookCallback;
         private static bool _enabled;
+        private static string _consentState = "OFF";
         private static long _consentGeneration;
+        private static DateTime _idleDeadlineUtc = DateTime.MinValue;
         private static IntPtr _keyboardHook;
         private static DateTime _lastPhysicalEscapeUtc = DateTime.MinValue;
         private static int _activeScopes;
         private static string _activeTool = string.Empty;
+        private static string _activeActionId = string.Empty;
         private static Dispatcher _dispatcher;
         private static McpDesktopControlOverlayWindow _overlay;
 
-        public static bool IsEnabled { get { lock (Sync) return _enabled; } }
+        public static bool IsEnabled
+        {
+            get
+            {
+                ExpireConsentIfIdle();
+                lock (Sync) return _enabled;
+            }
+        }
+
+        public static string ConsentState
+        {
+            get
+            {
+                ExpireConsentIfIdle();
+                lock (Sync) return _consentState;
+            }
+        }
+
+        public static TimeSpan IdleRemaining
+        {
+            get
+            {
+                ExpireConsentIfIdle();
+                lock (Sync)
+                {
+                    if (!_enabled || _idleDeadlineUtc == DateTime.MinValue) return TimeSpan.Zero;
+                    var remaining = _idleDeadlineUtc - DateTime.UtcNow;
+                    return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
+                }
+            }
+        }
+
         public static string ActiveTool { get { lock (Sync) return _activeTool; } }
+        public static string ActiveActionId { get { lock (Sync) return _activeActionId; } }
 
         public static void EnableFromLocalUser()
         {
+            ResumeFromLocalUser();
+        }
+
+        public static void ResumeFromLocalUser()
+        {
+            ExpireConsentIfIdle();
             lock (Sync)
             {
                 if (_enabled) return;
+            }
+
+            // The emergency hook must exist before consent becomes usable.
+            EnsureKeyboardHook();
+            lock (Sync)
+            {
                 _enabled = true;
+                _consentState = "ON";
                 unchecked { _consentGeneration++; }
+                _idleDeadlineUtc = DateTime.UtcNow + ConsentIdleTimeout;
                 _lastPhysicalEscapeUtc = DateTime.MinValue;
             }
 
-            EnsureKeyboardHook();
             if (McpCadAgentRuntime.AutomationStopped && McpEmbeddedServer.IsRunning)
             {
                 try
@@ -63,6 +112,8 @@ namespace QS3D.BricsCAD.V25
                     lock (Sync)
                     {
                         _enabled = false;
+                        _consentState = "PAUSED";
+                        _idleDeadlineUtc = DateTime.MinValue;
                         unchecked { _consentGeneration++; }
                     }
                     ReleaseKeyboardHook();
@@ -72,28 +123,35 @@ namespace QS3D.BricsCAD.V25
 
             McpAgentExperience.Success(
                 "desktop-control",
-                "User đã bật quyền desktop cho phiên BricsCAD hiện tại.",
-                "Khi MCP thao tác desktop sẽ có viền xanh; nhấn Esc 2 lần để dừng ngay.");
+                "User đã Resume desktop control cho phiên BricsCAD hiện tại.",
+                "Consent tự hết hạn sau 10 phút không có desktop action; Esc ×2 hoặc Pause để dừng ngay.");
+        }
+
+        public static void PauseFromLocalUser(string reason)
+        {
+            StopSession(reason, true, false, "PAUSED");
         }
 
         public static void DisableFromLocalUser(string reason)
         {
-            StopSession(reason, true, false);
+            StopSession(reason, true, false, "OFF");
         }
 
         public static void RequireLocalConsent(string tool)
         {
+            ExpireConsentIfIdle();
             lock (Sync)
             {
                 if (!_enabled)
                     throw new InvalidOperationException(
-                        "Local desktop-control consent is OFF. Open QS3D MCP Agent Center > Agent and click 'Bật quyền desktop' before using "
+                        "Local desktop-control consent is " + _consentState + ". Open QS3D MCP Agent Center > Agent and Resume desktop locally before using "
                         + (tool ?? "this desktop tool") + ".");
             }
         }
 
-        public static IDisposable BeginGuardedAction(string tool)
+        public static GuardedActionScope BeginGuardedAction(string tool)
         {
+            ExpireConsentIfIdle();
             RequireLocalConsent(tool);
             var safeTool = string.IsNullOrWhiteSpace(tool) ? "desktop action" : tool.Trim();
             long consentGeneration;
@@ -102,21 +160,52 @@ namespace QS3D.BricsCAD.V25
                 if (!_enabled)
                     throw new InvalidOperationException("Local desktop-control consent was disabled before the action started.");
                 consentGeneration = _consentGeneration;
+                _idleDeadlineUtc = DateTime.UtcNow + ConsentIdleTimeout;
                 _activeScopes++;
                 _activeTool = safeTool;
             }
 
-            McpAgentExperience.ActionStarted(
+            var action = McpAgentExperience.StartDesktopAction(
                 "desktop-control",
-                "MCP đang thao tác desktop: " + safeTool,
-                "Esc 2 lần trong 1.2 giây để Emergency Stop.");
-            ShowOverlay(safeTool);
-            return new GuardedActionScope(safeTool, consentGeneration, IsSensitiveReadTool(safeTool));
+                safeTool,
+                "Esc ×2 để dừng ngay; sau khi dừng hãy kiểm tra drawing/backup trước khi Resume.");
+            lock (Sync) _activeActionId = action.ActionId;
+            ShowOverlay(safeTool, action.ActionId);
+            return new GuardedActionScope(safeTool, consentGeneration, IsSensitiveReadTool(safeTool), action);
+        }
+
+        public static void ExpireConsentIfIdle()
+        {
+            var expired = false;
+            lock (Sync)
+            {
+                if (_enabled && _idleDeadlineUtc != DateTime.MinValue && DateTime.UtcNow >= _idleDeadlineUtc)
+                {
+                    _enabled = false;
+                    _consentState = "EXPIRED";
+                    _idleDeadlineUtc = DateTime.MinValue;
+                    unchecked { _consentGeneration++; }
+                    _activeScopes = 0;
+                    _activeTool = string.Empty;
+                    _activeActionId = string.Empty;
+                    _lastPhysicalEscapeUtc = DateTime.MinValue;
+                    expired = true;
+                }
+            }
+            if (!expired) return;
+
+            try { McpCadAgentRuntime.StopAutomation(); } catch { }
+            HideOverlay();
+            ReleaseKeyboardHook();
+            McpAgentExperience.Warning(
+                "desktop-control",
+                "Desktop consent đã EXPIRED sau 10 phút không có desktop action mới.",
+                "Kiểm tra drawing/backup nếu cần, sau đó Resume desktop từ Agent Center khi muốn tiếp tục.");
         }
 
         public static void Shutdown()
         {
-            StopSession("BricsCAD/QS3D đang đóng; desktop consent đã được xóa khỏi bộ nhớ.", false, false);
+            StopSession("BricsCAD/QS3D đang đóng; desktop consent đã được xóa khỏi bộ nhớ.", false, false, "OFF");
             ReleaseKeyboardHook();
             HideOverlay();
         }
@@ -127,7 +216,7 @@ namespace QS3D.BricsCAD.V25
                    || string.Equals(tool, "desktop_screenshot", StringComparison.Ordinal);
         }
 
-        private static void CompleteGuardedAction(string tool)
+        private static void CompleteGuardedAction(GuardedActionScope scope, string terminalState, string failureMessage)
         {
             var hide = false;
             lock (Sync)
@@ -136,26 +225,46 @@ namespace QS3D.BricsCAD.V25
                 if (_activeScopes == 0)
                 {
                     _activeTool = string.Empty;
+                    _activeActionId = string.Empty;
                     hide = true;
                 }
             }
             if (hide) HideOverlay();
-            McpAgentExperience.ActionFinished(
-                "desktop-control",
-                "MCP desktop action kết thúc: " + (tool ?? string.Empty),
-                IsEnabled ? "Desktop consent vẫn bật cho phiên này; Esc×2 luôn có thể dừng." : "Desktop consent đang OFF.");
+
+            var next = IsEnabled
+                ? "Desktop consent vẫn ON; Idle còn " + FormatRemaining(IdleRemaining) + ". Esc ×2 luôn có thể dừng."
+                : "Desktop consent đang " + ConsentState + ". Kiểm tra drawing/backup rồi Resume local nếu muốn tiếp tục.";
+            var message = terminalState == "failed" && !string.IsNullOrWhiteSpace(failureMessage)
+                ? "Desktop action thất bại: " + scope.Tool + " · " + BoundMessage(failureMessage)
+                : "Desktop action " + terminalState + ": " + scope.Tool;
+            McpAgentExperience.CompleteDesktopAction(scope.Action, message, next, terminalState);
         }
 
-        private static void StopSession(string reason, bool stopAutomation, bool cancelCadCommand)
+        private static string FormatRemaining(TimeSpan remaining)
         {
-            bool wasEnabled;
+            if (remaining <= TimeSpan.Zero) return "0:00";
+            return ((int)remaining.TotalMinutes).ToString() + ":" + remaining.Seconds.ToString("00");
+        }
+
+        private static string BoundMessage(string value)
+        {
+            value = (value ?? string.Empty).Replace("\0", string.Empty).Trim();
+            return value.Length <= 300 ? value : value.Substring(0, 300);
+        }
+
+        private static void StopSession(string reason, bool stopAutomation, bool cancelCadCommand, string state)
+        {
+            bool hadSession;
             lock (Sync)
             {
-                wasEnabled = _enabled;
+                hadSession = _enabled || _activeScopes > 0;
                 _enabled = false;
+                _consentState = string.IsNullOrWhiteSpace(state) ? "OFF" : state;
+                _idleDeadlineUtc = DateTime.MinValue;
                 unchecked { _consentGeneration++; }
                 _activeScopes = 0;
                 _activeTool = string.Empty;
+                _activeActionId = string.Empty;
                 _lastPhysicalEscapeUtc = DateTime.MinValue;
             }
 
@@ -163,16 +272,15 @@ namespace QS3D.BricsCAD.V25
             {
                 try { McpCadAgentRuntime.StopAutomation(); } catch { }
             }
-
             HideOverlay();
             ReleaseKeyboardHook();
 
-            if (wasEnabled || stopAutomation)
+            if (hadSession || stopAutomation)
             {
                 McpAgentExperience.Warning(
                     "desktop-control",
                     string.IsNullOrWhiteSpace(reason) ? "Desktop control đã dừng." : reason,
-                    "Muốn tiếp tục, user phải bật lại quyền desktop từ QS3D Agent Center.");
+                    "Kiểm tra drawing/backup; muốn tiếp tục user phải Resume desktop từ QS3D Agent Center.");
             }
 
             if (cancelCadCommand && McpEmbeddedServer.IsRunning)
@@ -184,7 +292,7 @@ namespace QS3D.BricsCAD.V25
                     {
                         McpAgentExperience.Error(
                             "desktop-control",
-                            "Esc×2 đã Emergency Stop nhưng không gửi được CAD cancel: " + ex.Message,
+                            "Emergency Stop thành công nhưng không gửi được CAD cancel: " + BoundMessage(ex.Message),
                             "Nếu BricsCAD command vẫn chờ input, nhấn Esc trực tiếp trong BricsCAD.");
                     }
                 });
@@ -207,14 +315,11 @@ namespace QS3D.BricsCAD.V25
                 }
                 catch { module = GetModuleHandle(null); }
 
-                _keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardCallback, module, 0);
-                if (_keyboardHook == IntPtr.Zero)
-                {
-                    _enabled = false;
-                    unchecked { _consentGeneration++; }
+                var hook = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardCallback, module, 0);
+                if (hook == IntPtr.Zero)
                     throw new InvalidOperationException(
                         "Windows không cho QS3D cài keyboard emergency hook; desktop control không được bật để tránh mất nút dừng Esc×2.");
-                }
+                _keyboardHook = hook;
             }
         }
 
@@ -250,11 +355,13 @@ namespace QS3D.BricsCAD.V25
                             {
                                 trigger = true;
                                 _lastPhysicalEscapeUtc = DateTime.MinValue;
-                                // Fail closed immediately inside the hook before any async UI work.
                                 _enabled = false;
+                                _consentState = "PAUSED";
+                                _idleDeadlineUtc = DateTime.MinValue;
                                 unchecked { _consentGeneration++; }
                                 _activeScopes = 0;
                                 _activeTool = string.Empty;
+                                _activeActionId = string.Empty;
                             }
                             else
                             {
@@ -268,8 +375,8 @@ namespace QS3D.BricsCAD.V25
                             HideOverlay();
                             McpAgentExperience.Warning(
                                 "desktop-control",
-                                "Esc×2: MCP desktop control + Agent mutation đã Emergency Stop.",
-                                "QS3D sẽ gửi thêm CAD cancel; user phải bật lại desktop consent để tiếp tục.");
+                                "Esc×2: MCP desktop control + Agent mutation đã Emergency Stop và chuyển sang PAUSED.",
+                                "Kiểm tra drawing/backup; Resume desktop local khi muốn tiếp tục.");
                             ThreadPool.QueueUserWorkItem(_ =>
                             {
                                 try
@@ -288,7 +395,7 @@ namespace QS3D.BricsCAD.V25
             return CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
         }
 
-        private static void ShowOverlay(string tool)
+        private static void ShowOverlay(string tool, string actionId)
         {
             var dispatcher = ResolveDispatcher();
             if (dispatcher == null) return;
@@ -301,7 +408,7 @@ namespace QS3D.BricsCAD.V25
                         _overlay = new McpDesktopControlOverlayWindow();
                         _overlay.Closed += (_, __) => _overlay = null;
                     }
-                    _overlay.SetTool(tool);
+                    _overlay.SetTool(tool, actionId);
                     if (!_overlay.IsVisible) _overlay.Show();
                     _overlay.Topmost = true;
                 }
@@ -335,35 +442,51 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private sealed class GuardedActionScope : IDisposable
+        internal sealed class GuardedActionScope : IDisposable
         {
-            private readonly string _tool;
             private readonly long _consentGenerationAtStart;
             private readonly bool _failClosedOnConsentChange;
+            private string _terminalState = "cancelled";
+            private string _failureMessage = string.Empty;
             private int _disposed;
 
-            public GuardedActionScope(string tool, long consentGenerationAtStart, bool failClosedOnConsentChange)
+            internal GuardedActionScope(string tool, long consentGenerationAtStart, bool failClosedOnConsentChange, McpDesktopActionContext action)
             {
-                _tool = tool ?? string.Empty;
+                Tool = tool ?? string.Empty;
                 _consentGenerationAtStart = consentGenerationAtStart;
                 _failClosedOnConsentChange = failClosedOnConsentChange;
+                Action = action;
+            }
+
+            internal string Tool { get; private set; }
+            internal McpDesktopActionContext Action { get; private set; }
+            internal string ActionId { get { return Action == null ? string.Empty : Action.ActionId; } }
+
+            internal void MarkSuccess()
+            {
+                _terminalState = "success";
+                _failureMessage = string.Empty;
+            }
+
+            internal void MarkFailed(Exception ex)
+            {
+                _terminalState = "failed";
+                _failureMessage = ex == null ? string.Empty : ex.Message;
             }
 
             public void Dispose()
             {
                 if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
-                var consentRevoked = false;
-                if (_failClosedOnConsentChange)
+                bool consentRevoked;
+                lock (Sync)
                 {
-                    lock (Sync)
-                    {
-                        consentRevoked = !_enabled || _consentGeneration != _consentGenerationAtStart;
-                    }
+                    consentRevoked = !_enabled || _consentGeneration != _consentGenerationAtStart;
                 }
+                if (consentRevoked) _terminalState = "cancelled";
 
-                CompleteGuardedAction(_tool);
-                if (consentRevoked)
+                CompleteGuardedAction(this, _terminalState, _failureMessage);
+                if (_failClosedOnConsentChange && consentRevoked)
                     throw new InvalidOperationException(
                         "Local desktop-control consent changed while the sensitive read was in progress; payload was discarded.");
             }
@@ -465,13 +588,14 @@ namespace QS3D.BricsCAD.V25
             banner.Child = row;
             grid.Children.Add(banner);
             Content = grid;
-
             SourceInitialized += (_, __) => MakeClickThrough();
         }
 
-        public void SetTool(string tool)
+        public void SetTool(string tool, string actionId)
         {
-            _toolText.Text = string.IsNullOrWhiteSpace(tool) ? "desktop" : tool.Trim();
+            var safeTool = string.IsNullOrWhiteSpace(tool) ? "desktop" : tool.Trim();
+            var safeId = string.IsNullOrWhiteSpace(actionId) ? string.Empty : " · " + actionId.Trim();
+            _toolText.Text = safeTool + safeId;
         }
 
         protected override void OnActivated(EventArgs e)
