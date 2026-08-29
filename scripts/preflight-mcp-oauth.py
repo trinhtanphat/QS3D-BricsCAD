@@ -70,6 +70,21 @@ def main() -> int:
     require(oauth, "HMACSHA256", "signed opaque OAuth tokens")
     require(oauth, "RandomNumberGenerator.Create", "cryptographic randomness")
 
+    # ChatGPT long-lived OAuth connectivity requires an advertised offline/refresh scope.
+    # Keep it authorization-server-only: the protected MCP resource still exposes just
+    # the qs3d:mcp permission, while authorization may grant optional offline_access.
+    require(oauth, 'OfflineAccessScope = "offline_access"', "offline-access scope declaration")
+    require(oauth, '"scopes_supported":[\"" + RequiredScope + "\",\"" + OfflineAccessScope + "\"]', "authorization-server offline_access discovery")
+    require(oauth, "TryNormalizeAuthorizationScope", "offline-access authorization scope parser")
+    require(oauth, "HasOfflineAccess", "offline-access grant detection")
+    require(oauth, "includeRefreshToken", "refresh-token issuance gate")
+    require(oauth, "requested refresh scope exceeds the original grant", "refresh-scope preservation")
+
+    protected_resource_block = oauth.split('if (string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase)\n                && string.Equals(path, "/.well-known/oauth-authorization-server"', 1)[0]
+    if OfflineAccessScope_literal := 'OfflineAccessScope':
+        if OfflineAccessScope_literal in protected_resource_block:
+            fail("protected-resource metadata must not advertise offline_access")
+
     # DCR is fail-closed to ChatGPT connector callbacks, never arbitrary redirect URIs.
     require(oauth, 'ChatGptCallbackPrefix = "https://chatgpt.com/connector/oauth/"', "ChatGPT callback allowlist")
     require(oauth, "IsAllowedChatGptRedirect", "redirect allowlist function")
