@@ -184,6 +184,7 @@ namespace QS3D.Core.SmokeTests
                 MaximumClearPanelHeightM = 3d
             };
             row.ElementIds.Add("CW-1");
+            row.SourceHandles.Add("CW-HANDLE-1");
             return row;
         }
 
