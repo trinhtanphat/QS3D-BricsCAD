@@ -21,7 +21,10 @@ if "foreach (var element in elements)" in body:
 required = [
     "using (var enumerator = elements.GetEnumerator())",
     "while (enumerator.MoveNext())",
-    "if (knownTargetCount.HasValue && observed >= knownTargetCount.Value)",
+    "observed++;",
+    "if (observed > MaxMutationTargetCount)",
+    "if (knownTargetCount.HasValue && observed > knownTargetCount.Value)",
+    "continue;",
     "var element = enumerator.Current;",
 ]
 for token in required:
@@ -29,14 +32,16 @@ for token in required:
         raise SystemExit("FAIL Floor mutation target Count stability: missing required no-overread shape: " + token)
 
 move = body.find("while (enumerator.MoveNext())")
-known = body.find("if (knownTargetCount.HasValue && observed >= knownTargetCount.Value)")
-current = body.find("var element = enumerator.Current;")
-cap = body.find("if (observed >= MaxMutationTargetCount)")
-if min(move, known, current, cap) < 0 or not (move < known < cap < current):
-    raise SystemExit("FAIL Floor mutation target Count stability: admission must be MoveNext -> Count -> cap -> Current")
+observed = body.find("observed++;", move)
+cap = body.find("if (observed > MaxMutationTargetCount)", observed)
+known = body.find("if (knownTargetCount.HasValue && observed > knownTargetCount.Value)", cap)
+current = body.find("var element = enumerator.Current;", known)
+if min(move, observed, cap, known, current) < 0 or not (move < observed < cap < known < current):
+    raise SystemExit("FAIL Floor mutation target Count stability: admission must be MoveNext -> observe -> cap -> Count admission -> Current")
 
-if "observed++;" not in body:
-    raise SystemExit("FAIL Floor mutation target Count stability: admitted targets must advance observed count")
+known_slice = body[known:current]
+if "continue;" not in known_slice:
+    raise SystemExit("FAIL Floor mutation target Count stability: entries beyond known Count must continue bounded traversal without Current")
 if "observed != knownTargetCount.Value" not in body:
     raise SystemExit("FAIL Floor mutation target Count stability: completed traversal equality check missing")
 if "Project changed while Floor mutation targets were being enumerated" not in body:
