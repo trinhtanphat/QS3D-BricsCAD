@@ -7,6 +7,8 @@ Lane-Key: `issue-4584`
 
 `QS3D-BricsCAD` is the only shipping repository/package required for this integration. The MCP server, OAuth authorization server, Cloudflare onboarding, Agent Center, CAD tools, safety controls, and local audit surface are embedded in the BricsCAD plugin. A second MCP repository, Node runtime, PowerShell, CMD, or manual terminal setup is not part of the normal end-user path.
 
+The canonical Ribbon entry remains `QS3DMCPAGENTCENTER`; `McpPublicEndpointResolver` remains the single validated source of the public HTTPS `/mcp` endpoint.
+
 ## Runtime architecture
 
 ```text
