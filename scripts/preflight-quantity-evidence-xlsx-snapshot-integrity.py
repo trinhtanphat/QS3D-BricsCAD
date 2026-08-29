@@ -38,4 +38,13 @@ if missing:
 if forbidden:
     raise SystemExit("Quantity evidence XLSX snapshot-integrity preflight failed; live caller list traversal remains: " + ", ".join(forbidden))
 
+snapshot_index = source.index("var snapshot = SnapshotExplanations(explanations);")
+capacity_index = source.index("ValidateProjectedRowCapacity(snapshot);")
+projection_index = source.index("QuantityEvidenceExportProjection.CreateMany(snapshot);")
+if not snapshot_index < capacity_index < projection_index:
+    raise SystemExit(
+        "Quantity evidence XLSX snapshot-integrity preflight failed; "
+        "export order must be detached snapshot -> capacity validation -> projection"
+    )
+
 print("PASS quantity evidence XLSX detached snapshot integrity source guard")
