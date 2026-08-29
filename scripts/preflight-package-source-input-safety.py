@@ -41,6 +41,17 @@ def inspect_script(text: str, major: str) -> list[str]:
         if token not in text:
             found.append(f"{major}: missing {token}")
 
+    held_tokens = (
+        "function Open-HeldPackageInput",
+        "[IO.FileShare]::Read",
+        "function Assert-HeldPathBinding",
+        "function Copy-HeldPackageInput",
+        "function Read-HeldPackageText",
+    )
+    for token in held_tokens:
+        if token not in text:
+            found.append(f"{major}: missing {token}")
+
     if major == "V25":
         required_calls = (
             "$source = Assert-SafeInputDirectory",
@@ -50,6 +61,11 @@ def inspect_script(text: str, major: str) -> list[str]:
             "package launcher $launcherName",
             "synthetic sample $sampleName",
             "Get-SafeSourceFiles -SourceRoot (Join-Path $root 'src/QS3D.BricsCAD.V25')",
+            "Copy-HeldPackageInput -SourcePath $path",
+            "Copy-HeldPackageInput -SourcePath $scriptPath",
+            "Copy-HeldPackageInput -SourcePath $launcherPath",
+            "Copy-HeldPackageInput -SourcePath $samplePath",
+            "Read-HeldSourceText -Path $_.FullName",
         )
         legacy = "Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V25') -Recurse -Filter '*.cs'"
     else:
@@ -62,6 +78,7 @@ def inspect_script(text: str, major: str) -> list[str]:
             "synthetic sample $sampleName",
             "Get-SafeSourceFiles -SourceRoot $v25Root",
             "Get-SafeSourceFiles -SourceRoot (Join-Path $root 'src/QS3D.BricsCAD.V26')",
+            "function Invoke-WithHeldPackageInput",
         )
         legacy = "Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V26') -Recurse -Filter '*.cs'"
 
@@ -75,6 +92,35 @@ def inspect_script(text: str, major: str) -> list[str]:
     output_mutation = text.find("New-Item -ItemType Directory -Path $distRoot -Force")
     if source_bind < 0 or output_mutation < 0 or source_bind >= output_mutation:
         found.append(f"{major}: source admission must happen before package output mutation")
+
+    common_forbidden = (
+        "Get-Content -LiteralPath $ProjectPath -Raw",
+        "Copy-Item -LiteralPath $path -Destination (Join-Path $dist $name)",
+        "Copy-Item -LiteralPath $samplePath -Destination",
+    )
+    for forbidden_token in common_forbidden:
+        if forbidden_token in text:
+            found.append(f"{major}: pathname reopen/copy generation shortcut remains: {forbidden_token}")
+
+    if major == "V25":
+        for forbidden_token in (
+            "Get-Content -LiteralPath $_.FullName -Raw",
+            "Copy-Item -LiteralPath $scriptPath -Destination",
+            "Copy-Item -LiteralPath $launcherPath -Destination",
+        ):
+            if forbidden_token in text:
+                found.append(f"V25: pathname reopen/copy generation shortcut remains: {forbidden_token}")
+    else:
+        for forbidden_token in (
+            "Get-Content -LiteralPath $Path -Raw",
+        ):
+            if forbidden_token in text:
+                found.append(f"V26: pathname reopen/copy generation shortcut remains: {forbidden_token}")
+
+    artifact_admit = text.find(f"Assert-SafeInputFile -Path (Join-Path $source $name)")
+    held_copy = text.find("Copy-HeldPackageInput -SourcePath $path", artifact_admit)
+    if artifact_admit < 0 or held_copy <= artifact_admit:
+        found.append(f"{major}: held build-artifact copy must follow ordinary/non-reparse admission")
     return found
 
 
@@ -89,9 +135,11 @@ runbook = RUNBOOK.read_text(encoding="utf-8") if RUNBOOK.is_file() else ""
 errors.extend(inspect_script(v25, "V25"))
 errors.extend(inspect_script(v26, "V26"))
 
+before(v25, "$source = Assert-SafeInputDirectory", "foreach ($name in $required)", "V25")
+before(v25, "Assert-SafeInputFile -Path (Join-Path $source $name)", "Copy-HeldPackageInput -SourcePath $path", "V25")
+before(v26, "$source = Assert-SafeInputDirectory", "foreach ($name in $required)", "V26")
+before(v26, "Assert-SafeInputFile -Path (Join-Path $source $name)", "Copy-HeldPackageInput -SourcePath $path", "V26")
 for text, major in ((v25, "V25"), (v26, "V26")):
-    before(text, "$source = Assert-SafeInputDirectory", "foreach ($name in $required)", major)
-    before(text, "Assert-SafeInputFile -Path (Join-Path $source $name)", "Copy-Item -LiteralPath $path", major)
     require(text, "$item.Attributes -band [IO.FileAttributes]::ReparsePoint", major)
     require(text, "Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop", major)
 
@@ -101,13 +149,15 @@ require(runbook, "before any packaging output mutation", "runbook")
 require(runbook, "V25", "runbook")
 require(runbook, "V26", "runbook")
 
-# Mutation checks: removing the input binder or restoring recursive source scanning
-# must make the reference inspector reject the candidate.
+# Mutation checks: removing an input binder, restoring recursive source scanning,
+# or reverting either package path to pathname copy must make inspection reject it.
 mutations = (
     ("V25", v25.replace("$source = Assert-SafeInputDirectory", "$source = Get-CanonicalFullPath", 1)),
     ("V26", v26.replace("$generator = Assert-SafeInputFile", "$generator = Get-CanonicalFullPath", 1)),
     ("V25", v25.replace("Get-SafeSourceFiles -SourceRoot (Join-Path $root 'src/QS3D.BricsCAD.V25') -RepositoryRoot $root -Extension '.cs'", "Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V25') -Recurse -Filter '*.cs'", 1)),
     ("V26", v26.replace("Get-SafeSourceFiles -SourceRoot (Join-Path $root 'src/QS3D.BricsCAD.V26') -RepositoryRoot $root -Extension '.cs'", "Get-ChildItem (Join-Path $root 'src/QS3D.BricsCAD.V26') -Recurse -Filter '*.cs'", 1)),
+    ("V25", v25.replace("Copy-HeldPackageInput -SourcePath $path -DestinationPath (Join-Path $dist $name) -Label (\"V25 build artifact $name\")", "Copy-Item -LiteralPath $path -Destination (Join-Path $dist $name)", 1)),
+    ("V26", v26.replace("Copy-HeldPackageInput -SourcePath $path -DestinationPath (Join-Path $dist $name) -Label (\"V26 build artifact $name\")", "Copy-Item -LiteralPath $path -Destination (Join-Path $dist $name)", 1)),
 )
 for major, mutated in mutations:
     if not inspect_script(mutated, major):

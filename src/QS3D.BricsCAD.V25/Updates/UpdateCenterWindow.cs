@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
@@ -23,8 +22,8 @@ namespace QS3D.BricsCAD.V25.Updates
         private UpdateCheckResult? _result;
         private bool _coordinatorAttached;
         private bool _previewDownloading = false;
-        private string? _downloadedPackagePath;
-        private string? _downloadedReleaseTag;
+        private bool _previewScheduled;
+        private string? _previewScheduledDetail;
 
         internal UpdateCenterWindow()
         {
@@ -144,18 +143,6 @@ namespace QS3D.BricsCAD.V25.Updates
             if (result == null) return;
             _result = result;
 
-            var releaseTag = result.Release?.Tag;
-            if (_downloadedReleaseTag != null && !string.Equals(_downloadedReleaseTag, releaseTag, StringComparison.Ordinal))
-            {
-                _downloadedPackagePath = null;
-                _downloadedReleaseTag = null;
-            }
-            if (_downloadedPackagePath != null && !File.Exists(_downloadedPackagePath))
-            {
-                _downloadedPackagePath = null;
-                _downloadedReleaseTag = null;
-            }
-
             _status.Text = result.Message;
             _detail.Text = result.Detail;
 
@@ -182,13 +169,9 @@ namespace QS3D.BricsCAD.V25.Updates
 #else
             var hasPreviewDownload = result.State == UpdateState.ManualInstallRequired && result.Release?.HasVerifiedPreviewPackage == true;
 #endif
-            var hasDownloadedPreview = hasPreviewDownload
-                                       && _downloadedPackagePath != null
-                                       && string.Equals(_downloadedReleaseTag, releaseTag, StringComparison.Ordinal)
-                                       && File.Exists(_downloadedPackagePath);
 
-            _refreshButton.IsEnabled = !_previewDownloading && !checking && result.State != UpdateState.Scheduled;
-            _updateButton.IsEnabled = !_previewDownloading && (result.CanAutoInstall || hasPreviewDownload || hasManualRelease);
+            _refreshButton.IsEnabled = !_previewDownloading && !_previewScheduled && !checking && result.State != UpdateState.Scheduled;
+            _updateButton.IsEnabled = !_previewDownloading && !_previewScheduled && (result.CanAutoInstall || hasPreviewDownload || hasManualRelease);
             _releaseButton.IsEnabled = !_previewDownloading && result.Release?.PageUri != null;
 
             if (_previewDownloading)
@@ -196,20 +179,23 @@ namespace QS3D.BricsCAD.V25.Updates
                 _updateButton.Content = "Đang tải…";
                 _updateButton.ToolTip = "Đang tải package từ GitHub Release và kiểm tra SHA-256.";
             }
+            else if (_previewScheduled)
+            {
+                _updateButton.Content = "Đã lên lịch";
+                _updateButton.ToolTip = "Package preview đã xác minh sẽ chỉ thay DLL sau khi BricsCAD thoát.";
+                _status.Text = "Đã xác minh và lên lịch cài đặt";
+                _detail.Text = _previewScheduledDetail ??
+                    "QS3D đang chờ BricsCAD thoát rồi mới thay payload V25 đã được kiểm tra SHA-256.";
+            }
             else if (result.State == UpdateState.Scheduled)
             {
                 _updateButton.Content = "Đã lên lịch";
                 _updateButton.ToolTip = "Cập nhật đã được lên lịch và đang chờ BricsCAD đóng an toàn.";
             }
-            else if (hasDownloadedPreview)
-            {
-                _updateButton.Content = "Mở file đã tải";
-                _updateButton.ToolTip = "Mở Explorer tới package preview đã được kiểm tra SHA-256.";
-            }
             else if (hasPreviewDownload)
             {
-                _updateButton.Content = "Tải & kiểm tra";
-                _updateButton.ToolTip = "Tải package preview trực tiếp từ GitHub Release và xác minh SHA-256. Package unsigned sẽ không được tự chạy/cài.";
+                _updateButton.Content = "Tải & cài đặt";
+                _updateButton.ToolTip = "Tải package preview từ GitHub, xác minh SHA-256, stage an toàn rồi cài sau khi BricsCAD thoát.";
             }
             else if (hasManualRelease)
             {
@@ -232,18 +218,12 @@ namespace QS3D.BricsCAD.V25.Updates
 
         private async System.Threading.Tasks.Task HandlePrimaryActionAsync()
         {
+            if (_previewScheduled) return;
+
             var current = _result;
             if (current?.State == UpdateState.ManualInstallRequired && current.Release != null)
             {
 #if !BRICSCAD_V26
-                if (_downloadedPackagePath != null
-                    && string.Equals(_downloadedReleaseTag, current.Release.Tag, StringComparison.Ordinal)
-                    && File.Exists(_downloadedPackagePath))
-                {
-                    RevealDownloadedFile(_downloadedPackagePath);
-                    return;
-                }
-
                 if (current.Release.HasVerifiedPreviewPackage)
                 {
                     await DownloadPreviewAsync(current.Release);
@@ -264,33 +244,47 @@ namespace QS3D.BricsCAD.V25.Updates
 #if !BRICSCAD_V26
         private async System.Threading.Tasks.Task DownloadPreviewAsync(UpdateReleaseInfo release)
         {
-            if (_previewDownloading) return;
+            if (_previewDownloading || _previewScheduled) return;
             _previewDownloading = true;
             Apply(_result);
             _status.Text = "Đang tải bản preview…";
-            _detail.Text = "QS3D đang tải package và checksum từ đúng GitHub Release. File chỉ được giữ lại sau khi SHA-256 khớp.";
+            _detail.Text = "QS3D đang tải package và checksum từ đúng GitHub Release. Package chỉ được stage sau khi SHA-256 khớp.";
 
             try
             {
                 var verified = await new VerifiedReleaseDownloader().DownloadAsync(release);
-                _downloadedPackagePath = verified.Path;
-                _downloadedReleaseTag = release.Tag;
-                _previewDownloading = false;
-                Apply(_result);
-                _status.Text = "Đã tải và kiểm tra SHA-256";
-                _detail.Text = "Package preview đã được xác minh (SHA-256: " + verified.Sha256 + "). Đây là package unsigned nên QS3D không tự chạy hoặc tự cài. File: " + verified.Path;
-                RevealDownloadedFile(verified.Path);
+                if (!VerifiedPreviewInstaller.TrySchedule(verified.Path, verified.Sha256, out var installError))
+                    throw new InvalidOperationException("Không thể stage package preview: " + installError);
+
+                _previewScheduled = true;
+                _previewScheduledDetail =
+                    "SHA-256 đã xác minh: " + verified.Sha256 +
+                    ". Updater tách rời sẽ chờ BricsCAD thoát, backup DLL hiện tại, thay payload V25/Core rồi rollback nếu có lỗi.";
+
+                if (!SecureUpdateLauncher.TryRequestGracefulHostClose(out var closeError))
+                {
+                    _previewScheduledDetail += " " + closeError;
+                    MessageBox.Show(
+                        this,
+                        closeError,
+                        "QS3D Update Center",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
             }
             catch (Exception ex)
             {
-                _previewDownloading = false;
-                Apply(_result);
                 MessageBox.Show(
                     this,
-                    "Không tải được bản preview an toàn: " + ex.Message,
+                    "Không chuẩn bị được bản preview an toàn: " + ex.Message,
                     "QS3D Update Center",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
+            }
+            finally
+            {
+                _previewDownloading = false;
+                Apply(_result);
             }
         }
 #endif
@@ -310,27 +304,6 @@ namespace QS3D.BricsCAD.V25.Updates
                     "QS3D Update Center",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
-            }
-        }
-
-        private void RevealDownloadedFile(string path)
-        {
-            if (!File.Exists(path))
-            {
-                _downloadedPackagePath = null;
-                _downloadedReleaseTag = null;
-                Apply(_result);
-                MessageBox.Show(this, "File cập nhật đã tải không còn tồn tại.", "QS3D Update Center", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-
-            try
-            {
-                Process.Start(new ProcessStartInfo("explorer.exe", "/select,\"" + path + "\"") { UseShellExecute = true });
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(this, "Không mở được thư mục chứa package: " + ex.Message, "QS3D Update Center", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 

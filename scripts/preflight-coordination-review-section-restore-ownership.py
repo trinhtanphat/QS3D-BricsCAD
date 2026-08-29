@@ -7,14 +7,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "CoordinationManagerReviewUi.cs"
 text = SOURCE.read_text(encoding="utf-8")
 
-restore = re.search(
-    r"public void RestoreSectionView\(\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*private void RestoreSectionViewBestEffort",
-    text,
-    re.S,
-)
-if not restore:
+restore_start = text.find("public void RestoreSectionView()")
+restore_end = text.find("private bool TryRestoreSectionViewBestEffort", restore_start)
+if restore_start < 0 or restore_end < 0:
     raise SystemExit("FAIL coordination section restore ownership: RestoreSectionView method not found")
-body = restore.group("body")
+body = text[restore_start:restore_end]
 
 required = [
     "if (_viewBeforeSection == null) return;",
@@ -39,6 +36,20 @@ destroyed = re.search(r"if\s*\(_destroyed\)\s*\{(?P<destroyed>.*?)\}", body, re.
 if "_viewBeforeSection = null;" not in destroyed or "return;" not in destroyed:
     raise SystemExit("FAIL coordination section restore ownership: destroyed document must abandon retained snapshot without native access")
 
+helper_start = text.find("private bool TryRestoreSectionViewBestEffort(ViewSnapshot snapshot)")
+helper_end = text.find("private Extents3d ReadBounds", helper_start)
+if helper_start < 0 or helper_end < 0:
+    raise SystemExit("FAIL coordination section restore ownership: result-bearing section rollback helper is missing")
+helper_body = text[helper_start:helper_end]
+for token in (
+    "snapshot.Apply(view);",
+    "_document.Editor.SetCurrentView(view);",
+    "return true;",
+    "return false;",
+):
+    if token not in helper_body:
+        raise SystemExit(f"FAIL coordination section restore ownership: rollback helper missing {token}")
+
 reset_public = re.search(
     r"public void ResetTransientStateBestEffort\(\)\s*\{(?P<body>.*?)\n\s*\}",
     text,
@@ -52,18 +63,13 @@ if "ResetTransientStateBestEffort(false);" not in reset_public.group("body"):
     raise SystemExit("FAIL coordination section restore ownership: public reset must delegate to non-throwing section cleanup mode")
 
 reset_core = re.search(
-    r"private void ResetTransientStateBestEffort\(bool throwOnSectionRestoreFailure\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*public void AbandonDestroyedDocumentState",
+    r"private Exception\? ResetTransientStateBestEffort\(bool throwOnSectionRestoreFailure\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*public void AbandonDestroyedDocumentState",
     text,
     re.S,
 )
 if not reset_core:
-    raise SystemExit("FAIL coordination section restore ownership: retry-aware reset core overload is missing")
+    raise SystemExit("FAIL coordination section restore ownership: retry-aware result-bearing reset core overload is missing")
 core_body = reset_core.group("body")
-if "RestoreSectionView();" not in core_body:
-    raise SystemExit("FAIL coordination section restore ownership: reset core must attempt section-view restore")
-# The cleanup implementation may need to preserve failures from highlight/isolation as well
-# as section restore. Pin the stronger semantic contract instead of a single catch shape:
-# every cleanup is attempted, the first failure is retained, and dispose mode rethrows it.
 for token in (
     "Exception? cleanupFailure = null;",
     "try { ClearHighlight(); } catch (Exception ex) { cleanupFailure = ex; }",
@@ -72,9 +78,10 @@ for token in (
     "cleanupFailure = cleanupFailure ?? ex;",
     "if (throwOnSectionRestoreFailure && cleanupFailure != null)",
     "throw cleanupFailure;",
+    "return cleanupFailure;",
 ):
     if token not in core_body:
-        raise SystemExit(f"FAIL coordination section restore ownership: retry-aware reset must retain first cleanup failure while attempting all cleanup: {token}")
+        raise SystemExit(f"FAIL coordination section restore ownership: retry-aware reset must retain and surface first cleanup failure while attempting all cleanup: {token}")
 if "_viewBeforeSection = null" in core_body:
     raise SystemExit("FAIL coordination section restore ownership: reset core must never erase section retry ownership on live restore failure")
 
@@ -89,7 +96,7 @@ dispose_body = dispose.group("body")
 cleanup_index = dispose_body.find("ResetTransientStateBestEffort(true);")
 disposed_index = dispose_body.find("_disposed = true;")
 if cleanup_index < 0:
-    raise SystemExit("FAIL coordination section restore ownership: Dispose must use throwing section cleanup mode so controller can retry")
+    raise SystemExit("FAIL coordination section restore ownership: Dispose must use throwing cleanup mode so controller can retry")
 if disposed_index < 0 or disposed_index < cleanup_index:
     raise SystemExit("FAIL coordination section restore ownership: session cannot publish disposed state before retry-sensitive cleanup succeeds")
 

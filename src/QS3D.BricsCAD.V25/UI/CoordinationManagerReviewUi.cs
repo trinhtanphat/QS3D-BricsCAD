@@ -83,6 +83,7 @@ namespace QS3D.BricsCAD.V25.UI
             private readonly Button _restoreView;
             private Attachment _attachments;
             private bool _attached;
+            private bool _cleanupBarrier;
             private bool _disposeInProgress;
             private bool _sessionDisposed;
             private bool _disposed;
@@ -195,7 +196,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnClearHighlight(object sender, RoutedEventArgs e)
             {
-                RunValidated("Clear Highlight", ids => _session.ClearHighlight());
+                RunCleanup("Clear Highlight", () => _session.ClearHighlight());
             }
 
             private void OnIsolate(object sender, RoutedEventArgs e)
@@ -205,7 +206,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnRestoreIsolation(object sender, RoutedEventArgs e)
             {
-                RunValidated("Restore Isolation", ids => _session.RestoreIsolation());
+                RunCleanup("Restore Isolation", () => _session.RestoreIsolation());
             }
 
             private void OnSection(object sender, RoutedEventArgs e)
@@ -215,11 +216,42 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnRestoreView(object sender, RoutedEventArgs e)
             {
-                RunValidated("Restore View", ids => _session.RestoreSectionView());
+                RunCleanup("Restore View", () => _session.RestoreSectionView());
             }
+
+            private void RunCleanup(string actionName, Action effect)
+            {
+                if (!_attached || _disposeInProgress || _disposed) return;
+
+                var cleanupBarrierBefore = _cleanupBarrier;
+                try
+                {
+                    effect();
+                    _cleanupBarrier = cleanupBarrierBefore && _session.HasTransientState;
+                    SetStatus(_cleanupBarrier
+                        ? actionName + " • cleanup còn pending; review mới vẫn bị khóa."
+                        : actionName + " • transient review state đã được dọn sạch.");
+                }
+                catch (Exception ex)
+                {
+                    _cleanupBarrier = cleanupBarrierBefore && _session.HasTransientState;
+                    SetStatus(actionName + " bị từ chối: " + ex.Message);
+                }
+                finally
+                {
+                    UpdateActionState();
+                }
+            }
+
             private void RunValidated(string actionName, Action<IReadOnlyList<ObjectId>> effect)
             {
                 if (!_attached || _disposeInProgress || _disposed) return;
+                if (_cleanupBarrier)
+                {
+                    SetStatus("Review mới bị khóa cho tới khi transient state của row trước được dọn sạch.");
+                    UpdateActionState();
+                    return;
+                }
 
                 try
                 {
@@ -305,8 +337,11 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!_attached || _disposeInProgress || _disposed) return;
 
                 // A previous row must never leak presentation state into the next row.
-                _session.ResetTransientStateBestEffort();
-                SetStatus(string.Empty);
+                var cleanupFailure = _session.TryResetTransientStateBestEffort();
+                _cleanupBarrier = cleanupFailure != null || _session.HasTransientState;
+                SetStatus(_cleanupBarrier
+                    ? "Không thể dọn sạch review state của row trước; chỉ các nút cleanup được phép retry."
+                    : string.Empty);
                 UpdateActionState();
             }
 
@@ -321,6 +356,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (!_attached || _disposeInProgress || _disposed || !ReferenceEquals(e.Document, _document)) return;
                 _session.AbandonDestroyedDocumentState();
+                _cleanupBarrier = false;
                 if (_window.IsLoaded) _window.Close();
             }
 
@@ -335,12 +371,13 @@ namespace QS3D.BricsCAD.V25.UI
 
                 var row = _grid.SelectedItem as CoordinationManagerRow;
                 var actionable = row != null && row.CanLocate;
-                _highlight.IsEnabled = actionable;
-                _isolate.IsEnabled = actionable;
-                _section.IsEnabled = actionable;
-                _clearHighlight.IsEnabled = actionable && _session.HasHighlight;
-                _restoreIsolation.IsEnabled = actionable && _session.HasIsolation;
-                _restoreView.IsEnabled = actionable && _session.HasSectionView;
+                var mutationsAllowed = actionable && !_cleanupBarrier;
+                _highlight.IsEnabled = mutationsAllowed;
+                _isolate.IsEnabled = mutationsAllowed;
+                _section.IsEnabled = mutationsAllowed;
+                _clearHighlight.IsEnabled = _session.HasHighlight;
+                _restoreIsolation.IsEnabled = _session.HasIsolation;
+                _restoreView.IsEnabled = _session.HasSectionView;
             }
 
             private void SetStatus(string message)
@@ -438,6 +475,7 @@ namespace QS3D.BricsCAD.V25.UI
             public bool HasHighlight => _highlighted.Count > 0;
             public bool HasIsolation => _isolationActive || _objectIsolationModeBefore != null;
             public bool HasSectionView => _viewBeforeSection != null;
+            public bool HasTransientState => HasHighlight || HasIsolation || HasSectionView;
 
             public void Highlight(IReadOnlyList<ObjectId> ids)
             {
@@ -570,7 +608,8 @@ namespace QS3D.BricsCAD.V25.UI
                 catch
                 {
                     RestoreImpliedSelectionBestEffort(impliedSelectionBefore);
-                    TryRestoreObjectIsolationModeBestEffort(modeBefore);
+                    if (!TryRestoreObjectIsolationModeBestEffort(modeBefore))
+                        _objectIsolationModeBefore = modeBefore;
                     throw;
                 }
 
@@ -648,7 +687,8 @@ namespace QS3D.BricsCAD.V25.UI
                     }
                     catch
                     {
-                        RestoreSectionViewBestEffort(viewBeforeSection);
+                        if (!TryRestoreSectionViewBestEffort(viewBeforeSection))
+                            _viewBeforeSection = viewBeforeSection;
                         throw;
                     }
                     _viewBeforeSection = viewBeforeSection;
@@ -674,9 +714,9 @@ namespace QS3D.BricsCAD.V25.UI
                 _viewBeforeSection = null;
             }
 
-            private void RestoreSectionViewBestEffort(ViewSnapshot snapshot)
+            private bool TryRestoreSectionViewBestEffort(ViewSnapshot snapshot)
             {
-                if (snapshot == null || _destroyed) return;
+                if (snapshot == null || _destroyed) return true;
                 try
                 {
                     using (var view = _document.Editor.GetCurrentView())
@@ -684,10 +724,13 @@ namespace QS3D.BricsCAD.V25.UI
                         snapshot.Apply(view);
                         _document.Editor.SetCurrentView(view);
                     }
+                    return true;
                 }
                 catch
                 {
-                    // Compensation is bounded best-effort and must not mask native apply failure.
+                    // Compensation remains best-effort so the original native apply failure
+                    // stays primary; false transfers the snapshot into persistent retry ownership.
+                    return false;
                 }
             }
 
@@ -763,7 +806,12 @@ namespace QS3D.BricsCAD.V25.UI
                 ResetTransientStateBestEffort(false);
             }
 
-            private void ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)
+            public Exception? TryResetTransientStateBestEffort()
+            {
+                return ResetTransientStateBestEffort(false);
+            }
+
+            private Exception? ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)
             {
                 Exception? cleanupFailure = null;
                 try { ClearHighlight(); } catch (Exception ex) { cleanupFailure = ex; }
@@ -776,6 +824,7 @@ namespace QS3D.BricsCAD.V25.UI
 
                 if (throwOnSectionRestoreFailure && cleanupFailure != null)
                     throw cleanupFailure;
+                return cleanupFailure;
             }
 
             public void AbandonDestroyedDocumentState()
