@@ -7,21 +7,26 @@ registration = (root / "tests/QS3D.Core.SmokeTests/FloorMutationInputFreshnessSm
 
 helper = "private static IReadOnlyList<ProjectElement> ResolveOwnedElements(ProjectState project, IEnumerable<ProjectElement> elements)"
 capture = "var targetEnumerationVersion = project.ChangeVersion;"
-enumeration = "foreach (var element in elements)"
+enumerator = "using (var enumerator = elements.GetEnumerator())"
+move_next = "while (enumerator.MoveNext())"
+current = "var element = enumerator.Current;"
 freshness = "if (project.ChangeVersion != targetEnumerationVersion)"
 ordered_return = "return unique.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();"
 message = 'throw new InvalidOperationException("Project changed while Floor mutation targets were being enumerated. Retry the operation against the current project state.");'
 
-for token in (helper, capture, enumeration, freshness, ordered_return, message):
+for token in (helper, capture, enumerator, move_next, current, freshness, ordered_return, message):
     assert token in source, f"missing Floor mutation input-freshness contract: {token}"
 
 helper_pos = source.index(helper)
 capture_pos = source.index(capture, helper_pos)
-enumeration_pos = source.index(enumeration, capture_pos)
-freshness_pos = source.index(freshness, enumeration_pos)
+enumerator_pos = source.index(enumerator, capture_pos)
+move_next_pos = source.index(move_next, enumerator_pos)
+current_pos = source.index(current, move_next_pos)
+freshness_pos = source.index(freshness, current_pos)
 return_pos = source.index(ordered_return, freshness_pos)
-assert helper_pos < capture_pos < enumeration_pos < freshness_pos < return_pos, (
+assert helper_pos < capture_pos < enumerator_pos < move_next_pos < current_pos < freshness_pos < return_pos, (
     "Floor mutation freshness ordering changed: version capture must precede caller enumeration, "
+    "explicit traversal must read admitted Current entries before the post-enumeration freshness rejection, "
     "and freshness rejection must precede resolved-target return"
 )
 
