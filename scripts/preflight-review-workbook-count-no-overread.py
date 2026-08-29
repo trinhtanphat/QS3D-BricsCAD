@@ -21,7 +21,7 @@ source = SOURCE.read_text(encoding="utf-8")
 smoke = SMOKE.read_text(encoding="utf-8")
 runbook = RUNBOOK.read_text(encoding="utf-8")
 
-helper_marker = "private static List<T> SnapshotCounted<T>(IReadOnlyList<T> source, string label)"
+helper_marker = "private static List<T> SnapshotCounted<T>(IReadOnlyList<T> source, int expectedCount, string label)"
 quantity_marker = "private static List<QuantityReportRow> Quantity"
 if helper_marker not in source:
     fail("shared SnapshotCounted<T> boundary is missing")
@@ -30,7 +30,6 @@ helper_end = source.index(quantity_marker, helper_start)
 helper = source[helper_start:helper_end]
 
 required_helper = (
-    "var expectedCount = source.Count;",
     "while (enumerator.MoveNext())",
     "if (result.Count >= expectedCount)",
     "result.Add(enumerator.Current);",
@@ -47,11 +46,20 @@ if helper.index("if (result.Count != expectedCount)") > helper.index("if (source
     fail("SnapshotCounted<T> must establish traversal cardinality before post-traversal Count rebind")
 
 for token in (
-    'SnapshotCounted(quantityDetails, "QTO detail")',
-    'SnapshotCounted(quantitySummary, "QTO summary")',
-    'SnapshotCounted(clashes, "clash")',
-    'SnapshotCounted(duplicates, "duplicate")',
-    'SnapshotCounted(issueGeometry, "issue geometry")',
+    "var detailCount = quantityDetails.Count;",
+    "var summaryCount = quantitySummary.Count;",
+    "var clashCount = clashes.Count;",
+    "var duplicateCount = duplicates.Count;",
+    "var geometryCount = issueGeometry == null ? (int?)null : issueGeometry.Count;",
+    "Limit(detailCount, QuantitySheet)",
+    "Limit(summaryCount + 16, SummarySheet)",
+    "Limit(clashCount, ClashSheet)",
+    "Limit(duplicateCount, DuplicateSheet)",
+    'SnapshotCounted(quantityDetails, detailCount, "QTO detail")',
+    'SnapshotCounted(quantitySummary, summaryCount, "QTO summary")',
+    'SnapshotCounted(clashes, clashCount, "clash")',
+    'SnapshotCounted(duplicates, duplicateCount, "duplicate")',
+    'SnapshotCounted(issueGeometry, geometryCount!.Value, "issue geometry")',
     "Quantity(detailInput, true, modelInfo.DrawingFingerprint)",
     "Quantity(summaryInput, false, modelInfo.DrawingFingerprint)",
     "Clash(clashInput, modelInfo.DrawingFingerprint)",
@@ -59,7 +67,7 @@ for token in (
     "Geometry(geometryInput, clashRows, duplicateRows)",
 ):
     if token not in source:
-        fail(f"Export is missing counted-snapshot routing token: {token}")
+        fail(f"Export is missing bound-count routing token: {token}")
 
 for unsafe in (
     "Quantity(quantityDetails, true",
@@ -77,6 +85,7 @@ for token in (
     "UnderYieldFailsExactCardinality",
     "PostTraversalCountDriftFailsClosed",
     "StableCountedSnapshotReadsEachAdmittedCurrentExactlyOnce",
+    "var admittedCount = source.Count;",
     "MoveNextCalls",
     "CurrentReads",
     "CountReads",
