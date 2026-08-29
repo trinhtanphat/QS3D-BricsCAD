@@ -4,7 +4,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using Bricscad.ApplicationServices;
+using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Revisions;
+using QS3D.Core.Services;
 using BcadApplication = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
@@ -14,20 +16,24 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly IReadOnlyList<QuantityRevisionRow> _rows;
         private readonly SemanticChangeReview _semanticReview;
         private readonly RevisionSnapshot _afterSnapshot;
-        private readonly Action<QuantityRevisionRow>? _locate;
-        private readonly Document _document;
+        private readonly IntPtr _nativeDatabaseIdentity;
+        private readonly bool _canLocate;
         private bool _staleSnapshot;
 
         public RevisionWindow(Document document, RevisionSnapshot before, RevisionSnapshot after, IReadOnlyList<QuantityRevisionRow> rows, Action<QuantityRevisionRow>? locate = null)
         {
-            _document = document ?? throw new ArgumentNullException(nameof(document));
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            _nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
             if (before == null) throw new ArgumentNullException(nameof(before));
             _afterSnapshot = after ?? throw new ArgumentNullException(nameof(after));
             _rows = rows ?? throw new ArgumentNullException(nameof(rows));
-            _locate = locate;
+            // The caller-supplied callback historically closed over the command's managed Document
+            // wrapper. Keep only whether Locate was enabled; execute the equivalent locate workflow
+            // below against a freshly resolved live wrapper for the bound native database.
+            _canLocate = locate != null;
             _semanticReview = new SemanticChangeReviewBuilder().Build(before, _afterSnapshot);
             InitializeComponent();
-            DocumentBoundWindowLifetime.Attach(this, _document);
+            DocumentBoundWindowLifetime.Attach(this, document);
             Activated += (_, __) => RefreshSnapshotFreshness();
             Grid.ItemsSource = _rows;
             SemanticGrid.ItemsSource = _semanticReview.Elements;
@@ -43,6 +49,52 @@ namespace QS3D.BricsCAD.V25.UI
             if (_rows.Count == 0 && _semanticReview.HasChanges) Tabs.SelectedIndex = 1;
         }
 
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
+        {
+            if (document.IsDisposed)
+                throw new InvalidOperationException("Revision cần một BricsCAD document còn hoạt động.");
+            var database = document.Database;
+            if (database == null)
+                throw new InvalidOperationException("Revision cần BricsCAD document database.");
+            var identity = database.UnmanagedObject;
+            if (identity == IntPtr.Zero)
+                throw new InvalidOperationException("Revision cần native BricsCAD database còn hoạt động.");
+            return identity;
+        }
+
+        private bool MatchesNativeDatabase(Document document)
+        {
+            if (document == null || document.IsDisposed) return false;
+            try
+            {
+                var database = document.Database;
+                return database != null &&
+                       database.UnmanagedObject != IntPtr.Zero &&
+                       database.UnmanagedObject == _nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool TryGetBoundActiveDocument(out Document document)
+        {
+            document = BcadApplication.DocumentManager.MdiActiveDocument!;
+            if (document == null || !MatchesNativeDatabase(document))
+            {
+                document = null!;
+                return false;
+            }
+            return true;
+        }
+
+        private Document RequireBoundActiveDocument()
+        {
+            if (TryGetBoundActiveDocument(out var document)) return document;
+            throw new InvalidOperationException("Cửa sổ Revision này thuộc một DWG khác. Hãy kích hoạt lại đúng bản vẽ trước khi định vị.");
+        }
+
         private void OnLocateClick(object sender, RoutedEventArgs e) => LocateCurrentTab();
         private void OnGridDoubleClick(object sender, MouseButtonEventArgs e) => LocateQuantity();
         private void OnSemanticGridDoubleClick(object sender, MouseButtonEventArgs e) => LocateSemantic();
@@ -55,13 +107,13 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void LocateQuantity()
         {
-            if (_locate == null || !(Grid.SelectedItem is QuantityRevisionRow row)) return;
+            if (!_canLocate || !(Grid.SelectedItem is QuantityRevisionRow row)) return;
             Locate(row);
         }
 
         private void LocateSemantic()
         {
-            if (_locate == null || !(SemanticGrid.SelectedItem is SemanticChangeReviewElement row)) return;
+            if (!_canLocate || !(SemanticGrid.SelectedItem is SemanticChangeReviewElement row)) return;
             Locate(new QuantityRevisionRow { ElementId = row.ElementId, Category = row.Category, Change = row.Change });
         }
 
@@ -69,8 +121,8 @@ namespace QS3D.BricsCAD.V25.UI
         {
             try
             {
-                EnsureActiveAndCurrent();
-                _locate?.Invoke(row);
+                var document = EnsureActiveAndCurrent();
+                LocateCurrentElement(document, row);
             }
             catch (Exception ex)
             {
@@ -78,21 +130,30 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
-        private void EnsureActiveAndCurrent()
+        private Document EnsureActiveAndCurrent()
         {
-            if (!ReferenceEquals(BcadApplication.DocumentManager.MdiActiveDocument, _document))
-                throw new InvalidOperationException("Cửa sổ Revision này thuộc một DWG khác. Hãy kích hoạt lại đúng bản vẽ trước khi định vị.");
-            RefreshSnapshotFreshness();
+            var document = RequireBoundActiveDocument();
+            RefreshSnapshotFreshness(document);
             if (_staleSnapshot)
                 throw new InvalidOperationException("Snapshot Revision đã cũ vì semantic project của DWG này đã thay đổi. Đóng cửa sổ và chạy lại QS3DREVDIFF trước khi định vị.");
+            return document;
         }
 
         private void RefreshSnapshotFreshness()
         {
             if (_staleSnapshot) return;
+            // Switching to another DWG is temporary, not evidence that this snapshot is stale.
+            // DocumentBoundWindowLifetime blocks interaction; refresh only when the bound DWG is active.
+            if (!TryGetBoundActiveDocument(out var document)) return;
+            RefreshSnapshotFreshness(document);
+        }
+
+        private void RefreshSnapshotFreshness(Document document)
+        {
+            if (_staleSnapshot) return;
             try
             {
-                if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var currentProject))
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject))
                 {
                     MarkSnapshotStale("QS3D project hiện hành không còn khả dụng.");
                     return;
@@ -107,6 +168,25 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 MarkSnapshotStale("Không thể xác nhận semantic snapshot hiện hành: " + ex.Message);
             }
+        }
+
+        private static void LocateCurrentElement(Document document, QuantityRevisionRow row)
+        {
+            if (string.IsNullOrWhiteSpace(row.ElementId))
+                throw new InvalidOperationException("Revision Locate: dòng review không có ElementId hợp lệ.");
+
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject))
+                throw new InvalidOperationException("Revision Locate: QS3D project hiện hành không còn khả dụng. Hãy làm mới bảng review.");
+            var element = currentProject.FindElement(row.ElementId)
+                ?? throw new InvalidOperationException("Revision Locate: cấu kiện " + row.ElementId + " không còn tồn tại trong project hiện tại. Hãy làm mới bảng review.");
+            var handles = SourceHandleResolver.Resolve(currentProject, new[] { element.Id });
+            if (handles.Count == 0)
+                throw new InvalidOperationException("Revision Locate: cấu kiện " + element.Id + " không còn CAD source handle hợp lệ trong project hiện tại.");
+
+            var count = CadHandleService.Select(document, handles);
+            if (count == 0)
+                throw new InvalidOperationException("Revision Locate: CAD source của cấu kiện " + element.Id + " không còn tồn tại trong bản vẽ hiện tại.");
+            document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
         }
 
         private void MarkSnapshotStale(string reason)
