@@ -74,7 +74,7 @@ namespace QS3D.Core.SmokeTests
             var events = trail.Events;
 
             Equal(1, events.Count, "single-count snapshot count");
-            Equal(1, history.CountReads, "single-count snapshot Count reads");
+            Equal(2, history.CountReads, "single-count snapshot Count reads");
         }
 
         private static void RejectsRecordAtCapacityWithoutMutation()
@@ -274,8 +274,8 @@ namespace QS3D.Core.SmokeTests
                 get
                 {
                     CountReads++;
-                    if (CountReads > 1)
-                        throw new InvalidOperationException("Audit history Count was read more than once before snapshot traversal.");
+                    if (CountReads > 2)
+                        throw new InvalidOperationException("Audit history Count was read more than twice across admission and post-traversal revalidation.");
                     return _items.Count;
                 }
             }
