@@ -47,6 +47,9 @@ namespace QS3D.Core.Services
                 }
             }
 
+            if (_changeVersion != enumerationVersion)
+                throw new InvalidOperationException("Selection changed while replacement element ids were being enumerated. Retry replacement against the current selection state.");
+
             var finalKnownCount = ResolveKnownCount(ids);
             if (knownCount.HasValue != finalKnownCount.HasValue ||
                 (knownCount.HasValue && knownCount.Value != finalKnownCount!.Value))
@@ -55,8 +58,6 @@ namespace QS3D.Core.Services
                     (knownCount.HasValue ? knownCount.Value.ToString() : "<none>") + " to " +
                     (finalKnownCount.HasValue ? finalKnownCount.Value.ToString() : "<none>") + ".");
 
-            if (_changeVersion != enumerationVersion)
-                throw new InvalidOperationException("Selection changed while replacement element ids were being enumerated. Retry replacement against the current selection state.");
             if (knownCount.HasValue && inputCount != knownCount.Value)
                 throw new InvalidOperationException(
                     "Semantic selection known Count reported " + knownCount.Value +
