@@ -43,13 +43,19 @@ namespace QS3D.Core.Export
             Limit(clashes.Count, ClashSheet); Limit(duplicates.Count, DuplicateSheet);
             if (ruleProfile != null) Limit(ruleProfile.Rules.Count, RulesSheet);
 
-            var details = Quantity(quantityDetails, true, modelInfo.DrawingFingerprint);
-            var summaries = Quantity(quantitySummary, false, modelInfo.DrawingFingerprint);
+            var detailInput = SnapshotCounted(quantityDetails, "QTO detail");
+            var summaryInput = SnapshotCounted(quantitySummary, "QTO summary");
+            var clashInput = SnapshotCounted(clashes, "clash");
+            var duplicateInput = SnapshotCounted(duplicates, "duplicate");
+            var geometryInput = issueGeometry == null ? null : SnapshotCounted(issueGeometry, "issue geometry");
+
+            var details = Quantity(detailInput, true, modelInfo.DrawingFingerprint);
+            var summaries = Quantity(summaryInput, false, modelInfo.DrawingFingerprint);
             Scope(details, summaries);
-            var clashRows = Clash(clashes, modelInfo.DrawingFingerprint);
-            var duplicateRows = Duplicate(duplicates, modelInfo.DrawingFingerprint);
+            var clashRows = Clash(clashInput, modelInfo.DrawingFingerprint);
+            var duplicateRows = Duplicate(duplicateInput, modelInfo.DrawingFingerprint);
             var lifecycle = Lifecycle(lifecycleByFindingId, clashRows, duplicateRows);
-            var geometry = Geometry(issueGeometry, clashRows, duplicateRows);
+            var geometry = Geometry(geometryInput, clashRows, duplicateRows);
 
             Qs3dReviewXlsx.WritePackage(path,
                 Summary(summaries, clashRows.Count, duplicateRows.Count, modelInfo),
@@ -58,6 +64,30 @@ namespace QS3D.Core.Export
                 DuplicateSheetXml(duplicateRows, lifecycle, geometry, modelInfo),
                 Rules(ruleProfile),
                 ModelInfo(details.Count, summaries.Count, clashRows.Count, duplicateRows.Count, ruleProfile, modelInfo));
+        }
+
+        private static List<T> SnapshotCounted<T>(IReadOnlyList<T> source, string label)
+        {
+            var expectedCount = source.Count;
+            if (expectedCount < 0)
+                throw new InvalidDataException("QS3D Review " + label + " collection advertised a negative Count.");
+
+            var result = new List<T>(expectedCount);
+            using (var enumerator = source.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= expectedCount)
+                        throw new InvalidDataException("QS3D Review " + label + " collection Count does not match completed traversal.");
+                    result.Add(enumerator.Current);
+                }
+            }
+
+            if (result.Count != expectedCount)
+                throw new InvalidDataException("QS3D Review " + label + " collection Count does not match completed traversal.");
+            if (source.Count != expectedCount)
+                throw new InvalidDataException("QS3D Review " + label + " collection Count changed after traversal.");
+            return result;
         }
 
         private static List<QuantityReportRow> Quantity(IReadOnlyList<QuantityReportRow> source, bool single, string fingerprint)
@@ -101,8 +131,8 @@ namespace QS3D.Core.Export
             Evidence(row.NetConcreteM3, row.HasNetConcreteM3Evidence, "NetConcreteM3");
             Evidence(row.FormworkM2, row.HasFormworkM2Evidence, "FormworkM2");
             Evidence(row.LengthM, row.HasLengthMEvidence, "LengthM");
-            Evidence(row.OuterPerimeterM, row.HasOuterPerimeterMEvidence, "OuterPerimeterM");
-            Evidence(row.InnerPerimeterM, row.HasInnerPerimeterMEvidence, "InnerPerimeterM");
+            Evidence(row.OuterPerimeterM, row.HasOuterPerimeterM2Evidence, "OuterPerimeterM");
+            Evidence(row.InnerPerimeterM, row.HasInnerPerimeterM2Evidence, "InnerPerimeterM");
             Evidence(row.DoorAreaM2, row.HasDoorAreaM2Evidence, "DoorAreaM2");
             Evidence(row.SideAreaM2, row.HasSideAreaM2Evidence, "SideAreaM2");
             Evidence(row.BottomAreaM2, row.HasBottomAreaM2Evidence, "BottomAreaM2");
