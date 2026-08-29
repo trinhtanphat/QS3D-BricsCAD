@@ -124,6 +124,7 @@ namespace QS3D.Core.Mapping
                 throw new InvalidOperationException(
                     "Measurement/work-item mapping source known Count does not match completed traversal cardinality.");
 
+            RevalidateKnownCountAfterTraversal(mappings, knownCount);
             items.Sort(CompareMappings);
             Mappings = new ReadOnlyCollection<MeasurementWorkItemMapping>(items.ToArray());
         }
@@ -140,6 +141,25 @@ namespace QS3D.Core.Mapping
                 return MeasurementWorkItemMappingResolution.Mapped(mapping);
 
             return MeasurementWorkItemMappingResolution.Unmapped(canonicalCategory, canonicalMeasurementItemId);
+        }
+
+        private static void RevalidateKnownCountAfterTraversal(
+            IEnumerable<MeasurementWorkItemMapping> mappings,
+            int? admittedCount)
+        {
+            if (!admittedCount.HasValue)
+                return;
+
+            var reboundCount = TryGetKnownCount(mappings, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (negativeKnownCount)
+                throw new InvalidOperationException(
+                    "Measurement/work-item mapping source exposes an invalid negative known Count value after traversal.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException(
+                    "Measurement/work-item mapping source exposes conflicting known Count values after traversal.");
+            if (!reboundCount.HasValue || reboundCount.Value != admittedCount.Value)
+                throw new InvalidOperationException(
+                    "Measurement/work-item mapping source known Count changed during traversal.");
         }
 
         private static int? TryGetKnownCount(
