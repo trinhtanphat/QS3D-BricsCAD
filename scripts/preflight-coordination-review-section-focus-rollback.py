@@ -16,44 +16,47 @@ if not match:
     raise SystemExit("FAIL coordination section focus rollback: ApplySectionFocus method not found")
 body = match.group("body")
 
-required = [
+for token in [
     "RequireTargets(ids);",
     "RestoreSectionView();",
     "var bounds = ReadBounds(ids);",
     "ViewSnapshot.Capture(view)",
     "_document.Editor.SetCurrentView(view);",
-]
-for token in required:
+]:
     if token not in body:
-        raise SystemExit(f"FAIL coordination section focus rollback: missing established behavior: {token}")
+        raise SystemExit("FAIL coordination section focus rollback: missing established behavior: " + token)
 
 if not re.search(r"var\s+viewBeforeSection\s*=\s*ViewSnapshot\.Capture\(view\)", body):
-    raise SystemExit("FAIL coordination section focus rollback: prior view snapshot must remain attempt-local before native view apply succeeds")
-
-if "try" not in body or "catch" not in body:
-    raise SystemExit("FAIL coordination section focus rollback: native view apply lacks synchronous compensation boundary")
-
-catch = re.search(r"catch\s*\{(?P<catch>.*?)\n\s*\}", body, re.S)
-if not catch:
-    raise SystemExit("FAIL coordination section focus rollback: rollback catch block missing")
-catch_body = catch.group("catch")
-if "RestoreSectionViewBestEffort(viewBeforeSection)" not in catch_body:
-    raise SystemExit("FAIL coordination section focus rollback: failed view apply does not restore attempt-local prior view")
-if "throw;" not in catch_body:
-    raise SystemExit("FAIL coordination section focus rollback: original view-apply failure must be rethrown after compensation")
+    raise SystemExit("FAIL coordination section focus rollback: prior view snapshot must remain attempt-local before native view apply")
 
 apply_index = body.find("_document.Editor.SetCurrentView(view);")
+catch_index = body.find("catch", apply_index)
 publish_index = body.find("_viewBeforeSection = viewBeforeSection;")
-if apply_index < 0 or publish_index < 0:
-    raise SystemExit("FAIL coordination section focus rollback: successful section ownership publication is incomplete")
-if publish_index < apply_index:
-    raise SystemExit("FAIL coordination section focus rollback: persistent section ownership is published before native view apply succeeds")
+if apply_index < 0 or catch_index < 0 or publish_index < apply_index:
+    raise SystemExit("FAIL coordination section focus rollback: native apply/rollback ownership ordering is invalid")
+
+catch_body = body[catch_index:]
+if not re.search(
+    r"if\s*\(\s*!TryRestoreSectionViewBestEffort\(viewBeforeSection\)\s*\)\s*"
+    r"_viewBeforeSection\s*=\s*viewBeforeSection\s*;",
+    catch_body,
+    re.S,
+):
+    raise SystemExit("FAIL coordination section focus rollback: unconfirmed rollback must transfer prior snapshot into retry ownership")
+if "throw;" not in catch_body:
+    raise SystemExit("FAIL coordination section focus rollback: original native apply failure must remain primary")
 
 if "_viewBeforeSection = ViewSnapshot.Capture(view);" in body:
-    raise SystemExit("FAIL coordination section focus rollback: ApplySectionFocus still publishes snapshot before native apply")
+    raise SystemExit("FAIL coordination section focus rollback: snapshot cannot be published before native apply")
 
-if not re.search(r"private void RestoreSectionViewBestEffort\(ViewSnapshot snapshot\)", text):
-    raise SystemExit("FAIL coordination section focus rollback: compensation helper must restore an attempt-local snapshot")
+helper_start = text.find("private bool TryRestoreSectionViewBestEffort(ViewSnapshot snapshot)")
+helper_end = text.find("private Extents3d ReadBounds", helper_start)
+if helper_start < 0 or helper_end < 0:
+    raise SystemExit("FAIL coordination section focus rollback: result-bearing compensation helper not found")
+helper_body = text[helper_start:helper_end]
+for token in ["snapshot.Apply(view);", "_document.Editor.SetCurrentView(view);", "return true;", "return false;"]:
+    if token not in helper_body:
+        raise SystemExit("FAIL coordination section focus rollback: compensation helper missing " + token)
 
-print("PASS coordination review section focus synchronous view-apply rollback atomicity")
+print("PASS coordination review section focus synchronous view-apply rollback atomicity and retry ownership")
 sys.exit(0)
