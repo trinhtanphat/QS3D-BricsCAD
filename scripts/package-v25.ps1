@@ -246,7 +246,7 @@ function Read-ProjectProductVersion {
         Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label 'project file'
         $versions = @($project.Project.PropertyGroup | ForEach-Object { [string]$_.Version } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
         if ($versions.Count -ne 1) { throw "Project must declare exactly one Version value: $ProjectPath" }
-        $version = [string]$versions[0]
+        $version = $versions[0]
         if (-not [string]::Equals($version, $version.Trim(), [StringComparison]::Ordinal)) { throw "Project Version must be canonical without surrounding whitespace: $ProjectPath" }
         return $version
     }
