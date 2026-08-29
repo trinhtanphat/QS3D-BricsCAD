@@ -52,7 +52,7 @@ def main():
         "ProjectStateSnapshot.CreateDetachedCopy(project)",
         "ProjectRebarScheduleBuilder.Build(previewProject)",
         "rows.Count == 0",
-        "QuantityReportMath.Add",
+        "RebarScheduleBuilder.CalculateTotals(rows)",
         "new SaveFileDialog",
         "dialog.ShowDialog()",
         "XlsxRebarScheduleExporter.Export(dialog.FileName, rows)")
@@ -64,12 +64,16 @@ def main():
         "ProjectStateSnapshot.CreateDetachedCopy(project)",
         "ProjectRebarScheduleBuilder.Build(snapshot)",
         "rows.Count == 0",
-        "QuantityReportMath.Add",
+        "RebarScheduleBuilder.CalculateTotals(rows)",
         "new SaveFileDialog",
         "dialog.ShowDialog()",
         "RebarCsvExporter.Export(dialog.FileName, rows)")
 
-    print("PASS: ED2/BBS XLSX/CSV validate exportability before Save dialogs and write only after confirmation.")
+    for label, text in (("BBS XLSX", bbs), ("BBS CSV", csv)):
+        if "QuantityReportMath.Add(" in text:
+            raise AssertionError(label + " must not restore legacy pairwise status aggregation before SaveFileDialog")
+
+    print("PASS: ED2/BBS XLSX/CSV validate exportability before Save dialogs and write only after confirmation; BBS uses canonical compensated totals.")
     return 0
 
 
