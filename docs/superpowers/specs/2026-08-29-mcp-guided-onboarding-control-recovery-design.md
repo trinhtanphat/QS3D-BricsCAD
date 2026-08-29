@@ -1,0 +1,114 @@
+# QS3D guided MCP onboarding, visible control and recovery design
+
+Date: 2026-08-29
+
+## Goal
+
+A new QS3D user should be able to install/load QS3D, click one MCP entry point, complete the provider-owned browser authentication steps, connect ChatGPT to the embedded QS3D MCP server, and then operate BricsCAD through ChatGPT without a second repository, Node runtime or shell-driven setup.
+
+The experience must also make powerful desktop automation visible and locally revocable, while keeping frequent project recovery copies so an interrupted or mistaken workflow can be recovered.
+
+## Product decisions
+
+### 1. System browser owns Cloudflare and ChatGPT identity
+
+QS3D does not embed credential forms, scrape browser cookies, copy passwords or attempt to persist ChatGPT session cookies. `cloudflared tunnel login` opens Cloudflare's browser-owned authentication flow; ChatGPT is opened in the user's normal browser so the browser owns the ChatGPT login session.
+
+QS3D persists only QS3D-owned settings plus the normal provider artifacts produced by cloudflared. The existing OAuth/DCR MCP server remains the preferred ChatGPT authentication path. Static engineering bearer copy remains an advanced compatibility path, not the primary onboarding UX.
+
+### 2. One MCP Control Center
+
+`QS3DMCPAGENTCENTER` is the canonical user surface. It presents four task-oriented tabs:
+
+- **Kết nối** — embedded MCP, cloudflared, Cloudflare login, Named Tunnel and ChatGPT registration.
+- **Agent** — local desktop-control consent, emergency stop, status/current action/next step and recent local events.
+- **Backup & khôi phục** — BricsCAD autosave policy, versioned QS3D recovery copies, manual backup and restore-to-copy.
+- **Nâng cao** — Quick Tunnel test fallback, bearer compatibility copy, protocol probe, self-test and audit folder.
+
+The primary connect path is sequential and self-explanatory. Quick Tunnel remains explicitly test-only.
+
+### 3. Local consent for desktop-wide input
+
+The existing `desktop_*` MCP tools remain separate from BricsCAD-confined `cad_ui_*` tools. Desktop mutation and sensitive desktop reads additionally require a **local, in-memory consent session** enabled from QS3D after each BricsCAD start.
+
+This local consent is intentionally not persisted. A remote ChatGPT request cannot turn it on.
+
+When a guarded desktop call is active:
+
+- a topmost blue border/banner states that QS3D MCP is controlling/reading the Windows desktop;
+- the current MCP tool is displayed;
+- a low-level keyboard hook listens for **Esc twice within 1.2 seconds**;
+- double-Esc disables local desktop consent, advances the MCP emergency-stop epoch and requests cancellation of the active BricsCAD command.
+
+Stopping the desktop session also emergency-stops remote mutation. Re-enabling is a local user action.
+
+### 4. Status is mirrored, not scraped from ChatGPT Web
+
+QS3D must not automate or scrape ChatGPT's web UI to mirror assistant prose. ChatGPT remains responsible for its own conversation display.
+
+QS3D maintains a bounded local event timeline containing onboarding, tunnel, desktop action, backup and error events. The Control Center displays current action, last result, error and next step. MCP tool results/errors already return local execution outcomes to ChatGPT; `qs3d_status` and `cad_audit_tail` remain the canonical remote inspection surfaces.
+
+This gives bidirectional operational interaction without pretending the MCP server can push arbitrary unsolicited text into the ChatGPT conversation UI.
+
+### 5. Recovery uses two independent layers
+
+Power-loss recovery and accidental-delete recovery need different mechanisms:
+
+1. **BricsCAD autosave safety** — QS3D ensures `SAVETIME` is enabled at a conservative maximum interval of five minutes and `ISAVEBAK=1`, without increasing an already shorter user autosave interval.
+2. **Versioned QS3D copies** — while BricsCAD is idle, QS3D periodically copies the last coherent on-disk DWG into `%LOCALAPPDATA%/QS3D/Backups/<project-key>/`. Copies are bounded by retention and are never used to overwrite the active drawing automatically.
+
+Manual recovery restores a selected/latest backup to a new `Recovered` copy. The original file is never overwritten by the recovery helper.
+
+### 6. Tunnel policy
+
+The production path is a stable Cloudflare Named Tunnel with a stable HTTPS hostname and `/mcp` endpoint. Quick Tunnel remains a one-click diagnostic fallback only. Cloudflare authentication is completed in the provider browser; QS3D does not store the Cloudflare password.
+
+### 7. ChatGPT capability boundary
+
+The embedded MCP server exposes direct CAD API tools first, bounded native command workflows second, BricsCAD-only UI fallback third, and explicit Windows desktop tools only for cross-application workflows.
+
+Arbitrary shell/process execution remains outside the remote MCP surface. Broad mouse/keyboard/window/clipboard/screenshot access is provided through explicit bounded tools, local consent, per-call mutation/sensitive-read acknowledgement, audit metadata and emergency stop.
+
+## Onboarding state model
+
+The Control Center derives the next action from observable local state:
+
+1. `EmbeddedServerStarting`
+2. `CloudflaredMissing`
+3. `CloudflareLoginRequired`
+4. `NamedTunnelRequired`
+5. `PublicEndpointReady`
+6. `ChatGptRegistrationRequired`
+7. `Ready`
+8. `ErrorRecovery`
+
+The state model never equates "ChatGPT browser opened" with "connector registered". The final registration remains user-visible in ChatGPT, while QS3D can verify the local MCP protocol and public endpoint prerequisites.
+
+## First-run notification
+
+After plugin startup, QS3D schedules a non-blocking toast when cloudflared or MCP onboarding is incomplete. The toast links to the MCP Control Center and is rate-limited so it does not appear on every document operation.
+
+## Backup constraints
+
+- copy only a real saved source file;
+- skip while `CMDACTIVE != 0`;
+- compare source length/write timestamp before and after copy and discard a copy if the source changed during the copy;
+- bounded retention per drawing;
+- do not include private DWG paths or file contents in MCP audit messages;
+- recovery always writes a new file.
+
+## Security invariants
+
+- no browser-cookie scraping;
+- no password capture;
+- no remote method that enables the local desktop-consent session;
+- no persistence of local desktop consent across BricsCAD restart;
+- no arbitrary remote process/shell launch;
+- double-Esc remains available while a desktop action is running;
+- Quick Tunnel is not presented as the production path;
+- recovery never overwrites the active DWG automatically;
+- audit/status strings are bounded and must not include clipboard contents, typed secrets, screenshots or bearer/OAuth tokens.
+
+## Runtime qualification
+
+Source implementation can be completed in-repository, but exact Windows keyboard hook, topmost overlay, BricsCAD autosave variables, DWG copy behavior, Cloudflare login/tunnel and ChatGPT connector behavior remain `PENDING_LOCAL` until exercised on the intended Windows + licensed BricsCAD V25/V26 + Cloudflare + ChatGPT environment.
