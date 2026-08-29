@@ -16,19 +16,47 @@ def main() -> int:
 
     required = {
         "layout rounding": "UseLayoutRounding = true",
-        "dashboard background": "Background = SurfaceBrush",
         "dashboard shell": "CreateDashboardShell()",
-        "card component": "CreateCard(",
+        "section card component": "CreateSectionCard(",
         "status chip component": "CreateStatusChip(",
         "status row component": "CreateStatusRow(",
         "primary action hierarchy": "ActionKind.Primary",
         "secondary action hierarchy": "ActionKind.Secondary",
         "danger action hierarchy": "ActionKind.Danger",
-        "setup card": 'CreateCard("Kết nối Cloudflare"',
-        "connector card": 'CreateCard("ChatGPT Connector"',
-        "agent control card": 'CreateCard("Điều khiển Agent"',
-        "system status card": 'CreateCard("Trạng thái hệ thống"',
-        "recent activity panel": 'Text = "Hoạt động gần nhất"',
+        "utility action hierarchy": "ActionKind.Utility",
+        "navigation action hierarchy": "ActionKind.Navigation",
+        "theme action hierarchy": "ActionKind.ThemeChoice",
+        "theme mode enum": "enum ThemeMode",
+        "system theme mode": "ThemeMode.System",
+        "dark theme mode": "ThemeMode.Dark",
+        "light theme mode": "ThemeMode.Light",
+        "Windows app theme registry": "AppsUseLightTheme",
+        "Windows theme change event": "SystemEvents.UserPreferenceChanged",
+        "semantic theme palette": "ThemePalette",
+        "theme selector": "CreateThemeSelector(",
+        "tab navigation": "CreateTabNavigation(",
+        "overview page": "CreateOverviewPage(",
+        "cloudflare page": "CreateCloudflarePage(",
+        "connector page": "CreateConnectorPage(",
+        "agent control page": "CreateAgentControlPage(",
+        "logs page": "CreateLogsPage(",
+        "overview label": '"Tổng quan"',
+        "cloudflare label": '"Cloudflare"',
+        "connector label": '"ChatGPT Connector"',
+        "agent label": '"Điều khiển Agent"',
+        "logs label": '"Logs"',
+        "toast host": "_toastHost",
+        "toast kinds": "enum ToastKind",
+        "toast presenter": "ShowToast(",
+        "activity history": "AddActivityEntry(",
+        "bounded activity history": "MaxActivityEntries = 50",
+        "bounded visible toasts": "MaxVisibleToasts = 4",
+        "toast timers": "DispatcherTimer",
+        "custom button template": "new ControlTemplate(typeof(Button))",
+        "button hover trigger": "Button.IsMouseOverProperty",
+        "button pressed trigger": "Button.IsPressedProperty",
+        "button keyboard focus trigger": "Button.IsKeyboardFocusedProperty",
+        "button disabled trigger": "Button.IsEnabledProperty",
         "responsive scrolling": "HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled",
         "compact footer": "CreateFooter()",
     }
@@ -46,26 +74,30 @@ def main() -> int:
         "cancel command": 'InvokeControlTool("cad_cancel_command"',
         "resume agent": 'InvokeControlTool("cad_agent_resume"',
         "worker-thread operations": "ThreadPool.QueueUserWorkItem",
+        "serialized local checks": "Interlocked.CompareExchange(ref _localOperationActive, 1, 0)",
     }
     for label, token in preserved.items():
         if token not in text:
             errors.append(f"Agent Center UI regression removed {label}: {token}")
 
-    forbidden = (
-        "powershell.exe",
-        "cmd.exe",
-        "System.Windows.Forms",
-    )
-    for token in forbidden:
+    forbidden = {
+        "terminal dependency powershell": "powershell.exe",
+        "terminal dependency cmd": "cmd.exe",
+        "WinForms dependency": "System.Windows.Forms",
+        "legacy fixed activity panel": "CreateActivityPanel()",
+        "legacy activity text field": "_activity.Text",
+        "blocking Agent Center message box": "MessageBox.Show(",
+    }
+    for label, token in forbidden.items():
         if token in text:
-            errors.append(f"Agent Center UI introduced forbidden dependency: {token}")
+            errors.append(f"Agent Center UI contains forbidden {label}: {token}")
 
     if errors:
         for error in errors:
             print("ERROR:", error)
         return 1
 
-    print("PASS MCP Agent Center UIUX contract")
+    print("PASS MCP Agent Center UIUX tabs/toast/theme contract")
     return 0
 
 
