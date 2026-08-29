@@ -5,9 +5,10 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 source = ROOT / "src/QS3D.Core/Commercial/CommercialContracts.cs"
 smoke = ROOT / "tests/QS3D.Core.SmokeTests/CommercialCountStabilitySmoke.cs"
+no_overread_smoke = ROOT / "tests/QS3D.Core.SmokeTests/CommercialCountNoOverreadSmoke.cs"
 errors = []
 
-for path in (source, smoke):
+for path in (source, smoke, no_overread_smoke):
     if not path.is_file():
         errors.append("missing Commercial Count-stability file: " + str(path.relative_to(ROOT)))
 
@@ -19,32 +20,38 @@ if source.is_file():
     append = text[append_start:append_end] if append_start >= 0 and append_end > append_start else ""
     append_required = (
         "var knownCount = TryGetKnownCount(records",
-        "foreach (var record in records)",
+        "using (var enumerator = records.GetEnumerator())",
+        "while (enumerator.MoveNext())",
+        "RequireCanProcessNext(knownCount, snapshot.Count",
+        "var record = enumerator.Current;",
         "snapshot.Count != knownCount.Value",
         "RequireStableKnownCount(records, knownCount);",
         "_events.AddRange(snapshot);",
     )
     append_positions = [append.find(token) for token in append_required]
     if not append or any(pos < 0 for pos in append_positions) or append_positions != sorted(append_positions):
-        errors.append("CommercialAuditLog.AppendBatch must rebind deterministic Count after exact traversal and before audit publication.")
-    if "RequireCanProcessNext(knownCount, snapshot.Count" not in append:
-        errors.append("CommercialAuditLog.AppendBatch must reject known-count overrun before retaining an extra record.")
+        errors.append("CommercialAuditLog.AppendBatch must guard Count before Current, then rebind Count before audit publication.")
+    if "foreach (var record in records)" in append:
+        errors.append("CommercialAuditLog.AppendBatch must not use foreach for caller-controlled counted traversal.")
 
     snapshot_start = text.find("internal static IReadOnlyList<T> Snapshot<T>(")
     snapshot_end = text.find("internal static void RequireCanProcessNext", snapshot_start)
     snapshot = text[snapshot_start:snapshot_end] if snapshot_start >= 0 and snapshot_end > snapshot_start else ""
     snapshot_required = (
         "var knownCount = SnapshotKnownCount(source, paramName, maximum);",
-        "foreach (var item in source)",
+        "using (var enumerator = source.GetEnumerator())",
+        "while (enumerator.MoveNext())",
+        "RequireCanProcessNext(knownCount, result.Count",
+        "var item = enumerator.Current;",
         "result.Count != knownCount.Value",
         "RequireStableSnapshotKnownCount(source, knownCount, paramName, maximum);",
         "return new ReadOnlyCollection<T>(result.ToArray());",
     )
     snapshot_positions = [snapshot.find(token) for token in snapshot_required]
     if not snapshot or any(pos < 0 for pos in snapshot_positions) or snapshot_positions != sorted(snapshot_positions):
-        errors.append("CommercialGuard.Snapshot must rebind Count after exact traversal and before returning the immutable snapshot.")
-    if "RequireCanProcessNext(knownCount, result.Count" not in snapshot:
-        errors.append("CommercialGuard.Snapshot must preserve fail-closed known-count overrun handling.")
+        errors.append("CommercialGuard.Snapshot must guard Count before Current, then rebind Count before immutable return.")
+    if "foreach (var item in source)" in snapshot:
+        errors.append("CommercialGuard.Snapshot must not use foreach for caller-controlled counted traversal.")
 
     stable_start = text.find("private static void RequireStableSnapshotKnownCount<T>(")
     stable_end = text.find("private static int? SnapshotKnownCount<T>", stable_start)
@@ -75,6 +82,21 @@ if smoke.is_file():
         if token not in text:
             errors.append("Commercial Count-stability smoke missing regression token: " + token)
 
+if no_overread_smoke.is_file():
+    text = no_overread_smoke.read_text(encoding="utf-8")
+    for token in (
+        "[ModuleInitializer]",
+        "AuditKnownCountOverrunStopsBeforeUnexpectedCurrent",
+        "AuditZeroCountOverrunNeverReadsCurrent",
+        "RevisionKnownCountOverrunStopsBeforeUnexpectedCurrent",
+        "RevisionZeroCountOverrunNeverReadsCurrent",
+        "MoveNextCalls",
+        "CurrentReads",
+        "ThrowOnUnexpectedCurrent",
+    ):
+        if token not in text:
+            errors.append("Commercial Count no-overread smoke missing regression token: " + token)
+
 print("QS3D Commercial collection Count-stability preflight")
 if errors:
     for error in errors:
@@ -82,4 +104,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Commercial audit and snapshot materializers rebind deterministic Count evidence before publication.")
+print("PASS: Commercial audit and snapshot materializers guard Count before Current and rebind deterministic Count before publication.")

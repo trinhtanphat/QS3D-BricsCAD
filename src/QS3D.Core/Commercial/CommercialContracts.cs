@@ -93,14 +93,19 @@ namespace QS3D.Core.Commercial
 
             var eventIds = ExistingEventIds();
             var snapshot = new List<CommercialAuditRecord>();
-            foreach (var record in records)
+            using (var enumerator = records.GetEnumerator())
             {
-                CommercialGuard.RequireCanProcessNext(knownCount, snapshot.Count, "Commercial audit batch source");
-                if (snapshot.Count == remainingCapacity)
-                    throw new InvalidOperationException("Commercial audit log supports at most 10000 events.");
-                if (record == null) throw new ArgumentException("Commercial audit batch contains a null record.", nameof(records));
-                RequireUniqueEventId(record.EventId, eventIds);
-                snapshot.Add(record);
+                while (enumerator.MoveNext())
+                {
+                    CommercialGuard.RequireCanProcessNext(knownCount, snapshot.Count, "Commercial audit batch source");
+                    if (snapshot.Count == remainingCapacity)
+                        throw new InvalidOperationException("Commercial audit log supports at most 10000 events.");
+
+                    var record = enumerator.Current;
+                    if (record == null) throw new ArgumentException("Commercial audit batch contains a null record.", nameof(records));
+                    RequireUniqueEventId(record.EventId, eventIds);
+                    snapshot.Add(record);
+                }
             }
 
             if (knownCount.HasValue && snapshot.Count != knownCount.Value)
@@ -258,14 +263,19 @@ namespace QS3D.Core.Commercial
             var result = knownCount.HasValue
                 ? new List<T>(knownCount.Value)
                 : new List<T>();
-            foreach (var item in source)
+            using (var enumerator = source.GetEnumerator())
             {
-                RequireCanProcessNext(knownCount, result.Count, paramName);
-                if (result.Count == maximum)
-                    throw new InvalidOperationException(paramName + " supports at most " + maximum + " entries.");
-                if (item == null)
-                    throw new ArgumentException(paramName + " contains a null item.", paramName);
-                result.Add(item);
+                while (enumerator.MoveNext())
+                {
+                    RequireCanProcessNext(knownCount, result.Count, paramName);
+                    if (result.Count == maximum)
+                        throw new InvalidOperationException(paramName + " supports at most " + maximum + " entries.");
+
+                    var item = enumerator.Current;
+                    if (item == null)
+                        throw new ArgumentException(paramName + " contains a null item.", paramName);
+                    result.Add(item);
+                }
             }
 
             if (knownCount.HasValue && result.Count != knownCount.Value)
