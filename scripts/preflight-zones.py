@@ -33,7 +33,13 @@ checks = {
         "SemanticSelectionResolver.ResolveImplied(_document, project)", "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)",
         'AuditTrail.ForProject(project).Record("zone.create"', 'AuditTrail.ForProject(project).Record("zone.assign"',
     ],
-    required[3]: ['CommandMethod("QS3DZONES"', "new ZoneManagerWindow(document)", "ShowModelessWindow"],
+    required[3]: [
+        'CommandMethod("QS3DZONES"', "candidate = new ZoneManagerWindow(document)", "ShowModelessWindow",
+        "private static PublishedManager? _published", "private readonly WeakReference<Document> _document",
+        "NativeDatabaseIdentity", "database.UnmanagedObject == NativeDatabaseIdentity",
+        "previous.Matches(document) && previous.MatchesManagedWrapper(document)",
+        "previous.Window.Activate()", "previous.Window.Close()", "publishedWindow.Closed", "_published = published",
+    ],
     required[4]: [
         "CreateUpdateAssignAndDelete", "AssignmentMarksGeneratedGeometryStale", "DeleteGuardsActiveAndReferencedZones", "RejectsDuplicateNames",
         "IsGeneratedSolidStale()",
@@ -56,4 +62,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Core-backed Zone CRUD/active/assignment semantics, stale propagation, delete guards and document-bound Zone Manager are present.")
+print("PASS: Core-backed Zone semantics and native-database-affine, wrapper-bound, veto-safe single-instance Zone Manager are present.")
