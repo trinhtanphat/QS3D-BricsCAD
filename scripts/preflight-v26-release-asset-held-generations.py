@@ -48,17 +48,17 @@ def check(workflow: str, helper: str):
         if forbidden in workflow:
             found.append("V26 release workflow must not reopen release assets by pathname for hashing: " + forbidden)
 
-    download = workflow.find("-OutFile $downloadedAsset")
-    size = workflow.find("Uploaded V26 release asset size mismatch", download + 1)
-    local_hash = workflow.find("verify-v26-held-file.ps1 -Operation Hash -Path $localAsset", size + 1)
+    size = workflow.find("Uploaded V26 release asset size mismatch")
+    download = workflow.find("-OutFile $downloadedAsset", size + 1)
+    local_hash = workflow.find("verify-v26-held-file.ps1 -Operation Hash -Path $localAsset", download + 1)
     remote_hash = workflow.find("verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset", local_hash + 1)
     hash_compare = workflow.find("Uploaded V26 release asset SHA-256 mismatch", remote_hash + 1)
     second_tag = workflow.find("Assert-RemoteReleaseTagTargetsWorkflowSha", hash_compare + 1)
     publish = workflow.find("$published = Invoke-RestMethod -Method Patch", second_tag + 1)
-    if min(download, size, local_hash, remote_hash, hash_compare, second_tag, publish) < 0 or not (
-        download < size < local_hash < remote_hash < hash_compare < second_tag < publish
+    if min(size, download, local_hash, remote_hash, hash_compare, second_tag, publish) < 0 or not (
+        size < download < local_hash < remote_hash < hash_compare < second_tag < publish
     ):
-        found.append("V26 release order must be download -> size -> held local hash -> held remote hash -> hash compare -> tag/SHA recheck -> publish")
+        found.append("V26 release order must be size -> download -> held local hash -> held remote hash -> hash compare -> tag/SHA recheck -> publish")
     return found
 
 if not WORKFLOW.is_file():
