@@ -217,7 +217,6 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 RunValidated("Restore View", ids => _session.RestoreSectionView());
             }
-
             private void RunValidated(string actionName, Action<IReadOnlyList<ObjectId>> effect)
             {
                 if (!_attached || _disposeInProgress || _disposed) return;
@@ -533,7 +532,12 @@ namespace QS3D.BricsCAD.V25.UI
             public void Isolate(IReadOnlyList<ObjectId> ids)
             {
                 RequireTargets(ids);
-                if (_isolationActive) RestoreIsolation();
+                if (HasIsolation)
+                {
+                    RestoreIsolation();
+                    if (HasIsolation)
+                        throw new InvalidOperationException("Previous isolation cleanup is still pending.");
+                }
 
                 var impliedSelectionBefore = CadSelectionGuard.ReadImpliedSelection(_document);
                 var modeBefore = Bricscad.ApplicationServices.Application.GetSystemVariable("OBJECTISOLATIONMODE");
