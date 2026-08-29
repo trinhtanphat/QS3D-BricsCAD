@@ -124,18 +124,22 @@ namespace QS3D.Core.Coordination
 
             var snapshot = hasKnownCount ? new List<T>(knownCount) : new List<T>();
             var observedCount = 0;
-            foreach (var item in items)
+            using (var enumerator = items.GetEnumerator())
             {
-                if (observedCount == MaximumEntries)
-                    ThrowTooManyEntries(collectionLabel);
-                if (hasKnownCount && observedCount == knownCount)
+                while (enumerator.MoveNext())
                 {
-                    throw new InvalidOperationException(
-                        collectionLabel + " traversal produced more entries than its admitted known count of " + knownCount + ".");
-                }
+                    if (hasKnownCount && observedCount >= knownCount)
+                    {
+                        throw new InvalidOperationException(
+                            collectionLabel + " traversal produced more entries than its admitted known count of " + knownCount + ".");
+                    }
+                    if (observedCount >= MaximumEntries)
+                        ThrowTooManyEntries(collectionLabel);
 
-                snapshot.Add(item);
-                observedCount++;
+                    var item = enumerator.Current;
+                    snapshot.Add(item);
+                    observedCount++;
+                }
             }
 
             if (hasKnownCount && knownCount != observedCount)
