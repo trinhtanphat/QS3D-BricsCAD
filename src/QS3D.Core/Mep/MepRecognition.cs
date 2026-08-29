@@ -269,7 +269,7 @@ namespace QS3D.Core.Mep
             Mep("mep.cable", 860, "Cable", MepElementKind.Cable, "CABLE", "WIRE"),
             Mep("mep.fitting", 850, "Fitting", MepElementKind.Fitting, "FITTING", "ELBOW", "REDUCER", "COUPLING", "TEE_", "TEE-"),
             Mep("mep.accessory", 840, "Accessory", MepElementKind.Accessory, "VALVE", "DAMPER", "ACCESSORY"),
-            Mep("mep.equipment", 830, "Equipment", MepElementKind.Equipment, "Equipment", "EQUIP", "AHU", "FCU", "PUMP", "FAN", "CHILLER", "BOILER"),
+            Mep("mep.equipment", 830, "Equipment", MepElementKind.Equipment, "EQUIP", "AHU", "FCU", "PUMP", "FAN", "CHILLER", "BOILER"),
             Mep("mep.fixture", 820, "Fixture", MepElementKind.Fixture, "FIXTURE", "LUMINAIRE", "LIGHTING", "LIGHT_", "LIGHT-", "SOCKET", "OUTLET", "SWITCH", "SANITARY", "SPRINKLER"),
             Building("structure.beam", 700, MepRecognitionDiscipline.Structure, "Beam", "BEAM"),
             Building("structure.column", 690, MepRecognitionDiscipline.Structure, "Column", "COLUMN"),
