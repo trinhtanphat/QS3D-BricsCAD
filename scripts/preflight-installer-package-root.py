@@ -64,9 +64,24 @@ if not PACKAGE.is_file():
     package_text = ""
 else:
     package_text = PACKAGE.read_text(encoding="utf-8")
-for token in ("INSTALL-QS3D.cmd", "install-v25-autoload.ps1"):
-    if token not in package_text:
-        errors.append("V25 package script must ship installer companion together: " + token)
+
+script_loop = "foreach ($script in @('install-v25-autoload.ps1', 'uninstall-v25-autoload.ps1', 'update-v25.ps1', 'unblock-v25-netload.ps1')) {"
+script_copy = 'Copy-HeldPackageInput -SourcePath $scriptPath -DestinationPath (Join-Path $dist $script)'
+launcher_loop = "foreach ($launcherName in @('INSTALL-QS3D.cmd', 'UNBLOCK-QS3D.cmd')) {"
+launcher_copy = 'Copy-HeldPackageInput -SourcePath $launcherPath -DestinationPath (Join-Path $dist $launcherName)'
+package_contract = (script_loop, script_copy, launcher_loop, launcher_copy)
+for token in package_contract:
+    if package_text.count(token) != 1:
+        errors.append("V25 package companion contract must contain exactly one active packaging token: " + token)
+
+script_loop_index = package_text.find(script_loop)
+script_copy_index = package_text.find(script_copy)
+launcher_loop_index = package_text.find(launcher_loop)
+launcher_copy_index = package_text.find(launcher_copy)
+if min(script_loop_index, script_copy_index, launcher_loop_index, launcher_copy_index) < 0 or not (
+    script_loop_index < script_copy_index < launcher_loop_index < launcher_copy_index
+):
+    errors.append("V25 package script must copy install-v25-autoload.ps1 and INSTALL-QS3D.cmd through their canonical held-input packaging loops")
 
 print("QS3D installer package-root preflight")
 if errors:
@@ -75,4 +90,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: installer resolves the package root after parameter binding; INSTALL-QS3D.cmd rejects an incompletely extracted package before PowerShell, tells the user to Extract All, and the V25 package contract ships the CMD + install-v25-autoload.ps1 companions together.")
+print("PASS: installer resolves the package root after parameter binding; INSTALL-QS3D.cmd rejects an incompletely extracted package before PowerShell, tells the user to Extract All, and the V25 package contract copies the CMD + install-v25-autoload.ps1 companions through the canonical held-input packaging loops.")
