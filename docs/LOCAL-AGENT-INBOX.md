@@ -556,14 +556,16 @@ Closing all `OPEN` P0/P1 items does not automatically mean the product is commer
 ## LOCAL-024 — #4352 ChatGPT MCP full-agent qualification
 
 - Priority: P0
-- Status: OPEN
+- Status: IN_PROGRESS
 - Area: issue #4352; ChatGPT MCP embedded full-CAD agent / Cloudflare onboarding
-- Source/runner status: `SOURCE_READY / PENDING_LOCAL`
+- Source/runner status: `SOURCE_READY / LOCAL CELL ACTIVE`
 - Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
+- Current local owner/cell: `agent/root/issue-4584-local024-runtime` — OAuth extension #4584, V25 first; one bounded host reservation, exact published preview `v0.1.0-preview.10250@d3e6e4d6e9f423efbd2d236d600110a6a2ced1f5`.
+- Current package identity: official V25 ZIP SHA-256 `8FEA4804EA14EF106AD230338F441C8801F40FCB7FFD36AABCD2F2C239E0DF5D`; V25 adapter `00649085701B3A122F344A3E0606DE3CC95F6D544A2764187C4D93BA05446F10`; Core `CA343909E93CC033E96129C8A3D27B6BB6740AE625B39A2F492FA07C171F8C31`.
 - Exact-source rule: Run only from a clean checkout of the exact candidate SHA that is intended for merge/release qualification; hosted/static CI is source evidence only.
 - Why local: Final acceptance requires licensed BricsCAD V25/V26, Windows desktop/UI input, a real Cloudflare account/tunnel/browser login, and ChatGPT MCP connectivity.
 - Scenario: Follow `docs/agent-work-claims/issue-4352-chatgpt-mcp-session-handoff.md` and `docs/MCP-FULL-CAD-AGENT.md`; prove embedded loopback MCP, authenticated protocol/read-only probe, Cloudflare Named Tunnel + Quick fallback, ChatGPT discovery, direct CAD API and bounded command/UI fallback, timeout uncertainty/no-auto-retry, emergency stop/resume/cancel, save/reopen, shutdown and cleanup on the exact candidate SHA.
 - Evidence required: exact candidate SHA; licensed BricsCAD V25/V26 host/plugin identity; sanitized MCP/Cloudflare/ChatGPT results; no bearer token, Cloudflare credential, private path, customer DWG, proprietary binary, raw Handle/ProjectId or unsanitized screenshot.
-- Evidence: `PENDING_LOCAL`
+- Evidence: `PENDING_LOCAL` — registration only; no runtime result is claimed until the exact host cell and cleanup complete.
 - Related docs: `docs/agent-work-claims/issue-4352-chatgpt-mcp-session-handoff.md`; `docs/MCP-FULL-CAD-AGENT.md`; issue #4352.
-- Updated: 2026-08-29
+- Updated: 2026-08-29 (LOCAL-024 #4584 cell)
