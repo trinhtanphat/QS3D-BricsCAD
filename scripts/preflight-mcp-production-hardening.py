@@ -88,8 +88,6 @@ def main() -> int:
         "reject any Transfer-Encoding header": (server, 'if (headers.ContainsKey("Transfer-Encoding"))'),
         "strict UTF-8 request body": (server, "StrictUtf8.GetString(body)"),
         "invalid UTF-8 request rejection": (server, "Invalid UTF-8 in MCP HTTP body."),
-        "initialize parser error conversion": (server, "TryExtractInitializeProtocolVersion"),
-        "initialize parser JSON-RPC error": (server, "JsonRpcError(id, -32602, initializeError)"),
         "top-level JSON trailing-comma rejection": (top_level_json, "JSON object cannot end with a trailing comma."),
         "MCP arguments trailing-comma rejection": (top_level_json, "MCP arguments object cannot end with a trailing comma."),
         "strict RFC JSON whitespace helper": (top_level_json, "IsJsonWhitespace(source[index])"),
@@ -97,6 +95,7 @@ def main() -> int:
         "recursive JSON object grammar": (top_level_json, "private static bool TrySkipJsonObject("),
         "recursive JSON array grammar": (top_level_json, "private static bool TrySkipJsonArray("),
         "recursive JSON primitive grammar": (top_level_json, "private static bool TrySkipJsonPrimitive("),
+        "bounded recursive JSON depth": (top_level_json, "MaxJsonDepth = 64"),
         "runtime foreground ESC fallback": (runtime, "TrySendEscapeFallback()"),
         "runtime emergency-stop latch": (runtime, "_automationStopped = true"),
         "runtime queued dispatch state": (runtime, "CadWorkQueued = 0"),
@@ -112,6 +111,17 @@ def main() -> int:
     for label, (text, token) in required.items():
         if token not in text:
             errors.append(f"missing {label}: {token}")
+
+    extract_string_start = top_level_json.find("internal static string ExtractString(")
+    extract_string_end = top_level_json.find("internal static bool ExtractBoolean(", extract_string_start)
+    if extract_string_start < 0 or extract_string_end < 0:
+        errors.append("cannot inspect MCP top-level string extraction")
+    else:
+        extract_string = top_level_json[extract_string_start:extract_string_end]
+        if "throw new InvalidOperationException(error);" in extract_string:
+            errors.append("MCP string extraction still throws parser errors instead of failing closed to caller validation")
+        if "return string.Empty;" not in extract_string:
+            errors.append("MCP string extraction lacks fail-closed empty-value behavior for malformed input")
 
     named_start = account.find("private static bool StartProcess")
     named_exit = account.find("private static void HandleProcessExit", named_start)
@@ -153,10 +163,10 @@ def main() -> int:
 
     print(
         "PASS: compiled modular MCP transport/runtime use strict HTTP framing/UTF-8, exact JSON media "
-        "type admission and strict recursive RFC JSON grammar/whitespace, bounded authenticated session "
-        "handling, fail-closed initialize parsing, atomic CAD timeout truth, BricsCAD-confined recovery, "
-        "one validated HTTPS endpoint resolver, live-only Cloudflare provider URLs, exact tunnel identity, "
-        "canonical named-tunnel config regeneration and verified click-first redacted onboarding."
+        "type admission and strict bounded recursive RFC JSON grammar/whitespace, fail-closed string "
+        "extraction, bounded authenticated session handling, atomic CAD timeout truth, BricsCAD-confined "
+        "recovery, one validated HTTPS endpoint resolver, live-only Cloudflare provider URLs, exact tunnel "
+        "identity, canonical named-tunnel config regeneration and verified click-first redacted onboarding."
     )
     return 0
 
