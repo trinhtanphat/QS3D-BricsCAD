@@ -2,6 +2,7 @@
 from pathlib import Path
 import sys
 
+# RED contract: the CMD must reject an incomplete/not-extracted package before PowerShell starts.
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "scripts" / "install-v25-autoload.ps1"
 CMD = ROOT / "scripts" / "INSTALL-QS3D.cmd"
