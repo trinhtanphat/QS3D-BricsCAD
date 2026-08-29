@@ -27,16 +27,20 @@ namespace QS3D.Core.Services
             var enumerationVersion = _changeVersion;
             var next = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var inputCount = 0;
-            foreach (var raw in ids)
+            using (var enumerator = ids.GetEnumerator())
             {
-                if (knownCount.HasValue && inputCount >= knownCount.Value)
-                    throw new InvalidOperationException(
-                        "Semantic selection traversal produced more entries than its known Count of " + knownCount.Value + ".");
-                if (inputCount >= MaxInputCount)
-                    throw new InvalidOperationException("Semantic selection cannot exceed " + MaxInputCount + " input entries.");
-                inputCount++;
-                if (string.IsNullOrWhiteSpace(raw)) continue;
-                next.Add(raw.Trim());
+                while (enumerator.MoveNext())
+                {
+                    if (knownCount.HasValue && inputCount >= knownCount.Value)
+                        throw new InvalidOperationException(
+                            "Semantic selection traversal produced more entries than its known Count of " + knownCount.Value + ".");
+                    if (inputCount >= MaxInputCount)
+                        throw new InvalidOperationException("Semantic selection cannot exceed " + MaxInputCount + " input entries.");
+                    var raw = enumerator.Current;
+                    inputCount++;
+                    if (string.IsNullOrWhiteSpace(raw)) continue;
+                    next.Add(raw.Trim());
+                }
             }
 
             if (_changeVersion != enumerationVersion)

@@ -21,11 +21,19 @@ clear = method_body(
 if "var pending = _highlighted.ToArray();" not in clear:
     raise SystemExit("ClearHighlight must snapshot current highlight ownership")
 commit = clear.find("transaction.Commit();")
-release = clear.rfind("_highlighted.Clear();")
-if commit < 0 or release < 0 or release < commit:
-    raise SystemExit("ClearHighlight must release live highlight ownership only after native cleanup commit")
+release_loop = clear.find("foreach (var id in released)")
+release = clear.find("_highlighted.Remove(id);", release_loop)
+if commit < 0 or release_loop < 0 or release < 0 or not (commit < release_loop < release):
+    raise SystemExit("ClearHighlight must release confirmed per-entity live highlight ownership only after native cleanup commit")
+if "released.Add(id);" not in clear:
+    raise SystemExit("ClearHighlight must record only per-entity native cleanup successes before ownership release")
+if "if (cleanupFailure != null)" not in clear or "throw new InvalidOperationException" not in clear:
+    raise SystemExit("ClearHighlight must surface incomplete live cleanup so failed entity ownership remains retryable")
 if "if (_destroyed)" not in clear:
     raise SystemExit("ClearHighlight must preserve explicit destroyed-document abandon semantics")
+live = clear.split("if (_destroyed)", 1)[-1]
+if "_highlighted.Clear();" in live.split("using (_document.LockDocument())", 1)[-1]:
+    raise SystemExit("ClearHighlight live cleanup must not clear the whole ownership set after a partial native failure")
 
 restore_isolation = method_body(
     "public void RestoreIsolation()",
