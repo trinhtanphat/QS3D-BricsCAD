@@ -38,19 +38,21 @@ def main() -> int:
     oauth = OAUTH.read_text(encoding="utf-8")
     consent = CONSENT.read_text(encoding="utf-8")
 
-    # OAuth/MCP discovery required by ChatGPT custom MCP.
+    # OAuth/MCP discovery required by ChatGPT custom MCP. Property names appear escaped
+    # inside C# JSON string literals, so assert their exact identifiers rather than an
+    # unescaped quoted representation that can never occur in source text.
     for needle in (
         "/.well-known/oauth-protected-resource",
         "/.well-known/oauth-authorization-server",
         "/oauth/register",
         "/oauth/authorize",
         "/oauth/token",
-        '"authorization_servers"',
-        '"authorization_endpoint"',
-        '"token_endpoint"',
-        '"registration_endpoint"',
-        '"code_challenge_methods_supported"',
-        '"S256"',
+        "authorization_servers",
+        "authorization_endpoint",
+        "token_endpoint",
+        "registration_endpoint",
+        "code_challenge_methods_supported",
+        "S256",
     ):
         require(oauth, needle, "OAuth discovery/DCR contract")
 
