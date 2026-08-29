@@ -92,7 +92,7 @@ def main():
         "ProgressBar",
         "UpdateDownloadProgress",
         "ApplyDownloadProgress",
-        "Inlines.Add",
+        "ApplyVersionHighlights(currentDisplay, latest)",
         '"Phiên bản hiện tại"',
         '"Phiên bản mới"',
         '"BricsCAD sẽ tự mở lại"',
