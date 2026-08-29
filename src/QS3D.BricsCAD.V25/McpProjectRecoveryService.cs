@@ -37,7 +37,7 @@ namespace QS3D.BricsCAD.V25
         private static readonly TimeSpan SnapshotInterval = TimeSpan.FromMinutes(5);
         private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(30);
         private static readonly object Sync = new object();
-        private static DispatcherTimer _timer;
+        private static DispatcherTimer? _timer;
         private static string _lastSourcePath = string.Empty;
         private static long _lastSourceLength = -1;
         private static long _lastSourceWriteTicks = -1;
@@ -83,7 +83,7 @@ namespace QS3D.BricsCAD.V25
 
         public static void Stop()
         {
-            DispatcherTimer timer;
+            DispatcherTimer? timer;
             lock (Sync)
             {
                 timer = _timer;
