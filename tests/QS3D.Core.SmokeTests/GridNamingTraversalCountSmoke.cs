@@ -39,7 +39,7 @@ namespace QS3D.Core.SmokeTests
             }
             catch (InvalidOperationException ex)
             {
-                Equal("Grid renumber target source Count does not match the enumerated element count.", ex.Message);
+                Equal("Grid renumber target source known Count was exceeded during traversal.", ex.Message);
                 Equal(beforeVersion, project.ChangeVersion);
                 Equal(beforeUpdatedUtc, project.UpdatedUtc);
                 Equal("KEEP-A", first.Properties[GridNamingService.GridLabelKey]);
