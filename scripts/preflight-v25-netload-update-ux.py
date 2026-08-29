@@ -72,7 +72,7 @@ if UPDATE_CENTER.is_file():
         "using System.Reflection;",
         'Title = "QS3D Update Center — " + currentDisplay;',
         '_title.Text = "Cập nhật QS3D " + currentDisplay;',
-        '_versions.Text = "Phiên bản hiện tại: " + currentDisplay',
+        "ApplyVersionHighlights(currentDisplay, latest);",
         'var assembly = Assembly.GetExecutingAssembly();',
         'var loadedPath = string.IsNullOrWhiteSpace(assembly.Location)',
         'var buildIdentity = GetBuildIdentity(currentOriginal);',
