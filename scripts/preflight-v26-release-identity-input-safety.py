@@ -21,16 +21,15 @@ def validate_helper(text: str) -> list[str]:
         "Resolve-OrdinaryNonReparseFile",
         "$item.Attributes -band [IO.FileAttributes]::ReparsePoint",
         "$cursor.Attributes -band [IO.FileAttributes]::ReparsePoint",
-        "Get-StreamingSha256",
+        "Get-HeldStreamingSha256",
         "[Security.Cryptography.SHA256]::Create()",
-        "$currentHash = Get-StreamingSha256 -File $current -Label $Label",
-        "Get-StableFileState",
-        "Assert-StableFileState",
-        "LastWriteUtcTicks",
-        "Sha256 = $currentHash",
-        "Read-BoundedStrictUtf8File",
+        "Open-LockedStableFile",
         "[IO.File]::Open",
         "[IO.FileShare]::Read",
+        "$hash = Get-HeldStreamingSha256 -Stream $stream -Label $Label",
+        "LastWriteUtcTicks",
+        "Sha256 = $hash",
+        "Read-BoundedStrictUtf8Stream",
         "$stream.Length -gt $script:MaxMetadataBytes",
         "[byte[]]::new([int]$stream.Length)",
         "[Text.UTF8Encoding]::new($false, $true)",
@@ -39,55 +38,73 @@ def validate_helper(text: str) -> list[str]:
         "BricsCAD V26 x64",
         "net8.0-windows",
         "[string]::Equals(('v' + [string]$metadata.productVersion), $ReleaseTag, [StringComparison]::Ordinal)",
-        "[Reflection.AssemblyName]::GetAssemblyName($pluginFile.FullName)",
-        "[Reflection.AssemblyName]::GetAssemblyName($coreFile.FullName)",
+        "Assert-LockedPathBinding -Held $pluginHeld",
+        "[Reflection.AssemblyName]::GetAssemblyName($pluginHeld.Path)",
+        "Assert-LockedPathBinding -Held $coreHeld",
+        "[Reflection.AssemblyName]::GetAssemblyName($coreHeld.Path)",
+        "$heldFiles[$index].Stream.Dispose()",
     )
     for token in required:
         if token not in text:
             errors.append(f"V26 release identity helper missing required safety token: {token}")
 
-    metadata_state = text.find("$metadataState = Get-StableFileState")
-    plugin_state = text.find("$pluginState = Get-StableFileState")
-    core_state = text.find("$coreState = Get-StableFileState")
-    metadata_guard = text.find("$metadataFile = Resolve-OrdinaryNonReparseFile")
-    metadata_read = text.find("$metadataText = Read-BoundedStrictUtf8File")
-    metadata_recheck = text.find("Assert-StableFileState -Expected $metadataState")
-    json_parse = text.find("ConvertFrom-Json -ErrorAction Stop")
-    plugin_guard = text.find("$pluginFile = Resolve-OrdinaryNonReparseFile")
-    plugin_read = text.find("GetAssemblyName($pluginFile.FullName)")
-    plugin_recheck = text.find("Assert-StableFileState -Expected $pluginState")
-    core_guard = text.find("$coreFile = Resolve-OrdinaryNonReparseFile")
-    core_read = text.find("GetAssemblyName($coreFile.FullName)")
-    core_recheck = text.find("Assert-StableFileState -Expected $coreState")
+    metadata_lock = text.find("$metadataHeld = Open-LockedStableFile")
+    plugin_lock = text.find("$pluginHeld = Open-LockedStableFile", metadata_lock)
+    core_lock = text.find("$coreHeld = Open-LockedStableFile", plugin_lock)
+    metadata_guard = text.find("Assert-LockedPathBinding -Held $metadataHeld", core_lock)
+    metadata_read = text.find("$metadataText = Read-BoundedStrictUtf8Stream -Held $metadataHeld", metadata_guard)
+    json_parse = text.find("ConvertFrom-Json -ErrorAction Stop", metadata_read)
+    plugin_pre = text.find("Assert-LockedPathBinding -Held $pluginHeld", json_parse)
+    plugin_read = text.find("GetAssemblyName($pluginHeld.Path)", plugin_pre)
+    plugin_post = text.find("Assert-LockedPathBinding -Held $pluginHeld", plugin_read)
+    core_pre = text.find("Assert-LockedPathBinding -Held $coreHeld", plugin_post)
+    core_read = text.find("GetAssemblyName($coreHeld.Path)", core_pre)
+    core_post = text.find("Assert-LockedPathBinding -Held $coreHeld", core_read)
+    dispose = text.find("$heldFiles[$index].Stream.Dispose()", core_post)
 
-    if min(metadata_state, metadata_guard, metadata_read, metadata_recheck, json_parse) < 0 or not metadata_state < metadata_guard < metadata_read < metadata_recheck < json_parse:
-        errors.append("V26 metadata safety order must be stable-state capture -> ordinary-file guard -> bounded strict-UTF8 read -> stability recheck -> JSON parse")
-    if min(plugin_state, plugin_guard, plugin_read, plugin_recheck) < 0 or not plugin_state < plugin_guard < plugin_read < plugin_recheck:
-        errors.append("V26 plugin assembly safety order must be stable-state capture -> ordinary-file guard -> AssemblyName parsing -> stability recheck")
-    if min(core_state, core_guard, core_read, core_recheck) < 0 or not core_state < core_guard < core_read < core_recheck:
-        errors.append("V26 Core assembly safety order must be stable-state capture -> ordinary-file guard -> AssemblyName parsing -> stability recheck")
+    ordered = (
+        metadata_lock,
+        plugin_lock,
+        core_lock,
+        metadata_guard,
+        metadata_read,
+        json_parse,
+        plugin_pre,
+        plugin_read,
+        plugin_post,
+        core_pre,
+        core_read,
+        core_post,
+        dispose,
+    )
+    if min(ordered) < 0 or list(ordered) != sorted(ordered):
+        errors.append(
+            "V26 identity safety order must lock metadata/plugin/core before consumption, read metadata from the held stream, consume AssemblyName under locked pathname assertions, then dispose"
+        )
 
-    stable_capture = text.find("function Get-StableFileState")
-    first_hash = text.find("Get-StreamingSha256 -File $file")
-    second_resolve = text.find("$current = Resolve-OrdinaryNonReparseFile")
-    second_hash = text.find("$currentHash = Get-StreamingSha256 -File $current -Label $Label")
-    state_hash = text.find("Sha256 = $currentHash")
-    if min(stable_capture, first_hash, second_resolve, second_hash, state_hash) < 0 or not stable_capture < first_hash < second_resolve < second_hash < state_hash:
-        errors.append("V26 stable file-state capture must fingerprint, re-resolve, re-fingerprint, and publish the revalidated SHA-256 state")
-
-    stability_assert = text.find("function Assert-StableFileState")
-    actual_capture = text.find("$actual = Get-StableFileState", stability_assert)
-    hash_compare = text.find("$Expected.Sha256", stability_assert)
-    if min(stability_assert, actual_capture, hash_compare) < 0 or not stability_assert < actual_capture < hash_compare:
-        errors.append("V26 stability assertion must recapture file state and compare the SHA-256 fingerprint")
+    lock_function = text.find("function Open-LockedStableFile")
+    file_open = text.find("[IO.File]::Open(", lock_function)
+    share_read = text.find("[IO.FileShare]::Read", file_open)
+    held_hash = text.find("$hash = Get-HeldStreamingSha256 -Stream $stream -Label $Label", share_read)
+    after_hash = text.find("$afterHash = Resolve-OrdinaryNonReparseFile", held_hash)
+    state_hash = text.find("Sha256 = $hash", after_hash)
+    if min(lock_function, file_open, share_read, held_hash, after_hash, state_hash) < 0 or not (
+        lock_function < file_open < share_read < held_hash < after_hash < state_hash
+    ):
+        errors.append(
+            "V26 held generation admission must open with FileShare.Read, fingerprint the held stream, re-resolve, and publish that held SHA-256 state"
+        )
 
     for forbidden in (
+        "Get-StableFileState",
+        "Assert-StableFileState",
+        "Read-BoundedStrictUtf8File",
         "Get-Content -LiteralPath $MetadataPath -Raw | ConvertFrom-Json",
         "[Text.Encoding]::UTF8.GetString",
         "Get-FileHash",
     ):
         if forbidden in text:
-            errors.append(f"V26 release identity helper contains unsafe parsing/fingerprinting shortcut: {forbidden}")
+            errors.append(f"V26 release identity helper contains superseded/unsafe transient parsing shortcut: {forbidden}")
     return errors
 
 
@@ -143,16 +160,15 @@ helper_mutations = {
     "leaf reparse rejection": helper.replace("$item.Attributes -band [IO.FileAttributes]::ReparsePoint", "$item.Attributes -band [IO.FileAttributes]::Normal", 1),
     "parent reparse rejection": helper.replace("$cursor.Attributes -band [IO.FileAttributes]::ReparsePoint", "$cursor.Attributes -band [IO.FileAttributes]::Normal", 1),
     "streaming fingerprint": helper.replace("[Security.Cryptography.SHA256]::Create()", "[Security.Cryptography.MD5]::Create()", 1),
-    "revalidated fingerprint": helper.replace("$currentHash = Get-StreamingSha256 -File $current -Label $Label", "$currentHash = $hash", 1),
-    "stable metadata capture": helper.replace("$metadataState = Get-StableFileState", "$metadataState = Resolve-OrdinaryNonReparseFile", 1),
-    "stable plugin capture": helper.replace("$pluginState = Get-StableFileState", "$pluginState = Resolve-OrdinaryNonReparseFile", 1),
-    "stable core capture": helper.replace("$coreState = Get-StableFileState", "$coreState = Resolve-OrdinaryNonReparseFile", 1),
-    "metadata post-read recheck": helper.replace("Assert-StableFileState -Expected $metadataState", "# removed metadata stability recheck", 1),
-    "plugin post-read recheck": helper.replace("Assert-StableFileState -Expected $pluginState", "# removed plugin stability recheck", 1),
-    "core post-read recheck": helper.replace("Assert-StableFileState -Expected $coreState", "# removed core stability recheck", 1),
-    "metadata ordinary-file binding": helper.replace("$metadataFile = Resolve-OrdinaryNonReparseFile", "$metadataFile = Get-Item", 1),
-    "plugin ordinary-file binding": helper.replace("$pluginFile = Resolve-OrdinaryNonReparseFile", "$pluginFile = Get-Item", 1),
-    "core ordinary-file binding": helper.replace("$coreFile = Resolve-OrdinaryNonReparseFile", "$coreFile = Get-Item", 1),
+    "generation share mode": helper.replace("[IO.FileShare]::Read", "[IO.FileShare]::ReadWrite", 1),
+    "held fingerprint": helper.replace("$hash = Get-HeldStreamingSha256 -Stream $stream -Label $Label", "$hash = 'UNBOUND'", 1),
+    "metadata generation lock": helper.replace("$metadataHeld = Open-LockedStableFile", "$metadataHeld = Resolve-OrdinaryNonReparseFile", 1),
+    "plugin generation lock": helper.replace("$pluginHeld = Open-LockedStableFile", "$pluginHeld = Resolve-OrdinaryNonReparseFile", 1),
+    "core generation lock": helper.replace("$coreHeld = Open-LockedStableFile", "$coreHeld = Resolve-OrdinaryNonReparseFile", 1),
+    "held metadata consumption": helper.replace("$metadataText = Read-BoundedStrictUtf8Stream -Held $metadataHeld", "$metadataText = Get-Content $MetadataPath -Raw", 1),
+    "plugin locked AssemblyName": helper.replace("GetAssemblyName($pluginHeld.Path)", "GetAssemblyName($PluginPath)", 1),
+    "core locked AssemblyName": helper.replace("GetAssemblyName($coreHeld.Path)", "GetAssemblyName($CorePath)", 1),
+    "finally disposal": helper.replace("$heldFiles[$index].Stream.Dispose()", "# generation lock disposal removed", 1),
 }
 for label, mutated in helper_mutations.items():
     if mutated == helper:
@@ -180,4 +196,4 @@ if errors:
         print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: V26 release package identity is bounded, strict-UTF8, ordinary-file/reparse guarded, SHA-256 state-bound before/after consumption, and the manual release workflow is mutation-locked to the exact shared-helper invocation.")
+print("PASS: V26 release package identity is bounded, strict-UTF8, ordinary-file/reparse guarded, SHA-256 bound to held FileShare.Read generations through semantic consumption, and the manual release workflow is mutation-locked to the exact shared-helper invocation.")
