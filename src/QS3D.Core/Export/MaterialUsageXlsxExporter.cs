@@ -239,6 +239,7 @@ namespace QS3D.Core.Export
                 !string.Equals(source.Category ?? string.Empty, snapshot.Category, StringComparison.Ordinal) ||
                 !string.Equals(source.FamilyName ?? string.Empty, snapshot.FamilyName, StringComparison.Ordinal) ||
                 source.ElementCount != snapshot.ElementCount ||
+                source.PrimaryQuantity != snapshot.PrimaryQuantity ||
                 source.LengthM != snapshot.LengthM ||
                 source.AreaM2 != snapshot.AreaM2 ||
                 source.VolumeM3 != snapshot.VolumeM3 ||
