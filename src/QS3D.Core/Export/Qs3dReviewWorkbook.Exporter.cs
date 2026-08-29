@@ -131,8 +131,8 @@ namespace QS3D.Core.Export
             Evidence(row.NetConcreteM3, row.HasNetConcreteM3Evidence, "NetConcreteM3");
             Evidence(row.FormworkM2, row.HasFormworkM2Evidence, "FormworkM2");
             Evidence(row.LengthM, row.HasLengthMEvidence, "LengthM");
-            Evidence(row.OuterPerimeterM, row.HasOuterPerimeterM2Evidence, "OuterPerimeterM");
-            Evidence(row.InnerPerimeterM, row.HasInnerPerimeterM2Evidence, "InnerPerimeterM");
+            Evidence(row.OuterPerimeterM, row.HasOuterPerimeterMEvidence, "OuterPerimeterM");
+            Evidence(row.InnerPerimeterM, row.HasInnerPerimeterMEvidence, "InnerPerimeterM");
             Evidence(row.DoorAreaM2, row.HasDoorAreaM2Evidence, "DoorAreaM2");
             Evidence(row.SideAreaM2, row.HasSideAreaM2Evidence, "SideAreaM2");
             Evidence(row.BottomAreaM2, row.HasBottomAreaM2Evidence, "BottomAreaM2");
