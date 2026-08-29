@@ -245,7 +245,7 @@ namespace QS3D.BricsCAD.V25.UI
             private void RunValidated(string actionName, Action<IReadOnlyList<ObjectId>> effect)
             {
                 if (!_attached || _disposeInProgress || _disposed) return;
-                if (_cleanupBarrier || _session.HasTransientState && !CanStartMutationWithCurrentState(actionName))
+                if (_cleanupBarrier)
                 {
                     SetStatus("Review mới bị khóa cho tới khi transient state của row trước được dọn sạch.");
                     UpdateActionState();
@@ -268,20 +268,6 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     UpdateActionState();
                 }
-            }
-
-            private bool CanStartMutationWithCurrentState(string actionName)
-            {
-                // Same-row actions may legitimately replace their own prior presentation state.
-                // A row-change failure sets _cleanupBarrier, which always wins this check.
-                if (_cleanupBarrier) return false;
-                if (string.Equals(actionName, "Highlight", StringComparison.Ordinal))
-                    return !_session.HasIsolation && !_session.HasSectionView;
-                if (string.Equals(actionName, "Isolate", StringComparison.Ordinal))
-                    return !_session.HasHighlight && !_session.HasSectionView;
-                if (string.Equals(actionName, "Section / Focus", StringComparison.Ordinal))
-                    return !_session.HasHighlight && !_session.HasIsolation;
-                return !_session.HasTransientState;
             }
 
             private IReadOnlyList<ObjectId> ResolveReviewTargets()
