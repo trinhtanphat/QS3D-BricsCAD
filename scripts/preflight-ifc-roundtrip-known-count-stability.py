@@ -45,29 +45,66 @@ for token in (
     if token not in helper:
         errors.append("IFC Count contract missing token: " + token)
 
-if projection.count("IfcRoundTripKnownCountContract.RequireStableDuringTraversal(") != 6:
+traversal_token = "IfcRoundTripKnownCountContract.RequireStableDuringTraversal("
+post_traversal_token = "IfcRoundTripKnownCountContract.RequireStableAfterTraversal("
+count_guard_token = "IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount("
+
+if projection.count(traversal_token) != 6:
     errors.append("expected exactly six traversal Count rebound checks in projection source")
-if projection.count("IfcRoundTripKnownCountContract.RequireStableAfterTraversal(") != 3:
+if projection.count(post_traversal_token) != 3:
     errors.append("expected exactly three post-traversal Count checks in projection source")
-if evidence.count("IfcRoundTripKnownCountContract.RequireStableAfterTraversal(") != 1:
+if evidence.count(post_traversal_token) != 1:
     errors.append("expected exactly one post-traversal Count check in quantity-evidence source")
-if result.count("IfcRoundTripKnownCountContract.RequireStableAfterTraversal(") != 1:
+if result.count(post_traversal_token) != 1:
     errors.append("expected exactly one post-traversal Count check in exchange-result source")
 
-for source_label in (
-    "IFC round-trip dimension",
-    "IFC round-trip provenance",
-    "IFC round-trip projection",
+
+def method_region(source, start_token, end_token, label):
+    start = source.find(start_token)
+    if start < 0:
+        errors.append("could not find " + label + " traversal start")
+        return ""
+    end = source.find(end_token, start + len(start_token))
+    if end < 0:
+        errors.append("could not find " + label + " traversal end")
+        return ""
+    return source[start:end]
+
+
+dimension_region = method_region(
+    projection,
+    "private static IReadOnlyList<IfcRoundTripNumericProperty> CanonicalizeDimensions",
+    "private static IReadOnlyList<string> CanonicalizeProvenance",
+    "dimension")
+provenance_region = method_region(
+    projection,
+    "private static IReadOnlyList<string> CanonicalizeProvenance",
+    "private static int? TryGetKnownCount<T>",
+    "provenance")
+projection_set_source = projection[projection.find("public sealed class IfcRoundTripProjectionSet"):]
+projection_set_region = method_region(
+    projection_set_source,
+    "public static IfcRoundTripProjectionSet Create",
+    "private static int? TryGetKnownCount(",
+    "projection set")
+
+for region, label in (
+    (dimension_region, "dimension"),
+    (provenance_region, "provenance"),
+    (projection_set_region, "projection set"),
 ):
-    label_index = projection.find(source_label)
-    first = projection.rfind("IfcRoundTripKnownCountContract.RequireStableDuringTraversal(", 0, label_index + 1)
-    if first < 0:
-        first = projection.find("IfcRoundTripKnownCountContract.RequireStableDuringTraversal(", label_index)
-    move = projection.find("enumerator.MoveNext()", first)
-    second = projection.find("IfcRoundTripKnownCountContract.RequireStableDuringTraversal(", move)
-    current = projection.find("enumerator.Current", second)
-    if not (first >= 0 and move > first and second > move and current > second):
-        errors.append(source_label + " must rebind Count before MoveNext and after successful MoveNext before Current")
+    if not region:
+        continue
+    if region.count(traversal_token) != 2:
+        errors.append(label + " traversal must contain exactly two Count rebound checks")
+        continue
+    first = region.find(traversal_token)
+    move = region.find("enumerator.MoveNext()", first)
+    second = region.find(traversal_token, first + len(traversal_token))
+    count_guard = region.find(count_guard_token, second)
+    current = region.find("enumerator.Current", count_guard)
+    if not (0 <= first < move < second < count_guard < current):
+        errors.append(label + " must rebind Count before MoveNext and after successful MoveNext before overrun guard and Current")
 
 ordering_checks = (
     (projection, "IFC round-trip dimension source Count does not match enumerated dimension count.", '"IFC round-trip dimension");', "items.Sort(IfcRoundTripNumericPropertyComparer.Instance)", "dimension"),
@@ -78,17 +115,17 @@ ordering_checks = (
 )
 for source, mismatch_token, stable_label, publication_token, label in ordering_checks:
     mismatch = source.find(mismatch_token)
-    stable = source.find("IfcRoundTripKnownCountContract.RequireStableAfterTraversal(", mismatch)
+    stable = source.find(post_traversal_token, mismatch)
     stable_label_index = source.find(stable_label, stable)
     publication = source.find(publication_token, stable)
     if not (mismatch >= 0 and stable > mismatch and stable_label_index > stable and publication > stable_label_index):
         errors.append(label + " post-traversal Count check must occur after under-yield detection and before canonical publication")
 
-if projection.count("IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(") != 3:
+if projection.count(count_guard_token) != 3:
     errors.append("projection source lost one of the three pre-item Count overrun guards")
-if evidence.count("IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(") != 1:
+if evidence.count(count_guard_token) != 1:
     errors.append("quantity-evidence source lost its pre-item Count overrun guard")
-if result.count("IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(") != 1:
+if result.count(count_guard_token) != 1:
     errors.append("exchange-result source lost its pre-item Count overrun guard")
 for source, tokens in (
     (projection, ("MaxNestedCollectionItems", "MaxProjections")),
