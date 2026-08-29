@@ -417,7 +417,7 @@ namespace QS3D.BricsCAD.V25
                 foreach (ObjectId id in model)
                 {
                     if (id.IsNull) continue;
-                    Entity entity;
+                    Entity? entity;
                     try { entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity; }
                     catch { continue; }
                     if (entity == null) continue;
@@ -684,9 +684,9 @@ namespace QS3D.BricsCAD.V25
 
         private sealed class CadWorkItem
         {
-            public Func<string> Action;
+            public Func<string> Action = null!;
             public string Result = string.Empty;
-            public Exception Error;
+            public Exception? Error;
             public readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
             public int DispatchState = CadWorkQueued;
             public int Abandoned;
