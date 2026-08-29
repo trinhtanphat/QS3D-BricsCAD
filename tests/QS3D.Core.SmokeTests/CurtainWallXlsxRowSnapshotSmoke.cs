@@ -38,7 +38,8 @@ namespace QS3D.Core.SmokeTests
                 MaximumClearPanelWidthM = 1.1d,
                 MinimumClearPanelHeightM = 2.4d,
                 MaximumClearPanelHeightM = 3d,
-                ElementIds = { "CW-SNAPSHOT-01" }
+                ElementIds = { "CW-SNAPSHOT-01" },
+                SourceHandles = { "CW-SNAPSHOT-HANDLE-01" }
             };
             var rows = new SingleReadRowList(row);
 
