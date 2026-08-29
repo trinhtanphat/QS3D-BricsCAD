@@ -245,10 +245,11 @@ namespace QS3D.BricsCAD.V25
                     throw new HttpProtocolException(400, "Bad Request", "Invalid UTF-8 in MCP HTTP body.");
                 }
 
-                var path = requestParts[1].Trim();
-                var query = path.IndexOf('?');
-                if (query >= 0) path = path.Substring(0, query);
-                return new HttpRequest(requestParts[0].Trim().ToUpperInvariant(), path, headers, bodyText);
+                var target = requestParts[1].Trim();
+                var queryIndex = target.IndexOf('?');
+                var path = queryIndex >= 0 ? target.Substring(0, queryIndex) : target;
+                var query = queryIndex >= 0 && queryIndex + 1 < target.Length ? target.Substring(queryIndex + 1) : string.Empty;
+                return new HttpRequest(requestParts[0].Trim().ToUpperInvariant(), path, query, headers, bodyText);
             }
         }
 
@@ -317,6 +318,23 @@ namespace QS3D.BricsCAD.V25
 
         private static void HandleRequest(NetworkStream stream, HttpRequest request)
         {
+            var publicMcpUrl = PublicUrl;
+            McpOAuthHttpResponse oauthResponse;
+            if (McpOAuthAuthorizationServer.TryHandle(
+                request.Method,
+                request.Path,
+                request.Query,
+                request.Headers,
+                request.Body,
+                publicMcpUrl,
+                GetBearerToken(),
+                out oauthResponse))
+            {
+                WriteResponse(stream, oauthResponse.StatusCode, oauthResponse.Reason, oauthResponse.Body,
+                    oauthResponse.Headers, oauthResponse.ContentType);
+                return;
+            }
+
             if (!IsAllowedOrigin(request.Headers))
             {
                 WriteResponse(stream, 403, "Forbidden", "{\"error\":\"invalid MCP Origin\"}", null);
@@ -343,10 +361,10 @@ namespace QS3D.BricsCAD.V25
                 WriteResponse(stream, 404, "Not Found", "{\"error\":\"not found\"}", null);
                 return;
             }
-            if (!Authorize(request.Headers))
+            if (!Authorize(request.Headers, publicMcpUrl))
             {
                 WriteResponse(stream, 401, "Unauthorized", JsonRpcError("null", -32001, "Bearer authorization required."),
-                    new Dictionary<string, string> { ["WWW-Authenticate"] = "Bearer" });
+                    new Dictionary<string, string> { ["WWW-Authenticate"] = McpOAuthAuthorizationServer.BuildBearerChallenge(publicMcpUrl) });
                 return;
             }
             if (request.Method == "DELETE")
@@ -522,7 +540,7 @@ namespace QS3D.BricsCAD.V25
                 Tool("cad_create_polyline", "Create native 2D Polyline; points use x,y;x,y format.", "\"points\":{\"type\":\"string\",\"maxLength\":16000},\"closed\":{\"type\":\"boolean\"},\"elevation\":{\"type\":\"number\"}" + CommonLayerConfirm(), "points","confirmMutation"),
                 Tool("cad_create_text", "Create native single-line DBText.", "\"text\":{\"type\":\"string\",\"maxLength\":4000}," + Numeric("x","y","z","height","rotationDeg") + CommonLayerConfirm(), "text","x","y","height","confirmMutation"),
                 Tool("cad_create_mtext", "Create native multiline MText.", "\"text\":{\"type\":\"string\",\"maxLength\":16000}," + Numeric("x","y","z","height","width","rotationDeg") + CommonLayerConfirm(), "text","x","y","height","confirmMutation"),
-                Tool("cad_entity_transform", "Move, rotate or scale one entity by handle.", "\"handle\":{\"type\":\"string\",\"maxLength\":32},\"action\":{\"type\":\"string\",\"enum\":[\"move\",\"rotate\",\"scale\"]}," + Numeric("dx","dy","dz","angleDeg","factor") + ConfirmProperty(), "handle","action","confirmMutation"),
+                Tool("cad_entity_transform", "Move, rotate or scale one entity by handle.", "\"handle\":{\"type\":\"string\",\"maxLength\":32},\"action\":{\"type\":\"string\",\"enum\":[\"move\",\"rotate\",\"scale\"]}," + Numeric("dx","dy","dz","angleDeg","factor") + "," + ConfirmProperty(), "handle","action","confirmMutation"),
                 Tool("cad_entity_delete", "Erase one entity by handle.", "\"handle\":{\"type\":\"string\",\"maxLength\":32}," + ConfirmProperty(), "handle","confirmMutation"),
                 Tool("cad_entity_set_layer", "Move one entity to a layer, creating that layer if needed.", "\"handle\":{\"type\":\"string\",\"maxLength\":32},\"layer\":{\"type\":\"string\",\"maxLength\":255}," + ConfirmProperty(), "handle","layer","confirmMutation"),
                 Tool("cad_layer", "Create layer or make layer current.", "\"action\":{\"type\":\"string\",\"enum\":[\"create\",\"set_current\"]},\"name\":{\"type\":\"string\",\"maxLength\":255}," + ConfirmProperty(), "action","name","confirmMutation"),
@@ -548,7 +566,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     var publicUrl = PublicUrl;
                     return ToolSuccess("{\"protocol\":\"" + ProtocolVersion + "\",\"endpoint\":\"" + JsonEscape(Endpoint.ToString())
-                        + "\",\"publicUrl\":\"" + JsonEscape(publicUrl) + "\",\"auth\":\"bearer\",\"singleRepository\":true,"
+                        + "\",\"publicUrl\":\"" + JsonEscape(publicUrl) + "\",\"auth\":\"oauth2.1+legacy_bearer\",\"singleRepository\":true,"
                         + "\"fullCadAgent\":true,\"structuredContent\":true,\"automationStopped\":"
                         + (McpCadAgentRuntime.AutomationStopped ? "true" : "false") + "}");
                 }
@@ -662,13 +680,14 @@ namespace QS3D.BricsCAD.V25
             return McpTopLevelJson.TryFindPropertyValue(json, property, out raw, out found, out error);
         }
 
-        private static bool Authorize(IDictionary<string, string> headers)
+        private static bool Authorize(IDictionary<string, string> headers, string publicMcpUrl)
         {
             string authorization;
             if (!headers.TryGetValue("Authorization", out authorization)) return false;
             const string prefix = "Bearer ";
             if (!authorization.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
-            return ConstantTimeEquals(authorization.Substring(prefix.Length).Trim(), GetBearerToken());
+            if (ConstantTimeEquals(authorization.Substring(prefix.Length).Trim(), GetBearerToken())) return true;
+            return McpOAuthAuthorizationServer.TryValidateAccessToken(headers, publicMcpUrl, GetBearerToken());
         }
 
         private static bool TryCreateSession(string protocolVersion, out string sessionId)
@@ -800,13 +819,25 @@ namespace QS3D.BricsCAD.V25
                    + ",\"message\":\"" + JsonEscape(message ?? string.Empty) + "\"}}";
         }
 
-        private static void WriteResponse(NetworkStream stream, int statusCode, string reason, string body, IDictionary<string, string>? extraHeaders)
+        private static void WriteResponse(
+            NetworkStream stream,
+            int statusCode,
+            string reason,
+            string body,
+            IDictionary<string, string>? extraHeaders,
+            string? contentType = null)
         {
             var payload = string.IsNullOrEmpty(body) ? new byte[0] : Encoding.UTF8.GetBytes(body);
             var header = new StringBuilder();
             header.Append("HTTP/1.1 ").Append(statusCode).Append(' ').Append(reason)
                 .Append("\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n");
-            if (payload.Length > 0) header.Append("Content-Type: application/json; charset=utf-8\r\n");
+            if (payload.Length > 0)
+            {
+                var safeContentType = string.IsNullOrWhiteSpace(contentType) ? "application/json; charset=utf-8" : contentType!.Trim();
+                if (safeContentType.Length > 128 || safeContentType.IndexOfAny(new[] { '\r', '\n' }) >= 0)
+                    safeContentType = "application/json; charset=utf-8";
+                header.Append("Content-Type: ").Append(safeContentType).Append("\r\n");
+            }
             header.Append("Content-Length: ").Append(payload.Length).Append("\r\n");
             if (extraHeaders != null)
             {
@@ -922,10 +953,11 @@ namespace QS3D.BricsCAD.V25
 
         private sealed class HttpRequest
         {
-            public HttpRequest(string method, string path, IDictionary<string, string> headers, string body)
-            { Method = method; Path = path; Headers = headers; Body = body ?? string.Empty; }
+            public HttpRequest(string method, string path, string query, IDictionary<string, string> headers, string body)
+            { Method = method; Path = path; Query = query ?? string.Empty; Headers = headers; Body = body ?? string.Empty; }
             public string Method { get; private set; }
             public string Path { get; private set; }
+            public string Query { get; private set; }
             public IDictionary<string, string> Headers { get; private set; }
             public string Body { get; private set; }
         }
