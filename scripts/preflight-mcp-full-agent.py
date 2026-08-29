@@ -67,10 +67,10 @@ def main() -> int:
         "protocol/session binding": "MCP-Protocol-Version does not match initialized session",
         "canonical public endpoint": "McpPublicEndpointResolver.Resolve()",
         "runtime delegation": "McpCadAgentRuntime.Call(tool, arguments)",
-        "structured tool results": '"structuredContent"',
+        "structured tool results": '\"structuredContent\"',
         "single repository truth": '"singleRepository\\\":true',
         "full agent truth": '"fullCadAgent\\\":true',
-        "modular server identity": '"embedded-5"',
+        "modular server identity": '\"embedded-5\"',
         "tool arguments object scoping": "TryExtractToolCall",
         "top-level scanner dependency": "McpTopLevelJson.TryFindPropertyValue",
     })
