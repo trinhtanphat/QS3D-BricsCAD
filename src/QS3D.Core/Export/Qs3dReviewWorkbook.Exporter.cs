@@ -38,16 +38,22 @@ namespace QS3D.Core.Export
             if (clashes == null) throw new ArgumentNullException(nameof(clashes));
             if (duplicates == null) throw new ArgumentNullException(nameof(duplicates));
             if (modelInfo == null) throw new ArgumentNullException(nameof(modelInfo));
-            if (quantityDetails.Count == 0 || quantitySummary.Count == 0) throw new InvalidDataException("QS3D Review workbook requires QTO detail and summary rows.");
-            Limit(quantityDetails.Count, QuantitySheet); Limit(quantitySummary.Count + 16, SummarySheet);
-            Limit(clashes.Count, ClashSheet); Limit(duplicates.Count, DuplicateSheet);
+
+            var detailCount = quantityDetails.Count;
+            var summaryCount = quantitySummary.Count;
+            var clashCount = clashes.Count;
+            var duplicateCount = duplicates.Count;
+            var geometryCount = issueGeometry == null ? (int?)null : issueGeometry.Count;
+            if (detailCount == 0 || summaryCount == 0) throw new InvalidDataException("QS3D Review workbook requires QTO detail and summary rows.");
+            Limit(detailCount, QuantitySheet); Limit(summaryCount + 16, SummarySheet);
+            Limit(clashCount, ClashSheet); Limit(duplicateCount, DuplicateSheet);
             if (ruleProfile != null) Limit(ruleProfile.Rules.Count, RulesSheet);
 
-            var detailInput = SnapshotCounted(quantityDetails, "QTO detail");
-            var summaryInput = SnapshotCounted(quantitySummary, "QTO summary");
-            var clashInput = SnapshotCounted(clashes, "clash");
-            var duplicateInput = SnapshotCounted(duplicates, "duplicate");
-            var geometryInput = issueGeometry == null ? null : SnapshotCounted(issueGeometry, "issue geometry");
+            var detailInput = SnapshotCounted(quantityDetails, detailCount, "QTO detail");
+            var summaryInput = SnapshotCounted(quantitySummary, summaryCount, "QTO summary");
+            var clashInput = SnapshotCounted(clashes, clashCount, "clash");
+            var duplicateInput = SnapshotCounted(duplicates, duplicateCount, "duplicate");
+            var geometryInput = issueGeometry == null ? null : SnapshotCounted(issueGeometry, geometryCount!.Value, "issue geometry");
 
             var details = Quantity(detailInput, true, modelInfo.DrawingFingerprint);
             var summaries = Quantity(summaryInput, false, modelInfo.DrawingFingerprint);
@@ -66,13 +72,12 @@ namespace QS3D.Core.Export
                 ModelInfo(details.Count, summaries.Count, clashRows.Count, duplicateRows.Count, ruleProfile, modelInfo));
         }
 
-        private static List<T> SnapshotCounted<T>(IReadOnlyList<T> source, string label)
+        private static List<T> SnapshotCounted<T>(IReadOnlyList<T> source, int expectedCount, string label)
         {
-            var expectedCount = source.Count;
             if (expectedCount < 0)
                 throw new InvalidDataException("QS3D Review " + label + " collection advertised a negative Count.");
 
-            var result = new List<T>(expectedCount);
+            var result = new List<T>();
             using (var enumerator = source.GetEnumerator())
             {
                 while (enumerator.MoveNext())
