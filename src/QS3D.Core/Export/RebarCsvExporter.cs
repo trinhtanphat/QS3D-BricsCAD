@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -41,34 +42,91 @@ namespace QS3D.Core.Export
         public static string ToCsv(IEnumerable<RebarScheduleRow> rows)
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            var admittedCount = ReadKnownCount(rows);
+            if (admittedCount.HasValue)
+            {
+                ValidateKnownCount(admittedCount.Value);
+                if (admittedCount.Value > MaxRowCount)
+                    throw new ArgumentOutOfRangeException(nameof(rows), "BBS CSV exceeds the supported row bound of " + MaxRowCount + ".");
+            }
+
             var sb = new StringBuilder();
             sb.Append("ElementId,BarMark,ShapeCode,Notation,DiameterMm,Quantity,CuttingLengthM,TotalLengthM,UnitWeightKgM,NetWeightKg,WastePercent,TotalWeightKg,FabricationStatus,FabricationStandardCode,FabricationDetailingRevision").Append("\r\n");
             var rowCount = 0;
-            foreach (var row in rows)
+            using (var enumerator = rows.GetEnumerator())
             {
-                if (rowCount >= MaxRowCount)
-                    throw new ArgumentOutOfRangeException(nameof(rows), "BBS CSV exceeds the supported row bound of " + MaxRowCount + ".");
-                rowCount++;
-                ValidateRow(row ?? throw new ArgumentException("BBS row cannot be null.", nameof(rows)));
-                sb.Append(QIdentity(row.ElementId, "element id")).Append(',')
-                    .Append(Q(row.BarMark)).Append(',')
-                    .Append(Q(row.ShapeCode)).Append(',')
-                    .Append(Q(row.Notation)).Append(',')
-                    .Append(F(row.DiameterMm)).Append(',')
-                    .Append(row.Quantity.ToString(CultureInfo.InvariantCulture)).Append(',')
-                    .Append(F(row.CuttingLengthM)).Append(',')
-                    .Append(F(row.TotalLengthM)).Append(',')
-                    .Append(F(row.UnitWeightKgM)).Append(',')
-                    .Append(F(row.NetWeightKg)).Append(',')
-                    .Append(F(row.WastePercent)).Append(',')
-                    .Append(F(row.TotalWeightKg)).Append(',')
-                    .Append(Q(row.FabricationStatus)).Append(',')
-                    .Append(Q(row.FabricationStandardCode)).Append(',')
-                    .Append(Q(row.FabricationDetailingRevision)).Append("\r\n");
+                while (true)
+                {
+                    ValidateKnownCount(rows, admittedCount);
+                    var moved = enumerator.MoveNext();
+                    ValidateKnownCount(rows, admittedCount);
+                    if (!moved) break;
+                    if (rowCount >= MaxRowCount)
+                        throw new ArgumentOutOfRangeException(nameof(rows), "BBS CSV exceeds the supported row bound of " + MaxRowCount + ".");
+                    if (admittedCount.HasValue && rowCount >= admittedCount.Value)
+                        throw new InvalidOperationException("BBS CSV row Count grew beyond the admitted Count during serialization.");
+
+                    var row = enumerator.Current;
+                    rowCount++;
+                    ValidateRow(row ?? throw new ArgumentException("BBS row cannot be null.", nameof(rows)));
+                    sb.Append(QIdentity(row.ElementId, "element id")).Append(',')
+                        .Append(Q(row.BarMark)).Append(',')
+                        .Append(Q(row.ShapeCode)).Append(',')
+                        .Append(Q(row.Notation)).Append(',')
+                        .Append(F(row.DiameterMm)).Append(',')
+                        .Append(row.Quantity.ToString(CultureInfo.InvariantCulture)).Append(',')
+                        .Append(F(row.CuttingLengthM)).Append(',')
+                        .Append(F(row.TotalLengthM)).Append(',')
+                        .Append(F(row.UnitWeightKgM)).Append(',')
+                        .Append(F(row.NetWeightKg)).Append(',')
+                        .Append(F(row.WastePercent)).Append(',')
+                        .Append(F(row.TotalWeightKg)).Append(',')
+                        .Append(Q(row.FabricationStatus)).Append(',')
+                        .Append(Q(row.FabricationStandardCode)).Append(',')
+                        .Append(Q(row.FabricationDetailingRevision)).Append("\r\n");
+                }
             }
+
+            ValidateKnownCount(rows, admittedCount);
+            if (admittedCount.HasValue && rowCount != admittedCount.Value)
+                throw new InvalidOperationException("BBS CSV row Count did not match the admitted Count during serialization.");
             var content = sb.ToString();
             StrictUtf8WithBom.GetByteCount(content);
             return content;
+        }
+
+        private static int? ReadKnownCount(IEnumerable<RebarScheduleRow> rows)
+        {
+            int? count = null;
+            if (rows is ICollection<RebarScheduleRow> genericCollection)
+                BindKnownCount(ref count, genericCollection.Count);
+            if (rows is IReadOnlyCollection<RebarScheduleRow> readOnlyCollection)
+                BindKnownCount(ref count, readOnlyCollection.Count);
+            if (rows is ICollection nonGenericCollection)
+                BindKnownCount(ref count, nonGenericCollection.Count);
+            return count;
+        }
+
+        private static void BindKnownCount(ref int? bound, int candidate)
+        {
+            ValidateKnownCount(candidate);
+            if (bound.HasValue && bound.Value != candidate)
+                throw new InvalidOperationException("BBS CSV exposes conflicting row Count evidence.");
+            bound = candidate;
+        }
+
+        private static void ValidateKnownCount(int count)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("BBS CSV row Count cannot be negative.");
+        }
+
+        private static void ValidateKnownCount(IEnumerable<RebarScheduleRow> rows, int? admittedCount)
+        {
+            if (!admittedCount.HasValue) return;
+            var current = ReadKnownCount(rows);
+            if (!current.HasValue || current.Value != admittedCount.Value)
+                throw new InvalidOperationException("BBS CSV row Count changed during serialization.");
         }
 
         private static UTF8Encoding CreateStrictUtf8WithBom()
