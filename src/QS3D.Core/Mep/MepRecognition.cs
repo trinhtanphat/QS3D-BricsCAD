@@ -174,18 +174,22 @@ namespace QS3D.Core.Mep
             var snapshot = new List<MepRecognitionRule>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var rule in rules)
+            using (var enumerator = rules.GetEnumerator())
             {
-                if (index >= MepRecognitionLimits.MaxRules)
-                    throw new ArgumentException(
-                        "Recognition profile may contain at most " + MepRecognitionLimits.MaxRules + " rules.",
-                        nameof(rules));
-                if (rule == null)
-                    throw new ArgumentException("Recognition profile contains a null rule at index " + index + ".", nameof(rules));
-                if (!ids.Add(rule.Id))
-                    throw new ArgumentException("Duplicate recognition rule id: " + rule.Id + ".", nameof(rules));
-                snapshot.Add(rule);
-                index++;
+                while (enumerator.MoveNext())
+                {
+                    if (index >= MepRecognitionLimits.MaxRules)
+                        throw new ArgumentException(
+                            "Recognition profile may contain at most " + MepRecognitionLimits.MaxRules + " rules.",
+                            nameof(rules));
+                    var rule = enumerator.Current;
+                    if (rule == null)
+                        throw new ArgumentException("Recognition profile contains a null rule at index " + index + ".", nameof(rules));
+                    if (!ids.Add(rule.Id))
+                        throw new ArgumentException("Duplicate recognition rule id: " + rule.Id + ".", nameof(rules));
+                    snapshot.Add(rule);
+                    index++;
+                }
             }
             if (snapshot.Count == 0)
                 throw new ArgumentException("Recognition profile must contain at least one rule.", nameof(rules));
@@ -265,7 +269,7 @@ namespace QS3D.Core.Mep
             Mep("mep.cable", 860, "Cable", MepElementKind.Cable, "CABLE", "WIRE"),
             Mep("mep.fitting", 850, "Fitting", MepElementKind.Fitting, "FITTING", "ELBOW", "REDUCER", "COUPLING", "TEE_", "TEE-"),
             Mep("mep.accessory", 840, "Accessory", MepElementKind.Accessory, "VALVE", "DAMPER", "ACCESSORY"),
-            Mep("mep.equipment", 830, "Equipment", MepElementKind.Equipment, "EQUIP", "AHU", "FCU", "PUMP", "FAN", "CHILLER", "BOILER"),
+            Mep("mep.equipment", 830, "Equipment", MepElementKind.Equipment, "Equipment", "EQUIP", "AHU", "FCU", "PUMP", "FAN", "CHILLER", "BOILER"),
             Mep("mep.fixture", 820, "Fixture", MepElementKind.Fixture, "FIXTURE", "LUMINAIRE", "LIGHTING", "LIGHT_", "LIGHT-", "SOCKET", "OUTLET", "SWITCH", "SANITARY", "SPRINKLER"),
             Building("structure.beam", 700, MepRecognitionDiscipline.Structure, "Beam", "BEAM"),
             Building("structure.column", 690, MepRecognitionDiscipline.Structure, "Column", "COLUMN"),
