@@ -33,6 +33,7 @@ require(session, "_consentGeneration", "desktop consent generation")
 require(session, "IsSensitiveReadTool", "sensitive desktop-read classification")
 require(session, '"desktop_clipboard_read"', "clipboard read consent-revocation protection")
 require(session, '"desktop_screenshot"', "screenshot consent-revocation protection")
+require(session, 'string.Equals(tool, "desktop_sequence", StringComparison.Ordinal)', "sequence consent-revocation protection")
 require(session, "_consentGeneration != _consentGenerationAtStart", "mid-flight consent generation revalidation")
 require(session, "payload was discarded", "fail-closed sensitive payload suppression")
 
@@ -81,6 +82,8 @@ require(runtime, "Sequence screenshot is forced to the bound target window", "se
 require(runtime, "Sequence execution is fail-fast", "sequence fail-fast contract")
 require(runtime, "Sequence does not roll back completed steps", "sequence partial-execution contract")
 require(runtime, "EnsureSequenceRunning", "sequence stop/duration check")
+require(runtime, "EnsureSequenceStepRunning", "per-injected-input sequence stop/duration/consent check")
+require(runtime, "Sequence wait-for-target timed out", "sequence wait timeout fail-fast")
 forbid(runtime, '"desktop_macro"', "duplicate generic desktop macro alias")
 
 recovery = text(V25 / "McpProjectRecoveryService.cs")
