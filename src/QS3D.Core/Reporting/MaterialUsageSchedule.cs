@@ -58,7 +58,7 @@ namespace QS3D.Core.Reporting
             var units = ProjectMaterialCatalog.GetAll(project)
                 .GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(x => x.Key, x => x.First().Unit, StringComparer.OrdinalIgnoreCase);
-            var rows = new Dictionary<string, MaterialUsageRow>(StringComparer.OrdinalIgnoreCase);
+            var rows = new Dictionary<string, UsageGroup>(StringComparer.OrdinalIgnoreCase);
             var order = new List<string>();
 
             foreach (var element in project.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
@@ -86,7 +86,9 @@ namespace QS3D.Core.Reporting
                     }
                 }
             }
-            return order.Select(x => rows[x]).ToList().AsReadOnly();
+
+            foreach (var key in order) rows[key].FinalizeQuantities();
+            return order.Select(x => rows[x].Row).ToList().AsReadOnly();
         }
 
         private sealed class UsageMetrics
@@ -95,6 +97,89 @@ namespace QS3D.Core.Reporting
             public double AreaM2 { get; set; }
             public double VolumeM3 { get; set; }
             public double MassKg { get; set; }
+        }
+
+        private sealed class UsageGroup
+        {
+            private readonly StableAccumulator _length = new StableAccumulator();
+            private readonly StableAccumulator _area = new StableAccumulator();
+            private readonly StableAccumulator _volume = new StableAccumulator();
+            private readonly StableAccumulator _mass = new StableAccumulator();
+
+            public UsageGroup(MaterialUsageRow row)
+            {
+                Row = row ?? throw new ArgumentNullException(nameof(row));
+            }
+
+            public MaterialUsageRow Row { get; }
+
+            public void Add(UsageMetrics metrics, string label)
+            {
+                if (metrics == null) throw new ArgumentNullException(nameof(metrics));
+                _length.Add(metrics.LengthM, label + "/material length");
+                _area.Add(metrics.AreaM2, label + "/material area");
+                _volume.Add(metrics.VolumeM3, label + "/material volume");
+                _mass.Add(metrics.MassKg, label + "/material mass");
+            }
+
+            public void FinalizeQuantities()
+            {
+                Row.LengthM = _length.Value("material length");
+                Row.AreaM2 = _area.Value("material area");
+                Row.VolumeM3 = _volume.Value("material volume");
+                Row.MassKg = _mass.Value("material mass");
+            }
+        }
+
+        private sealed class StableAccumulator
+        {
+            private double _sum;
+            private double _compensation;
+
+            public void Add(double value, string label)
+            {
+                var incoming = QuantityReportMath.NonNegative(value, label);
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+
+                var result = _sum + incoming;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Material usage aggregate overflow: " + label + ".");
+
+                var correction = Math.Abs(_sum) >= Math.Abs(incoming)
+                    ? (_sum - result) + incoming
+                    : (incoming - result) + _sum;
+                var nextCompensation = _compensation + correction;
+                if (double.IsNaN(nextCompensation) || double.IsInfinity(nextCompensation))
+                    throw new OverflowException("Material usage aggregate compensation overflow: " + label + ".");
+
+                _sum = result == 0d ? 0d : result;
+                _compensation = nextCompensation == 0d ? 0d : nextCompensation;
+            }
+
+            public double Value(string label)
+            {
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+                var result = _sum + _compensation;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Material usage aggregate overflow: " + label + ".");
+                if (_compensation != 0d && result == _sum && !IsStrictlyBelowHalfUlp(_sum, _compensation))
+                    throw new OverflowException("Material usage aggregate lost a non-zero compensation at floating-point precision: " + label + ".");
+                if (_sum != 0d && result == _compensation)
+                    throw new OverflowException("Material usage aggregate lost a non-zero accumulated value at floating-point precision: " + label + ".");
+                return result == 0d ? 0d : result;
+            }
+
+            private static bool IsStrictlyBelowHalfUlp(double current, double compensation)
+            {
+                if (current <= 0d || compensation == 0d) return false;
+                var currentBits = BitConverter.DoubleToInt64Bits(current);
+                var adjacentBits = compensation > 0d ? currentBits + 1L : currentBits - 1L;
+                var adjacent = BitConverter.Int64BitsToDouble(adjacentBits);
+                var spacing = Math.Abs(adjacent - current);
+                return Math.Abs(compensation) < spacing / 2d;
+            }
         }
 
         private static UsageMetrics MetricsForMainMaterial(ProjectElement element, ProjectFamily? family)
@@ -207,7 +292,7 @@ namespace QS3D.Core.Reporting
             ProjectFamily? family,
             IDictionary<string, string> floors,
             IDictionary<string, string> units,
-            IDictionary<string, MaterialUsageRow> rows,
+            IDictionary<string, UsageGroup> rows,
             IList<string> order,
             string material,
             string component,
@@ -219,9 +304,9 @@ namespace QS3D.Core.Reporting
             var familyName = family?.Name ?? familyId;
             var category = element.Category.ToString();
             var key = GroupKey(floorId, material, component, category, familyId);
-            if (!rows.TryGetValue(key, out var row))
+            if (!rows.TryGetValue(key, out var group))
             {
-                row = new MaterialUsageRow
+                var row = new MaterialUsageRow
                 {
                     ProjectId = project.ProjectId,
                     DrawingFingerprint = project.DrawingFingerprint,
@@ -232,16 +317,14 @@ namespace QS3D.Core.Reporting
                     Category = category,
                     FamilyName = familyName
                 };
-                rows[key] = row;
+                group = new UsageGroup(row);
+                rows[key] = group;
                 order.Add(key);
             }
-            row.ElementCount = QuantityReportMath.AddCount(row.ElementCount, 1);
-            row.LengthM = QuantityReportMath.Add(row.LengthM, metrics.LengthM, element.Id + "/material length");
-            row.AreaM2 = QuantityReportMath.Add(row.AreaM2, metrics.AreaM2, element.Id + "/material area");
-            row.VolumeM3 = QuantityReportMath.Add(row.VolumeM3, metrics.VolumeM3, element.Id + "/material volume");
-            row.MassKg = QuantityReportMath.Add(row.MassKg, metrics.MassKg, element.Id + "/material mass");
-            row.ElementIds.Add(element.Id);
-            ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
+            group.Row.ElementCount = QuantityReportMath.AddCount(group.Row.ElementCount, 1);
+            group.Add(metrics, element.Id);
+            group.Row.ElementIds.Add(element.Id);
+            ReportingRowProvenance.AppendSourceHandles(group.Row.SourceHandles, element.SourceHandles);
         }
 
         private static string GroupKey(params string[] tokens)
