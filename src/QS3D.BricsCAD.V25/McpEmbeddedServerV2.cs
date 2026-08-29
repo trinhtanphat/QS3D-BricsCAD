@@ -29,6 +29,7 @@ namespace QS3D.BricsCAD.V25
         private const string TokenFileName = "mcp-bearer-token.txt";
 
         private static readonly object Sync = new object();
+        private static readonly object SessionSync = new object();
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private static readonly SemaphoreSlim ClientSlots = new SemaphoreSlim(MaxConcurrentClients, MaxConcurrentClients);
         private static readonly ConcurrentDictionary<string, SessionState> Sessions =
@@ -81,7 +82,7 @@ namespace QS3D.BricsCAD.V25
                 try { if (_listener != null) _listener.Stop(); } catch { }
                 _listener = null;
                 _listenerThread = null;
-                Sessions.Clear();
+                lock (SessionSync) Sessions.Clear();
             }
             if (thread != null && thread != Thread.CurrentThread)
             {
@@ -184,6 +185,8 @@ namespace QS3D.BricsCAD.V25
                     if (headerEnd < 0 && accumulated.Length > MaxHeaderBytes)
                         throw new HttpProtocolException(431, "Request Header Fields Too Large", "MCP HTTP headers exceed 64 KiB.");
                 }
+                if (headerEnd + 4 > MaxHeaderBytes)
+                    throw new HttpProtocolException(431, "Request Header Fields Too Large", "MCP HTTP headers exceed 64 KiB.");
 
                 var all = accumulated.ToArray();
                 var headerText = Encoding.ASCII.GetString(all, 0, headerEnd);
@@ -329,8 +332,7 @@ namespace QS3D.BricsCAD.V25
                     WriteResponse(stream, 400, "Bad Request", JsonRpcError("null", -32002, "Mcp-Session-Id is required."), null);
                     return;
                 }
-                SessionState removed;
-                Sessions.TryRemove(sessionId, out removed);
+                TryDeleteSession(sessionId);
                 WriteResponse(stream, 204, "No Content", string.Empty, null);
                 return;
             }
@@ -384,9 +386,11 @@ namespace QS3D.BricsCAD.V25
 
             SessionState session;
             string sessionError;
-            if (!TryValidateSession(request.Headers, out session, out sessionError))
+            int sessionStatusCode;
+            if (!TryValidateSession(request.Headers, out session, out sessionError, out sessionStatusCode))
             {
-                WriteResponse(stream, 400, "Bad Request", JsonRpcError(hasId ? id : "null", -32002, sessionError), null);
+                WriteResponse(stream, sessionStatusCode, sessionStatusCode == 404 ? "Not Found" : "Bad Request",
+                    JsonRpcError(hasId ? id : "null", -32002, sessionError), null);
                 return;
             }
 
@@ -449,14 +453,12 @@ namespace QS3D.BricsCAD.V25
                     "Unsupported MCP protocolVersion. Supported: " + ProtocolVersion + ", " + LegacyProtocolVersion + "."), null);
                 return;
             }
-            CleanupSessions();
-            if (Sessions.Count >= MaxSessions)
+            string sessionId;
+            if (!TryCreateSession(requested, out sessionId))
             {
                 WriteResponse(stream, 200, "OK", JsonRpcError(id, -32003, "MCP session capacity reached."), null);
                 return;
             }
-            var sessionId = Guid.NewGuid().ToString("N");
-            Sessions[sessionId] = new SessionState(DateTime.UtcNow, requested);
             var result = "{\"jsonrpc\":\"2.0\",\"id\":" + id
                          + ",\"result\":{\"protocolVersion\":\"" + requested
                          + "\",\"capabilities\":{\"tools\":{\"listChanged\":false}},"
@@ -637,37 +639,81 @@ namespace QS3D.BricsCAD.V25
             return ConstantTimeEquals(authorization.Substring(prefix.Length).Trim(), GetBearerToken());
         }
 
-        private static bool TryValidateSession(IDictionary<string, string> headers, out SessionState state, out string error)
+        private static bool TryCreateSession(string protocolVersion, out string sessionId)
         {
-            CleanupSessions();
-            state = null;
-            string sessionId;
-            if (!headers.TryGetValue("Mcp-Session-Id", out sessionId) || string.IsNullOrWhiteSpace(sessionId))
-            { error = "Mcp-Session-Id is required after initialize."; return false; }
-            SessionState stored;
-            if (!Sessions.TryGetValue(sessionId, out stored)) { error = "Unknown or expired MCP session."; return false; }
-            if (DateTime.UtcNow - stored.LastSeenUtc > TimeSpan.FromHours(4))
+            lock (SessionSync)
             {
-                SessionState ignored;
-                Sessions.TryRemove(sessionId, out ignored);
-                error = "MCP session expired.";
-                return false;
+                CleanupSessionsLocked();
+                if (Sessions.Count >= MaxSessions)
+                {
+                    sessionId = string.Empty;
+                    return false;
+                }
+                do
+                {
+                    sessionId = Guid.NewGuid().ToString("N");
+                }
+                while (!Sessions.TryAdd(sessionId, new SessionState(DateTime.UtcNow, protocolVersion)));
+                return true;
             }
-            string version;
-            if (headers.TryGetValue("MCP-Protocol-Version", out version)
-                && !string.IsNullOrWhiteSpace(version)
-                && !string.Equals(version, stored.ProtocolVersion, StringComparison.Ordinal))
-            {
-                error = "MCP-Protocol-Version does not match initialized session.";
-                return false;
-            }
-            state = new SessionState(DateTime.UtcNow, stored.ProtocolVersion);
-            Sessions[sessionId] = state;
-            error = string.Empty;
-            return true;
         }
 
-        private static void CleanupSessions()
+        private static bool TryDeleteSession(string sessionId)
+        {
+            lock (SessionSync)
+            {
+                SessionState ignored;
+                return Sessions.TryRemove(sessionId, out ignored);
+            }
+        }
+
+        private static bool TryValidateSession(
+            IDictionary<string, string> headers,
+            out SessionState state,
+            out string error,
+            out int statusCode)
+        {
+            state = null;
+            error = string.Empty;
+            statusCode = 400;
+            string sessionId;
+            if (!headers.TryGetValue("Mcp-Session-Id", out sessionId) || string.IsNullOrWhiteSpace(sessionId))
+            {
+                error = "Mcp-Session-Id is required after initialize.";
+                return false;
+            }
+
+            lock (SessionSync)
+            {
+                CleanupSessionsLocked();
+                SessionState stored;
+                if (!Sessions.TryGetValue(sessionId, out stored))
+                {
+                    statusCode = 404;
+                    error = "Unknown or expired MCP session.";
+                    return false;
+                }
+                string version;
+                if (headers.TryGetValue("MCP-Protocol-Version", out version)
+                    && !string.IsNullOrWhiteSpace(version)
+                    && !string.Equals(version, stored.ProtocolVersion, StringComparison.Ordinal))
+                {
+                    error = "MCP-Protocol-Version does not match initialized session.";
+                    return false;
+                }
+                state = new SessionState(DateTime.UtcNow, stored.ProtocolVersion);
+                if (!Sessions.TryUpdate(sessionId, state, stored))
+                {
+                    statusCode = 404;
+                    state = null;
+                    error = "Unknown or expired MCP session.";
+                    return false;
+                }
+                return true;
+            }
+        }
+
+        private static void CleanupSessionsLocked()
         {
             var cutoff = DateTime.UtcNow - TimeSpan.FromHours(4);
             foreach (var pair in Sessions)
