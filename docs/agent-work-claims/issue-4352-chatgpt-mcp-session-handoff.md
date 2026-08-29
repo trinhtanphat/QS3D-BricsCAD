@@ -35,7 +35,7 @@ Production public endpoint: `https://<configured-hostname>/mcp`
 
 **ACTIVE:**
 
-- `src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs` — HTTP/MCP/auth/session/tool schemas/results.
+- `src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs` — active loopback HTTP transport; owns HTTP/MCP/auth/session/tool schemas/results.
 - `src/QS3D.BricsCAD.V25/McpCadAgentRuntime.cs` — CAD/editor/runtime/UI/recovery/audit.
 - `src/QS3D.BricsCAD.V25/McpTopLevelJson.cs` — top-level security-sensitive JSON parsing.
 - `src/QS3D.BricsCAD.V25/McpAgentControlCenter.cs` — main click-first user control center.
@@ -49,16 +49,16 @@ Production public endpoint: `https://<configured-hostname>/mcp`
 
 **LEGACY:**
 
-- `src/QS3D.BricsCAD.V25/McpEmbeddedServer.cs` — historical monolith; explicitly removed from active V25 compile. Do not land normal MCP fixes there.
+- `src/QS3D.BricsCAD.V25/McpEmbeddedServer.cs` — legacy historical monolith only; explicitly removed from active V25 compile. Do not land normal MCP fixes there.
 
 ## Product decisions fixed by the owner/session
 
-- One shipping repo/install: `QS3D-BricsCAD` only.
+- One shipping repo/install: only `QS3D-BricsCAD`.
 - `QS3D-CAD-MCP` is historical/reference only, never a second end-user runtime requirement.
-- No PowerShell/CMD/Git/Node in normal user setup.
-- Cloudflare username/password are entered only on Cloudflare's browser page and are never requested/stored by QS3D.
+- No PowerShell, CMD, Git, or Node in normal user setup.
+- QS3D must never ask for, inspect, log, or store the Cloudflare password; Cloudflare username/password are entered only on Cloudflare's browser page.
 - Persistent Named Tunnel is production path; Quick Tunnel is test/fallback only.
-- ChatGPT drawing strategy is **direct API first -> bounded native command second -> UI fallback last**.
+- ChatGPT drawing strategy is **direct CAD API tool first -> bounded native command second -> UI fallback last**.
 - UI automation may target only an HWND owned by the current BricsCAD process; no desktop-wide remote control.
 - No arbitrary shell/process execution through MCP.
 - No production remote screenshot/desktop-capture tool in current scope; database/entity/view-state verification is canonical.
@@ -82,7 +82,7 @@ The bounded command catalog covers representative drawing/editing, hatch, dimens
 - loopback-only listener;
 - bearer authentication;
 - bounded header/body/session/concurrency state;
-- exact `application/json` admission rather than lookalikes;
+- exact `application/json` media-type admission with explicit rejection of JSON media-type lookalikes;
 - fail-closed duplicate security-sensitive headers;
 - unsupported transfer encoding rejection;
 - Origin/DNS-rebinding checks;
@@ -97,7 +97,7 @@ The bounded command catalog covers representative drawing/editing, hatch, dimens
 - BricsCAD-process-only mouse/keyboard with foreground revalidation;
 - Alt+F4 blocked;
 - emergency stop/resume/cancel with BricsCAD-only ESC recovery;
-- application-context timeout handling distinguishes cancelled-before-start from already-running/completion-uncertain work so agents must not blindly retry;
+- application-context timeout handling uses atomic `Queued → Running` / `Queued → CancelledBeforeStart` transitions and distinguishes cancelled-before-start from already-running/completion-uncertain work so agents must not blindly retry;
 - rotating/sanitized local mutation audit;
 - no remote PowerShell/cmd/arbitrary shell/process launch.
 
