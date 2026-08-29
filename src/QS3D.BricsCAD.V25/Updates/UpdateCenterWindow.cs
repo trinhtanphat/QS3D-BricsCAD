@@ -22,8 +22,11 @@ namespace QS3D.BricsCAD.V25.Updates
         private UpdateCheckResult? _result;
         private bool _coordinatorAttached;
         private bool _previewDownloading = false;
-        private bool _previewScheduled;
-        private string? _previewScheduledDetail;
+        // V26 compiles this shared UI but intentionally never enters the V25 preview-download path.
+        // Keep its read-side state explicit so the V26 compiler does not treat the fields as
+        // uninitialized while V25 still replaces both values only after verified staging succeeds.
+        private bool _previewScheduled = false;
+        private string? _previewScheduledDetail = null;
 
         internal UpdateCenterWindow()
         {
