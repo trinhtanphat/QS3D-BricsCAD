@@ -66,8 +66,8 @@ namespace QS3D.Core.SmokeTests
             var values = new InstrumentedCountCollection<int>(new[] { 5, 6 }, 2, 2, readOnlyCountOverride: 3);
             var error = InvokeExpectingInvalidOperation(values, 2, "conflicting Count surfaces");
 
-            Contains("count changed or conflicted before traversal", error.Message,
-                "Conflicting supported Count surfaces must fail closed before enumeration.");
+            Contains("known count does not match enumerated entry count", error.Message,
+                "Conflicting supported Count surfaces must preserve the deterministic Count mismatch diagnostic.");
             Equal(0, values.MoveNextCalls,
                 "Conflicting pre-traversal Count evidence must fail before MoveNext.");
             Equal(0, values.CurrentReads,
