@@ -9,10 +9,26 @@ namespace QS3D.Core.Services
     {
         private const int MaxElementInputCount = 10000;
 
+        private sealed class OrderingSnapshot
+        {
+            public OrderingSnapshot(ProjectElement element, string id, ElementDirtyFlags dirty, string[] dependencies)
+            {
+                Element = element;
+                Id = id;
+                Dirty = dirty;
+                Dependencies = dependencies;
+            }
+
+            public ProjectElement Element { get; }
+            public string Id { get; }
+            public ElementDirtyFlags Dirty { get; }
+            public IReadOnlyList<string> Dependencies { get; }
+        }
+
         private sealed class VisitFrame
         {
-            public VisitFrame(ProjectElement element) { Element = element; }
-            public ProjectElement Element { get; }
+            public VisitFrame(OrderingSnapshot snapshot) { Snapshot = snapshot; }
+            public OrderingSnapshot Snapshot { get; }
             public int NextDependencyIndex { get; set; }
         }
 
@@ -140,7 +156,7 @@ namespace QS3D.Core.Services
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var knownCount = RejectKnownOversizedInput(elements, "Dependency ordering", out var knownCountSources);
-            var materialized = new List<ProjectElement>();
+            var materialized = new List<OrderingSnapshot>();
             using (var enumerator = elements.GetEnumerator())
             {
                 while (enumerator.MoveNext())
@@ -150,28 +166,27 @@ namespace QS3D.Core.Services
                         throw new InvalidOperationException("Dependency ordering exceeds the supported " + MaxElementInputCount + " element limit.");
                     var element = enumerator.Current;
                     if (element == null) throw new InvalidOperationException("Dependency ordering cannot contain a null semantic element.");
-                    materialized.Add(element);
+                    materialized.Add(CaptureOrderingSnapshot(element));
                 }
             }
 
             RequireObservedCount(knownCount, materialized.Count, "Dependency ordering");
             RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency ordering");
-
-            foreach (var element in materialized)
-                ValidateDependencies(element);
+            foreach (var snapshot in materialized)
+                RequireStableOrderingSnapshot(snapshot);
 
             var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var list = new List<ProjectElement>();
-            foreach (var element in materialized)
+            var list = new List<OrderingSnapshot>();
+            foreach (var snapshot in materialized)
             {
-                if (!seenIds.Add(element.Id))
-                    throw new InvalidOperationException("Dependency ordering contains duplicate semantic element id: " + element.Id);
-                if (element.Dirty != ElementDirtyFlags.None) list.Add(element);
+                if (!seenIds.Add(snapshot.Id))
+                    throw new InvalidOperationException("Dependency ordering contains duplicate semantic element id: " + snapshot.Id);
+                if (snapshot.Dirty != ElementDirtyFlags.None) list.Add(snapshot);
             }
 
-            var byId = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
-            foreach (var element in list)
-                byId[element.Id] = element;
+            var byId = new Dictionary<string, OrderingSnapshot>(StringComparer.OrdinalIgnoreCase);
+            foreach (var snapshot in list)
+                byId[snapshot.Id] = snapshot;
 
             var result = new List<ProjectElement>(list.Count);
             var temporary = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -187,9 +202,9 @@ namespace QS3D.Core.Services
                 while (stack.Count > 0)
                 {
                     var frame = stack.Peek();
-                    if (frame.NextDependencyIndex < frame.Element.DependsOn.Count)
+                    if (frame.NextDependencyIndex < frame.Snapshot.Dependencies.Count)
                     {
-                        var dependencyId = frame.Element.DependsOn[frame.NextDependencyIndex++];
+                        var dependencyId = frame.Snapshot.Dependencies[frame.NextDependencyIndex++];
                         if (!byId.TryGetValue(dependencyId, out var dependency) || permanent.Contains(dependency.Id)) continue;
                         if (!temporary.Add(dependency.Id))
                             throw new InvalidOperationException("Dependency cycle detected at " + dependency.Id + ".");
@@ -198,11 +213,45 @@ namespace QS3D.Core.Services
                     }
 
                     stack.Pop();
-                    temporary.Remove(frame.Element.Id);
-                    if (permanent.Add(frame.Element.Id)) result.Add(frame.Element);
+                    temporary.Remove(frame.Snapshot.Id);
+                    if (permanent.Add(frame.Snapshot.Id)) result.Add(frame.Snapshot.Element);
                 }
             }
+
+            foreach (var snapshot in materialized)
+                RequireStableOrderingSnapshot(snapshot);
             return result.AsReadOnly();
+        }
+
+        private static OrderingSnapshot CaptureOrderingSnapshot(ProjectElement element)
+        {
+            ValidateDependencies(element);
+            return new OrderingSnapshot(
+                element,
+                element.Id,
+                element.Dirty,
+                element.DependsOn.ToArray());
+        }
+
+        private static void RequireStableOrderingSnapshot(OrderingSnapshot snapshot)
+        {
+            var element = snapshot.Element;
+            if (!string.Equals(element.Id, snapshot.Id, StringComparison.Ordinal) ||
+                element.Dirty != snapshot.Dirty ||
+                element.DependsOn.Count != snapshot.Dependencies.Count)
+                throw OrderingSnapshotChanged(snapshot.Id);
+
+            for (var index = 0; index < snapshot.Dependencies.Count; index++)
+            {
+                if (!string.Equals(element.DependsOn[index], snapshot.Dependencies[index], StringComparison.Ordinal))
+                    throw OrderingSnapshotChanged(snapshot.Id);
+            }
+        }
+
+        private static InvalidOperationException OrderingSnapshotChanged(string elementId)
+        {
+            return new InvalidOperationException(
+                "Dependency ordering input changed after semantic element " + elementId + " was admitted. Retry ordering against stable semantic input.");
         }
 
         private static int? RejectKnownOversizedInput(IEnumerable<ProjectElement> elements, string operation, out int knownCountSources)
