@@ -40,11 +40,12 @@ for token in (
 for token in (
     "new SemanticChangeReviewBuilder().Build(before, _afterSnapshot)",
     "SemanticGrid.ItemsSource = _semanticReview.Elements",
-    "DocumentBoundWindowLifetime.Attach(this, _document)",
+    "DocumentBoundWindowLifetime.Attach(this, document)",
     "if (_rows.Count == 0 && _semanticReview.HasChanges) Tabs.SelectedIndex = 1",
     "SemanticGrid.SelectedItem is SemanticChangeReviewElement row",
     "new QuantityRevisionRow { ElementId = row.ElementId",
-    "EnsureActiveAndCurrent();",
+    "var document = EnsureActiveAndCurrent();",
+    "LocateCurrentElement(document, row);",
     "OmittedSourceReferenceChangeCount",
 ):
     if token not in code:
@@ -52,15 +53,32 @@ for token in (
 
 for forbidden in (
     "SourceHandles",
-    "CadHandleService",
     "OpenMode.ForWrite",
     "StartTransaction(",
 ):
     if forbidden in xaml or forbidden in code:
         errors.append("Revision semantic UI must not expose raw handles or native write paths: " + forbidden)
 
+# The modeless window now mirrors the canonical read-only locate workflow locally so it can
+# pass a freshly resolved Document rather than retain the command callback's captured wrapper.
 for token in (
-    "LocateCurrentElement(doc, row.ElementId, \"Revision Locate\")",
+    "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
+    "var element = currentProject.FindElement(row.ElementId)",
+    "SourceHandleResolver.Resolve(currentProject, new[] { element.Id })",
+    "CadHandleService.Select(document, handles)",
+    'document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false)',
+):
+    if token not in code:
+        errors.append("RevisionWindow current-state read-only locate contract missing token: " + token)
+
+if "ProjectContextCoordinator.GetOrCreate" in code:
+    errors.append("Revision modeless Locate/freshness must not create/cache replacement project state")
+if "private readonly Action<QuantityRevisionRow>? _locate" in code or "_locate = locate" in code:
+    errors.append("RevisionWindow must not retain the caller callback that captures the command-time Document wrapper")
+
+# Keep the command helper contract pinned so the mirrored modeless locate path cannot silently drift.
+for token in (
+    'LocateCurrentElement(doc, row.ElementId, "Revision Locate")',
     "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
     "var element = currentProject.FindElement(elementId)",
     "SourceHandleResolver.Resolve(currentProject, new[] { element.Id })",
@@ -84,4 +102,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: RevisionWindow presents quantity and grouped semantic changes, hides raw source handles, and reuses the current-state read-only stable-ID locate path without native mutation.")
+print("PASS: RevisionWindow presents quantity and grouped semantic changes, hides raw source handles, resolves a live source Document for the current-state read-only stable-ID locate path, and performs no native write mutation.")

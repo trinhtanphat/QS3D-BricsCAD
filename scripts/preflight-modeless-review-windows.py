@@ -18,9 +18,10 @@ for label, path in windows.items():
         errors.append("missing modeless review window: " + str(path.relative_to(ROOT)))
         continue
     text = path.read_text(encoding="utf-8")
-    for needle in ("Document", "BcadApplication.DocumentManager.MdiActiveDocument", "ReferenceEquals"):
-        if needle not in text:
-            errors.append(label + " window missing bound-DWG guard token: " + needle)
+    if "Document" not in text or "BcadApplication.DocumentManager.MdiActiveDocument" not in text:
+        errors.append(label + " window missing bound-DWG guard tokens")
+    if label != "Revision" and "ReferenceEquals" not in text:
+        errors.append(label + " window missing legacy bound-DWG reference guard token")
 
 bq = windows["BQ"]
 if bq.is_file():
@@ -81,10 +82,16 @@ if bbs.is_file():
 revision = windows["Revision"]
 if revision.is_file():
     text = revision.read_text(encoding="utf-8")
-    ensure = text.find("EnsureActiveAndCurrent();")
-    callback = text.find("_locate?.Invoke(row);")
-    if min(ensure, callback) < 0 or ensure > callback:
-        errors.append("Revision Locate must verify its source DWG before invoking the CAD callback")
+    for needle in (
+        "private readonly IntPtr _nativeDatabaseIdentity;",
+        "database.UnmanagedObject == _nativeDatabaseIdentity",
+        "var document = EnsureActiveAndCurrent();",
+        "LocateCurrentElement(document, row);",
+    ):
+        if needle not in text:
+            errors.append("Revision Locate missing live source-DWG/native-identity guard: " + needle)
+    if "private readonly Document _document" in text or "private readonly Action<QuantityRevisionRow>? _locate" in text:
+        errors.append("Revision must not retain managed Document/callback state across modeless lifetime")
 
 health = windows["Model Health"]
 if health.is_file() and "EnsureActiveAndCurrent();\n                _locate(issue);" not in health.read_text(encoding="utf-8"):
@@ -97,4 +104,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Recognition/BQ/BBS/Revision/Health modeless actions stay bound to their source DWG; Recognition surfaces atomic batch failures, BQ refreshes before export, and BBS totals remain checked.")
+print("PASS: Recognition/BQ/BBS/Revision/Health modeless actions stay bound to their source DWG; Revision uses stable native identity and action-time live Document resolution, Recognition surfaces atomic failures, BQ refreshes before export, and BBS totals remain checked.")
