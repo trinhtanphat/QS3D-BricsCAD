@@ -55,14 +55,29 @@ for forbidden in (
     if forbidden in source:
         errors.append("quantity report revision review must remain CAD-independent/read-only and must not become a second quantity engine: " + forbidden)
 
+# Revision review must continue to reuse the authoritative detail builder. Pin the
+# builder's compensated aggregation contract rather than an implementation-specific
+# pairwise addition primitive so commercial precision fixes cannot be reverted by
+# this cross-feature guard.
 for token in (
     "public static IReadOnlyList<QuantityReportRow> Detail(ProjectState project)",
-    "var volumeStates = new Dictionary<string, CompensatedSum>",
-    "private static double MaterializeStrict(",
-    "Lost material compensated contribution",
+    "var accumulators = new Dictionary<string, QuantityReportAggregateState>",
+    "private sealed class QuantityReportAggregateState",
+    "private sealed class CompensatedValue",
+    'row.GrossConcreteM3 = aggregate.GrossConcreteM3.Value("GrossConcreteM3")',
+    "lost a non-zero compensation at floating-point precision",
 ):
     if token not in builder:
-        errors.append("authoritative ProjectQuantityReportBuilder contract is missing: " + token)
+        errors.append("authoritative ProjectQuantityReportBuilder compensated contract is missing: " + token)
+
+for forbidden in (
+    "row.GrossConcreteM3 = QuantityReportMath.Add(row.GrossConcreteM3",
+    "row.NetConcreteM3 = QuantityReportMath.Add(row.NetConcreteM3",
+    "row.FormworkM2 = QuantityReportMath.Add(row.FormworkM2",
+    "row.LengthM = QuantityReportMath.Add(row.LengthM",
+):
+    if forbidden in builder:
+        errors.append("authoritative ProjectQuantityReportBuilder regressed to pairwise grouped accumulation: " + forbidden)
 
 for token in (
     "public RevisionSnapshot Capture(ProjectState project, string revisionId)",
