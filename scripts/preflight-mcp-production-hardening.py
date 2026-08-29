@@ -92,6 +92,7 @@ def main() -> int:
         "serialized MCP session state": (server, "private static readonly object SessionSync = new object();"),
         "atomic session creation helper": (server, "private static bool TryCreateSession("),
         "serialized session deletion helper": (server, "private static bool TryDeleteSession("),
+        "protocol-version validation helper": (server, "private static bool TryValidateProtocolVersionHeader("),
         "serialized session refresh": (server, "Sessions.TryUpdate(sessionId, state, stored)"),
         "session validation status output": (server, "out int statusCode"),
         "unknown session HTTP 404": (server, "statusCode = 404;"),
@@ -146,10 +147,10 @@ def main() -> int:
         errors.append("cannot inspect MCP DELETE session handler")
     else:
         delete_handler = server[delete_handler_start:delete_handler_end]
-        if "if (!TryDeleteSession(sessionId))" not in delete_handler:
-            errors.append("MCP DELETE ignores unknown/expired session result instead of returning 404")
-        if 'WriteResponse(stream, 404, "Not Found"' not in delete_handler:
-            errors.append("MCP DELETE lacks HTTP 404 response for unknown/expired session")
+        if "TryDeleteSession(request.Headers, sessionId, out sessionError, out sessionStatusCode)" not in delete_handler:
+            errors.append("MCP DELETE does not atomically validate protocol version and session termination result")
+        if 'sessionStatusCode == 404 ? "Not Found" : "Bad Request"' not in delete_handler:
+            errors.append("MCP DELETE lacks distinct HTTP 400 protocol-version / 404 stale-session truth")
 
     delete_session_start = server.find("private static bool TryDeleteSession(")
     delete_session_end = server.find("private static bool TryValidateSession(", delete_session_start)
@@ -161,13 +162,36 @@ def main() -> int:
             errors.append("MCP session deletion is not serialized under SessionSync")
         if "CleanupSessionsLocked();" not in delete_session:
             errors.append("MCP session deletion does not expire stale sessions before deciding DELETE result")
+        if "TryValidateProtocolVersionHeader(headers, stored.ProtocolVersion, out error)" not in delete_session:
+            errors.append("MCP session deletion ignores invalid/unsupported MCP-Protocol-Version")
+        if "Sessions.TryRemove(sessionId, out ignored)" not in delete_session:
+            errors.append("MCP session deletion no longer removes the validated session under SessionSync")
 
     validate_session_start = server.find("private static bool TryValidateSession(")
-    validate_session_end = server.find("private static void CleanupSessionsLocked(", validate_session_start)
-    if validate_session_start >= 0 and validate_session_end > validate_session_start:
+    validate_session_end = server.find("private static bool TryValidateProtocolVersionHeader(", validate_session_start)
+    if validate_session_start < 0 or validate_session_end <= validate_session_start:
+        errors.append("cannot inspect MCP session validation/refresh")
+    else:
         validate_session = server[validate_session_start:validate_session_end]
         if "lock (SessionSync)" not in validate_session:
             errors.append("MCP session validation/refresh is not serialized under SessionSync")
+        if "TryValidateProtocolVersionHeader(headers, stored.ProtocolVersion, out error)" not in validate_session:
+            errors.append("MCP session validation does not reject empty/mismatched protocol-version headers")
+        if "!string.IsNullOrWhiteSpace(version)" in validate_session:
+            errors.append("MCP session validation still accepts an explicitly empty MCP-Protocol-Version header")
+
+    protocol_helper_start = server.find("private static bool TryValidateProtocolVersionHeader(")
+    protocol_helper_end = server.find("private static void CleanupSessionsLocked(", protocol_helper_start)
+    if protocol_helper_start < 0 or protocol_helper_end <= protocol_helper_start:
+        errors.append("cannot inspect MCP protocol-version validation helper")
+    else:
+        protocol_helper = server[protocol_helper_start:protocol_helper_end]
+        if 'headers.TryGetValue("MCP-Protocol-Version", out version)' not in protocol_helper:
+            errors.append("MCP protocol-version helper does not inspect the HTTP header")
+        if "string.Equals(version, expectedProtocolVersion, StringComparison.Ordinal)" not in protocol_helper:
+            errors.append("MCP protocol-version helper does not require exact negotiated-version match")
+        if "string.IsNullOrWhiteSpace(version)" in protocol_helper:
+            errors.append("MCP protocol-version helper treats an explicitly empty header as absent")
 
     named_start = account.find("private static bool StartProcess")
     named_exit = account.find("private static void HandleProcessExit", named_start)
@@ -210,8 +234,8 @@ def main() -> int:
     print(
         "PASS: compiled modular MCP transport/runtime use strict bounded HTTP framing/UTF-8, exact JSON "
         "media type admission, strict recursive RFC JSON grammar, valid JSON-RPC ids and serialized "
-        "bounded session lifecycle with 404 expiry truth; CAD timeout/recovery and validated Cloudflare "
-        "endpoint/onboarding boundaries remain fail-closed."
+        "bounded session lifecycle with strict negotiated protocol-version validation and 404 expiry truth; "
+        "CAD timeout/recovery and validated Cloudflare endpoint/onboarding boundaries remain fail-closed."
     )
     return 0
 
