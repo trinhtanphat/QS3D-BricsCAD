@@ -648,7 +648,8 @@ namespace QS3D.BricsCAD.V25.UI
                     }
                     catch
                     {
-                        RestoreSectionViewBestEffort(viewBeforeSection);
+                        if (!TryRestoreSectionViewBestEffort(viewBeforeSection))
+                            _viewBeforeSection = viewBeforeSection;
                         throw;
                     }
                     _viewBeforeSection = viewBeforeSection;
@@ -674,9 +675,9 @@ namespace QS3D.BricsCAD.V25.UI
                 _viewBeforeSection = null;
             }
 
-            private void RestoreSectionViewBestEffort(ViewSnapshot snapshot)
+            private bool TryRestoreSectionViewBestEffort(ViewSnapshot snapshot)
             {
-                if (snapshot == null || _destroyed) return;
+                if (snapshot == null || _destroyed) return true;
                 try
                 {
                     using (var view = _document.Editor.GetCurrentView())
@@ -684,10 +685,13 @@ namespace QS3D.BricsCAD.V25.UI
                         snapshot.Apply(view);
                         _document.Editor.SetCurrentView(view);
                     }
+                    return true;
                 }
                 catch
                 {
-                    // Compensation is bounded best-effort and must not mask native apply failure.
+                    // Compensation remains best-effort so the original native apply failure
+                    // stays primary; false transfers the snapshot into persistent retry ownership.
+                    return false;
                 }
             }
 
