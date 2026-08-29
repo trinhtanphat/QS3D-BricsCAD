@@ -340,7 +340,6 @@ namespace QS3D.BricsCAD.V25
                 {
                     EnsureSequenceRunning(hwnd, ensureMutationRunning, started, maxDuration);
                     var result = ExecuteSequenceStep(step, hwnd, sensitiveConfirmed, ensureMutationRunning, audit, started, maxDuration);
-                    // Recheck after every step. Sensitive payloads are not returned if consent/epoch changed during capture/read.
                     EnsureSequenceRunning(hwnd, ensureMutationRunning, started, maxDuration);
                     if (completed > 0) results.Append(',');
                     results.Append("{\"index\":").Append(i + 1)
@@ -383,34 +382,43 @@ namespace QS3D.BricsCAD.V25
             Stopwatch sequenceStarted,
             int maxDuration)
         {
-            EnsureSequenceRunning(hwnd, ensureMutationRunning, sequenceStarted, maxDuration);
+            Action sequenceGuard = delegate
+            {
+                EnsureSequenceRunning(hwnd, ensureMutationRunning, sequenceStarted, maxDuration);
+            };
+            sequenceGuard();
             var args = step.Arguments;
             switch (step.Tool)
             {
                 case "desktop_window_focus":
-                    return FocusWindow(WithSequenceWindow(args, hwnd), ensureMutationRunning, audit);
+                    return FocusWindow(WithSequenceWindow(args, hwnd), sequenceGuard, audit);
                 case "desktop_mouse_move":
                 {
                     var x = IntegerRequired(args, "x", -1000000, 1000000);
                     var y = IntegerRequired(args, "y", -1000000, 1000000);
                     RequirePointInsideWindow(hwnd, x, y);
-                    ensureMutationRunning();
+                    sequenceGuard();
                     FocusAndVerify(hwnd);
-                    EnsureTargetReady(hwnd, x, y, ensureMutationRunning);
-                    return MouseMove(args, ensureMutationRunning, audit);
+                    EnsureTargetReady(hwnd, x, y, sequenceGuard);
+                    if (!SetCursorPos(x, y)) throw new InvalidOperationException("Windows rejected the sequence cursor move.");
+                    EnsureTargetReady(hwnd, x, y, sequenceGuard);
+                    Audit(audit, "handle=" + HandleText(hwnd) + "; x=" + x.ToString(CultureInfo.InvariantCulture)
+                                 + "; y=" + y.ToString(CultureInfo.InvariantCulture));
+                    return "{\"moved\":true,\"windowHandle\":\"" + HandleText(hwnd) + "\",\"x\":"
+                           + x.ToString(CultureInfo.InvariantCulture) + ",\"y\":" + y.ToString(CultureInfo.InvariantCulture) + "}";
                 }
                 case "desktop_mouse_click":
-                    return MouseClick(WithSequenceWindow(args, hwnd), ensureMutationRunning, audit);
+                    return MouseClick(WithSequenceWindow(args, hwnd), sequenceGuard, audit);
                 case "desktop_mouse_scroll":
-                    return MouseScroll(WithSequenceWindow(args, hwnd), ensureMutationRunning, audit);
+                    return MouseScroll(WithSequenceWindow(args, hwnd), sequenceGuard, audit);
                 case "desktop_mouse_drag":
-                    return MouseDrag(WithSequenceWindow(args, hwnd), ensureMutationRunning, audit);
+                    return MouseDrag(WithSequenceWindow(args, hwnd), sequenceGuard, audit);
                 case "desktop_type":
-                    return TypeText(WithSequenceWindow(args, hwnd), ensureMutationRunning, audit);
+                    return TypeText(WithSequenceWindow(args, hwnd), sequenceGuard, audit);
                 case "desktop_key":
-                    return PressKey(WithSequenceWindow(args, hwnd), ensureMutationRunning, audit);
+                    return PressKey(WithSequenceWindow(args, hwnd), sequenceGuard, audit);
                 case "desktop_clipboard_write":
-                    return ClipboardWrite(args, ensureMutationRunning, audit);
+                    return ClipboardWrite(args, sequenceGuard, audit);
                 case "desktop_wait_for_window":
                     return WaitForSequenceTarget(args, hwnd, ensureMutationRunning, sequenceStarted, maxDuration);
                 case "desktop_screenshot":
@@ -569,7 +577,6 @@ namespace QS3D.BricsCAD.V25
             if (inString || escaped || depth != 0)
                 throw new InvalidOperationException("Sequence step arguments contain unterminated JSON content.");
 
-            // Force a full top-level scan before any security-sensitive property injection.
             string ignoredRaw, scanError;
             bool ignoredFound;
             if (!McpTopLevelJson.TryFindPropertyValue(value, "__qs3d_sequence_validation__", out ignoredRaw, out ignoredFound, out scanError))
@@ -621,7 +628,7 @@ namespace QS3D.BricsCAD.V25
                     return "{\"found\":true,\"elapsedMs\":" + waitStarted.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture)
                            + ",\"window\":" + WindowJson(info) + "}";
                 if (waitStarted.ElapsedMilliseconds >= timeout)
-                    return "{\"found\":false,\"elapsedMs\":" + waitStarted.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture) + "}";
+                    throw new TimeoutException("desktop_sequence wait step timed out before the bound target matched.");
                 var sleep = Math.Min(poll, SequenceDelaySliceMilliseconds);
                 Thread.Sleep(Math.Max(1, sleep));
             }
