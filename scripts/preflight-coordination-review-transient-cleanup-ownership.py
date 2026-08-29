@@ -73,7 +73,7 @@ for token in (
 
 abandon = method_body(
     "public void AbandonDestroyedDocumentState()",
-    "private void RestoreImpliedSelectionBestEffort()",
+    "private void RestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)",
 )
 for token in ("_destroyed = true;", "_highlighted.Clear();", "_isolationActive = false;", "_viewBeforeSection = null;"):
     if token not in abandon:
