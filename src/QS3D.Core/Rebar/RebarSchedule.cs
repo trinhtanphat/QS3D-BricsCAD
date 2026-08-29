@@ -274,21 +274,21 @@ namespace QS3D.Core.Rebar
                 var result = _sum + _compensation;
                 if (double.IsNaN(result) || double.IsInfinity(result))
                     throw new OverflowException("BBS aggregate overflow: " + label + ".");
-                if (_compensation != 0d && result == _sum && !IsStrictlyBelowHalfUlp(_sum, _compensation))
+                if (_compensation != 0d && result == _sum && !IsAtMostHalfUlp(_sum, _compensation))
                     throw new OverflowException("BBS aggregate lost a non-zero compensation at floating-point precision: " + label + ".");
                 if (_sum != 0d && result == _compensation)
                     throw new OverflowException("BBS aggregate lost a non-zero accumulated value at floating-point precision: " + label + ".");
                 return result == 0d ? 0d : result;
             }
 
-            private static bool IsStrictlyBelowHalfUlp(double current, double compensation)
+            private static bool IsAtMostHalfUlp(double current, double compensation)
             {
                 if (current <= 0d || compensation == 0d) return false;
                 var currentBits = BitConverter.DoubleToInt64Bits(current);
                 var adjacentBits = compensation > 0d ? currentBits + 1L : currentBits - 1L;
                 var adjacent = BitConverter.Int64BitsToDouble(adjacentBits);
                 var spacing = Math.Abs(adjacent - current);
-                return Math.Abs(compensation) < spacing / 2d;
+                return Math.Abs(compensation) <= spacing / 2d;
             }
         }
 
