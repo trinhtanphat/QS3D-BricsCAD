@@ -13,82 +13,58 @@ match = re.search(
     re.S,
 )
 if not match:
-    raise SystemExit("FAIL coordination section focus rollback ownership: ApplySectionFocus method not found")
+    raise SystemExit("FAIL section focus ownership: ApplySectionFocus method not found")
 body = match.group("body")
 
-for token, label in [
-    ("var viewBeforeSection = ViewSnapshot.Capture(view);", "attempt-local prior-view snapshot"),
-    ("_document.Editor.SetCurrentView(view);", "native section view apply"),
-    ("TryRestoreSectionViewBestEffort(viewBeforeSection)", "observable rollback result"),
-    ("_viewBeforeSection = viewBeforeSection;", "persistent retry ownership publication"),
-    ("throw;", "original native apply failure rethrow"),
+for token in [
+    "var viewBeforeSection = ViewSnapshot.Capture(view);",
+    "_document.Editor.SetCurrentView(view);",
+    "TryRestoreSectionViewBestEffort(viewBeforeSection)",
+    "_viewBeforeSection = viewBeforeSection;",
+    "throw;",
 ]:
     if token not in body:
-        raise SystemExit(f"FAIL coordination section focus rollback ownership: missing {label}: {token}")
+        raise SystemExit("FAIL section focus ownership: missing " + token)
 
 apply_at = body.find("_document.Editor.SetCurrentView(view);")
-catch_at = body.find("catch", apply_at)
-if apply_at < 0 or catch_at < 0:
-    raise SystemExit("FAIL coordination section focus rollback ownership: native apply must have a compensation catch")
+first_publish_at = body.find("_viewBeforeSection = viewBeforeSection;")
+if apply_at < 0 or first_publish_at < apply_at:
+    raise SystemExit("FAIL section focus ownership: ownership published before native apply attempt")
 
-catch_tail = body[catch_at:]
-conditional = re.search(
+if not re.search(
     r"catch\s*\{\s*if\s*\(\s*!TryRestoreSectionViewBestEffort\(viewBeforeSection\)\s*\)\s*"
     r"_viewBeforeSection\s*=\s*viewBeforeSection\s*;\s*throw\s*;\s*\}",
-    catch_tail,
+    body,
     re.S,
-)
-if not conditional:
-    raise SystemExit(
-        "FAIL coordination section focus rollback ownership: failed native apply must retain the attempt-local snapshot only when rollback is unconfirmed, then rethrow the original failure"
-    )
+):
+    raise SystemExit("FAIL section focus ownership: failed compensation must retain snapshot then rethrow")
 
-# The first persistent publication may be the failed-compensation transfer, but it must
-# never occur before the initial native SetCurrentView attempt.
-first_publish_at = body.find("_viewBeforeSection = viewBeforeSection;")
-if first_publish_at < apply_at:
-    raise SystemExit("FAIL coordination section focus rollback ownership: persistent snapshot ownership is published before native apply is attempted")
-
-helper = re.search(
-    r"private bool TryRestoreSectionViewBestEffort\(ViewSnapshot snapshot\)\s*\{(?P<body>.*?)\n\s*\}",
-    text,
-    re.S,
-)
-if not helper:
-    raise SystemExit("FAIL coordination section focus rollback ownership: bool compensation helper not found")
-helper_body = helper.group("body")
-for token, label in [
-    ("snapshot.Apply(view);", "prior snapshot application"),
-    ("_document.Editor.SetCurrentView(view);", "native prior-view restoration"),
-    ("return true;", "confirmed rollback result"),
-    ("return false;", "unconfirmed rollback result"),
-]:
+helper_start = text.find("private bool TryRestoreSectionViewBestEffort(ViewSnapshot snapshot)")
+helper_end = text.find("private Extents3d ReadBounds", helper_start)
+if helper_start < 0 or helper_end < 0:
+    raise SystemExit("FAIL section focus ownership: bool compensation helper not found")
+helper_body = text[helper_start:helper_end]
+for token in ["snapshot.Apply(view);", "_document.Editor.SetCurrentView(view);", "return true;", "return false;"]:
     if token not in helper_body:
-        raise SystemExit(f"FAIL coordination section focus rollback ownership: helper missing {label}: {token}")
+        raise SystemExit("FAIL section focus ownership: compensation helper missing " + token)
 
-restore = re.search(
-    r"public void RestoreSectionView\(\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*private bool TryRestoreSectionViewBestEffort",
-    text,
-    re.S,
-)
-if not restore:
-    raise SystemExit("FAIL coordination section focus rollback ownership: RestoreSectionView method not found")
-restore_body = restore.group("body")
+restore_start = text.find("public void RestoreSectionView()")
+restore_end = text.find("private bool TryRestoreSectionViewBestEffort", restore_start)
+if restore_start < 0 or restore_end < 0:
+    raise SystemExit("FAIL section focus ownership: RestoreSectionView method not found")
+restore_body = text[restore_start:restore_end]
 restore_apply_at = restore_body.find("_document.Editor.SetCurrentView(view);")
 restore_clear_at = restore_body.rfind("_viewBeforeSection = null;")
 if restore_apply_at < 0 or restore_clear_at < restore_apply_at:
-    raise SystemExit("FAIL coordination section focus rollback ownership: retry ownership must clear only after native prior-view restoration succeeds")
+    raise SystemExit("FAIL section focus ownership: ownership must clear after successful native restore")
 
-abandon = re.search(
-    r"public void AbandonDestroyedDocumentState\(\)\s*\{(?P<body>.*?)\n\s*\}",
-    text,
-    re.S,
-)
-if not abandon or "_viewBeforeSection = null;" not in abandon.group("body"):
-    raise SystemExit("FAIL coordination section focus rollback ownership: destroyed-document path must remain the explicit section-view ownership abandon boundary")
+abandon_start = text.find("public void AbandonDestroyedDocumentState()")
+abandon_end = text.find("private void RestoreImpliedSelectionBestEffort", abandon_start)
+if abandon_start < 0 or abandon_end < 0 or "_viewBeforeSection = null;" not in text[abandon_start:abandon_end]:
+    raise SystemExit("FAIL section focus ownership: destroyed-document abandon boundary missing")
 
 if "private void RestoreSectionViewBestEffort(ViewSnapshot snapshot)" in text:
-    raise SystemExit("FAIL coordination section focus rollback ownership: fire-and-forget rollback helper cannot preserve failed compensation ownership")
+    raise SystemExit("FAIL section focus ownership: fire-and-forget rollback helper remains")
 
 print("PASS coordination review section focus failed-compensation retry ownership")
 sys.exit(0)
