@@ -15,7 +15,7 @@ def require(condition: bool, message: str) -> None:
 
 
 highlight = re.search(
-    r"public void Highlight\(IReadOnlyList<ObjectId> ids\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*public void ClearHighlight",
+    r"public void Highlight\(IReadOnlyList<ObjectId> ids\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*private IReadOnlyList<ObjectId> UnhighlightAttemptBestEffort",
     text,
     re.S,
 )
@@ -38,34 +38,38 @@ if highlight is not None:
     commit = body.find("transaction.Commit();")
     require(commit >= 0 and publish > commit,
             "persistent session ownership must publish only after successful transaction completion")
-    require("catch" in body and "UnhighlightAttemptBestEffort(pending);" in body and "throw;" in body,
-            "failed multi-entity highlight must compensate this attempt before rethrow")
+    require("var rollbackPending = UnhighlightAttemptBestEffort(pending);" in body and
+            "_highlighted.AddRange(rollbackPending);" in body and "throw;" in body,
+            "failed multi-entity highlight must compensate and retain unconfirmed rollback ownership before rethrow")
     catch_pos = body.find("catch")
-    rollback_pos = body.find("UnhighlightAttemptBestEffort(pending);", catch_pos)
-    throw_pos = body.find("throw;", catch_pos)
-    require(catch_pos >= 0 and catch_pos < rollback_pos < throw_pos,
-            "highlight catch path must compensate before propagating failure")
+    rollback_pos = body.find("var rollbackPending = UnhighlightAttemptBestEffort(pending);", catch_pos)
+    retry_publish = body.find("_highlighted.AddRange(rollbackPending);", rollback_pos)
+    throw_pos = body.find("throw;", retry_publish)
+    require(catch_pos >= 0 and catch_pos < rollback_pos < retry_publish < throw_pos,
+            "highlight catch path must classify and publish retry ownership before propagating the original failure")
     require("_highlighted.Add(id);" not in body,
             "session ownership must never publish incrementally inside the native highlight loop")
 
 helper = re.search(
-    r"private void UnhighlightAttemptBestEffort\(IReadOnlyList<ObjectId> pending\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*public void ClearHighlight",
+    r"private IReadOnlyList<ObjectId> UnhighlightAttemptBestEffort\(IReadOnlyList<ObjectId> pending\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*public void ClearHighlight",
     text,
     re.S,
 )
 require(helper is not None, "per-attempt highlight compensation helper was not found")
 if helper is not None:
     body = helper.group("body")
-    require("if (pending == null || pending.Count == 0 || _destroyed) return;" in body,
-            "compensation must be inert for empty/destroyed attempts")
     require("_document.LockDocument()" in body and "StartTransaction()" in body,
             "compensation must re-enter the document through bounded native lifetime")
-    require("entity?.Unhighlight();" in body,
-            "compensation must best-effort unhighlight only this attempt's successfully highlighted entities")
-    require("catch" in body,
-            "one failed cleanup target must not prevent the rest of the attempt from being compensated")
+    require("entity.Unhighlight();" in body,
+            "compensation must unhighlight only this attempt's successfully highlighted entities")
+    require("var unreleased = new List<ObjectId>();" in body and "unreleased.Add(id);" in body,
+            "one failed cleanup target must be retained while compensation continues for the rest")
+    require("return pending.ToArray();" in body,
+            "whole compensation failure must conservatively retain all attempt ownership")
+    require("return unreleased.AsReadOnly();" in body,
+            "successful compensation transaction must return the exact unconfirmed ownership set")
     require("_highlighted" not in body,
-            "attempt compensation must not mutate session-published ownership")
+            "attempt compensation helper must not publish session ownership directly")
 
 # Preserve established fail-closed review semantics and cleanup boundaries.
 for token in (
@@ -84,4 +88,4 @@ if errors:
         print(" - " + error)
     sys.exit(1)
 
-print("PASS Coordination review highlight publication is atomic with per-attempt best-effort rollback")
+print("PASS Coordination review highlight publication is atomic and failed compensation retains retry ownership")
