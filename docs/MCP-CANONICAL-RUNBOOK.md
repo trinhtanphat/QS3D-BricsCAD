@@ -8,7 +8,7 @@
 **Merged OAuth source head:** `3f4cc36448b81dba15da741138807fe59793aa60`  
 **End-user model:** one QS3D install, click/browser-login setup, no PowerShell/CMD/Node/second MCP repository.
 
-> **MCP AGENTS MUST START HERE.** The architecture established by #4352 remains the parent product contract. OAuth/DCR onboarding added by #4584/#4597 is the canonical ChatGPT authentication path. #4629 extends that same embedded runtime with bounded Windows desktop tools, local desktop consent, visible emergency controls, guided onboarding and versioned recovery. Do not reconstruct the product from stale bearer-only docs or the historical second MCP repository.
+> **MCP AGENTS MUST START HERE.** The architecture established by #4352 remains the parent product contract. OAuth/DCR onboarding added by #4584/#4597 is the canonical ChatGPT authentication path. #4629 extends that same embedded runtime with bounded Windows desktop tools, local desktop consent, visible emergency controls, guided onboarding and versioned recovery. The owner selected the explicit-tool **Completion Pack (Approach A)** for #4629; generic batch/macro desktop automation (**Approach B**) is deferred and must not be silently added to this carrier. Do not reconstruct the product from stale bearer-only docs or the historical second MCP repository.
 
 ## 1. Canonical architecture
 
@@ -30,7 +30,7 @@ ChatGPT Web / custom MCP
        +-- bounded native command workflows
        +-- BricsCAD-process UI fallback
        +-- McpDesktopAutomationRuntime (explicit desktop_* only)
-  -> local desktop-consent / blue overlay / Esc×2 stop boundary
+  -> local desktop-consent / idle expiry / blue overlay / Esc×2 stop boundary
 ```
 
 There is **one shipping repository and one end-user installation**: `trinhtanphat/QS3D-BricsCAD`. The historical `QS3D-CAD-MCP` repository is reference/history only and must not return as a second runtime, Node service, clone, or user setup requirement.
@@ -46,7 +46,7 @@ Inspect these first:
 3. `src/QS3D.BricsCAD.V25/McpOAuthConsent.cs` — bounded local BricsCAD approve/deny prompt for OAuth authorization.
 4. `src/QS3D.BricsCAD.V25/McpCadAgentRuntime.cs` — direct CAD operations, bounded command dispatch, BricsCAD-process UI fallback, canonical mutation epoch/emergency recovery and audit.
 5. `src/QS3D.BricsCAD.V25/McpDesktopAutomationRuntime.cs` — explicit bounded `desktop_*` observation/input/clipboard/screenshot tools for the current interactive Windows session.
-6. `src/QS3D.BricsCAD.V25/McpDesktopControlSession.cs` — non-persistent local desktop consent, blue active-control overlay and physical Esc×2 emergency stop.
+6. `src/QS3D.BricsCAD.V25/McpDesktopControlSession.cs` — non-persistent local desktop consent, idle expiry, pause/resume state, blue active-control overlay and physical Esc×2 emergency stop.
 7. `src/QS3D.BricsCAD.V25/McpTopLevelJson.cs` — security-sensitive top-level JSON parsing and mutation confirmation.
 8. `src/QS3D.BricsCAD.V25/McpAgentControlCenter.cs` — guided four-tab `QS3DMCPAGENTCENTER` UX.
 9. `src/QS3D.BricsCAD.V25/McpLocalAgentClient.cs` — local loopback protocol/self-test/emergency-control client.
@@ -76,7 +76,7 @@ The production path is click-first:
 10. When BricsCAD shows the local OAuth consent prompt, approve only the connection you initiated.
 11. ChatGPT completes authorization-code + PKCE S256, receives an access token and scans/calls MCP tools.
 12. Return to Agent Center, acknowledge that the MCP was added, then run protocol/read-only verification.
-13. Enable **desktop control** locally in the **Agent** tab only when a workflow genuinely needs to cross outside BricsCAD.
+13. Enable **desktop control** locally in the **Agent** tab only when a workflow genuinely needs to cross outside BricsCAD. The session is local-only, pausable/resumable only by the user and expires after 10 minutes of desktop-action inactivity.
 
 The legacy static bearer token remains a local/backward-compatible engineering path under **Nâng cao**. It is **not** the normal ChatGPT onboarding UX.
 
@@ -133,40 +133,56 @@ The active transport must continue to preserve:
 
 The `cad_entity_transform` schema must remain valid JSON and preserve its required boolean `confirmMutation` contract.
 
-### Desktop-wide tools
+### Desktop-wide tools — Approach A selected
 
-The explicit desktop namespace is:
+The explicit desktop namespace for #4629 is:
 
-- read-only observation: `desktop_cursor_position`, `desktop_window_list`, `desktop_foreground_window`;
-- mutation/input: `desktop_window_focus`, `desktop_mouse_move`, `desktop_mouse_click`, `desktop_mouse_scroll`, `desktop_type`, `desktop_key`, `desktop_clipboard_write`;
-- sensitive reads: `desktop_clipboard_read`, `desktop_screenshot`.
+- read-only observation/wait: `desktop_cursor_position`, `desktop_window_list`, `desktop_foreground_window`, `desktop_wait_for_window`;
+- mutation/input: `desktop_window_focus`, `desktop_mouse_move`, `desktop_mouse_click`, `desktop_mouse_scroll`, `desktop_mouse_drag`, `desktop_type`, `desktop_key`, `desktop_clipboard_write`;
+- sensitive reads: `desktop_clipboard_read`, `desktop_screenshot` with optional bounded crop.
 
-Desktop mutation requires both `confirmMutation=true` **and** local desktop consent. Clipboard/screenshot reads require `confirmSensitiveRead=true` **and** local desktop consent. Local desktop consent is process-memory-only, resets at every BricsCAD start and cannot be enabled by an MCP call.
+Desktop mutation requires both `confirmMutation=true` **and** local desktop consent. Clipboard/screenshot reads require `confirmSensitiveRead=true` **and** local desktop consent. Local desktop consent is process-memory-only, resets at every BricsCAD start, expires after 10 minutes of desktop-action inactivity and cannot be enabled/resumed by an MCP call.
 
-A guarded desktop action displays a click-through blue border/banner. Physical **Esc ×2 within 1.2 seconds** revokes consent, advances the MCP emergency-stop epoch, hides the overlay and requests BricsCAD command cancellation. Re-enabling desktop control is a local user action.
+A guarded desktop action displays a click-through blue border/banner. Physical **Esc ×2 within 1.2 seconds** revokes consent, advances the MCP emergency-stop epoch, hides the overlay and requests BricsCAD command cancellation. Local Pause uses the same fail-closed stop boundary. Resume is an explicit local user action that creates a new consent generation only after the emergency keyboard hook is available.
 
-Desktop targeting is limited to visible top-level windows in the current interactive Windows session. Handles are revalidated before input. Text, click counts, wheel deltas, window lists, clipboard payloads and screenshots are bounded. Typed text, clipboard contents and screenshot pixels must not be persisted into audit records.
+`desktop_wait_for_window` is read-only and bounded to a maximum 15-second timeout. It observes visible current-session top-level window metadata and never focuses/clicks automatically.
+
+`desktop_mouse_drag` requires an exact visible `windowHandle`, start/end points inside current target bounds, foreground focus/revalidation immediately before injection and repeated stop/target checks during the drag. It must fail closed if the target, consent generation or mutation epoch changes.
+
+`desktop_screenshot` may crop either the validated target window or virtual desktop. Crop coordinates are intersected with the selected source bounds, empty/invalid crops are rejected, and existing screenshot dimension/payload caps still apply.
+
+Desktop targeting is limited to visible top-level windows in the current interactive Windows session. Handles are revalidated before input. Text, click counts, wheel deltas, drag duration, window lists, wait timeout, clipboard payloads and screenshots are bounded. Typed text, clipboard contents and screenshot pixels must not be persisted into audit records.
+
+Local desktop events may contain a bounded `actionId`, timestamps/duration and success/failure/cancelled state. They must not contain typed/clipboard/screenshot/token/DWG content.
+
+### Approach B — deferred desktop batch/macro
+
+A future `desktop_sequence` / `desktop_macro` style primitive may be considered only after Approach A is locally qualified. It is **not part of #4629 / PR #4632**, must not appear in the current `tools/list`, and must not be implemented opportunistically by another agent.
+
+Any future batch design needs its own reservation/design and must preserve per-step exact-window validation, bounded sequence length/time, local consent, Esc×2 cancellation, mutation-epoch checks and per-step audit. It must never become arbitrary shell/process/script execution.
 
 ## 6. Agent decision model
 
 Decision order is **direct CAD API first → bounded allowlisted native command second → BricsCAD-process UI fallback third → explicit desktop tools only for genuinely cross-application workflows**.
 
-Representative inspection tools include `connector_info`, `qs3d_status`, `cad_active_document`, `cad_selection`, `cad_database_snapshot`, `cad_entity_inspect`, `cad_view_state`, `cad_wait_idle`, `cad_sysvar`, `cad_command_catalog`, `cad_audit_tail` and read-only desktop observation.
+Representative inspection tools include `connector_info`, `qs3d_status`, `cad_active_document`, `cad_selection`, `cad_database_snapshot`, `cad_entity_inspect`, `cad_view_state`, `cad_wait_idle`, `cad_sysvar`, `cad_command_catalog`, `cad_audit_tail`, desktop window observation and bounded `desktop_wait_for_window`.
 
-Representative direct mutations include line/circle/arc/polyline/text/MText creation, `cad_entity_transform`, delete/layer operations and `qs3d_run_command`. Complex native workflows use `cad_command_sequence`. BricsCAD UI fallback stays confined to BricsCAD-owned windows. `cad_agent_stop`, `cad_cancel_command`, and confirmed `cad_agent_resume` preserve recovery.
+Representative direct mutations include line/circle/arc/polyline/text/MText creation, `cad_entity_transform`, delete/layer operations and `qs3d_run_command`. Complex native workflows use `cad_command_sequence`. BricsCAD UI fallback stays confined to BricsCAD-owned windows. Cross-application workflows may use explicit desktop focus/move/click/scroll/drag/type/key/clipboard tools under the local-consent boundary. `cad_agent_stop`, `cad_cancel_command`, and confirmed `cad_agent_resume` preserve recovery.
 
 A successful tool call is not proof the drawing or external application state is correct. Re-inspect state before consequential follow-up actions and before final save/plot.
 
 ## 7. Guided local status and recovery
 
-QS3D does not scrape the ChatGPT web conversation. ChatGPT remains the conversation UI. Agent Center mirrors only bounded local operational metadata such as onboarding state, current MCP action, next step, errors and recovery events. Normal MCP results/errors flow back to ChatGPT through `tools/call`.
+QS3D does not scrape the ChatGPT web conversation. ChatGPT remains the conversation UI. Agent Center mirrors only bounded local operational metadata such as onboarding state, desktop consent/idle-expiry state, current MCP action, bounded action ID/duration/result, next step, errors and recovery events. Normal MCP results/errors flow back to ChatGPT through `tools/call`.
+
+The Agent tab must make these desktop states visible: waiting, controlling, locally paused/stopped, idle-expired and local re-enable required. Existing System/Dark/Light behavior, toast UX and blue active-control overlay remain authoritative.
 
 Recovery uses two layers:
 
 1. preserve a shorter existing BricsCAD autosave interval, otherwise ensure `SAVETIME <= 5`, and enable `ISAVEBAK=1`;
 2. while CAD is idle, keep bounded coherent on-disk DWG copies under `%LOCALAPPDATA%\QS3D\Backups`, maximum 30 per drawing.
 
-Recovery verifies the source did not change during copying and always restores to a new `Recovered` copy. It does not silently overwrite the active/original DWG.
+Recovery verifies the source did not change during copying and always restores to a new `Recovered` copy. It does not silently overwrite the active/original DWG. After an emergency stop or failed desktop action, Agent Center should keep recovery guidance visible when relevant.
 
 Both V25 and V26 host entries start embedded MCP, persistent tunnel reconnect, recovery and first-run onboarding. Teardown revokes desktop consent before network services stop.
 
@@ -185,7 +201,7 @@ For the current MCP surface, run/inspect at minimum:
 - `scripts/preflight-mcp-loopback-readonly.py`
 - deterministic Core smoke and trusted V25/V26 compilation where selected by repository CI.
 
-Hosted/source evidence does not replace licensed runtime qualification.
+The desktop source guards must cover the selected Approach A contracts, including exact-target drag behavior, bounded wait/crop, idle expiry/local-only resume and sensitive timeline redaction. Hosted/source evidence does not replace licensed runtime qualification.
 
 ## 9. LOCAL-024 — required runtime qualification
 
@@ -199,23 +215,28 @@ The local matrix must cover:
 4. protected-resource and authorization-server discovery;
 5. ChatGPT DCR using only basic URL + OAuth setup;
 6. deny then approve local OAuth consent;
-7. PKCE S256 token exchange and `tools/list`, including the complete `desktop_*` catalog;
+7. PKCE S256 token exchange and `tools/list`, including the complete Approach A `desktop_*` catalog and absence of deferred `desktop_sequence`/macro tools;
 8. representative read-only CAD calls plus desktop cursor/window observation;
-9. local desktop-consent OFF rejection and local enable behavior;
-10. blue overlay while guarded desktop input/sensitive reads run;
-11. `desktop_clipboard_read` and `desktop_screenshot` rejection without acknowledgement, then bounded success on disposable content;
-12. confirmed disposable window/mouse/type/key/clipboard-write behavior;
-13. physical Esc×2 emergency stop, CAD cancel and required local re-enable;
-14. one-use auth-code replay rejection;
-15. no-refresh behavior without `offline_access`;
-16. refresh issuance with `offline_access`, rotation and old-token replay rejection;
-17. scope/resource mismatch rejection;
-18. BricsCAD restart invalidating process-bound refresh credentials and local desktop consent;
-19. legacy engineering-bearer compatibility;
-20. Quick Tunnel URL invalidation and persistent Named Tunnel reconnect/autostart;
-21. autosave/BAK policy, versioned snapshot retention and recovery-to-new-copy on a disposable drawing;
-22. one confirmed disposable-DWG mutation plus audit/emergency-stop/cancel;
-23. save/reopen and clean process shutdown.
+9. bounded `desktop_wait_for_window` success + timeout behavior;
+10. local desktop-consent OFF rejection and local enable behavior;
+11. 10-minute idle expiry plus local Pause/Resume behavior and remaining-time UI;
+12. blue overlay while guarded desktop input/sensitive reads run;
+13. `desktop_clipboard_read` and `desktop_screenshot` rejection without acknowledgement, then bounded success on disposable content;
+14. screenshot crop validation and bounded output;
+15. confirmed disposable window/mouse/type/key/clipboard-write behavior;
+16. exact-target `desktop_mouse_drag` plus mid-drag Esc×2/fail-closed behavior on disposable UI;
+17. local action timeline IDs/duration/terminal state with no sensitive payload persistence;
+18. physical Esc×2 emergency stop, CAD cancel and required local re-enable;
+19. one-use auth-code replay rejection;
+20. no-refresh behavior without `offline_access`;
+21. refresh issuance with `offline_access`, rotation and old-token replay rejection;
+22. scope/resource mismatch rejection;
+23. BricsCAD restart invalidating process-bound refresh credentials and local desktop consent;
+24. legacy engineering-bearer compatibility;
+25. Quick Tunnel URL invalidation and persistent Named Tunnel reconnect/autostart;
+26. autosave/BAK policy, versioned snapshot retention and recovery-to-new-copy on a disposable drawing;
+27. one confirmed disposable-DWG mutation plus audit/emergency-stop/cancel;
+28. save/reopen and clean process shutdown.
 
 Never commit access/refresh tokens, static bearer secrets, Cloudflare credentials, private paths/DWGs, clipboard contents, typed secrets, proprietary BricsCAD binaries or unsanitized screenshots.
 
@@ -228,13 +249,14 @@ For future MCP work:
 3. resolve current `main` and current source before changing anything;
 4. edit active V2/OAuth/runtime source, not the legacy monolith;
 5. preserve one repo/runtime, click-first setup, system/provider-browser identity ownership, OAuth basic-screen onboarding and API-first CAD control;
-6. preserve local desktop consent + visible active-control + Esc×2 emergency boundaries for desktop-wide automation;
-7. do not open a competing MCP carrier for the same scope;
-8. update `docs/CHATGPT-MCP-INTEGRATION.md`, `docs/MCP-FULL-CAD-AGENT.md`, `docs/MCP-GUIDED-ONBOARDING-RECOVERY.md` and the single LOCAL-024 handoff when behavior changes;
-9. never promote hosted CI to `LOCAL_PASS`.
+6. preserve local desktop consent + idle expiry + visible active-control + Esc×2 emergency boundaries for desktop-wide automation;
+7. implement the owner-selected Approach A completion pack on #4629; keep Approach B batch/macro deferred unless a later owner request explicitly opens a new design/reservation;
+8. do not open a competing MCP carrier for the same scope;
+9. update `docs/CHATGPT-MCP-INTEGRATION.md`, `docs/MCP-FULL-CAD-AGENT.md`, `docs/MCP-GUIDED-ONBOARDING-RECOVERY.md` and the single LOCAL-024 handoff when behavior changes;
+10. never promote hosted CI to `LOCAL_PASS`.
 
 ## 11. Definition of done
 
-Source integration for OAuth (#4584/#4597) is already merged. Source integration for #4629 is complete only after its canonical protected PR lands in `main` with current required checks satisfied.
+Source integration for OAuth (#4584/#4597) is already merged. Source integration for #4629 is complete only after the selected Approach A completion pack is implemented, its source contracts are satisfied, and its canonical protected PR lands in `main` with current required checks satisfied.
 
 Full runtime completion is separate: the exact intended merged/release descendant must pass LOCAL-024 with real BricsCAD V25/V26 + Cloudflare + ChatGPT + Windows desktop behavior, sanitized evidence must be recorded, and the runtime item can then move from `PENDING_LOCAL` to completed.
