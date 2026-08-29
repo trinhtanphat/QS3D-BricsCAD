@@ -51,13 +51,23 @@ safe_summary_files = [
     "src/QS3D.BricsCAD.V25/UI/CurtainWallWindow.xaml.cs",
     "src/QS3D.BricsCAD.V25/UI/RebarScheduleWindow.xaml.cs",
 ]
+canonical_bbs_totals = {
+    "src/QS3D.BricsCAD.V25/BbsCsvCommands.cs": "RebarScheduleBuilder.CalculateTotals(rows)",
+    "src/QS3D.BricsCAD.V25/UI/RebarScheduleWindow.xaml.cs": "RebarScheduleBuilder.CalculateTotals(_rows)",
+}
 for relative in safe_summary_files:
     path = ROOT / relative
     if not path.is_file():
         errors.append("missing schedule summary file: " + relative)
         continue
     text = path.read_text(encoding="utf-8")
-    if "QuantityReportMath" not in text:
+    if relative in canonical_bbs_totals:
+        token = canonical_bbs_totals[relative]
+        if token not in text:
+            errors.append(relative + " must use canonical compensated BBS schedule totals: " + token)
+        if "QuantityReportMath.Add(" in text or "QuantityReportMath.AddCount(" in text:
+            errors.append(relative + " must not restore legacy pairwise BBS aggregation")
+    elif "QuantityReportMath" not in text:
         errors.append(relative + " must use shared checked schedule arithmetic")
     if ".Sum(" in text:
         errors.append(relative + " must not use unchecked LINQ Sum for user-visible/export schedule totals")
@@ -85,4 +95,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: BQ fallbacks are lazy; WallFinish BQ prefers regenerated net finish area; BQ export verifies its bound current project before refresh; schedule/Curtain/BBS UI-export totals use shared checked finite arithmetic with room provenance exclusion.")
+print("PASS: BQ fallbacks are lazy; WallFinish BQ prefers regenerated net finish area; BQ export verifies its bound current project before refresh; non-BBS schedule totals use shared checked finite arithmetic while BBS UI/export uses canonical compensated totals with room provenance exclusion.")
