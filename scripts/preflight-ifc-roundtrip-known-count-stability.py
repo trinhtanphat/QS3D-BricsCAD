@@ -8,6 +8,7 @@ PROJECTION = ROOT / "src/QS3D.Core/Export/IfcRoundTripProjection.cs"
 EVIDENCE = ROOT / "src/QS3D.Core/Export/IfcRoundTripQuantityEvidence.cs"
 RESULT = ROOT / "src/QS3D.Core/Export/IfcRoundTripExchangeResult.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/IfcRoundTripKnownCountStabilitySmoke.cs"
+TRANSIENT_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/IfcRoundTripTransientKnownCountStabilitySmoke.cs"
 RUNBOOK = ROOT / "docs/FEATURE-RUNBOOKS/ifc-roundtrip-known-count-stability.md"
 errors = []
 
@@ -17,6 +18,7 @@ for path, label in (
     (EVIDENCE, "IFC quantity-evidence source"),
     (RESULT, "IFC exchange-result source"),
     (SMOKE, "IFC Count-stability smoke"),
+    (TRANSIENT_SMOKE, "IFC transient Count-stability smoke"),
     (RUNBOOK, "IFC Count-stability runbook"),
 ):
     if not path.is_file():
@@ -27,6 +29,7 @@ projection = PROJECTION.read_text(encoding="utf-8") if PROJECTION.is_file() else
 evidence = EVIDENCE.read_text(encoding="utf-8") if EVIDENCE.is_file() else ""
 result = RESULT.read_text(encoding="utf-8") if RESULT.is_file() else ""
 smoke = SMOKE.read_text(encoding="utf-8") if SMOKE.is_file() else ""
+transient_smoke = TRANSIENT_SMOKE.read_text(encoding="utf-8") if TRANSIENT_SMOKE.is_file() else ""
 runbook = RUNBOOK.read_text(encoding="utf-8") if RUNBOOK.is_file() else ""
 
 for token in (
@@ -56,7 +59,10 @@ for source_label in (
     "IFC round-trip provenance",
     "IFC round-trip projection",
 ):
-    first = projection.find("IfcRoundTripKnownCountContract.RequireStableDuringTraversal(", projection.find(source_label) - 200)
+    label_index = projection.find(source_label)
+    first = projection.rfind("IfcRoundTripKnownCountContract.RequireStableDuringTraversal(", 0, label_index + 1)
+    if first < 0:
+        first = projection.find("IfcRoundTripKnownCountContract.RequireStableDuringTraversal(", label_index)
     move = projection.find("enumerator.MoveNext()", first)
     second = projection.find("IfcRoundTripKnownCountContract.RequireStableDuringTraversal(", move)
     current = projection.find("enumerator.Current", second)
@@ -78,7 +84,6 @@ for source, mismatch_token, stable_label, publication_token, label in ordering_c
     if not (mismatch >= 0 and stable > mismatch and stable_label_index > stable and publication > stable_label_index):
         errors.append(label + " post-traversal Count check must occur after under-yield detection and before canonical publication")
 
-# Preserve issue-4316 early-overrun and independent streaming bounds.
 if projection.count("IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(") != 3:
     errors.append("projection source lost one of the three pre-item Count overrun guards")
 if evidence.count("IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(") != 1:
@@ -108,6 +113,20 @@ for token in (
 ):
     if token not in smoke:
         errors.append("IFC Count-stability smoke missing historical regression/control: " + token)
+
+for token in (
+    "DimensionGrowthFailsBeforeCurrent();",
+    "ProvenanceShrinkFailsBeforeCurrent();",
+    "ProjectionNegativeCountFailsBeforeCurrent();",
+    "DimensionConflictingCountFailsBeforeCurrent();",
+    "StableCountedInputsRemainAccepted();",
+    "CurrentReads",
+    "DriftAfterMoveCollection<T>",
+    "ConflictAfterMoveCollection<T>",
+    "[ModuleInitializer]",
+):
+    if token not in transient_smoke:
+        errors.append("IFC transient Count smoke missing regression/control: " + token)
 
 for token in (
     "transient",
