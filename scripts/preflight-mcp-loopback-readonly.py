@@ -17,6 +17,14 @@ def main() -> int:
         "loopback-only endpoint": 'DEFAULT_ENDPOINT = "http://127.0.0.1:8765/mcp"',
         "loopback host restriction": 'parsed.hostname not in {"127.0.0.1", "localhost"}',
         "health check": 'base + "/healthz"',
+        "Origin request override": "origin: str | None = None",
+        "Origin header injection": 'headers["Origin"] = origin',
+        "remote Origin rejection": "hostile_origin_status != 403",
+        "opaque/null Origin rejection": "null_origin_status != 403",
+        "loopback Origin acceptance": "loopback_origin_status != 200",
+        "remote Origin result marker": "origin_remote_403=PASS",
+        "null Origin result marker": "origin_null_403=PASS",
+        "loopback Origin result marker": "origin_loopback=PASS",
         "bearer rejection": "unauthorized_status != 401",
         "initialize": '"initialize"',
         "initialized notification": '"notifications/initialized"',
@@ -75,9 +83,10 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: local MCP loopback probe is loopback-only, exercises auth/session/tool discovery, "
-        "protocol-version rejection without accidental session termination, terminated-session 404 truth, "
-        "and bounded read-only CAD observation, performs no mutation, launches no shell, and does not print bearer material."
+        "PASS: local MCP loopback probe is loopback-only, exercises DNS-rebinding Origin rejection, "
+        "auth/session/tool discovery, protocol-version rejection without accidental session termination, "
+        "terminated-session 404 truth, and bounded read-only CAD observation, performs no mutation, "
+        "launches no shell, and does not print bearer material."
     )
     return 0
 
