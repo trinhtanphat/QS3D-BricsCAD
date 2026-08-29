@@ -332,7 +332,11 @@ namespace QS3D.BricsCAD.V25
                     WriteResponse(stream, 400, "Bad Request", JsonRpcError("null", -32002, "Mcp-Session-Id is required."), null);
                     return;
                 }
-                TryDeleteSession(sessionId);
+                if (!TryDeleteSession(sessionId))
+                {
+                    WriteResponse(stream, 404, "Not Found", JsonRpcError("null", -32002, "Unknown or expired MCP session."), null);
+                    return;
+                }
                 WriteResponse(stream, 204, "No Content", string.Empty, null);
                 return;
             }
@@ -662,6 +666,7 @@ namespace QS3D.BricsCAD.V25
         {
             lock (SessionSync)
             {
+                CleanupSessionsLocked();
                 SessionState ignored;
                 return Sessions.TryRemove(sessionId, out ignored);
             }
