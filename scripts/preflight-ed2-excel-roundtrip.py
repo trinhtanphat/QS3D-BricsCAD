@@ -90,7 +90,10 @@ require("builder", (
     '"VolumeM3"',
     '"MeasuredVolumeM3"',
     "DensityKey(densityKgM3)",
-    "QuantityReportMath.Add(current.Value, value.Value, label)",
+    "QuantityReportAggregateState",
+    'aggregate.MassKg.Add(massKg, element.Id + "/MassKg")',
+    'row.MassKg = aggregate.MassKg.Value("MassKg")',
+    "QuantityReportMath.AddCount(row.Count, 1)",
     "row.ElementIds.Add(elementId)",
 ))
 if 'element.ZoneId + "\\u001f" + category' in texts.get("builder", "") or 'material + "\\u001f" + DensityKey(densityKgM3)' in texts.get("builder", ""):
@@ -103,7 +106,6 @@ require("row", (
     "public string Material { get; set; }",
     "public string Note { get; set; }",
     "public double? DensityKgM3 { get; set; }",
-    "public double? MassKg { get; set; }",
     "public string FloorZoneText",
 ))
 require("exporter", (
@@ -112,12 +114,12 @@ require("exporter", (
     "detailIds.Add(elementId)",
     "summaryIds.SetEquals(detailIds)",
     "summaryHandles.SetEquals(detailHandles)",
-    'name=\\\"CHI_TIET\\\"',
-    'name=\\\"TONG_HOP\\\"',
+    'name=\\"CHI_TIET\\"',
+    'name=\\"TONG_HOP\\"',
     '"xl/worksheets/sheet2.xml"',
     "BuildEd2Sheet(rows)",
     'value.ToString("R", CultureInfo.InvariantCulture)',
-    'formatCode=\\\"#,##0.000\\\"',
+    'formatCode=\\"#,##0.000\\"',
     'AppendNumberCell(sb, CellRef(6, r), row.Count, IntegerStyle)',
     'AppendEvidenceNumberCell(sb, CellRef(7, r), row.GrossConcreteM3, row.HasGrossConcreteM3Evidence, Decimal3Style)',
     'private static void AppendEvidenceNumberCell(StringBuilder sb, string cellRef, double value, bool hasEvidence, int style = Decimal2Style)',
@@ -140,9 +142,9 @@ require("exporter", (
     "row.SourceHandleText",
     "row.DrawingFingerprint",
     "Ed2ColumnWidthsXml",
-    'fgColor rgb=\\\"FFFFC000\\\"',
-    'wrapText=\\\"1\\\"',
-    'ht=\\\"30\\\" customHeight=\\\"1\\\"',
+    'fgColor rgb=\\"FFFFC000\\"',
+    'wrapText=\\"1\\"',
+    'ht=\\"30\\" customHeight=\\"1\\"',
     'if (row.Count > 1) sb.Append(" ht=\\"96\\" customHeight=\\"1\\"")',
 ))
 require("reader", (
@@ -208,10 +210,10 @@ require("excel_smoke", (
     'detailSheet.Contains("Tên cấu kiện")',
     'detailSheet.Contains("Khối lượng riêng (kg/m³)")',
     'detailSheet.Contains(">4500<")',
-    'detailSheet.Contains("r=\\\"H2\\\" s=\\\"5\\\"><v>1E-09</v>")',
-    'styles.Contains("numFmtId=\\\"164\\\" formatCode=\\\"#,##0.000\\\"")',
-    '!detailSheet.Contains("r=\\\"T3\\\"")',
-    '!detailSheet.Contains("r=\\\"U3\\\"")',
+    'detailSheet.Contains("r=\\"H2\\" s=\\"5\\"><v>1E-09</v>")',
+    'styles.Contains("numFmtId=\\"164\\" formatCode=\\"#,##0.000\\"")',
+    '!detailSheet.Contains("r=\\"T3\\"")',
+    '!detailSheet.Contains("r=\\"U3\\"")',
 ))
 
 print("QS3D ED2 Excel round-trip preflight")
