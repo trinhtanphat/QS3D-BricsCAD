@@ -389,7 +389,7 @@ namespace QS3D.BricsCAD.V25
         private static extern bool UnhookWindowsHookEx(IntPtr hook);
 
         [DllImport("user32.dll")]
-        private static extern IntPtr CallNextHookEx(IntPtr.Zero.GetType(), int code, IntPtr wParam, IntPtr lParam);
+        private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern IntPtr GetModuleHandle(string moduleName);
