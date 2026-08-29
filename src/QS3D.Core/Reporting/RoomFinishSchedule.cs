@@ -49,6 +49,7 @@ namespace QS3D.Core.Reporting
                 .GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(x => x.Key, x => x.First().Unit, StringComparer.OrdinalIgnoreCase);
             var rows = new Dictionary<string, RoomFinishScheduleRow>(StringComparer.OrdinalIgnoreCase);
+            var aggregations = new Dictionary<string, FinishAggregationState>(StringComparer.OrdinalIgnoreCase);
             var order = new List<string>();
 
             foreach (var element in project.Elements.Where(x => FinishCategories.Contains(x.Category)).OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
@@ -91,16 +92,29 @@ namespace QS3D.Core.Reporting
                         UnitHint = unitHint
                     };
                     rows[key] = row;
+                    aggregations[key] = new FinishAggregationState();
                     order.Add(key);
                 }
+
+                var aggregation = aggregations[key];
                 row.Count = checked(row.Count + 1);
-                row.LengthM = Add(row.LengthM, metrics.LengthM, element.Id + "/finish length");
-                row.AreaM2 = Add(row.AreaM2, metrics.AreaM2, element.Id + "/finish area");
-                row.PrimaryQuantity = Add(row.PrimaryQuantity, primary, element.Id + "/finish primary quantity");
+                aggregation.LengthM.Add(metrics.LengthM, element.Id + "/finish length");
+                aggregation.AreaM2.Add(metrics.AreaM2, element.Id + "/finish area");
+                aggregation.PrimaryQuantity.Add(primary, element.Id + "/finish primary quantity");
                 row.ElementIds.Add(element.Id);
                 ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
                 if (roomId.Length > 0 && !row.RoomIds.Contains(roomId, StringComparer.OrdinalIgnoreCase)) row.RoomIds.Add(roomId);
             }
+
+            foreach (var key in order)
+            {
+                var row = rows[key];
+                var aggregation = aggregations[key];
+                row.LengthM = aggregation.LengthM.Value("room finish/LengthM");
+                row.AreaM2 = aggregation.AreaM2.Value("room finish/AreaM2");
+                row.PrimaryQuantity = aggregation.PrimaryQuantity.Value("room finish/PrimaryQuantity");
+            }
+
             return order.Select(x => rows[x]).ToList().AsReadOnly();
         }
 
@@ -115,6 +129,64 @@ namespace QS3D.Core.Reporting
                     .Append(token);
             }
             return key.ToString();
+        }
+
+        private sealed class FinishAggregationState
+        {
+            internal CompensatedTotal LengthM { get; } = new CompensatedTotal();
+            internal CompensatedTotal AreaM2 { get; } = new CompensatedTotal();
+            internal CompensatedTotal PrimaryQuantity { get; } = new CompensatedTotal();
+        }
+
+        private sealed class CompensatedTotal
+        {
+            private double _sum;
+            private double _compensation;
+
+            internal void Add(double value, string label)
+            {
+                var incoming = QuantityReportMath.NonNegative(value, label);
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+
+                var nextSum = _sum + incoming;
+                if (double.IsNaN(nextSum) || double.IsInfinity(nextSum))
+                    throw new OverflowException("Room finish schedule total overflow: " + label);
+
+                var correction = Math.Abs(_sum) >= Math.Abs(incoming)
+                    ? (_sum - nextSum) + incoming
+                    : (incoming - nextSum) + _sum;
+                var nextCompensation = _compensation + correction;
+                if (double.IsNaN(nextCompensation) || double.IsInfinity(nextCompensation))
+                    throw new OverflowException("Room finish schedule compensation overflow: " + label);
+
+                _sum = nextSum == 0d ? 0d : nextSum;
+                _compensation = nextCompensation == 0d ? 0d : nextCompensation;
+            }
+
+            internal double Value(string label)
+            {
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+                var result = _sum + _compensation;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Room finish schedule total overflow: " + label);
+                if (_compensation != 0d && result == _sum && !IsStrictlyBelowHalfUlp(_sum, _compensation))
+                    throw new OverflowException("Room finish schedule total lost a non-zero compensation at floating-point precision: " + label);
+                if (_sum != 0d && result == _compensation)
+                    throw new OverflowException("Room finish schedule total lost a non-zero accumulated value at floating-point precision: " + label);
+                return result == 0d ? 0d : result;
+            }
+
+            private static bool IsStrictlyBelowHalfUlp(double current, double compensation)
+            {
+                if (current <= 0d || compensation == 0d) return false;
+                var currentBits = BitConverter.DoubleToInt64Bits(current);
+                var adjacentBits = compensation > 0d ? currentBits + 1L : currentBits - 1L;
+                var adjacent = BitConverter.Int64BitsToDouble(adjacentBits);
+                var spacing = Math.Abs(adjacent - current);
+                return Math.Abs(compensation) < spacing / 2d;
+            }
         }
 
         private sealed class FinishMetrics
@@ -198,11 +270,6 @@ namespace QS3D.Core.Reporting
                 return value;
             }
             return 0d;
-        }
-
-        private static double Add(double left, double right, string label)
-        {
-            return QuantityReportMath.Add(left, right, label);
         }
     }
 }
