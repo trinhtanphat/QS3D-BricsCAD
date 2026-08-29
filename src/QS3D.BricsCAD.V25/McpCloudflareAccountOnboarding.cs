@@ -732,7 +732,7 @@ namespace QS3D.BricsCAD.V25
             });
             panel.Children.Add(new TextBlock
             {
-                Text = "Bấm một nút để kết nối. QS3D tự lo MCP và Cloudflare; cấu hình cố định chỉ cần khi bạn muốn URL riêng dùng lâu dài.",
+                Text = "Bấm một nút để kết nối. QS3D tự lo MCP và Cloudflare; cấu hình cố định chỉ cần khi bạn muốn URL riêng dùng lâu dài. QS3D không hỏi và không lưu mật khẩu Cloudflare.",
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 14)
             });
@@ -1002,7 +1002,7 @@ namespace QS3D.BricsCAD.V25
             _quickUrlPollTicks = 0;
             _quickUrlTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
             {
-                Interval = TimeSpan.FromMilliseconds(500)
+                Interval = TimeSpan.FromMilliseconds(1500)
             };
             _quickUrlTimer.Tick += QuickUrlTimerOnTick;
             _quickUrlTimer.Start();
@@ -1030,7 +1030,7 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
-            if (_quickUrlPollTicks >= 60)
+            if (_quickUrlPollTicks >= 20)
             {
                 _lastUiDetail = "Quick Tunnel remained running but no public URL was discovered within 30 seconds.";
                 StopQuickUrlPolling(false);
