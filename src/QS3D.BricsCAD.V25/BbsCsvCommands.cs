@@ -36,8 +36,7 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                var totalWeight = 0d;
-                foreach (var row in rows) totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS CSV total weight");
+                var totals = RebarScheduleBuilder.CalculateTotals(rows);
 
                 var drawingName = string.IsNullOrWhiteSpace(document.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(document.Name);
                 var dialog = new SaveFileDialog
@@ -53,7 +52,7 @@ namespace QS3D.BricsCAD.V25
 
                 RebarCsvExporter.Export(dialog.FileName, rows);
 
-                var status = "BBS CSV: " + rows.Count + " bar mark • " + totalWeight.ToString("0.###") + " kg • " + dialog.FileName;
+                var status = "BBS CSV: " + rows.Count + " bar mark • " + totals.TotalWeightKg.ToString("0.###") + " kg • " + dialog.FileName;
                 FinalizeUi(document, status);
             }
             catch (System.Exception)
