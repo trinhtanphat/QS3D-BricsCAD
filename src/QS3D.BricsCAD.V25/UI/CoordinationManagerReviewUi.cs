@@ -463,15 +463,18 @@ namespace QS3D.BricsCAD.V25.UI
                 }
                 catch
                 {
-                    UnhighlightAttemptBestEffort(pending);
+                    var rollbackPending = UnhighlightAttemptBestEffort(pending);
+                    _highlighted.AddRange(rollbackPending);
                     throw;
                 }
             }
 
-            private void UnhighlightAttemptBestEffort(IReadOnlyList<ObjectId> pending)
+            private IReadOnlyList<ObjectId> UnhighlightAttemptBestEffort(IReadOnlyList<ObjectId> pending)
             {
-                if (pending == null || pending.Count == 0 || _destroyed) return;
+                if (pending == null || pending.Count == 0 || _destroyed)
+                    return Array.Empty<ObjectId>();
 
+                var unreleased = new List<ObjectId>();
                 try
                 {
                     using (_document.LockDocument())
@@ -481,12 +484,15 @@ namespace QS3D.BricsCAD.V25.UI
                         {
                             try
                             {
-                                var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
-                                entity?.Unhighlight();
+                                var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity
+                                    ?? throw new InvalidOperationException("Highlight rollback target is not an Entity.");
+                                entity.Unhighlight();
                             }
                             catch
                             {
-                                // One stale/erased native object must not prevent rollback of the rest.
+                                // Continue compensating the remaining entities, but retain
+                                // this native highlight as session-owned cleanup debt.
+                                unreleased.Add(id);
                             }
                         }
                         transaction.Commit();
@@ -494,8 +500,12 @@ namespace QS3D.BricsCAD.V25.UI
                 }
                 catch
                 {
-                    // Compensation is bounded best-effort and must never mask the original failure.
+                    // If the compensation transaction itself is not confirmed, conservatively
+                    // retain the whole attempt so a later ClearHighlight/Dispose can retry it.
+                    return pending.ToArray();
                 }
+
+                return unreleased.AsReadOnly();
             }
 
             public void ClearHighlight()
