@@ -226,6 +226,7 @@ namespace QS3D.Core.SmokeTests
                 MaximumClearPanelHeightM = 0d
             };
             row.ElementIds.Add("CW-COUNT-DRIFT-1");
+            row.SourceHandles.Add("CW-COUNT-DRIFT-HANDLE-1");
             return row;
         }
 

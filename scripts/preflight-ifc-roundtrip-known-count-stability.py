@@ -67,7 +67,7 @@ ordering_checks = (
         projection,
         "IFC round-trip projection source Count does not match enumerated projection count.",
         '"IFC round-trip projection");',
-        "var ifcGlobalIds = new HashSet<string>",
+        "items.Sort(IfcRoundTripProjectionComparer.CanonicalOrder)",
         "projection set",
     ),
     (
