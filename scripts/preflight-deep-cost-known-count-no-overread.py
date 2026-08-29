@@ -50,10 +50,10 @@ if missing:
 
 orderings = [
     ("edgeEnumerator", "if (knownCount.HasValue && index == knownCount.Value)", "if (index == MaximumEdges)", "var edge = edgeEnumerator.Current;"),
-    ("rateEnumerator", "AdvancedCostCollectionContract.RequireCanProcessNext(\n                    hasKnownRateCount", None, "var rate = rateEnumerator.Current;"),
-    ("itemEnumerator", "AdvancedCostCollectionContract.RequireCanProcessNext(\n                    hasKnownItemCount", None, "var item = itemEnumerator.Current;"),
-    ("entryEnumerator", "AdvancedCostCollectionContract.RequireCanProcessNext(\n                    hasKnownEntryCount", None, "var entry = entryEnumerator.Current;"),
-    ("projectEntryEnumerator", "AdvancedCostCollectionContract.RequireCanProcessNext(\n                    hasKnownProjectEntryCount", None, "var entry = projectEntryEnumerator.Current;"),
+    ("rateEnumerator", "AdvancedCostCollectionContract.RequireCanProcessNext(", None, "var rate = rateEnumerator.Current;"),
+    ("itemEnumerator", "AdvancedCostCollectionContract.RequireCanProcessNext(", None, "var item = itemEnumerator.Current;"),
+    ("entryEnumerator", "AdvancedCostCollectionContract.RequireCanProcessNext(", None, "var entry = entryEnumerator.Current;"),
+    ("projectEntryEnumerator", "AdvancedCostCollectionContract.RequireCanProcessNext(", None, "var entry = projectEntryEnumerator.Current;"),
 ]
 for enumerator, count_guard, ceiling_guard, current_token in orderings:
     start = source.index("using (var " + enumerator)
