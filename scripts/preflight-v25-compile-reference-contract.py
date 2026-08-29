@@ -154,13 +154,18 @@ if snapshot:
         "three-reference contract": "@('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')",
         "ordinary-file admission": "must be an ordinary non-reparse file",
         "streaming SHA-256": "[Security.Cryptography.SHA256]::Create()",
-        "source length binding": "$length = [int64]$first.Length",
-        "source UTC timestamp binding": "$ticks = [int64]$first.LastWriteTimeUtc.Ticks",
-        "independent second hash": "$secondHash = Get-StreamingSha256 -Path $secondPath",
-        "copy from admitted path": "[IO.File]::Copy($before.path, $destinationPath, $false)",
-        "post-copy source rebind": "$after = Get-StableFileState -Path $sourcePath",
+        "simultaneous source lock": "function Open-LockedReferenceState",
+        "write/delete denying source lock": "[IO.FileShare]::Read",
+        "held-stream source digest": "$hash = Get-StreamSha256 -Stream $stream",
+        "all-source lock collection": "$locked = New-Object 'System.Collections.Generic.List[object]'",
+        "lock admission": "state = Open-LockedReferenceState -Path $sourcePath",
+        "copy from held source stream": "$source.stream.CopyTo($destinationStream)",
+        "post-copy held source rehash": "$sourceHashAfterCopy = Get-StreamSha256 -Stream $source.stream",
         "snapshot byte verification": "$destination = Get-StableFileState -Path $destinationPath",
-        "source/snapshot hash parity": "[string]::Equals($destination.sha256, $before.sha256, [StringComparison]::Ordinal)",
+        "source/snapshot hash parity": "[string]::Equals($destination.sha256, [string]$source.sha256, [StringComparison]::Ordinal)",
+        "whole-set rebind": "# Rebind every source member while every lock is still held.",
+        "failed manifest cleanup": "Remove-Item -LiteralPath $state -Force -ErrorAction SilentlyContinue",
+        "source lock disposal": "$locked[$index].state.stream.Dispose()",
         "bounded state": "$maxStateBytes = 32768",
         "strict UTF-8 state write": "New-Object Text.UTF8Encoding($false, $true)",
         "reparse component admission": "Assert-NoExistingReparseComponent -Path $snapshot",
@@ -172,16 +177,45 @@ if snapshot:
         if marker not in snapshot:
             errors.append(f"V25 compile-reference snapshot helper is missing {label}: {marker}")
 
-    copy_index = snapshot.find("[IO.File]::Copy($before.path, $destinationPath, $false)")
-    after_index = snapshot.find("$after = Get-StableFileState -Path $sourcePath")
-    destination_index = snapshot.find("$destination = Get-StableFileState -Path $destinationPath")
-    state_write_index = snapshot.find("[IO.File]::WriteAllText($state, $json, $utf8)")
-    if min(copy_index, after_index, destination_index, state_write_index) < 0 or not (
-        copy_index < after_index < destination_index < state_write_index
+    admission_index = snapshot.find("# Admission is deliberately a separate phase")
+    lock_index = snapshot.find("state = Open-LockedReferenceState -Path $sourcePath", admission_index)
+    copy_index = snapshot.find("$source.stream.CopyTo($destinationStream)", lock_index)
+    source_rehash_index = snapshot.find("$sourceHashAfterCopy = Get-StreamSha256 -Stream $source.stream", copy_index)
+    destination_index = snapshot.find("$destination = Get-StableFileState -Path $destinationPath", source_rehash_index)
+    whole_set_rebind_index = snapshot.find("# Rebind every source member while every lock is still held.", destination_index)
+    state_write_index = snapshot.find("[IO.File]::WriteAllText($state, $json, $utf8)", whole_set_rebind_index)
+    dispose_index = snapshot.find("$locked[$index].state.stream.Dispose()", state_write_index)
+    if min(
+        admission_index,
+        lock_index,
+        copy_index,
+        source_rehash_index,
+        destination_index,
+        whole_set_rebind_index,
+        state_write_index,
+        dispose_index,
+    ) < 0 or not (
+        admission_index
+        < lock_index
+        < copy_index
+        < source_rehash_index
+        < destination_index
+        < whole_set_rebind_index
+        < state_write_index
+        < dispose_index
     ):
         errors.append(
-            "V25 compile-reference snapshot ordering must be copy -> source rebind -> snapshot verification -> state publication"
+            "V25 compile-reference snapshot ordering must be all-source admission -> held-stream copy -> source rehash -> snapshot verification -> whole-set rebind -> state publication -> lock disposal"
         )
+
+    retired_snapshot_markers = {
+        "sequential admitted-path copy": "[IO.File]::Copy($before.path, $destinationPath, $false)",
+        "per-file source generation before whole-set admission": "$before = Get-StableFileState -Path $sourcePath",
+        "per-file post-copy source reopen": "$after = Get-StableFileState -Path $sourcePath",
+    }
+    for label, marker in retired_snapshot_markers.items():
+        if marker in snapshot:
+            errors.append(f"V25 compile-reference snapshot helper retains retired {label}: {marker}")
 
 if state_assert:
     assert_markers = {
@@ -271,5 +305,5 @@ if errors:
 print(
     "V25 compile-reference contract preflight PASS: "
     + ", ".join(sorted(required_files))
-    + " are synchronized across workflows and Shared CI binds both hosted V25 builds to locked, verified reference snapshots."
+    + " are synchronized across workflows and Shared CI binds both hosted V25 builds to locked, verified reference snapshots from one admitted source set."
 )
