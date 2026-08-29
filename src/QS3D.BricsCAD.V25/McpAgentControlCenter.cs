@@ -68,14 +68,15 @@ namespace QS3D.BricsCAD.V25
 
         private sealed class ToastVisual
         {
-            public ToastVisual(Border card, DispatcherTimer timer)
+            public ToastVisual(Border card, DispatcherTimer? timer)
             {
                 Card = card;
                 Timer = timer;
             }
 
             public Border Card { get; private set; }
-            public DispatcherTimer Timer { get; set; }
+            public DispatcherTimer? Timer { get; set; }
+            public EventHandler? TimerHandler { get; set; }
         }
 
         private sealed class ThemePalette
@@ -124,8 +125,8 @@ namespace QS3D.BricsCAD.V25
         private ContentControl _pageHost = new ContentControl();
         private TextBlock _desktopConsentText = new TextBlock();
         private int _localOperationActive;
-        private DispatcherTimer _quickUrlTimer;
-        private DispatcherTimer _liveRefreshTimer;
+        private DispatcherTimer? _quickUrlTimer;
+        private DispatcherTimer? _liveRefreshTimer;
         private int _quickUrlPollTicks;
         private bool _closed;
 
@@ -145,7 +146,7 @@ namespace QS3D.BricsCAD.V25
             StartLiveRefresh();
         }
 
-        private void OnWindowClosed(object sender, EventArgs e)
+        private void OnWindowClosed(object? sender, EventArgs e)
         {
             _closed = true;
             StopQuickUrlPolling();
@@ -174,13 +175,13 @@ namespace QS3D.BricsCAD.V25
             timer.Tick -= LiveRefreshTimerOnTick;
         }
 
-        private void LiveRefreshTimerOnTick(object sender, EventArgs e)
+        private void LiveRefreshTimerOnTick(object? sender, EventArgs e)
         {
             if (_closed) return;
             try { RefreshStatus(); } catch { }
         }
 
-        private void SystemEventsOnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+        private void SystemEventsOnUserPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)
         {
             if (_closed || _themeMode != ThemeMode.System) return;
             try
@@ -709,6 +710,13 @@ namespace QS3D.BricsCAD.V25
             style.Setters.Add(new Setter(Control.BorderBrushProperty, border));
             style.Setters.Add(new Setter(Control.TemplateProperty, CreateButtonTemplate()));
 
+            var focus = new Trigger { Property = Button.IsKeyboardFocusedProperty, Value = true };
+            focus.Setters.Add(new Setter(Control.BackgroundProperty, background));
+            focus.Setters.Add(new Setter(Control.ForegroundProperty, foreground));
+            focus.Setters.Add(new Setter(Control.BorderBrushProperty, _palette.FocusBorder));
+            focus.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(2)));
+            style.Triggers.Add(focus);
+
             var hover = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
             hover.Setters.Add(new Setter(Control.BackgroundProperty, hoverBackground));
             hover.Setters.Add(new Setter(Control.ForegroundProperty, hoverForeground));
@@ -720,11 +728,6 @@ namespace QS3D.BricsCAD.V25
             pressed.Setters.Add(new Setter(Control.ForegroundProperty, pressedForeground));
             pressed.Setters.Add(new Setter(Control.BorderBrushProperty, pressedBorder));
             style.Triggers.Add(pressed);
-
-            var focus = new Trigger { Property = Button.IsKeyboardFocusedProperty, Value = true };
-            focus.Setters.Add(new Setter(Control.BorderBrushProperty, _palette.FocusBorder));
-            focus.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(2)));
-            style.Triggers.Add(focus);
 
             var disabled = new Trigger { Property = Button.IsEnabledProperty, Value = false };
             disabled.Setters.Add(new Setter(Control.BackgroundProperty, _palette.DisabledBackground));
@@ -779,7 +782,7 @@ namespace QS3D.BricsCAD.V25
             };
         }
 
-        private UIElement CreateStatusRow(string label, string value, Brush valueBrush = null)
+        private UIElement CreateStatusRow(string label, string value, Brush? valueBrush = null)
         {
             var row = new Grid { Margin = new Thickness(0, 0, 0, 8) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(122) });
@@ -969,8 +972,10 @@ namespace QS3D.BricsCAD.V25
                 {
                     Interval = GetToastLifetime(kind)
                 };
+                EventHandler handler = (_, __) => DismissToast(visual);
                 visual.Timer = timer;
-                timer.Tick += (_, __) => DismissToast(visual);
+                visual.TimerHandler = handler;
+                timer.Tick += handler;
                 timer.Start();
             }
             _visibleToasts.Add(visual);
@@ -983,7 +988,13 @@ namespace QS3D.BricsCAD.V25
             if (visual.Timer != null)
             {
                 visual.Timer.Stop();
+                if (visual.TimerHandler != null) visual.Timer.Tick -= visual.TimerHandler;
+                visual.TimerHandler = null;
                 visual.Timer = null;
+            }
+            else
+            {
+                visual.TimerHandler = null;
             }
             if (_toastHost != null) _toastHost.Children.Remove(visual.Card);
             _visibleToasts.Remove(visual);
@@ -991,10 +1002,7 @@ namespace QS3D.BricsCAD.V25
 
         private void ClearVisibleToasts()
         {
-            foreach (var visual in new List<ToastVisual>(_visibleToasts))
-                if (visual.Timer != null) visual.Timer.Stop();
-            _visibleToasts.Clear();
-            if (_toastHost != null) _toastHost.Children.Clear();
+            foreach (var visual in new List<ToastVisual>(_visibleToasts)) DismissToast(visual);
         }
 
         private static TimeSpan GetToastLifetime(ToastKind kind)
@@ -1034,7 +1042,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private void InstallCloudflared(object sender, RoutedEventArgs args)
+        private void InstallCloudflared(object? sender, RoutedEventArgs args)
         {
             McpAgentExperience.ActionStarted("onboarding", "Đang cài/cập nhật cloudflared...", "Chờ kiểm tra Authenticode hoàn tất.");
             ShowToast(ToastKind.Info, "Cloudflare Tunnel", "Đang tải cloudflared chính thức và kiểm tra Authenticode...");
@@ -1114,7 +1122,7 @@ namespace QS3D.BricsCAD.V25
             _quickUrlTimer.Start();
         }
 
-        private void QuickUrlTimerOnTick(object sender, EventArgs e)
+        private void QuickUrlTimerOnTick(object? sender, EventArgs e)
         {
             _quickUrlPollTicks++;
             RefreshStatus();
