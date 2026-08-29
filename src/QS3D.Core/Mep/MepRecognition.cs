@@ -71,15 +71,19 @@ namespace QS3D.Core.Mep
             var normalized = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var tokenIndex = 0;
-            foreach (var token in tokens)
+            using (var enumerator = tokens.GetEnumerator())
             {
-                if (tokenIndex >= MepRecognitionLimits.MaxTokensPerRule)
-                    throw new ArgumentException(
-                        "Recognition rule may contain at most " + MepRecognitionLimits.MaxTokensPerRule + " tokens.",
-                        nameof(tokens));
-                tokenIndex++;
-                var value = RequireText(token, nameof(tokens));
-                if (seen.Add(value)) normalized.Add(value);
+                while (enumerator.MoveNext())
+                {
+                    if (tokenIndex >= MepRecognitionLimits.MaxTokensPerRule)
+                        throw new ArgumentException(
+                            "Recognition rule may contain at most " + MepRecognitionLimits.MaxTokensPerRule + " tokens.",
+                            nameof(tokens));
+                    var token = enumerator.Current;
+                    tokenIndex++;
+                    var value = RequireText(token, nameof(tokens));
+                    if (seen.Add(value)) normalized.Add(value);
+                }
             }
             if (normalized.Count == 0)
                 throw new ArgumentException("At least one recognition token is required.", nameof(tokens));
@@ -170,18 +174,22 @@ namespace QS3D.Core.Mep
             var snapshot = new List<MepRecognitionRule>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var rule in rules)
+            using (var enumerator = rules.GetEnumerator())
             {
-                if (index >= MepRecognitionLimits.MaxRules)
-                    throw new ArgumentException(
-                        "Recognition profile may contain at most " + MepRecognitionLimits.MaxRules + " rules.",
-                        nameof(rules));
-                if (rule == null)
-                    throw new ArgumentException("Recognition profile contains a null rule at index " + index + ".", nameof(rules));
-                if (!ids.Add(rule.Id))
-                    throw new ArgumentException("Duplicate recognition rule id: " + rule.Id + ".", nameof(rules));
-                snapshot.Add(rule);
-                index++;
+                while (enumerator.MoveNext())
+                {
+                    if (index >= MepRecognitionLimits.MaxRules)
+                        throw new ArgumentException(
+                            "Recognition profile may contain at most " + MepRecognitionLimits.MaxRules + " rules.",
+                            nameof(rules));
+                    var rule = enumerator.Current;
+                    if (rule == null)
+                        throw new ArgumentException("Recognition profile contains a null rule at index " + index + ".", nameof(rules));
+                    if (!ids.Add(rule.Id))
+                        throw new ArgumentException("Duplicate recognition rule id: " + rule.Id + ".", nameof(rules));
+                    snapshot.Add(rule);
+                    index++;
+                }
             }
             if (snapshot.Count == 0)
                 throw new ArgumentException("Recognition profile must contain at least one rule.", nameof(rules));

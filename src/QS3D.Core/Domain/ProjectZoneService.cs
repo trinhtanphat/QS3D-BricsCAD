@@ -76,22 +76,36 @@ namespace QS3D.Core.Domain
 
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var observedEntries = 0;
-            foreach (var element in elements)
+            using (var enumerator = elements.GetEnumerator())
             {
-                observedEntries++;
-                if (observedEntries > MaxAssignmentTargetEntries)
-                    throw AssignmentTargetLimitExceeded();
-                if (element == null)
-                    throw new InvalidOperationException("Zone assignment target collection contains a null element.");
-                var elementId = RequiredIdentity(element.Id, "Zone assignment target element id", 128);
-                if (!projectElements.TryGetValue(elementId, out var owned) || !ReferenceEquals(owned, element))
-                    throw new InvalidOperationException("Element does not belong to the project instance: " + elementId);
-                unique[elementId] = owned;
+                while (enumerator.MoveNext())
+                {
+                    observedEntries++;
+                    if (observedEntries > MaxAssignmentTargetEntries)
+                        throw AssignmentTargetLimitExceeded();
+                    if (knownTargetCount.HasValue && observedEntries > knownTargetCount.Value)
+                        throw new InvalidOperationException("Zone assignment target collection known count does not match the observed target traversal.");
+
+                    var element = enumerator.Current;
+                    if (element == null)
+                        throw new InvalidOperationException("Zone assignment target collection contains a null element.");
+                    var elementId = RequiredIdentity(element.Id, "Zone assignment target element id", 128);
+                    if (!projectElements.TryGetValue(elementId, out var owned) || !ReferenceEquals(owned, element))
+                        throw new InvalidOperationException("Element does not belong to the project instance: " + elementId);
+                    unique[elementId] = owned;
+                }
             }
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Zone assignment targets were being enumerated. Retry assignment against the current project state.");
             if (knownTargetCount.HasValue && observedEntries != knownTargetCount.Value)
                 throw new InvalidOperationException("Zone assignment target collection known count does not match the observed target traversal.");
+
+            var currentKnownTargetCount = SnapshotAssignmentTargetKnownCount(elements);
+            if (project.ChangeVersion != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while Zone assignment target counts were being rebound. Retry assignment against the current project state.");
+            if (knownTargetCount != currentKnownTargetCount)
+                throw new InvalidOperationException("Zone assignment target collection known count changed during enumeration.");
+
             RequireCurrentAssignmentOwnership(project, zone, unique.Values);
 
             var changed = unique.Values
