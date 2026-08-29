@@ -55,7 +55,7 @@ if any(token not in smoke for token in smoke_tokens):
 
 runbook_tokens = (
     "Lane-Key: `issue-4721`",
-    "transient Count",
+    "Transient Count",
     "before semantic `Current`",
     "Runtime: `NOT_APPLICABLE`",
 )
