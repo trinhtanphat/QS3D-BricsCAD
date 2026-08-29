@@ -101,12 +101,16 @@ def main():
         "UpdatePreferences.TrySetInstallOnExit",
         '"Gói preview + SHA-256 đã sẵn sàng"',
         '"Tải, xác minh SHA-256, đóng BricsCAD an toàn, cài đặt rồi tự mở lại BricsCAD."',
+        "UpdateState.Error",
+        "BorderStroke",
     ):
         require(window, needle, window_rel)
 
     require(preferences, "ReadBoolean(InstallOnExitValue, false)", preferences_rel)
 
     for needle in (
+        "UpdateState.Failed",
+        "private static readonly Brush Border =",
         "Process.Start(verified.Path",
         "Process.Start(_downloadedPackagePath",
         "File.Copy(verified.Path, Assembly.GetExecutingAssembly().Location",
@@ -121,7 +125,7 @@ def main():
         "rollback is preserved, the exact BricsCAD executable is restarted after apply/recovery, downloader progress is surfaced, "
         "preview capability copy stays coherent with the primary action, update-on-close defaults OFF unless persisted by the user, "
         "GitHub 403/rate-limit responses are bounded and recover from a recent safe release snapshot when possible, "
-        "and Update Center presents highlighted version/progress state instead of merely revealing the downloaded ZIP."
+        "and Update Center presents highlighted version/progress state with valid shared V25/V26 WPF identifiers."
     )
     return 0
 
