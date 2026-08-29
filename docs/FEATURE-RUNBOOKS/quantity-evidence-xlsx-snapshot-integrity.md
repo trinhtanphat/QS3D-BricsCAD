@@ -3,7 +3,10 @@
 Status: REMOTE_SAFE / Core deterministic export contract
 
 Issue: #4560  
-Lane-Key: `issue-4560`
+Lane-Key: `issue-4560`  
+Canonical carrier: `agent/automation-6a815c58/issue-4560-quantity-evidence-xlsx-snapshot-integrity`
+
+The public Issue reservation is Reservation Protocol v2 and claims exactly this exporter, its focused smoke, its auto-discovered guard, and this runbook through `Expected-Paths`. Scope expansion requires updating that same canonical reservation before mutation.
 
 ## Product boundary
 
