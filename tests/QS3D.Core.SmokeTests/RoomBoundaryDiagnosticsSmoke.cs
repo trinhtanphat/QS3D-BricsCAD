@@ -14,6 +14,8 @@ namespace QS3D.Core.SmokeTests
             ClassifiesOpenNetwork();
             ExplainsMinimumAreaRejection();
             AcceptedFaceProvenanceIsDeterministicAndPrivacySafe();
+            MalformedSourceProvenanceFailsClosed();
+            SupplementaryUnicodeProvenanceRemainsDeterministic();
         }
 
         private static void ClassifiesNoInputAndInsufficientSegments()
@@ -84,6 +86,41 @@ namespace QS3D.Core.SmokeTests
             Equal(first.AcceptedBoundaries[0].Key, second.AcceptedBoundaries[0].Key);
         }
 
+        private static void MalformedSourceProvenanceFailsClosed()
+        {
+            var service = new RoomBoundaryDiagnosticService();
+            var high = "HANDLE-" + (char)0xD800;
+            var low = "HANDLE-" + (char)0xDC00;
+
+            Throws<ArgumentException>(() => service.Analyze(new[]
+            {
+                Segment(0, 0, 1, 0, high)
+            }));
+            Throws<ArgumentException>(() => service.Analyze(new[]
+            {
+                Segment(0, 0, 1, 0, low)
+            }));
+        }
+
+        private static void SupplementaryUnicodeProvenanceRemainsDeterministic()
+        {
+            var service = new RoomBoundaryDiagnosticService();
+            var source = new[]
+            {
+                Segment(0, 0, 1, 0, "HANDLE-\U0001F600-A"),
+                Segment(1, 0, 1, 1, "HANDLE-\U0001F600-B"),
+                Segment(1, 1, 0, 1, "HANDLE-\U0001F600-C"),
+                Segment(0, 1, 0, 0, "HANDLE-\U0001F600-D")
+            };
+
+            var first = service.Analyze(source, minimumArea: 0.5d).Report;
+            var second = service.Analyze(source.AsEnumerable().Reverse(), minimumArea: 0.5d).Report;
+            Equal(RoomBoundaryDiagnosticReason.Ready, first.Reason);
+            Equal(4, first.UniqueSourceCount);
+            Equal(first.Faces[0].SourceFingerprint, second.Faces[0].SourceFingerprint);
+            Equal(first.Faces[0].FaceFingerprint, second.Faces[0].FaceFingerprint);
+        }
+
         private static BoundarySegment[] Square() => new[]
         {
             Segment(0, 0, 1, 0, "HANDLE-A"),
@@ -94,6 +131,20 @@ namespace QS3D.Core.SmokeTests
 
         private static BoundarySegment Segment(double ax, double ay, double bx, double by, string sourceId)
             => new BoundarySegment(new Point2(ax, ay), new Point2(bx, by), sourceId);
+
+        private static void Throws<TException>(Action action) where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+
+            throw new Exception("Expected " + typeof(TException).Name + ".");
+        }
 
         private static void Equal<T>(T expected, T actual)
         {

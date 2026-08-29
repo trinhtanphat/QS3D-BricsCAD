@@ -35,6 +35,8 @@ namespace QS3D.Core.Export
             public string DrawingFingerprint { get; set; } = string.Empty;
             public string ElementIds { get; set; } = string.Empty;
             public string SourceHandles { get; set; } = string.Empty;
+            public List<string> ElementIdValues { get; set; } = new List<string>();
+            public List<string> SourceHandleValues { get; set; } = new List<string>();
         }
 
         public static void Export(string path, IReadOnlyList<MaterialUsageRow> rows)
@@ -43,6 +45,7 @@ namespace QS3D.Core.Export
             if (rows == null) throw new ArgumentNullException(nameof(rows));
             var rowCount = BindRowCount(rows);
             var snapshot = new List<ExportRow>(rowCount);
+            var sourceRows = new List<MaterialUsageRow>(rowCount);
             for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
             {
                 var sourceRow = rows[rowIndex];
@@ -66,10 +69,13 @@ namespace QS3D.Core.Export
                 ValidateNonNegative(row.AreaM2, rowIndex, "AreaM2");
                 ValidateNonNegative(row.VolumeM3, rowIndex, "VolumeM3");
                 ValidateNonNegative(row.MassKg, rowIndex, "MassKg");
+                sourceRows.Add(sourceRow);
                 snapshot.Add(row);
             }
             if (BindRowCount(rows) != rowCount)
                 throw new InvalidOperationException("Material XLSX source row count changed during snapshot traversal.");
+            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+                EnsureRowStable(sourceRows[rowIndex], snapshot[rowIndex], rowIndex);
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -176,8 +182,8 @@ namespace QS3D.Core.Export
 
         private static ExportRow SnapshotRow(MaterialUsageRow row, int rowIndex)
         {
-            int elementIdCount;
-            var elementIds = SnapshotProvenance(row.ElementIds, rowIndex, "ElementIds", out elementIdCount);
+            var elementIdValues = SnapshotProvenance(row.ElementIds, rowIndex, "ElementIds");
+            var sourceHandleValues = SnapshotProvenance(row.SourceHandles, rowIndex, "SourceHandles");
             return new ExportRow
             {
                 Floor = row.Floor ?? string.Empty,
@@ -187,7 +193,7 @@ namespace QS3D.Core.Export
                 Category = row.Category ?? string.Empty,
                 FamilyName = row.FamilyName ?? string.Empty,
                 ElementCount = row.ElementCount,
-                ElementIdCount = elementIdCount,
+                ElementIdCount = elementIdValues.Count,
                 PrimaryQuantity = row.PrimaryQuantity,
                 LengthM = row.LengthM,
                 AreaM2 = row.AreaM2,
@@ -195,34 +201,66 @@ namespace QS3D.Core.Export
                 MassKg = row.MassKg,
                 ProjectId = row.ProjectId ?? string.Empty,
                 DrawingFingerprint = row.DrawingFingerprint ?? string.Empty,
-                ElementIds = elementIds,
-                SourceHandles = SnapshotProvenance(row.SourceHandles, rowIndex, "SourceHandles")
+                ElementIds = string.Join(ProvenanceSeparator, elementIdValues),
+                SourceHandles = string.Join(ProvenanceSeparator, sourceHandleValues),
+                ElementIdValues = elementIdValues,
+                SourceHandleValues = sourceHandleValues
             };
         }
 
-        private static string SnapshotProvenance(IList<string> values, int rowIndex, string fieldName)
-        {
-            int count;
-            return SnapshotProvenance(values, rowIndex, fieldName, out count);
-        }
-
-        private static string SnapshotProvenance(IList<string> values, int rowIndex, string fieldName, out int count)
+        private static List<string> SnapshotProvenance(IList<string> values, int rowIndex, string fieldName)
         {
             if (values == null)
                 throw new ArgumentException("Material XLSX row " + rowIndex + " field " + fieldName + " cannot be null.", "rows");
 
-            count = values.Count;
-            var snapshot = new string[count];
-            for (var index = 0; index < snapshot.Length; index++)
+            var count = values.Count;
+            var snapshot = new List<string>(count);
+            for (var index = 0; index < count; index++)
             {
                 var value = values[index];
                 if (value == null)
                     throw new ArgumentException(
                         "Material XLSX row " + rowIndex + " field " + fieldName + " contains a null provenance entry at index " + index + ".",
                         "rows");
-                snapshot[index] = value;
+                snapshot.Add(value);
             }
-            return string.Join(ProvenanceSeparator, snapshot);
+            if (values.Count != count)
+                throw new InvalidOperationException("Material XLSX row " + rowIndex + " field " + fieldName + " count changed during snapshot traversal.");
+            return snapshot;
+        }
+
+        private static void EnsureRowStable(MaterialUsageRow source, ExportRow snapshot, int rowIndex)
+        {
+            if (source == null ||
+                !string.Equals(source.Floor ?? string.Empty, snapshot.Floor, StringComparison.Ordinal) ||
+                !string.Equals(source.MaterialName ?? string.Empty, snapshot.MaterialName, StringComparison.Ordinal) ||
+                !string.Equals(source.UnitHint ?? string.Empty, snapshot.UnitHint, StringComparison.Ordinal) ||
+                !string.Equals(source.Component ?? string.Empty, snapshot.Component, StringComparison.Ordinal) ||
+                !string.Equals(source.Category ?? string.Empty, snapshot.Category, StringComparison.Ordinal) ||
+                !string.Equals(source.FamilyName ?? string.Empty, snapshot.FamilyName, StringComparison.Ordinal) ||
+                source.ElementCount != snapshot.ElementCount ||
+                source.PrimaryQuantity != snapshot.PrimaryQuantity ||
+                source.LengthM != snapshot.LengthM ||
+                source.AreaM2 != snapshot.AreaM2 ||
+                source.VolumeM3 != snapshot.VolumeM3 ||
+                source.MassKg != snapshot.MassKg ||
+                !string.Equals(source.ProjectId ?? string.Empty, snapshot.ProjectId, StringComparison.Ordinal) ||
+                !string.Equals(source.DrawingFingerprint ?? string.Empty, snapshot.DrawingFingerprint, StringComparison.Ordinal))
+                throw new InvalidOperationException("Material XLSX export row values changed during snapshot traversal. Invalid row index: " + rowIndex + ".");
+
+            EnsureProvenanceStable(source.ElementIds, snapshot.ElementIdValues, rowIndex, "ElementIds");
+            EnsureProvenanceStable(source.SourceHandles, snapshot.SourceHandleValues, rowIndex, "SourceHandles");
+        }
+
+        private static void EnsureProvenanceStable(IList<string> source, IReadOnlyList<string> snapshot, int rowIndex, string fieldName)
+        {
+            if (source == null || source.Count != snapshot.Count)
+                throw new InvalidOperationException("Material XLSX row " + rowIndex + " field " + fieldName + " count changed during snapshot traversal.");
+            for (var index = 0; index < snapshot.Count; index++)
+            {
+                if (!string.Equals(source[index], snapshot[index], StringComparison.Ordinal))
+                    throw new InvalidOperationException("Material XLSX row " + rowIndex + " field " + fieldName + " values changed during snapshot traversal.");
+            }
         }
 
         private static void ValidateCellText(string value, int rowIndex, string fieldName)

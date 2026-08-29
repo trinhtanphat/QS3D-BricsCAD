@@ -40,6 +40,7 @@ namespace QS3D.Core.Reporting
             var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var rows = new Dictionary<string, CurtainWallScheduleRow>(StringComparer.OrdinalIgnoreCase);
+            var accumulators = new Dictionary<string, CurtainWallAggregateState>(StringComparer.OrdinalIgnoreCase);
             var order = new List<string>();
 
             foreach (var element in project.Elements.Where(x => x.Category == ElementCategory.GlassWall).OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
@@ -62,19 +63,21 @@ namespace QS3D.Core.Reporting
                         FamilyName = family
                     };
                     rows[key] = row;
+                    accumulators[key] = new CurtainWallAggregateState();
                     order.Add(key);
                 }
 
+                var aggregate = accumulators[key];
                 row.WallCount = checked(row.WallCount + 1);
                 row.PanelCount = AddInt(row.PanelCount, QInt(element, "CurtainPanelCount"), element.Id + "/CurtainPanelCount");
                 row.VerticalFrameCount = AddInt(row.VerticalFrameCount, QInt(element, "CurtainVerticalFrameCount"), element.Id + "/CurtainVerticalFrameCount");
                 row.HorizontalFrameCount = AddInt(row.HorizontalFrameCount, QInt(element, "CurtainHorizontalFrameCount"), element.Id + "/CurtainHorizontalFrameCount");
-                row.TotalWallLengthM = Add(row.TotalWallLengthM, Q(element, "LengthM"), element.Id + "/LengthM");
-                row.GrossWallAreaM2 = Add(row.GrossWallAreaM2, Q(element, "GrossWallAreaM2"), element.Id + "/GrossWallAreaM2");
-                row.OpeningAreaM2 = Add(row.OpeningAreaM2, Q(element, "OpeningAreaM2"), element.Id + "/OpeningAreaM2");
-                row.NetGlassAreaM2 = Add(row.NetGlassAreaM2, Q(element, "CurtainNetGlassAreaM2"), element.Id + "/CurtainNetGlassAreaM2");
-                row.FrameFaceAreaM2 = Add(row.FrameFaceAreaM2, Q(element, "CurtainFrameFaceAreaM2"), element.Id + "/CurtainFrameFaceAreaM2");
-                row.FrameLengthM = Add(row.FrameLengthM, Q(element, "CurtainFrameLengthM"), element.Id + "/CurtainFrameLengthM");
+                aggregate.TotalWallLengthM.Add(Q(element, "LengthM"), element.Id + "/LengthM");
+                aggregate.GrossWallAreaM2.Add(Q(element, "GrossWallAreaM2"), element.Id + "/GrossWallAreaM2");
+                aggregate.OpeningAreaM2.Add(Q(element, "OpeningAreaM2"), element.Id + "/OpeningAreaM2");
+                aggregate.NetGlassAreaM2.Add(Q(element, "CurtainNetGlassAreaM2"), element.Id + "/CurtainNetGlassAreaM2");
+                aggregate.FrameFaceAreaM2.Add(Q(element, "CurtainFrameFaceAreaM2"), element.Id + "/CurtainFrameFaceAreaM2");
+                aggregate.FrameLengthM.Add(Q(element, "CurtainFrameLengthM"), element.Id + "/CurtainFrameLengthM");
                 row.MinimumClearPanelWidthM = Math.Min(row.MinimumClearPanelWidthM, Q(element, "CurtainMinClearPanelWidthM"));
                 row.MaximumClearPanelWidthM = Math.Max(row.MaximumClearPanelWidthM, Q(element, "CurtainMaxClearPanelWidthM"));
                 row.MinimumClearPanelHeightM = Math.Min(row.MinimumClearPanelHeightM, Q(element, "CurtainMinClearPanelHeightM"));
@@ -83,8 +86,16 @@ namespace QS3D.Core.Reporting
                 ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
             }
 
-            foreach (var row in rows.Values)
+            foreach (var key in order)
             {
+                var row = rows[key];
+                var aggregate = accumulators[key];
+                row.TotalWallLengthM = aggregate.TotalWallLengthM.Value("TotalWallLengthM");
+                row.GrossWallAreaM2 = aggregate.GrossWallAreaM2.Value("GrossWallAreaM2");
+                row.OpeningAreaM2 = aggregate.OpeningAreaM2.Value("OpeningAreaM2");
+                row.NetGlassAreaM2 = aggregate.NetGlassAreaM2.Value("NetGlassAreaM2");
+                row.FrameFaceAreaM2 = aggregate.FrameFaceAreaM2.Value("FrameFaceAreaM2");
+                row.FrameLengthM = aggregate.FrameLengthM.Value("FrameLengthM");
                 if (row.MinimumClearPanelWidthM == double.MaxValue) row.MinimumClearPanelWidthM = 0d;
                 if (row.MinimumClearPanelHeightM == double.MaxValue) row.MinimumClearPanelHeightM = 0d;
             }
@@ -122,11 +133,65 @@ namespace QS3D.Core.Reporting
             catch (OverflowException ex) { throw new OverflowException(label + " overflowed.", ex); }
         }
 
-        private static double Add(double left, double right, string label)
+        private sealed class CurtainWallAggregateState
         {
-            if (double.IsNaN(left) || double.IsInfinity(left) || left < 0d || double.IsNaN(right) || double.IsInfinity(right) || right < 0d)
-                throw new InvalidOperationException(label + " requires finite non-negative values.");
-            return QuantityReportMath.Add(left, right, label);
+            internal CompensatedQuantity TotalWallLengthM { get; } = new CompensatedQuantity();
+            internal CompensatedQuantity GrossWallAreaM2 { get; } = new CompensatedQuantity();
+            internal CompensatedQuantity OpeningAreaM2 { get; } = new CompensatedQuantity();
+            internal CompensatedQuantity NetGlassAreaM2 { get; } = new CompensatedQuantity();
+            internal CompensatedQuantity FrameFaceAreaM2 { get; } = new CompensatedQuantity();
+            internal CompensatedQuantity FrameLengthM { get; } = new CompensatedQuantity();
+        }
+
+        private sealed class CompensatedQuantity
+        {
+            private double _sum;
+            private double _compensation;
+
+            internal void Add(double value, string label)
+            {
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+                var incoming = QuantityReportMath.NonNegative(value, label);
+
+                var result = _sum + incoming;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Curtain wall schedule aggregate overflowed: " + label + ".");
+
+                var correction = Math.Abs(_sum) >= Math.Abs(incoming)
+                    ? (_sum - result) + incoming
+                    : (incoming - result) + _sum;
+                var nextCompensation = _compensation + correction;
+                if (double.IsNaN(nextCompensation) || double.IsInfinity(nextCompensation))
+                    throw new OverflowException("Curtain wall schedule aggregate compensation overflowed: " + label + ".");
+
+                _sum = result == 0d ? 0d : result;
+                _compensation = nextCompensation == 0d ? 0d : nextCompensation;
+            }
+
+            internal double Value(string label)
+            {
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+                var result = _sum + _compensation;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Curtain wall schedule aggregate overflowed: " + label + ".");
+                if (_compensation != 0d && result == _sum && !IsStrictlyBelowHalfUlp(_sum, _compensation))
+                    throw new OverflowException("Curtain wall schedule aggregate lost a non-zero compensation at floating-point precision: " + label + ".");
+                if (_sum != 0d && result == _compensation)
+                    throw new OverflowException("Curtain wall schedule aggregate lost a non-zero accumulated value at floating-point precision: " + label + ".");
+                return result == 0d ? 0d : result;
+            }
+
+            private static bool IsStrictlyBelowHalfUlp(double current, double compensation)
+            {
+                if (current <= 0d || compensation == 0d) return false;
+                var currentBits = BitConverter.DoubleToInt64Bits(current);
+                var adjacentBits = compensation > 0d ? currentBits + 1L : currentBits - 1L;
+                var adjacent = BitConverter.Int64BitsToDouble(adjacentBits);
+                var spacing = Math.Abs(adjacent - current);
+                return Math.Abs(compensation) < spacing / 2d;
+            }
         }
     }
 }

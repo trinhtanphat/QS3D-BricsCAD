@@ -135,34 +135,42 @@ namespace QS3D.Core.Export
 
             var byExternalIdentity = new Dictionary<string, IfcRoundTripExchangeResult>(StringComparer.Ordinal);
             var observedResultCount = 0;
-            foreach (var item in results)
+            using (var enumerator = results.GetEnumerator())
             {
-                IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
-                    knownCount,
-                    observedResultCount,
-                    "IFC exchange result");
-                if (observedResultCount == MaxResultsPerCollection)
-                    throw ResultCollectionTooLarge();
-                observedResultCount++;
-
-                if (item == null)
-                    throw new ArgumentException("IFC exchange result collection cannot contain null entries.", nameof(results));
-
-                if (!byExternalIdentity.ContainsKey(item.ExternalObjectId))
+                while (enumerator.MoveNext())
                 {
-                    byExternalIdentity.Add(item.ExternalObjectId, item);
-                    continue;
-                }
+                    IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
+                        knownCount,
+                        observedResultCount,
+                        "IFC exchange result");
+                    if (observedResultCount == MaxResultsPerCollection)
+                        throw ResultCollectionTooLarge();
+                    var item = enumerator.Current;
+                    observedResultCount++;
 
-                byExternalIdentity[item.ExternalObjectId] = new IfcRoundTripExchangeResult(
-                    item.ExternalObjectId,
-                    IfcRoundTripResultState.InvalidOrAmbiguous,
-                    null,
-                    stateDetail: DuplicateExternalIdentityDetail);
+                    if (item == null)
+                        throw new ArgumentException("IFC exchange result collection cannot contain null entries.", nameof(results));
+
+                    if (!byExternalIdentity.ContainsKey(item.ExternalObjectId))
+                    {
+                        byExternalIdentity.Add(item.ExternalObjectId, item);
+                        continue;
+                    }
+
+                    byExternalIdentity[item.ExternalObjectId] = new IfcRoundTripExchangeResult(
+                        item.ExternalObjectId,
+                        IfcRoundTripResultState.InvalidOrAmbiguous,
+                        null,
+                        stateDetail: DuplicateExternalIdentityDetail);
+                }
             }
 
             if (knownCount.HasValue && observedResultCount != knownCount.Value)
                 throw new InvalidOperationException("IFC exchange result source Count does not match enumerated result count.");
+            IfcRoundTripKnownCountContract.RequireStableAfterTraversal(
+                results,
+                knownCount,
+                "IFC exchange result");
 
             var items = byExternalIdentity.Values.ToList();
             items.Sort(IfcRoundTripExchangeResultComparer.Instance);

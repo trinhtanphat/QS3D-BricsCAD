@@ -15,14 +15,16 @@ smoke = SMOKE.read_text(encoding="utf-8")
 runbook = RUNBOOK.read_text(encoding="utf-8")
 
 required_source = (
+    "while (enumerator.MoveNext())",
     "if (hasKnownCount && index >= knownCount)",
+    "if (index >= MaxLines)",
+    "var line = enumerator.Current;",
     'throw new InvalidOperationException("Frozen estimate projection source Count does not match source traversal.");',
     "if (hasKnownCount && rows.Count != knownCount)",
     "RequireStableKnownCount(lines, knownCount);",
     "private static void RequireStableKnownCount(IEnumerable<EstimateLine> lines, int expectedCount)",
     "TryGetKnownCount(lines, out var observedCount)",
     'throw new InvalidOperationException("Frozen estimate projection source Count changed during enumeration.");',
-    "if (index == MaxLines)",
     "reports an invalid negative known count",
     "reports conflicting known counts",
 )
@@ -30,12 +32,17 @@ missing = [token for token in required_source if token not in source]
 if missing:
     raise SystemExit("Frozen estimate Count-stability preflight missing source contract: " + ", ".join(missing))
 
-overrun_guard = source.index("if (hasKnownCount && index >= knownCount)")
-null_validation = source.index("if (line == null)")
-duplicate_validation = source.index("if (!lineIds.Add(line.EstimateLineId))")
-row_materialization = source.index("rows.Add(FrozenEstimateProjectionRow.From(line));")
-if not overrun_guard < null_validation or not overrun_guard < duplicate_validation or not overrun_guard < row_materialization:
-    raise SystemExit("Frozen estimate known-Count overrun must fail before unexpected-line validation/materialization.")
+traversal = source.index("while (enumerator.MoveNext())")
+overrun_guard = source.index("if (hasKnownCount && index >= knownCount)", traversal)
+ceiling_guard = source.index("if (index >= MaxLines)", traversal)
+current_read = source.index("var line = enumerator.Current;", traversal)
+null_validation = source.index("if (line == null)", current_read)
+duplicate_validation = source.index("if (!lineIds.Add(line.EstimateLineId))", null_validation)
+row_materialization = source.index("rows.Add(FrozenEstimateProjectionRow.From(line));", duplicate_validation)
+if not traversal < overrun_guard < ceiling_guard < current_read < null_validation < duplicate_validation < row_materialization:
+    raise SystemExit(
+        "Frozen estimate traversal must reject known-Count/streaming overflow before Current and preserve validation before row materialization."
+    )
 
 observed_mismatch = source.index("if (hasKnownCount && rows.Count != knownCount)")
 stability_rebind = source.index("RequireStableKnownCount(lines, knownCount);")

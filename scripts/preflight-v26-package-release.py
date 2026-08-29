@@ -53,6 +53,7 @@ verify = read("scripts/verify-v26-signatures.ps1")
 finalize = read("scripts/finalize-v26-signed-package.ps1")
 manifest = read("scripts/new-v26-update-manifest.ps1")
 workflow = read(".github/workflows/release-v26.yml")
+host_safety = read("scripts/assert-v26-host-reference-safety.ps1")
 v26_project = read("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj")
 v25_release_client = read("src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs")
 v26_release_client = read("src/QS3D.BricsCAD.V26/Updates/GitHubReleaseClient.cs")
@@ -208,8 +209,8 @@ for token in (
     "github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE'",
     "runs-on: [self-hosted, windows, x64, bricscad-v26]",
     "BRICSCAD_V26_DIR",
-    "TD_MgdBrep.dll",
-    "FileMajorPart -ne 26",
+    "V26_HOST_REFERENCE_STATE",
+    "assert-v26-host-reference-safety.ps1",
     "Microsoft\\.WindowsDesktop\\.App 8\\.",
     "preflight-bricscad-v26.py",
     "preflight-v26-package-release.py",
@@ -234,6 +235,17 @@ for token in (
     "Draft V26 release contains unexpected assets",
 ):
     require(workflow, token, "V26 release workflow")
+
+# Host-file identity is centralized in the shared helper so workflow text cannot
+# drift from the exact ordinary/non-reparse files whose generations are captured.
+for token in (
+    "@('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')",
+    "$version.FileMajorPart -ne 26",
+    "function Get-StableHostFileState",
+    "function Assert-StableHostFileState",
+):
+    require(host_safety, token, "V26 host-reference safety helper")
+
 if workflow.count("Assert-RemoteReleaseTagTargetsWorkflowSha") < 3:
     errors.append("V26 release workflow must define and invoke remote tag/SHA verification both before and after asset verification")
 

@@ -137,6 +137,33 @@ namespace QS3D.Core.Cost
                 collectionLabel + " traversal produced " + observedCount +
                 " entries but its known count reported " + knownCount + ".");
         }
+
+        internal static void RequireKnownCountStableAfterTraversal<T>(
+            IEnumerable<T> items,
+            bool hadKnownCount,
+            int initialKnownCount,
+            int observedCount,
+            string collectionLabel)
+        {
+            RequireKnownCountMatchesTraversal(
+                hadKnownCount,
+                initialKnownCount,
+                observedCount,
+                collectionLabel);
+
+            if (!hadKnownCount)
+                return;
+
+            var hasCurrentKnownCount = TryGetKnownCount(items, out var currentKnownCount);
+            if (hasCurrentKnownCount && currentKnownCount > MaximumEntries)
+                ThrowTooManyEntries(collectionLabel);
+            if (!hasCurrentKnownCount || currentKnownCount != initialKnownCount)
+            {
+                throw new InvalidOperationException(
+                    collectionLabel + " known count changed during traversal from " + initialKnownCount +
+                    " to " + (hasCurrentKnownCount ? currentKnownCount.ToString() : "unavailable") + ".");
+            }
+        }
     }
 
     internal static class AdvancedCostTextContract
@@ -223,21 +250,26 @@ namespace QS3D.Core.Cost
             var snapshot = new List<CostResourceComponent>();
             var resourceCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var component in components)
+            using (var componentEnumerator = components.GetEnumerator())
             {
-                AdvancedCostCollectionContract.RequireCanProcessNext(
-                    hasKnownComponentCount,
-                    knownComponentCount,
-                    index,
-                    "Rate build-up component collection");
-                if (component == null)
-                    throw new ArgumentException("Rate build-up contains a null component at index " + index + ".", nameof(components));
-                if (!resourceCodes.Add(component.ResourceCode))
-                    throw new ArgumentException("Duplicate rate build-up resource code: " + component.ResourceCode + ".", nameof(components));
-                snapshot.Add(component);
-                index++;
+                while (componentEnumerator.MoveNext())
+                {
+                    AdvancedCostCollectionContract.RequireCanProcessNext(
+                        hasKnownComponentCount,
+                        knownComponentCount,
+                        index,
+                        "Rate build-up component collection");
+                    var component = componentEnumerator.Current;
+                    if (component == null)
+                        throw new ArgumentException("Rate build-up contains a null component at index " + index + ".", nameof(components));
+                    if (!resourceCodes.Add(component.ResourceCode))
+                        throw new ArgumentException("Duplicate rate build-up resource code: " + component.ResourceCode + ".", nameof(components));
+                    snapshot.Add(component);
+                    index++;
+                }
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                components,
                 hasKnownComponentCount,
                 knownComponentCount,
                 index,
@@ -337,21 +369,26 @@ namespace QS3D.Core.Cost
             var snapshot = new List<HistoricalCostRecord>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var record in records)
+            using (var recordEnumerator = records.GetEnumerator())
             {
-                AdvancedCostCollectionContract.RequireCanProcessNext(
-                    hasKnownRecordCount,
-                    knownRecordCount,
-                    index,
-                    "Historical cost catalog");
-                if (record == null)
-                    throw new ArgumentException("Historical cost catalog contains a null record at index " + index + ".", nameof(records));
-                if (!ids.Add(record.RecordId))
-                    throw new ArgumentException("Duplicate historical cost record id: " + record.RecordId + ".", nameof(records));
-                snapshot.Add(record);
-                index++;
+                while (recordEnumerator.MoveNext())
+                {
+                    AdvancedCostCollectionContract.RequireCanProcessNext(
+                        hasKnownRecordCount,
+                        knownRecordCount,
+                        index,
+                        "Historical cost catalog");
+                    var record = recordEnumerator.Current;
+                    if (record == null)
+                        throw new ArgumentException("Historical cost catalog contains a null record at index " + index + ".", nameof(records));
+                    if (!ids.Add(record.RecordId))
+                        throw new ArgumentException("Duplicate historical cost record id: " + record.RecordId + ".", nameof(records));
+                    snapshot.Add(record);
+                    index++;
+                }
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                records,
                 hasKnownRecordCount,
                 knownRecordCount,
                 index,
@@ -580,21 +617,26 @@ namespace QS3D.Core.Cost
 
             var byItem = new Dictionary<string, TenderQuoteLine>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var line in lines)
+            using (var lineEnumerator = lines.GetEnumerator())
             {
-                AdvancedCostCollectionContract.RequireCanProcessNext(
-                    hasKnownLineCount,
-                    knownLineCount,
-                    index,
-                    "Tender quote line collection");
-                if (line == null)
-                    throw new ArgumentException("Tender bid contains a null line at index " + index + ".", nameof(lines));
-                if (byItem.ContainsKey(line.ItemCode))
-                    throw new ArgumentException("Duplicate tender quote item code: " + line.ItemCode + ".", nameof(lines));
-                byItem.Add(line.ItemCode, line);
-                index++;
+                while (lineEnumerator.MoveNext())
+                {
+                    AdvancedCostCollectionContract.RequireCanProcessNext(
+                        hasKnownLineCount,
+                        knownLineCount,
+                        index,
+                        "Tender quote line collection");
+                    var line = lineEnumerator.Current;
+                    if (line == null)
+                        throw new ArgumentException("Tender bid contains a null line at index " + index + ".", nameof(lines));
+                    if (byItem.ContainsKey(line.ItemCode))
+                        throw new ArgumentException("Duplicate tender quote item code: " + line.ItemCode + ".", nameof(lines));
+                    byItem.Add(line.ItemCode, line);
+                    index++;
+                }
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                lines,
                 hasKnownLineCount,
                 knownLineCount,
                 index,
@@ -720,21 +762,26 @@ namespace QS3D.Core.Cost
             var result = new List<TenderRequirement>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var requirement in requirements)
+            using (var requirementEnumerator = requirements.GetEnumerator())
             {
-                AdvancedCostCollectionContract.RequireCanProcessNext(
-                    hasKnownRequirementCount,
-                    knownRequirementCount,
-                    index,
-                    "Tender requirement collection");
-                if (requirement == null)
-                    throw new ArgumentException("Tender requirements contain a null item at index " + index + ".", nameof(requirements));
-                if (!ids.Add(requirement.ItemCode))
-                    throw new ArgumentException("Duplicate tender requirement item code: " + requirement.ItemCode + ".", nameof(requirements));
-                result.Add(requirement);
-                index++;
+                while (requirementEnumerator.MoveNext())
+                {
+                    AdvancedCostCollectionContract.RequireCanProcessNext(
+                        hasKnownRequirementCount,
+                        knownRequirementCount,
+                        index,
+                        "Tender requirement collection");
+                    var requirement = requirementEnumerator.Current;
+                    if (requirement == null)
+                        throw new ArgumentException("Tender requirements contain a null item at index " + index + ".", nameof(requirements));
+                    if (!ids.Add(requirement.ItemCode))
+                        throw new ArgumentException("Duplicate tender requirement item code: " + requirement.ItemCode + ".", nameof(requirements));
+                    result.Add(requirement);
+                    index++;
+                }
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                requirements,
                 hasKnownRequirementCount,
                 knownRequirementCount,
                 index,
@@ -752,21 +799,26 @@ namespace QS3D.Core.Cost
             var result = new List<TenderBid>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var bid in bids)
+            using (var bidEnumerator = bids.GetEnumerator())
             {
-                AdvancedCostCollectionContract.RequireCanProcessNext(
-                    hasKnownBidCount,
-                    knownBidCount,
-                    index,
-                    "Tender bid collection");
-                if (bid == null)
-                    throw new ArgumentException("Tender comparison contains a null bid at index " + index + ".", nameof(bids));
-                if (!ids.Add(bid.BidId))
-                    throw new ArgumentException("Duplicate tender bid id: " + bid.BidId + ".", nameof(bids));
-                result.Add(bid);
-                index++;
+                while (bidEnumerator.MoveNext())
+                {
+                    AdvancedCostCollectionContract.RequireCanProcessNext(
+                        hasKnownBidCount,
+                        knownBidCount,
+                        index,
+                        "Tender bid collection");
+                    var bid = bidEnumerator.Current;
+                    if (bid == null)
+                        throw new ArgumentException("Tender comparison contains a null bid at index " + index + ".", nameof(bids));
+                    if (!ids.Add(bid.BidId))
+                        throw new ArgumentException("Duplicate tender bid id: " + bid.BidId + ".", nameof(bids));
+                    result.Add(bid);
+                    index++;
+                }
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                bids,
                 hasKnownBidCount,
                 knownBidCount,
                 index,
@@ -899,20 +951,25 @@ namespace QS3D.Core.Cost
 
             var contracts = new Dictionary<string, ProgressContractItem>(StringComparer.OrdinalIgnoreCase);
             var contractIndex = 0;
-            foreach (var item in contractItems)
+            using (var contractEnumerator = contractItems.GetEnumerator())
             {
-                AdvancedCostCollectionContract.RequireCanProcessNext(
-                    hasKnownContractCount,
-                    knownContractCount,
-                    contractIndex,
-                    "Progress contract item collection");
-                if (item == null) throw new ArgumentException("Progress contract contains a null item.", nameof(contractItems));
-                if (contracts.ContainsKey(item.ItemCode))
-                    throw new ArgumentException("Duplicate progress contract item code: " + item.ItemCode + ".", nameof(contractItems));
-                contracts.Add(item.ItemCode, item);
-                contractIndex++;
+                while (contractEnumerator.MoveNext())
+                {
+                    AdvancedCostCollectionContract.RequireCanProcessNext(
+                        hasKnownContractCount,
+                        knownContractCount,
+                        contractIndex,
+                        "Progress contract item collection");
+                    var item = contractEnumerator.Current;
+                    if (item == null) throw new ArgumentException("Progress contract contains a null item.", nameof(contractItems));
+                    if (contracts.ContainsKey(item.ItemCode))
+                        throw new ArgumentException("Duplicate progress contract item code: " + item.ItemCode + ".", nameof(contractItems));
+                    contracts.Add(item.ItemCode, item);
+                    contractIndex++;
+                }
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                contractItems,
                 hasKnownContractCount,
                 knownContractCount,
                 contractIndex,
@@ -920,22 +977,27 @@ namespace QS3D.Core.Cost
 
             var claims = new Dictionary<string, ProgressClaimLine>(StringComparer.OrdinalIgnoreCase);
             var claimIndex = 0;
-            foreach (var line in claimLines)
+            using (var claimEnumerator = claimLines.GetEnumerator())
             {
-                AdvancedCostCollectionContract.RequireCanProcessNext(
-                    hasKnownClaimCount,
-                    knownClaimCount,
-                    claimIndex,
-                    "Progress claim line collection");
-                if (line == null) throw new ArgumentException("Progress claim contains a null line.", nameof(claimLines));
-                if (claims.ContainsKey(line.ItemCode))
-                    throw new ArgumentException("Duplicate progress claim item code: " + line.ItemCode + ".", nameof(claimLines));
-                if (!contracts.ContainsKey(line.ItemCode))
-                    throw new InvalidOperationException("Progress claim references an unknown contract item: " + line.ItemCode + ".");
-                claims.Add(line.ItemCode, line);
-                claimIndex++;
+                while (claimEnumerator.MoveNext())
+                {
+                    AdvancedCostCollectionContract.RequireCanProcessNext(
+                        hasKnownClaimCount,
+                        knownClaimCount,
+                        claimIndex,
+                        "Progress claim line collection");
+                    var line = claimEnumerator.Current;
+                    if (line == null) throw new ArgumentException("Progress claim contains a null line.", nameof(claimLines));
+                    if (claims.ContainsKey(line.ItemCode))
+                        throw new ArgumentException("Duplicate progress claim item code: " + line.ItemCode + ".", nameof(claimLines));
+                    if (!contracts.ContainsKey(line.ItemCode))
+                        throw new InvalidOperationException("Progress claim references an unknown contract item: " + line.ItemCode + ".");
+                    claims.Add(line.ItemCode, line);
+                    claimIndex++;
+                }
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                claimLines,
                 hasKnownClaimCount,
                 knownClaimCount,
                 claimIndex,

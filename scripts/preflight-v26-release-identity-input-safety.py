@@ -21,8 +21,15 @@ def validate_helper(text: str) -> list[str]:
         "Resolve-OrdinaryNonReparseFile",
         "$item.Attributes -band [IO.FileAttributes]::ReparsePoint",
         "$cursor.Attributes -band [IO.FileAttributes]::ReparsePoint",
-        "Read-BoundedStrictUtf8File",
+        "Get-HeldStreamingSha256",
+        "[Security.Cryptography.SHA256]::Create()",
+        "Open-LockedStableFile",
         "[IO.File]::Open",
+        "[IO.FileShare]::Read",
+        "$hash = Get-HeldStreamingSha256 -Stream $stream -Label $Label",
+        "LastWriteUtcTicks",
+        "Sha256 = $hash",
+        "Read-BoundedStrictUtf8Stream",
         "$stream.Length -gt $script:MaxMetadataBytes",
         "[byte[]]::new([int]$stream.Length)",
         "[Text.UTF8Encoding]::new($false, $true)",
@@ -31,33 +38,73 @@ def validate_helper(text: str) -> list[str]:
         "BricsCAD V26 x64",
         "net8.0-windows",
         "[string]::Equals(('v' + [string]$metadata.productVersion), $ReleaseTag, [StringComparison]::Ordinal)",
-        "[Reflection.AssemblyName]::GetAssemblyName($pluginFile.FullName)",
-        "[Reflection.AssemblyName]::GetAssemblyName($coreFile.FullName)",
+        "Assert-LockedPathBinding -Held $pluginHeld",
+        "[Reflection.AssemblyName]::GetAssemblyName($pluginHeld.Path)",
+        "Assert-LockedPathBinding -Held $coreHeld",
+        "[Reflection.AssemblyName]::GetAssemblyName($coreHeld.Path)",
+        "$heldFiles[$index].Stream.Dispose()",
     )
     for token in required:
         if token not in text:
             errors.append(f"V26 release identity helper missing required safety token: {token}")
 
-    metadata_guard = text.find("$metadataFile = Resolve-OrdinaryNonReparseFile")
-    metadata_read = text.find("$metadataText = Read-BoundedStrictUtf8File")
-    json_parse = text.find("ConvertFrom-Json -ErrorAction Stop")
-    plugin_guard = text.find("$pluginFile = Resolve-OrdinaryNonReparseFile")
-    plugin_read = text.find("GetAssemblyName($pluginFile.FullName)")
-    core_guard = text.find("$coreFile = Resolve-OrdinaryNonReparseFile")
-    core_read = text.find("GetAssemblyName($coreFile.FullName)")
-    if min(metadata_guard, metadata_read, json_parse) < 0 or not metadata_guard < metadata_read < json_parse:
-        errors.append("V26 metadata safety order must be ordinary-file guard -> bounded strict-UTF8 read -> JSON parse")
-    if min(plugin_guard, plugin_read) < 0 or plugin_guard >= plugin_read:
-        errors.append("V26 plugin assembly must be ordinary/non-reparse before AssemblyName parsing")
-    if min(core_guard, core_read) < 0 or core_guard >= core_read:
-        errors.append("V26 Core assembly must be ordinary/non-reparse before AssemblyName parsing")
+    metadata_lock = text.find("$metadataHeld = Open-LockedStableFile")
+    plugin_lock = text.find("$pluginHeld = Open-LockedStableFile", metadata_lock)
+    core_lock = text.find("$coreHeld = Open-LockedStableFile", plugin_lock)
+    metadata_guard = text.find("Assert-LockedPathBinding -Held $metadataHeld", core_lock)
+    metadata_read = text.find("$metadataText = Read-BoundedStrictUtf8Stream -Held $metadataHeld", metadata_guard)
+    json_parse = text.find("ConvertFrom-Json -ErrorAction Stop", metadata_read)
+    plugin_pre = text.find("Assert-LockedPathBinding -Held $pluginHeld", json_parse)
+    plugin_read = text.find("GetAssemblyName($pluginHeld.Path)", plugin_pre)
+    plugin_post = text.find("Assert-LockedPathBinding -Held $pluginHeld", plugin_read)
+    core_pre = text.find("Assert-LockedPathBinding -Held $coreHeld", plugin_post)
+    core_read = text.find("GetAssemblyName($coreHeld.Path)", core_pre)
+    core_post = text.find("Assert-LockedPathBinding -Held $coreHeld", core_read)
+    dispose = text.find("$heldFiles[$index].Stream.Dispose()", core_post)
+
+    ordered = (
+        metadata_lock,
+        plugin_lock,
+        core_lock,
+        metadata_guard,
+        metadata_read,
+        json_parse,
+        plugin_pre,
+        plugin_read,
+        plugin_post,
+        core_pre,
+        core_read,
+        core_post,
+        dispose,
+    )
+    if min(ordered) < 0 or list(ordered) != sorted(ordered):
+        errors.append(
+            "V26 identity safety order must lock metadata/plugin/core before consumption, read metadata from the held stream, consume AssemblyName under locked pathname assertions, then dispose"
+        )
+
+    lock_function = text.find("function Open-LockedStableFile")
+    file_open = text.find("[IO.File]::Open(", lock_function)
+    share_read = text.find("[IO.FileShare]::Read", file_open)
+    held_hash = text.find("$hash = Get-HeldStreamingSha256 -Stream $stream -Label $Label", share_read)
+    after_hash = text.find("$afterHash = Resolve-OrdinaryNonReparseFile", held_hash)
+    state_hash = text.find("Sha256 = $hash", after_hash)
+    if min(lock_function, file_open, share_read, held_hash, after_hash, state_hash) < 0 or not (
+        lock_function < file_open < share_read < held_hash < after_hash < state_hash
+    ):
+        errors.append(
+            "V26 held generation admission must open with FileShare.Read, fingerprint the held stream, re-resolve, and publish that held SHA-256 state"
+        )
 
     for forbidden in (
+        "Get-StableFileState",
+        "Assert-StableFileState",
+        "Read-BoundedStrictUtf8File",
         "Get-Content -LiteralPath $MetadataPath -Raw | ConvertFrom-Json",
         "[Text.Encoding]::UTF8.GetString",
+        "Get-FileHash",
     ):
         if forbidden in text:
-            errors.append(f"V26 release identity helper contains unsafe parsing shortcut: {forbidden}")
+            errors.append(f"V26 release identity helper contains superseded/unsafe transient parsing shortcut: {forbidden}")
     return errors
 
 
@@ -66,8 +113,6 @@ def package_identity_call(text: str) -> str:
     start = text.find(helper_call)
     if start < 0:
         return ""
-    # Bound this check to the package-identity invocation. Other release helpers
-    # may legitimately bind the same RELEASE_TAG input earlier in the workflow.
     line_start = text.rfind("\n", 0, start) + 1
     end_marker = " | Out-Null"
     end = text.find(end_marker, start)
@@ -114,9 +159,16 @@ helper_mutations = {
     "strict UTF-8 decoder": helper.replace("[Text.UTF8Encoding]::new($false, $true)", "[Text.Encoding]::UTF8", 1),
     "leaf reparse rejection": helper.replace("$item.Attributes -band [IO.FileAttributes]::ReparsePoint", "$item.Attributes -band [IO.FileAttributes]::Normal", 1),
     "parent reparse rejection": helper.replace("$cursor.Attributes -band [IO.FileAttributes]::ReparsePoint", "$cursor.Attributes -band [IO.FileAttributes]::Normal", 1),
-    "metadata ordinary-file binding": helper.replace("$metadataFile = Resolve-OrdinaryNonReparseFile", "$metadataFile = Get-Item", 1),
-    "plugin ordinary-file binding": helper.replace("$pluginFile = Resolve-OrdinaryNonReparseFile", "$pluginFile = Get-Item", 1),
-    "core ordinary-file binding": helper.replace("$coreFile = Resolve-OrdinaryNonReparseFile", "$coreFile = Get-Item", 1),
+    "streaming fingerprint": helper.replace("[Security.Cryptography.SHA256]::Create()", "[Security.Cryptography.MD5]::Create()", 1),
+    "generation share mode": helper.replace("[IO.FileShare]::Read", "[IO.FileShare]::Write", 1),
+    "held fingerprint": helper.replace("$hash = Get-HeldStreamingSha256 -Stream $stream -Label $Label", "$hash = 'UNBOUND'", 1),
+    "metadata generation lock": helper.replace("$metadataHeld = Open-LockedStableFile", "$metadataHeld = Resolve-OrdinaryNonReparseFile", 1),
+    "plugin generation lock": helper.replace("$pluginHeld = Open-LockedStableFile", "$pluginHeld = Resolve-OrdinaryNonReparseFile", 1),
+    "core generation lock": helper.replace("$coreHeld = Open-LockedStableFile", "$coreHeld = Resolve-OrdinaryNonReparseFile", 1),
+    "held metadata consumption": helper.replace("$metadataText = Read-BoundedStrictUtf8Stream -Held $metadataHeld", "$metadataText = Get-Content $MetadataPath -Raw", 1),
+    "plugin locked AssemblyName": helper.replace("GetAssemblyName($pluginHeld.Path)", "GetAssemblyName($PluginPath)", 1),
+    "core locked AssemblyName": helper.replace("GetAssemblyName($coreHeld.Path)", "GetAssemblyName($CorePath)", 1),
+    "finally disposal": helper.replace("$heldFiles[$index].Stream.Dispose()", "# generation lock disposal removed", 1),
 }
 for label, mutated in helper_mutations.items():
     if mutated == helper:
@@ -144,4 +196,4 @@ if errors:
         print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: V26 release package identity is bounded, strict-UTF8, ordinary-file/reparse guarded, and the manual release workflow is mutation-locked to the exact shared-helper invocation.")
+print("PASS: V26 release package identity is bounded, strict-UTF8, ordinary-file/reparse guarded, SHA-256 bound to held FileShare.Read generations through semantic consumption, and the manual release workflow is mutation-locked to the exact shared-helper invocation.")

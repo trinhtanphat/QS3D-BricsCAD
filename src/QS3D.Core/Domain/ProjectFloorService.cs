@@ -294,16 +294,23 @@ namespace QS3D.Core.Domain
 
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var observed = 0;
-            foreach (var element in elements)
+            using (var enumerator = elements.GetEnumerator())
             {
-                observed++;
-                if (observed > MaxMutationTargetCount)
-                    throw new InvalidOperationException("Floor mutation target collection exceeds the supported " + MaxMutationTargetCount + " element limit.");
-                if (element == null)
-                    throw new InvalidOperationException("Floor mutation target collection contains a null element.");
-                if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
-                    throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
-                unique[element.Id] = owned;
+                while (enumerator.MoveNext())
+                {
+                    observed++;
+                    if (observed > MaxMutationTargetCount)
+                        throw new InvalidOperationException("Floor mutation target collection exceeds the supported " + MaxMutationTargetCount + " element limit.");
+                    if (knownTargetCount.HasValue && observed > knownTargetCount.Value)
+                        continue;
+
+                    var element = enumerator.Current;
+                    if (element == null)
+                        throw new InvalidOperationException("Floor mutation target collection contains a null element.");
+                    if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
+                        throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
+                    unique[element.Id] = owned;
+                }
             }
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Floor mutation targets were being enumerated. Retry the operation against the current project state.");

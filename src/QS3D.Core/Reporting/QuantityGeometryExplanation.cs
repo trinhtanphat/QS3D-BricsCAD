@@ -151,13 +151,57 @@ namespace QS3D.Core.Reporting
         {
             if (faces == null) throw new InvalidOperationException("FormworkFaces cannot be null.");
             var total = 0d;
+            var compensation = 0d;
             for (var index = 0; index < faces.Count; index++)
             {
                 var face = faces[index] ?? throw new InvalidOperationException("FormworkFaces cannot contain null entries.");
                 var value = QuantityReportMath.NonNegative(selector(face), label + "[" + index + "]");
-                total = QuantityReportMath.Add(total, value, label);
+                AddCompensated(ref total, ref compensation, value, label + "[" + index + "]");
             }
-            return total;
+            return FinalizeCompensated(total, compensation, label);
+        }
+
+        private static void AddCompensated(ref double total, ref double compensation, double value, string label)
+        {
+            QuantityReportMath.Finite(total, label + "/sum");
+            QuantityReportMath.Finite(compensation, label + "/compensation");
+            var nextTotal = total + value;
+            if (double.IsNaN(nextTotal) || double.IsInfinity(nextTotal))
+                throw new OverflowException("Formwork explanation total overflow: " + label);
+
+            var correction = Math.Abs(total) >= Math.Abs(value)
+                ? (total - nextTotal) + value
+                : (value - nextTotal) + total;
+            var nextCompensation = compensation + correction;
+            if (double.IsNaN(nextCompensation) || double.IsInfinity(nextCompensation))
+                throw new OverflowException("Formwork explanation compensation overflow: " + label);
+
+            total = nextTotal == 0d ? 0d : nextTotal;
+            compensation = nextCompensation == 0d ? 0d : nextCompensation;
+        }
+
+        private static double FinalizeCompensated(double total, double compensation, string label)
+        {
+            QuantityReportMath.Finite(total, label + "/sum");
+            QuantityReportMath.Finite(compensation, label + "/compensation");
+            var result = total + compensation;
+            if (double.IsNaN(result) || double.IsInfinity(result))
+                throw new OverflowException("Formwork explanation total overflow: " + label);
+            if (compensation != 0d && result == total && !IsStrictlyBelowHalfUlp(total, compensation))
+                throw new OverflowException("Formwork explanation total lost a non-zero compensation at floating-point precision: " + label);
+            if (total != 0d && result == compensation)
+                throw new OverflowException("Formwork explanation total lost a non-zero accumulated value at floating-point precision: " + label);
+            return result == 0d ? 0d : result;
+        }
+
+        private static bool IsStrictlyBelowHalfUlp(double current, double compensation)
+        {
+            if (current <= 0d || compensation == 0d) return false;
+            var currentBits = BitConverter.DoubleToInt64Bits(current);
+            var adjacentBits = compensation > 0d ? currentBits + 1L : currentBits - 1L;
+            var adjacent = BitConverter.Int64BitsToDouble(adjacentBits);
+            var spacing = Math.Abs(adjacent - current);
+            return Math.Abs(compensation) < spacing / 2d;
         }
 
         private static void NonNegativeFinite(double value, string label)

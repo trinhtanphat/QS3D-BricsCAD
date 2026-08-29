@@ -124,12 +124,22 @@ namespace QS3D.Core.Coordination
 
             var snapshot = hasKnownCount ? new List<T>(knownCount) : new List<T>();
             var observedCount = 0;
-            foreach (var item in items)
+            using (var enumerator = items.GetEnumerator())
             {
-                if (observedCount == MaximumEntries)
-                    ThrowTooManyEntries(collectionLabel);
-                snapshot.Add(item);
-                observedCount++;
+                while (enumerator.MoveNext())
+                {
+                    if (hasKnownCount && observedCount >= knownCount)
+                    {
+                        throw new InvalidOperationException(
+                            collectionLabel + " traversal produced more entries than its admitted known count of " + knownCount + ".");
+                    }
+                    if (observedCount >= MaximumEntries)
+                        ThrowTooManyEntries(collectionLabel);
+
+                    var item = enumerator.Current;
+                    snapshot.Add(item);
+                    observedCount++;
+                }
             }
 
             if (hasKnownCount && knownCount != observedCount)
@@ -137,6 +147,17 @@ namespace QS3D.Core.Coordination
                 throw new InvalidOperationException(
                     collectionLabel + " traversal produced " + observedCount +
                     " entries but its known count reported " + knownCount + ".");
+            }
+
+            if (hasKnownCount)
+            {
+                var stillHasKnownCount = TryGetKnownCount(items, out var reboundKnownCount);
+                if (!stillHasKnownCount || reboundKnownCount != knownCount)
+                {
+                    throw new InvalidOperationException(
+                        collectionLabel + " known Count changed during traversal from " + knownCount +
+                        " to " + (stillHasKnownCount ? reboundKnownCount.ToString(CultureInfo.InvariantCulture) : "<unavailable>") + ".");
+                }
             }
 
             return snapshot.ToArray();

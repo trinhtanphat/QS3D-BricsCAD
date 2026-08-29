@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -41,38 +42,95 @@ namespace QS3D.Core.Export
         public static string ToCsv(IEnumerable<RebarProcurementSummary> rows)
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            var admittedCount = ReadKnownCount(rows);
+            if (admittedCount.HasValue)
+            {
+                ValidateKnownCount(admittedCount.Value);
+                if (admittedCount.Value > MaxRowCount)
+                    throw new ArgumentOutOfRangeException(nameof(rows), "Rebar procurement CSV exceeds the supported row bound of " + MaxRowCount + ".");
+            }
+
             var sb = new StringBuilder();
             sb.Append("AlgorithmId,GroupId,Grade,DiameterMm,StockLengthM,RequiredCutCount,RequiredLengthM,AllowanceLengthM,DemandBeforeKerfM,StockBarCount,KerfLengthM,OffCutLengthM,WasteLengthM,ProcurementLengthM,UnitWeightKgM,DemandWeightKg,ProcurementWeightKg,WasteWeightKg,WastePercent").Append("\r\n");
             var rowCount = 0;
-            foreach (var row in rows)
+            using (var enumerator = rows.GetEnumerator())
             {
-                if (rowCount >= MaxRowCount)
-                    throw new ArgumentOutOfRangeException(nameof(rows), "Rebar procurement CSV exceeds the supported row bound of " + MaxRowCount + ".");
-                rowCount++;
-                if (row == null) throw new ArgumentException("Rebar procurement CSV cannot contain a null row.", nameof(rows));
-                sb.Append(Q(row.AlgorithmId)).Append(',')
-                    .Append(QIdentity(row.GroupId, "group id")).Append(',')
-                    .Append(Q(row.Grade)).Append(',')
-                    .Append(F(row.DiameterMm)).Append(',')
-                    .Append(F(row.StockLengthM)).Append(',')
-                    .Append(row.RequiredCutCount.ToString(CultureInfo.InvariantCulture)).Append(',')
-                    .Append(F(row.RequiredLengthM)).Append(',')
-                    .Append(F(row.AllowanceLengthM)).Append(',')
-                    .Append(F(row.DemandBeforeKerfM)).Append(',')
-                    .Append(row.StockBarCount.ToString(CultureInfo.InvariantCulture)).Append(',')
-                    .Append(F(row.KerfLengthM)).Append(',')
-                    .Append(F(row.OffCutLengthM)).Append(',')
-                    .Append(F(row.WasteLengthM)).Append(',')
-                    .Append(F(row.ProcurementLengthM)).Append(',')
-                    .Append(F(row.UnitWeightKgM)).Append(',')
-                    .Append(F(row.DemandWeightKg)).Append(',')
-                    .Append(F(row.ProcurementWeightKg)).Append(',')
-                    .Append(F(row.WasteWeightKg)).Append(',')
-                    .Append(F(row.WastePercent)).Append("\r\n");
+                while (true)
+                {
+                    ValidateKnownCount(rows, admittedCount);
+                    var moved = enumerator.MoveNext();
+                    ValidateKnownCount(rows, admittedCount);
+                    if (!moved) break;
+                    if (rowCount >= MaxRowCount)
+                        throw new ArgumentOutOfRangeException(nameof(rows), "Rebar procurement CSV exceeds the supported row bound of " + MaxRowCount + ".");
+                    if (admittedCount.HasValue && rowCount >= admittedCount.Value)
+                        throw new InvalidOperationException("Rebar procurement CSV row Count grew beyond the admitted Count during serialization.");
+
+                    var row = enumerator.Current;
+                    rowCount++;
+                    if (row == null) throw new ArgumentException("Rebar procurement CSV cannot contain a null row.", nameof(rows));
+                    sb.Append(Q(row.AlgorithmId)).Append(',')
+                        .Append(QSemanticIdentity(row.GroupId, "group id")).Append(',')
+                        .Append(QSemanticIdentity(row.Grade, "grade")).Append(',')
+                        .Append(F(row.DiameterMm)).Append(',')
+                        .Append(F(row.StockLengthM)).Append(',')
+                        .Append(row.RequiredCutCount.ToString(CultureInfo.InvariantCulture)).Append(',')
+                        .Append(F(row.RequiredLengthM)).Append(',')
+                        .Append(F(row.AllowanceLengthM)).Append(',')
+                        .Append(F(row.DemandBeforeKerfM)).Append(',')
+                        .Append(row.StockBarCount.ToString(CultureInfo.InvariantCulture)).Append(',')
+                        .Append(F(row.KerfLengthM)).Append(',')
+                        .Append(F(row.OffCutLengthM)).Append(',')
+                        .Append(F(row.WasteLengthM)).Append(',')
+                        .Append(F(row.ProcurementLengthM)).Append(',')
+                        .Append(F(row.UnitWeightKgM)).Append(',')
+                        .Append(F(row.DemandWeightKg)).Append(',')
+                        .Append(F(row.ProcurementWeightKg)).Append(',')
+                        .Append(F(row.WasteWeightKg)).Append(',')
+                        .Append(F(row.WastePercent)).Append("\r\n");
+                }
             }
+
+            ValidateKnownCount(rows, admittedCount);
+            if (admittedCount.HasValue && rowCount != admittedCount.Value)
+                throw new InvalidOperationException("Rebar procurement CSV row Count did not match the admitted Count during serialization.");
             var content = sb.ToString();
             StrictUtf8WithBom.GetByteCount(content);
             return content;
+        }
+
+        private static int? ReadKnownCount(IEnumerable<RebarProcurementSummary> rows)
+        {
+            int? count = null;
+            if (rows is ICollection<RebarProcurementSummary> genericCollection)
+                BindKnownCount(ref count, genericCollection.Count);
+            if (rows is IReadOnlyCollection<RebarProcurementSummary> readOnlyCollection)
+                BindKnownCount(ref count, readOnlyCollection.Count);
+            if (rows is ICollection nonGenericCollection)
+                BindKnownCount(ref count, nonGenericCollection.Count);
+            return count;
+        }
+
+        private static void BindKnownCount(ref int? bound, int candidate)
+        {
+            ValidateKnownCount(candidate);
+            if (bound.HasValue && bound.Value != candidate)
+                throw new InvalidOperationException("Rebar procurement CSV exposes conflicting row Count evidence.");
+            bound = candidate;
+        }
+
+        private static void ValidateKnownCount(int count)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Rebar procurement CSV row Count cannot be negative.");
+        }
+
+        private static void ValidateKnownCount(IEnumerable<RebarProcurementSummary> rows, int? admittedCount)
+        {
+            if (!admittedCount.HasValue) return;
+            var current = ReadKnownCount(rows);
+            if (!current.HasValue || current.Value != admittedCount.Value)
+                throw new InvalidOperationException("Rebar procurement CSV row Count changed during serialization.");
         }
 
         private static string F(double value)
@@ -82,7 +140,7 @@ namespace QS3D.Core.Export
             return value.ToString("R", CultureInfo.InvariantCulture);
         }
 
-        private static string QIdentity(string value, string label)
+        private static string QSemanticIdentity(string value, string label)
         {
             var safe = value ?? string.Empty;
             var probe = safe.TrimStart();

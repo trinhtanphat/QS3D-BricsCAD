@@ -80,10 +80,18 @@ namespace QS3D.Core.Documentation
             var result = new List<SemanticSheetPlan>(Math.Min(MaxSheets, 256));
             using (var enumerator = sheets.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableKnownCount(sheets, knownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireStableKnownCount(sheets, knownCount);
+
+                    if (knownCount.HasValue && result.Count >= knownCount.Value)
+                        throw TraversalCountMismatch();
                     if (result.Count >= MaxSheets)
                         throw TooManySheets();
+
                     var sheet = enumerator.Current;
                     if (sheet == null)
                         throw new ArgumentException("Semantic sheet index source cannot contain a null sheet at index " + result.Count + ".", nameof(sheets));
@@ -92,9 +100,17 @@ namespace QS3D.Core.Documentation
             }
 
             if (knownCount.HasValue && result.Count != knownCount.Value)
-                throw new InvalidOperationException("Semantic sheet index source traversal count does not match its known count.");
+                throw TraversalCountMismatch();
 
+            RequireStableKnownCount(sheets, knownCount);
             return result;
+        }
+
+        private static void RequireStableKnownCount(IEnumerable<SemanticSheetPlan> sheets, int? knownCount)
+        {
+            var currentKnownCount = RequireKnownCountsWithinLimit(sheets);
+            if (knownCount != currentKnownCount)
+                throw new InvalidOperationException("Semantic sheet index source known count changed during traversal.");
         }
 
         private static int? RequireKnownCountsWithinLimit(IEnumerable<SemanticSheetPlan> sheets)
@@ -127,6 +143,11 @@ namespace QS3D.Core.Documentation
                 throw new InvalidOperationException("Semantic sheet index source reports conflicting known counts.");
 
             return expected;
+        }
+
+        private static InvalidOperationException TraversalCountMismatch()
+        {
+            return new InvalidOperationException("Semantic sheet index source traversal count does not match its known count.");
         }
 
         private static InvalidOperationException TooManySheets()

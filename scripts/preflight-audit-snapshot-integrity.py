@@ -70,17 +70,38 @@ if AUDIT.is_file():
     supported_count_method_pos = text.find("private int RequireSupportedHistoryCount", validate_method_pos)
     validate_text = text[validate_method_pos:supported_count_method_pos] if validate_method_pos >= 0 and supported_count_method_pos > validate_method_pos else ""
     validate_count_pos = validate_text.find("var storedCount = RequireSupportedHistoryCount(requireAppendCapacity);")
-    validate_traversal_pos = validate_text.find("foreach (var existing in _events)")
-    validate_equality_pos = validate_text.find("RequireObservedHistoryCount(storedCount, observed);")
-    validate_return_pos = validate_text.find("return observed;")
+    validate_enumerator_pos = validate_text.find("using (var enumerator = _events.GetEnumerator())", validate_count_pos)
+    validate_move_pos = validate_text.find("while (enumerator.MoveNext())", validate_enumerator_pos)
+    validate_can_read_pos = validate_text.find("RequireCanReadCurrent(storedCount, observed);", validate_move_pos)
+    validate_current_pos = validate_text.find("var existing = enumerator.Current;", validate_can_read_pos)
+    validate_equality_pos = validate_text.find("RequireObservedHistoryCount(storedCount, observed);", validate_current_pos)
+    validate_stable_pos = validate_text.find("RequireStableHistoryCount(storedCount);", validate_equality_pos)
+    validate_return_pos = validate_text.find("return observed;", validate_stable_pos)
     if (
         validate_count_pos < 0
-        or validate_traversal_pos < 0
+        or validate_enumerator_pos < 0
+        or validate_move_pos < 0
+        or validate_can_read_pos < 0
+        or validate_current_pos < 0
         or validate_equality_pos < 0
+        or validate_stable_pos < 0
         or validate_return_pos < 0
-        or not (validate_count_pos < validate_traversal_pos < validate_equality_pos < validate_return_pos)
+        or not (
+            validate_count_pos
+            < validate_enumerator_pos
+            < validate_move_pos
+            < validate_can_read_pos
+            < validate_current_pos
+            < validate_equality_pos
+            < validate_stable_pos
+            < validate_return_pos
+        )
     ):
-        errors.append("AuditTrail.ValidateExistingHistory must enforce Count -> traversal -> equality -> return ordering inside the modification validator.")
+        errors.append(
+            "AuditTrail.ValidateExistingHistory must enforce Count -> MoveNext -> Current-read guard -> Current -> equality -> stable Count -> return ordering inside the modification validator."
+        )
+    if "foreach (var existing in _events)" in validate_text:
+        errors.append("AuditTrail.ValidateExistingHistory must not use foreach because Current would be read before the admitted-Count guard.")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")

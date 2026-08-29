@@ -99,6 +99,9 @@ namespace QS3D.Core.Documentation
                 while (enumerator.MoveNext())
                 {
                     observedCount++;
+                    if (knownCount.HasValue && observedCount > knownCount.Value)
+                        throw new InvalidOperationException(
+                            "Semantic title-block mapping source known Count was exceeded during traversal.");
                     if (observedCount > MaxParameters)
                         throw ParameterCollectionTooLarge();
                     result.Add(enumerator.Current);
@@ -108,7 +111,29 @@ namespace QS3D.Core.Documentation
             if (knownCount.HasValue && observedCount != knownCount.Value)
                 throw new InvalidOperationException("Semantic title-block mapping source known Count does not match the number of definitions traversed.");
 
+            if (knownCount.HasValue)
+                RevalidateKnownCountAfterTraversal(definitions, knownCount.Value);
+
             return result;
+        }
+
+        private static void RevalidateKnownCountAfterTraversal(
+            IEnumerable<SemanticTitleBlockParameterDefinition> definitions,
+            int admittedKnownCount)
+        {
+            var reboundKnownCount = TryGetKnownCount(
+                definitions,
+                out var conflictingKnownCounts,
+                out var negativeKnownCount);
+            if (negativeKnownCount)
+                throw new InvalidOperationException(
+                    "Semantic title-block mapping source exposes an invalid negative known Count value after traversal.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException(
+                    "Semantic title-block mapping source exposes conflicting known Count values after traversal.");
+            if (!reboundKnownCount.HasValue || reboundKnownCount.Value != admittedKnownCount)
+                throw new InvalidOperationException(
+                    "Semantic title-block mapping source known Count changed during traversal.");
         }
 
         private static int? TryGetKnownCount(

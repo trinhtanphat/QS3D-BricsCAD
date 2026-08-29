@@ -55,22 +55,32 @@ namespace QS3D.Core.Cost
             var snapshot = new List<RateReferenceEdge>();
             var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var edge in edges)
+            using (var edgeEnumerator = edges.GetEnumerator())
             {
-                if (index == MaximumEdges)
-                    ThrowTooManyEdges();
-                if (edge == null)
-                    throw new ArgumentException("Rate reference graph contains a null edge at index " + index + ".", nameof(edges));
-                var key = edge.SourceRateCode + "\u001f" + ((int)edge.TargetKind) + "\u001f" + edge.TargetId;
-                if (!keys.Add(key))
-                    throw new ArgumentException("Duplicate rate reference edge: " + key + ".", nameof(edges));
-                snapshot.Add(edge);
-                index++;
+                while (edgeEnumerator.MoveNext())
+                {
+                    if (knownCount.HasValue && index == knownCount.Value)
+                        throw new ArgumentException(
+                            "Rate reference edge collection contains more entries than its known count.",
+                            nameof(edges));
+                    if (index == MaximumEdges)
+                        ThrowTooManyEdges();
+                    var edge = edgeEnumerator.Current;
+                    if (edge == null)
+                        throw new ArgumentException("Rate reference graph contains a null edge at index " + index + ".", nameof(edges));
+                    var key = edge.SourceRateCode + "\u001f" + ((int)edge.TargetKind) + "\u001f" + edge.TargetId;
+                    if (!keys.Add(key))
+                        throw new ArgumentException("Duplicate rate reference edge: " + key + ".", nameof(edges));
+                    snapshot.Add(edge);
+                    index++;
+                }
             }
             if (knownCount.HasValue && index != knownCount.Value)
                 throw new ArgumentException(
                     "Rate reference edge collection known count does not match the observed traversal.",
                     nameof(edges));
+            if (knownCount.HasValue)
+                RequireKnownCountStableAfterTraversal(edges, knownCount.Value);
             snapshot.Sort(CompareEdges);
             _edges = new ReadOnlyCollection<RateReferenceEdge>(snapshot.ToArray());
         }
@@ -141,6 +151,17 @@ namespace QS3D.Core.Cost
             return expected;
         }
 
+        private static void RequireKnownCountStableAfterTraversal(
+            IEnumerable<RateReferenceEdge> edges,
+            int admittedKnownCount)
+        {
+            var reboundKnownCount = ValidateKnownCount(edges);
+            if (!reboundKnownCount.HasValue || reboundKnownCount.Value != admittedKnownCount)
+                throw new ArgumentException(
+                    "Rate reference edge collection known count changed during traversal.",
+                    nameof(edges));
+        }
+
         private static int CompareEdges(RateReferenceEdge left, RateReferenceEdge right)
         {
             var compare = StringComparer.OrdinalIgnoreCase.Compare(left.SourceRateCode, right.SourceRateCode);
@@ -206,29 +227,34 @@ namespace QS3D.Core.Cost
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var result = new List<BuildUpAnalysisLine>();
             var index = 0;
-            foreach (var rate in rates)
+            using (var rateEnumerator = rates.GetEnumerator())
             {
-                AdvancedCostCollectionContract.RequireCanProcessNext(
-                    hasKnownRateCount,
-                    knownRateCount,
-                    index,
-                    "Build-up analysis rate collection");
-                if (rate == null)
-                    throw new ArgumentException("Build-up analysis contains a null rate at index " + index + ".", nameof(rates));
-                if (!ids.Add(rate.RateCode))
-                    throw new ArgumentException("Duplicate build-up rate code: " + rate.RateCode + ".", nameof(rates));
-                var mark = references.GetMark(rate.RateCode);
-                if (!adoptedOnly || !mark.IsUnused)
+                while (rateEnumerator.MoveNext())
                 {
-                    result.Add(new BuildUpAnalysisLine(
-                        rate,
-                        mark,
-                        references.GetReverseReferences(rate.RateCode, RateReferenceTargetKind.BillItem),
-                        references.GetReverseReferences(rate.RateCode, RateReferenceTargetKind.UnitRate)));
+                    AdvancedCostCollectionContract.RequireCanProcessNext(
+                        hasKnownRateCount,
+                        knownRateCount,
+                        index,
+                        "Build-up analysis rate collection");
+                    var rate = rateEnumerator.Current;
+                    if (rate == null)
+                        throw new ArgumentException("Build-up analysis contains a null rate at index " + index + ".", nameof(rates));
+                    if (!ids.Add(rate.RateCode))
+                        throw new ArgumentException("Duplicate build-up rate code: " + rate.RateCode + ".", nameof(rates));
+                    var mark = references.GetMark(rate.RateCode);
+                    if (!adoptedOnly || !mark.IsUnused)
+                    {
+                        result.Add(new BuildUpAnalysisLine(
+                            rate,
+                            mark,
+                            references.GetReverseReferences(rate.RateCode, RateReferenceTargetKind.BillItem),
+                            references.GetReverseReferences(rate.RateCode, RateReferenceTargetKind.UnitRate)));
+                    }
+                    index++;
                 }
-                index++;
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                rates,
                 hasKnownRateCount,
                 knownRateCount,
                 index,
@@ -394,37 +420,42 @@ namespace QS3D.Core.Cost
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var totals = new Dictionary<string, TradeAggregate>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var item in items)
+            using (var itemEnumerator = items.GetEnumerator())
             {
-                AdvancedCostCollectionContract.RequireCanProcessNext(
-                    hasKnownItemCount,
-                    knownItemCount,
-                    index,
-                    "Trade analysis item collection");
-                if (item == null)
-                    throw new ArgumentException("Trade analysis contains a null item at index " + index + ".", nameof(items));
-                if (!ids.Add(item.ItemCode))
-                    throw new ArgumentException("Duplicate trade-analysis item code: " + item.ItemCode + ".", nameof(items));
-                if (!totals.TryGetValue(item.TradeCode, out var aggregate))
+                while (itemEnumerator.MoveNext())
                 {
-                    aggregate = new TradeAggregate(item.TradeCode);
-                    totals.Add(item.TradeCode, aggregate);
+                    AdvancedCostCollectionContract.RequireCanProcessNext(
+                        hasKnownItemCount,
+                        knownItemCount,
+                        index,
+                        "Trade analysis item collection");
+                    var item = itemEnumerator.Current;
+                    if (item == null)
+                        throw new ArgumentException("Trade analysis contains a null item at index " + index + ".", nameof(items));
+                    if (!ids.Add(item.ItemCode))
+                        throw new ArgumentException("Duplicate trade-analysis item code: " + item.ItemCode + ".", nameof(items));
+                    if (!totals.TryGetValue(item.TradeCode, out var aggregate))
+                    {
+                        aggregate = new TradeAggregate(item.TradeCode);
+                        totals.Add(item.TradeCode, aggregate);
+                    }
+                    else if (string.CompareOrdinal(item.TradeCode, aggregate.TradeCode) < 0)
+                    {
+                        aggregate.TradeCode = item.TradeCode;
+                    }
+                    checked
+                    {
+                        aggregate.ItemCount++;
+                        aggregate.TotalCost = CostDecimalMath.AddPreservingNonZeroContribution(
+                            aggregate.TotalCost,
+                            item.Cost,
+                            "trade cost aggregate total");
+                    }
+                    index++;
                 }
-                else if (string.CompareOrdinal(item.TradeCode, aggregate.TradeCode) < 0)
-                {
-                    aggregate.TradeCode = item.TradeCode;
-                }
-                checked
-                {
-                    aggregate.ItemCount++;
-                    aggregate.TotalCost = CostDecimalMath.AddPreservingNonZeroContribution(
-                        aggregate.TotalCost,
-                        item.Cost,
-                        "trade cost aggregate total");
-                }
-                index++;
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                items,
                 hasKnownItemCount,
                 knownItemCount,
                 index,
@@ -491,21 +522,26 @@ namespace QS3D.Core.Cost
             var snapshot = new List<BqLibraryEntry>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var entry in entries)
+            using (var entryEnumerator = entries.GetEnumerator())
             {
-                AdvancedCostCollectionContract.RequireCanProcessNext(
-                    hasKnownEntryCount,
-                    knownEntryCount,
-                    index,
-                    "BQ library entry collection");
-                if (entry == null)
-                    throw new ArgumentException("BQ library contains a null entry at index " + index + ".", nameof(entries));
-                if (!ids.Add(entry.ItemCode))
-                    throw new ArgumentException("Duplicate BQ library item code: " + entry.ItemCode + ".", nameof(entries));
-                snapshot.Add(entry);
-                index++;
+                while (entryEnumerator.MoveNext())
+                {
+                    AdvancedCostCollectionContract.RequireCanProcessNext(
+                        hasKnownEntryCount,
+                        knownEntryCount,
+                        index,
+                        "BQ library entry collection");
+                    var entry = entryEnumerator.Current;
+                    if (entry == null)
+                        throw new ArgumentException("BQ library contains a null entry at index " + index + ".", nameof(entries));
+                    if (!ids.Add(entry.ItemCode))
+                        throw new ArgumentException("Duplicate BQ library item code: " + entry.ItemCode + ".", nameof(entries));
+                    snapshot.Add(entry);
+                    index++;
+                }
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                entries,
                 hasKnownEntryCount,
                 knownEntryCount,
                 index,
@@ -528,23 +564,28 @@ namespace QS3D.Core.Cost
             for (var i = 0; i < _entries.Count; i++) merged.Add(_entries[i].ItemCode, _entries[i]);
             var incomingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var entry in projectEntries)
+            using (var projectEntryEnumerator = projectEntries.GetEnumerator())
             {
-                AdvancedCostCollectionContract.RequireCanProcessNext(
-                    hasKnownProjectEntryCount,
-                    knownProjectEntryCount,
-                    index,
-                    "BQ project import collection");
-                if (entry == null)
-                    throw new ArgumentException("Project import contains a null BQ entry at index " + index + ".", nameof(projectEntries));
-                if (!incomingIds.Add(entry.ItemCode))
-                    throw new ArgumentException("Project import contains duplicate BQ item code: " + entry.ItemCode + ".", nameof(projectEntries));
-                if (merged.ContainsKey(entry.ItemCode) && !replaceExisting)
-                    throw new InvalidOperationException("BQ library import would overwrite existing item " + entry.ItemCode + ".");
-                merged[entry.ItemCode] = entry;
-                index++;
+                while (projectEntryEnumerator.MoveNext())
+                {
+                    AdvancedCostCollectionContract.RequireCanProcessNext(
+                        hasKnownProjectEntryCount,
+                        knownProjectEntryCount,
+                        index,
+                        "BQ project import collection");
+                    var entry = projectEntryEnumerator.Current;
+                    if (entry == null)
+                        throw new ArgumentException("Project import contains a null BQ entry at index " + index + ".", nameof(projectEntries));
+                    if (!incomingIds.Add(entry.ItemCode))
+                        throw new ArgumentException("Project import contains duplicate BQ item code: " + entry.ItemCode + ".", nameof(projectEntries));
+                    if (merged.ContainsKey(entry.ItemCode) && !replaceExisting)
+                        throw new InvalidOperationException("BQ library import would overwrite existing item " + entry.ItemCode + ".");
+                    merged[entry.ItemCode] = entry;
+                    index++;
+                }
             }
-            AdvancedCostCollectionContract.RequireKnownCountMatchesTraversal(
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                projectEntries,
                 hasKnownProjectEntryCount,
                 knownProjectEntryCount,
                 index,

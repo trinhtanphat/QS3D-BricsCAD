@@ -27,6 +27,45 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                McpEmbeddedServer.Start();
+            }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("MCP server", ex);
+            }
+
+            try
+            {
+                // Provider-browser login + persistent Named Tunnel is the normal production path.
+                // Quick/static-bearer modes stay explicit Advanced/test fallbacks in Agent Center.
+                McpCloudflareAccountTunnelManager.TryAutoStart();
+                McpPublicEndpointResolver.Resolve();
+            }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("MCP Cloudflare tunnel", ex);
+            }
+
+            try
+            {
+                McpProjectRecoveryService.Start();
+            }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("MCP recovery service", ex);
+            }
+
+            try
+            {
+                McpFirstRunExperience.Start();
+            }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("MCP onboarding experience", ex);
+            }
+
+            try
+            {
                 QuantityContextMenuCoordinator.Start();
             }
             catch (Exception ex)
@@ -51,6 +90,14 @@ namespace QS3D.BricsCAD.V25
 
         private static void TeardownHostServices()
         {
+            // Revoke desktop-wide consent before stopping network services so no injected input
+            // can outlive the BricsCAD/QS3D host lifecycle.
+            TryCleanup(McpDesktopControlSession.Shutdown);
+            TryCleanup(McpFirstRunExperience.Stop);
+            TryCleanup(McpProjectRecoveryService.Stop);
+            TryCleanup(McpCloudflareAccountTunnelManager.StopForHostShutdown);
+            TryCleanup(McpCloudflareTunnelManager.StopForHostShutdown);
+            TryCleanup(McpEmbeddedServer.Stop);
             TryCleanup(UpdateBootstrapper.Stop);
             TryCleanup(QuantityContextMenuCoordinator.Stop);
             TryCleanup(RibbonInitializationCoordinator.Stop);

@@ -123,45 +123,54 @@ namespace QS3D.Core.Cost
             var effectiveTimesByScope = new Dictionary<string, HashSet<DateTime>>(StringComparer.OrdinalIgnoreCase);
 
             var index = 0;
-            foreach (var item in items)
+            using (var enumerator = items.GetEnumerator())
             {
-                if (index == MaxItems)
-                    ThrowTooManyItems();
-                if (hasKnownCount && index >= knownCount)
-                    ThrowKnownCountTraversalMismatch();
-                if (item == null)
-                    throw new ArgumentException("Rate book contains a null item at index " + index + ".", nameof(items));
-                if (!itemIds.Add(item.RateItemId))
-                    throw new ArgumentException("Duplicate rate item id: " + item.RateItemId + ".", nameof(items));
-
-                var scopeKey = RateBookContract.ScopeKey(item.CostCode, item.Unit, item.Currency);
-                if (!_byScope.TryGetValue(scopeKey, out var scopedItems))
+                while (true)
                 {
-                    scopedItems = new List<RateItem>();
-                    _byScope.Add(scopeKey, scopedItems);
-                    effectiveTimesByScope.Add(scopeKey, new HashSet<DateTime>());
+                    if (hasKnownCount)
+                        RequireStableKnownCount(items, knownCount);
+
+                    if (!enumerator.MoveNext())
+                        break;
+
+                    if (hasKnownCount)
+                        RequireStableKnownCount(items, knownCount);
+                    if (hasKnownCount && index >= knownCount)
+                        ThrowKnownCountTraversalMismatch();
+                    if (index >= MaxItems)
+                        ThrowTooManyItems();
+
+                    var item = enumerator.Current;
+                    if (item == null)
+                        throw new ArgumentException("Rate book contains a null item at index " + index + ".", nameof(items));
+                    if (!itemIds.Add(item.RateItemId))
+                        throw new ArgumentException("Duplicate rate item id: " + item.RateItemId + ".", nameof(items));
+
+                    var scopeKey = RateBookContract.ScopeKey(item.CostCode, item.Unit, item.Currency);
+                    if (!_byScope.TryGetValue(scopeKey, out var scopedItems))
+                    {
+                        scopedItems = new List<RateItem>();
+                        _byScope.Add(scopeKey, scopedItems);
+                        effectiveTimesByScope.Add(scopeKey, new HashSet<DateTime>());
+                    }
+
+                    if (!effectiveTimesByScope[scopeKey].Add(item.EffectiveFromUtc))
+                        throw new ArgumentException(
+                            "Ambiguous rate items share the same cost code, unit, currency and effective timestamp: " +
+                            item.CostCode.Value + "/" + item.Unit + "/" + item.Currency + "/" +
+                            item.EffectiveFromUtc.ToString("O") + ".",
+                            nameof(items));
+
+                    scopedItems.Add(item);
+                    snapshot.Add(item);
+                    index++;
                 }
-
-                if (!effectiveTimesByScope[scopeKey].Add(item.EffectiveFromUtc))
-                    throw new ArgumentException(
-                        "Ambiguous rate items share the same cost code, unit, currency and effective timestamp: " +
-                        item.CostCode.Value + "/" + item.Unit + "/" + item.Currency + "/" +
-                        item.EffectiveFromUtc.ToString("O") + ".",
-                        nameof(items));
-
-                scopedItems.Add(item);
-                snapshot.Add(item);
-                index++;
             }
 
             if (hasKnownCount && index != knownCount)
                 ThrowKnownCountTraversalMismatch();
             if (hasKnownCount)
-            {
-                var hasFinalKnownCount = TryGetKnownCount(items, out var finalKnownCount);
-                if (!hasFinalKnownCount || finalKnownCount != knownCount)
-                    ThrowKnownCountChangedDuringTraversal();
-            }
+                RequireStableKnownCount(items, knownCount);
 
             foreach (var pair in _byScope)
                 pair.Value.Sort(CompareEffectiveItems);
@@ -195,6 +204,13 @@ namespace QS3D.Core.Cost
             return match == null
                 ? RateBookResolution.Unmatched(costCode, canonicalUnit, canonicalCurrency, canonicalAsOf)
                 : RateBookResolution.Matched(match.CostCode, canonicalUnit, canonicalCurrency, canonicalAsOf, match);
+        }
+
+        private static void RequireStableKnownCount(IEnumerable<RateItem> items, int knownCount)
+        {
+            var hasCurrentKnownCount = TryGetKnownCount(items, out var currentKnownCount);
+            if (!hasCurrentKnownCount || currentKnownCount != knownCount)
+                ThrowKnownCountChangedDuringTraversal();
         }
 
         private static bool TryGetKnownCount(IEnumerable<RateItem> items, out int count)

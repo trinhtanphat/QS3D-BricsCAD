@@ -96,18 +96,34 @@ for token in (
     "function Convert-ToStrictSemVerText",
     "function Read-ManagedAssemblyVersion",
     "function Read-ManagedProductVersion",
+    "function Get-StreamingSha256",
+    "function Get-StableFileState",
+    "function Assert-StableFileState",
     "managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')",
     "PACKAGE-METADATA is missing productVersion",
-    "Assert-AuthenticodeSigner",
-    "Assert-ZipPayloadMatchesSignedStaging",
+    "Resolve-OrdinaryNonReparseDirectory",
+    "Resolve-OrdinaryNonReparseFile",
+    "Read-BoundedStrictUtf8File",
+    "$metadataState = Get-StableFileState",
+    "$zipState = Get-StableFileState",
+    "$payloadFiles[$name] = Resolve-OrdinaryNonReparseFile",
+    "$payloadStates[$name] = Get-StableFileState",
+    "Assert-AuthenticodeSigner -Path $payloadFiles[$name].FullName",
+    "Assert-ZipPayloadMatchesSignedStaging -ZipFile $zip -PackageRoot $package",
     "Package ZIP payload does not match signed staging file",
+    "$zip = Assert-StableFileState -Expected $zipState",
+    "$zipHash = [string]$zipState.Sha256",
     "schemaVersion = 2",
     "productVersion = $signedPluginProductVersion",
     "signerThumbprint = $expectedSigner",
+    "[IO.File]::WriteAllText($stagePath",
+    "[IO.File]::Replace($stage.FullName, $outputFull, $backupPath, $true)",
 ):
     require(manifest, token, "scripts/new-v25-update-manifest.ps1")
 if "schemaVersion = 1" in manifest:
     errors.append("new-v25-update-manifest.ps1 must not regress to legacy schemaVersion 1")
+if "Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256" in manifest:
+    errors.append("new-v25-update-manifest.ps1 must derive the published ZIP hash from its admitted stable state, not reopen the ZIP through Get-FileHash")
 
 for token in (
     "ExpectedSignerThumbprint",
@@ -198,12 +214,56 @@ if min(archive_check, extraction) < 0 or archive_check > extraction:
 if min(package_check, signed_version, metadata_check, installer_execute) < 0 or not (package_check < signed_version < metadata_check < installer_execute):
     errors.append("updater must verify signatures, signed plugin identity and metadata binding before installer execution")
 
-manifest_signer = manifest.find("Assert-AuthenticodeSigner -Path (Join-Path $package $name)")
+manifest_package_guard = manifest.find("$package = Resolve-OrdinaryNonReparseDirectory -Path $PackageDirectory")
+manifest_zip_guard = manifest.find("$zip = Resolve-OrdinaryNonReparseFile -Path $PackageZip")
+manifest_metadata_guard = manifest.find("$metadataFile = Resolve-OrdinaryNonReparseFile")
+manifest_metadata_state = manifest.find("$metadataState = Get-StableFileState")
+manifest_zip_state = manifest.find("$zipState = Get-StableFileState")
+manifest_payload_guard = manifest.find("$payloadFiles[$name] = Resolve-OrdinaryNonReparseFile")
+manifest_payload_state = manifest.find("$payloadStates[$name] = Get-StableFileState")
+manifest_metadata_read = manifest.find("$metadataText = Read-BoundedStrictUtf8File")
+manifest_metadata_recheck = manifest.find("Assert-StableFileState -Expected $metadataState", manifest_metadata_read)
+manifest_signer = manifest.find("Assert-AuthenticodeSigner -Path $payloadFiles[$name].FullName")
 manifest_identity = manifest.find("$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')")
-manifest_zip_verify = manifest.find("Assert-ZipPayloadMatchesSignedStaging -ZipPath $zip")
-manifest_hash = manifest.find("$zipHash =")
-if min(manifest_signer, manifest_identity, manifest_zip_verify, manifest_hash) < 0 or not (manifest_signer < manifest_identity < manifest_zip_verify < manifest_hash):
-    errors.append("manifest generation must bind both signed managed identities before verifying/hashing the ZIP")
+manifest_zip_verify = manifest.find("Assert-ZipPayloadMatchesSignedStaging -ZipFile $zip -PackageRoot $package")
+manifest_zip_recheck = manifest.find("$zip = Assert-StableFileState -Expected $zipState", manifest_zip_verify)
+manifest_hash = manifest.find("$zipHash = [string]$zipState.Sha256", manifest_zip_recheck)
+manifest_publish = manifest.find("[IO.File]::WriteAllText($stagePath")
+manifest_positions = (
+    manifest_package_guard,
+    manifest_zip_guard,
+    manifest_metadata_guard,
+    manifest_metadata_state,
+    manifest_zip_state,
+    manifest_payload_guard,
+    manifest_payload_state,
+    manifest_metadata_read,
+    manifest_metadata_recheck,
+    manifest_signer,
+    manifest_identity,
+    manifest_zip_verify,
+    manifest_zip_recheck,
+    manifest_hash,
+    manifest_publish,
+)
+if min(manifest_positions) < 0 or not (
+    manifest_package_guard
+    < manifest_zip_guard
+    < manifest_metadata_guard
+    < manifest_metadata_state
+    < manifest_zip_state
+    < manifest_payload_guard
+    < manifest_payload_state
+    < manifest_metadata_read
+    < manifest_metadata_recheck
+    < manifest_signer
+    < manifest_identity
+    < manifest_zip_verify
+    < manifest_zip_recheck
+    < manifest_hash
+    < manifest_publish
+):
+    errors.append("manifest generation must ordinary-file bind and stable-state capture package/ZIP/metadata/payload before bounded metadata materialization, then revalidate identities and ZIP generation before publishing the admitted ZIP hash atomically")
 
 finalizer_signer = finalizer.find("Assert-AuthenticodeSigner -Path $path")
 finalizer_identity = finalizer.find("$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')")
@@ -240,4 +300,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: secure V25 update uses bounded HTTPS, schema-2 dual managed identity binding, signed/hash-verified packages, shared update serialization, transactional install rollback and quarantine-safe uninstall rollback.")
+print("PASS: secure V25 update uses bounded HTTPS, bounded/reparse-safe generation-stable manifest inputs with atomic publication, schema-2 dual managed identity binding, signed/hash-verified packages, shared update serialization, transactional install rollback and quarantine-safe uninstall rollback.")
