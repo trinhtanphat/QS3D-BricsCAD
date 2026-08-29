@@ -22,6 +22,14 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def method_block(source: str, signature: str) -> str:
+    start = source.find(signature)
+    if start < 0:
+        return ""
+    next_method = source.find("\n        private static ", start + len(signature))
+    return source[start:] if next_method < 0 else source[start:next_method]
+
+
 def main() -> int:
     errors: list[str] = []
     try:
@@ -113,7 +121,15 @@ def main() -> int:
         "JSON-RPC numeric id support": (top_level_json, "if (IsJsonNumberToken(raw)) return raw;"),
         "JSON-RPC invalid id rejection": (top_level_json, 'throw new InvalidOperationException("JSON-RPC id must be a string, number, or null.");'),
         "runtime foreground ESC fallback": (runtime, "TrySendEscapeFallback()"),
-        "runtime emergency-stop latch": (runtime, "_automationStopped = true"),
+        "runtime emergency-stop latch": (runtime, "StopAutomation();"),
+        "runtime mutation epoch context": (runtime, "private static readonly AsyncLocal<int?> MutationEpoch"),
+        "runtime mutation epoch state": (runtime, "private static int _automationEpoch;"),
+        "runtime epoch invalidation": (runtime, "Interlocked.Increment(ref _automationEpoch);"),
+        "runtime mutation stop recheck": (runtime, "private static void EnsureCurrentMutationRunning()"),
+        "runtime mutation CAD dispatch": (runtime, "private static string InvokeCadMutation("),
+        "runtime command token canonicalizer": (runtime, "private static string NormalizeCadCommandToken("),
+        "runtime primary command canonicalization": (runtime, 'var command = NormalizeCadCommandToken(McpTopLevelJson.ExtractString(body, "command"));'),
+        "runtime prompt command canonicalization": (runtime, "var commandLike = NormalizeCadCommandToken(trimmed);"),
         "runtime queued dispatch state": (runtime, "CadWorkQueued = 0"),
         "runtime running dispatch state": (runtime, "CadWorkRunning = 1"),
         "runtime cancelled-before-start state": (runtime, "CadWorkCancelledBeforeStart = 2"),
@@ -204,6 +220,47 @@ def main() -> int:
         if "string.IsNullOrWhiteSpace(version)" in protocol_helper:
             errors.append("MCP protocol-version helper treats an explicitly empty header as absent")
 
+    mutation = method_block(runtime, "private static string Mutation(")
+    if not mutation:
+        errors.append("cannot inspect MCP mutation gate")
+    else:
+        if "EnsureAutomationRunning();" not in mutation:
+            errors.append("MCP mutation gate does not reject an already-stopped agent")
+        if "MutationEpoch.Value = epoch;" not in mutation or "EnsureAutomationRunning(epoch);" not in mutation:
+            errors.append("MCP mutation gate does not bind each confirmed mutation to the current stop epoch")
+
+    invoke_mutation = method_block(runtime, "private static string InvokeCadMutation(")
+    if not invoke_mutation or "EnsureAutomationRunning(epoch.Value);" not in invoke_mutation:
+        errors.append("queued CAD mutations do not re-check the captured stop epoch at CAD-context execution")
+    if runtime.count("return InvokeCadMutation(") < 12:
+        errors.append("one or more direct/native command mutations bypass the mutation-aware CAD dispatcher")
+
+    normalize_command = method_block(runtime, "private static string NormalizeCadCommandToken(")
+    if not normalize_command or "token[index] == '_' || token[index] == '.'" not in normalize_command:
+        errors.append("CAD command token canonicalizer does not strip arbitrary leading global/English prefix sequences")
+    if ".TrimStart('_').TrimStart('.')" in runtime:
+        errors.append("CAD command guard still uses order-dependent prefix trimming that permits ._ command injection")
+
+    ui_click = method_block(runtime, "private static string UiClick(")
+    ui_type = method_block(runtime, "private static string UiType(")
+    ui_key = method_block(runtime, "private static string UiKey(")
+    unicode_text = method_block(runtime, "private static void SendUnicodeText(")
+    if ui_click.count("EnsureCurrentMutationRunning();") < 2:
+        errors.append("UI click does not re-check the stop epoch before cursor/input injection and repeated clicks")
+    if ui_type.count("EnsureCurrentMutationRunning();") < 2:
+        errors.append("UI typing does not re-check the stop epoch before text and optional Enter injection")
+    if "EnsureCurrentMutationRunning();" not in ui_key:
+        errors.append("UI key injection does not re-check the stop epoch")
+    if "EnsureCurrentMutationRunning();" not in unicode_text:
+        errors.append("long Unicode typing does not re-check the stop epoch for each injected character")
+
+    emergency_stop = method_block(runtime, "private static string EmergencyStop(")
+    if "StopAutomation();" not in emergency_stop:
+        errors.append("Emergency Stop does not invalidate the mutation epoch before attempting ESC delivery")
+    resume_agent = method_block(runtime, "private static string ResumeAgent(")
+    if "Interlocked.Increment(ref _automationEpoch);" not in resume_agent or "_automationStopped = false;" not in resume_agent:
+        errors.append("Agent resume does not advance the mutation epoch before reopening mutation admission")
+
     named_start = account.find("private static bool StartProcess")
     named_exit = account.find("private static void HandleProcessExit", named_start)
     if named_start < 0 or named_exit < 0:
@@ -244,9 +301,10 @@ def main() -> int:
 
     print(
         "PASS: compiled modular MCP transport/runtime use strict bounded HTTP framing/UTF-8, exact JSON "
-        "media type admission, loopback-only Origin validation, strict recursive RFC JSON grammar, valid JSON-RPC ids "
-        "and serialized bounded session lifecycle with strict negotiated protocol-version validation and 404 expiry truth; "
-        "CAD timeout/recovery and validated Cloudflare endpoint/onboarding boundaries remain fail-closed."
+        "media type admission, loopback-only Origin validation, strict recursive RFC JSON grammar, valid JSON-RPC ids, "
+        "serialized bounded sessions, epoch-invalidated mutation dispatch/UI input, canonical command-prefix rejection, "
+        "strict negotiated protocol-version validation and 404 expiry truth; CAD timeout/recovery and validated "
+        "Cloudflare endpoint/onboarding boundaries remain fail-closed."
     )
     return 0
 
