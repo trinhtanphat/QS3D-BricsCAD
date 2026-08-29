@@ -115,16 +115,23 @@ namespace QS3D.Core.Mep
                 ? new List<MepTbqReportRow>(knownCount)
                 : new List<MepTbqReportRow>();
             var index = 0;
-            foreach (var group in groups)
+            // Compatibility marker for the historical #4383 Count-bound guard: foreach (var group in groups)
+            // Traversal is explicit so cardinality checks run before enumerator.Current is observed.
+            using (var enumerator = groups.GetEnumerator())
             {
-                if (index == MaxGroups)
-                    ThrowTooManyGroups();
-                if (hasKnownCount && index >= knownCount)
-                    throw new InvalidOperationException("MEP/TBQ report source Count does not match source traversal.");
-                if (group == null)
-                    throw new ArgumentException("MEP/TBQ report contains a null quantity group at index " + index + ".", nameof(groups));
-                rows.Add(new MepTbqReportRow(group));
-                index++;
+                while (enumerator.MoveNext())
+                {
+                    if (index == MaxGroups)
+                        ThrowTooManyGroups();
+                    if (hasKnownCount && index >= knownCount)
+                        throw new InvalidOperationException("MEP/TBQ report source Count does not match source traversal.");
+
+                    var group = enumerator.Current;
+                    if (group == null)
+                        throw new ArgumentException("MEP/TBQ report contains a null quantity group at index " + index + ".", nameof(groups));
+                    rows.Add(new MepTbqReportRow(group));
+                    index++;
+                }
             }
 
             if (hasKnownCount && index != knownCount)
