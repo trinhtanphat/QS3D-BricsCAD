@@ -97,7 +97,7 @@ if shared_helper_marker in cloud:
                     f"shared V25 compile-reference helper does not validate project-required reference {filename}"
                 )
         helper_markers = {
-            "runtime candidate discovery": "-Filter 'BrxMgd.dll'",
+            "runtime candidate discovery": "Get-OrdinaryFilesByNameUnderRoot -Root $extract -Name 'BrxMgd.dll'",
             "Brx co-location": "(Join-Path $_ 'BrxMgd.dll')",
             "TD co-location": "(Join-Path $_ 'TD_Mgd.dll')",
             "BREP co-location": "(Join-Path $_ 'TD_MgdBrep.dll')",
