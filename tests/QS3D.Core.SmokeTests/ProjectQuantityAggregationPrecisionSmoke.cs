@@ -13,6 +13,8 @@ namespace QS3D.Core.SmokeTests
             LargeFirstRepresentableAggregateIsPreserved();
             SmallFirstRepresentableAggregateIsPreserved();
             MetricsAndGroupsRemainIsolated();
+            HomogeneousMassUsesCompensatedAggregation();
+            MissingMassKeepsGroupedMassUnknown();
             DetailRowsRemainElementIsolated();
             FinalUnrepresentableAggregateFailsClosed();
             NonFiniteInputStillFailsClosed();
@@ -62,6 +64,27 @@ namespace QS3D.Core.SmokeTests
             Equal(11d, rows[1].FormworkM2, "second-group formwork");
         }
 
+        private static void HomogeneousMassUsesCompensatedAggregation()
+        {
+            var project = Project("PQ-PREC-MASS");
+            AddElement(project, "q1", "q", 1d, massKg: 1e16d);
+            AddElement(project, "q2", "q", 1d, massKg: 1d);
+            AddElement(project, "q3", "q", 1d, massKg: 1d);
+
+            var row = Single(project);
+            Equal(10000000000000002d, row.MassKg, "homogeneous compensated mass");
+        }
+
+        private static void MissingMassKeepsGroupedMassUnknown()
+        {
+            var project = Project("PQ-PREC-MASS-NULL");
+            AddElement(project, "q1", "q", 1d, massKg: 10d);
+            AddElement(project, "q2", "q", 1d);
+
+            var row = Single(project);
+            Equal<double?>(null, row.MassKg, "missing mass remains unknown");
+        }
+
         private static void DetailRowsRemainElementIsolated()
         {
             var project = Project("PQ-PREC-DETAIL");
@@ -97,7 +120,7 @@ namespace QS3D.Core.SmokeTests
             return project;
         }
 
-        private static void AddElement(ProjectState project, string id, string familyId, double value, double? formwork = null)
+        private static void AddElement(ProjectState project, string id, string familyId, double value, double? formwork = null, double? massKg = null)
         {
             var element = new ProjectElement(id, ElementCategory.CustomQuantity, familyId, "f1", "z");
             element.Quantities["LengthM"] = value;
@@ -106,6 +129,7 @@ namespace QS3D.Core.SmokeTests
             element.Quantities["GrossFormworkM2"] = formwork ?? value;
             element.Quantities["NetFormworkM2"] = formwork ?? value;
             element.Quantities["FormworkM2"] = formwork ?? value;
+            if (massKg.HasValue) element.Quantities["WeightKg"] = massKg.Value;
             project.Elements.Add(element);
         }
 
