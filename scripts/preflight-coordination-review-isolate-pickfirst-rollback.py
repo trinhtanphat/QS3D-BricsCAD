@@ -34,7 +34,7 @@ if not catch:
     raise SystemExit("FAIL coordination isolate PICKFIRST rollback: synchronous launch catch missing")
 catch_body = catch.group("catch")
 restore_pickfirst = "RestoreImpliedSelectionBestEffort(impliedSelectionBefore);"
-restore_mode = "RestoreObjectIsolationModeBestEffort(modeBefore);"
+restore_mode = "TryRestoreObjectIsolationModeBestEffort(modeBefore);"
 for token in [restore_pickfirst, restore_mode, "throw;"]:
     if token not in catch_body:
         raise SystemExit(f"FAIL coordination isolate PICKFIRST rollback: catch missing {token}")
