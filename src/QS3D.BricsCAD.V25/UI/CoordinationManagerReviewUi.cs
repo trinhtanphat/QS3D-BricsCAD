@@ -508,6 +508,8 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
                 }
 
+                var released = new List<ObjectId>();
+                Exception? cleanupFailure = null;
                 using (_document.LockDocument())
                 using (var transaction = _document.Database.TransactionManager.StartTransaction())
                 {
@@ -515,18 +517,26 @@ namespace QS3D.BricsCAD.V25.UI
                     {
                         try
                         {
-                            var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
-                            entity?.Unhighlight();
+                            var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity
+                                ?? throw new InvalidOperationException("Owned highlight target is not an Entity.");
+                            entity.Unhighlight();
+                            released.Add(id);
                         }
-                        catch
+                        catch (Exception ex)
                         {
-                            // Cleanup is best-effort for erased/closed transient objects.
+                            cleanupFailure = cleanupFailure ?? ex;
                         }
                     }
                     transaction.Commit();
                 }
 
-                _highlighted.Clear();
+                foreach (var id in released)
+                    _highlighted.Remove(id);
+
+                if (cleanupFailure != null)
+                    throw new InvalidOperationException(
+                        "Highlight cleanup is incomplete; failed entities remain owned for retry.",
+                        cleanupFailure);
             }
 
             public void Isolate(IReadOnlyList<ObjectId> ids)
