@@ -46,3 +46,7 @@ The guard pins admission, fixed loop bound, pre-index Count revalidation, post-t
 ## Acceptance
 
 Repository-safe acceptance requires the focused guard, aggregate discovered feature guards, Core build and deterministic smoke to pass on the exact candidate. If protected main advances, collision-scan the four reserved paths and reconcile non-force before obtaining fresh protected checks and merging.
+
+## Reconciliation receipt
+
+The source-ready carrier was reconciled non-force onto protected `main@463f394b06454d6e200f03859c16e7ae2a050776` after a zero-overlap scan of all four reserved paths. Pre-reconcile exact head `7df1f2e85b90ba464fb84d80880fdadfefe38a78` passed Shared CI run `33236386212`, including deterministic smoke and V25 compile/final build. The reconciled successor must obtain fresh exact-head branch CI before the canonical PR is opened; stale earlier-main evidence is not merge evidence.
