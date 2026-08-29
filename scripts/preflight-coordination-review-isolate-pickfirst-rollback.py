@@ -34,13 +34,15 @@ if not catch:
     raise SystemExit("FAIL coordination isolate PICKFIRST rollback: synchronous launch catch missing")
 catch_body = catch.group("catch")
 restore_pickfirst = "RestoreImpliedSelectionBestEffort(impliedSelectionBefore);"
-restore_mode = "TryRestoreObjectIsolationModeBestEffort(modeBefore);"
-for token in [restore_pickfirst, restore_mode, "throw;"]:
+restore_mode_call = "TryRestoreObjectIsolationModeBestEffort(modeBefore)"
+for token in [restore_pickfirst, restore_mode_call, "throw;"]:
     if token not in catch_body:
         raise SystemExit(f"FAIL coordination isolate PICKFIRST rollback: catch missing {token}")
 
-if catch_body.find(restore_pickfirst) > catch_body.find("throw;"):
-    raise SystemExit("FAIL coordination isolate PICKFIRST rollback: PICKFIRST compensation must run before original failure rethrow")
+if catch_body.find(restore_pickfirst) > catch_body.find(restore_mode_call):
+    raise SystemExit("FAIL coordination isolate PICKFIRST rollback: PICKFIRST compensation must run before mode compensation")
+if catch_body.find(restore_mode_call) > catch_body.find("throw;"):
+    raise SystemExit("FAIL coordination isolate PICKFIRST rollback: mode compensation must run before original failure rethrow")
 
 if body.count(restore_pickfirst) != 1:
     raise SystemExit("FAIL coordination isolate PICKFIRST rollback: PICKFIRST restore must occur only in the synchronous failure path")
