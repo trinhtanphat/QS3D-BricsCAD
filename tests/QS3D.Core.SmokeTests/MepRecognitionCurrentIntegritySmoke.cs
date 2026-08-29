@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             TokenLimitRejectsBeforeReadingOverrunCurrent();
+            RuleLimitRejectsBeforeReadingOverrunCurrent();
         }
 
         private static void TokenLimitRejectsBeforeReadingOverrunCurrent()
@@ -33,6 +34,19 @@ namespace QS3D.Core.SmokeTests
                 "MEP token limit must observe exactly the first disallowed MoveNext.");
             Equal(MepRecognitionLimits.MaxTokensPerRule, source.CurrentReads,
                 "MEP token limit must reject element 101 before reading caller Current.");
+        }
+
+        private static void RuleLimitRejectsBeforeReadingOverrunCurrent()
+        {
+            var source = new RuleLimitProbe();
+            var error = Capture<ArgumentException>(() => new MepRecognitionProfile(source));
+
+            Contains("at most 500", error.Message,
+                "MEP rule limit must retain the existing bounded-input diagnostic.");
+            Equal(MepRecognitionLimits.MaxRules + 1, source.MoveNextCalls,
+                "MEP rule limit must observe exactly the first disallowed MoveNext.");
+            Equal(MepRecognitionLimits.MaxRules, source.CurrentReads,
+                "MEP rule limit must reject element 501 before reading caller Current.");
         }
 
         private static TException Capture<TException>(Action action)
@@ -96,6 +110,53 @@ namespace QS3D.Core.SmokeTests
                     _owner.MoveNextCalls++;
                     _index++;
                     return _index <= MepRecognitionLimits.MaxTokensPerRule;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
+        }
+
+        private sealed class RuleLimitProbe : IEnumerable<MepRecognitionRule>
+        {
+            internal int MoveNextCalls { get; private set; }
+            internal int CurrentReads { get; private set; }
+
+            public IEnumerator<MepRecognitionRule> GetEnumerator() => new ProbeEnumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class ProbeEnumerator : IEnumerator<MepRecognitionRule>
+            {
+                private readonly RuleLimitProbe _owner;
+                private int _index = -1;
+
+                internal ProbeEnumerator(RuleLimitProbe owner)
+                {
+                    _owner = owner;
+                }
+
+                public MepRecognitionRule Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        return new MepRecognitionRule(
+                            "current-integrity-rule-" + _index,
+                            1,
+                            MepRecognitionDiscipline.Structure,
+                            "Structure",
+                            new[] { "RULE-" + _index },
+                            MepRecognitionSource.LayerOrBlockName);
+                    }
+                }
+
+                object IEnumerator.Current => Current;
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    _index++;
+                    return _index <= MepRecognitionLimits.MaxRules;
                 }
 
                 public void Reset() => throw new NotSupportedException();
