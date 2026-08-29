@@ -298,13 +298,13 @@ namespace QS3D.Core.Domain
             {
                 while (enumerator.MoveNext())
                 {
-                    if (knownTargetCount.HasValue && observed >= knownTargetCount.Value)
-                        throw new InvalidOperationException("Floor mutation target collection known count does not match the observed target traversal.");
-                    if (observed >= MaxMutationTargetCount)
+                    observed++;
+                    if (observed > MaxMutationTargetCount)
                         throw new InvalidOperationException("Floor mutation target collection exceeds the supported " + MaxMutationTargetCount + " element limit.");
+                    if (knownTargetCount.HasValue && observed > knownTargetCount.Value)
+                        continue;
 
                     var element = enumerator.Current;
-                    observed++;
                     if (element == null)
                         throw new InvalidOperationException("Floor mutation target collection contains a null element.");
                     if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
