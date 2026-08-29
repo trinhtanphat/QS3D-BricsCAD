@@ -9,10 +9,12 @@ def main():
     text = SOURCE.read_text(encoding="utf-8")
     required = [
         "private readonly RevisionSnapshot _afterSnapshot;",
+        "private readonly IntPtr _nativeDatabaseIdentity;",
         "private bool _staleSnapshot;",
         "Activated += (_, __) => RefreshSnapshotFreshness();",
-        "EnsureActiveAndCurrent();",
-        "ProjectContextCoordinator.TryGetReadOnly(_document, out var currentProject)",
+        "var document = RequireBoundActiveDocument();",
+        "RefreshSnapshotFreshness(document);",
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
         "var liveSnapshot = revisionService.Capture(currentProject, \"__revision_window_live__\");",
         "revisionService.Compare(_afterSnapshot, liveSnapshot).Count == 0",
         "MarkSnapshotStale(",
@@ -27,18 +29,31 @@ def main():
             print(" - missing:", needle)
         return 1
 
+    for forbidden in (
+        "private readonly Document _document",
+        "ProjectContextCoordinator.TryGetReadOnly(_document",
+        "ReferenceEquals(BcadApplication.DocumentManager.MdiActiveDocument, _document)",
+    ):
+        if forbidden in text:
+            print("ERROR: Revision freshness must not retain/dereference a stale managed Document wrapper:", forbidden)
+            return 1
+
     locate_pos = text.find("private void Locate(QuantityRevisionRow row)")
-    guard_pos = text.find("EnsureActiveAndCurrent();", locate_pos)
-    callback_pos = text.find("_locate?.Invoke(row);", locate_pos)
-    if locate_pos < 0 or guard_pos < 0 or callback_pos < 0 or not (locate_pos < guard_pos < callback_pos):
-        print("ERROR: Revision Locate must revalidate the live semantic snapshot before invoking the locate callback.")
+    guard_pos = text.find("var document = EnsureActiveAndCurrent();", locate_pos)
+    locate_current_pos = text.find("LocateCurrentElement(document, row);", locate_pos)
+    if locate_pos < 0 or guard_pos < 0 or locate_current_pos < 0 or not (locate_pos < guard_pos < locate_current_pos):
+        print("ERROR: Revision Locate must resolve/revalidate the live source Document before CAD locate.")
+        return 1
+
+    if "if (!TryGetBoundActiveDocument(out var document)) return;" not in text:
+        print("ERROR: temporary activation of another DWG must not incorrectly mark the Revision snapshot stale.")
         return 1
 
     if "ChangeVersion" in text or "UpdatedUtc" in text:
         print("ERROR: Revision freshness must compare semantic revision content, not project Touch/audit timestamps.")
         return 1
 
-    print("PASS: RevisionWindow blocks stale snapshot Locate while allowing audit-only project Touch changes.")
+    print("PASS: RevisionWindow resolves its live source Document by stable native database identity, blocks stale snapshot Locate, and allows audit-only project Touch changes.")
     return 0
 
 
