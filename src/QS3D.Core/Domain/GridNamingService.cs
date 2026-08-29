@@ -72,6 +72,8 @@ namespace QS3D.Core.Domain
             var ids = new List<string>();
             foreach (var value in orderedGridElementIds)
             {
+                if (knownCount.HasValue && ids.Count == knownCount.Value)
+                    throw new InvalidOperationException("Grid renumber target source known Count was exceeded during traversal.");
                 if (ids.Count == MaxGridBatch)
                     throw new InvalidOperationException("A Grid renumber batch supports at most " + MaxGridBatch + " elements.");
                 ids.Add(Required(value, "orderedGridElementIds[" + ids.Count + "]", 128));
@@ -80,6 +82,7 @@ namespace QS3D.Core.Domain
                 throw new InvalidOperationException("Project changed while Grid renumber targets were being enumerated. Retry renumbering against the current project state.");
             if (knownCount.HasValue && ids.Count != knownCount.Value)
                 throw new InvalidOperationException("Grid renumber target source Count does not match the enumerated element count.");
+            RevalidateKnownCountAfterTraversal(project, orderedGridElementIds, knownCount, targetEnumerationVersion);
             if (ids.Count == 0) throw new InvalidOperationException("At least one Grid element is required for renumbering.");
             if (ids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != ids.Count)
                 throw new InvalidOperationException("Grid renumber input contains duplicate element ids.");
@@ -174,6 +177,26 @@ namespace QS3D.Core.Domain
             var result = prefix + core + suffix;
             if (result.Length > MaxLabelLength) throw new InvalidOperationException("Grid label exceeds " + MaxLabelLength + " characters.");
             return result;
+        }
+
+        private static void RevalidateKnownCountAfterTraversal(
+            ProjectState project,
+            IEnumerable<string> source,
+            int? admittedCount,
+            long targetEnumerationVersion)
+        {
+            if (!admittedCount.HasValue)
+                return;
+
+            var reboundCount = TryGetKnownCount(source, out var conflictingKnownCounts, out var invalidNegativeKnownCount);
+            if (project.ChangeVersion != targetEnumerationVersion)
+                throw new InvalidOperationException("Project changed while Grid renumber targets were being enumerated. Retry renumbering against the current project state.");
+            if (invalidNegativeKnownCount)
+                throw new InvalidOperationException("Grid renumber target source exposes an invalid negative known Count value after traversal.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Grid renumber target source exposes conflicting known Count values after traversal.");
+            if (!reboundCount.HasValue || reboundCount.Value != admittedCount.Value)
+                throw new InvalidOperationException("Grid renumber target source known Count changed during traversal.");
         }
 
         private static int? TryGetKnownCount(

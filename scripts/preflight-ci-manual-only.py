@@ -475,7 +475,9 @@ for path, text in workflow_sources:
             "python scripts/preflight.py", "python scripts/preflight-all.py", "test-v25-package-verifier.ps1",
             "dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release",
             "tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release",
-            "dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64",
+            ".\\scripts\\build-v25-with-stable-references.ps1",
+            "src\\QS3D.BricsCAD.V25\\QS3D.BricsCAD.V25.csproj",
+            "tests\\QS3D.BricsCAD.V25.LocalQualification\\QS3D.BricsCAD.V25.LocalQualification.csproj",
             "cancel-in-progress: true",
         ), path.name)
         for forbidden in (
