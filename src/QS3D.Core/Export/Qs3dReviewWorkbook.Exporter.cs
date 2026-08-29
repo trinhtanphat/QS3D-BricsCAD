@@ -38,18 +38,30 @@ namespace QS3D.Core.Export
             if (clashes == null) throw new ArgumentNullException(nameof(clashes));
             if (duplicates == null) throw new ArgumentNullException(nameof(duplicates));
             if (modelInfo == null) throw new ArgumentNullException(nameof(modelInfo));
-            if (quantityDetails.Count == 0 || quantitySummary.Count == 0) throw new InvalidDataException("QS3D Review workbook requires QTO detail and summary rows.");
-            Limit(quantityDetails.Count, QuantitySheet); Limit(quantitySummary.Count + 16, SummarySheet);
-            Limit(clashes.Count, ClashSheet); Limit(duplicates.Count, DuplicateSheet);
+
+            var detailCount = quantityDetails.Count;
+            var summaryCount = quantitySummary.Count;
+            var clashCount = clashes.Count;
+            var duplicateCount = duplicates.Count;
+            var geometryCount = issueGeometry == null ? (int?)null : issueGeometry.Count;
+            if (detailCount == 0 || summaryCount == 0) throw new InvalidDataException("QS3D Review workbook requires QTO detail and summary rows.");
+            Limit(detailCount, QuantitySheet); Limit(summaryCount + 16, SummarySheet);
+            Limit(clashCount, ClashSheet); Limit(duplicateCount, DuplicateSheet);
             if (ruleProfile != null) Limit(ruleProfile.Rules.Count, RulesSheet);
 
-            var details = Quantity(quantityDetails, true, modelInfo.DrawingFingerprint);
-            var summaries = Quantity(quantitySummary, false, modelInfo.DrawingFingerprint);
+            var detailInput = SnapshotCounted(quantityDetails, detailCount, "QTO detail");
+            var summaryInput = SnapshotCounted(quantitySummary, summaryCount, "QTO summary");
+            var clashInput = SnapshotCounted(clashes, clashCount, "clash");
+            var duplicateInput = SnapshotCounted(duplicates, duplicateCount, "duplicate");
+            var geometryInput = issueGeometry == null ? null : SnapshotCounted(issueGeometry, geometryCount!.Value, "issue geometry");
+
+            var details = Quantity(detailInput, true, modelInfo.DrawingFingerprint);
+            var summaries = Quantity(summaryInput, false, modelInfo.DrawingFingerprint);
             Scope(details, summaries);
-            var clashRows = Clash(clashes, modelInfo.DrawingFingerprint);
-            var duplicateRows = Duplicate(duplicates, modelInfo.DrawingFingerprint);
+            var clashRows = Clash(clashInput, modelInfo.DrawingFingerprint);
+            var duplicateRows = Duplicate(duplicateInput, modelInfo.DrawingFingerprint);
             var lifecycle = Lifecycle(lifecycleByFindingId, clashRows, duplicateRows);
-            var geometry = Geometry(issueGeometry, clashRows, duplicateRows);
+            var geometry = Geometry(geometryInput, clashRows, duplicateRows);
 
             Qs3dReviewXlsx.WritePackage(path,
                 Summary(summaries, clashRows.Count, duplicateRows.Count, modelInfo),
@@ -58,6 +70,29 @@ namespace QS3D.Core.Export
                 DuplicateSheetXml(duplicateRows, lifecycle, geometry, modelInfo),
                 Rules(ruleProfile),
                 ModelInfo(details.Count, summaries.Count, clashRows.Count, duplicateRows.Count, ruleProfile, modelInfo));
+        }
+
+        private static List<T> SnapshotCounted<T>(IReadOnlyList<T> source, int expectedCount, string label)
+        {
+            if (expectedCount < 0)
+                throw new InvalidDataException("QS3D Review " + label + " collection advertised a negative Count.");
+
+            var result = new List<T>();
+            using (var enumerator = source.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count >= expectedCount)
+                        throw new InvalidDataException("QS3D Review " + label + " collection Count does not match completed traversal.");
+                    result.Add(enumerator.Current);
+                }
+            }
+
+            if (result.Count != expectedCount)
+                throw new InvalidDataException("QS3D Review " + label + " collection Count does not match completed traversal.");
+            if (source.Count != expectedCount)
+                throw new InvalidDataException("QS3D Review " + label + " collection Count changed after traversal.");
+            return result;
         }
 
         private static List<QuantityReportRow> Quantity(IReadOnlyList<QuantityReportRow> source, bool single, string fingerprint)
