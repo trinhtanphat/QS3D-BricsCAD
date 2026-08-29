@@ -80,13 +80,13 @@ for relative, needles in checks.items():
 exporter = ROOT / required[1]
 if exporter.is_file():
     text = exporter.read_text(encoding="utf-8")
-    snapshot_pos = text.find("PrimaryQuantity = row.PrimaryQuantity")
-    stability_pos = text.find("source.PrimaryQuantity != snapshot.PrimaryQuantity")
-    publication_pos = text.find("AtomicFileCommit.CreateTempPath")
-    if snapshot_pos < 0 or stability_pos < 0 or publication_pos < 0:
-        errors.append("Material XLSX PrimaryQuantity snapshot/stability/publication markers must all exist")
-    elif not (snapshot_pos < stability_pos < publication_pos):
-        errors.append("Material XLSX must compare PrimaryQuantity snapshot stability before filesystem publication")
+    snapshot_call_pos = text.find("var row = SnapshotRow(sourceRow, rowIndex);")
+    stability_call_pos = text.find("EnsureRowStable(sourceRows[rowIndex], snapshot[rowIndex], rowIndex);")
+    publication_pos = text.find("var fullPath = Path.GetFullPath(path);")
+    if snapshot_call_pos < 0 or stability_call_pos < 0 or publication_pos < 0:
+        errors.append("Material XLSX snapshot/stability/publication call markers must all exist")
+    elif not (snapshot_call_pos < stability_call_pos < publication_pos):
+        errors.append("Material XLSX must snapshot rows, verify row stability, then begin filesystem publication")
 
 commands_source = ROOT / required[2]
 if commands_source.is_file():
