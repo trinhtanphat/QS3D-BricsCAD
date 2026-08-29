@@ -140,6 +140,28 @@ def main() -> int:
         if "lock (SessionSync)" not in create_session or "Sessions.Count >= MaxSessions" not in create_session:
             errors.append("MCP session creation is not atomically capacity-checked under SessionSync")
 
+    delete_handler_start = server.find('if (request.Method == "DELETE")')
+    delete_handler_end = server.find('if (request.Method != "POST")', delete_handler_start)
+    if delete_handler_start < 0 or delete_handler_end <= delete_handler_start:
+        errors.append("cannot inspect MCP DELETE session handler")
+    else:
+        delete_handler = server[delete_handler_start:delete_handler_end]
+        if "if (!TryDeleteSession(sessionId))" not in delete_handler:
+            errors.append("MCP DELETE ignores unknown/expired session result instead of returning 404")
+        if 'WriteResponse(stream, 404, "Not Found"' not in delete_handler:
+            errors.append("MCP DELETE lacks HTTP 404 response for unknown/expired session")
+
+    delete_session_start = server.find("private static bool TryDeleteSession(")
+    delete_session_end = server.find("private static bool TryValidateSession(", delete_session_start)
+    if delete_session_start < 0 or delete_session_end <= delete_session_start:
+        errors.append("cannot inspect MCP session deletion helper")
+    else:
+        delete_session = server[delete_session_start:delete_session_end]
+        if "lock (SessionSync)" not in delete_session:
+            errors.append("MCP session deletion is not serialized under SessionSync")
+        if "CleanupSessionsLocked();" not in delete_session:
+            errors.append("MCP session deletion does not expire stale sessions before deciding DELETE result")
+
     validate_session_start = server.find("private static bool TryValidateSession(")
     validate_session_end = server.find("private static void CleanupSessionsLocked(", validate_session_start)
     if validate_session_start >= 0 and validate_session_end > validate_session_start:
