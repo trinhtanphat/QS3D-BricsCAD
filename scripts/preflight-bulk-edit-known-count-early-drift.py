@@ -21,6 +21,19 @@ def require(text: str, marker: str, label: str, start: int = 0) -> int:
     return index
 
 
+def require_success_path(segment: str, rebound: str, guard: str, current: str, validation: str, label: str) -> None:
+    cursor = require(segment, "using (var enumerator = ", label + " explicit enumerator")
+    cursor = require(segment, rebound, label + " pre-MoveNext Count rebound", cursor)
+    cursor = require(segment, "if (!enumerator.MoveNext())", label + " MoveNext", cursor)
+    # Skip the false/terminal branch deliberately. The rebound after its break is
+    # the one protecting a successful MoveNext before caller-controlled Current.
+    cursor = require(segment, "break;", label + " terminal branch", cursor)
+    cursor = require(segment, rebound, label + " post-successful-MoveNext Count rebound", cursor)
+    cursor = require(segment, guard, label + " early Count guard", cursor)
+    cursor = require(segment, current, label + " Current read", cursor)
+    require(segment, validation, label + " first semantic validation", cursor)
+
+
 for path, label in (
     (SOURCE, "BulkEditService production source"),
     (SMOKE, "Bulk edit known-Count smoke"),
@@ -42,28 +55,26 @@ require(source, "input count changed during enumeration.", "count-drift diagnost
 object_start = require(source, "private static IReadOnlyList<ProjectElement> OwnedDistinct(", "object-target materializer")
 object_end = require(source, "private static void RequireCurrentElementOwnership", "object-target materializer end", object_start)
 object_segment = source[object_start:object_end]
-object_using = require(object_segment, "using (var enumerator = elements.GetEnumerator())", "object explicit enumerator")
-object_pre = require(object_segment, "RequireKnownCountStable(elements, knownCount, knownCountSources, \"Bulk edit target collection\");", "object pre-MoveNext Count rebound", object_using)
-object_move = require(object_segment, "if (!enumerator.MoveNext())", "object MoveNext", object_pre)
-object_post = require(object_segment, "RequireKnownCountStable(elements, knownCount, knownCountSources, \"Bulk edit target collection\");", "object post-MoveNext Count rebound", object_move + 1)
-object_guard = require(object_segment, "RequireCanObserveNext(knownCount, inputCount, \"Bulk edit target collection\");", "object early Count guard", object_post)
-object_current = require(object_segment, "var element = enumerator.Current;", "object Current read", object_guard)
-object_null = require(object_segment, "if (element == null)", "object null validation", object_current)
-if not (object_using < object_pre < object_move < object_post < object_guard < object_current < object_null):
-    fail("object-target traversal must reject Count overrun before reading unexpected IEnumerator.Current and before target validation")
+require_success_path(
+    object_segment,
+    "RequireKnownCountStable(elements, knownCount, knownCountSources, \"Bulk edit target collection\");",
+    "RequireCanObserveNext(knownCount, inputCount, \"Bulk edit target collection\");",
+    "var element = enumerator.Current;",
+    "if (element == null)",
+    "object-target traversal",
+)
 
 id_start = require(source, "private static IReadOnlyList<string> MaterializeBounded", "target-id materializer")
 id_end = require(source, "private static int? SnapshotKnownCount", "target-id materializer end", id_start)
 id_segment = source[id_start:id_end]
-id_using = require(id_segment, "using (var enumerator = values.GetEnumerator())", "id explicit enumerator")
-id_pre = require(id_segment, "RequireKnownCountStable(values, knownCount, knownCountSources, label);", "id pre-MoveNext Count rebound", id_using)
-id_move = require(id_segment, "if (!enumerator.MoveNext())", "id MoveNext", id_pre)
-id_post = require(id_segment, "RequireKnownCountStable(values, knownCount, knownCountSources, label);", "id post-MoveNext Count rebound", id_move + 1)
-id_guard = require(id_segment, "RequireCanObserveNext(knownCount, inputCount, label);", "id early Count guard", id_post)
-id_current = require(id_segment, "var value = enumerator.Current;", "id Current read", id_guard)
-id_append = require(id_segment, "result.Add(value);", "id append", id_current)
-if not (id_using < id_pre < id_move < id_post < id_guard < id_current < id_append):
-    fail("target-id traversal must reject Count overrun before reading/materializing unexpected IEnumerator.Current")
+require_success_path(
+    id_segment,
+    "RequireKnownCountStable(values, knownCount, knownCountSources, label);",
+    "RequireCanObserveNext(knownCount, inputCount, label);",
+    "var value = enumerator.Current;",
+    "result.Add(value);",
+    "target-id traversal",
+)
 
 if "foreach (var element in elements)" in source:
     fail("caller-controlled object targets must not regress to foreach")
