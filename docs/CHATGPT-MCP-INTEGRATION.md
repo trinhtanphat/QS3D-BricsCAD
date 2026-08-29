@@ -1,7 +1,7 @@
 # ChatGPT Web ↔ QS3D embedded MCP
 
-Status: SOURCE_IMPLEMENTED / PENDING_LOCAL  
-Canonical product issue: #4352  
+Status: SOURCE_READY / PENDING_LOCAL  
+Canonical issue: #4352  
 OAuth integration issue: #4584  
 Lane-Key: `issue-4584`
 
