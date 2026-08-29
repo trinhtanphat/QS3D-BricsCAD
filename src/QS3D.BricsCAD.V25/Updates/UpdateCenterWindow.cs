@@ -22,8 +22,10 @@ namespace QS3D.BricsCAD.V25.Updates
         private UpdateCheckResult? _result;
         private bool _coordinatorAttached;
         private bool _previewDownloading = false;
+#if !BRICSCAD_V26
         private bool _previewScheduled;
         private string? _previewScheduledDetail;
+#endif
 
         internal UpdateCenterWindow()
         {
@@ -169,9 +171,14 @@ namespace QS3D.BricsCAD.V25.Updates
 #else
             var hasPreviewDownload = result.State == UpdateState.ManualInstallRequired && result.Release?.HasVerifiedPreviewPackage == true;
 #endif
+#if !BRICSCAD_V26
+            var previewScheduled = _previewScheduled;
+#else
+            var previewScheduled = false;
+#endif
 
-            _refreshButton.IsEnabled = !_previewDownloading && !_previewScheduled && !checking && result.State != UpdateState.Scheduled;
-            _updateButton.IsEnabled = !_previewDownloading && !_previewScheduled && (result.CanAutoInstall || hasPreviewDownload || hasManualRelease);
+            _refreshButton.IsEnabled = !_previewDownloading && !previewScheduled && !checking && result.State != UpdateState.Scheduled;
+            _updateButton.IsEnabled = !_previewDownloading && !previewScheduled && (result.CanAutoInstall || hasPreviewDownload || hasManualRelease);
             _releaseButton.IsEnabled = !_previewDownloading && result.Release?.PageUri != null;
 
             if (_previewDownloading)
@@ -179,7 +186,8 @@ namespace QS3D.BricsCAD.V25.Updates
                 _updateButton.Content = "Đang tải…";
                 _updateButton.ToolTip = "Đang tải package từ GitHub Release và kiểm tra SHA-256.";
             }
-            else if (_previewScheduled)
+#if !BRICSCAD_V26
+            else if (previewScheduled)
             {
                 _updateButton.Content = "Đã lên lịch";
                 _updateButton.ToolTip = "Package preview đã xác minh sẽ chỉ thay DLL sau khi BricsCAD thoát.";
@@ -187,6 +195,7 @@ namespace QS3D.BricsCAD.V25.Updates
                 _detail.Text = _previewScheduledDetail ??
                     "QS3D đang chờ BricsCAD thoát rồi mới thay payload V25 đã được kiểm tra SHA-256.";
             }
+#endif
             else if (result.State == UpdateState.Scheduled)
             {
                 _updateButton.Content = "Đã lên lịch";
@@ -218,7 +227,9 @@ namespace QS3D.BricsCAD.V25.Updates
 
         private async System.Threading.Tasks.Task HandlePrimaryActionAsync()
         {
+#if !BRICSCAD_V26
             if (_previewScheduled) return;
+#endif
 
             var current = _result;
             if (current?.State == UpdateState.ManualInstallRequired && current.Release != null)
