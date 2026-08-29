@@ -42,9 +42,6 @@ def main() -> int:
     consent = CONSENT.read_text(encoding="utf-8")
     embedded = EMBEDDED.read_text(encoding="utf-8")
 
-    # OAuth/MCP discovery required by ChatGPT custom MCP. Property names appear escaped
-    # inside C# JSON string literals, so assert their exact identifiers rather than an
-    # unescaped quoted representation that can never occur in source text.
     for needle in (
         "/.well-known/oauth-protected-resource",
         "/.well-known/oauth-authorization-server",
@@ -60,7 +57,6 @@ def main() -> int:
     ):
         require(oauth, needle, "OAuth discovery/DCR contract")
 
-    # The normal ChatGPT flow must be a public client with DCR + authorization code/PKCE.
     require(oauth, 'TokenEndpointAuthMethod = "none"', "public-client token authentication")
     require(oauth, 'AuthorizationCodeGrant = "authorization_code"', "authorization-code grant")
     require(oauth, 'RefreshTokenGrant = "refresh_token"', "refresh-token grant")
@@ -70,9 +66,9 @@ def main() -> int:
     require(oauth, "HMACSHA256", "signed opaque OAuth tokens")
     require(oauth, "RandomNumberGenerator.Create", "cryptographic randomness")
 
-    # ChatGPT long-lived OAuth connectivity requires an advertised offline/refresh scope.
-    # Keep it authorization-server-only: the protected MCP resource still exposes just
-    # the qs3d:mcp permission, while authorization may grant optional offline_access.
+    # ChatGPT long-lived OAuth connectivity requests optional offline_access. It belongs
+    # to authorization-server discovery only; protected-resource metadata/challenges
+    # continue to advertise the MCP permission qs3d:mcp and never offline_access.
     require(oauth, 'OfflineAccessScope = "offline_access"', "offline-access scope declaration")
     require(oauth, '\\"scopes_supported\\":[\\\"' + '" + RequiredScope + "' + '\\\",\\\"' + '" + OfflineAccessScope + "' + '\\\"]', "authorization-server offline_access discovery")
     require(oauth, "TryNormalizeAuthorizationScope", "offline-access authorization scope parser")
@@ -80,25 +76,32 @@ def main() -> int:
     require(oauth, "includeRefreshToken", "refresh-token issuance gate")
     require(oauth, "requested refresh scope exceeds the original grant", "refresh-scope preservation")
 
-    protected_resource_block = oauth.split('if (string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase)\n                && string.Equals(path, "/.well-known/oauth-authorization-server"', 1)[0]
-    if OfflineAccessScope_literal := 'OfflineAccessScope':
-        if OfflineAccessScope_literal in protected_resource_block:
-            fail("protected-resource metadata must not advertise offline_access")
+    protected_marker = 'string.Equals(path, "/.well-known/oauth-protected-resource"'
+    authorization_marker = 'string.Equals(path, "/.well-known/oauth-authorization-server"'
+    protected_start = oauth.find(protected_marker)
+    authorization_start = oauth.find(authorization_marker, protected_start + 1)
+    if protected_start < 0 or authorization_start < 0 or authorization_start <= protected_start:
+        fail("unable to isolate protected-resource metadata branch")
+    protected_resource_block = oauth[protected_start:authorization_start]
+    require(
+        protected_resource_block,
+        '\\"scopes_supported\\":[\\\"' + '" + RequiredScope + "' + '\\\"]',
+        "protected-resource qs3d:mcp-only scope discovery",
+    )
+    reject(protected_resource_block, "OfflineAccessScope", "protected-resource metadata")
+    reject(protected_resource_block, "offline_access", "protected-resource metadata")
 
-    # DCR is fail-closed to ChatGPT connector callbacks, never arbitrary redirect URIs.
     require(oauth, 'ChatGptCallbackPrefix = "https://chatgpt.com/connector/oauth/"', "ChatGPT callback allowlist")
     require(oauth, "IsAllowedChatGptRedirect", "redirect allowlist function")
     require(oauth, "redirect_uris", "DCR redirect registration")
     reject(oauth, "StartsWith(\"https://chatgpt.com/\"", "over-broad ChatGPT redirect allowlist")
 
-    # Every DCR string array must be parsed as an array with immutable count/length bounds.
     require(oauth, "TryParseJsonStringArray(rawRedirects", "redirect URI array parsing")
     require(oauth, "TryParseJsonStringArray(rawGrantTypes", "grant type array parsing")
     require(oauth, "TryParseJsonStringArray(rawResponseTypes", "response type array parsing")
     require(oauth, "maxItemLength", "DCR per-item length bound")
     reject(oauth, "++maxItems", "mutable DCR array count bound")
 
-    # Every credential is resource/client/scope bound and short-lived where appropriate.
     for needle in (
         "AccessTokenLifetime",
         "RefreshTokenLifetime",
@@ -112,26 +115,20 @@ def main() -> int:
     ):
         require(oauth, needle, "OAuth credential binding")
 
-    # Authorization codes must be one-time and process-bound, closing restart/replay ambiguity.
     require(oauth, "ConsumedAuthorizationCodes", "authorization-code replay cache")
     require(oauth, "ProcessNonce", "authorization-code process binding")
     require(oauth, "TryAdd", "single-use authorization-code consumption")
 
-    # MCP OAuth public-client refresh tokens MUST rotate. Make each refresh credential
-    # one-use and process-bound so a consumed token cannot be replayed, including after a
-    # BricsCAD process restart where the process nonce necessarily changes.
     require(oauth, "ConsumedRefreshTokens", "refresh-token replay cache")
     require(oauth, "CleanupConsumedRefreshTokens();", "bounded refresh-token replay-cache cleanup")
     require(oauth, "ConsumedRefreshTokens.TryAdd(HashForCache(refresh), expiry)", "single-use refresh-token consumption")
     require(oauth, '"refresh token was already used"', "refresh-token replay rejection")
     require(oauth, "fields.Length != 7", "process-bound refresh-token payload")
 
-    # Security-sensitive query/form parsing must reject duplicates and malformed percent encoding.
     require(oauth, "ParseFormEncoded", "strict query/form parser")
     require(oauth, "duplicate OAuth parameter", "duplicate parameter rejection")
     require(oauth, "UTF8Encoding(false, true)", "strict UTF-8 decoding")
 
-    # User authorization is local to BricsCAD; the OAuth protocol source must not harvest credentials.
     require(oauth, "McpOAuthConsent.RequestApproval", "explicit local consent")
     for forbidden in (
         "Process.Start",
@@ -143,7 +140,6 @@ def main() -> int:
     ):
         reject(oauth.lower(), forbidden.lower(), "OAuth protocol security boundary")
 
-    # Consent must be marshalled into BricsCAD's application context and bounded.
     require(consent, "ExecuteInApplicationContext", "BricsCAD application-context consent")
     require(consent, "MessageBox.Show", "visible local consent prompt")
     require(consent, "SemaphoreSlim", "single concurrent consent prompt")
@@ -151,9 +147,6 @@ def main() -> int:
     require(consent, "YesNo", "explicit approve/deny choice")
     reject(consent, "Process.Start", "consent UI process-launch boundary")
 
-    # The shipping HTTP transport must preserve the raw query for /oauth/authorize,
-    # dispatch OAuth discovery/DCR/token endpoints before the /mcp-only router, and accept
-    # either the legacy engineering bearer or a validated OAuth access token.
     for needle in (
         "public string Query",
         "McpOAuthAuthorizationServer.TryHandle(",
@@ -166,11 +159,9 @@ def main() -> int:
         require(embedded, needle, "OAuth transport wiring")
     reject(embedded, '["WWW-Authenticate"] = "Bearer"', "legacy bare challenge after OAuth wiring")
 
-    # Keep the implementation shareable by V25 net48 and V26 net8 source composition.
     for modern_only in ("Convert.ToHexString", "RandomNumberGenerator.GetBytes(", "CryptographicOperations.FixedTimeEquals"):
         reject(oauth, modern_only, "net48 compatibility")
 
-    # Avoid accidental logging/serialization of the legacy static bearer key.
     if re.search(r"Console\.(Write|WriteLine).*token", oauth, re.IGNORECASE):
         fail("OAuth source must not print token material")
 
