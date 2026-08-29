@@ -118,7 +118,7 @@ namespace QS3D.Core.SmokeTests
                 }
             }
             object IEnumerator.Current => Current;
-            internal int CountReads { get; protected set; }
+            protected int CountReads { get; set; }
             internal int MoveNextCalls { get; private set; }
             internal int CurrentReads { get; private set; }
 
