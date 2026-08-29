@@ -11,7 +11,12 @@ namespace QS3D.Core.Domain
     {
         private const int MaximumEntries = 10000;
         private const string ProjectBrowserWorkspaceMetadataKey = "QS3D.ProjectBrowser.WorkspaceState";
-        private const string WallJunctionSnapPreviewMetadataPrefix = "WallJunctionSnapPreview";
+        private const string WallJunctionSnapPreviewPlanHashMetadataKey = "WallJunctionSnapPreviewPlanHash";
+        private const string WallJunctionSnapPreviewSourceFingerprintMetadataKey = "WallJunctionSnapPreviewSourceFingerprint";
+        private const string WallJunctionSnapPreviewCountMetadataKey = "WallJunctionSnapPreviewCount";
+        private const string WallJunctionSnapPreviewUtcMetadataKey = "WallJunctionSnapPreviewUtc";
+        private const string WallJunctionSnapPreviewProjectIdMetadataKey = "WallJunctionSnapPreviewProjectId";
+        private const string WallJunctionSnapPreviewChangeVersionMetadataKey = "WallJunctionSnapPreviewChangeVersion";
         private readonly Dictionary<string, string> _items = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private ProjectState? _project;
 
@@ -245,13 +250,19 @@ namespace QS3D.Core.Domain
             if (string.Equals(key, ProjectBrowserWorkspaceMetadataKey, StringComparison.OrdinalIgnoreCase))
                 return false;
 
-            // Wall Snap preview keys are one workflow-state batch. The command records
-            // one audit revision and performs one final Touch() after publishing the
-            // batch; Apply similarly records one audit revision (or one explicit Touch
-            // for an empty plan). Individual preview-key writes/removes must therefore
-            // not advance ChangeVersion independently or the persisted approval stamp
-            // immediately invalidates itself.
-            return !key.StartsWith(WallJunctionSnapPreviewMetadataPrefix, StringComparison.OrdinalIgnoreCase);
+            // Only the six production-owned Wall Snap preview keys are one workflow-state
+            // batch. Public metadata that merely shares their prefix remains semantic state.
+            return !IsWallJunctionSnapPreviewWorkflowKey(key);
+        }
+
+        private static bool IsWallJunctionSnapPreviewWorkflowKey(string key)
+        {
+            return string.Equals(key, WallJunctionSnapPreviewPlanHashMetadataKey, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, WallJunctionSnapPreviewSourceFingerprintMetadataKey, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, WallJunctionSnapPreviewCountMetadataKey, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, WallJunctionSnapPreviewUtcMetadataKey, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, WallJunctionSnapPreviewProjectIdMetadataKey, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, WallJunctionSnapPreviewChangeVersionMetadataKey, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void ValidateReserved(IEnumerable<KeyValuePair<string, string>> metadata)
