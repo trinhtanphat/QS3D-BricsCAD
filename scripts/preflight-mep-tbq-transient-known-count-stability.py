@@ -18,7 +18,8 @@ required = (
     "var hasKnownCount = TryGetKnownCount(groups, out var knownCount);",
     "using (var enumerator = groups.GetEnumerator())",
     "RequireStableKnownCount(groups, knownCount);",
-    "if (!enumerator.MoveNext())",
+    "var moved = enumerator.MoveNext();",
+    "if (!moved)",
     "if (index == MaxGroups)",
     "if (hasKnownCount && index >= knownCount)",
     "var group = enumerator.Current;",
@@ -29,13 +30,14 @@ if not region or any(token not in region for token in required):
     raise SystemExit("MEP/TBQ transient Count guard missing BuildReport contract token")
 
 first_rebound = region.find("RequireStableKnownCount(groups, knownCount);")
-move = region.find("if (!enumerator.MoveNext())", first_rebound)
-second_rebound = region.find("RequireStableKnownCount(groups, knownCount);", move)
+move = region.find("var moved = enumerator.MoveNext();", first_rebound)
+move_result_gate = region.find("if (!moved)", move)
+second_rebound = region.find("RequireStableKnownCount(groups, knownCount);", move_result_gate)
 cap = region.find("if (index == MaxGroups)", second_rebound)
 overrun = region.find("if (hasKnownCount && index >= knownCount)", cap)
 current = region.find("var group = enumerator.Current;", overrun)
-if min(first_rebound, move, second_rebound, cap, overrun, current) < 0 or not (
-    first_rebound < move < second_rebound < cap < overrun < current
+if min(first_rebound, move, move_result_gate, second_rebound, cap, overrun, current) < 0 or not (
+    first_rebound < move < move_result_gate < second_rebound < cap < overrun < current
 ):
     raise SystemExit("MEP/TBQ BuildReport must rebind admitted Count before MoveNext and again after successful MoveNext before capacity/Current")
 
