@@ -58,6 +58,10 @@ The active modular service implements Streamable-HTTP request/response behavior 
 
 `/mcp` requires bearer authentication. The bearer secret is either a sufficiently long `QS3D_MCP_BEARER_TOKEN` environment override or a cryptographically generated 32-byte token persisted in the QS3D application-data directory; it is never a Cloudflare account password. The listener binds only to `IPAddress.Loopback`.
 
+Streamable-HTTP DNS-rebinding defense is fail-closed. `Origin` is a security-sensitive singleton header. Requests with no `Origin` remain valid for non-browser MCP/tunnel clients; if `Origin` is present it must parse as a clean absolute HTTP/HTTPS loopback origin with no user-info, query, fragment, or non-root path. Malformed, opaque/`null`, or non-loopback origins are rejected with HTTP **403** before any route, including `/healthz`, is processed.
+
+Post-initialize session requests use the negotiated session protocol version. An explicitly present `MCP-Protocol-Version` must exactly match the version stored in that session; empty or mismatched values fail with HTTP **400**. Session DELETE applies the same version check atomically with lookup/removal under `SessionSync`; a rejected DELETE does not terminate the live session, while unknown/expired/terminated sessions return HTTP **404**.
+
 Mutation confirmation is top-level only: nested `confirmMutation=true` never authorizes a mutation, and duplicate top-level `confirmMutation` is rejected fail-closed by the top-level JSON parser. HTTP media-type admission rejects lookalikes such as `application/jsonevil`; only `application/json` with optional parameters is admitted.
 
 Remote MCP must never expose PowerShell, `cmd.exe`, arbitrary shell execution, arbitrary program launch, arbitrary desktop input, or unbounded CAD script execution. Keep request parsing fail-closed, reject malformed/duplicate security-sensitive headers, reject unsupported transfer encoding and JSON media-type lookalikes, and preserve no-store/nosniff response headers.
@@ -126,7 +130,7 @@ Named-tunnel and Quick-tunnel process ownership must remain mutually exclusive. 
 
 ## 8. Main source/files to inspect before changing this lane
 
-- `src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs` — active loopback HTTP transport, bearer auth, MCP protocol/session routing, tool schemas/results and exact JSON media-type admission.
+- `src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs` — active loopback HTTP transport, bearer auth, MCP protocol/session routing, tool schemas/results, exact JSON media-type admission and Origin validation.
 - `src/QS3D.BricsCAD.V25/McpCadAgentRuntime.cs` — active CAD/editor runtime: transactional API tools, atomic application-context dispatch, bounded native commands, BricsCAD-only UI input, recovery and audit.
 - `src/QS3D.BricsCAD.V25/McpEmbeddedServer.cs` — legacy historical monolith only; it is explicitly excluded from V25/V26 compilation and must not be treated as the active transport/runtime.
 - `src/QS3D.BricsCAD.V25/McpTopLevelJson.cs` — security-sensitive top-level JSON/member parsing.
@@ -150,8 +154,8 @@ Named-tunnel and Quick-tunnel process ownership must remain mutually exclusive. 
 A checked source item is **not** runtime evidence.
 
 - [x] Embedded single-repository modular MCP listener/runtime; no Node/second MCP runtime.
-- [x] Loopback binding + bearer auth + exact JSON media-type admission + bounded HTTP/session/concurrency behavior.
-- [x] MCP initialize/ping/tools/list/tools/call/session lifecycle.
+- [x] Loopback binding + bearer auth + loopback-only Origin validation + exact JSON media-type admission + bounded HTTP/session/concurrency behavior.
+- [x] MCP initialize/ping/tools/list/tools/call/session lifecycle, including strict negotiated protocol-version checks and 404 stale/expired session truth.
 - [x] Direct read/inspection surface for document/selection/database/entity/view/idle/sysvar state.
 - [x] Direct transactional line/circle/arc/polyline/DBText/MText create plus transform/delete/entity-layer/layer management.
 - [x] Bounded allowlisted CAD command workflow covering advanced drawing/annotation/layout/save/plot classes.
@@ -162,7 +166,7 @@ A checked source item is **not** runtime evidence.
 - [x] Click-first Cloudflare browser login + named tunnel + DNS route + canonical ingress + autostart.
 - [x] GUI cloudflared bootstrap path; no terminal requirement for end user.
 - [x] Quick Tunnel test fallback and advanced DPAPI token fallback.
-- [x] Sanitized read-only loopback qualification probe with no mutation/shell/token output.
+- [x] Sanitized read-only loopback qualification probe with Origin/protocol/session negative cases and no mutation/shell/token output.
 - [x] Production decision: no remote screenshot tool in the current MCP surface; use database/entity/view-state verification and keep any future BricsCAD-only image capture in a separate reviewed scope.
 - [x] Final source audit for timeout/late-CAD-callback semantics: atomic `Queued → Running` / `Queued → CancelledBeforeStart` transitions prevent pre-start late mutation, while an already-running timeout explicitly reports completion uncertainty and forbids automatic retry.
 - [ ] Keep this handoff, the runbook and the single matching item in `docs/LOCAL-AGENT-INBOX.md` synchronized whenever source materially changes the local scenario.
@@ -174,7 +178,7 @@ No remote/static agent may convert these cells to `LOCAL_PASS`. Pin the **exact 
 Required runtime proof includes:
 
 1. Load exact V25 plugin in licensed BricsCAD V25 and exact V26 plugin in licensed BricsCAD V26; record sanitized host/plugin identity.
-2. Run `scripts/test-mcp-loopback-readonly.py` against the loaded exact candidate and prove `/healthz`, bearer rejection, initialize/session/version handling, initialized notification, ping, required `tools/list`, bounded read-only tool calls and session DELETE without printing the token or mutating the drawing.
+2. Run `scripts/test-mcp-loopback-readonly.py` against the loaded exact candidate and prove `/healthz`; no-Origin and loopback-Origin admission; remote/opaque Origin HTTP 403 rejection; bearer rejection; initialize/session handling; mismatched protocol-version POST/DELETE HTTP 400 without accidental session termination; initialized notification; ping; required `tools/list`; bounded read-only tool calls; valid session DELETE 204; and terminated-session reuse HTTP 404 — without printing the token or mutating the drawing.
 3. Complete GUI cloudflared installation/update if required, Cloudflare browser login, named-tunnel create/reuse, DNS route, public `/mcp`, restart BricsCAD and automatic reconnect — without terminal use in the end-user flow.
 4. Connect ChatGPT Web custom MCP to the public endpoint and prove tool discovery.
 5. Read active document, selection, database/entity snapshot, view state and privacy-safe allowlisted sysvars.
