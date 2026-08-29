@@ -112,6 +112,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 button.Click -= OnAddClick;
                 button.Click -= OnFamilyAddModeClick;
+                button.Click -= OnGridAwareFamilyAddModeClick;
                 button.Click -= OnBlt3dFamilyAddClick;
                 button.Click -= OnBlt3dRoomAwareAddClick;
                 button.Click += OnBlt3dRoomAwareAddClick;
@@ -129,6 +130,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 item.Click -= OnAddClick;
                 item.Click -= OnFamilyAddModeClick;
+                item.Click -= OnGridAwareFamilyAddModeClick;
                 item.Click -= OnBlt3dFamilyAddClick;
                 item.Click -= OnBlt3dRoomAwareAddClick;
                 item.Click += OnBlt3dRoomAwareAddClick;
@@ -141,6 +143,11 @@ namespace QS3D.BricsCAD.V25.UI
             e.Handled = true;
             if (!IsBlt3dRoomWorkspace())
             {
+                if (IsGridSubtype(_familySubtypeFilter))
+                {
+                    CreateGridFamilyFromWorkspaceSubtype(false);
+                    return;
+                }
                 OnBlt3dFamilyAddClick(sender, e);
                 return;
             }

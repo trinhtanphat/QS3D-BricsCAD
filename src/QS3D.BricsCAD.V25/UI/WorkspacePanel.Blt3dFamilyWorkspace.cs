@@ -422,6 +422,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 button.Click -= OnAddClick;
                 button.Click -= OnFamilyAddModeClick;
+                button.Click -= OnGridAwareFamilyAddModeClick;
                 button.Click -= OnBlt3dFamilyAddClick;
                 button.Click += OnBlt3dFamilyAddClick;
                 button.ToolTip = "Add Family — chọn Tham số hoặc Solid3D";
@@ -435,6 +436,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 item.Click -= OnAddClick;
                 item.Click -= OnFamilyAddModeClick;
+                item.Click -= OnGridAwareFamilyAddModeClick;
                 item.Click -= OnBlt3dFamilyAddClick;
                 item.Click += OnBlt3dFamilyAddClick;
                 item.Header = "Thêm Family…";
