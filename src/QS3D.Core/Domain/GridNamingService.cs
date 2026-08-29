@@ -183,7 +183,7 @@ namespace QS3D.Core.Domain
             ProjectState project,
             IEnumerable<string> source,
             int? admittedCount,
-            int targetEnumerationVersion)
+            long targetEnumerationVersion)
         {
             if (!admittedCount.HasValue)
                 return;
