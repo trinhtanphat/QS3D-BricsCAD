@@ -315,27 +315,27 @@ jobs:
           $update = Join-Path $dist 'QS3D-BricsCAD-V25.update.json'
           $provenancePath = Join-Path $dist 'QS3D-BricsCAD-V25.provenance.json'
           foreach ($path in @($zip, $checksum, $update, $provenancePath)) { if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing commercial candidate asset: $path" } }
-          $checksumText = (Get-Content -LiteralPath $checksum -Raw).Trim()
-          if ($checksumText -notmatch '^([0-9a-f]{64})  QS3D-BricsCAD-V25\.zip$') { throw 'Commercial checksum file is malformed.' }
-          $zipHash = (& .\scripts\verify-v25-held-file.ps1 -Operation Hash -Path $zip).Trim().ToLowerInvariant()
-          if ($zipHash -ne $Matches[1]) { throw 'Commercial ZIP checksum mismatch.' }
-          $provenance = Get-Content -LiteralPath $provenancePath -Raw | ConvertFrom-Json
-          if ([int]$provenance.schemaVersion -ne 1 -or [string]$provenance.product -ne 'QS3D' -or [string]$provenance.target -ne 'BricsCAD V25 x64' -or
-              -not [string]::Equals([string]$provenance.releaseTag, $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
-              -not [string]::Equals([string]$provenance.productVersion, $env:RELEASE_TAG.Substring(1), [StringComparison]::Ordinal) -or
-              -not [string]::Equals([string]$provenance.sourceCommit, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase) -or
-              -not [string]::Equals([string]$provenance.signerThumbprint, $env:QS3D_SIGNING_CERT_THUMBPRINT.Replace(' ', ''), [StringComparison]::OrdinalIgnoreCase) -or
-              -not [string]::Equals([string]$provenance.packageSha256, $zipHash, [StringComparison]::OrdinalIgnoreCase)) {
-            throw 'Commercial candidate provenance does not exactly bind tag, product, source, signer and ZIP digest.'
-          }
-          $updateHash = (& .\scripts\verify-v25-held-file.ps1 -Operation Hash -Path $update).Trim().ToLowerInvariant()
-          if (-not [string]::Equals([string]$provenance.updateManifestSha256, $updateHash, [StringComparison]::OrdinalIgnoreCase)) { throw 'Update manifest digest mismatch.' }
           $extract = Join-Path $env:RUNNER_TEMP ('qs3d-commercial-publish-' + [Guid]::NewGuid().ToString('N'))
           $heldRoot = Join-Path $env:RUNNER_TEMP ('qs3d-commercial-candidate-held-' + [Guid]::NewGuid().ToString('N'))
           New-Item -ItemType Directory -Path $heldRoot -Force | Out-Null
           try {
             $heldZip = Join-Path $heldRoot 'QS3D-BricsCAD-V25.zip'
             & .\scripts\verify-v25-held-file.ps1 -Operation Copy -Path $zip -Destination $heldZip | Out-Null
+            $checksumText = (Get-Content -LiteralPath $checksum -Raw).Trim()
+            if ($checksumText -notmatch '^([0-9a-f]{64})  QS3D-BricsCAD-V25\.zip$') { throw 'Commercial checksum file is malformed.' }
+            $zipHash = (& .\scripts\verify-v25-held-file.ps1 -Operation Hash -Path $heldZip).Trim().ToLowerInvariant()
+            if ($zipHash -ne $Matches[1]) { throw 'Commercial ZIP checksum mismatch.' }
+            $provenance = Get-Content -LiteralPath $provenancePath -Raw | ConvertFrom-Json
+            if ([int]$provenance.schemaVersion -ne 1 -or [string]$provenance.product -ne 'QS3D' -or [string]$provenance.target -ne 'BricsCAD V25 x64' -or
+                -not [string]::Equals([string]$provenance.releaseTag, $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
+                -not [string]::Equals([string]$provenance.productVersion, $env:RELEASE_TAG.Substring(1), [StringComparison]::Ordinal) -or
+                -not [string]::Equals([string]$provenance.sourceCommit, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase) -or
+                -not [string]::Equals([string]$provenance.signerThumbprint, $env:QS3D_SIGNING_CERT_THUMBPRINT.Replace(' ', ''), [StringComparison]::OrdinalIgnoreCase) -or
+                -not [string]::Equals([string]$provenance.packageSha256, $zipHash, [StringComparison]::OrdinalIgnoreCase)) {
+              throw 'Commercial candidate provenance does not exactly bind tag, product, source, signer and ZIP digest.'
+            }
+            $updateHash = (& .\scripts\verify-v25-held-file.ps1 -Operation Hash -Path $update).Trim().ToLowerInvariant()
+            if (-not [string]::Equals([string]$provenance.updateManifestSha256, $updateHash, [StringComparison]::OrdinalIgnoreCase)) { throw 'Update manifest digest mismatch.' }
             Expand-Archive -LiteralPath $heldZip -DestinationPath $extract
             $metadata = Get-Content -LiteralPath (Join-Path $extract 'PACKAGE-METADATA.json') -Raw | ConvertFrom-Json
             if (-not [string]::Equals([string]$metadata.productVersion, $env:RELEASE_TAG.Substring(1), [StringComparison]::Ordinal) -or -not [string]::Equals(([string]$metadata.gitCommit).Trim(), $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) { throw 'Packaged metadata lost exact tag/source binding.' }
@@ -397,13 +397,13 @@ jobs:
             $remoteChecksum = (Get-Content -LiteralPath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip.sha256') -Raw).Trim()
             if ($remoteChecksum -notmatch '^([0-9a-f]{64})  QS3D-BricsCAD-V25\.zip$') { throw 'Downloaded draft checksum is malformed.' }
             $remoteZip = Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip'
-            $remoteZipHash = (& .\scripts\verify-v25-held-file.ps1 -Operation Hash -Path $remoteZip).Trim().ToLowerInvariant()
-            if ($remoteZipHash -ne $Matches[1]) { throw 'Downloaded draft ZIP fails its SHA-256 checksum.' }
             $heldRoot = Join-Path $env:RUNNER_TEMP ('qs3d-commercial-draft-held-' + [Guid]::NewGuid().ToString('N'))
             New-Item -ItemType Directory -Path $heldRoot -Force | Out-Null
             try {
               $heldRemoteZip = Join-Path $heldRoot 'QS3D-BricsCAD-V25.zip'
               & .\scripts\verify-v25-held-file.ps1 -Operation Copy -Path $remoteZip -Destination $heldRemoteZip | Out-Null
+              $remoteZipHash = (& .\scripts\verify-v25-held-file.ps1 -Operation Hash -Path $heldRemoteZip).Trim().ToLowerInvariant()
+              if ($remoteZipHash -ne $Matches[1]) { throw 'Downloaded draft ZIP fails its SHA-256 checksum.' }
               $extract = Join-Path $downloadRoot 'verified-package'
               Expand-Archive -LiteralPath $heldRemoteZip -DestinationPath $extract
               $payload = @(
