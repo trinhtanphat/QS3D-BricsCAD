@@ -36,7 +36,7 @@ def main() -> int:
     require(client, "GitHub Releases history exceeds the bounded updater scan window", "fail-closed incomplete-history behavior")
 
     require(client, "if (response.ContentLength > MaxResponseBytes)", "per-page declared-size bound")
-    require(client, "CopyBoundedAsync(source, buffer, MaxResponseBytes, null, 0)", "per-page streaming-size bound")
+    require(client, "CopyBoundedAsync(source, buffer, MaxResponseBytes)", "per-page streaming-size bound")
     require(client, 'request.Accept = "application/vnd.github+json"', "GitHub JSON accept header")
     require(client, 'request.UserAgent = "QS3D-BricsCAD-V25-Updater/1.0"', "explicit updater user agent")
     require(client, 'request.Headers["X-GitHub-Api-Version"] = "2022-11-28"', "GitHub API version header")
@@ -57,7 +57,7 @@ def main() -> int:
     require(client, "private static async Task CopyBoundedAsync", "bounded response streaming helper")
     require(client, "if (total > maxBytes)", "streaming byte ceiling")
 
-    print("PASS: GitHub release discovery scans bounded sequential pages, handles the current progress-aware bounded response helper, and fails closed on an incomplete history window while response streaming remains independently byte-bounded.")
+    print("PASS: GitHub release discovery scans bounded sequential pages, handles the current bounded response helper, and fails closed on an incomplete history window while response streaming remains independently byte-bounded.")
     return 0
 
 
