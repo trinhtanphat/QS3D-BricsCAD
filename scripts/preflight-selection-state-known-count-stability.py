@@ -23,7 +23,11 @@ def main() -> int:
     require(source, "_changeVersion != enumerationVersion", "reentrant selection freshness guard")
     require(source, "inputCount >= MaxInputCount", "independent streaming cap")
 
-    require(smoke, "KnownCountOverrunFailsBeforeThrowingTail", "overrun/no-overread regression")
+    require(smoke, "KnownCountOverrunFailsBeforeCurrentAndThrowingTail", "overrun/no-Current-overread regression")
+    require(smoke, "MoveNextCalls", "overrun MoveNext observation")
+    require(smoke, "CurrentReads", "overrun Current observation")
+    require(smoke, "Equal(2, source.MoveNextCalls);", "overrun MoveNext boundary assertion")
+    require(smoke, "Equal(1, source.CurrentReads);", "overrun Current no-overread assertion")
     require(smoke, "GenericCountDriftFailsWithoutPublication", "generic Count drift regression")
     require(smoke, "ReadOnlyCountDriftFailsWithoutPublication", "read-only Count drift regression")
     require(smoke, "NonGenericCountDriftFailsWithoutPublication", "non-generic Count drift regression")

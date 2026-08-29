@@ -11,7 +11,7 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
-            KnownCountOverrunFailsBeforeThrowingTail();
+            KnownCountOverrunFailsBeforeCurrentAndThrowingTail();
             GenericCountDriftFailsWithoutPublication();
             ReadOnlyCountDriftFailsWithoutPublication();
             NonGenericCountDriftFailsWithoutPublication();
@@ -19,7 +19,7 @@ namespace QS3D.Core.SmokeTests
             StableMultiInterfaceCountAndStreamingInputsRemainSupported();
         }
 
-        private static void KnownCountOverrunFailsBeforeThrowingTail()
+        private static void KnownCountOverrunFailsBeforeCurrentAndThrowingTail()
         {
             var state = SeededState(out var changed);
             var source = new OverrunThenThrowCollection();
@@ -28,7 +28,8 @@ namespace QS3D.Core.SmokeTests
                 () => state.Replace(source),
                 "more entries than its known Count");
 
-            Equal(2, source.ObservedEntries);
+            Equal(2, source.MoveNextCalls);
+            Equal(1, source.CurrentReads);
             Equal(0, changed());
             SequenceEqual(new[] { "KEEP" }, state.ElementIds);
         }
@@ -131,25 +132,51 @@ namespace QS3D.Core.SmokeTests
 
         private sealed class OverrunThenThrowCollection : ICollection<string>
         {
-            public int ObservedEntries { get; private set; }
+            public int MoveNextCalls { get; private set; }
+            public int CurrentReads { get; private set; }
             public int Count => 1;
             public bool IsReadOnly => true;
 
-            public IEnumerator<string> GetEnumerator()
-            {
-                ObservedEntries++;
-                yield return "A";
-                ObservedEntries++;
-                yield return "B";
-                throw new Exception("SelectionState advanced beyond the known-count overrun boundary.");
-            }
-
+            public IEnumerator<string> GetEnumerator() => new Enumerator(this);
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
             public bool Contains(string item) => false;
             public void CopyTo(string[] array, int arrayIndex) => throw new NotSupportedException();
             public void Add(string item) => throw new NotSupportedException();
             public bool Remove(string item) => throw new NotSupportedException();
             public void Clear() => throw new NotSupportedException();
+
+            private sealed class Enumerator : IEnumerator<string>
+            {
+                private readonly OverrunThenThrowCollection _owner;
+                private int _index = -1;
+
+                public Enumerator(OverrunThenThrowCollection owner)
+                {
+                    _owner = owner;
+                }
+
+                public string Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        return _index == 0 ? "A" : "B";
+                    }
+                }
+
+                object IEnumerator.Current => Current;
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    _index++;
+                    if (_index <= 1) return true;
+                    throw new Exception("SelectionState advanced beyond the known-count overrun boundary.");
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
         }
 
         private sealed class GenericCountDriftCollection : ICollection<string>
