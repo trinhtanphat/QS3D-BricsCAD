@@ -17,6 +17,11 @@ def require(haystack: str, needle: str, label: str) -> None:
         raise SystemExit(f"missing {label}: {needle}")
 
 
+def forbid(haystack: str, needle: str, label: str) -> None:
+    if needle in haystack:
+        raise SystemExit(f"forbidden {label}: {needle}")
+
+
 session = text(V25 / "McpDesktopControlSession.cs")
 require(session, "RequireLocalConsent", "local desktop consent gate")
 require(session, "BeginGuardedAction", "visible desktop action scope")
@@ -31,11 +36,33 @@ require(session, '"desktop_screenshot"', "screenshot consent-revocation protecti
 require(session, "_consentGeneration != _consentGenerationAtStart", "mid-flight consent generation revalidation")
 require(session, "payload was discarded", "fail-closed sensitive payload suppression")
 
+# Completion Pack A: consent is local-only, explicitly pausable/resumable and idle-expiring.
+require(session, "ConsentIdleTimeout", "10-minute desktop consent idle timeout")
+require(session, "TimeSpan.FromMinutes(10)", "10-minute desktop consent value")
+require(session, "IdleRemaining", "desktop consent idle countdown")
+require(session, "PauseFromLocalUser", "local desktop pause")
+require(session, "ResumeFromLocalUser", "local desktop resume")
+require(session, "ExpireConsentIfIdle", "synchronous fail-closed idle expiry")
+require(session, "ActionId", "guarded desktop action id")
+
 runtime = text(V25 / "McpDesktopAutomationRuntime.cs")
 require(runtime, "McpDesktopControlSession.RequireLocalConsent", "runtime local-consent enforcement")
 require(runtime, "McpDesktopControlSession.BeginGuardedAction", "runtime active overlay scope")
 require(runtime, "desktop_clipboard_read", "clipboard read tool remains present")
 require(runtime, "desktop_screenshot", "screenshot tool remains present")
+
+# Completion Pack A tool surface. Approach B macro/sequence remains intentionally absent.
+require(runtime, '"desktop_mouse_drag"', "bounded desktop drag tool")
+require(runtime, '"desktop_wait_for_window"', "bounded wait-for-window tool")
+require(runtime, "WaitForWindow", "wait-for-window routing")
+require(runtime, "MouseDrag", "drag routing")
+require(runtime, "RequirePointInsideWindow", "exact target point validation")
+require(runtime, "cropX", "screenshot crop x")
+require(runtime, "cropY", "screenshot crop y")
+require(runtime, "cropWidth", "screenshot crop width")
+require(runtime, "cropHeight", "screenshot crop height")
+forbid(runtime, '"desktop_sequence"', "Approach B desktop sequence tool")
+forbid(runtime, '"desktop_macro"', "Approach B desktop macro tool")
 
 recovery = text(V25 / "McpProjectRecoveryService.cs")
 require(recovery, '"SAVETIME"', "BricsCAD autosave interval")
@@ -49,6 +76,12 @@ require(experience, "MaxEvents", "bounded local event timeline")
 require(experience, "DetermineOnboarding", "onboarding state machine")
 require(experience, "CloudflaredMissing", "cloudflared prerequisite state")
 require(experience, "ChatGptRegistrationRequired", "ChatGPT registration state")
+# Completion Pack A action metadata must remain bounded local operational metadata only.
+require(experience, "ActionId", "timeline action id")
+require(experience, "DurationMilliseconds", "timeline action duration")
+require(experience, "TerminalState", "timeline action terminal state")
+require(experience, "StartDesktopAction", "desktop action timeline start")
+require(experience, "CompleteDesktopAction", "desktop action timeline completion")
 
 ui = text(V25 / "McpAgentControlCenter.cs")
 for tab in ("Kết nối", "Agent", "Backup & khôi phục", "Nâng cao"):
@@ -58,6 +91,12 @@ require(ui, "Mở ChatGPT", "system-browser ChatGPT action")
 require(ui, "Đăng nhập Cloudflare", "provider-browser Cloudflare action")
 require(ui, "OAuth", "OAuth-first ChatGPT guidance")
 require(ui, "Quick Tunnel · test only", "test-only Quick Tunnel wording")
+# Completion Pack A local UX: no remote resume route.
+require(ui, "Pause desktop", "local pause control")
+require(ui, "Resume desktop", "local resume control")
+require(ui, "Idle còn", "desktop idle countdown copy")
+require(ui, "Action ID", "desktop action-id display")
+require(ui, "Kiểm tra drawing/backup", "post-stop recovery guidance")
 
 first_run = text(V25 / "McpFirstRunExperience.cs")
 require(first_run, "McpToastNotificationWindow", "first-run toast window")
@@ -71,4 +110,4 @@ v26_entry = text(V26 / "PluginEntry.cs")
 for needle in ("McpEmbeddedServer.Start", "McpCloudflareAccountTunnelManager.TryAutoStart", "McpProjectRecoveryService.Start", "McpFirstRunExperience.Start"):
     require(v26_entry, needle, "V26 MCP lifecycle parity")
 
-print("PASS MCP guided onboarding + desktop consent + recovery source contract")
+print("PASS MCP guided onboarding + desktop Completion Pack A + recovery source contract")
