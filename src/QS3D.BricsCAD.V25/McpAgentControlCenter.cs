@@ -17,10 +17,8 @@ using Teigha.Runtime;
 namespace QS3D.BricsCAD.V25
 {
     /// <summary>
-    /// One-window, click-first operations center for non-technical MCP users.
-    /// Provider credentials remain in provider-owned browser flows. The UI combines the
-    /// production Agent-Center tabs/toasts/theme system with guided OAuth onboarding,
-    /// explicit local desktop consent and bounded DWG recovery.
+    /// Canonical task-oriented MCP operations center. Provider credentials remain in
+    /// provider-owned browser sessions; QS3D mirrors local MCP execution/status only.
     /// </summary>
     public sealed class McpAgentControlCenterCommands
     {
@@ -59,7 +57,6 @@ namespace QS3D.BricsCAD.V25
                 Title = title ?? string.Empty;
                 Message = message ?? string.Empty;
             }
-
             public DateTime Timestamp { get; private set; }
             public ToastKind Kind { get; private set; }
             public string Title { get; private set; }
@@ -73,7 +70,6 @@ namespace QS3D.BricsCAD.V25
                 Card = card;
                 Timer = timer;
             }
-
             public Border Card { get; private set; }
             public DispatcherTimer? Timer { get; set; }
             public EventHandler? TimerHandler { get; set; }
@@ -124,6 +120,7 @@ namespace QS3D.BricsCAD.V25
         private StackPanel _navigationHost = new StackPanel();
         private ContentControl _pageHost = new ContentControl();
         private TextBlock _desktopConsentText = new TextBlock();
+        private TextBlock _desktopActivityText = new TextBlock();
         private int _localOperationActive;
         private DispatcherTimer? _quickUrlTimer;
         private DispatcherTimer? _liveRefreshTimer;
@@ -236,8 +233,7 @@ namespace QS3D.BricsCAD.V25
             Foreground = _palette.TextPrimary;
             Content = CreateDashboardShell();
             RefreshStatus();
-            if (announce)
-                ShowToast(ToastKind.Info, "Giao diện", "Theme hiện tại: " + GetThemeModeLabel(_themeMode) + ".");
+            if (announce) ShowToast(ToastKind.Info, "Giao diện", "Theme hiện tại: " + GetThemeModeLabel(_themeMode) + ".");
         }
 
         private UIElement CreateDashboardShell()
@@ -290,7 +286,6 @@ namespace QS3D.BricsCAD.V25
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
             var left = new StackPanel();
             left.Children.Add(new TextBlock
             {
@@ -309,7 +304,7 @@ namespace QS3D.BricsCAD.V25
             });
             left.Children.Add(new TextBlock
             {
-                Text = "Kết nối, kiểm tra, điều khiển Agent và khôi phục dự án từ một nơi. Password/login ở browser hệ thống; QS3D không scrape cookie hoặc hội thoại ChatGPT.",
+                Text = "Kết nối, Agent desktop, backup/recovery và chẩn đoán từ một nơi. Login/password ở browser hệ thống; QS3D không scrape cookie hoặc nội dung hội thoại ChatGPT.",
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = _palette.TextSecondary,
                 FontSize = 12.5,
@@ -317,7 +312,6 @@ namespace QS3D.BricsCAD.V25
             });
             left.Children.Add(_statusChips);
             grid.Children.Add(left);
-
             var theme = CreateThemeSelector();
             Grid.SetColumn(theme, 1);
             grid.Children.Add(theme);
@@ -362,12 +356,10 @@ namespace QS3D.BricsCAD.V25
 
         private void PopulateTabNavigation()
         {
-            _navigationHost.Children.Add(CreateNavigationButton("Tổng quan", 0));
-            _navigationHost.Children.Add(CreateNavigationButton("Cloudflare", 1));
-            _navigationHost.Children.Add(CreateNavigationButton("ChatGPT Connector", 2));
-            _navigationHost.Children.Add(CreateNavigationButton("Điều khiển Agent", 3));
-            _navigationHost.Children.Add(CreateNavigationButton("Backup & khôi phục", 4));
-            _navigationHost.Children.Add(CreateNavigationButton("Logs", 5));
+            _navigationHost.Children.Add(CreateNavigationButton("Kết nối", 0));
+            _navigationHost.Children.Add(CreateNavigationButton("Agent", 1));
+            _navigationHost.Children.Add(CreateNavigationButton("Backup & khôi phục", 2));
+            _navigationHost.Children.Add(CreateNavigationButton("Nâng cao", 3));
         }
 
         private Button CreateNavigationButton(string text, int index)
@@ -377,7 +369,7 @@ namespace QS3D.BricsCAD.V25
 
         private void SetSelectedTab(int index)
         {
-            if (index < 0 || index > 5 || _selectedTab == index) return;
+            if (index < 0 || index > 3 || _selectedTab == index) return;
             _selectedTab = index;
             _navigationHost.Children.Clear();
             PopulateTabNavigation();
@@ -390,21 +382,19 @@ namespace QS3D.BricsCAD.V25
             _statusRows = new StackPanel();
             switch (_selectedTab)
             {
-                case 1: return CreateCloudflarePage();
-                case 2: return CreateConnectorPage();
-                case 3: return CreateAgentControlPage();
-                case 4: return CreateRecoveryPage();
-                case 5: return CreateLogsPage();
-                default: return CreateOverviewPage();
+                case 1: return CreateAgentPage();
+                case 2: return CreateRecoveryPage();
+                case 3: return CreateAdvancedPage();
+                default: return CreateConnectionPage();
             }
         }
 
-        private UIElement CreateOverviewPage()
+        private UIElement CreateConnectionPage()
         {
             var grid = CreateTwoColumnGrid();
-            var quick = new StackPanel();
             var onboarding = McpAgentExperience.DetermineOnboarding();
-            quick.Children.Add(new TextBlock
+            var actions = new StackPanel();
+            actions.Children.Add(new TextBlock
             {
                 Text = onboarding.Title,
                 Foreground = _palette.TextPrimary,
@@ -413,7 +403,7 @@ namespace QS3D.BricsCAD.V25
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 5)
             });
-            quick.Children.Add(new TextBlock
+            actions.Children.Add(new TextBlock
             {
                 Text = onboarding.Detail + Environment.NewLine + "Tiếp theo: " + onboarding.NextStep,
                 Foreground = _palette.TextSecondary,
@@ -421,66 +411,21 @@ namespace QS3D.BricsCAD.V25
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 12)
             });
-            quick.Children.Add(CreateActionButton("Cài / cập nhật Cloudflare Tunnel", InstallCloudflared, ActionKind.Primary));
-            quick.Children.Add(CreateActionButton("Đăng nhập Cloudflare + tạo Named Tunnel", (_, __) => OpenAccountSetup(), ActionKind.Secondary));
-            quick.Children.Add(CreateActionButton("Mở ChatGPT", (_, __) => OpenChatGpt(), ActionKind.Secondary));
-            quick.Children.Add(CreateActionButton("Copy MCP URL", (_, __) => CopyUrl(), ActionKind.Secondary));
-            AddGridCard(grid, CreateSectionCard("Bắt đầu nhanh", "Luồng production: Named Tunnel ổn định + ChatGPT URL/OAuth, không cần PowerShell hay CMD.", quick), 0);
-            AddGridCard(grid, CreateSectionCard("Trạng thái kết nối", "MCP, tunnel, endpoint và desktop-consent hiện tại.", _statusRows), 1);
-            return grid;
-        }
-
-        private UIElement CreateCloudflarePage()
-        {
-            var grid = CreateTwoColumnGrid();
-            var actions = new StackPanel();
             actions.Children.Add(CreateActionButton("Cài / cập nhật Cloudflare Tunnel", InstallCloudflared, ActionKind.Primary));
             actions.Children.Add(CreateActionButton("Đăng nhập Cloudflare + tạo Named Tunnel", (_, __) => OpenAccountSetup(), ActionKind.Secondary));
             actions.Children.Add(CreateActionButton("Khởi động Named Tunnel đã lưu", (_, __) => StartNamedTunnel(), ActionKind.Secondary));
-            actions.Children.Add(CreateActionButton("Quick Tunnel · test only", (_, __) => StartQuickTunnel(), ActionKind.Secondary));
-            actions.Children.Add(CreateActionButton("Dừng tất cả tunnel", (_, __) => StopTunnels(), ActionKind.Secondary));
-            AddGridCard(grid, CreateSectionCard("Thiết lập & Tunnel", "Cloudflare credential/password chỉ nhập trên trang Cloudflare trong browser. Named Tunnel là production path.", actions), 0);
-            AddGridCard(grid, CreateSectionCard("Trạng thái Cloudflare", "Quick Tunnel chỉ dùng test vì hostname có thể thay đổi và làm resource-bound OAuth cần kết nối lại.", _statusRows), 1);
-            return grid;
-        }
-
-        private UIElement CreateConnectorPage()
-        {
-            var grid = CreateTwoColumnGrid();
-            var actions = new StackPanel();
-            actions.Children.Add(CreateActionButton("Mở ChatGPT", (_, __) => OpenChatGpt(), ActionKind.Primary));
+            actions.Children.Add(CreateActionButton("Mở ChatGPT", (_, __) => OpenChatGpt(), ActionKind.Secondary));
             actions.Children.Add(CreateActionButton("Copy MCP URL", (_, __) => CopyUrl(), ActionKind.Secondary));
             actions.Children.Add(CreateActionButton("Đã thêm MCP trong ChatGPT", (_, __) => MarkChatGptRegistered(), ActionKind.Secondary));
-            actions.Children.Add(CreateActionButton("Kiểm tra MCP protocol", (_, __) => CheckProtocol(), ActionKind.Secondary));
-            actions.Children.Add(CreateActionButton("Tự kiểm tra Agent · read-only", (_, __) => RunReadOnlySelfTest(), ActionKind.Secondary));
-            AddGridCard(grid, CreateSectionCard("ChatGPT Connector", "Luồng chuẩn là URL + OAuth/DCR trên basic screen. QS3D không lấy ChatGPT password và không scrape browser cookie.", actions), 0);
-
-            var right = new StackPanel();
-            right.Children.Add(_statusRows);
-            right.Children.Add(new Border
-            {
-                Background = _palette.SubtleBackground,
-                BorderBrush = _palette.Border,
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(12),
-                Margin = new Thickness(0, 8, 0, 0),
-                Child = new TextBlock
-                {
-                    Text = "Engineering bearer được chuyển xuống khu vực Nâng cao trong Logs. Với ChatGPT bình thường chỉ dùng public /mcp URL + OAuth.",
-                    Foreground = _palette.TextSecondary,
-                    TextWrapping = TextWrapping.Wrap,
-                    FontSize = 11.5
-                }
-            });
-            AddGridCard(grid, CreateSectionCard("Kết nối hiện tại", "Public MCP URL luôn lấy từ canonical endpoint resolver.", right), 1);
+            AddGridCard(grid, CreateSectionCard("Kết nối", "Luồng production: embedded MCP → cloudflared → Cloudflare browser login → Named Tunnel → ChatGPT URL/OAuth.", actions), 0);
+            AddGridCard(grid, CreateSectionCard("Trạng thái kết nối", "QS3D không lưu password ChatGPT/Cloudflare và không scrape browser session.", _statusRows), 1);
             return grid;
         }
 
-        private UIElement CreateAgentControlPage()
+        private UIElement CreateAgentPage()
         {
             var grid = CreateTwoColumnGrid();
-            var danger = new StackPanel();
+            var controls = new StackPanel();
             _desktopConsentText = new TextBlock
             {
                 TextWrapping = TextWrapping.Wrap,
@@ -488,33 +433,48 @@ namespace QS3D.BricsCAD.V25
                 FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(0, 0, 0, 8)
             };
-            danger.Children.Add(_desktopConsentText);
-            danger.Children.Add(new TextBlock
+            controls.Children.Add(_desktopConsentText);
+            controls.Children.Add(new TextBlock
             {
-                Text = "Desktop-wide input mặc định OFF sau mỗi lần mở BricsCAD. ChatGPT không có tool để tự bật. Khi chạy sẽ có viền xanh; Esc ×2 trong 1.2 giây dừng ngay.",
+                Text = "Desktop-wide input mặc định OFF sau mỗi lần mở BricsCAD. Consent tự hết hạn sau 10 phút không có desktop action mới. ChatGPT không có tool để Resume quyền này; chỉ user tại máy local mới bật lại được. Khi thao tác sẽ có viền xanh; Esc ×2 trong 1.2 giây dừng ngay.",
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = _palette.TextSecondary,
                 FontSize = 11.5,
                 Margin = new Thickness(0, 0, 0, 10)
             });
-            danger.Children.Add(CreateActionButton("Bật quyền desktop", (_, __) => ToggleDesktopConsent(), ActionKind.Primary));
-            danger.Children.Add(CreateActionButton("EMERGENCY STOP AGENT", (_, __) => EmergencyStop(), ActionKind.Danger));
-            danger.Children.Add(CreateActionButton("Hủy command BricsCAD hiện tại · ESC x2", (_, __) => InvokeControlTool("cad_cancel_command", "{}"), ActionKind.Secondary));
-            AddGridCard(grid, CreateSectionCard("Desktop control & khẩn cấp", "Local consent + MCP mutation epoch là hai lớp độc lập. Emergency Stop/ESC vẫn khả dụng khi self-test đang chạy.", danger, true), 0);
+            controls.Children.Add(CreateActionButton("Resume desktop", (_, __) => ResumeDesktopConsent(), ActionKind.Primary));
+            controls.Children.Add(CreateActionButton("Pause desktop", (_, __) => PauseDesktopConsent(), ActionKind.Secondary));
+            controls.Children.Add(CreateActionButton("EMERGENCY STOP AGENT", (_, __) => EmergencyStop(), ActionKind.Danger));
+            controls.Children.Add(CreateActionButton("Hủy command BricsCAD hiện tại · ESC x2", (_, __) => InvokeControlTool("cad_cancel_command", "{}"), ActionKind.Secondary));
+            AddGridCard(grid, CreateSectionCard("Desktop control & khẩn cấp", "Local consent + confirmMutation/sensitive-read + mutation epoch là các lớp độc lập.", controls, true), 0);
 
-            var recovery = new StackPanel();
-            recovery.Children.Add(CreateActionButton("Resume Agent", (_, __) => InvokeControlTool("cad_agent_resume", "{\"confirmMutation\":true}"), ActionKind.Primary));
-            recovery.Children.Add(CreateActionButton("Mở thư mục audit MCP", (_, __) => OpenAuditFolder(), ActionKind.Secondary));
-            recovery.Children.Add(new TextBlock
+            var activity = new StackPanel();
+            _desktopActivityText = new TextBlock
             {
-                Text = "Đang làm: " + (string.IsNullOrWhiteSpace(McpAgentExperience.CurrentAction) ? "không có action local đang chạy" : McpAgentExperience.CurrentAction)
-                       + Environment.NewLine + "Bước tiếp: " + (string.IsNullOrWhiteSpace(McpAgentExperience.NextStep) ? "theo trạng thái onboarding hiện tại" : McpAgentExperience.NextStep),
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = _palette.TextSecondary,
-                FontSize = 11.5,
-                Margin = new Thickness(0, 8, 0, 0)
+                Foreground = _palette.TextPrimary,
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 11.5
+            };
+            activity.Children.Add(_desktopActivityText);
+            activity.Children.Add(new Border
+            {
+                Background = _palette.WarningSoft,
+                BorderBrush = _palette.WarningBorder,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(11),
+                Margin = new Thickness(0, 10, 0, 8),
+                Child = new TextBlock
+                {
+                    Text = "Sau PAUSED / EXPIRED / failed: Kiểm tra drawing/backup trước. Nếu trạng thái CAD đúng, user có thể Resume desktop local để ChatGPT tiếp tục.",
+                    Foreground = _palette.TextPrimary,
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 11.5
+                }
             });
-            AddGridCard(grid, CreateSectionCard("Phục hồi & Audit", "Khôi phục CAD Agent, theo dõi local execution state và mở audit khi cần kiểm tra.", recovery), 1);
+            activity.Children.Add(CreateActionButton("Mở thư mục audit MCP", (_, __) => OpenAuditFolder(), ActionKind.Secondary));
+            AddGridCard(grid, CreateSectionCard("Đang làm gì?", "QS3D mirror metadata của MCP action local; không scrape prose từ ChatGPT Web.", activity), 1);
             return grid;
         }
 
@@ -539,7 +499,7 @@ namespace QS3D.BricsCAD.V25
             status.Children.Add(new TextBlock
             {
                 Text = "Backup root: " + McpProjectRecoveryService.BackupRoot + Environment.NewLine
-                       + "Policy: giữ SAVETIME ngắn hơn; nếu disabled/>5 phút thì dùng 5 phút; bật ISAVEBAK; tối đa 30 snapshot ổn định/drawing.",
+                       + "Policy: giữ SAVETIME ngắn hơn; nếu disabled/>5 phút thì dùng 5 phút; bật ISAVEBAK; tối đa 30 snapshot ổn định/drawing. Recovery luôn ghi sang file mới.",
                 Foreground = _palette.TextSecondary,
                 TextWrapping = TextWrapping.Wrap,
                 FontSize = 11.5,
@@ -549,26 +509,30 @@ namespace QS3D.BricsCAD.V25
             return grid;
         }
 
-        private UIElement CreateLogsPage()
+        private UIElement CreateAdvancedPage()
         {
             var grid = CreateTwoColumnGrid();
             _logsHost = new StackPanel();
             RenderActivityHistory();
-            AddGridCard(grid, CreateSectionCard("Logs", "Lịch sử UI + local MCP event gần nhất trong phiên. MCP mutation audit đầy đủ vẫn ở audit log riêng.", _logsHost), 0);
+            AddGridCard(grid, CreateSectionCard("Logs & trạng thái", "Local MCP timeline gần nhất. Mutation audit đầy đủ vẫn ở audit log riêng.", _logsHost), 0);
 
             var advanced = new StackPanel();
+            advanced.Children.Add(CreateActionButton("Kiểm tra MCP protocol", (_, __) => CheckProtocol(), ActionKind.Primary));
+            advanced.Children.Add(CreateActionButton("Tự kiểm tra Agent · read-only", (_, __) => RunReadOnlySelfTest(), ActionKind.Secondary));
+            advanced.Children.Add(CreateActionButton("Quick Tunnel · test only", (_, __) => StartQuickTunnel(), ActionKind.Secondary));
+            advanced.Children.Add(CreateActionButton("Dừng tất cả tunnel", (_, __) => StopTunnels(), ActionKind.Secondary));
             advanced.Children.Add(CreateActionButton("Copy Bearer Token · engineering compatibility", (_, __) => CopyToken(), ActionKind.Secondary));
             advanced.Children.Add(CreateActionButton("Copy URL + Authorization · engineering compatibility", (_, __) => CopyConfig(), ActionKind.Secondary));
             advanced.Children.Add(CreateActionButton("Mở thư mục audit MCP", (_, __) => OpenAuditFolder(), ActionKind.Secondary));
             advanced.Children.Add(new TextBlock
             {
-                Text = "Nâng cao: static bearer chỉ dùng debug/backward compatibility. Production ChatGPT dùng Named Tunnel + OAuth/DCR. Secret không được đưa vào UI log/audit.",
+                Text = "Nâng cao: static bearer + Quick Tunnel chỉ dùng debug/backward compatibility. Production ChatGPT dùng Named Tunnel + OAuth/DCR. Completion Pack A dùng explicit desktop tools; desktop_sequence/desktop_macro (Approach B) chưa được expose.",
                 Foreground = _palette.TextSecondary,
                 TextWrapping = TextWrapping.Wrap,
                 FontSize = 11.5,
                 Margin = new Thickness(0, 8, 0, 0)
             });
-            AddGridCard(grid, CreateSectionCard("Nâng cao", "Engineering compatibility và chẩn đoán.", advanced), 1);
+            AddGridCard(grid, CreateSectionCard("Nâng cao", "Chẩn đoán và engineering compatibility.", advanced), 1);
             return grid;
         }
 
@@ -710,6 +674,7 @@ namespace QS3D.BricsCAD.V25
             style.Setters.Add(new Setter(Control.BorderBrushProperty, border));
             style.Setters.Add(new Setter(Control.TemplateProperty, CreateButtonTemplate()));
 
+            // Trigger precedence is intentional: focus -> hover -> pressed -> disabled.
             var focus = new Trigger { Property = Button.IsKeyboardFocusedProperty, Value = true };
             focus.Setters.Add(new Setter(Control.BackgroundProperty, background));
             focus.Setters.Add(new Setter(Control.ForegroundProperty, foreground));
@@ -787,13 +752,7 @@ namespace QS3D.BricsCAD.V25
             var row = new Grid { Margin = new Thickness(0, 0, 0, 8) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(122) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            var labelBlock = new TextBlock
-            {
-                Text = label,
-                FontSize = 11.5,
-                Foreground = _palette.TextMuted,
-                VerticalAlignment = VerticalAlignment.Top
-            };
+            var labelBlock = new TextBlock { Text = label, FontSize = 11.5, Foreground = _palette.TextMuted, VerticalAlignment = VerticalAlignment.Top };
             var valueBlock = new TextBlock
             {
                 Text = value,
@@ -811,16 +770,11 @@ namespace QS3D.BricsCAD.V25
 
         private UIElement CreateFooter()
         {
-            var footer = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(0, 12, 0, 0)
-            };
+            var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
             var refresh = CreateActionButton("Refresh", (_, __) =>
             {
                 RefreshStatus();
-                ShowToast(ToastKind.Info, "Trạng thái", "Đã làm mới trạng thái MCP, tunnel, consent và recovery.");
+                ShowToast(ToastKind.Info, "Trạng thái", "Đã làm mới MCP, tunnel, consent, action và recovery.");
             }, ActionKind.Utility);
             refresh.MinWidth = 88;
             var close = CreateActionButton("Đóng", (_, __) => Close(), ActionKind.Utility);
@@ -833,17 +787,15 @@ namespace QS3D.BricsCAD.V25
         private void AddActivityEntry(ToastKind kind, string title, string message)
         {
             _activityEntries.Insert(0, new ActivityEntry(DateTime.Now, kind, title, message));
-            while (_activityEntries.Count > MaxActivityEntries)
-                _activityEntries.RemoveAt(_activityEntries.Count - 1);
-            if (_selectedTab == 5 && _logsHost != null) RenderActivityHistory();
+            while (_activityEntries.Count > MaxActivityEntries) _activityEntries.RemoveAt(_activityEntries.Count - 1);
+            if (_selectedTab == 3 && _logsHost != null) RenderActivityHistory();
         }
 
         private void RenderActivityHistory()
         {
             if (_logsHost == null) return;
             _logsHost.Children.Clear();
-
-            var localEvents = McpAgentExperience.Recent(12);
+            var localEvents = McpAgentExperience.Recent(16);
             if (localEvents.Length > 0)
             {
                 _logsHost.Children.Add(new TextBlock
@@ -856,9 +808,12 @@ namespace QS3D.BricsCAD.V25
                 });
                 foreach (var item in localEvents)
                 {
+                    var action = string.IsNullOrWhiteSpace(item.ActionId)
+                        ? string.Empty
+                        : " · Action ID=" + item.ActionId + " · " + item.TerminalState + " · " + item.DurationMilliseconds + "ms";
                     _logsHost.Children.Add(new TextBlock
                     {
-                        Text = item.Utc.ToLocalTime().ToString("HH:mm:ss") + "  [" + item.Level + "/" + item.Category + "] " + item.Message,
+                        Text = item.Utc.ToLocalTime().ToString("HH:mm:ss") + "  [" + item.Level + "/" + item.Category + "] " + item.Message + action,
                         Foreground = _palette.TextSecondary,
                         TextWrapping = TextWrapping.Wrap,
                         FontFamily = new FontFamily("Consolas"),
@@ -868,7 +823,6 @@ namespace QS3D.BricsCAD.V25
                 }
                 _logsHost.Children.Add(new Border { Height = 10, Background = Brushes.Transparent });
             }
-
             if (_activityEntries.Count == 0)
             {
                 _logsHost.Children.Add(new TextBlock
@@ -879,12 +833,9 @@ namespace QS3D.BricsCAD.V25
                 });
                 return;
             }
-
             foreach (var entry in _activityEntries)
             {
-                Brush accent;
-                Brush surface;
-                Brush border;
+                Brush accent, surface, border;
                 GetToastColors(entry.Kind, out accent, out surface, out border);
                 var stack = new StackPanel();
                 stack.Children.Add(new TextBlock
@@ -920,19 +871,10 @@ namespace QS3D.BricsCAD.V25
             AddActivityEntry(kind, title, message);
             if (_toastHost == null || _closed) return;
             while (_visibleToasts.Count >= MaxVisibleToasts) DismissToast(_visibleToasts[0]);
-
-            Brush accent;
-            Brush surface;
-            Brush borderBrush;
+            Brush accent, surface, borderBrush;
             GetToastColors(kind, out accent, out surface, out borderBrush);
             var textStack = new StackPanel();
-            textStack.Children.Add(new TextBlock
-            {
-                Text = title,
-                Foreground = accent,
-                FontWeight = FontWeights.SemiBold,
-                FontSize = 12.5
-            });
+            textStack.Children.Add(new TextBlock { Text = title, Foreground = accent, FontWeight = FontWeights.SemiBold, FontSize = 12.5 });
             textStack.Children.Add(new TextBlock
             {
                 Text = message,
@@ -941,7 +883,6 @@ namespace QS3D.BricsCAD.V25
                 FontSize = 11.5,
                 Margin = new Thickness(0, 3, 0, 0)
             });
-
             var contentGrid = new Grid();
             contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -953,7 +894,6 @@ namespace QS3D.BricsCAD.V25
             close.Margin = new Thickness(8, 0, 0, 0);
             Grid.SetColumn(close, 1);
             contentGrid.Children.Add(close);
-
             var card = new Border
             {
                 Background = surface,
@@ -968,10 +908,7 @@ namespace QS3D.BricsCAD.V25
             close.Click += (_, __) => DismissToast(visual);
             if (!sticky)
             {
-                var timer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
-                {
-                    Interval = GetToastLifetime(kind)
-                };
+                var timer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher) { Interval = GetToastLifetime(kind) };
                 EventHandler handler = (_, __) => DismissToast(visual);
                 visual.Timer = timer;
                 visual.TimerHandler = handler;
@@ -992,10 +929,7 @@ namespace QS3D.BricsCAD.V25
                 visual.TimerHandler = null;
                 visual.Timer = null;
             }
-            else
-            {
-                visual.TimerHandler = null;
-            }
+            else visual.TimerHandler = null;
             if (_toastHost != null) _toastHost.Children.Remove(visual.Card);
             _visibleToasts.Remove(visual);
         }
@@ -1019,26 +953,10 @@ namespace QS3D.BricsCAD.V25
         {
             switch (kind)
             {
-                case ToastKind.Success:
-                    accent = _palette.Success;
-                    surface = _palette.SuccessSoft;
-                    border = _palette.SuccessBorder;
-                    return;
-                case ToastKind.Warning:
-                    accent = _palette.Warning;
-                    surface = _palette.WarningSoft;
-                    border = _palette.WarningBorder;
-                    return;
-                case ToastKind.Error:
-                    accent = _palette.Danger;
-                    surface = _palette.DangerSoft;
-                    border = _palette.DangerBorder;
-                    return;
-                default:
-                    accent = _palette.Accent;
-                    surface = _palette.SelectedBackground;
-                    border = _palette.Accent;
-                    return;
+                case ToastKind.Success: accent = _palette.Success; surface = _palette.SuccessSoft; border = _palette.SuccessBorder; return;
+                case ToastKind.Warning: accent = _palette.Warning; surface = _palette.WarningSoft; border = _palette.WarningBorder; return;
+                case ToastKind.Error: accent = _palette.Danger; surface = _palette.DangerSoft; border = _palette.DangerBorder; return;
+                default: accent = _palette.Accent; surface = _palette.SelectedBackground; border = _palette.Accent; return;
             }
         }
 
@@ -1114,10 +1032,7 @@ namespace QS3D.BricsCAD.V25
         {
             StopQuickUrlPolling();
             _quickUrlPollTicks = 0;
-            _quickUrlTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
-            {
-                Interval = TimeSpan.FromMilliseconds(500)
-            };
+            _quickUrlTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher) { Interval = TimeSpan.FromMilliseconds(500) };
             _quickUrlTimer.Tick += QuickUrlTimerOnTick;
             _quickUrlTimer.Start();
         }
@@ -1171,10 +1086,7 @@ namespace QS3D.BricsCAD.V25
                     "Thêm public MCP URL bằng OAuth/DCR rồi đánh dấu đã thêm MCP.");
                 ShowToast(ToastKind.Success, "ChatGPT", "Đã mở ChatGPT trong browser. Dùng URL + OAuth trên basic connector screen.");
             }
-            catch (Exception ex)
-            {
-                ShowToast(ToastKind.Error, "ChatGPT", ex.Message);
-            }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "ChatGPT", ex.Message); }
         }
 
         private void MarkChatGptRegistered()
@@ -1182,12 +1094,9 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 McpAgentExperience.MarkChatGptRegistrationAcknowledged();
-                ShowToast(ToastKind.Success, "ChatGPT Connector", "Đã ghi nhận MCP URL hiện tại được thêm trong ChatGPT. Chạy protocol/read-only self-test để xác minh local endpoint.");
+                ShowToast(ToastKind.Success, "ChatGPT Connector", "Đã ghi nhận MCP URL hiện tại được thêm trong ChatGPT.");
             }
-            catch (Exception ex)
-            {
-                ShowToast(ToastKind.Error, "ChatGPT Connector", ex.Message);
-            }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "ChatGPT Connector", ex.Message); }
             RefreshStatus();
         }
 
@@ -1199,15 +1108,8 @@ namespace QS3D.BricsCAD.V25
                 ShowToast(ToastKind.Warning, "MCP URL", "Chưa có public MCP URL. Hãy tạo Named Tunnel trước.");
                 return;
             }
-            try
-            {
-                Clipboard.SetText(url);
-                ShowToast(ToastKind.Success, "MCP URL", "Đã copy public MCP URL.");
-            }
-            catch (Exception ex)
-            {
-                ShowToast(ToastKind.Error, "Clipboard", ex.Message);
-            }
+            try { Clipboard.SetText(url); ShowToast(ToastKind.Success, "MCP URL", "Đã copy public MCP URL."); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "Clipboard", ex.Message); }
         }
 
         private void CopyToken()
@@ -1216,12 +1118,9 @@ namespace QS3D.BricsCAD.V25
             {
                 McpEmbeddedServer.EnsureStarted();
                 Clipboard.SetText(McpEmbeddedServer.GetBearerToken());
-                ShowToast(ToastKind.Warning, "Bearer Token", "Đã copy engineering bearer. Không chia sẻ token này công khai; ChatGPT production dùng OAuth.");
+                ShowToast(ToastKind.Warning, "Bearer Token", "Đã copy engineering bearer. Không chia sẻ token công khai; ChatGPT production dùng OAuth.");
             }
-            catch (Exception ex)
-            {
-                ShowToast(ToastKind.Error, "Bearer Token", ex.Message);
-            }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "Bearer Token", ex.Message); }
         }
 
         private void CopyConfig()
@@ -1234,35 +1133,31 @@ namespace QS3D.BricsCAD.V25
             }
             try
             {
-                Clipboard.SetText("MCP URL: " + url + Environment.NewLine
-                                  + "Authorization: Bearer " + McpEmbeddedServer.GetBearerToken());
+                Clipboard.SetText("MCP URL: " + url + Environment.NewLine + "Authorization: Bearer " + McpEmbeddedServer.GetBearerToken());
                 ShowToast(ToastKind.Warning, "Engineering config", "Đã copy URL + Authorization cho compatibility/debug. Secret không được ghi vào Logs.");
             }
-            catch (Exception ex)
-            {
-                ShowToast(ToastKind.Error, "Engineering config", ex.Message);
-            }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "Engineering config", ex.Message); }
         }
 
-        private void ToggleDesktopConsent()
+        private void ResumeDesktopConsent()
         {
             try
             {
-                if (McpDesktopControlSession.IsEnabled)
-                {
-                    McpDesktopControlSession.DisableFromLocalUser("User tắt desktop control từ Agent Center.");
-                    ShowToast(ToastKind.Warning, "Desktop control", "Đã tắt quyền desktop và emergency-stop mutation epoch.");
-                }
-                else
-                {
-                    McpDesktopControlSession.EnableFromLocalUser();
-                    ShowToast(ToastKind.Success, "Desktop control", "Đã bật quyền desktop cho phiên BricsCAD hiện tại. Esc ×2 để dừng ngay.");
-                }
+                McpDesktopControlSession.ResumeFromLocalUser();
+                ShowToast(ToastKind.Success, "Resume desktop", "Desktop consent ON. Idle timeout 10 phút; Esc ×2 hoặc Pause desktop để dừng ngay.");
             }
-            catch (Exception ex)
+            catch (Exception ex) { ShowToast(ToastKind.Error, "Resume desktop", ex.Message); }
+            RefreshStatus();
+        }
+
+        private void PauseDesktopConsent()
+        {
+            try
             {
-                ShowToast(ToastKind.Error, "Desktop control", ex.Message);
+                McpDesktopControlSession.PauseFromLocalUser("User bấm Pause desktop trong Agent Center.");
+                ShowToast(ToastKind.Warning, "Pause desktop", "Đã PAUSED desktop control và emergency-stop mutation. Kiểm tra drawing/backup trước khi Resume.");
             }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "Pause desktop", ex.Message); }
             RefreshStatus();
         }
 
@@ -1270,7 +1165,7 @@ namespace QS3D.BricsCAD.V25
         {
             try { McpDesktopControlSession.DisableFromLocalUser("User bấm EMERGENCY STOP AGENT trong Agent Center."); } catch { }
             InvokeControlTool("cad_agent_stop", "{}");
-            ShowToast(ToastKind.Warning, "Emergency Stop", "Đã yêu cầu dừng Agent và thu hồi desktop consent.", true);
+            ShowToast(ToastKind.Warning, "Emergency Stop", "Đã dừng Agent và thu hồi desktop consent. Kiểm tra drawing/backup trước khi bật lại.", true);
             RefreshStatus();
         }
 
@@ -1284,8 +1179,7 @@ namespace QS3D.BricsCAD.V25
 
         private void RecoverLatest()
         {
-            string path;
-            string message;
+            string path, message;
             var ok = McpProjectRecoveryService.RecoverLatestToCopy(out path, out message);
             ShowToast(ok ? ToastKind.Success : ToastKind.Warning, "Recovery", message);
             if (ok && !string.IsNullOrWhiteSpace(path))
@@ -1331,12 +1225,11 @@ namespace QS3D.BricsCAD.V25
             {
                 if (Interlocked.CompareExchange(ref _localOperationActive, 1, 0) != 0)
                 {
-                    ShowToast(ToastKind.Warning, "MCP local check", "Một MCP local check khác đang chạy; Emergency Stop/ESC vẫn luôn khả dụng.");
+                    ShowToast(ToastKind.Warning, "MCP local check", "Một MCP local check khác đang chạy; Emergency Stop/ESC vẫn khả dụng.");
                     return;
                 }
                 ownsSlot = true;
             }
-
             McpAgentExperience.ActionStarted("agent", pendingMessage, "Chờ local loopback operation hoàn tất.");
             ShowToast(ToastKind.Info, "MCP local check", pendingMessage);
             ThreadPool.QueueUserWorkItem(_ =>
@@ -1356,7 +1249,6 @@ namespace QS3D.BricsCAD.V25
                 {
                     if (ownsSlot) Interlocked.Exchange(ref _localOperationActive, 0);
                 }
-
                 try
                 {
                     Dispatcher.BeginInvoke(new Action(() =>
@@ -1396,14 +1288,12 @@ namespace QS3D.BricsCAD.V25
                 Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true });
                 ShowToast(ToastKind.Success, title, "Đã mở thư mục.");
             }
-            catch (Exception ex)
-            {
-                ShowToast(ToastKind.Error, title, ex.Message);
-            }
+            catch (Exception ex) { ShowToast(ToastKind.Error, title, ex.Message); }
         }
 
         private void RefreshStatus()
         {
+            McpDesktopControlSession.ExpireConsentIfIdle();
             var publicUrl = McpPublicEndpointResolver.Resolve();
             var mcpRunning = McpEmbeddedServer.IsRunning;
             var namedTunnelRunning = McpCloudflareAccountTunnelManager.IsRunning;
@@ -1412,13 +1302,16 @@ namespace QS3D.BricsCAD.V25
             var cloudflaredInstalled = !string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.CloudflaredPath);
             var authenticated = McpCloudflareAccountTunnelManager.IsAuthenticated;
             var desktopConsent = McpDesktopControlSession.IsEnabled;
+            var desktopState = McpDesktopControlSession.ConsentState;
+            var idleRemaining = McpDesktopControlSession.IdleRemaining;
+            var idleText = desktopConsent ? FormatIdle(idleRemaining) : "—";
             var onboarding = McpAgentExperience.DetermineOnboarding();
 
             _statusChips.Children.Clear();
             _statusChips.Children.Add(CreateStatusChip(mcpRunning ? "MCP online" : "MCP offline", mcpRunning));
             _statusChips.Children.Add(CreateStatusChip(tunnelRunning ? "Tunnel online" : "Tunnel offline", tunnelRunning));
             _statusChips.Children.Add(CreateStatusChip(string.IsNullOrWhiteSpace(publicUrl) ? "Public URL chưa có" : "Public URL sẵn sàng", !string.IsNullOrWhiteSpace(publicUrl)));
-            _statusChips.Children.Add(CreateStatusChip(desktopConsent ? "Desktop ON" : "Desktop OFF", desktopConsent));
+            _statusChips.Children.Add(CreateStatusChip("Desktop " + desktopState, desktopConsent));
 
             _statusRows.Children.Clear();
             _statusRows.Children.Add(CreateStatusRow("MCP embedded", mcpRunning ? "RUNNING" : "STOPPED", mcpRunning ? _palette.Success : _palette.TextMuted));
@@ -1429,50 +1322,49 @@ namespace QS3D.BricsCAD.V25
             _statusRows.Children.Add(CreateStatusRow("Quick Tunnel", quickTunnelRunning ? "RUNNING / test only" : "STOPPED", quickTunnelRunning ? _palette.Warning : _palette.TextMuted));
             _statusRows.Children.Add(CreateStatusRow("Public MCP", string.IsNullOrWhiteSpace(publicUrl) ? "Chưa có public URL" : publicUrl));
             _statusRows.Children.Add(CreateStatusRow("Onboarding", onboarding.Title));
+            _statusRows.Children.Add(CreateStatusRow("Desktop consent", desktopState, desktopConsent ? _palette.Success : _palette.Warning));
+            _statusRows.Children.Add(CreateStatusRow("Idle còn", idleText));
+            _statusRows.Children.Add(CreateStatusRow("Action ID", string.IsNullOrWhiteSpace(McpAgentExperience.LastActionId) ? "—" : McpAgentExperience.LastActionId));
+            _statusRows.Children.Add(CreateStatusRow("Action state", string.IsNullOrWhiteSpace(McpAgentExperience.LastTerminalState)
+                ? "—" : McpAgentExperience.LastTerminalState + " · " + McpAgentExperience.LastDurationMilliseconds + " ms"));
             _statusRows.Children.Add(CreateStatusRow("Agent", McpEmbeddedServer.Describe()));
 
             if (_desktopConsentText != null)
             {
-                _desktopConsentText.Text = desktopConsent
-                    ? "● Desktop control: ON · chỉ phiên local hiện tại"
-                    : "○ Desktop control: OFF · an toàn mặc định";
-                _desktopConsentText.Foreground = desktopConsent ? _palette.Success : _palette.TextMuted;
+                _desktopConsentText.Text = "Desktop control: " + desktopState + (desktopConsent ? " · Idle còn " + idleText : " · local Resume required");
+                _desktopConsentText.Foreground = desktopConsent ? _palette.Success : (desktopState == "EXPIRED" || desktopState == "PAUSED" ? _palette.Warning : _palette.TextMuted);
             }
+            if (_desktopActivityText != null)
+            {
+                _desktopActivityText.Text =
+                    "Đang làm: " + (string.IsNullOrWhiteSpace(McpAgentExperience.CurrentAction) ? "không có desktop action đang chạy" : McpAgentExperience.CurrentAction)
+                    + Environment.NewLine + "Action ID: " + (string.IsNullOrWhiteSpace(McpAgentExperience.LastActionId) ? "—" : McpAgentExperience.LastActionId)
+                    + Environment.NewLine + "Trạng thái cuối: " + (string.IsNullOrWhiteSpace(McpAgentExperience.LastTerminalState) ? "—" : McpAgentExperience.LastTerminalState)
+                    + Environment.NewLine + "Duration: " + McpAgentExperience.LastDurationMilliseconds + " ms"
+                    + Environment.NewLine + "Bước tiếp: " + (string.IsNullOrWhiteSpace(McpAgentExperience.NextStep) ? "theo trạng thái onboarding hiện tại" : McpAgentExperience.NextStep);
+            }
+            if (_selectedTab == 3 && _logsHost != null) RenderActivityHistory();
+        }
+
+        private static string FormatIdle(TimeSpan remaining)
+        {
+            if (remaining <= TimeSpan.Zero) return "0:00";
+            return ((int)remaining.TotalMinutes).ToString() + ":" + remaining.Seconds.ToString("00");
         }
 
         private static ThemePalette CreateLightPalette()
         {
             return new ThemePalette
             {
-                WindowBackground = CreateBrush(0xF4, 0xF7, 0xFB),
-                CardBackground = CreateBrush(0xFF, 0xFF, 0xFF),
-                SubtleBackground = CreateBrush(0xF2, 0xF4, 0xF7),
-                SelectedBackground = CreateBrush(0xEA, 0xF2, 0xFF),
-                Border = CreateBrush(0xDC, 0xE4, 0xEF),
-                StrongBorder = CreateBrush(0xA9, 0xB5, 0xC7),
-                TextPrimary = CreateBrush(0x17, 0x20, 0x33),
-                TextSecondary = CreateBrush(0x4B, 0x57, 0x6B),
-                TextMuted = CreateBrush(0x66, 0x70, 0x85),
-                Accent = CreateBrush(0x25, 0x63, 0xEB),
-                AccentHover = CreateBrush(0x1D, 0x4E, 0xD8),
-                AccentPressed = CreateBrush(0x1E, 0x40, 0xAF),
-                AccentText = CreateBrush(0xFF, 0xFF, 0xFF),
-                Success = CreateBrush(0x15, 0x80, 0x3D),
-                SuccessSoft = CreateBrush(0xE9, 0xF8, 0xEF),
-                SuccessBorder = CreateBrush(0xAB, 0xEF, 0xC6),
-                Warning = CreateBrush(0x9A, 0x67, 0x00),
-                WarningSoft = CreateBrush(0xFF, 0xF8, 0xE1),
-                WarningBorder = CreateBrush(0xF0, 0xC3, 0x6B),
-                Danger = CreateBrush(0xB4, 0x23, 0x18),
-                DangerSoft = CreateBrush(0xFD, 0xEC, 0xEC),
-                DangerHover = CreateBrush(0xB4, 0x23, 0x18),
-                DangerPressed = CreateBrush(0x91, 0x1D, 0x14),
-                DangerBorder = CreateBrush(0xFD, 0xB0, 0xA8),
-                DangerStrongText = CreateBrush(0xFF, 0xFF, 0xFF),
-                DisabledBackground = CreateBrush(0xEA, 0xEC, 0xF0),
-                DisabledForeground = CreateBrush(0x98, 0xA2, 0xB3),
-                DisabledBorder = CreateBrush(0xD0, 0xD5, 0xDD),
-                FocusBorder = CreateBrush(0x15, 0x5E, 0xD8)
+                WindowBackground = CreateBrush(0xF4, 0xF7, 0xFB), CardBackground = CreateBrush(0xFF, 0xFF, 0xFF),
+                SubtleBackground = CreateBrush(0xF2, 0xF4, 0xF7), SelectedBackground = CreateBrush(0xEA, 0xF2, 0xFF),
+                Border = CreateBrush(0xDC, 0xE4, 0xEF), StrongBorder = CreateBrush(0xA9, 0xB5, 0xC7),
+                TextPrimary = CreateBrush(0x17, 0x20, 0x33), TextSecondary = CreateBrush(0x4B, 0x57, 0x6B), TextMuted = CreateBrush(0x66, 0x70, 0x85),
+                Accent = CreateBrush(0x25, 0x63, 0xEB), AccentHover = CreateBrush(0x1D, 0x4E, 0xD8), AccentPressed = CreateBrush(0x1E, 0x40, 0xAF), AccentText = CreateBrush(0xFF, 0xFF, 0xFF),
+                Success = CreateBrush(0x15, 0x80, 0x3D), SuccessSoft = CreateBrush(0xE9, 0xF8, 0xEF), SuccessBorder = CreateBrush(0xAB, 0xEF, 0xC6),
+                Warning = CreateBrush(0x9A, 0x67, 0x00), WarningSoft = CreateBrush(0xFF, 0xF8, 0xE1), WarningBorder = CreateBrush(0xF0, 0xC3, 0x6B),
+                Danger = CreateBrush(0xB4, 0x23, 0x18), DangerSoft = CreateBrush(0xFD, 0xEC, 0xEC), DangerHover = CreateBrush(0xB4, 0x23, 0x18), DangerPressed = CreateBrush(0x91, 0x1D, 0x14), DangerBorder = CreateBrush(0xFD, 0xB0, 0xA8), DangerStrongText = CreateBrush(0xFF, 0xFF, 0xFF),
+                DisabledBackground = CreateBrush(0xEA, 0xEC, 0xF0), DisabledForeground = CreateBrush(0x98, 0xA2, 0xB3), DisabledBorder = CreateBrush(0xD0, 0xD5, 0xDD), FocusBorder = CreateBrush(0x15, 0x5E, 0xD8)
             };
         }
 
@@ -1480,35 +1372,15 @@ namespace QS3D.BricsCAD.V25
         {
             return new ThemePalette
             {
-                WindowBackground = CreateBrush(0x0F, 0x14, 0x1F),
-                CardBackground = CreateBrush(0x18, 0x20, 0x2E),
-                SubtleBackground = CreateBrush(0x22, 0x2C, 0x3B),
-                SelectedBackground = CreateBrush(0x1D, 0x35, 0x5F),
-                Border = CreateBrush(0x34, 0x40, 0x52),
-                StrongBorder = CreateBrush(0x5A, 0x69, 0x7F),
-                TextPrimary = CreateBrush(0xF2, 0xF4, 0xF7),
-                TextSecondary = CreateBrush(0xC1, 0xC9, 0xD6),
-                TextMuted = CreateBrush(0x98, 0xA2, 0xB3),
-                Accent = CreateBrush(0x6E, 0x9C, 0xFF),
-                AccentHover = CreateBrush(0x86, 0xAC, 0xFF),
-                AccentPressed = CreateBrush(0x4F, 0x7D, 0xE8),
-                AccentText = CreateBrush(0x08, 0x12, 0x24),
-                Success = CreateBrush(0x75, 0xE0, 0xA1),
-                SuccessSoft = CreateBrush(0x14, 0x37, 0x28),
-                SuccessBorder = CreateBrush(0x2B, 0x6E, 0x4A),
-                Warning = CreateBrush(0xF6, 0xD3, 0x70),
-                WarningSoft = CreateBrush(0x3C, 0x30, 0x12),
-                WarningBorder = CreateBrush(0x78, 0x61, 0x24),
-                Danger = CreateBrush(0xFF, 0x9D, 0x96),
-                DangerSoft = CreateBrush(0x3B, 0x1E, 0x20),
-                DangerHover = CreateBrush(0xC9, 0x43, 0x3A),
-                DangerPressed = CreateBrush(0x9E, 0x2F, 0x28),
-                DangerBorder = CreateBrush(0x7B, 0x36, 0x37),
-                DangerStrongText = CreateBrush(0xFF, 0xFF, 0xFF),
-                DisabledBackground = CreateBrush(0x20, 0x27, 0x33),
-                DisabledForeground = CreateBrush(0x69, 0x74, 0x86),
-                DisabledBorder = CreateBrush(0x31, 0x3A, 0x49),
-                FocusBorder = CreateBrush(0x8B, 0xB1, 0xFF)
+                WindowBackground = CreateBrush(0x0F, 0x14, 0x1F), CardBackground = CreateBrush(0x18, 0x20, 0x2E),
+                SubtleBackground = CreateBrush(0x22, 0x2C, 0x3B), SelectedBackground = CreateBrush(0x1D, 0x35, 0x5F),
+                Border = CreateBrush(0x34, 0x40, 0x52), StrongBorder = CreateBrush(0x5A, 0x69, 0x7F),
+                TextPrimary = CreateBrush(0xF2, 0xF4, 0xF7), TextSecondary = CreateBrush(0xC1, 0xC9, 0xD6), TextMuted = CreateBrush(0x98, 0xA2, 0xB3),
+                Accent = CreateBrush(0x6E, 0x9C, 0xFF), AccentHover = CreateBrush(0x86, 0xAC, 0xFF), AccentPressed = CreateBrush(0x4F, 0x7D, 0xE8), AccentText = CreateBrush(0x08, 0x12, 0x24),
+                Success = CreateBrush(0x75, 0xE0, 0xA1), SuccessSoft = CreateBrush(0x14, 0x37, 0x28), SuccessBorder = CreateBrush(0x2B, 0x6E, 0x4A),
+                Warning = CreateBrush(0xF6, 0xD3, 0x70), WarningSoft = CreateBrush(0x3C, 0x30, 0x12), WarningBorder = CreateBrush(0x78, 0x61, 0x24),
+                Danger = CreateBrush(0xFF, 0x9D, 0x96), DangerSoft = CreateBrush(0x3B, 0x1E, 0x20), DangerHover = CreateBrush(0xC9, 0x43, 0x3A), DangerPressed = CreateBrush(0x9E, 0x2F, 0x28), DangerBorder = CreateBrush(0x7B, 0x36, 0x37), DangerStrongText = CreateBrush(0xFF, 0xFF, 0xFF),
+                DisabledBackground = CreateBrush(0x20, 0x27, 0x33), DisabledForeground = CreateBrush(0x69, 0x74, 0x86), DisabledBorder = CreateBrush(0x31, 0x3A, 0x49), FocusBorder = CreateBrush(0x8B, 0xB1, 0xFF)
             };
         }
 
