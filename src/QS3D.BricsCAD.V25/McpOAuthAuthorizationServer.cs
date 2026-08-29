@@ -52,7 +52,7 @@ namespace QS3D.BricsCAD.V25
             string signingSecret,
             out McpOAuthHttpResponse response)
         {
-            response = null;
+            response = null!;
             string resource;
             Uri resourceUri;
             if (!ValidatePublicMcpResource(publicMcpUrl, out resource, out resourceUri)) return false;
@@ -189,7 +189,7 @@ namespace QS3D.BricsCAD.V25
             if (!found) return OAuthError(400, "Bad Request", "invalid_client_metadata", "redirect_uris is required");
 
             List<string> redirects;
-            if (!TryParseJsonStringArray(rawRedirects, 4, out redirects, out error) || redirects.Count != 1)
+            if (!TryParseJsonStringArray(rawRedirects, 4, 2048, "redirect_uris", out redirects, out error) || redirects.Count != 1)
                 return OAuthError(400, "Bad Request", "invalid_redirect_uri", string.IsNullOrWhiteSpace(error) ? "exactly one redirect URI is required" : error);
             var redirect = redirects[0];
             if (!IsAllowedChatGptRedirect(redirect))
@@ -200,15 +200,37 @@ namespace QS3D.BricsCAD.V25
                 && !string.Equals(requestedAuthMethod, TokenEndpointAuthMethod, StringComparison.Ordinal))
                 return OAuthError(400, "Bad Request", "invalid_client_metadata", "only public OAuth clients are supported");
 
-            var grantTypes = string.Empty;
             string rawGrantTypes;
             if (!McpTopLevelJson.TryFindPropertyValue(body, "grant_types", out rawGrantTypes, out found, out error))
                 return OAuthError(400, "Bad Request", "invalid_client_metadata", error);
-            if (found) grantTypes = rawGrantTypes;
-            if (grantTypes.Length != 0
-                && (grantTypes.IndexOf(AuthorizationCodeGrant, StringComparison.Ordinal) < 0
-                    || grantTypes.IndexOf(RefreshTokenGrant, StringComparison.Ordinal) < 0))
-                return OAuthError(400, "Bad Request", "invalid_client_metadata", "authorization_code and refresh_token grants are required");
+            if (found)
+            {
+                List<string> grantTypes;
+                if (!TryParseJsonStringArray(rawGrantTypes, 4, 64, "grant_types", out grantTypes, out error))
+                    return OAuthError(400, "Bad Request", "invalid_client_metadata", error);
+                if (grantTypes.Count == 0 || !ContainsOrdinal(grantTypes, AuthorizationCodeGrant))
+                    return OAuthError(400, "Bad Request", "invalid_client_metadata", "grant_types must include authorization_code");
+                foreach (var grantType in grantTypes)
+                {
+                    if (!string.Equals(grantType, AuthorizationCodeGrant, StringComparison.Ordinal)
+                        && !string.Equals(grantType, RefreshTokenGrant, StringComparison.Ordinal))
+                        return OAuthError(400, "Bad Request", "invalid_client_metadata", "grant_types contains an unsupported grant");
+                }
+                if (HasDuplicateOrdinal(grantTypes))
+                    return OAuthError(400, "Bad Request", "invalid_client_metadata", "grant_types contains duplicate values");
+            }
+
+            string rawResponseTypes;
+            if (!McpTopLevelJson.TryFindPropertyValue(body, "response_types", out rawResponseTypes, out found, out error))
+                return OAuthError(400, "Bad Request", "invalid_client_metadata", error);
+            if (found)
+            {
+                List<string> responseTypes;
+                if (!TryParseJsonStringArray(rawResponseTypes, 4, 64, "response_types", out responseTypes, out error))
+                    return OAuthError(400, "Bad Request", "invalid_client_metadata", error);
+                if (responseTypes.Count != 1 || !string.Equals(responseTypes[0], "code", StringComparison.Ordinal))
+                    return OAuthError(400, "Bad Request", "invalid_client_metadata", "response_types must contain only code");
+            }
 
             var expires = UnixNow() + (long)ClientRegistrationLifetime.TotalSeconds;
             var clientId = CreateSignedToken(
@@ -400,7 +422,7 @@ namespace QS3D.BricsCAD.V25
             return response;
         }
 
-        private static bool IsValidClient(string clientId, string resource, string signingSecret, string expectedRedirect)
+        private static bool IsValidClient(string clientId, string resource, string signingSecret, string? expectedRedirect)
         {
             string[] fields;
             long ignored;
@@ -437,7 +459,7 @@ namespace QS3D.BricsCAD.V25
         internal static bool ValidatePublicMcpResource(string value, out string canonical, out Uri uri)
         {
             canonical = string.Empty;
-            uri = null;
+            uri = null!;
             Uri parsed;
             if (string.IsNullOrWhiteSpace(value) || !Uri.TryCreate(value.Trim(), UriKind.Absolute, out parsed)) return false;
             if (!string.Equals(parsed.Scheme, "https", StringComparison.OrdinalIgnoreCase)
@@ -562,14 +584,20 @@ namespace QS3D.BricsCAD.V25
             return -1;
         }
 
-        private static bool TryParseJsonStringArray(string raw, int maxItems, out List<string> values, out string error)
+        private static bool TryParseJsonStringArray(
+            string raw,
+            int maxItems,
+            int maxItemLength,
+            string fieldName,
+            out List<string> values,
+            out string error)
         {
             values = new List<string>();
             error = string.Empty;
             raw = (raw ?? string.Empty).Trim();
             if (raw.Length < 2 || raw[0] != '[' || raw[raw.Length - 1] != ']')
             {
-                error = "redirect_uris must be a JSON string array";
+                error = fieldName + " must be a JSON string array";
                 return false;
             }
             var index = 1;
@@ -580,32 +608,60 @@ namespace QS3D.BricsCAD.V25
                 string value;
                 if (!TryReadJsonString(raw, ref index, out value))
                 {
-                    error = "redirect_uris contains an invalid string";
+                    error = fieldName + " contains an invalid string";
                     return false;
                 }
-                if (value.Length > 2048 || ++maxItems < 0) { }
+                if (value.Length > maxItemLength)
+                {
+                    error = fieldName + " value exceeds length bound";
+                    return false;
+                }
                 values.Add(value);
                 if (values.Count > maxItems)
                 {
-                    error = "redirect_uris contains too many entries";
+                    error = fieldName + " contains too many entries";
                     return false;
                 }
                 SkipJsonWhitespace(raw, ref index);
-                if (index >= raw.Length) return false;
-                if (raw[index] == ']') return index == raw.Length - 1;
+                if (index >= raw.Length)
+                {
+                    error = fieldName + " array is incomplete";
+                    return false;
+                }
+                if (raw[index] == ']')
+                {
+                    if (index == raw.Length - 1) return true;
+                    error = fieldName + " has trailing content";
+                    return false;
+                }
                 if (raw[index] != ',')
                 {
-                    error = "redirect_uris requires commas between strings";
+                    error = fieldName + " requires commas between strings";
                     return false;
                 }
                 index++;
                 SkipJsonWhitespace(raw, ref index);
                 if (index >= raw.Length - 1)
                 {
-                    error = "redirect_uris cannot end with a trailing comma";
+                    error = fieldName + " cannot end with a trailing comma";
                     return false;
                 }
             }
+        }
+
+        private static bool ContainsOrdinal(IList<string> values, string expected)
+        {
+            foreach (var value in values)
+                if (string.Equals(value, expected, StringComparison.Ordinal)) return true;
+            return false;
+        }
+
+        private static bool HasDuplicateOrdinal(IList<string> values)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var value in values)
+                if (!seen.Add(value)) return true;
+            return false;
         }
 
         private static bool TryReadJsonString(string raw, ref int index, out string value)
