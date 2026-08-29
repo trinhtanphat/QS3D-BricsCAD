@@ -48,8 +48,8 @@ namespace QS3D.Core.SmokeTests
             "\"units\":{\"length\":\"m\",\"area\":\"m2\",\"volume\":\"m3\",\"mass\":\"kg\"}," +
             "\"project\":{\"id\":\"P\",\"name\":\"N\",\"schemaVersion\":1,\"drawingFingerprint\":\"\",\"updatedUtc\":\"2026-08-10T11:00:00.0000000Z\"}," +
             "\"zones\":[],\"floors\":[]," +
-            "\"families\":[{\"id\":\"F1\",\"name\":\"Fam\",\"category\":\"Wall\",\"properties\":{\"Mark\":\"F1\"}}]," +
-            "\"elements\":[{\"id\":\"E1\",\"category\":\"Wall\",\"familyId\":\"F1\",\"floorId\":\"\",\"zoneId\":\"\",\"drawingFingerprint\":\"\",\"updatedUtc\":\"2026-08-10T11:00:00.0000000Z\",\"sourceRefScope\":\"drawing-local\",\"sourceHandles\":[],\"dependencies\":[],\"properties\":{\"Tag\":\"E1\"},\"quantities\":{\"LengthM\":1.0}}]}";
+            "\"families\":[{\"id\":\"F1\",\"name\":\"Fam\",\"category\":\"StructuralWall\",\"properties\":{\"Mark\":\"F1\"}}]," +
+            "\"elements\":[{\"id\":\"E1\",\"category\":\"StructuralWall\",\"familyId\":\"F1\",\"floorId\":\"\",\"zoneId\":\"\",\"drawingFingerprint\":\"\",\"updatedUtc\":\"2026-08-10T11:00:00.0000000Z\",\"sourceRefScope\":\"drawing-local\",\"sourceHandles\":[],\"dependencies\":[],\"properties\":{\"Tag\":\"E1\"},\"quantities\":{\"LengthM\":1.0}}]}";
 
         private static void RequireDuplicate(ProjectInterchangeValidationResult result, string expectedPath)
         {
