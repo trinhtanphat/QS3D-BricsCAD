@@ -26,6 +26,7 @@ namespace QS3D.BricsCAD.V25
         private static readonly object Sync = new object();
         private static readonly LowLevelKeyboardProc KeyboardCallback = KeyboardHookCallback;
         private static bool _enabled;
+        private static long _consentGeneration;
         private static IntPtr _keyboardHook;
         private static DateTime _lastPhysicalEscapeUtc = DateTime.MinValue;
         private static int _activeScopes;
@@ -42,6 +43,7 @@ namespace QS3D.BricsCAD.V25
             {
                 if (_enabled) return;
                 _enabled = true;
+                unchecked { _consentGeneration++; }
                 _lastPhysicalEscapeUtc = DateTime.MinValue;
             }
 
@@ -58,7 +60,11 @@ namespace QS3D.BricsCAD.V25
                 }
                 catch (Exception ex)
                 {
-                    lock (Sync) _enabled = false;
+                    lock (Sync)
+                    {
+                        _enabled = false;
+                        unchecked { _consentGeneration++; }
+                    }
                     ReleaseKeyboardHook();
                     throw new InvalidOperationException("Không resume được MCP Agent khi bật quyền desktop: " + ex.Message, ex);
                 }
@@ -90,10 +96,12 @@ namespace QS3D.BricsCAD.V25
         {
             RequireLocalConsent(tool);
             var safeTool = string.IsNullOrWhiteSpace(tool) ? "desktop action" : tool.Trim();
+            long consentGeneration;
             lock (Sync)
             {
                 if (!_enabled)
                     throw new InvalidOperationException("Local desktop-control consent was disabled before the action started.");
+                consentGeneration = _consentGeneration;
                 _activeScopes++;
                 _activeTool = safeTool;
             }
@@ -103,7 +111,7 @@ namespace QS3D.BricsCAD.V25
                 "MCP đang thao tác desktop: " + safeTool,
                 "Esc 2 lần trong 1.2 giây để Emergency Stop.");
             ShowOverlay(safeTool);
-            return new GuardedActionScope(safeTool);
+            return new GuardedActionScope(safeTool, consentGeneration, IsSensitiveReadTool(safeTool));
         }
 
         public static void Shutdown()
@@ -111,6 +119,12 @@ namespace QS3D.BricsCAD.V25
             StopSession("BricsCAD/QS3D đang đóng; desktop consent đã được xóa khỏi bộ nhớ.", false, false);
             ReleaseKeyboardHook();
             HideOverlay();
+        }
+
+        private static bool IsSensitiveReadTool(string tool)
+        {
+            return string.Equals(tool, "desktop_clipboard_read", StringComparison.Ordinal)
+                   || string.Equals(tool, "desktop_screenshot", StringComparison.Ordinal);
         }
 
         private static void CompleteGuardedAction(string tool)
@@ -139,6 +153,7 @@ namespace QS3D.BricsCAD.V25
             {
                 wasEnabled = _enabled;
                 _enabled = false;
+                unchecked { _consentGeneration++; }
                 _activeScopes = 0;
                 _activeTool = string.Empty;
                 _lastPhysicalEscapeUtc = DateTime.MinValue;
@@ -196,6 +211,7 @@ namespace QS3D.BricsCAD.V25
                 if (_keyboardHook == IntPtr.Zero)
                 {
                     _enabled = false;
+                    unchecked { _consentGeneration++; }
                     throw new InvalidOperationException(
                         "Windows không cho QS3D cài keyboard emergency hook; desktop control không được bật để tránh mất nút dừng Esc×2.");
                 }
@@ -236,6 +252,7 @@ namespace QS3D.BricsCAD.V25
                                 _lastPhysicalEscapeUtc = DateTime.MinValue;
                                 // Fail closed immediately inside the hook before any async UI work.
                                 _enabled = false;
+                                unchecked { _consentGeneration++; }
                                 _activeScopes = 0;
                                 _activeTool = string.Empty;
                             }
@@ -321,14 +338,34 @@ namespace QS3D.BricsCAD.V25
         private sealed class GuardedActionScope : IDisposable
         {
             private readonly string _tool;
+            private readonly long _consentGenerationAtStart;
+            private readonly bool _failClosedOnConsentChange;
             private int _disposed;
 
-            public GuardedActionScope(string tool) { _tool = tool ?? string.Empty; }
+            public GuardedActionScope(string tool, long consentGenerationAtStart, bool failClosedOnConsentChange)
+            {
+                _tool = tool ?? string.Empty;
+                _consentGenerationAtStart = consentGenerationAtStart;
+                _failClosedOnConsentChange = failClosedOnConsentChange;
+            }
 
             public void Dispose()
             {
                 if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+                var consentRevoked = false;
+                if (_failClosedOnConsentChange)
+                {
+                    lock (Sync)
+                    {
+                        consentRevoked = !_enabled || _consentGeneration != _consentGenerationAtStart;
+                    }
+                }
+
                 CompleteGuardedAction(_tool);
+                if (consentRevoked)
+                    throw new InvalidOperationException(
+                        "Local desktop-control consent changed while the sensitive read was in progress; payload was discarded.");
             }
         }
 
@@ -352,7 +389,7 @@ namespace QS3D.BricsCAD.V25
         private static extern bool UnhookWindowsHookEx(IntPtr hook);
 
         [DllImport("user32.dll")]
-        private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
+        private static extern IntPtr CallNextHookEx(IntPtr.Zero.GetType(), int code, IntPtr wParam, IntPtr lParam);
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern IntPtr GetModuleHandle(string moduleName);
