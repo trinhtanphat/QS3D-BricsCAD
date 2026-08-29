@@ -78,7 +78,7 @@ def main():
         'Evidence(sb, Cell(5, excelRow), row.WidthM, row.HasWidthMEvidence);',
         'Evidence(sb, Cell(6, excelRow), row.HeightM, row.HasHeightMEvidence);',
         'Evidence(sb, Cell(10, excelRow), row.NetFormworkM2, row.HasNetFormworkM2Evidence);',
-        '<sheet name=\\\"TRACE_MODEL\\\" sheetId=\\\"4\\\" state=\\\"hidden\\\"',
+        '<sheet name=\\"TRACE_MODEL\\" sheetId=\\"4\\" state=\\"hidden\\"',
     ]
     missing = [token for token in exporter_required if token not in exporter]
     if missing:
