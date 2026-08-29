@@ -258,6 +258,14 @@ namespace QS3D.BricsCAD.V25
                    || string.Equals(name, "MCP-Protocol-Version", StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsJsonContentType(string contentType)
+        {
+            if (string.IsNullOrWhiteSpace(contentType)) return false;
+            var separator = contentType.IndexOf(';');
+            var mediaType = (separator < 0 ? contentType : contentType.Substring(0, separator)).Trim();
+            return string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static void HandleRequest(NetworkStream stream, HttpRequest request)
         {
             if (request.Method == "GET" && string.Equals(request.Path, "/healthz", StringComparison.OrdinalIgnoreCase))
@@ -308,7 +316,7 @@ namespace QS3D.BricsCAD.V25
 
             string contentType;
             if (!request.Headers.TryGetValue("Content-Type", out contentType)
-                || !contentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase))
+                || !IsJsonContentType(contentType))
             {
                 WriteResponse(stream, 415, "Unsupported Media Type", "{\"error\":\"Content-Type application/json is required\"}", null);
                 return;
