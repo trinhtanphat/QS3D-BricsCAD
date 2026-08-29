@@ -18,7 +18,7 @@ namespace QS3D.BricsCAD.V25
 
         public static string CallOne(Uri endpoint, int timeoutMilliseconds, string tool, string argumentsJson)
         {
-            string session = null;
+            string? session = null;
             try
             {
                 session = Initialize(endpoint, timeoutMilliseconds);
@@ -36,7 +36,7 @@ namespace QS3D.BricsCAD.V25
 
         public static string RunReadOnlySelfTest(Uri endpoint, int timeoutMilliseconds)
         {
-            string session = null;
+            string? session = null;
             try
             {
                 session = Initialize(endpoint, timeoutMilliseconds);
@@ -102,7 +102,7 @@ namespace QS3D.BricsCAD.V25
             RequireSuccess(result, "initialize");
             if (string.IsNullOrWhiteSpace(result.SessionId))
                 throw new InvalidOperationException("initialize không trả Mcp-Session-Id.");
-            return result.SessionId;
+            return result.SessionId!;
         }
 
         private static void NotifyInitialized(Uri endpoint, int timeoutMilliseconds, string session)
@@ -154,7 +154,7 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException(operation + " returned JSON-RPC error.");
         }
 
-        private static LocalHttpResult Send(Uri endpoint, string method, string body, int timeoutMilliseconds, string session)
+        private static LocalHttpResult Send(Uri endpoint, string method, string body, int timeoutMilliseconds, string? session)
         {
 #pragma warning disable SYSLIB0014
             var request = (HttpWebRequest)WebRequest.Create(endpoint);
@@ -209,7 +209,7 @@ namespace QS3D.BricsCAD.V25
 
         private sealed class LocalHttpResult
         {
-            public LocalHttpResult(int statusCode, string sessionId, string body)
+            public LocalHttpResult(int statusCode, string? sessionId, string body)
             {
                 StatusCode = statusCode;
                 SessionId = sessionId;
@@ -217,7 +217,7 @@ namespace QS3D.BricsCAD.V25
             }
 
             public int StatusCode { get; private set; }
-            public string SessionId { get; private set; }
+            public string? SessionId { get; private set; }
             public string Body { get; private set; }
         }
     }
