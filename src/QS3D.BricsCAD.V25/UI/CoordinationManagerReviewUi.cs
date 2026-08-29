@@ -570,7 +570,8 @@ namespace QS3D.BricsCAD.V25.UI
                 catch
                 {
                     RestoreImpliedSelectionBestEffort(impliedSelectionBefore);
-                    TryRestoreObjectIsolationModeBestEffort(modeBefore);
+                    if (!TryRestoreObjectIsolationModeBestEffort(modeBefore))
+                        _objectIsolationModeBefore = modeBefore;
                     throw;
                 }
 
