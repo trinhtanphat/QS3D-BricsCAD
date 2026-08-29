@@ -8,7 +8,7 @@
 **Merged OAuth source head:** `3f4cc36448b81dba15da741138807fe59793aa60`  
 **End-user model:** one QS3D install, click/browser-login setup, no PowerShell/CMD/Node/second MCP repository.
 
-> **MCP AGENTS MUST START HERE.** The architecture established by #4352 remains the parent product contract. OAuth/DCR onboarding added by #4584/#4597 is the canonical ChatGPT authentication path. #4629 extends that same embedded runtime with bounded Windows desktop tools, local desktop consent, visible emergency controls, guided onboarding and versioned recovery. The owner selected the explicit-tool **Completion Pack (Approach A)** for #4629; generic batch/macro desktop automation (**Approach B**) is deferred and must not be silently added to this carrier. Do not reconstruct the product from stale bearer-only docs or the historical second MCP repository.
+> **MCP AGENTS MUST START HERE.** The architecture established by #4352 remains the parent product contract. OAuth/DCR onboarding added by #4584/#4597 is the canonical ChatGPT authentication path. #4629 extends that same embedded runtime with bounded Windows desktop tools, local desktop consent, visible emergency controls, guided onboarding and versioned recovery. The owner approved the explicit-tool **Completion Pack (Approach A)** first and then approved the bounded single-target **Completion Pack (Approach B)** on the same canonical carrier. Approach B is exactly one `desktop_sequence` tool; there is no `desktop_macro` alias and no arbitrary shell/process/script surface. Do not reconstruct the product from stale bearer-only docs or the historical second MCP repository.
 
 ## 1. Canonical architecture
 
@@ -29,7 +29,9 @@ ChatGPT Web / custom MCP
        +-- direct BricsCAD API
        +-- bounded native command workflows
        +-- BricsCAD-process UI fallback
-       +-- McpDesktopAutomationRuntime (explicit desktop_* only)
+       +-- McpDesktopAutomationRuntime
+            +-- explicit desktop_* primitives
+            +-- bounded single-target desktop_sequence
   -> local desktop-consent / idle expiry / blue overlay / Esc×2 stop boundary
 ```
 
@@ -45,7 +47,7 @@ Inspect these first:
 2. `src/QS3D.BricsCAD.V25/McpOAuthAuthorizationServer.cs` — protected-resource/authorization-server discovery, DCR, authorization code, PKCE S256, access/refresh credentials, optional `offline_access`, refresh rotation/replay protection and resource binding.
 3. `src/QS3D.BricsCAD.V25/McpOAuthConsent.cs` — bounded local BricsCAD approve/deny prompt for OAuth authorization.
 4. `src/QS3D.BricsCAD.V25/McpCadAgentRuntime.cs` — direct CAD operations, bounded command dispatch, BricsCAD-process UI fallback, canonical mutation epoch/emergency recovery and audit.
-5. `src/QS3D.BricsCAD.V25/McpDesktopAutomationRuntime.cs` — explicit bounded `desktop_*` observation/input/clipboard/screenshot tools for the current interactive Windows session.
+5. `src/QS3D.BricsCAD.V25/McpDesktopAutomationRuntime.cs` — explicit bounded `desktop_*` observation/input/clipboard/screenshot primitives plus the bounded single-target `desktop_sequence` executor for the current interactive Windows session.
 6. `src/QS3D.BricsCAD.V25/McpDesktopControlSession.cs` — non-persistent local desktop consent, idle expiry, pause/resume state, blue active-control overlay and physical Esc×2 emergency stop.
 7. `src/QS3D.BricsCAD.V25/McpTopLevelJson.cs` — security-sensitive top-level JSON parsing and mutation confirmation.
 8. `src/QS3D.BricsCAD.V25/McpAgentControlCenter.cs` — guided four-tab `QS3DMCPAGENTCENTER` UX.
@@ -133,9 +135,9 @@ The active transport must continue to preserve:
 
 The `cad_entity_transform` schema must remain valid JSON and preserve its required boolean `confirmMutation` contract.
 
-### Desktop-wide tools — Approach A selected
+### Desktop-wide tools — Approach A implemented
 
-The explicit desktop namespace for #4629 is:
+The explicit desktop namespace for #4629 includes 14 Approach-A primitives:
 
 - read-only observation/wait: `desktop_cursor_position`, `desktop_window_list`, `desktop_foreground_window`, `desktop_wait_for_window`;
 - mutation/input: `desktop_window_focus`, `desktop_mouse_move`, `desktop_mouse_click`, `desktop_mouse_scroll`, `desktop_mouse_drag`, `desktop_type`, `desktop_key`, `desktop_clipboard_write`;
@@ -155,11 +157,37 @@ Desktop targeting is limited to visible top-level windows in the current interac
 
 Local desktop events may contain a bounded `actionId`, timestamps/duration and success/failure/cancelled state. They must not contain typed/clipboard/screenshot/token/DWG content.
 
-### Approach B — deferred desktop batch/macro
+### Approach B — selected bounded `desktop_sequence`
 
-A future `desktop_sequence` / `desktop_macro` style primitive may be considered only after Approach A is locally qualified. It is **not part of #4629 / PR #4632**, must not appear in the current `tools/list`, and must not be implemented opportunistically by another agent.
+Approach B adds the 15th canonical desktop tool, **`desktop_sequence`**. It batches only a narrow allowlist of the existing desktop primitives and remains inside the same `McpCadAgentRuntime.Mutation(...)`, local-consent, blue-overlay, audit and Esc×2 boundaries.
 
-Any future batch design needs its own reservation/design and must preserve per-step exact-window validation, bounded sequence length/time, local consent, Esc×2 cancellation, mutation-epoch checks and per-step audit. It must never become arbitrary shell/process/script execution.
+Sequence invariants:
+
+- one exact visible current-session `windowHandle` per sequence; no target switching inside the sequence;
+- maximum 12 steps and maximum 30 seconds total runtime;
+- optional per-step delay is 0–2000 ms and is split into short cancellation-check slices;
+- fail-fast on the first error; there is no `continueOnError`;
+- no recursion/nested `desktop_sequence` and no `desktop_macro` alias;
+- no atomic rollback: completed UI steps remain completed when a later step fails, and the result/error reports completed-step count/duration;
+- `stepsJson` is a bounded string containing a JSON array of flat `{tool, arguments, delayAfterMs}` records; each `arguments` value is a bounded flat JSON-object string;
+- step arguments may not provide `windowHandle`, `confirmMutation` or `confirmSensitiveRead`; the executor owns those values;
+- allowed sequence primitives are target focus, mouse move/click/scroll/drag, Unicode type, named key/hotkey, clipboard write, wait-for-the-same-target and target-window screenshot;
+- `desktop_clipboard_read`, observation/list tools, CAD/QS3D/plugin dispatch, filesystem, shell/process/script/eval and nested sequence are not allowed inside the sequence;
+- sequence screenshot is forced to the bound target window, at most one screenshot is returned per sequence, and the outer call must explicitly set `confirmSensitiveRead=true` before step 1 executes;
+- Esc×2, Pause, consent revocation, mutation-epoch change, invalid/hidden target or total-duration expiry aborts before the next input/delay segment;
+- sequence audit records bounded step index/tool/status/completed-count/duration only, never typed text, clipboard text or screenshot pixels.
+
+Example payload shape (the inner `arguments` values are JSON strings because top-level MCP arguments remain flat):
+
+```json
+{
+  "windowHandle": "1A02BC",
+  "stepsJson": "[{\"tool\":\"desktop_mouse_click\",\"arguments\":\"{\\\"x\\\":500,\\\"y\\\":300,\\\"button\\\":\\\"left\\\"}\",\"delayAfterMs\":100},{\"tool\":\"desktop_key\",\"arguments\":\"{\\\"key\\\":\\\"TAB\\\"}\"}]",
+  "confirmMutation": true
+}
+```
+
+When the workflow needs another dialog/application handle, ChatGPT must perform normal observation/wait against that new window and submit a new sequence. Do not broaden one sequence into cross-window generic scripting.
 
 ## 6. Agent decision model
 
@@ -167,7 +195,7 @@ Decision order is **direct CAD API first → bounded allowlisted native command 
 
 Representative inspection tools include `connector_info`, `qs3d_status`, `cad_active_document`, `cad_selection`, `cad_database_snapshot`, `cad_entity_inspect`, `cad_view_state`, `cad_wait_idle`, `cad_sysvar`, `cad_command_catalog`, `cad_audit_tail`, desktop window observation and bounded `desktop_wait_for_window`.
 
-Representative direct mutations include line/circle/arc/polyline/text/MText creation, `cad_entity_transform`, delete/layer operations and `qs3d_run_command`. Complex native workflows use `cad_command_sequence`. BricsCAD UI fallback stays confined to BricsCAD-owned windows. Cross-application workflows may use explicit desktop focus/move/click/scroll/drag/type/key/clipboard tools under the local-consent boundary. `cad_agent_stop`, `cad_cancel_command`, and confirmed `cad_agent_resume` preserve recovery.
+Representative direct mutations include line/circle/arc/polyline/text/MText creation, `cad_entity_transform`, delete/layer operations and `qs3d_run_command`. Complex native workflows use `cad_command_sequence`. BricsCAD UI fallback stays confined to BricsCAD-owned windows. Cross-application workflows may use explicit desktop focus/move/click/scroll/drag/type/key/clipboard tools under the local-consent boundary. `desktop_sequence` is appropriate only when several deterministic UI steps can remain bound to one exact window; use explicit observation between sequences whenever state/target may have changed. `cad_agent_stop`, `cad_cancel_command`, and confirmed `cad_agent_resume` preserve recovery.
 
 A successful tool call is not proof the drawing or external application state is correct. Re-inspect state before consequential follow-up actions and before final save/plot.
 
@@ -201,7 +229,7 @@ For the current MCP surface, run/inspect at minimum:
 - `scripts/preflight-mcp-loopback-readonly.py`
 - deterministic Core smoke and trusted V25/V26 compilation where selected by repository CI.
 
-The desktop source guards must cover the selected Approach A contracts, including exact-target drag behavior, bounded wait/crop, idle expiry/local-only resume and sensitive timeline redaction. Hosted/source evidence does not replace licensed runtime qualification.
+Desktop source guards must cover both owner-selected completion phases: Approach A exact-target drag/wait/crop, idle expiry/local-only resume and sensitive timeline redaction; Approach B single-target sequence allowlist, hard step/time/delay caps, no nested/macro/shell surface, screenshot pre-confirmation, per-step cancellation checks and partial-execution reporting. Hosted/source evidence does not replace licensed runtime qualification.
 
 ## 9. LOCAL-024 — required runtime qualification
 
@@ -215,28 +243,31 @@ The local matrix must cover:
 4. protected-resource and authorization-server discovery;
 5. ChatGPT DCR using only basic URL + OAuth setup;
 6. deny then approve local OAuth consent;
-7. PKCE S256 token exchange and `tools/list`, including the complete Approach A `desktop_*` catalog and absence of deferred `desktop_sequence`/macro tools;
+7. PKCE S256 token exchange and `tools/list`, including all 14 explicit Approach-A desktop primitives plus `desktop_sequence`, with no `desktop_macro` alias;
 8. representative read-only CAD calls plus desktop cursor/window observation;
 9. bounded `desktop_wait_for_window` success + timeout behavior;
 10. local desktop-consent OFF rejection and local enable behavior;
 11. 10-minute idle expiry plus local Pause/Resume behavior and remaining-time UI;
-12. blue overlay while guarded desktop input/sensitive reads run;
+12. blue overlay while guarded desktop input/sensitive reads/sequence run;
 13. `desktop_clipboard_read` and `desktop_screenshot` rejection without acknowledgement, then bounded success on disposable content;
 14. screenshot crop validation and bounded output;
 15. confirmed disposable window/mouse/type/key/clipboard-write behavior;
 16. exact-target `desktop_mouse_drag` plus mid-drag Esc×2/fail-closed behavior on disposable UI;
 17. local action timeline IDs/duration/terminal state with no sensitive payload persistence;
-18. physical Esc×2 emergency stop, CAD cancel and required local re-enable;
-19. one-use auth-code replay rejection;
-20. no-refresh behavior without `offline_access`;
-21. refresh issuance with `offline_access`, rotation and old-token replay rejection;
-22. scope/resource mismatch rejection;
-23. BricsCAD restart invalidating process-bound refresh credentials and local desktop consent;
-24. legacy engineering-bearer compatibility;
-25. Quick Tunnel URL invalidation and persistent Named Tunnel reconnect/autostart;
-26. autosave/BAK policy, versioned snapshot retention and recovery-to-new-copy on a disposable drawing;
-27. one confirmed disposable-DWG mutation plus audit/emergency-stop/cancel;
-28. save/reopen and clean process shutdown.
+18. `desktop_sequence` success on a disposable single-window workflow with <=12 steps and bounded delays;
+19. `desktop_sequence` rejection of target switching, nested sequence, clipboard read, unauthorized screenshot and oversized/overlong sequences;
+20. mid-sequence Esc×2/Pause/target-loss cancellation with explicit partial-completion reporting and no implicit rollback;
+21. physical Esc×2 emergency stop, CAD cancel and required local re-enable;
+22. one-use auth-code replay rejection;
+23. no-refresh behavior without `offline_access`;
+24. refresh issuance with `offline_access`, rotation and old-token replay rejection;
+25. scope/resource mismatch rejection;
+26. BricsCAD restart invalidating process-bound refresh credentials and local desktop consent;
+27. legacy engineering-bearer compatibility;
+28. Quick Tunnel URL invalidation and persistent Named Tunnel reconnect/autostart;
+29. autosave/BAK policy, versioned snapshot retention and recovery-to-new-copy on a disposable drawing;
+30. one confirmed disposable-DWG mutation plus audit/emergency-stop/cancel;
+31. save/reopen and clean process shutdown.
 
 Never commit access/refresh tokens, static bearer secrets, Cloudflare credentials, private paths/DWGs, clipboard contents, typed secrets, proprietary BricsCAD binaries or unsanitized screenshots.
 
@@ -250,13 +281,13 @@ For future MCP work:
 4. edit active V2/OAuth/runtime source, not the legacy monolith;
 5. preserve one repo/runtime, click-first setup, system/provider-browser identity ownership, OAuth basic-screen onboarding and API-first CAD control;
 6. preserve local desktop consent + idle expiry + visible active-control + Esc×2 emergency boundaries for desktop-wide automation;
-7. implement the owner-selected Approach A completion pack on #4629; keep Approach B batch/macro deferred unless a later owner request explicitly opens a new design/reservation;
+7. preserve both owner-approved completion phases on #4629: Approach A explicit primitives and Approach B bounded single-target `desktop_sequence`; do not add a `desktop_macro` alias or broaden sequence into arbitrary scripting;
 8. do not open a competing MCP carrier for the same scope;
 9. update `docs/CHATGPT-MCP-INTEGRATION.md`, `docs/MCP-FULL-CAD-AGENT.md`, `docs/MCP-GUIDED-ONBOARDING-RECOVERY.md` and the single LOCAL-024 handoff when behavior changes;
 10. never promote hosted CI to `LOCAL_PASS`.
 
 ## 11. Definition of done
 
-Source integration for OAuth (#4584/#4597) is already merged. Source integration for #4629 is complete only after the selected Approach A completion pack is implemented, its source contracts are satisfied, and its canonical protected PR lands in `main` with current required checks satisfied.
+Source integration for OAuth (#4584/#4597) is already merged. Source integration for #4629 is complete only after both owner-approved completion phases are implemented, their source contracts are satisfied, and the canonical protected PR lands in `main` with current required checks satisfied.
 
 Full runtime completion is separate: the exact intended merged/release descendant must pass LOCAL-024 with real BricsCAD V25/V26 + Cloudflare + ChatGPT + Windows desktop behavior, sanitized evidence must be recorded, and the runtime item can then move from `PENDING_LOCAL` to completed.
