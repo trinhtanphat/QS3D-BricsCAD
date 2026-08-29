@@ -38,7 +38,7 @@ catch = re.search(r"catch\s*\{(?P<catch>.*?)\n\s*\}", body, re.S)
 if not catch:
     raise SystemExit("FAIL coordination isolate launch rollback: rollback catch block missing")
 catch_body = catch.group("catch")
-if "RestoreObjectIsolationModeBestEffort(modeBefore)" not in catch_body:
+if "TryRestoreObjectIsolationModeBestEffort(modeBefore)" not in catch_body:
     raise SystemExit("FAIL coordination isolate launch rollback: synchronous failure does not restore attempt-local OBJECTISOLATIONMODE")
 if "throw;" not in catch_body:
     raise SystemExit("FAIL coordination isolate launch rollback: original launch failure must be rethrown after compensation")
@@ -51,7 +51,7 @@ if send_index < 0 or mode_publish < 0 or active_publish < 0:
 if mode_publish < send_index or active_publish < send_index:
     raise SystemExit("FAIL coordination isolate launch rollback: persistent isolation ownership is published before native command queueing succeeds")
 
-if not re.search(r"private void RestoreObjectIsolationModeBestEffort\(object\? modeBefore\)", text):
+if not re.search(r"private bool TryRestoreObjectIsolationModeBestEffort\(object\? modeBefore\)", text):
     raise SystemExit("FAIL coordination isolate launch rollback: compensation helper must accept attempt-local mode without publishing session ownership")
 
 print("PASS coordination review isolate synchronous launch rollback atomicity")
