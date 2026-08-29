@@ -66,7 +66,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void NullRowValidationRemainsInsideAdmittedCount()
         {
-            var source = new FixedCountRows(1, null!);
+            var source = new FixedCountRows(1, new MepTbqReportRow[] { null! });
             Throws<ArgumentException>(
                 () => new MepTbqProjectionService().SerializeCsv(source),
                 "MEP/TBQ CSV null row validation");
