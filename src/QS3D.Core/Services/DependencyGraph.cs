@@ -156,7 +156,8 @@ namespace QS3D.Core.Services
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
             var knownCount = RejectKnownOversizedInput(elements, "Dependency ordering", out var knownCountSources);
-            var materialized = new List<OrderingSnapshot>();
+            var materialized = new List<ProjectElement>();
+            var snapshots = new List<OrderingSnapshot>();
             using (var enumerator = elements.GetEnumerator())
             {
                 while (enumerator.MoveNext())
@@ -166,18 +167,20 @@ namespace QS3D.Core.Services
                         throw new InvalidOperationException("Dependency ordering exceeds the supported " + MaxElementInputCount + " element limit.");
                     var element = enumerator.Current;
                     if (element == null) throw new InvalidOperationException("Dependency ordering cannot contain a null semantic element.");
-                    materialized.Add(CaptureOrderingSnapshot(element));
+                    ValidateDependencies(element);
+                    materialized.Add(element);
+                    snapshots.Add(CaptureOrderingSnapshot(element));
                 }
             }
 
             RequireObservedCount(knownCount, materialized.Count, "Dependency ordering");
             RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency ordering");
-            foreach (var snapshot in materialized)
+            foreach (var snapshot in snapshots)
                 RequireStableOrderingSnapshot(snapshot);
 
             var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var list = new List<OrderingSnapshot>();
-            foreach (var snapshot in materialized)
+            foreach (var snapshot in snapshots)
             {
                 if (!seenIds.Add(snapshot.Id))
                     throw new InvalidOperationException("Dependency ordering contains duplicate semantic element id: " + snapshot.Id);
@@ -218,14 +221,13 @@ namespace QS3D.Core.Services
                 }
             }
 
-            foreach (var snapshot in materialized)
+            foreach (var snapshot in snapshots)
                 RequireStableOrderingSnapshot(snapshot);
             return result.AsReadOnly();
         }
 
         private static OrderingSnapshot CaptureOrderingSnapshot(ProjectElement element)
         {
-            ValidateDependencies(element);
             return new OrderingSnapshot(
                 element,
                 element.Id,
