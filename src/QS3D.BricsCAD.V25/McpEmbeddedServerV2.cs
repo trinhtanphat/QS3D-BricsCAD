@@ -555,6 +555,7 @@ namespace QS3D.BricsCAD.V25
                 Tool("cad_audit_tail", "Read latest bounded local mutation audit entries.", "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}"),
                 Tool("cad_cancel_command", "Deliver ESC twice to cancel current BricsCAD command; no confirmation required.", "")
             };
+            tools.AddRange(McpDesktopAutomationRuntime.ToolDescriptors());
             return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"tools\":[" + string.Join(",", tools) + "]}}";
         }
 

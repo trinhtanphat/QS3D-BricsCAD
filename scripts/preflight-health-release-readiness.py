@@ -20,12 +20,14 @@ if SUMMARY.is_file():
         "public bool IsReleaseReady => Errors == 0 && Warnings == 0;",
         "public const int MaxIssueCount = 1000000;",
         "var normalized = MaterializeIssues(issues);",
-        "var expectedKnownCount = RequireKnownCountsWithinLimit(issues);",
+        "var expectedKnownCount = RequireKnownCountsWithinLimit(issues, out var expectedKnownCountSources);",
         "private static int? RequireKnownCountsWithinLimit",
+        "private static void RequireKnownCountStable",
         "issues is ICollection<ModelHealthIssue> collection",
         "issues is IReadOnlyCollection<ModelHealthIssue> readOnlyCollection",
         "issues is System.Collections.ICollection nonGenericCollection",
-        "while (enumerator.MoveNext())",
+        "while (true)",
+        "if (!enumerator.MoveNext())",
         "if (result.Count >= MaxIssueCount)",
         "if (expectedKnownCount.HasValue && result.Count != expectedKnownCount.Value)",
         'throw new InvalidOperationException("Health summary known issue count does not match enumerated issue count.");',
@@ -37,6 +39,16 @@ if SUMMARY.is_file():
     ):
         if token not in text:
             errors.append("HealthSummary.cs missing readiness token: " + token)
+
+    pre_move = text.find("RequireKnownCountStable(issues, expectedKnownCount, expectedKnownCountSources);")
+    move = text.find("if (!enumerator.MoveNext())", pre_move)
+    post_move = text.find("RequireKnownCountStable(issues, expectedKnownCount, expectedKnownCountSources);", move + 1)
+    overrun = text.find("if (expectedKnownCount.HasValue && result.Count >= expectedKnownCount.Value)", post_move)
+    current = text.find("result.Add(enumerator.Current);", overrun)
+    if min(pre_move, move, post_move, overrun, current) < 0 or not (pre_move < move < post_move < overrun < current):
+        errors.append("HealthSummary must rebind Count around MoveNext and reject known-Count overrun before IEnumerator.Current")
+    if "while (enumerator.MoveNext())" in text:
+        errors.append("HealthSummary must not regress to caller-controlled while(MoveNext) traversal")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -81,4 +93,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Core distinguishes health from release readiness, rejects invalid known issue-count contracts before enumeration, rejects known Count/traversal mismatches after bounded single-pass traversal, rejects malformed diagnostics fail-closed, and warnings block IsReleaseReady. This gate does not inspect V25 runtime/native files.")
+print("PASS: Core distinguishes health from release readiness, rejects invalid/unstable known issue-count contracts around traversal before Current, rejects Count/traversal mismatches after bounded single-pass traversal, rejects malformed diagnostics fail-closed, and warnings block IsReleaseReady. This gate does not inspect V25 runtime/native files.")
