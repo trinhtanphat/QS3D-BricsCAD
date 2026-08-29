@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -8,7 +7,6 @@ SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "RegenerationSubsetKnownCountC
 
 source = SOURCE.read_text(encoding="utf-8")
 smoke = SMOKE.read_text(encoding="utf-8")
-
 errors = []
 
 start = source.find("private static HashSet<string> CanonicalTargetIds")
@@ -23,8 +21,9 @@ required_source = [
     "using (var enumerator = elementIds.GetEnumerator())",
     "while (enumerator.MoveNext())",
     "if (knownCount.HasValue && index >= knownCount.Value)",
-    "if (index >= maxCount)",
     "var value = enumerator.Current",
+    "if (result.Contains(raw))",
+    "if (result.Count >= maxCount)",
     "var reboundCount = ValidateKnownTargetIdCounts(elementIds)",
     "if (reboundCount != knownCount)",
 ]
@@ -38,16 +37,16 @@ if "foreach (var value in elementIds)" in method:
 ordered = [
     "while (enumerator.MoveNext())",
     "if (knownCount.HasValue && index >= knownCount.Value)",
-    "if (index >= maxCount)",
     "var value = enumerator.Current",
+    "if (result.Contains(raw))",
+    "if (result.Count >= maxCount)",
 ]
 positions = [method.find(token) for token in ordered]
 if any(position < 0 for position in positions) or positions != sorted(positions):
-    errors.append("required MoveNext -> known Count -> project bound -> Current ordering is not preserved")
+    errors.append("required MoveNext -> known Count -> Current -> duplicate -> project bound ordering is not preserved")
 
 required_smoke = [
     "KnownCountOverrunRejectsBeforeUnexpectedCurrent",
-    "ProjectBoundRejectsStreamingInputBeforeUnexpectedCurrent",
     "KnownCountUnderYieldStillFails",
     "PostTraversalCountDriftFailsClosed",
     "ExactKnownCountRemainsAccepted",

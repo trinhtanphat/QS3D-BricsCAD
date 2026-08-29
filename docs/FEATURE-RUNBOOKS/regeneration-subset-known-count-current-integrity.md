@@ -12,20 +12,20 @@ The traversal ordering is:
 
 1. read and validate supported known Count sources, rejecting negative/conflicting evidence;
 2. acquire one enumerator;
-3. for each successful `MoveNext()`, reject known-Count overrun and the independent project-element maximum **before** reading `IEnumerator.Current`;
-4. only for admitted values, read `Current`, then apply blank/canonical/duplicate validation and retain the ID;
+3. for each successful `MoveNext()`, reject **known-Count** overrun before reading `IEnumerator.Current`;
+4. only for admitted values, read `Current`, then apply existing blank/canonical/duplicate validation and the independent project-element maximum in its historical precedence order;
 5. after enumeration, reject known-Count under-yield;
-6. re-read the supported Count sources and reject post-traversal source/value drift.
+6. when traversal cardinality matches admission, re-read the supported Count sources and reject post-traversal source/value drift.
 
-Pure streaming inputs remain supported and are bounded independently by the current project element count.
+Pure streaming inputs remain supported. Their project-cardinality behavior and duplicate-validation precedence remain unchanged from the completed subset-bound contract.
 
 ## Deterministic regression
 
-`RegenerationSubsetKnownCountCurrentIntegritySmoke` uses hostile enumerables that record Count reads, successful/terminal `MoveNext()` attempts, and `Current` reads independently. The key overrun assertion is Count=1 with two yielded values: the second `MoveNext()` is observed, but the second `Current` must never be read.
+`RegenerationSubsetKnownCountCurrentIntegritySmoke` uses a hostile `IReadOnlyCollection<string>` that records Count reads, `MoveNext()` calls, and `Current` reads independently. The key overrun assertion is Count=1 with two yielded values: the second successful `MoveNext()` is observed, but the second `Current` must never be read.
 
-The smoke also covers streaming project-bound overrun before `Current`, known-Count under-yield, post-traversal Count drift, and exact-count compatibility.
+The smoke also covers known-Count under-yield, post-traversal Count drift, and exact-count compatibility. Existing `RegenerationSubsetTargetBoundSmoke` remains authoritative for streaming project-cardinality and duplicate-precedence behavior.
 
-`scripts/preflight-regeneration-subset-known-count-current-integrity.py` is auto-discovered by aggregate feature guards and pins the explicit-enumerator ordering plus the hostile regression surface.
+`scripts/preflight-regeneration-subset-known-count-current-integrity.py` is auto-discovered by aggregate feature guards and pins the explicit-enumerator ordering without weakening the existing project-bound diagnostic order.
 
 ## Validation boundary
 

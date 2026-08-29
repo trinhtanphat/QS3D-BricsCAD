@@ -188,8 +188,6 @@ namespace QS3D.Core.Services
                 {
                     if (knownCount.HasValue && index >= knownCount.Value)
                         throw new InvalidOperationException("Regeneration target id count changed during enumeration.");
-                    if (index >= maxCount)
-                        throw new ArgumentException("Regeneration target set cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
 
                     var value = enumerator.Current;
                     var raw = value ?? string.Empty;
@@ -199,6 +197,8 @@ namespace QS3D.Core.Services
                         throw new ArgumentException("Regeneration target id must be canonical without surrounding whitespace: " + raw + ".", nameof(elementIds));
                     if (result.Contains(raw))
                         throw new ArgumentException("Duplicate regeneration target id: " + raw + ".", nameof(elementIds));
+                    if (result.Count >= maxCount)
+                        throw new ArgumentException("Regeneration target set cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
                     result.Add(raw);
                     index++;
                 }

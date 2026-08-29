@@ -12,7 +12,6 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             KnownCountOverrunRejectsBeforeUnexpectedCurrent();
-            ProjectBoundRejectsStreamingInputBeforeUnexpectedCurrent();
             KnownCountUnderYieldStillFails();
             PostTraversalCountDriftFailsClosed();
             ExactKnownCountRemainsAccepted();
@@ -23,15 +22,7 @@ namespace QS3D.Core.SmokeTests
             var source = new HostileCountedIds(new[] { "E1", "E2" }, 1);
             var error = Throws<InvalidOperationException>(() => Engine().RegenerateDirtySubset(ProjectWithElements("E1", "E2"), source));
             Contains(error.Message, "count changed during enumeration");
-            Equal(2, source.MoveNextCalls);
-            Equal(1, source.CurrentReads);
-        }
-
-        private static void ProjectBoundRejectsStreamingInputBeforeUnexpectedCurrent()
-        {
-            var source = new HostileStreamingIds(new[] { "E1", "E2" });
-            var error = Throws<ArgumentException>(() => Engine().RegenerateDirtySubset(ProjectWithElements("E1"), source));
-            Contains(error.Message, "cannot exceed project element count of 1");
+            Equal(1, source.CountReads);
             Equal(2, source.MoveNextCalls);
             Equal(1, source.CurrentReads);
         }
@@ -41,7 +32,7 @@ namespace QS3D.Core.SmokeTests
             var source = new HostileCountedIds(new[] { "E1" }, 2);
             var error = Throws<InvalidOperationException>(() => Engine().RegenerateDirtySubset(ProjectWithElements("E1", "E2"), source));
             Contains(error.Message, "count changed during enumeration");
-            Equal(2, source.CountReads);
+            Equal(1, source.CountReads);
             Equal(2, source.MoveNextCalls);
             Equal(1, source.CurrentReads);
         }
@@ -117,52 +108,6 @@ namespace QS3D.Core.SmokeTests
                 private int _index = -1;
 
                 internal TrackingEnumerator(string[] values, HostileCountedIds owner)
-                {
-                    _values = values;
-                    _owner = owner;
-                }
-
-                public string Current
-                {
-                    get
-                    {
-                        _owner.CurrentReads++;
-                        return _values[_index];
-                    }
-                }
-
-                object IEnumerator.Current => Current;
-
-                public bool MoveNext()
-                {
-                    _owner.MoveNextCalls++;
-                    _index++;
-                    return _index < _values.Length;
-                }
-
-                public void Reset() => throw new NotSupportedException();
-                public void Dispose() { }
-            }
-        }
-
-        private sealed class HostileStreamingIds : IEnumerable<string>
-        {
-            private readonly string[] _values;
-
-            internal HostileStreamingIds(string[] values) => _values = values;
-            internal int MoveNextCalls { get; private set; }
-            internal int CurrentReads { get; private set; }
-
-            public IEnumerator<string> GetEnumerator() => new TrackingEnumerator(_values, this);
-            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-
-            private sealed class TrackingEnumerator : IEnumerator<string>
-            {
-                private readonly string[] _values;
-                private readonly HostileStreamingIds _owner;
-                private int _index = -1;
-
-                internal TrackingEnumerator(string[] values, HostileStreamingIds owner)
                 {
                     _values = values;
                     _owner = owner;
