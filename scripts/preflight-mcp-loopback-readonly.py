@@ -24,6 +24,14 @@ def main() -> int:
         "tools list": '"tools/list"',
         "session id": 'headers.get("mcp-session-id"',
         "session delete": 'request(endpoint, "DELETE"',
+        "invalid protocol sentinel": 'INVALID_PROTOCOL = "2024-11-05"',
+        "protocol-version request override": "protocol_version: str = PROTOCOL",
+        "protocol-version POST rejection": "invalid_post_status != 400",
+        "protocol-version DELETE rejection": "invalid_delete_status != 400",
+        "protocol-rejected DELETE preserves session": "after_invalid_delete_status != 200",
+        "protocol-version POST result marker": "protocol_version_post_400=PASS",
+        "protocol-version DELETE result marker": "protocol_version_delete_400=PASS",
+        "DELETE-preserves-session result marker": "delete_preserves_session=PASS",
         "terminated session retry": "stale_delete_status",
         "terminated session HTTP 404": "stale_delete_status != 404",
         "terminated session result marker": "stale_session_404=PASS",
@@ -67,9 +75,9 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: local MCP loopback probe is loopback-only, exercises auth/session/tool discovery "
-        "and terminated-session 404 truth plus bounded read-only CAD observation, performs no mutation, "
-        "launches no shell, and does not print bearer material."
+        "PASS: local MCP loopback probe is loopback-only, exercises auth/session/tool discovery, "
+        "protocol-version rejection without accidental session termination, terminated-session 404 truth, "
+        "and bounded read-only CAD observation, performs no mutation, launches no shell, and does not print bearer material."
     )
     return 0
 
