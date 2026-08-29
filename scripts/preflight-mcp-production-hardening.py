@@ -82,6 +82,12 @@ def main() -> int:
         "compiled transport bounded sessions": (server, "MaxSessions = 128"),
         "compiled transport bounded clients": (server, "MaxConcurrentClients = 16"),
         "compiled transport runtime delegation": (server, "McpCadAgentRuntime.Call(tool, arguments)"),
+        "strict HTTP field-name validation": (server, "IsHttpFieldName(name)"),
+        "singleton Content-Type header": (server, 'string.Equals(name, "Content-Type", StringComparison.OrdinalIgnoreCase)'),
+        "singleton Transfer-Encoding header": (server, 'string.Equals(name, "Transfer-Encoding", StringComparison.OrdinalIgnoreCase)'),
+        "reject any Transfer-Encoding header": (server, 'if (headers.ContainsKey("Transfer-Encoding"))'),
+        "strict UTF-8 request body": (server, "StrictUtf8.GetString(body)"),
+        "invalid UTF-8 request rejection": (server, "Invalid UTF-8 in MCP HTTP body."),
         "top-level JSON trailing-comma rejection": (top_level_json, "JSON object cannot end with a trailing comma."),
         "MCP arguments trailing-comma rejection": (top_level_json, "MCP arguments object cannot end with a trailing comma."),
         "strict RFC JSON whitespace helper": (top_level_json, "IsJsonWhitespace(source[index])"),
@@ -116,6 +122,8 @@ def main() -> int:
 
     if 'contentType.StartsWith("application/json"' in server:
         errors.append("compiled MCP transport accepts application/json lookalike media types via prefix matching")
+    if "rawArguments.Trim()" in server or "var candidate = raw.Trim();" in server:
+        errors.append("compiled MCP transport must not re-normalize raw JSON object boundaries with string.Trim")
     if "char.IsWhiteSpace(source[index])" in top_level_json:
         errors.append("MCP JSON parser accepts non-RFC Unicode whitespace via char.IsWhiteSpace")
     if ".Trim()" in top_level_json:
@@ -139,11 +147,11 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: compiled modular MCP transport/runtime use exact JSON media-type admission and "
-        "strict RFC JSON object framing/whitespace, bounded authenticated session handling, atomic "
-        "CAD timeout truth, BricsCAD-confined recovery, one validated HTTPS endpoint resolver, "
-        "live-only Cloudflare provider URLs, exact tunnel identity, canonical named-tunnel config "
-        "regeneration and verified click-first redacted onboarding."
+        "PASS: compiled modular MCP transport/runtime use strict HTTP framing/UTF-8, exact JSON media "
+        "type admission and strict RFC JSON object framing/whitespace, bounded authenticated session "
+        "handling, atomic CAD timeout truth, BricsCAD-confined recovery, one validated HTTPS endpoint "
+        "resolver, live-only Cloudflare provider URLs, exact tunnel identity, canonical named-tunnel "
+        "config regeneration and verified click-first redacted onboarding."
     )
     return 0
 
