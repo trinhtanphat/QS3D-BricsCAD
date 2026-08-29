@@ -44,7 +44,7 @@ CASES = (
         "BBS CSV",
         ROOT / "src/QS3D.BricsCAD.V25/BbsCsvCommands.cs",
         "ProjectRebarScheduleBuilder.Build(snapshot)",
-        "totalWeight = QuantityReportMath.Add(totalWeight, row.TotalWeightKg, \"BBS CSV total weight\");",
+        "var totals = RebarScheduleBuilder.CalculateTotals(rows);",
         "RebarCsvExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status);",
         True,
@@ -121,6 +121,8 @@ for label, path, build, aggregate, export, finalize, validate_before_dialog in C
         errors.append(label + " read-only export must not bind a mutation context")
     if "RegenerateDirty(project)" in text:
         errors.append(label + " read-only export must not regenerate live project state")
+    if label == "BBS CSV" and 'QuantityReportMath.Add(totalWeight, row.TotalWeightKg, "BBS CSV total weight")' in text:
+        errors.append("BBS CSV must not restore pairwise status aggregation after canonical validation")
     if "Cảnh báo UI sau export" not in text:
         errors.append(label + " missing best-effort post-export UI warning boundary")
 
@@ -178,4 +180,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: schedule exporters stay read-only on detached state, BBS CSV validates exportability before destination UI while the other schedule/template lanes preserve their current confirmation order, and all persistent writes remain confirmation-gated with post-export UI isolation.")
+print("PASS: schedule exporters stay read-only on detached state, BBS CSV validates canonical compensated totals before destination UI while the other schedule/template lanes preserve their current confirmation order, and all persistent writes remain confirmation-gated with post-export UI isolation.")
