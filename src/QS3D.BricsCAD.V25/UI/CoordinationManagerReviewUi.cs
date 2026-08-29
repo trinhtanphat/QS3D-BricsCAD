@@ -437,7 +437,7 @@ namespace QS3D.BricsCAD.V25.UI
             }
 
             public bool HasHighlight => _highlighted.Count > 0;
-            public bool HasIsolation => _isolationActive;
+            public bool HasIsolation => _isolationActive || _objectIsolationModeBefore != null;
             public bool HasSectionView => _viewBeforeSection != null;
 
             public void Highlight(IReadOnlyList<ObjectId> ids)
@@ -535,6 +535,7 @@ namespace QS3D.BricsCAD.V25.UI
                 RequireTargets(ids);
                 if (_isolationActive) RestoreIsolation();
 
+                var impliedSelectionBefore = CadSelectionGuard.ReadImpliedSelection(_document);
                 var modeBefore = Bricscad.ApplicationServices.Application.GetSystemVariable("OBJECTISOLATIONMODE");
                 try
                 {
@@ -544,7 +545,8 @@ namespace QS3D.BricsCAD.V25.UI
                 }
                 catch
                 {
-                    RestoreObjectIsolationModeBestEffort(modeBefore);
+                    RestoreImpliedSelectionBestEffort(impliedSelectionBefore);
+                    TryRestoreObjectIsolationModeBestEffort(modeBefore);
                     throw;
                 }
 
@@ -554,7 +556,11 @@ namespace QS3D.BricsCAD.V25.UI
 
             public void RestoreIsolation()
             {
-                if (!_isolationActive) return;
+                if (!_isolationActive)
+                {
+                    RestoreObjectIsolationModeBestEffort();
+                    return;
+                }
                 if (_destroyed)
                 {
                     _isolationActive = false;
@@ -755,20 +761,35 @@ namespace QS3D.BricsCAD.V25.UI
                 _isolationActive = false;
                 _viewBeforeSection = null;
                 RestoreObjectIsolationModeBestEffort();
+                _objectIsolationModeBefore = null;
+            }
+
+            private void RestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)
+            {
+                if (impliedSelectionBefore == null || _destroyed) return;
+                try { _document.Editor.SetImpliedSelection(impliedSelectionBefore); } catch { }
             }
 
             private void RestoreObjectIsolationModeBestEffort()
             {
                 if (_objectIsolationModeBefore == null) return;
                 var value = _objectIsolationModeBefore;
-                _objectIsolationModeBefore = null;
-                RestoreObjectIsolationModeBestEffort(value);
+                if (TryRestoreObjectIsolationModeBestEffort(value))
+                    _objectIsolationModeBefore = null;
             }
 
-            private void RestoreObjectIsolationModeBestEffort(object? modeBefore)
+            private bool TryRestoreObjectIsolationModeBestEffort(object? modeBefore)
             {
-                if (modeBefore == null) return;
-                try { Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", modeBefore); } catch { }
+                if (modeBefore == null) return true;
+                try
+                {
+                    Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", modeBefore);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
             }
 
             public void Dispose()
