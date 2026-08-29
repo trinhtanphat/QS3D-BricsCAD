@@ -152,7 +152,7 @@ namespace QS3D.Core.SmokeTests
                 private int _index = -1;
                 internal Enumerator(MultiCountSource<T> owner) { _owner = owner; }
                 public T Current => _owner._items[_index];
-                object IEnumerator.Current => Current;
+                object IEnumerator.Current => Current!;
                 public bool MoveNext()
                 {
                     _index++;
@@ -198,7 +198,7 @@ namespace QS3D.Core.SmokeTests
                         return _owner._factory(_index);
                     }
                 }
-                object IEnumerator.Current => Current;
+                object IEnumerator.Current => Current!;
                 public bool MoveNext()
                 {
                     _owner.MoveNextCalls++;
