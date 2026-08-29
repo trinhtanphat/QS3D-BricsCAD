@@ -10,13 +10,7 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class DoorOpeningXlsxTransientCountStabilitySmoke
     {
-        [ModuleInitializer]
-        internal static void Register()
-        {
-            SmokeTestRegistration.Register("door opening XLSX transient row count stability", Run);
-        }
-
-        private static void Run()
+        internal static void Run()
         {
             RejectsTransientGenericCountGrowthBeforeIndexer();
             RejectsTransientGenericCountDriftAfterIndexer();
@@ -137,5 +131,11 @@ namespace QS3D.Core.SmokeTests
             public IEnumerator<DoorOpeningScheduleRow> GetEnumerator() { yield return _row; }
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
+    }
+
+    internal static class DoorOpeningXlsxTransientCountStabilitySmokeRegistration
+    {
+        [ModuleInitializer]
+        internal static void Initialize() => DoorOpeningXlsxTransientCountStabilitySmoke.Run();
     }
 }
