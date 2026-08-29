@@ -803,7 +803,8 @@ namespace QS3D.BricsCAD.V25
                 McpEmbeddedServer.EnsureStarted();
 
                 var existingUrl = McpPublicEndpointResolver.Resolve();
-                if (!string.IsNullOrWhiteSpace(existingUrl))
+                if ((McpCloudflareAccountTunnelManager.IsRunning || McpCloudflareTunnelManager.IsRunning)
+                    && !string.IsNullOrWhiteSpace(existingUrl))
                 {
                     _lastUiDetail = "Existing public endpoint reused: " + existingUrl;
                     Notify("Đã kết nối", "ChatGPT ↔ QS3D ↔ BricsCAD đã sẵn sàng. Bấm 'Sao chép cấu hình ChatGPT' để dùng endpoint hiện tại.");
@@ -819,6 +820,13 @@ namespace QS3D.BricsCAD.V25
 
                 if (string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.CloudflaredPath))
                 {
+                    if (McpCloudflaredBootstrapper.IsInstalling)
+                    {
+                        Notify("Đang chuẩn bị", "Cloudflare Tunnel đang được cài. Chờ hoàn tất rồi bấm 'Kết nối ChatGPT' lại.");
+                        EndConnectOperation();
+                        return;
+                    }
+
                     Notify("Đang chuẩn bị", "QS3D đang cài Cloudflare Tunnel tự động...");
                     McpCloudflaredBootstrapper.BeginInstall((ok, message) =>
                     {
@@ -841,7 +849,7 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                string namedError;
+                var namedError = string.Empty;
                 if (!string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.SavedHostname)
                     && McpCloudflareAccountTunnelManager.StartSaved(out namedError))
                 {
@@ -1127,17 +1135,17 @@ namespace QS3D.BricsCAD.V25
 
         private McpToastWindow(Window owner, string title, string message)
         {
-            Title = title;
             Width = 420;
             SizeToContent = SizeToContent.Height;
             ResizeMode = ResizeMode.NoResize;
-            WindowStyle = WindowStyle.ToolWindow;
+            WindowStyle = WindowStyle.None;
             ShowInTaskbar = false;
+            ShowActivated = false;
             Topmost = true;
             Owner = owner;
             WindowStartupLocation = WindowStartupLocation.Manual;
 
-            var panel = new StackPanel { Margin = new Thickness(14) };
+            var panel = new StackPanel();
             panel.Children.Add(new TextBlock
             {
                 Text = title,
@@ -1150,7 +1158,14 @@ namespace QS3D.BricsCAD.V25
                 Text = message,
                 TextWrapping = TextWrapping.Wrap
             });
-            Content = panel;
+            Content = new Border
+            {
+                BorderBrush = SystemColors.ActiveBorderBrush,
+                BorderThickness = new Thickness(1),
+                Background = SystemColors.WindowBrush,
+                Padding = new Thickness(14),
+                Child = panel
+            };
 
             _timer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
             {
