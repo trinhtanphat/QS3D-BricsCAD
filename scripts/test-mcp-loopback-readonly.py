@@ -89,6 +89,7 @@ def request(
     token: str | None = None,
     session: str | None = None,
     protocol_version: str = PROTOCOL,
+    origin: str | None = None,
 ) -> tuple[int, dict[str, str], bytes]:
     payload = b"" if body is None else json.dumps(body, separators=(",", ":")).encode("utf-8")
     headers = {"Accept": "application/json, text/event-stream"}
@@ -99,6 +100,8 @@ def request(
     if session:
         headers["Mcp-Session-Id"] = session
         headers["MCP-Protocol-Version"] = protocol_version
+    if origin is not None:
+        headers["Origin"] = origin
     req = urllib.request.Request(url, data=payload if body is not None else None, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -193,6 +196,37 @@ def main() -> int:
         token = token_file.read_text(encoding="utf-8").strip()
         if len(token) < 16:
             raise ProbeError("Bearer token file is missing or invalid.")
+
+        hostile_origin_status, _, _ = request(
+            health,
+            "GET",
+            None,
+            args.timeout,
+            origin="https://example.invalid",
+        )
+        if hostile_origin_status != 403:
+            raise ProbeError("non-loopback MCP Origin was not rejected with HTTP 403.")
+
+        null_origin_status, _, _ = request(
+            health,
+            "GET",
+            None,
+            args.timeout,
+            origin="null",
+        )
+        if null_origin_status != 403:
+            raise ProbeError("opaque/null MCP Origin was not rejected with HTTP 403.")
+
+        loopback_origin_status, _, loopback_origin_raw = request(
+            health,
+            "GET",
+            None,
+            args.timeout,
+            origin="http://127.0.0.1",
+        )
+        loopback_origin_json = parse_json(loopback_origin_raw, "healthz loopback Origin")
+        if loopback_origin_status != 200 or loopback_origin_json.get("ok") is not True:
+            raise ProbeError("loopback MCP Origin was not accepted.")
 
         health_status, _, health_raw = request(health, "GET", None, args.timeout)
         health_json = parse_json(health_raw, "healthz")
@@ -318,8 +352,9 @@ def main() -> int:
             print("PASS: QS3D embedded MCP read-only loopback qualification")
             print(f" protocol={PROTOCOL}; server=qs3d-bricscad; tools={len(names)}")
             print(
-                " auth_rejection=PASS; initialize=PASS; protocol_version_post_400=PASS; notification=PASS; "
-                "ping=PASS; protocol_version_delete_400=PASS; delete_preserves_session=PASS; "
+                " origin_remote_403=PASS; origin_null_403=PASS; origin_loopback=PASS; auth_rejection=PASS; "
+                "initialize=PASS; protocol_version_post_400=PASS; notification=PASS; ping=PASS; "
+                "protocol_version_delete_400=PASS; delete_preserves_session=PASS; "
                 "session_delete=PASS; stale_session_404=PASS"
             )
             print(" readonly_tools=" + ",".join(f"{name}:{read_results[name]}" for name, _ in READ_ONLY_TOOLS))
