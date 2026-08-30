@@ -23,9 +23,12 @@ def main():
         "var targetEnumerationVersion = project.ChangeVersion;",
         "var projectElementsAtStart = project.Elements.ToList();",
         "var ids = new List<string>();",
-        "foreach (var value in orderedGridElementIds)",
+        "using (var enumerator = orderedGridElementIds.GetEnumerator())",
+        "RequireStableKnownCountDuringTraversal(project, orderedGridElementIds, knownCount, targetEnumerationVersion);",
+        "if (!enumerator.MoveNext()) break;",
         "if (ids.Count == MaxGridBatch)",
         'throw new InvalidOperationException("A Grid renumber batch supports at most " + MaxGridBatch + " elements.");',
+        "var value = enumerator.Current;",
         'ids.Add(Required(value, "orderedGridElementIds[" + ids.Count + "]", 128));',
         "if (project.ChangeVersion != targetEnumerationVersion)",
         "var originalTargets = ResolveOriginalTargets(projectElementsAtStart, ids);",
@@ -40,23 +43,28 @@ def main():
         ".Select((value, index) => Required(",
         "orderedGridElementIds.ToList()",
         "if (ids.Count > MaxGridBatch)",
+        "foreach (var value in orderedGridElementIds)",
     ]
     for token in legacy:
         if token in renumber:
-            print("ERROR: legacy post-materialization Grid naming capacity path returned: " + token)
+            print("ERROR: legacy Grid naming target traversal returned: " + token)
             return 1
 
     snapshot = renumber.find("var projectElementsAtStart = project.Elements.ToList();")
-    loop = renumber.find("foreach (var value in orderedGridElementIds)")
-    cap = renumber.find("if (ids.Count == MaxGridBatch)", loop)
-    add = renumber.find("ids.Add(Required(value", loop)
+    loop = renumber.find("using (var enumerator = orderedGridElementIds.GetEnumerator())")
+    first_rebound = renumber.find("RequireStableKnownCountDuringTraversal(project, orderedGridElementIds, knownCount, targetEnumerationVersion);", loop)
+    move = renumber.find("if (!enumerator.MoveNext()) break;", first_rebound)
+    second_rebound = renumber.find("RequireStableKnownCountDuringTraversal(project, orderedGridElementIds, knownCount, targetEnumerationVersion);", move)
+    cap = renumber.find("if (ids.Count == MaxGridBatch)", second_rebound)
+    current = renumber.find("var value = enumerator.Current;", cap)
+    add = renumber.find("ids.Add(Required(value", current)
     freshness = renumber.find("if (project.ChangeVersion != targetEnumerationVersion)", add)
     original = renumber.find("var originalTargets = ResolveOriginalTargets(projectElementsAtStart, ids);", freshness)
     resolve = renumber.find("var projectElements = ResolveProjectElements(project);", original)
-    if min(snapshot, loop, cap, add, freshness, original, resolve) < 0 or not (
-        snapshot < loop < cap < add < freshness < original < resolve
+    if min(snapshot, loop, first_rebound, move, second_rebound, cap, current, add, freshness, original, resolve) < 0 or not (
+        snapshot < loop < first_rebound < move < second_rebound < cap < current < add < freshness < original < resolve
     ):
-        print("ERROR: Grid naming must snapshot project identity, bound caller enumeration before normalization/add, verify freshness, then resolve current project state.")
+        print("ERROR: Grid naming must snapshot project identity, explicitly traverse with freshness/Count rebound, enforce capacity before Current/add, then verify final freshness and resolve current project state.")
         return 1
 
     smoke_tokens = [
@@ -77,7 +85,7 @@ def main():
         print("ERROR: Grid naming bounded-enumeration smoke is not module-registered.")
         return 1
 
-    print("PASS: GridNamingService.Renumber snapshots project identity while bounding lazy target enumeration at the first item beyond the 2,000-item capacity, before current-state resolution or mutation.")
+    print("PASS: GridNamingService.Renumber snapshots project identity and explicitly bounds lazy target enumeration at the first item beyond the 2,000-item capacity, with freshness/Count rebound before semantic Current.")
     return 0
 
 

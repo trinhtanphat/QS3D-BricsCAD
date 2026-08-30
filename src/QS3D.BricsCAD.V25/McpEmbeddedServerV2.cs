@@ -23,8 +23,11 @@ namespace QS3D.BricsCAD.V25
         private const int MaxBodyBytes = 1024 * 1024;
         private const int MaxConcurrentClients = 16;
         private const int MaxSessions = 128;
-        private const string ProtocolVersion = "2025-06-18";
+        private const string ModernProtocolVersion = "2026-07-28";
+        private const string ProtocolVersion = "2025-11-25";
+        private const string PreviousProtocolVersion = "2025-06-18";
         private const string LegacyProtocolVersion = "2025-03-26";
+        private const string ServerVersion = "embedded-7";
         private const string BearerEnvironment = "QS3D_MCP_BEARER_TOKEN";
         private const string TokenFileName = "mcp-bearer-token.txt";
 
@@ -41,6 +44,9 @@ namespace QS3D.BricsCAD.V25
         private static string _bearerToken = string.Empty;
         private static string _tokenSource = string.Empty;
         private static string _lastError = string.Empty;
+        private static DateTime _lastOAuthMcpActivityUtc = DateTime.MinValue;
+        private static string _lastOAuthMcpMethod = string.Empty;
+        private static string _lastOAuthMcpPublicUrl = string.Empty;
 
         public static Uri Endpoint { get { return new Uri("http://127.0.0.1:" + Port.ToString(CultureInfo.InvariantCulture) + "/mcp"); } }
         public static Uri HealthEndpoint { get { return new Uri("http://127.0.0.1:" + Port.ToString(CultureInfo.InvariantCulture) + "/healthz"); } }
@@ -50,6 +56,9 @@ namespace QS3D.BricsCAD.V25
         public static string LastError { get { lock (Sync) return _lastError; } }
         public static string TokenSource { get { EnsureBearerToken(); lock (Sync) return _tokenSource; } }
         public static string PublicUrl { get { return McpPublicEndpointResolver.Resolve(); } }
+        public static DateTime LastOAuthMcpActivityUtc { get { lock (Sync) return _lastOAuthMcpActivityUtc; } }
+        public static string LastOAuthMcpMethod { get { lock (Sync) return _lastOAuthMcpMethod; } }
+        public static string LastOAuthMcpPublicUrl { get { lock (Sync) return _lastOAuthMcpPublicUrl; } }
 
         public static void Start()
         {
@@ -59,6 +68,9 @@ namespace QS3D.BricsCAD.V25
                 EnsureBearerToken();
                 _stopping = false;
                 _lastError = string.Empty;
+                _lastOAuthMcpActivityUtc = DateTime.MinValue;
+                _lastOAuthMcpMethod = string.Empty;
+                _lastOAuthMcpPublicUrl = string.Empty;
                 McpCadAgentRuntime.ResetForServerStart();
                 var listener = new TcpListener(IPAddress.Loopback, Port);
                 listener.Server.NoDelay = true;
@@ -268,7 +280,9 @@ namespace QS3D.BricsCAD.V25
                    || string.Equals(name, "Authorization", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Origin", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Mcp-Session-Id", StringComparison.OrdinalIgnoreCase)
-                   || string.Equals(name, "MCP-Protocol-Version", StringComparison.OrdinalIgnoreCase);
+                   || string.Equals(name, "MCP-Protocol-Version", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(name, "Mcp-Method", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(name, "Mcp-Name", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsHttpFieldName(string name)
@@ -297,7 +311,7 @@ namespace QS3D.BricsCAD.V25
             return string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static bool IsAllowedOrigin(IDictionary<string, string> headers)
+        private static bool IsAllowedOrigin(IDictionary<string, string> headers, string publicMcpUrl)
         {
             string origin;
             if (!headers.TryGetValue("Origin", out origin)) return true;
@@ -313,7 +327,26 @@ namespace QS3D.BricsCAD.V25
             if (!string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
                 return false;
-            return uri.IsLoopback;
+            return uri.IsLoopback || IsChatGptOrigin(uri) || IsSameOriginAsPublicMcp(uri, publicMcpUrl);
+        }
+
+        private static bool IsChatGptOrigin(Uri origin)
+        {
+            return origin != null
+                   && string.Equals(origin.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+                   && string.Equals(origin.DnsSafeHost, "chatgpt.com", StringComparison.OrdinalIgnoreCase)
+                   && origin.IsDefaultPort;
+        }
+
+        private static bool IsSameOriginAsPublicMcp(Uri origin, string publicMcpUrl)
+        {
+            if (origin == null || string.IsNullOrWhiteSpace(publicMcpUrl)) return false;
+            Uri publicUri;
+            if (!Uri.TryCreate(publicMcpUrl.Trim(), UriKind.Absolute, out publicUri)) return false;
+            if (!string.Equals(publicUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) return false;
+            return string.Equals(origin.Scheme, publicUri.Scheme, StringComparison.OrdinalIgnoreCase)
+                   && string.Equals(origin.DnsSafeHost, publicUri.DnsSafeHost, StringComparison.OrdinalIgnoreCase)
+                   && origin.Port == publicUri.Port;
         }
 
         private static void HandleRequest(NetworkStream stream, HttpRequest request)
@@ -335,14 +368,14 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
-            if (!IsAllowedOrigin(request.Headers))
+            if (!IsAllowedOrigin(request.Headers, publicMcpUrl))
             {
                 WriteResponse(stream, 403, "Forbidden", "{\"error\":\"invalid MCP Origin\"}", null);
                 return;
             }
             if (request.Method == "GET" && string.Equals(request.Path, "/healthz", StringComparison.OrdinalIgnoreCase))
             {
-                WriteResponse(stream, 200, "OK", "{\"ok\":true,\"service\":\"qs3d-bricscad-mcp\",\"running\":true,\"version\":\"embedded-5\"}", null);
+                WriteResponse(stream, 200, "OK", "{\"ok\":true,\"service\":\"qs3d-bricscad-mcp\",\"running\":true,\"version\":\"" + ServerVersion + "\"}", null);
                 return;
             }
             if (request.Method == "OPTIONS" && string.Equals(request.Path, "/mcp", StringComparison.OrdinalIgnoreCase))
@@ -361,12 +394,14 @@ namespace QS3D.BricsCAD.V25
                 WriteResponse(stream, 404, "Not Found", "{\"error\":\"not found\"}", null);
                 return;
             }
-            if (!Authorize(request.Headers, publicMcpUrl))
+            bool oauthAccessToken;
+            if (!Authorize(request.Headers, publicMcpUrl, out oauthAccessToken))
             {
                 WriteResponse(stream, 401, "Unauthorized", JsonRpcError("null", -32001, "Bearer authorization required."),
                     new Dictionary<string, string> { ["WWW-Authenticate"] = McpOAuthAuthorizationServer.BuildBearerChallenge(publicMcpUrl) });
                 return;
             }
+            if (oauthAccessToken) RecordOAuthMcpActivity(request.Method, publicMcpUrl);
             if (request.Method == "DELETE")
             {
                 string sessionId;
@@ -428,6 +463,29 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
+            string requestProtocolVersion;
+            var modernRequest = request.Headers.TryGetValue("MCP-Protocol-Version", out requestProtocolVersion)
+                                && string.Equals(requestProtocolVersion, ModernProtocolVersion, StringComparison.Ordinal);
+            if (modernRequest)
+            {
+                string routingError;
+                if (!TryValidateModernRoutingHeaders(request.Headers, method, request.Body, out routingError))
+                {
+                    WriteResponse(stream, 400, "Bad Request", JsonRpcError(hasId ? id : "null", -32020, routingError), null);
+                    return;
+                }
+                HandleModernRequest(stream, request, method, id, hasId);
+                return;
+            }
+
+            if (string.Equals(method, "server/discover", StringComparison.Ordinal))
+            {
+                WriteResponse(stream, 400, "Bad Request",
+                    JsonRpcError(hasId ? id : "null", -32022,
+                        "Unsupported protocol version. Supported modern version: " + ModernProtocolVersion + "."), null);
+                return;
+            }
+
             if (string.Equals(method, "initialize", StringComparison.Ordinal))
             {
                 HandleInitialize(stream, request.Body, id, hasId);
@@ -463,7 +521,7 @@ namespace QS3D.BricsCAD.V25
             }
             if (string.Equals(method, "tools/list", StringComparison.Ordinal))
             {
-                WriteResponse(stream, 200, "OK", ToolsListResponse(id), ProtocolHeader(session));
+                WriteResponse(stream, 200, "OK", ToolsListResponse(id, false), ProtocolHeader(session));
                 return;
             }
             if (string.Equals(method, "tools/call", StringComparison.Ordinal))
@@ -482,6 +540,170 @@ namespace QS3D.BricsCAD.V25
             WriteResponse(stream, 200, "OK", JsonRpcError(id, -32601, "Method not found."), ProtocolHeader(session));
         }
 
+        private static void HandleModernRequest(NetworkStream stream, HttpRequest request, string method, string id, bool hasId)
+        {
+            if (!hasId)
+            {
+                WriteResponse(stream, 202, "Accepted", string.Empty, ModernProtocolHeader());
+                return;
+            }
+            if (string.Equals(method, "server/discover", StringComparison.Ordinal))
+            {
+                var result = "{\"jsonrpc\":\"2.0\",\"id\":" + id
+                             + ",\"result\":{\"resultType\":\"complete\","
+                             + "\"supportedVersions\":[\"" + ModernProtocolVersion + "\"],"
+                             + "\"capabilities\":{\"tools\":{}},"
+                             + "\"instructions\":\"QS3D full CAD agent. Ordinary mutations require confirmMutation=true; emergency stop and cancel remain available without confirmation.\","
+                             + "\"ttlMs\":0,\"cacheScope\":\"private\"," + ModernServerInfoMeta() + "}}";
+                WriteResponse(stream, 200, "OK", result, ModernProtocolHeader());
+                return;
+            }
+            if (string.Equals(method, "ping", StringComparison.Ordinal))
+            {
+                WriteResponse(stream, 200, "OK",
+                    "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"resultType\":\"complete\"," + ModernServerInfoMeta() + "}}",
+                    ModernProtocolHeader());
+                return;
+            }
+            if (string.Equals(method, "tools/list", StringComparison.Ordinal))
+            {
+                WriteResponse(stream, 200, "OK", ToolsListResponse(id, true), ModernProtocolHeader());
+                return;
+            }
+            if (string.Equals(method, "tools/call", StringComparison.Ordinal))
+            {
+                string toolName;
+                string arguments;
+                string error;
+                if (!TryExtractToolCall(request.Body, out toolName, out arguments, out error))
+                {
+                    WriteResponse(stream, 200, "OK", JsonRpcError(id, -32602, error), ModernProtocolHeader());
+                    return;
+                }
+                var modernResult = AddModernCompleteResult(CallTool(toolName, arguments));
+                WriteResponse(stream, 200, "OK",
+                    "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":" + modernResult + "}",
+                    ModernProtocolHeader());
+                return;
+            }
+            WriteResponse(stream, 200, "OK", JsonRpcError(id, -32601, "Method not found."), ModernProtocolHeader());
+        }
+
+        private static bool TryValidateModernRoutingHeaders(
+            IDictionary<string, string> headers,
+            string method,
+            string body,
+            out string error)
+        {
+            error = string.Empty;
+            string protocol;
+            if (!headers.TryGetValue("MCP-Protocol-Version", out protocol)
+                || !string.Equals(protocol, ModernProtocolVersion, StringComparison.Ordinal))
+            {
+                error = "MCP-Protocol-Version must be " + ModernProtocolVersion + ".";
+                return false;
+            }
+            if (!TryValidateModernRequestMeta(body, protocol, out error)) return false;
+            string headerMethod;
+            if (!headers.TryGetValue("Mcp-Method", out headerMethod)
+                || !string.Equals(headerMethod, method, StringComparison.Ordinal))
+            {
+                error = "Mcp-Method must match the JSON-RPC method.";
+                return false;
+            }
+            if (string.Equals(method, "tools/call", StringComparison.Ordinal))
+            {
+                string toolName;
+                string arguments;
+                string toolError;
+                if (!TryExtractToolCall(body, out toolName, out arguments, out toolError))
+                {
+                    error = toolError;
+                    return false;
+                }
+                string headerName;
+                if (!headers.TryGetValue("Mcp-Name", out headerName)
+                    || !string.Equals(headerName, toolName, StringComparison.Ordinal))
+                {
+                    error = "Mcp-Name must match tools/call params.name.";
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool TryValidateModernRequestMeta(string body, string protocol, out string error)
+        {
+            error = string.Empty;
+            string parameters;
+            if (!TryExtractObjectProperty(body, "params", out parameters))
+            {
+                error = "Modern MCP requests require object params containing _meta.";
+                return false;
+            }
+            string metadata;
+            if (!TryExtractObjectProperty(parameters, "_meta", out metadata))
+            {
+                error = "Modern MCP requests require params._meta.";
+                return false;
+            }
+            string metaProtocol;
+            try { metaProtocol = McpTopLevelJson.ExtractString(metadata, "io.modelcontextprotocol/protocolVersion"); }
+            catch (InvalidOperationException ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+            if (!string.Equals(metaProtocol, protocol, StringComparison.Ordinal))
+            {
+                error = "params._meta protocolVersion must match MCP-Protocol-Version.";
+                return false;
+            }
+
+            string rawCapabilities;
+            bool found;
+            if (!TryFindPropertyValue(metadata, "io.modelcontextprotocol/clientCapabilities", out rawCapabilities, out found, out error)) return false;
+            if (!found || !LooksLikeJsonObject(rawCapabilities))
+            {
+                error = "params._meta clientCapabilities must be an object.";
+                return false;
+            }
+
+            string rawClientInfo;
+            if (!TryFindPropertyValue(metadata, "io.modelcontextprotocol/clientInfo", out rawClientInfo, out found, out error)) return false;
+            if (found && !LooksLikeJsonObject(rawClientInfo))
+            {
+                error = "params._meta clientInfo must be an object when present.";
+                return false;
+            }
+            return true;
+        }
+
+        private static string AddModernCompleteResult(string result)
+        {
+            var raw = (result ?? string.Empty).Trim();
+            if (raw.Length >= 2 && raw[0] == '{' && raw[raw.Length - 1] == '}')
+            {
+                var inner = raw.Substring(1, raw.Length - 2);
+                return "{\"resultType\":\"complete\""
+                       + (inner.Length == 0 ? string.Empty : "," + inner)
+                       + "," + ModernServerInfoMeta() + "}";
+            }
+            return "{\"resultType\":\"complete\",\"content\":[{\"type\":\"text\",\"text\":\""
+                   + JsonEscape(raw) + "\"}],\"isError\":true," + ModernServerInfoMeta() + "}";
+        }
+
+        private static string ModernServerInfoMeta()
+        {
+            return "\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"qs3d-bricscad\",\"version\":\""
+                   + ServerVersion + "\"}}";
+        }
+
+        private static IDictionary<string, string> ModernProtocolHeader()
+        {
+            return new Dictionary<string, string> { ["MCP-Protocol-Version"] = ModernProtocolVersion };
+        }
+
         private static void HandleInitialize(NetworkStream stream, string body, string id, bool hasId)
         {
             if (!hasId)
@@ -497,10 +719,11 @@ namespace QS3D.BricsCAD.V25
             }
             var requested = McpTopLevelJson.ExtractString(parameters, "protocolVersion");
             if (!string.Equals(requested, ProtocolVersion, StringComparison.Ordinal)
+                && !string.Equals(requested, PreviousProtocolVersion, StringComparison.Ordinal)
                 && !string.Equals(requested, LegacyProtocolVersion, StringComparison.Ordinal))
             {
                 WriteResponse(stream, 200, "OK", JsonRpcError(id, -32602,
-                    "Unsupported MCP protocolVersion. Supported: " + ProtocolVersion + ", " + LegacyProtocolVersion + "."), null);
+                    "Unsupported initialize protocolVersion. Supported: " + ProtocolVersion + ", " + PreviousProtocolVersion + ", " + LegacyProtocolVersion + "."), null);
                 return;
             }
             string sessionId;
@@ -512,7 +735,7 @@ namespace QS3D.BricsCAD.V25
             var result = "{\"jsonrpc\":\"2.0\",\"id\":" + id
                          + ",\"result\":{\"protocolVersion\":\"" + requested
                          + "\",\"capabilities\":{\"tools\":{\"listChanged\":false}},"
-                         + "\"serverInfo\":{\"name\":\"qs3d-bricscad\",\"version\":\"embedded-5\"},"
+                         + "\"serverInfo\":{\"name\":\"qs3d-bricscad\",\"version\":\"" + ServerVersion + "\"},"
                          + "\"instructions\":\"QS3D full CAD agent. Prefer direct CAD API tools, use bounded command workflows for advanced native features, and BricsCAD-process UI input only as fallback. All ordinary mutations require confirmMutation=true. Emergency stop/cancel remain available without confirmation.\"}}";
             WriteResponse(stream, 200, "OK", result, new Dictionary<string, string>
             {
@@ -521,7 +744,7 @@ namespace QS3D.BricsCAD.V25
             });
         }
 
-        private static string ToolsListResponse(string id)
+        private static string ToolsListResponse(string id, bool modern)
         {
             var tools = new List<string>
             {
@@ -555,8 +778,15 @@ namespace QS3D.BricsCAD.V25
                 Tool("cad_audit_tail", "Read latest bounded local mutation audit entries.", "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}"),
                 Tool("cad_cancel_command", "Deliver ESC twice to cancel current BricsCAD command; no confirmation required.", "")
             };
-            tools.AddRange(McpDesktopAutomationRuntime.ToolDescriptors());
-            return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"tools\":[" + string.Join(",", tools) + "]}}";
+            foreach (var descriptor in McpDesktopAutomationRuntime.ToolDescriptors())
+                tools.Add(WithToolAnnotations(descriptor));
+            var resultPrefix = modern
+                ? "{\"resultType\":\"complete\",\"tools\":["
+                : "{\"tools\":[";
+            var resultSuffix = modern
+                ? "],\"ttlMs\":0,\"cacheScope\":\"private\"," + ModernServerInfoMeta() + "}"
+                : "]}";
+            return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":" + resultPrefix + string.Join(",", tools) + resultSuffix + "}";
         }
 
         private static string CallTool(string tool, string arguments)
@@ -566,9 +796,10 @@ namespace QS3D.BricsCAD.V25
                 if (string.Equals(tool, "connector_info", StringComparison.Ordinal))
                 {
                     var publicUrl = PublicUrl;
-                    return ToolSuccess("{\"protocol\":\"" + ProtocolVersion + "\",\"endpoint\":\"" + JsonEscape(Endpoint.ToString())
+                    return ToolSuccess("{\"protocol\":\"" + ModernProtocolVersion + "\",\"legacyProtocol\":\"" + ProtocolVersion + "\",\"serverVersion\":\"" + ServerVersion
+                        + "\",\"endpoint\":\"" + JsonEscape(Endpoint.ToString())
                         + "\",\"publicUrl\":\"" + JsonEscape(publicUrl) + "\",\"auth\":\"oauth2.1+legacy_bearer\",\"singleRepository\":true,"
-                        + "\"fullCadAgent\":true,\"structuredContent\":true,\"automationStopped\":"
+                        + "\"fullCadAgent\":true,\"structuredContent\":true,\"modernMetaEnvelope\":true,\"toolAnnotations\":true,\"automationStopped\":"
                         + (McpCadAgentRuntime.AutomationStopped ? "true" : "false") + "}");
                 }
                 return ToolSuccess(McpCadAgentRuntime.Call(tool, arguments));
@@ -592,6 +823,13 @@ namespace QS3D.BricsCAD.V25
             return (first == '{' && last == '}') || (first == '[' && last == ']');
         }
 
+        private static bool LooksLikeJsonObject(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            var trimmed = value.Trim();
+            return trimmed.Length >= 2 && trimmed[0] == '{' && trimmed[trimmed.Length - 1] == '}';
+        }
+
         private static string ToolError(string message)
         {
             return "{\"content\":[{\"type\":\"text\",\"text\":\"" + JsonEscape(message ?? "MCP tool failed.") + "\"}],\"isError\":true}";
@@ -604,8 +842,99 @@ namespace QS3D.BricsCAD.V25
                 : ",\"required\":[\"" + string.Join("\",\"", required) + "\"]";
             return "{\"name\":\"" + JsonEscape(name) + "\",\"description\":\"" + JsonEscape(description)
                    + "\",\"inputSchema\":{\"type\":\"object\",\"properties\":{" + (properties ?? string.Empty)
-                   + "},\"additionalProperties\":false" + requiredJson + "}}";
+                   + "},\"additionalProperties\":false" + requiredJson + "},\"annotations\":" + ToolAnnotations(name) + "}";
         }
+
+        private static string WithToolAnnotations(string descriptor)
+        {
+            var raw = (descriptor ?? string.Empty).Trim();
+            if (!LooksLikeJsonObject(raw) || raw.IndexOf("\"annotations\"", StringComparison.Ordinal) >= 0) return raw;
+            string name;
+            try { name = McpTopLevelJson.ExtractString(raw, "name"); }
+            catch (InvalidOperationException) { return raw; }
+            return raw.Substring(0, raw.Length - 1) + ",\"annotations\":" + ToolAnnotations(name) + "}";
+        }
+
+        private static string ToolAnnotations(string name)
+        {
+            var readOnly = IsReadOnlyTool(name);
+            var destructive = !readOnly && IsDestructiveTool(name);
+            var idempotent = readOnly || IsIdempotentMutationTool(name);
+            var openWorld = (name ?? string.Empty).StartsWith("desktop_", StringComparison.Ordinal);
+            return "{\"readOnlyHint\":" + JsonBool(readOnly)
+                   + ",\"destructiveHint\":" + JsonBool(destructive)
+                   + ",\"idempotentHint\":" + JsonBool(idempotent)
+                   + ",\"openWorldHint\":" + JsonBool(openWorld) + "}";
+        }
+
+        private static bool IsReadOnlyTool(string name)
+        {
+            switch (name ?? string.Empty)
+            {
+                case "connector_info":
+                case "qs3d_status":
+                case "cad_active_document":
+                case "cad_selection":
+                case "cad_database_snapshot":
+                case "cad_entity_inspect":
+                case "cad_view_state":
+                case "cad_wait_idle":
+                case "cad_sysvar":
+                case "cad_command_catalog":
+                case "cad_audit_tail":
+                case "desktop_cursor_position":
+                case "desktop_window_list":
+                case "desktop_foreground_window":
+                case "desktop_wait_for_window":
+                case "desktop_clipboard_read":
+                case "desktop_screenshot":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsDestructiveTool(string name)
+        {
+            switch (name ?? string.Empty)
+            {
+                case "cad_entity_transform":
+                case "cad_entity_delete":
+                case "cad_entity_set_layer":
+                case "cad_command_sequence":
+                case "qs3d_run_command":
+                case "cad_ui_click":
+                case "cad_ui_type":
+                case "cad_ui_key":
+                case "desktop_window_focus":
+                case "desktop_mouse_move":
+                case "desktop_mouse_click":
+                case "desktop_mouse_scroll":
+                case "desktop_mouse_drag":
+                case "desktop_type":
+                case "desktop_key":
+                case "desktop_clipboard_write":
+                case "desktop_sequence":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsIdempotentMutationTool(string name)
+        {
+            switch (name ?? string.Empty)
+            {
+                case "cad_agent_stop":
+                case "cad_agent_resume":
+                case "cad_cancel_command":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static string JsonBool(bool value) { return value ? "true" : "false"; }
 
         private static string Numeric(params string[] names)
         {
@@ -681,14 +1010,31 @@ namespace QS3D.BricsCAD.V25
             return McpTopLevelJson.TryFindPropertyValue(json, property, out raw, out found, out error);
         }
 
-        private static bool Authorize(IDictionary<string, string> headers, string publicMcpUrl)
+        private static bool Authorize(IDictionary<string, string> headers, string publicMcpUrl, out bool oauthAccessToken)
         {
+            oauthAccessToken = false;
             string authorization;
             if (!headers.TryGetValue("Authorization", out authorization)) return false;
             const string prefix = "Bearer ";
             if (!authorization.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
             if (ConstantTimeEquals(authorization.Substring(prefix.Length).Trim(), GetBearerToken())) return true;
-            return McpOAuthAuthorizationServer.TryValidateAccessToken(headers, publicMcpUrl, GetBearerToken());
+            if (!McpOAuthAuthorizationServer.TryValidateAccessToken(headers, publicMcpUrl, GetBearerToken())) return false;
+            oauthAccessToken = true;
+            return true;
+        }
+
+        private static void RecordOAuthMcpActivity(string method, string publicMcpUrl)
+        {
+            var safeMethod = (method ?? string.Empty).Trim().ToUpperInvariant();
+            if (safeMethod.Length > 16) safeMethod = safeMethod.Substring(0, 16);
+            var safePublicUrl = (publicMcpUrl ?? string.Empty).Trim();
+            if (safePublicUrl.Length > 2048) safePublicUrl = safePublicUrl.Substring(0, 2048);
+            lock (Sync)
+            {
+                _lastOAuthMcpActivityUtc = DateTime.UtcNow;
+                _lastOAuthMcpMethod = safeMethod;
+                _lastOAuthMcpPublicUrl = safePublicUrl;
+            }
         }
 
         private static bool TryCreateSession(string protocolVersion, out string sessionId)

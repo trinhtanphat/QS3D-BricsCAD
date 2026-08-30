@@ -9,11 +9,12 @@ smoke = SMOKE.read_text(encoding="utf-8")
 
 required_source = [
     "using (var enumerator = groups.GetEnumerator())",
-    "while (enumerator.MoveNext())",
+    "RequireStableKnownCount(groups, knownCount);",
+    "var moved = enumerator.MoveNext();",
+    "if (!moved)",
     "if (index == MaxGroups)",
     "if (hasKnownCount && index >= knownCount)",
     "var group = enumerator.Current;",
-    "RequireStableKnownCount(groups, knownCount);",
 ]
 required_smoke = [
     "KnownCountOverrunRejectsBeforeExtraCurrent();",
@@ -32,12 +33,17 @@ if missing:
         "MEP/TBQ known-Count no-overread preflight failed; missing: " + ", ".join(missing)
     )
 
-current = source.index("var group = enumerator.Current;")
-if source.index("if (index == MaxGroups)") > current:
-    raise SystemExit("MEP/TBQ streaming ceiling must fail before enumerator.Current.")
-if source.index("if (hasKnownCount && index >= knownCount)") > current:
-    raise SystemExit("MEP/TBQ known-Count overrun must fail before enumerator.Current.")
-if source.index("RequireStableKnownCount(groups, knownCount);") < current:
-    raise SystemExit("MEP/TBQ final Count rebinding must remain after traversal.")
+start = source.index("public IReadOnlyList<MepTbqReportRow> BuildReport(")
+end = source.index("public string SerializeCsv(", start)
+region = source[start:end]
+move = region.index("var moved = enumerator.MoveNext();")
+second_rebound = region.index("RequireStableKnownCount(groups, knownCount);", move)
+cap = region.index("if (index == MaxGroups)", second_rebound)
+overrun = region.index("if (hasKnownCount && index >= knownCount)", cap)
+current = region.index("var group = enumerator.Current;", overrun)
+under_yield = region.index("if (hasKnownCount && index != knownCount)", current)
+final_rebound = region.index("RequireStableKnownCount(groups, knownCount);", under_yield)
+if not (move < second_rebound < cap < overrun < current < under_yield < final_rebound):
+    raise SystemExit("MEP/TBQ known-Count traversal must reject drift/overrun before semantic Current and rebind after traversal.")
 
 print("PASS MEP/TBQ known-Count no-overread source guard")

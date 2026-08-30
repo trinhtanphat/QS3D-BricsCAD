@@ -112,7 +112,7 @@ for token in ("QS3DUPDATE", "UpdateCenterWindowHost.Show()", "QS3DUPDATE V26 err
 for token in ("one-click update is intentionally disabled", "Do not install a V25 update package"):
     forbid(update_commands, token, "V26 update command")
 
-for token in ("#if BRICSCAD_V26", "var hasPreviewDownload = false;", "#if !BRICSCAD_V26", "new VerifiedReleaseDownloader().DownloadAsync(release)"):
+for token in ("#if BRICSCAD_V26", "var hasPreviewDownload = false;", "#if !BRICSCAD_V26", "var progress = new Progress<UpdateDownloadProgress>(ApplyDownloadProgress);", "new VerifiedReleaseDownloader().DownloadAsync(release, progress)"):
     require(update_center, token, "shared Update Center V26 preview isolation")
 for token in ("private bool _previewScheduled;", "private string? _previewScheduledDetail;", "private async System.Threading.Tasks.Task DownloadPreviewAsync"):
     require(update_center, token, "V25 preview scheduling implementation")

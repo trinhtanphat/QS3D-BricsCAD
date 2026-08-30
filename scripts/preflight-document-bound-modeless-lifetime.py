@@ -144,12 +144,18 @@ if not errors:
         "schedule_hub": ("new ScheduleHubWindow(document)", "schedule_hub_window"),
         "curtain_hub": ("new CurtainWallWindow(document)", "curtain_hub_window"),
     }
+    publication_tracked_managers = {"families", "levels", "zones"}
     for key, (constructor, window_key) in manager_contracts.items():
         source = text[key]
         window_source = text[window_key]
         if constructor not in source:
             errors.append(key + " launcher lost its explicit source Document constructor")
-        if "Application.ShowModelessWindow(IntPtr.Zero, window, true);" not in source:
+        if key in publication_tracked_managers:
+            if "var publishedWindow = candidate;" not in source:
+                errors.append(key + " launcher must alias the exact candidate before attaching publication lifecycle")
+            if "Application.ShowModelessWindow(IntPtr.Zero, publishedWindow, true);" not in source:
+                errors.append(key + " launcher must show the exact publication-tracked candidate instance")
+        elif "Application.ShowModelessWindow(IntPtr.Zero, window, true);" not in source:
             errors.append(key + " launcher must show the same registered window instance")
         if "DocumentBoundWindowLifetime.Attach(window, document);" in source:
             errors.append(key + " launcher must not duplicate lifetime attachment owned by the window constructor")
@@ -176,4 +182,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: document-bound review/health/BQ/BBS/schedule/manager windows keep one source-DWG registration; Revision retains only stable native database identity for callbacks, native reactors stay centralized, and dynamic hubs remain active-document based.")
+print("PASS: document-bound review/health/BQ/BBS/schedule/manager windows keep one source-DWG registration; publication-tracked Family/Level/Zone managers show their exact lifecycle-owned candidate; Revision retains only stable native database identity for callbacks, native reactors stay centralized, and dynamic hubs remain active-document based.")

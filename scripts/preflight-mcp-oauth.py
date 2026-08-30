@@ -159,6 +159,17 @@ def main() -> int:
         require(embedded, needle, "OAuth transport wiring")
     reject(embedded, '["WWW-Authenticate"] = "Bearer"', "legacy bare challenge after OAuth wiring")
 
+    # Remote ChatGPT connectivity is different from local/tunnel readiness. Accept only
+    # absent/loopback Origin or the exact origin of the currently validated public MCP
+    # resource, and record only successful OAuth MCP traffic (never legacy self-test bearer).
+    require(embedded, "IsAllowedOrigin(request.Headers, publicMcpUrl)", "public-resource-aware Origin gate")
+    require(embedded, "IsSameOriginAsPublicMcp", "exact public MCP Origin comparison")
+    require(embedded, "LastOAuthMcpActivityUtc", "privacy-safe OAuth MCP activity timestamp")
+    require(embedded, "LastOAuthMcpMethod", "privacy-safe OAuth MCP activity method")
+    require(embedded, "LastOAuthMcpPublicUrl", "OAuth MCP resource binding")
+    require(embedded, "RecordOAuthMcpActivity", "OAuth MCP activity recorder")
+    require(embedded, "out bool oauthAccessToken", "legacy-bearer versus OAuth authorization distinction")
+
     for modern_only in ("Convert.ToHexString", "RandomNumberGenerator.GetBytes(", "CryptographicOperations.FixedTimeEquals"):
         reject(oauth, modern_only, "net48 compatibility")
 

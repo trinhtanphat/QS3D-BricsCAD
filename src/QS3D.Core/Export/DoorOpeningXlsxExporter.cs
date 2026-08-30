@@ -20,21 +20,23 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            var rowCount = RequireConsistentKnownCount(rows, MaxDataRows, "export rows");
+            KnownCountContract<DoorOpeningScheduleRow> rowCount = BindKnownCount(rows, MaxDataRows, "export rows");
 
-            var snapshot = new List<DoorOpeningScheduleRow>(rowCount);
-            var sourceRows = new List<DoorOpeningScheduleRow>(rowCount);
-            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+            var snapshot = new List<DoorOpeningScheduleRow>(rowCount.Value);
+            var sourceRows = new List<DoorOpeningScheduleRow>(rowCount.Value);
+            for (var rowIndex = 0; rowIndex < rowCount.Value; rowIndex++)
             {
+                rowCount.Revalidate(rows, "before row indexer");
                 var sourceRow = rows[rowIndex];
+                rowCount.Revalidate(rows, "after row indexer");
                 if (sourceRow == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
                 sourceRows.Add(sourceRow);
                 snapshot.Add(SnapshotRow(sourceRow, rowIndex));
+                rowCount.Revalidate(rows, "after row snapshot");
             }
-            if (rows.Count != rowCount)
-                throw new InvalidOperationException("Door/opening XLSX export row count changed during snapshot.");
-            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+            rowCount.Revalidate(rows, "after snapshot traversal");
+            for (var rowIndex = 0; rowIndex < rowCount.Value; rowIndex++)
                 EnsureRowStable(sourceRows[rowIndex], snapshot[rowIndex], rowIndex);
             ValidateCellText(snapshot);
             ValidateNumericValues(snapshot);
@@ -148,29 +150,88 @@ namespace QS3D.Core.Export
                 throw new InvalidOperationException("Door/opening XLSX export row " + rowIndex + " field " + fieldName + " count changed during snapshot traversal.");
         }
 
+        private static KnownCountContract<T> BindKnownCount<T>(IEnumerable<T> source, int maximum, string label)
+        {
+            var contract = new KnownCountContract<T>(
+                source is IReadOnlyCollection<T>,
+                source is ICollection<T>,
+                source is ICollection,
+                maximum,
+                label);
+            contract.Bind(source);
+            return contract;
+        }
+
         private static int RequireConsistentKnownCount<T>(IEnumerable<T> source, int maximum, string label)
         {
-            int? expected = null;
-            Action<int> bind = count =>
-            {
-                if (count < 0)
-                    throw new ArgumentOutOfRangeException("rows", "Door/opening XLSX " + label + " count must be non-negative.");
-                if (count > maximum)
-                    throw new ArgumentOutOfRangeException("rows", "Door/opening XLSX " + label + " count exceeds the supported maximum of " + maximum + ".");
-                if (expected.HasValue && expected.Value != count)
-                    throw new InvalidOperationException("Door/opening XLSX " + label + " exposes conflicting known collection counts.");
-                expected = count;
-            };
+            return BindKnownCount(source, maximum, label).Value;
+        }
 
-            var readOnly = source as IReadOnlyCollection<T>;
-            if (readOnly != null) bind(readOnly.Count);
-            var generic = source as ICollection<T>;
-            if (generic != null) bind(generic.Count);
-            var nonGeneric = source as ICollection;
-            if (nonGeneric != null) bind(nonGeneric.Count);
-            if (!expected.HasValue)
-                throw new ArgumentException("Door/opening XLSX " + label + " must expose a deterministic collection count.", "rows");
-            return expected.Value;
+        private sealed class KnownCountContract<T>
+        {
+            private readonly bool _readOnlyCount;
+            private readonly bool _genericCount;
+            private readonly bool _nonGenericCount;
+            private readonly int _maximum;
+            private readonly string _label;
+            private bool _bound;
+
+            internal KnownCountContract(bool readOnlyCount, bool genericCount, bool nonGenericCount, int maximum, string label)
+            {
+                _readOnlyCount = readOnlyCount;
+                _genericCount = genericCount;
+                _nonGenericCount = nonGenericCount;
+                _maximum = maximum;
+                _label = label;
+            }
+
+            internal int Value { get; private set; }
+
+            internal void Bind(IEnumerable<T> source)
+            {
+                var observed = Observe(source, "at admission");
+                Value = observed;
+                _bound = true;
+            }
+
+            internal void Revalidate(IEnumerable<T> source, string phase)
+            {
+                if (!_bound) throw new InvalidOperationException("Door/opening XLSX " + _label + " count contract was not admitted.");
+                var observed = Observe(source, phase);
+                if (observed != Value)
+                {
+                    if (string.Equals(_label, "export rows", StringComparison.Ordinal))
+                        throw new InvalidOperationException("Door/opening XLSX row count changed during snapshot " + phase + ". Expected " + Value + " but observed " + observed + ".");
+                    throw new InvalidOperationException("Door/opening XLSX " + _label + " count changed " + phase + ". Expected " + Value + " but observed " + observed + ".");
+                }
+            }
+
+            private int Observe(IEnumerable<T> source, string phase)
+            {
+                if ((source is IReadOnlyCollection<T>) != _readOnlyCount ||
+                    (source is ICollection<T>) != _genericCount ||
+                    (source is ICollection) != _nonGenericCount)
+                    throw new InvalidOperationException("Door/opening XLSX " + _label + " known count sources changed " + phase + ".");
+
+                int? expected = null;
+                Action<int> observe = count =>
+                {
+                    if (count < 0)
+                        throw new ArgumentOutOfRangeException("rows", "Door/opening XLSX " + _label + " count must be non-negative " + phase + ".");
+                    if (count > _maximum)
+                        throw new ArgumentOutOfRangeException("rows", "Door/opening XLSX " + _label + " count exceeds the supported maximum of " + _maximum + " " + phase + ".");
+                    if (expected.HasValue && expected.Value != count)
+                        throw new InvalidOperationException("Door/opening XLSX " + _label + " exposes conflicting known collection counts " + phase + ".");
+                    expected = count;
+                };
+
+                if (_readOnlyCount) observe(((IReadOnlyCollection<T>)source).Count);
+                if (_genericCount) observe(((ICollection<T>)source).Count);
+                if (_nonGenericCount) observe(((ICollection)source).Count);
+                if (!expected.HasValue)
+                    throw new ArgumentException("Door/opening XLSX " + _label + " must expose a deterministic collection count.", "rows");
+                return expected.Value;
+            }
         }
 
         private static void ValidateCellText(IReadOnlyList<DoorOpeningScheduleRow> rows)

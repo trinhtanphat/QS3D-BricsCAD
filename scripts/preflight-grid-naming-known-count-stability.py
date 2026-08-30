@@ -18,7 +18,9 @@ if source.is_file():
     renumber = text[renumber_start:renumber_end] if renumber_start >= 0 and renumber_end > renumber_start else ""
     required = (
         "var knownCount = TryGetKnownCount(orderedGridElementIds",
-        "foreach (var value in orderedGridElementIds)",
+        "using (var enumerator = orderedGridElementIds.GetEnumerator())",
+        "RequireStableKnownCountDuringTraversal(project, orderedGridElementIds, knownCount, targetEnumerationVersion);",
+        "if (!enumerator.MoveNext()) break;",
         "ids.Count != knownCount.Value",
         "RevalidateKnownCountAfterTraversal(project, orderedGridElementIds, knownCount, targetEnumerationVersion);",
         "var originalTargets = ResolveOriginalTargets",
@@ -27,9 +29,25 @@ if source.is_file():
     )
     positions = [renumber.find(token) for token in required]
     if not renumber or any(pos < 0 for pos in positions) or positions != sorted(positions):
-        errors.append("GridNamingService.Renumber must rebind Count after exact traversal and before target planning/mutation.")
+        errors.append("GridNamingService.Renumber must explicitly traverse with Count rebound, then rebind Count after exact traversal and before target planning/mutation.")
     if "known Count was exceeded during traversal" not in renumber:
         errors.append("GridNamingService.Renumber must reject known-Count overrun before retaining the extra id.")
+    if "foreach (var value in orderedGridElementIds)" in renumber:
+        errors.append("GridNamingService.Renumber must not regress to caller-controlled foreach before Count-stability gates.")
+
+    traversal_start = text.find("private static void RequireStableKnownCountDuringTraversal(")
+    traversal_end = text.find("private static void RevalidateKnownCountAfterTraversal(", traversal_start)
+    traversal = text[traversal_start:traversal_end] if traversal_start >= 0 and traversal_end > traversal_start else ""
+    traversal_required = (
+        "project.ChangeVersion != targetEnumerationVersion",
+        "TryGetKnownCount(source",
+        "invalidNegativeKnownCount",
+        "conflictingKnownCounts",
+        "!reboundCount.HasValue || reboundCount.Value != admittedCount.Value",
+        "known Count changed during traversal",
+    )
+    if not traversal or any(token not in traversal for token in traversal_required):
+        errors.append("Grid traversal-time Count validation must re-read all Count surfaces before semantic Current and preserve project-version anti-race checks.")
 
     stable_start = text.find("private static void RevalidateKnownCountAfterTraversal(")
     stable_end = text.find("private static int? TryGetKnownCount(", stable_start)
@@ -68,4 +86,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Grid renumber rebinds deterministic Count evidence before target planning/mutation.")
+print("PASS: Grid renumber rebinds deterministic Count evidence during traversal and after traversal before target planning/mutation.")
