@@ -136,6 +136,8 @@ namespace QS3D.Core.Mep
                         throw new InvalidOperationException("MEP/TBQ report source Count does not match source traversal.");
 
                     var group = enumerator.Current;
+                    if (hasKnownCount)
+                        RequireStableKnownCount(groups, knownCount);
                     if (group == null)
                         throw new ArgumentException("MEP/TBQ report contains a null quantity group at index " + index + ".", nameof(groups));
                     rows.Add(new MepTbqReportRow(group));
