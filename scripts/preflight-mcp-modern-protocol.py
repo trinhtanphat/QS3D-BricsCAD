@@ -48,7 +48,7 @@ def main() -> int:
         '"io.modelcontextprotocol/protocolVersion"',
         '"io.modelcontextprotocol/clientCapabilities"',
         '"io.modelcontextprotocol/clientInfo"',
-        '"io.modelcontextprotocol/serverInfo"',
+        r'\"io.modelcontextprotocol/serverInfo\"',
         '\\"resultType\\"',
         '\\"ttlMs\\"',
         '\\"cacheScope\\"',
@@ -83,7 +83,7 @@ def main() -> int:
         fail("modern per-request metadata helpers are incomplete")
     require(embedded[meta_validation:meta_stamp], '"io.modelcontextprotocol/protocolVersion"', "modern protocol-version envelope validation")
     require(embedded[meta_validation:meta_stamp], '"io.modelcontextprotocol/clientCapabilities"', "modern client-capabilities envelope validation")
-    require(embedded[meta_stamp:tools_list], '"io.modelcontextprotocol/serverInfo"', "modern response server identity stamp")
+    require(embedded[meta_stamp:tools_list], r'\"io.modelcontextprotocol/serverInfo\"', "modern response server identity stamp")
 
     modern_handler = embedded[embedded.find("private static void HandleModernRequest"):meta_validation]
     if '\\"serverInfo\\":' in modern_handler:
