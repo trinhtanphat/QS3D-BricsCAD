@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace QS3D.Core.Geometry
 {
@@ -44,10 +43,8 @@ namespace QS3D.Core.Geometry
             RequirePositiveFinite(geometryTolerance, nameof(geometryTolerance));
             RequirePositiveFinite(angleTolerance, nameof(angleTolerance));
 
-            var list = curves.Take(MaxCurves + 1).ToList();
+            var list = GridSnapInputMaterializer.Materialize(curves, MaxCurves, "Grid ARC snap input");
             if (list.Count == 0) return false;
-            if (list.Count > MaxCurves)
-                throw new InvalidOperationException("Grid ARC snap supports at most " + MaxCurves + " curves.");
 
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var candidates = new List<GridArcSnapResult>(list.Count);
