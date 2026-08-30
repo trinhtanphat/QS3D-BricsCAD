@@ -78,7 +78,7 @@ namespace QS3D.Core.SmokeTests
                         _owner.CurrentReads++;
                         _owner._currentObserved = true;
                         if (_owner._returnNull)
-                            return null;
+                            return null!;
                         return new QuantityReportRow
                         {
                             Count = 2,
