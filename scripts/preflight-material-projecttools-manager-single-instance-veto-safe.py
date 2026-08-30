@@ -34,6 +34,8 @@ for label, path in CASES.items():
         "window.Closed += (_, __) =>",
         "if (ReferenceEquals(_published, published)) _published = null;",
         "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+        "if (!window.IsLoaded)",
+        "host show returned without a loaded window.",
         "_published = published;",
         "window = null;",
         "if (window != null)",
@@ -59,12 +61,13 @@ for label, path in CASES.items():
     retained = source.find("if (ReferenceEquals(_published, previous))", close)
     construct = source.find("window = new ")
     show = source.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);")
-    publish = source.find("_published = published;", show)
-    if min(capture, reuse, close, retained, construct, show, publish) < 0:
+    loaded = source.find("if (!window.IsLoaded)", show)
+    publish = source.find("_published = published;", loaded)
+    if min(capture, reuse, close, retained, construct, show, loaded, publish) < 0:
         errors.append(f"{label} manager ordering tokens are incomplete")
-    elif not (capture < reuse < close < retained < construct < show < publish):
+    elif not (capture < reuse < close < retained < construct < show < loaded < publish):
         errors.append(
-            f"{label} manager must arbitrate/reuse, terminal-close, construct, show, then publish in fail-closed order"
+            f"{label} manager must arbitrate/reuse, terminal-close, construct, show, confirm Loaded, then publish in fail-closed order"
         )
 
 material = CASES["Material"].read_text(encoding="utf-8") if CASES["Material"].is_file() else ""
@@ -89,5 +92,5 @@ if errors:
 
 print(
     "PASS: Material Catalog and Project Tools retain exact native+managed-wrapper affinity, "
-    "terminal close arbitration, veto safety, publication-after-show and instance-safe Closed release."
+    "terminal close arbitration, veto safety, loaded host-show admission and instance-safe Closed release."
 )
