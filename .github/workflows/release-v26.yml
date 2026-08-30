@@ -302,25 +302,31 @@ jobs:
             generate_release_notes = $true
           } | ConvertTo-Json
 
-          $preCreateTagRef = "refs/tags/$env:RELEASE_TAG"
-          $preCreatePeeledRef = $preCreateTagRef + '^{}'
-          $preCreateTagLines = @(git ls-remote --tags origin $preCreateTagRef $preCreatePeeledRef)
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to prove remote V26 release tag absence before draft creation: $env:RELEASE_TAG"
-          }
-          if ($preCreateTagLines.Count -ne 0) {
-            throw "Remote V26 release tag already existed before draft creation; refusing transaction ownership: $env:RELEASE_TAG"
-          }
-          $tagWasAbsentBeforeCreate = $true
-          $releaseCreatedByThisRun = $false
+          $tagCreatedByThisRun = $false
+          $releaseId = [long]0
           $release = $null
 
           try {
+            $tagRefUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/refs"
+            $tagCreateRequest = @{
+              ref = "refs/tags/$env:RELEASE_TAG"
+              sha = $env:GITHUB_SHA
+            } | ConvertTo-Json
+            $createdTag = Invoke-RestMethod -Method Post -Uri $tagRefUri -Headers $headers -ContentType 'application/json' -Body $tagCreateRequest
+            if ($null -eq $createdTag -or -not [string]::Equals([string]$createdTag.ref, "refs/tags/$env:RELEASE_TAG", [StringComparison]::Ordinal)) {
+              throw "V26 release tag creation returned a mismatched ref; refusing transaction ownership."
+            }
+            if ($null -eq $createdTag.object -or -not [string]::Equals([string]$createdTag.object.sha, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+              throw "V26 release tag creation returned a mismatched SHA; refusing transaction ownership."
+            }
+            $tagCreatedByThisRun = $true
+            Assert-RemoteReleaseTagTargetsWorkflowSha
+
             $release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" -Headers $headers -ContentType 'application/json' -Body $request
             if ($null -eq $release -or [long]$release.id -le 0) {
-              throw "V26 draft creation returned no usable release identity; manual cleanup may be required."
+              throw "V26 draft creation returned no usable release identity."
             }
-            $releaseCreatedByThisRun = $true
+            $releaseId = [long]$release.id
             if ($release.draft -ne $true) {
               throw "Newly-created V26 release was not a draft; refusing publication transaction."
             }
@@ -344,7 +350,7 @@ jobs:
               Invoke-RestMethod -Method Post -Uri ($uploadBase + '?name=' + [Uri]::EscapeDataString($name)) -Headers $headers -ContentType $contentType -InFile $asset | Out-Null
             }
 
-            $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$($release.id)"
+            $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$releaseId"
             $draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
             $expectedAssets = @('QS3D-BricsCAD-V26.zip', 'QS3D-BricsCAD-V26.zip.sha256')
             if ($signPackage) { $expectedAssets += 'QS3D-BricsCAD-V26.update.json' }
@@ -402,17 +408,17 @@ jobs:
           }
           catch {
             $publicationError = $_
-            if (-not $releaseCreatedByThisRun -or $null -eq $release -or [long]$release.id -le 0) {
+            if (-not $tagCreatedByThisRun) {
               throw
             }
 
             try {
               & .\scripts\rollback-v26-draft-release.ps1 `
                 -Repository $env:GITHUB_REPOSITORY `
-                -ReleaseId ([long]$release.id) `
+                -ReleaseId $releaseId `
                 -ReleaseTag $env:RELEASE_TAG `
                 -WorkflowSha $env:GITHUB_SHA `
-                -TagWasAbsentBeforeCreate $tagWasAbsentBeforeCreate `
+                -TagCreatedByThisRun $tagCreatedByThisRun `
                 -Token $env:GH_TOKEN | Out-Null
             }
             catch {
@@ -420,5 +426,5 @@ jobs:
               throw "Automatic V26 draft rollback failed. Original publication error: $($publicationError.Exception.Message) Rollback error: $($rollbackError.Exception.Message) Manual cleanup is required before retry."
             }
 
-            throw "V26 publication failed after draft creation: $($publicationError.Exception.Message) Automatic rollback completed; retry with the same tag is safe."
+            throw "V26 publication failed after transaction tag creation: $($publicationError.Exception.Message) Automatic rollback completed; retry with the same tag is safe."
           }
