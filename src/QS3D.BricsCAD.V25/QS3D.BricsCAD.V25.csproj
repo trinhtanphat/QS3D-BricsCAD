@@ -23,6 +23,8 @@
   <ItemGroup>
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.Security" />
+    <Reference Include="UIAutomationClient" />
+    <Reference Include="UIAutomationTypes" />
     <Reference Include="BrxMgd"><HintPath>$(BRICSCAD_V25_DIR)\BrxMgd.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="TD_Mgd"><HintPath>$(BRICSCAD_V25_DIR)\TD_Mgd.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="TD_MgdBrep"><HintPath>$(BRICSCAD_V25_DIR)\TD_MgdBrep.dll</HintPath><Private>false</Private></Reference>
