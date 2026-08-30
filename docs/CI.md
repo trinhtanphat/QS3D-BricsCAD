@@ -13,6 +13,8 @@ This file is only a navigation aid. It must not define a second trigger/merge mo
 - red current-lane CI is remediated on the same carrier;
 - publishing/release workflows remain separate from ordinary task validation.
 
+Host-specific build qualification remains defined by the applicable architecture/release runbooks. For BricsCAD V26 those references include `BrxMgd.dll`, `TD_Mgd.dll`, and `TD_MgdBrep.dll`; this note is compatibility/navigation context, not a second CI policy.
+
 For details read:
 
 1. `../CI_POLICY.md`;
