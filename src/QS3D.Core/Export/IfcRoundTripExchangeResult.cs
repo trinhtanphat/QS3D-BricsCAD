@@ -137,8 +137,18 @@ namespace QS3D.Core.Export
             var observedResultCount = 0;
             using (var enumerator = results.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        results,
+                        knownCount,
+                        "IFC exchange result");
+                    if (!enumerator.MoveNext())
+                        break;
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        results,
+                        knownCount,
+                        "IFC exchange result");
                     IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
                         knownCount,
                         observedResultCount,
@@ -146,6 +156,10 @@ namespace QS3D.Core.Export
                     if (observedResultCount == MaxResultsPerCollection)
                         throw ResultCollectionTooLarge();
                     var item = enumerator.Current;
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        results,
+                        knownCount,
+                        "IFC exchange result");
                     observedResultCount++;
 
                     if (item == null)
