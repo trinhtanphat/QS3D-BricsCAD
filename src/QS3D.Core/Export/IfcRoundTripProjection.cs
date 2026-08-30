@@ -104,6 +104,10 @@ namespace QS3D.Core.Export
                     if (items.Count == MaxNestedCollectionItems)
                         ThrowTooManyNestedItems("dimension");
                     var item = enumerator.Current;
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        dimensions,
+                        knownCount,
+                        "IFC round-trip dimension");
                     if (item == null)
                         throw new ArgumentException("Dimension collection cannot contain null entries.", nameof(dimensions));
                     if (!seenNames.Add(item.Name))
@@ -155,6 +159,10 @@ namespace QS3D.Core.Export
                     if (items.Count == MaxNestedCollectionItems)
                         ThrowTooManyNestedItems("provenance");
                     var value = enumerator.Current;
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        provenance,
+                        knownCount,
+                        "IFC round-trip provenance");
                     var token = IfcRoundTripProjectionContract.RequireCanonicalToken(value, nameof(provenance));
                     if (!seen.Add(token)) throw new ArgumentException("Duplicate provenance token: " + token, nameof(provenance));
                     items.Add(token);
@@ -217,7 +225,6 @@ namespace QS3D.Core.Export
             if (knownCount.HasValue && knownCount.Value > MaxNestedCollectionItems)
                 ThrowTooManyNestedItems(collectionName);
         }
-
         private static void ThrowTooManyNestedItems(string collectionName)
         {
             throw new InvalidOperationException(
@@ -268,6 +275,10 @@ namespace QS3D.Core.Export
                     if (items.Count == MaxProjections)
                         ThrowTooManyProjections();
                     var projection = enumerator.Current;
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        projections,
+                        knownCount,
+                        "IFC round-trip projection");
                     if (projection == null) throw new ArgumentException("Projection collection cannot contain null entries.", nameof(projections));
                     if (!ifcGlobalIds.Add(projection.IfcGlobalId)) throw new InvalidOperationException("Duplicate IFC global identity: " + projection.IfcGlobalId);
                     if (!qs3dElementIds.Add(projection.Qs3dElementId)) throw new InvalidOperationException("Duplicate QS3D element identity: " + projection.Qs3dElementId);
