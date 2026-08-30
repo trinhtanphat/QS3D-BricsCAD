@@ -6,26 +6,34 @@ This runbook covers the Core-only `RegenerationEngine.RegenerateDirtySubset(...)
 
 ## Integrity contract
 
-`CanonicalTargetIds(...)` may accept arbitrary `IEnumerable<string>` target IDs. When the source also exposes a supported collection Count, that Count is admission evidence and must be treated as a caller-controlled cardinality contract.
+`CanonicalTargetIds(...)` may accept arbitrary `IEnumerable<string>` target IDs. When the source also exposes a supported collection Count, that Count is admission evidence and must be treated as a caller-controlled cardinality contract throughout traversal, not only at admission/finalization.
 
 The traversal ordering is:
 
-1. read and validate supported known Count sources, rejecting negative/conflicting evidence;
+1. read and validate every supported known Count source, rejecting negative/conflicting evidence;
 2. acquire one enumerator;
-3. for each successful `MoveNext()`, reject **known-Count** overrun before reading `IEnumerator.Current`;
-4. only for admitted values, read `Current`, then apply existing blank/canonical/duplicate validation and the independent project-element maximum in its historical precedence order;
-5. after enumeration, reject known-Count under-yield;
-6. when traversal cardinality matches admission, re-read the supported Count sources and reject post-traversal source/value drift.
+3. before each `MoveNext()`, re-read all admitted Count surfaces and require the exact admitted Count contract;
+4. after every successful `MoveNext()`, re-read the Count surfaces again **before** any `IEnumerator.Current` access;
+5. reject known-Count overrun before reading `Current`;
+6. only for admitted values, read `Current`, then apply existing blank/canonical/duplicate validation and the independent project-element maximum in its historical precedence order;
+7. after enumeration, reject known-Count under-yield and perform a final exact Count rebound.
+
+The post-`MoveNext()` rebound is required because caller code can mutate Count as a side effect of `MoveNext()` and restore it from `Current`; admission plus final validation alone would miss that transient drift after already consuming an inadmissible value.
 
 Pure streaming inputs remain supported. Their project-cardinality behavior and duplicate-validation precedence remain unchanged from the completed subset-bound contract.
 
 ## Deterministic regression
 
-`RegenerationSubsetKnownCountCurrentIntegritySmoke` uses a hostile `IReadOnlyCollection<string>` that records Count reads, `MoveNext()` calls, and `Current` reads independently. The key overrun assertion is Count=1 with two yielded values: the second successful `MoveNext()` is observed, but the second `Current` must never be read.
+`RegenerationSubsetKnownCountCurrentIntegritySmoke` records `MoveNext()` and `Current` independently and covers:
 
-The smoke also covers known-Count under-yield, post-traversal Count drift, and exact-count compatibility. Existing `RegenerationSubsetTargetBoundSmoke` remains authoritative for streaming project-cardinality and duplicate-precedence behavior.
+- stable known-Count overrun: Count=1 with two yielded values rejects the second value before its `Current`;
+- stable known-Count under-yield and terminal Count drift;
+- `MoveNext()`-induced transient Count growth and shrink, both rejected with zero `Current` reads for the affected item;
+- transient negative Count and cross-interface generic/read-only Count conflict, also rejected before `Current`;
+- exact stable counted compatibility;
+- pure-streaming compatibility.
 
-`scripts/preflight-regeneration-subset-known-count-current-integrity.py` is auto-discovered by aggregate feature guards and pins the explicit-enumerator ordering without weakening the existing project-bound diagnostic order.
+`scripts/preflight-regeneration-subset-known-count-current-integrity.py` is auto-discovered by aggregate feature guards. It pins `Count rebound -> MoveNext -> Count rebound -> known-Count overrun -> Current`, requires final rebound, and preserves the existing project-bound diagnostic order rather than weakening historical coverage.
 
 ## Validation boundary
 

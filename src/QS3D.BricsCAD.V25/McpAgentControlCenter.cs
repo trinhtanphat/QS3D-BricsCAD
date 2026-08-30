@@ -1033,7 +1033,7 @@ namespace QS3D.BricsCAD.V25
         {
             StopQuickUrlPolling();
             _quickUrlPollTicks = 0;
-            _quickUrlTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher) { Interval = TimeSpan.FromMilliseconds(500) };
+            _quickUrlTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher) { Interval = TimeSpan.FromMilliseconds(1500) };
             _quickUrlTimer.Tick += QuickUrlTimerOnTick;
             _quickUrlTimer.Start();
         }
