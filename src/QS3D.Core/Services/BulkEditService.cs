@@ -28,7 +28,7 @@ namespace QS3D.Core.Services
             var key = SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName);
             var beforeTargetEnumeration = project.ChangeVersion;
             var targets = OwnedDistinct(project, elements);
-            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk edit object target enumeration.");
+            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk edit object target enumeration");
             RequireCurrentElementOwnership(project, targets, "Bulk edit object target enumeration");
             var updates = new List<PendingPropertyUpdate>();
             var next = value ?? string.Empty;
@@ -63,7 +63,7 @@ namespace QS3D.Core.Services
 
             var beforeTargetEnumeration = project.ChangeVersion;
             var targets = OwnedDistinct(project, elements);
-            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk numeric object target enumeration.");
+            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk numeric object target enumeration");
             RequireCurrentElementOwnership(project, targets, "Bulk numeric object target enumeration");
             var updates = new List<PendingPropertyUpdate>();
             foreach (var element in targets)
@@ -105,7 +105,7 @@ namespace QS3D.Core.Services
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
             var beforeTargetEnumeration = project.ChangeVersion;
             var targets = OwnedDistinctByIds(project, elementIds);
-            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk edit target-id enumeration.");
+            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk edit target-id enumeration");
             return SetProperty(project, targets, propertyName, value).Count;
         }
 
@@ -120,7 +120,7 @@ namespace QS3D.Core.Services
             var familyOwnership = SnapshotFamilyOwnership(project);
             var beforeTargetEnumeration = project.ChangeVersion;
             var targets = OwnedDistinctByIds(project, elementIds);
-            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk Family target-id enumeration.");
+            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk Family target-id enumeration");
             RequireCurrentFamilyAssignmentOwnership(project, family, targets);
             RequireFamilyOwnershipUnchanged(project, familyOwnership);
 
@@ -292,13 +292,15 @@ namespace QS3D.Core.Services
                 if (string.IsNullOrWhiteSpace(id) || !string.Equals(id, id.Trim(), StringComparison.Ordinal))
                     throw new InvalidOperationException("Project family collection contains a blank or non-canonical family id.");
                 if (result.ContainsKey(id))
-                    throw new InvalidOperationException("Project contains duplicate family id: " + id);
+                    throw new InvalidOperationException("Project contains duplicate family id: " + id + ".");
                 result.Add(id, family);
             }
             return result;
         }
 
-        private static void RequireFamilyOwnershipUnchanged(ProjectState project, IReadOnlyDictionary<string, ProjectFamily> expected)
+        private static void RequireFamilyOwnershipUnchanged(
+            ProjectState project,
+            IReadOnlyDictionary<string, ProjectFamily> expected)
         {
             if (project.Families.Count != expected.Count)
                 throw new InvalidOperationException("Project Family ownership changed while materializing bulk assignment targets. Retry against the current project state.");
@@ -306,7 +308,10 @@ namespace QS3D.Core.Services
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var family in project.Families)
             {
-                if (family == null || !seen.Add(family.Id) || !expected.TryGetValue(family.Id, out var original) || !ReferenceEquals(original, family))
+                if (family == null ||
+                    !seen.Add(family.Id) ||
+                    !expected.TryGetValue(family.Id, out var original) ||
+                    !ReferenceEquals(original, family))
                     throw new InvalidOperationException("Project Family ownership changed while materializing bulk assignment targets. Retry against the current project state.");
             }
         }
@@ -316,6 +321,7 @@ namespace QS3D.Core.Services
             var currentFamily = project.FindFamily(family.Id);
             if (!ReferenceEquals(currentFamily, family))
                 throw new InvalidOperationException("Target Family no longer belongs to the project after bulk assignment target enumeration: " + family.Id + ".");
+
             foreach (var element in elements)
             {
                 var current = project.FindElement(element.Id);
@@ -326,7 +332,8 @@ namespace QS3D.Core.Services
 
         private static string RequireCanonicalFamilyId(string familyId)
         {
-            if (string.IsNullOrWhiteSpace(familyId)) throw new ArgumentException("Family id is required.", nameof(familyId));
+            if (string.IsNullOrWhiteSpace(familyId))
+                throw new ArgumentException("Family id is required.", nameof(familyId));
             if (!string.Equals(familyId, familyId.Trim(), StringComparison.Ordinal))
                 throw new ArgumentException("Family id must be canonical and contain no leading or trailing whitespace.", nameof(familyId));
             return familyId;
@@ -352,7 +359,7 @@ namespace QS3D.Core.Services
                 if (string.IsNullOrWhiteSpace(id) || !string.Equals(id, id.Trim(), StringComparison.Ordinal))
                     throw new InvalidOperationException("Project family collection contains a blank or non-canonical family id.");
                 if (!seen.Add(id))
-                    throw new InvalidOperationException("Project contains duplicate family id: " + id);
+                    throw new InvalidOperationException("Project contains duplicate family id: " + id + ".");
             }
         }
 
