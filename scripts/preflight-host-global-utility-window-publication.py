@@ -42,11 +42,14 @@ else:
         "if (window.IsLoaded) return false;"):
         if needle not in source:
             errors.append("Geometry Extensions missing pending-owner host-global publication contract: " + needle)
+    release_pending = source.find("ReleasePendingWindow(window);")
+    clear_candidate = source.find("candidate = null;", release_pending) if release_pending >= 0 else -1
     positions = [source.find(token) for token in (
         "var pending = _pending;", "if (pending != null && !TryClosePendingWindow(pending))", "var previous = _published;",
         "candidate = new GeometryExtensionsWindow();", "_pending = window;", "window.Closed += (_, __) => ReleaseWindow(window);",
         "Application.ShowModelessWindow(IntPtr.Zero, window, true);", "if (!window.IsLoaded)", "_published = window;",
-        "ReleasePendingWindow(window);", "candidate = null;", "finally", "TryClosePendingWindow(candidate);")]
+        "ReleasePendingWindow(window);")]
+    positions.extend([clear_candidate, source.find("finally"), source.find("TryClosePendingWindow(candidate);")])
     if min(positions) < 0 or positions != sorted(positions):
         errors.append("Geometry Extensions must drain pending failure before construct and transfer ownership only after Loaded admission")
     if source.find("_published = window;", source.find("Application.ShowModelessWindow"), source.find("if (!window.IsLoaded)")) >= 0:
