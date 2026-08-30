@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -96,9 +97,11 @@ namespace QS3D.Core.Geometry
             if (!Finite(maxGapM) || maxGapM < 0d) throw new ArgumentOutOfRangeException(nameof(maxGapM));
             if (!Finite(ambiguityToleranceM) || ambiguityToleranceM < 0d) throw new ArgumentOutOfRangeException(nameof(ambiguityToleranceM));
 
-            var segments = source.Take(MaxSegments + 1).ToList();
-            if (segments.Count > MaxSegments)
-                throw new InvalidOperationException("Opening host matching supports at most " + MaxSegments.ToString(CultureInfo.InvariantCulture) + " wall segments per opening.");
+            var knownCount = GetKnownInputCount(source);
+            if (knownCount.HasValue && knownCount.Value > MaxSegments)
+                ThrowTooManySegments();
+
+            var segments = MaterializeBoundedSegments(source, knownCount);
             if (segments.Any(x => x == null)) throw new ArgumentException("Host segment collection contains null.", nameof(source));
 
             var bestByHost = new Dictionary<string, Candidate>(StringComparer.OrdinalIgnoreCase);
@@ -140,6 +143,101 @@ namespace QS3D.Core.Geometry
             }
 
             return new OpeningHostMatchResult(OpeningHostMatchStatus.Matched, first.HostElementId, string.Empty, first.GapM, double.NaN, first.CenterlineDistanceM, first.ClosestPoint, ordered.Count);
+        }
+
+        private static List<OpeningHostSegment> MaterializeBoundedSegments(
+            IEnumerable<OpeningHostSegment> source,
+            int? knownCount)
+        {
+            var segments = new List<OpeningHostSegment>();
+            var observedCount = 0;
+            using (var enumerator = source.GetEnumerator())
+            {
+                while (true)
+                {
+                    RequireStableKnownInputCount(source, knownCount);
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireStableKnownInputCount(source, knownCount);
+                        break;
+                    }
+                    RequireStableKnownInputCount(source, knownCount);
+
+                    if (knownCount.HasValue && observedCount >= knownCount.Value)
+                        throw new InvalidOperationException("Opening host source known count does not match traversal.");
+                    if (observedCount >= MaxSegments)
+                        ThrowTooManySegments();
+
+                    var segment = enumerator.Current;
+                    segments.Add(segment);
+                    observedCount++;
+                }
+            }
+
+            RequireStableKnownInputCount(source, knownCount);
+            if (knownCount.HasValue && observedCount != knownCount.Value)
+                throw new InvalidOperationException("Opening host source known count does not match traversal.");
+            return segments;
+        }
+
+        private static int? GetKnownInputCount(IEnumerable<OpeningHostSegment> source)
+        {
+            var hasKnownCount = false;
+            var firstKnownCount = 0;
+            var maximumKnownCount = 0;
+            var conflictingKnownCounts = false;
+
+            if (source is ICollection<OpeningHostSegment> collection)
+                ObserveKnownCount(collection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+            if (source is IReadOnlyCollection<OpeningHostSegment> readOnlyCollection)
+                ObserveKnownCount(readOnlyCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+            if (source is ICollection nonGenericCollection)
+                ObserveKnownCount(nonGenericCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+
+            if (maximumKnownCount > MaxSegments)
+                return maximumKnownCount;
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Opening host source reports conflicting known counts.");
+            return hasKnownCount ? firstKnownCount : (int?)null;
+        }
+
+        private static void RequireStableKnownInputCount(
+            IEnumerable<OpeningHostSegment> source,
+            int? knownCount)
+        {
+            if (!knownCount.HasValue) return;
+            var currentCount = GetKnownInputCount(source);
+            if (!currentCount.HasValue || currentCount.Value != knownCount.Value)
+                throw new InvalidOperationException("Opening host source known count changed during traversal.");
+        }
+
+        private static void ObserveKnownCount(
+            int candidate,
+            ref bool hasKnownCount,
+            ref int firstKnownCount,
+            ref int maximumKnownCount,
+            ref bool conflictingKnownCounts)
+        {
+            if (candidate < 0)
+                throw new InvalidOperationException("Opening host source reports an invalid negative known count.");
+
+            if (!hasKnownCount)
+            {
+                hasKnownCount = true;
+                firstKnownCount = candidate;
+                maximumKnownCount = candidate;
+                return;
+            }
+
+            if (candidate != firstKnownCount)
+                conflictingKnownCounts = true;
+            if (candidate > maximumKnownCount)
+                maximumKnownCount = candidate;
+        }
+
+        private static void ThrowTooManySegments()
+        {
+            throw new InvalidOperationException("Opening host matching supports at most " + MaxSegments.ToString(CultureInfo.InvariantCulture) + " wall segments per opening.");
         }
 
         private static int Compare(Candidate left, Candidate right)
