@@ -48,22 +48,74 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 var count = 0;
-                var area = 0d;
+                var area = new CompensatedExportAreaTotal();
                 foreach (var row in rows)
                 {
                     count = QuantityReportMath.AddCount(count, row.Count);
-                    area = QuantityReportMath.Add(area, row.OpeningAreaM2, "Door/Opening export area");
+                    area.Add(row.OpeningAreaM2, "Door/Opening export area");
                 }
+                var totalAreaM2 = area.Value("Door/Opening export area");
                 var hosts = rows.SelectMany(x => x.HostIds).Distinct(StringComparer.OrdinalIgnoreCase).Count();
 
                 DoorOpeningXlsxExporter.Export(dialog.FileName, rows);
 
-                var status = "Door XLSX: " + rows.Count + " nhóm • " + count + " Cửa/Lỗ • " + area.ToString("0.###") + " m² • " + hosts + " host.";
+                var status = "Door XLSX: " + rows.Count + " nhóm • " + count + " Cửa/Lỗ • " + totalAreaM2.ToString("0.###") + " m² • " + hosts + " host.";
                 FinalizeUi(document, status, dialog.FileName);
             }
             catch (System.Exception)
             {
                 Report(document, "QS3DDOORXLSX lỗi: không thể xuất bảng Cửa / Lỗ mở.");
+            }
+        }
+
+        private sealed class CompensatedExportAreaTotal
+        {
+            private double _sum;
+            private double _compensation;
+
+            internal void Add(double value, string label)
+            {
+                var incoming = QuantityReportMath.NonNegative(value, label);
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+
+                var nextSum = _sum + incoming;
+                if (double.IsNaN(nextSum) || double.IsInfinity(nextSum))
+                    throw new OverflowException("Door/opening export area total overflow: " + label);
+
+                var correction = Math.Abs(_sum) >= Math.Abs(incoming)
+                    ? (_sum - nextSum) + incoming
+                    : (incoming - nextSum) + _sum;
+                var nextCompensation = _compensation + correction;
+                if (double.IsNaN(nextCompensation) || double.IsInfinity(nextCompensation))
+                    throw new OverflowException("Door/opening export area compensation overflow: " + label);
+
+                _sum = nextSum == 0d ? 0d : nextSum;
+                _compensation = nextCompensation == 0d ? 0d : nextCompensation;
+            }
+
+            internal double Value(string label)
+            {
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+                var result = _sum + _compensation;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Door/opening export area total overflow: " + label);
+                if (_compensation != 0d && result == _sum && !IsStrictlyBelowHalfUlp(_sum, _compensation))
+                    throw new OverflowException("Door/opening export area total lost a non-zero compensation at floating-point precision: " + label);
+                if (_sum != 0d && result == _compensation)
+                    throw new OverflowException("Door/opening export area total lost a non-zero accumulated value at floating-point precision: " + label);
+                return result == 0d ? 0d : result;
+            }
+
+            private static bool IsStrictlyBelowHalfUlp(double current, double compensation)
+            {
+                if (current <= 0d || compensation == 0d) return false;
+                var currentBits = BitConverter.DoubleToInt64Bits(current);
+                var adjacentBits = compensation > 0d ? currentBits + 1L : currentBits - 1L;
+                var adjacent = BitConverter.Int64BitsToDouble(adjacentBits);
+                var spacing = Math.Abs(adjacent - current);
+                return Math.Abs(compensation) < spacing / 2d;
             }
         }
 

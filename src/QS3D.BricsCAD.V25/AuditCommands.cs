@@ -8,6 +8,7 @@ namespace QS3D.BricsCAD.V25
     public sealed class AuditCommands
     {
         private static AuditLogWindow? _window;
+        private static IntPtr _nativeDatabaseIdentity;
 
         [CommandMethod("QS3DAUDIT", CommandFlags.Modal)]
         public void ShowAuditLog()
@@ -16,11 +17,34 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                if (_window != null && _window.IsLoaded) _window.Close();
+                var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+                if (!PreparePublishedWindow(nativeDatabaseIdentity))
+                {
+                    const string blockedStatus = "Nhật ký thay đổi đang thuộc bản vẽ khác và chưa thể đóng an toàn.";
+                    try { document.Editor.WriteMessage("\nQS3DAUDIT: cửa sổ hiện tại chưa đạt terminal Closed; không mở bản sao thứ hai."); } catch { }
+                    try { PaletteCoordinator.SetStatus(blockedStatus); } catch { }
+                    return;
+                }
+
+                if (_window != null)
+                {
+                    try { _window.Activate(); } catch { }
+                    var reusedStatus = ProjectContextCoordinator.TryGetReadOnly(document, out var existingProject)
+                        ? "Đã kích hoạt Nhật ký thay đổi hiện có • " + existingProject.AuditEvents.Count + " sự kiện."
+                        : "Đã kích hoạt Nhật ký thay đổi hiện có • chưa có QS3D project hiện hữu; không tạo project mới.";
+                    try { PaletteCoordinator.SetStatus(reusedStatus); } catch { }
+                    return;
+                }
+
                 var hasProject = ProjectContextCoordinator.TryGetReadOnly(document, out var project);
-                _window = new AuditLogWindow(document);
-                _window.Closed += (_, __) => _window = null;
-                Application.ShowModelessWindow(IntPtr.Zero, _window, true);
+                var candidate = new AuditLogWindow(document);
+                candidate.Closed += (_, __) => ReleasePublishedWindow(candidate);
+                Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
+                if (!candidate.IsLoaded) return;
+
+                _window = candidate;
+                _nativeDatabaseIdentity = nativeDatabaseIdentity;
+
                 var status = hasProject
                     ? "Đã mở Nhật ký thay đổi • " + project.AuditEvents.Count + " sự kiện."
                     : "Đã mở Nhật ký thay đổi • chưa có QS3D project hiện hữu; không tạo project mới.";
@@ -32,6 +56,55 @@ namespace QS3D.BricsCAD.V25
                 try { document.Editor.WriteMessage("\nQS3DAUDIT error: không thể mở nhật ký thay đổi."); } catch { }
                 try { PaletteCoordinator.SetStatus(status); } catch { }
             }
+        }
+
+        private static bool PreparePublishedWindow(IntPtr requestedNativeDatabaseIdentity)
+        {
+            var published = _window;
+            if (published == null) return true;
+
+            if (!published.IsLoaded)
+            {
+                ReleasePublishedWindow(published);
+                return true;
+            }
+
+            if (_nativeDatabaseIdentity == requestedNativeDatabaseIdentity)
+                return true;
+
+            try
+            {
+                published.Close();
+            }
+            catch
+            {
+                return false;
+            }
+
+            if (published.IsLoaded)
+                return false;
+
+            ReleasePublishedWindow(published);
+            return true;
+        }
+
+        private static void ReleasePublishedWindow(AuditLogWindow candidate)
+        {
+            if (!ReferenceEquals(_window, candidate)) return;
+            _window = null;
+            _nativeDatabaseIdentity = IntPtr.Zero;
+        }
+
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
+        {
+            var database = document.Database;
+            if (database == null)
+                throw new InvalidOperationException("Audit Log requires a BricsCAD document database.");
+
+            var identity = database.UnmanagedObject;
+            if (identity == IntPtr.Zero)
+                throw new InvalidOperationException("Audit Log requires a live native BricsCAD database.");
+            return identity;
         }
     }
 }

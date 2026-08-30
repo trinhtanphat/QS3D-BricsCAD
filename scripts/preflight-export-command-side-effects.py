@@ -35,7 +35,7 @@ CASES = (
         "Room finish",
         ROOT / "src/QS3D.BricsCAD.V25/RoomFinishScheduleCommands.cs",
         "RoomFinishScheduleBuilder.Build(snapshot)",
-        "primary = QuantityReportMath.Add(primary, row.PrimaryQuantity, \"HT_Phòng export primary quantity\");",
+        "var primary = primaryAccumulator.Value(\"HT_Phòng export primary quantity\");",
         "RoomFinishXlsxExporter.Export(dialog.FileName, rows);",
         "FinalizeUi(document, status, dialog.FileName);",
         False,

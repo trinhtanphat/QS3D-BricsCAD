@@ -24,12 +24,54 @@ def forbid(text, token, label):
         errors.append(f"{label} contains forbidden token: {token}")
 
 
+def preprocess_for_v26(text):
+    """Return the active source view when BRICSCAD_V26 is defined."""
+    active = True
+    branches = []
+    visible = []
+
+    for line in text.splitlines(keepends=True):
+        directive = line.strip()
+        if directive.startswith("#if "):
+            condition = directive[4:].strip()
+            if condition == "BRICSCAD_V26":
+                enabled = True
+            elif condition == "!BRICSCAD_V26":
+                enabled = False
+            else:
+                errors.append(f"shared Update Center contains unsupported V26 preprocessor condition: {condition}")
+                enabled = False
+            branches.append((active, enabled))
+            active = active and enabled
+            continue
+        if directive == "#else":
+            if not branches:
+                errors.append("shared Update Center has #else without matching #if")
+                continue
+            parent_active, enabled = branches[-1]
+            active = parent_active and not enabled
+            continue
+        if directive == "#endif":
+            if not branches:
+                errors.append("shared Update Center has #endif without matching #if")
+                continue
+            active, _ = branches.pop()
+            continue
+        if active:
+            visible.append(line)
+
+    if branches:
+        errors.append("shared Update Center has unterminated preprocessor branch")
+    return "".join(visible)
+
+
 v25 = read("src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj")
 v26 = read("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj")
 v26_solution = read("QS3D.V26.sln")
 entry = read("src/QS3D.BricsCAD.V26/PluginEntry.cs")
 update_commands = read("src/QS3D.BricsCAD.V26/Updates/UpdateCommands.cs")
 update_center = read("src/QS3D.BricsCAD.V25/Updates/UpdateCenterWindow.cs")
+v26_update_center = preprocess_for_v26(update_center)
 update_preferences = read("src/QS3D.BricsCAD.V25/Updates/UpdatePreferences.cs")
 v25_release_client = read("src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs")
 v26_release_client = read("src/QS3D.BricsCAD.V26/Updates/GitHubReleaseClient.cs")
@@ -70,8 +112,12 @@ for token in ("QS3DUPDATE", "UpdateCenterWindowHost.Show()", "QS3DUPDATE V26 err
 for token in ("one-click update is intentionally disabled", "Do not install a V25 update package"):
     forbid(update_commands, token, "V26 update command")
 
-for token in ("#if BRICSCAD_V26", "var hasPreviewDownload = false;", "#if !BRICSCAD_V26", "new VerifiedReleaseDownloader().DownloadAsync(release)"):
+for token in ("#if BRICSCAD_V26", "var hasPreviewDownload = false;", "#if !BRICSCAD_V26", "var progress = new Progress<UpdateDownloadProgress>(ApplyDownloadProgress);", "new VerifiedReleaseDownloader().DownloadAsync(release, progress)"):
     require(update_center, token, "shared Update Center V26 preview isolation")
+for token in ("private bool _previewScheduled;", "private string? _previewScheduledDetail;", "private async System.Threading.Tasks.Task DownloadPreviewAsync"):
+    require(update_center, token, "V25 preview scheduling implementation")
+for token in ("_previewScheduled", "_previewScheduledDetail", "DownloadPreviewAsync"):
+    forbid(v26_update_center, token, "V26 preprocessed Update Center")
 for token in ("#if BRICSCAD_V26", '@"Software\\QS3D\\BricsCAD-V26\\Updates"', '@"Software\\QS3D\\BricsCAD-V25\\Updates"'):
     require(update_preferences, token, "shared host-major update preferences")
 
