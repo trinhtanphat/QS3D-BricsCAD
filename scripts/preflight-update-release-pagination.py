@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Reservation-v2 scope includes this shared compatibility guard for #4675.
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,14 +31,15 @@ def main() -> int:
     require(client, 'ReleasesEndpoint + "&page=" + pageNumber.ToString', "explicit GitHub page addressing")
     require(client, 'response.Headers["Link"]', "GitHub pagination Link inspection")
     require(client, 'link.IndexOf("rel=\\\"next\\\"", StringComparison.OrdinalIgnoreCase)', "rel=next detection")
-    require(client, "if (!page.HasNext) return result;", "early stop when history is complete")
+    require(client, "if (!page.HasNext)", "early stop when history is complete")
     require(client, "if (pageNumber == MaxReleasePages)", "scan ceiling branch")
     require(client, "GitHub Releases history exceeds the bounded updater scan window", "fail-closed incomplete-history behavior")
 
     require(client, "if (response.ContentLength > MaxResponseBytes)", "per-page declared-size bound")
     require(client, "CopyBoundedAsync(source, buffer, MaxResponseBytes)", "per-page streaming-size bound")
     require(client, 'request.Accept = "application/vnd.github+json"', "GitHub JSON accept header")
-    require(client, 'request.UserAgent = "QS3D-BricsCAD-V25-Updater"', "explicit updater user agent")
+    require(client, 'request.UserAgent = "QS3D-BricsCAD-V25-Updater/1.0"', "explicit updater user agent")
+    require(client, 'request.Headers["X-GitHub-Api-Version"] = "2022-11-28"', "GitHub API version header")
     require(client, "DataContractJsonSerializer(typeof(GitHubReleaseDto[]))", "bounded DTO JSON parsing")
 
     require(client, "release.Prerelease != version.IsPrerelease", "GitHub/tag prerelease consistency")
@@ -52,11 +54,10 @@ def main() -> int:
     reject(scan, "while (true)", "unbounded release-page loop")
     reject(scan, "Task.WhenAll", "parallel release-page burst")
 
-    # Stream-copy loops may use while(true) only behind the explicit maxBytes guard.
     require(client, "private static async Task CopyBoundedAsync", "bounded response streaming helper")
     require(client, "if (total > maxBytes)", "streaming byte ceiling")
 
-    print("PASS: GitHub release discovery scans bounded sequential pages and fails closed on an incomplete history window while response streaming remains independently byte-bounded.")
+    print("PASS: GitHub release discovery scans bounded sequential pages, handles the current bounded response helper, and fails closed on an incomplete history window while response streaming remains independently byte-bounded.")
     return 0
 
 
