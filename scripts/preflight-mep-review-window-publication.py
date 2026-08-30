@@ -64,11 +64,15 @@ sequence = [
     "BricsApplication.ShowModelessWindow(window)",
     "if (!window.IsLoaded) return;",
     "_window = window;",
-    "candidate = null;",
 ]
 positions = [source.find(token) for token in sequence]
 if any(position < 0 for position in positions) or positions != sorted(positions) or len(set(positions)) != len(positions):
-    errors.append("source: expected Closed -> host show -> Loaded check -> publication -> cleanup-transfer ordering")
+    errors.append("source: expected Closed -> host show -> Loaded check -> publication ordering")
+else:
+    publication_position = positions[-1]
+    cleanup_transfer_position = source.find("candidate = null;", publication_position + len(sequence[-1]))
+    if cleanup_transfer_position < 0 or cleanup_transfer_position <= publication_position:
+        errors.append("source: cleanup ownership must transfer only after authoritative publication")
 
 if source.count("_window = window;") != 1:
     errors.append("source: authoritative window must be published exactly once")
