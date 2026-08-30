@@ -19,6 +19,7 @@ def main() -> int:
         "OAuth activity freshness": "OAuthMcpActivityFreshness",
         "OAuth activity classifier": "IsRecentOAuthMcpActivity(publicUrl)",
         "registration before OAuth": "if (!registered)",
+        "OAuth gate before pending": "if (!IsRecentOAuthMcpActivity(publicUrl))",
         "pending phase after registration": "return Snapshot(McpOnboardingPhase.ChatGptOAuthTrafficPending",
         "pending title": "Đã đăng ký · chờ ChatGPT OAuth traffic",
         "pending traffic explanation": "chưa quan sát authenticated OAuth MCP request",
@@ -31,8 +32,13 @@ def main() -> int:
         if token not in text:
             errors.append(f"MCP connectivity onboarding state missing {label}: {token}")
 
+    oauth_gate = text.find("if (!IsRecentOAuthMcpActivity(publicUrl))")
+    pending_state = text.find("return Snapshot(McpOnboardingPhase.ChatGptOAuthTrafficPending")
+    ready_state = text.find("return Snapshot(McpOnboardingPhase.Ready", pending_state + 1 if pending_state >= 0 else 0)
+    if oauth_gate < 0 or pending_state < 0 or ready_state < 0 or not (oauth_gate < pending_state < ready_state):
+        errors.append("MCP connectivity onboarding state must gate pending then Ready behind recent OAuth activity")
+
     forbidden = {
-        "registration-only ready state": "return Snapshot(McpOnboardingPhase.Ready, \"MCP sẵn sàng\"",
         "transport-only ready wording": "Embedded MCP + Named Tunnel + đăng ký ChatGPT đã được người dùng xác nhận.",
     }
     for label, token in forbidden.items():
