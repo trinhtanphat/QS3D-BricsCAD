@@ -13,7 +13,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             PaddedHandleFailsVisibleButKeepsLiveLookup();
-            LowercaseCanonicalHandleRemainsAccepted();
+            LowercaseOwnerTokenFailsVisibleButKeepsLiveLookup();
             EmptyDelimiterTokenRemainsInvalid();
         }
 
@@ -29,13 +29,13 @@ namespace QS3D.Core.SmokeTests
             ForbidIssue(issues, setup.Element.Id, "CURTAIN_PANEL_GENERATED_OWNERSHIP_CONFLICT");
         }
 
-        private static void LowercaseCanonicalHandleRemainsAccepted()
+        private static void LowercaseOwnerTokenFailsVisibleButKeepsLiveLookup()
         {
             var setup = Create("LOWER", "a", "1");
             var live = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "A" };
             var issues = new GeneratedCurtainPanelHealthService().Inspect(setup.Project, live);
 
-            ForbidIssue(issues, setup.Element.Id, "CURTAIN_PANEL_GENERATED_HANDLE_NON_CANONICAL");
+            RequireIssue(issues, setup.Element.Id, "CURTAIN_PANEL_GENERATED_HANDLE_NON_CANONICAL");
             ForbidIssue(issues, setup.Element.Id, "INVALID_CURTAIN_PANEL_GENERATED_HANDLE");
             ForbidIssue(issues, setup.Element.Id, "CURTAIN_PANEL_GENERATED_SOLID_MISSING");
             ForbidIssue(issues, setup.Element.Id, "CURTAIN_PANEL_GENERATED_OWNERSHIP_CONFLICT");
