@@ -378,8 +378,11 @@ namespace QS3D.BricsCAD.V25.Updates
 #if !BRICSCAD_V26
             if (_previewScheduled) return;
 #endif
+            // Never install from a stale window snapshot. A new preview can be published while
+            // Update Center remains open, so resolve the newest release again at click time.
+            var current = await UpdateCoordinator.Instance.RefreshAsync();
+            Apply(current);
 
-            var current = _result;
             if (current?.State == UpdateState.ManualInstallRequired && current.Release != null)
             {
 #if !BRICSCAD_V26
@@ -389,7 +392,6 @@ namespace QS3D.BricsCAD.V25.Updates
                     return;
                 }
 #endif
-
                 if (current.Release.PageUri != null)
                 {
                     OpenReleasePage();
@@ -520,22 +522,11 @@ namespace QS3D.BricsCAD.V25.Updates
             }
 
             _changingUpdateOnClose = true;
-            try
-            {
-                _updateOnCloseCheckBox.IsChecked = !enabled;
-            }
-            finally
-            {
-                _changingUpdateOnClose = false;
-            }
+            try { _updateOnCloseCheckBox.IsChecked = !enabled; }
+            finally { _changingUpdateOnClose = false; }
 
             RefreshUpdateOnCloseHelp();
-            MessageBox.Show(
-                this,
-                error,
-                "QS3D Update Center",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            MessageBox.Show(this, error, "QS3D Update Center", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
 
         private void RefreshUpdateOnCloseHelp()
@@ -570,10 +561,7 @@ namespace QS3D.BricsCAD.V25.Updates
         {
             var uri = _result?.Release?.PageUri;
             if (uri == null) return;
-            try
-            {
-                Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
-            }
+            try { Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true }); }
             catch (Exception ex)
             {
                 MessageBox.Show(this, "Không mở được trang release: " + ex.Message, "QS3D Update Center", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -657,20 +645,16 @@ namespace QS3D.BricsCAD.V25.Updates
             chrome.AppendChild(contentPresenter);
 
             var template = new ControlTemplate(typeof(Button)) { VisualTree = chrome };
-
             var hoverTrigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
             hoverTrigger.Setters.Add(new Setter(Border.BackgroundProperty, hover, "Chrome"));
             template.Triggers.Add(hoverTrigger);
-
             var pressedTrigger = new Trigger { Property = Button.IsPressedProperty, Value = true };
             pressedTrigger.Setters.Add(new Setter(Border.BackgroundProperty, pressed, "Chrome"));
             template.Triggers.Add(pressedTrigger);
-
             var disabledTrigger = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
             disabledTrigger.Setters.Add(new Setter(Border.BackgroundProperty, disabled, "Chrome"));
             disabledTrigger.Setters.Add(new Setter(UIElement.OpacityProperty, 0.56, "Chrome"));
             template.Triggers.Add(disabledTrigger);
-
             return template;
         }
     }
@@ -703,13 +687,8 @@ namespace QS3D.BricsCAD.V25.Updates
         {
             var window = _window;
             if (window == null) return;
-            try
-            {
-                window.Close();
-            }
-            catch
-            {
-            }
+            try { window.Close(); }
+            catch { }
             finally
             {
                 window.DetachCoordinator();
