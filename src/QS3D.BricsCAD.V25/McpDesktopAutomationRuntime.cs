@@ -62,6 +62,12 @@ namespace QS3D.BricsCAD.V25
 
         private static readonly HashSet<string> Tools = new HashSet<string>(StringComparer.Ordinal)
         {
+            "diagnostics_log_tail",
+            "diagnostics_since",
+            "diagnostics_snapshot",
+            "diagnostics_wait",
+            "theme_get",
+            "theme_set",
             "desktop_cursor_position",
             "desktop_window_list",
             "desktop_foreground_window",
@@ -81,6 +87,7 @@ namespace QS3D.BricsCAD.V25
 
         private static readonly HashSet<string> MutationTools = new HashSet<string>(StringComparer.Ordinal)
         {
+            "theme_set",
             "desktop_window_focus",
             "desktop_mouse_move",
             "desktop_mouse_click",
@@ -124,7 +131,7 @@ namespace QS3D.BricsCAD.V25
 
         internal static IEnumerable<string> ToolDescriptors()
         {
-            return new[]
+            var descriptors = new List<string>
             {
                 Tool("desktop_cursor_position", "Read the current Windows desktop cursor position.", ""),
                 Tool("desktop_window_list", "List a bounded set of visible top-level windows in the current interactive Windows session.",
@@ -167,6 +174,8 @@ namespace QS3D.BricsCAD.V25
                     + ConfirmMutationProperty() + "," + ConfirmSensitiveReadProperty(),
                     "windowHandle", "stepsJson", "confirmMutation")
             };
+            descriptors.AddRange(McpDirectDiagnosticsThemeRuntime.ToolDescriptors());
+            return descriptors;
         }
 
         internal static string Call(string toolName, string arguments, Action? ensureMutationRunning, Action<string> audit)
@@ -176,7 +185,9 @@ namespace QS3D.BricsCAD.V25
             var args = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
 
             McpDesktopControlSession.GuardedActionScope? guardedAction = null;
-            if (MutationTools.Contains(tool) || SensitiveTools.Contains(tool))
+            var requiresDesktopConsent = tool.StartsWith("desktop_", StringComparison.Ordinal)
+                                         && (MutationTools.Contains(tool) || SensitiveTools.Contains(tool));
+            if (requiresDesktopConsent)
             {
                 McpDesktopControlSession.RequireLocalConsent(tool);
                 guardedAction = McpDesktopControlSession.BeginGuardedAction(tool);
@@ -187,6 +198,13 @@ namespace QS3D.BricsCAD.V25
                 string result;
                 switch (tool)
                 {
+                    case "diagnostics_log_tail":
+                    case "diagnostics_since":
+                    case "diagnostics_snapshot":
+                    case "diagnostics_wait":
+                    case "theme_get":
+                    case "theme_set":
+                        result = McpDirectDiagnosticsThemeRuntime.Call(tool, args, ensureMutationRunning, audit); break;
                     case "desktop_cursor_position": result = CursorPositionJson(); break;
                     case "desktop_window_list": result = WindowListJson(Integer(args, "limit", 30, 1, MaxWindows)); break;
                     case "desktop_foreground_window": result = ForegroundWindowJson(); break;
