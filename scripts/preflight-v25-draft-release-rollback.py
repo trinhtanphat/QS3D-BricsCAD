@@ -36,9 +36,9 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
             errors.append(f"helper uses stale/broad destructive contract: {forbidden}")
 
     required_workflow = [
+        '$tagRef = "refs/tags/$env:RELEASE_TAG"',
         '$tagRefUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/refs"',
-        'ref = "refs/tags/$env:RELEASE_TAG"',
-        "sha = $env:GITHUB_SHA",
+        "$tagCreateRequest = @{ ref = $tagRef; sha = $env:GITHUB_SHA } | ConvertTo-Json",
         "$createdTag = Invoke-RestMethod -Method Post -Uri $tagRefUri",
         'createdTag.ref, "refs/tags/$env:RELEASE_TAG"',
         "createdTag.object.sha, $env:GITHUB_SHA",
@@ -67,6 +67,7 @@ if canonical_errors:
     raise SystemExit("V25 draft rollback contract failed: " + "; ".join(canonical_errors))
 
 mutations = {
+    "tag ref binding": (helper, workflow.replace("$tagCreateRequest = @{ ref = $tagRef; sha = $env:GITHUB_SHA } | ConvertTo-Json", "$tagCreateRequest = @{ ref = 'refs/tags/not-owned'; sha = $env:GITHUB_SHA } | ConvertTo-Json", 1)),
     "positive ownership": (helper, workflow.replace("$tagCreatedByThisRun = $true", "$tagCreatedByThisRun = $false", 1)),
     "draft-only delete": (helper.replace("if ($release.draft -ne $true)", "if ($false)", 1), workflow),
     "release-owner scan": (helper.replace("Assert-NoReleaseOwnsTag\n\n$resolvedAfter", "$resolvedAfter", 1), workflow),
