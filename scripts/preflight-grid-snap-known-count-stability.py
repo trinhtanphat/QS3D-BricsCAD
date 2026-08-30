@@ -48,14 +48,21 @@ for token in required_helper_tokens:
     if token not in helper:
         fail(f"shared materializer is missing contract token: {token}")
 
+validate_start = helper.find("private static void ValidateKnownCount(")
+if validate_start < 0:
+    fail("shared materializer must expose a dedicated Count-revalidation helper")
+validate_body = helper[validate_start:]
+if "ReadKnownCount(curves, label)" not in validate_body:
+    fail("Count-revalidation helper must re-read all supported known-Count interfaces")
+
 move_index = helper.find("enumerator.MoveNext()")
 current_index = helper.find("enumerator.Current")
 if move_index < 0 or current_index < 0 or current_index <= move_index:
     fail("shared materializer must call MoveNext before Current")
 
 between = helper[move_index:current_index]
-if "ReadKnownCount" not in between or "ValidateKnownCount" not in between:
-    fail("shared materializer must rebind and validate Count after successful MoveNext before Current")
+if "ValidateKnownCount(curves, admittedCount, label)" not in between:
+    fail("shared materializer must revalidate Count after successful MoveNext before Current")
 
 required_smoke_tokens = (
     "LineRejectsOverCapBeforeCurrent",
