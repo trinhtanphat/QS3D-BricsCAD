@@ -42,7 +42,8 @@ namespace QS3D.BricsCAD.V25
         private const string DownloadUrl = "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/";
         private const string DashboardUrl = "https://dash.cloudflare.com/?to=/:account/networks/tunnels";
         private const string ChatGptUrl = "https://chatgpt.com/";
-        private const string OriginUrl = "http://127.0.0.1:8765";
+        private static string OriginUrl => McpEmbeddedServer.Endpoint.GetLeftPart(UriPartial.Authority);
+        private static string OriginHostHeader => McpEmbeddedServer.Endpoint.Authority;
         private const string QuickTunnelHostSuffix = ".trycloudflare.com";
         private static readonly object Sync = new object();
         private static readonly byte[] DpapiEntropy = Encoding.UTF8.GetBytes("QS3D-BricsCAD/MCP/CloudflareTunnel/v1");
@@ -146,6 +147,12 @@ namespace QS3D.BricsCAD.V25
         {
             error = string.Empty;
             McpEmbeddedServer.EnsureStarted();
+            if (!McpEmbeddedServer.IsPreferredPort)
+            {
+                error = "Token tunnel đang được Cloudflare cấu hình cố định tới 127.0.0.1:8765, nhưng QS3D MCP phải dùng cổng dự phòng "
+                        + McpEmbeddedServer.Endpoint.Port.ToString() + ". Hãy dùng Kết nối ChatGPT/Quick Tunnel hoặc giải phóng cổng 8765 trước khi chạy token tunnel.";
+                return false;
+            }
             var executable = CloudflaredPath;
             if (string.IsNullOrWhiteSpace(executable))
             {
@@ -157,7 +164,6 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex) { error = "Không đọc được tunnel token: " + ex.Message; return false; }
             if (string.IsNullOrWhiteSpace(token)) { error = "Chưa lưu tunnel token."; return false; }
 
-            // Only one Cloudflare forwarding mode may own the embedded MCP endpoint at a time.
             McpCloudflareAccountTunnelManager.StopForHostShutdown();
             StopProcessOnly();
             var startInfo = CreateCloudflaredStartInfo(executable, "tunnel --no-autoupdate run");
@@ -181,7 +187,7 @@ namespace QS3D.BricsCAD.V25
             WriteText(AutoStartPath, "0");
             lock (Sync) { _quickMode = true; _quickBaseUrl = string.Empty; _lastError = string.Empty; }
             return StartProcess(
-                CreateCloudflaredStartInfo(executable, "tunnel --no-autoupdate --url " + OriginUrl + " --http-host-header 127.0.0.1:8765"),
+                CreateCloudflaredStartInfo(executable, "tunnel --no-autoupdate --url " + OriginUrl + " --http-host-header " + OriginHostHeader),
                 true,
                 out error);
         }
@@ -301,8 +307,6 @@ namespace QS3D.BricsCAD.V25
             if (clean.Length > 1000) clean = clean.Substring(0, 1000);
             lock (Sync)
             {
-                // Async stdout/stderr callbacks may arrive after Exited or after another mode has
-                // taken ownership. Never let stale process output resurrect a dead Quick Tunnel URL.
                 if (!ReferenceEquals(_process, process)) return;
                 if (clean.IndexOf("ERR", StringComparison.OrdinalIgnoreCase) >= 0
                     || clean.IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0) _lastError = clean;
