@@ -196,7 +196,7 @@ A parked LOCAL_ONLY item does not block an otherwise eligible repository merge u
 
 ## Unavailable-work handoff
 
-Start permitted local passes from `docs/LOCAL-AGENT-INBOX.md` and follow the linked exact runbook for the selected item. Do not manufacture local PASS from remote/static evidence, and do not create duplicate handoffs for the same exact candidate/scenario.
+Start permitted local passes from `docs/LOCAL-AGENT-INBOX.md` and follow the linked exact runbook for the selected item. For licensed BricsCAD V25 qualification use `docs/LOCAL-V25-QUALIFICATION.md`. Do not manufacture local PASS from remote/static evidence, and do not create duplicate handoffs for the same exact candidate/scenario.
 
 ## 12. Cross-agent non-interference
 
