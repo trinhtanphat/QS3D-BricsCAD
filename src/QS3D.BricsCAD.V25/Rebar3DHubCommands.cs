@@ -7,6 +7,8 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class Rebar3DHubCommands
     {
+        private static Rebar3DHubWindow? _window;
+
         [CommandMethod("QS3DREBARHUB", CommandFlags.Modal)]
         public void ShowRebarHub()
         {
@@ -14,14 +16,38 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                var published = _window;
+                if (published != null)
+                {
+                    if (published.IsLoaded)
+                    {
+                        try { published.Activate(); } catch { }
+                        try { PaletteCoordinator.SetStatus("Rebar 3D Hub hiện có đã được kích hoạt; lệnh vẫn theo drawing đang active."); } catch { }
+                        return;
+                    }
+
+                    ReleasePublishedWindow(published);
+                }
+
                 var window = new Rebar3DHubWindow();
+                window.Closed += (_, __) => ReleasePublishedWindow(window);
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
+                if (!window.IsLoaded) return;
+
+                _window = window;
+                PaletteCoordinator.SetStatus("Rebar 3D Hub đã mở; lệnh luôn gửi sang drawing đang active tại thời điểm bấm.");
             }
             catch (System.Exception ex)
             {
                 document.Editor.WriteMessage("\nQS3DREBARHUB lỗi: " + ex.Message);
                 PaletteCoordinator.SetStatus("QS3DREBARHUB lỗi: " + ex.Message);
             }
+        }
+
+        private static void ReleasePublishedWindow(Rebar3DHubWindow window)
+        {
+            if (!ReferenceEquals(_window, window)) return;
+            _window = null;
         }
     }
 }
