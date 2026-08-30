@@ -95,8 +95,11 @@ namespace QS3D.Core.Commercial
             var snapshot = new List<CommercialAuditRecord>();
             using (var enumerator = records.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableKnownCountDuringTraversal(records, knownCount);
+                    if (!enumerator.MoveNext())
+                        break;
                     RequireStableKnownCountDuringTraversal(records, knownCount);
                     CommercialGuard.RequireCanProcessNext(knownCount, snapshot.Count, "Commercial audit batch source");
                     if (snapshot.Count == remainingCapacity)
@@ -282,8 +285,11 @@ namespace QS3D.Core.Commercial
                 : new List<T>();
             using (var enumerator = source.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);
+                    if (!enumerator.MoveNext())
+                        break;
                     RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);
                     RequireCanProcessNext(knownCount, result.Count, paramName);
                     if (result.Count == maximum)
