@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace QS3D.Core.Geometry
 {
@@ -45,10 +44,8 @@ namespace QS3D.Core.Geometry
             if (!Finite(geometryTolerance) || geometryTolerance <= 0.0)
                 throw new ArgumentOutOfRangeException(nameof(geometryTolerance), "Grid snap geometry tolerance must be finite and positive.");
 
-            var list = curves.Take(MaxCurves + 1).ToList();
+            var list = GridSnapInputMaterializer.Materialize(curves, MaxCurves, "Grid line snap input");
             if (list.Count == 0) return false;
-            if (list.Count > MaxCurves)
-                throw new InvalidOperationException("Grid line snap supports at most " + MaxCurves + " curves.");
 
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var candidates = new List<GridLineSnapResult>(list.Count);

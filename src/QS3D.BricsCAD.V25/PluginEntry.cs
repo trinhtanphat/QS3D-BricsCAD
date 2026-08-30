@@ -36,6 +36,15 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                McpPopupObserver.Start();
+            }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("popup notification observer", ex);
+            }
+
+            try
+            {
                 Qs3dThemeCoordinator.Start();
             }
             catch (Exception ex)
@@ -111,6 +120,7 @@ namespace QS3D.BricsCAD.V25
             // Revoke desktop-wide consent before stopping network services so no injected input
             // can outlive the BricsCAD/QS3D host lifecycle.
             TryCleanup(McpDesktopControlSession.Shutdown);
+            TryCleanup(McpPopupObserver.Stop);
             TryCleanup(McpFirstRunExperience.Stop);
             TryCleanup(McpProjectRecoveryService.Stop);
             TryCleanup(McpCloudflareAccountTunnelManager.StopForHostShutdown);
