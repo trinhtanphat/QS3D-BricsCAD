@@ -160,7 +160,7 @@ mutations = {
     "draft marker identity": (helper, workflow.replace("$body.IndexOf($TransactionMarker, [StringComparison]::Ordinal)", "$false", 1)),
     "bounded enumeration": (helper, workflow.replace("$maxPages = 20", "$maxPages = [int]::MaxValue", 1)),
     "draft delete reconciliation": (helper.replace("Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri", "# removed", 1), workflow),
-    "release-owner scan": (helper.replace("Assert-NoReleaseOwnsTag", "# removed", 1), workflow),
+    "release-owner scan": (helper.replace("\nAssert-NoReleaseOwnsTag\n", "\n# removed\n", 1), workflow),
     "non-owned preservation": (helper.replace("if (-not $TagCreatedByThisRun)", "if ($false)", 1), workflow),
     "tag delete reconciliation": (helper.replace("Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri", "# removed", 1), workflow),
     "asset identity": (helper, workflow.replace("$verifiedAssetIds[$expectedAsset] = $uploadedAssetId", "# removed", 1)),
