@@ -29,8 +29,9 @@ def main() -> None:
     require(text, "entries.Sort", "deterministic radius ordering")
     require(text, "Math.Abs(delta) <= radiusTolerance", "near-equal radius ambiguity rejection")
     require(text, "if (descending) entries.Reverse();", "explicit descending ordering")
-    require(text, "Take(MaxCurves + 1)", "bounded input cardinality")
+    require(text, 'GridSnapInputMaterializer.Materialize(curves, MaxCurves, "Grid radial ordering input")', "Count-aware bounded input materialization")
 
+    forbid(text, "Take(MaxCurves + 1)", "legacy one-past LINQ traversal")
     forbid(text, "GridSystemPlanner", "system-plan engine takeover")
     forbid(text, "GridIntersectionPlanner", "intersection-engine takeover")
     forbid(text, "Teigha.", "CAD/vendor dependency in Core")

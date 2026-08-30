@@ -76,6 +76,8 @@ def main() -> int:
         "OAuth public URL binding": "McpEmbeddedServer.LastOAuthMcpPublicUrl",
         "OAuth request timestamp": "McpEmbeddedServer.LastOAuthMcpActivityUtc",
         "registration acknowledgement is distinct": "Đây là xác nhận cài đặt, chưa phải bằng chứng traffic",
+        "Quick Tunnel polling cadence": "TimeSpan.FromMilliseconds(1500)",
+        "Quick Tunnel bounded poll cap": "_quickUrlPollTicks >= 20",
     }
     for label, token in required.items():
         if token not in text:

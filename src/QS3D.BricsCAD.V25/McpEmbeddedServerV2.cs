@@ -18,7 +18,8 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     internal static class McpEmbeddedServer
     {
-        private const int Port = 8765;
+        private const int PreferredPort = 8765;
+        private const int MaxPortAttempts = 16;
         private const int MaxHeaderBytes = 64 * 1024;
         private const int MaxBodyBytes = 1024 * 1024;
         private const int MaxConcurrentClients = 16;
@@ -41,6 +42,7 @@ namespace QS3D.BricsCAD.V25
         private static TcpListener? _listener;
         private static Thread? _listenerThread;
         private static volatile bool _stopping;
+        private static int _boundPort = PreferredPort;
         private static string _bearerToken = string.Empty;
         private static string _tokenSource = string.Empty;
         private static string _lastError = string.Empty;
@@ -48,8 +50,9 @@ namespace QS3D.BricsCAD.V25
         private static string _lastOAuthMcpMethod = string.Empty;
         private static string _lastOAuthMcpPublicUrl = string.Empty;
 
-        public static Uri Endpoint { get { return new Uri("http://127.0.0.1:" + Port.ToString(CultureInfo.InvariantCulture) + "/mcp"); } }
-        public static Uri HealthEndpoint { get { return new Uri("http://127.0.0.1:" + Port.ToString(CultureInfo.InvariantCulture) + "/healthz"); } }
+        public static Uri Endpoint { get { return new Uri("http://127.0.0.1:" + Volatile.Read(ref _boundPort).ToString(CultureInfo.InvariantCulture) + "/mcp"); } }
+        public static Uri HealthEndpoint { get { return new Uri("http://127.0.0.1:" + Volatile.Read(ref _boundPort).ToString(CultureInfo.InvariantCulture) + "/healthz"); } }
+        public static bool IsPreferredPort { get { return Volatile.Read(ref _boundPort) == PreferredPort; } }
         public static string TokenFilePath { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QS3D", TokenFileName); } }
         public static string AuditFilePath { get { return McpCadAgentRuntime.AuditFilePath; } }
         public static bool IsRunning { get { lock (Sync) return _listener != null && !_stopping; } }
@@ -72,13 +75,44 @@ namespace QS3D.BricsCAD.V25
                 _lastOAuthMcpMethod = string.Empty;
                 _lastOAuthMcpPublicUrl = string.Empty;
                 McpCadAgentRuntime.ResetForServerStart();
-                var listener = new TcpListener(IPAddress.Loopback, Port);
-                listener.Server.NoDelay = true;
-                listener.Start(32);
+                int boundPort;
+                var listener = StartLoopbackListener(out boundPort);
+                Volatile.Write(ref _boundPort, boundPort);
                 _listener = listener;
                 _listenerThread = new Thread(ServeLoop) { IsBackground = true, Name = "QS3D MCP loopback server v2" };
                 _listenerThread.Start();
             }
+        }
+
+        private static TcpListener StartLoopbackListener(out int boundPort)
+        {
+            SocketException? lastAddressInUse = null;
+            for (var offset = 0; offset < MaxPortAttempts; offset++)
+            {
+                var port = PreferredPort + offset;
+                var listener = new TcpListener(IPAddress.Loopback, port);
+                try
+                {
+                    listener.Server.NoDelay = true;
+                    listener.Start(32);
+                    boundPort = port;
+                    return listener;
+                }
+                catch (SocketException ex)
+                {
+                    try { listener.Stop(); } catch { }
+                    if (ex.SocketErrorCode != SocketError.AddressAlreadyInUse) throw;
+                    lastAddressInUse = ex;
+                }
+            }
+
+            boundPort = PreferredPort;
+            var lastPort = PreferredPort + MaxPortAttempts - 1;
+            throw new InvalidOperationException(
+                "QS3D MCP could not bind any loopback port from " + PreferredPort.ToString(CultureInfo.InvariantCulture)
+                + " through " + lastPort.ToString(CultureInfo.InvariantCulture)
+                + ". Close the stale MCP/BricsCAD instance that owns those ports and retry.",
+                lastAddressInUse);
         }
 
         public static void EnsureStarted() { if (!IsRunning) Start(); }
@@ -94,6 +128,7 @@ namespace QS3D.BricsCAD.V25
                 try { if (_listener != null) _listener.Stop(); } catch { }
                 _listener = null;
                 _listenerThread = null;
+                Volatile.Write(ref _boundPort, PreferredPort);
                 lock (SessionSync) Sessions.Clear();
             }
             if (thread != null && thread != Thread.CurrentThread)
@@ -802,9 +837,47 @@ namespace QS3D.BricsCAD.V25
                         + "\"fullCadAgent\":true,\"structuredContent\":true,\"modernMetaEnvelope\":true,\"toolAnnotations\":true,\"automationStopped\":"
                         + (McpCadAgentRuntime.AutomationStopped ? "true" : "false") + "}");
                 }
-                return ToolSuccess(McpCadAgentRuntime.Call(tool, arguments));
+                var runtimeResult = McpCadAgentRuntime.Call(tool, arguments);
+                if (string.Equals(tool, "desktop_screenshot", StringComparison.Ordinal))
+                    return ScreenshotToolSuccess(runtimeResult);
+                return ToolSuccess(runtimeResult);
             }
             catch (Exception ex) { return ToolError(ex.Message); }
+        }
+
+        private static string ScreenshotToolSuccess(string jsonValue)
+        {
+            var raw = string.IsNullOrWhiteSpace(jsonValue) ? "{}" : jsonValue.Trim();
+            var pngBase64 = McpTopLevelJson.ExtractString(raw, "pngBase64");
+            var mimeType = McpTopLevelJson.ExtractString(raw, "mimeType");
+            if (string.IsNullOrWhiteSpace(pngBase64))
+                throw new InvalidOperationException("Screenshot result did not contain PNG image data.");
+            if (!string.Equals(mimeType, "image/png", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Screenshot result MIME type was not image/png.");
+
+            var scope = McpTopLevelJson.ExtractString(raw, "scope");
+            var windowHandle = McpTopLevelJson.ExtractString(raw, "windowHandle");
+            var width = RequiredJsonInteger(raw, "width");
+            var height = RequiredJsonInteger(raw, "height");
+            var bytes = RequiredJsonInteger(raw, "bytes");
+            var metadata = "{\"scope\":\"" + JsonEscape(scope)
+                           + "\",\"windowHandle\":\"" + JsonEscape(windowHandle)
+                           + "\",\"mimeType\":\"image/png\",\"width\":" + width.ToString(CultureInfo.InvariantCulture)
+                           + ",\"height\":" + height.ToString(CultureInfo.InvariantCulture)
+                           + ",\"bytes\":" + bytes.ToString(CultureInfo.InvariantCulture) + "}";
+            return "{\"content\":[{\"type\":\"image\",\"data\":\"" + JsonEscape(pngBase64)
+                   + "\",\"mimeType\":\"image/png\"}],\"structuredContent\":{\"data\":" + metadata + "},\"isError\":false}";
+        }
+
+        private static int RequiredJsonInteger(string json, string property)
+        {
+            int value;
+            bool found;
+            string error;
+            if (!McpTopLevelJson.TryExtractInteger(json, property, out value, out found, out error))
+                throw new InvalidOperationException(error);
+            if (!found) throw new InvalidOperationException("Screenshot result is missing " + property + ".");
+            return value;
         }
 
         private static string ToolSuccess(string jsonValue)

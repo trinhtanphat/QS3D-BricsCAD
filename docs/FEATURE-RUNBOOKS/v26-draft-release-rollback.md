@@ -1,115 +1,82 @@
 # V26 draft release rollback / restart safety
 
 Origin lane: `issue-4780`  
-Publish-acknowledgement hardening: `issue-4812`
+Publish-acknowledgement hardening: `issue-4812`  
+Rollback DELETE-acknowledgement hardening: `issue-4815`
 
 ## Purpose
 
 The manual V26 release lane creates a GitHub draft release before uploading and remotely verifying package assets. A post-create failure must not strand transaction-owned remote state, because a same-tag retry would otherwise fail before publication and require manual cleanup.
 
-The final `draft=false` publish request also has a commit-unknown boundary: GitHub may commit publication but the runner can lose the HTTP acknowledgement. The workflow must distinguish an exact already-committed publication from a still-owned draft before deciding whether rollback is appropriate.
+The final `draft=false` publish request has a commit-unknown boundary, and the destructive cleanup requests have the same class of boundary: GitHub can commit a DELETE while the runner loses its HTTP acknowledgement. The workflow/helper therefore reconcile authoritative remote state rather than inferring success or failure from transport outcomes alone.
 
-This runbook defines the bounded automatic rollback and acknowledgement-reconciliation contracts. It does not authorize release dispatch, signing, or licensed BricsCAD runtime claims.
+This runbook defines bounded automatic rollback and acknowledgement-reconciliation contracts. It does not authorize release dispatch, signing, or licensed BricsCAD runtime claims.
 
 ## Positive transaction ownership
 
-Absence immediately before draft creation is not sufficient ownership proof: another actor could create the same tag at the same qualified SHA between an absence check and the release POST. The workflow therefore does not infer ownership from absence.
+Absence immediately before draft creation is not sufficient ownership proof. The workflow first creates the exact GitHub ref `refs/tags/<release-tag>` through the GitHub REST API with `sha = GITHUB_SHA` and marks `tagCreatedByThisRun=true` only after the create response returns the exact expected ref and qualified SHA. A pre-existing tag is never owned or deleted by this transaction.
 
-Inside the publication transaction, `.github/workflows/release-v26.yml` first creates the exact GitHub ref `refs/tags/<release-tag>` through the GitHub REST API with `sha = GITHUB_SHA`. The transaction marks `tagCreatedByThisRun=true` only after the create response returns both the exact expected ref name and the exact qualified workflow SHA. A pre-existing tag causes the GitHub create-ref request to fail and is never owned or deleted by this transaction.
+The draft release is created only after positive tag ownership is established. The workflow records `releaseId` only after receiving a positive release identity. `releaseId=0` remains an intentional rollback state for failures after tag creation but before a trustworthy draft identity is available.
 
-The draft release is created only after positive tag ownership is established. The workflow records `releaseId` only after receiving a positive release identity. `releaseId=0` is an intentional rollback state for failures after tag creation but before a trustworthy draft identity is available.
+## Publication envelope and publish acknowledgement
 
-## Publication envelope
+Before the final publish PATCH, the transaction verifies exact tag ownership, exact expected assets, remote byte lengths, and held-generation SHA-256 parity; every successfully verified remote asset contributes its positive GitHub asset id to the transaction identity set. The workflow marks `publishPatchAttempted=true` immediately before the final `draft=false` PATCH.
 
-After exact ref ownership is established, the existing publication requirements remain inside one `try` envelope:
-
-1. the created remote tag must resolve exactly to the qualified `GITHUB_SHA`;
-2. the draft release must return a positive identity, remain a draft, and match the exact transaction tag;
-3. only V26 package assets are uploaded;
-4. the draft asset set must exactly match the expected set;
-5. remote size and held-generation SHA-256 verification must match local assets;
-6. each successfully hash-verified remote asset contributes its positive GitHub asset id to the transaction identity set;
-7. the remote tag is re-resolved and must still target `GITHUB_SHA` after asset verification;
-8. the workflow marks `publishPatchAttempted=true` immediately before the final `draft=false` PATCH;
-9. only then may the draft be published.
-
-An error before positive tag ownership is surfaced unchanged and does not invoke destructive cleanup. A failure after ownership enters acknowledgement reconciliation or bounded rollback depending on the authoritative remote state.
-
-## Publish acknowledgement reconciliation
-
-A transport exception from the final publish PATCH is not itself evidence that publication failed. When a positive release id exists, the catch path first fetches that exact release API identity.
-
-If the release is still a draft, the transaction continues into the existing bounded rollback path.
-
-If the release is already published (`draft=false`), the workflow treats the publication as committed only when all of these checks succeed:
-
-- the final publish PATCH was actually attempted by this workflow run;
-- fetched release id and release API URL match the exact transaction identity;
-- the release tag is exactly the requested transaction tag;
-- `target_commitish` is exactly the qualified `GITHUB_SHA`;
-- prerelease state matches the validated release request;
-- the remote tag still resolves exactly to `GITHUB_SHA`;
-- the published asset count exactly matches the expected set;
-- every published asset name is unique and expected;
-- every published asset id equals the exact remote asset id recorded only after that asset passed the earlier held-generation SHA-256 verification;
-- each published asset still reports the expected local byte length.
-
-Only after all checks pass does the workflow emit an acknowledgement-recovery message and return success without invoking rollback. This is not optimistic recovery: it is authoritative reconciliation of the exact transaction whose assets were already hash-verified before the PATCH.
-
-If the release is published before this run attempted its final PATCH, if any identity/tag/SHA/prerelease/asset check disagrees, or if authoritative release state cannot be fetched, the workflow fails closed and requires manual cleanup/review. It never infers success from a transport failure alone.
+If the PATCH acknowledgement is lost, the workflow fetches the exact release. An already-published release is accepted as committed only if the PATCH was attempted and exact release id/API URL, tag, target SHA, prerelease state, remote tag target, asset names/counts, previously verified remote asset IDs, and local byte lengths all still match. A still-draft release proceeds to bounded rollback. Mismatched or unreachable state fails closed to manual review.
 
 ## Bounded rollback helper
 
-`scripts/rollback-v26-draft-release.ps1` accepts the exact repository, optional positive release id, release tag, qualified workflow SHA, positive `TagCreatedByThisRun` proof, and workflow token. It fails closed unless the destructive preconditions remain true.
+`scripts/rollback-v26-draft-release.ps1` requires exact repository, optional positive release id, release tag, qualified workflow SHA, positive `TagCreatedByThisRun` proof, and workflow token. It fails closed unless destructive preconditions remain true.
 
-Before any cleanup it verifies the exact remote tag still resolves unambiguously to the qualified workflow SHA.
+Before cleanup it resolves the exact remote tag and requires the qualified workflow SHA. When `ReleaseId > 0`, the helper fetches the exact release and requires exact id/API URL, draft state, and transaction tag before attempting draft deletion.
 
-When `ReleaseId > 0`, the helper additionally verifies before draft deletion:
+After the optional draft deletion, and always before tag deletion, the helper exhaustively enumerates authenticated repository releases in bounded pages. Any draft or published release still owning the tag blocks tag deletion. The helper then re-resolves the tag and requires the exact qualified workflow SHA immediately before the exact tag DELETE. It never uses force push or broad Git deletion.
 
-- the fetched release id matches exactly;
-- fetched release URL is exactly the expected repository/release API URL;
-- release is still a draft;
-- release tag exactly matches the transaction tag.
+## Destructive DELETE acknowledgement reconciliation
 
-When `ReleaseId = 0`, the helper does not guess a draft identity. This safely covers the case where the transaction created its tag but draft creation failed before returning a trustworthy release id.
+A failed HTTP acknowledgement after a DELETE is not enough to classify the destructive operation as failed. `issue-4815` closes both commit-unknown boundaries without introducing blind retries.
 
-After the optional draft deletion, and always before tag deletion, the helper exhaustively enumerates authenticated repository releases in bounded pages. GitHub's release listing exposes drafts to callers with push access, unlike the published-only release-by-tag endpoint. If any draft or published release has the transaction tag, tag deletion is refused. The helper then re-resolves the tag and requires the exact qualified workflow SHA again before deleting it.
+### Draft DELETE
 
-This makes ambiguous draft-POST responses fail closed: if GitHub actually created a draft but the workflow never obtained a trustworthy id, the authenticated release enumeration discovers that draft and prevents deleting the tag underneath it. If release enumeration exceeds the bounded page budget, cleanup also fails closed instead of assuming absence.
+If the exact draft DELETE call throws, the helper immediately performs an authenticated GET of that exact release API identity.
 
-The helper does not use force push or broad Git tag deletion. Tag deletion is a single GitHub REST deletion for the exact escaped `refs/tags/<release-tag>` identity after all checks above.
+- HTTP 404 is the only automatic success reconciliation: the exact release is authoritatively absent, so the helper treats the draft deletion as committed and continues.
+- If GET succeeds, the helper validates exact release id, API URL, draft state, and transaction tag. Even when all those values still match, the helper fails closed because the owned draft still exists; it does not blindly retry DELETE.
+- A published, mismatched, or otherwise changed release fails closed.
+- A reconciliation transport/API failure other than authoritative 404 also fails closed with both the original DELETE error and reconciliation error.
 
-## Error reporting
+Only after this reconciliation or a normally acknowledged DELETE does exhaustive release-owner enumeration run.
 
-If authoritative reconciliation proves the exact release is already published after a final PATCH acknowledgement failure, the workflow reports that the exact qualified release is already committed and exits successfully without destructive cleanup.
+### Tag DELETE
 
-If the exact release remains a draft and bounded rollback succeeds, the step fails with `V26 publication failed after transaction tag creation` and explicitly states that automatic rollback completed, making a same-tag retry safe.
+Immediately before tag DELETE, the existing exhaustive release-owner check and exact remote-SHA recheck remain mandatory. If the exact tag DELETE throws, the helper queries the exact GitHub ref identity through the non-destructive GET-ref endpoint.
 
-If acknowledgement reconciliation is ambiguous or fails, the step reports `V26 publication acknowledgement reconciliation failed` with both the original publication error and reconciliation error and requires manual cleanup/review. If rollback itself fails closed, the step reports `Automatic V26 draft rollback failed` together with both the original publication error and rollback error. The original failure is never replaced by an unverified success.
+- HTTP 404 is the only automatic success reconciliation: the exact tag is authoritatively absent, so deletion is treated as committed.
+- If the ref still exists, the helper requires the exact expected ref identity and workflow SHA merely to classify it; it still fails closed and does not retry DELETE.
+- A moved/mismatched ref fails closed.
+- Any non-404 reconciliation failure fails closed with both errors.
+
+This means a lost DELETE response can no longer produce a false manual-cleanup blocker when GitHub actually committed the exact deletion, while an uncertain or changed remote state still cannot be converted into success.
 
 ## Deterministic source guard
 
-`scripts/preflight-v26-draft-release-rollback.py` checks helper and workflow ordering and runs mutation probes for these independent safety properties:
+`scripts/preflight-v26-draft-release-rollback.py` retains the positive tag ownership, draft-only deletion, exhaustive release-owner enumeration, exact-SHA checks, publish acknowledgement reconciliation, and rollback wiring contracts. It additionally requires and mutation-probes:
 
-- positive transaction tag ownership rather than absence inference;
-- exact created-ref identity;
-- exact created-ref SHA binding;
-- draft-only release deletion when a release id is known;
-- draft-inclusive exhaustive release-owner enumeration before tag deletion;
-- exact-SHA ownership before cleanup;
-- exact-SHA recheck before tag deletion;
-- capture of positive remote asset ids only after held-generation SHA-256 verification;
-- explicit proof that the final publish PATCH was attempted;
-- authoritative exact-release GET after a publication exception;
-- exact published release/tag/SHA/prerelease/asset-identity validation before acknowledgement recovery;
-- workflow rollback wiring when the authoritative state is still a draft.
+- explicit classification of GitHub 404 as the sole authoritative absence signal;
+- exact-release GET after a draft DELETE exception;
+- committed-draft-deletion recovery only on authoritative absence;
+- refusal to infer success when the exact draft still exists or changed;
+- exact-ref GET after a tag DELETE exception;
+- exact ref/SHA validation when the tag still exists;
+- committed-tag-deletion recovery only on authoritative absence;
+- ordering of each reconciliation immediately after its destructive request while preserving release-owner enumeration and the final SHA recheck before tag deletion.
 
-The guard must fail if any of these properties is removed while the surrounding source remains otherwise unchanged.
+The guard must fail if any of these properties is removed while surrounding source remains otherwise unchanged.
 
 ## Validation boundary
 
-Repository-safe acceptance for this lane is source/guard/hosted CI only. Do not manually dispatch `release-v26.yml` just to test this source change. A real release dispatch remains owner-controlled and may require signing credentials plus licensed BricsCAD V26 runtime evidence according to the existing release policy.
+Repository-safe acceptance for this lane is source/guard/hosted CI only. Do not manually dispatch `release-v26.yml` to test rollback source changes. A real release remains owner-controlled and may require signing credentials plus licensed BricsCAD V26 runtime evidence according to existing release policy.
 
-For `issue-4812`, the canonical reservation is intentionally limited to the V26 workflow, focused deterministic guard, and this runbook. The rollback helper remains unchanged from the already-merged `issue-4780` contract.
+For `issue-4815`, the canonical reservation is limited to the rollback helper, focused deterministic guard, and this runbook. The release workflow remains unchanged from the already-merged `issue-4812` contract.
 
 For merge readiness, require exact-head Shared CI, latest-main reconciliation, protected PR `preflight` + `core`, expected-head merge, and exact protected-main verification.
