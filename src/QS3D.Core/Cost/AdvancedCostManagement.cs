@@ -138,6 +138,26 @@ namespace QS3D.Core.Cost
                 " entries but its known count reported " + knownCount + ".");
         }
 
+        internal static void RequireKnownCountStableDuringTraversal<T>(
+            IEnumerable<T> items,
+            bool hadKnownCount,
+            int initialKnownCount,
+            string collectionLabel)
+        {
+            if (!hadKnownCount)
+                return;
+
+            var hasCurrentKnownCount = TryGetKnownCount(items, out var currentKnownCount);
+            if (hasCurrentKnownCount && currentKnownCount > MaximumEntries)
+                ThrowTooManyEntries(collectionLabel);
+            if (!hasCurrentKnownCount || currentKnownCount != initialKnownCount)
+            {
+                throw new InvalidOperationException(
+                    collectionLabel + " known count changed during traversal from " + initialKnownCount +
+                    " to " + (hasCurrentKnownCount ? currentKnownCount.ToString() : "unavailable") + ".");
+            }
+        }
+
         internal static void RequireKnownCountStableAfterTraversal<T>(
             IEnumerable<T> items,
             bool hadKnownCount,
@@ -151,18 +171,11 @@ namespace QS3D.Core.Cost
                 observedCount,
                 collectionLabel);
 
-            if (!hadKnownCount)
-                return;
-
-            var hasCurrentKnownCount = TryGetKnownCount(items, out var currentKnownCount);
-            if (hasCurrentKnownCount && currentKnownCount > MaximumEntries)
-                ThrowTooManyEntries(collectionLabel);
-            if (!hasCurrentKnownCount || currentKnownCount != initialKnownCount)
-            {
-                throw new InvalidOperationException(
-                    collectionLabel + " known count changed during traversal from " + initialKnownCount +
-                    " to " + (hasCurrentKnownCount ? currentKnownCount.ToString() : "unavailable") + ".");
-            }
+            RequireKnownCountStableDuringTraversal(
+                items,
+                hadKnownCount,
+                initialKnownCount,
+                collectionLabel);
         }
     }
 
@@ -252,8 +265,20 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var componentEnumerator = components.GetEnumerator())
             {
-                while (componentEnumerator.MoveNext())
+                while (true)
                 {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        components,
+                        hasKnownComponentCount,
+                        knownComponentCount,
+                        "Rate build-up component collection");
+                    if (!componentEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        components,
+                        hasKnownComponentCount,
+                        knownComponentCount,
+                        "Rate build-up component collection");
                     AdvancedCostCollectionContract.RequireCanProcessNext(
                         hasKnownComponentCount,
                         knownComponentCount,
@@ -371,8 +396,20 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var recordEnumerator = records.GetEnumerator())
             {
-                while (recordEnumerator.MoveNext())
+                while (true)
                 {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        records,
+                        hasKnownRecordCount,
+                        knownRecordCount,
+                        "Historical cost catalog");
+                    if (!recordEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        records,
+                        hasKnownRecordCount,
+                        knownRecordCount,
+                        "Historical cost catalog");
                     AdvancedCostCollectionContract.RequireCanProcessNext(
                         hasKnownRecordCount,
                         knownRecordCount,
@@ -619,8 +656,20 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var lineEnumerator = lines.GetEnumerator())
             {
-                while (lineEnumerator.MoveNext())
+                while (true)
                 {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        lines,
+                        hasKnownLineCount,
+                        knownLineCount,
+                        "Tender quote line collection");
+                    if (!lineEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        lines,
+                        hasKnownLineCount,
+                        knownLineCount,
+                        "Tender quote line collection");
                     AdvancedCostCollectionContract.RequireCanProcessNext(
                         hasKnownLineCount,
                         knownLineCount,
@@ -764,8 +813,20 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var requirementEnumerator = requirements.GetEnumerator())
             {
-                while (requirementEnumerator.MoveNext())
+                while (true)
                 {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        requirements,
+                        hasKnownRequirementCount,
+                        knownRequirementCount,
+                        "Tender requirement collection");
+                    if (!requirementEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        requirements,
+                        hasKnownRequirementCount,
+                        knownRequirementCount,
+                        "Tender requirement collection");
                     AdvancedCostCollectionContract.RequireCanProcessNext(
                         hasKnownRequirementCount,
                         knownRequirementCount,
@@ -801,8 +862,20 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var bidEnumerator = bids.GetEnumerator())
             {
-                while (bidEnumerator.MoveNext())
+                while (true)
                 {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        bids,
+                        hasKnownBidCount,
+                        knownBidCount,
+                        "Tender bid collection");
+                    if (!bidEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        bids,
+                        hasKnownBidCount,
+                        knownBidCount,
+                        "Tender bid collection");
                     AdvancedCostCollectionContract.RequireCanProcessNext(
                         hasKnownBidCount,
                         knownBidCount,
@@ -953,8 +1026,20 @@ namespace QS3D.Core.Cost
             var contractIndex = 0;
             using (var contractEnumerator = contractItems.GetEnumerator())
             {
-                while (contractEnumerator.MoveNext())
+                while (true)
                 {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        contractItems,
+                        hasKnownContractCount,
+                        knownContractCount,
+                        "Progress contract item collection");
+                    if (!contractEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        contractItems,
+                        hasKnownContractCount,
+                        knownContractCount,
+                        "Progress contract item collection");
                     AdvancedCostCollectionContract.RequireCanProcessNext(
                         hasKnownContractCount,
                         knownContractCount,
@@ -979,8 +1064,20 @@ namespace QS3D.Core.Cost
             var claimIndex = 0;
             using (var claimEnumerator = claimLines.GetEnumerator())
             {
-                while (claimEnumerator.MoveNext())
+                while (true)
                 {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        claimLines,
+                        hasKnownClaimCount,
+                        knownClaimCount,
+                        "Progress claim line collection");
+                    if (!claimEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        claimLines,
+                        hasKnownClaimCount,
+                        knownClaimCount,
+                        "Progress claim line collection");
                     AdvancedCostCollectionContract.RequireCanProcessNext(
                         hasKnownClaimCount,
                         knownClaimCount,
