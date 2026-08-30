@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             RejectsConflictingCountBeforeTraversal();
             RejectsTransientGrowthBeforeCurrent();
             RejectsTransientShrinkBeforeCurrent();
+            RejectsKnownCountOverrunBeforeSecondCurrent();
             RejectsKnownCountUnderYield();
             StableCountedAndStreamingOrderingRemainSupported();
         }
@@ -59,9 +60,17 @@ namespace QS3D.Core.SmokeTests
             Equal(0, source.CurrentReads);
         }
 
+        private static void RejectsKnownCountOverrunBeforeSecondCurrent()
+        {
+            var source = new StableCountCollection(1, 2);
+            ThrowsInvalidOperation(() => Invoke(source));
+            Equal(2, source.MoveNextCalls);
+            Equal(1, source.CurrentReads);
+        }
+
         private static void RejectsKnownCountUnderYield()
         {
-            var source = new StableShortCollection(2);
+            var source = new StableCountCollection(2, 1);
             ThrowsInvalidOperation(() => Invoke(source));
             Equal(2, source.MoveNextCalls);
             Equal(1, source.CurrentReads);
@@ -138,7 +147,7 @@ namespace QS3D.Core.SmokeTests
             public bool IsSynchronized => false;
             public object SyncRoot => this;
 
-            public IEnumerator<GridReferenceCurve> GetEnumerator() => new Enumerator(this, _yieldCount, throwOnCurrent: true);
+            public IEnumerator<GridReferenceCurve> GetEnumerator() => new Enumerator(this, _yieldCount);
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
             public bool Contains(GridReferenceCurve item) => false;
             public void CopyTo(GridReferenceCurve[] array, int arrayIndex) => throw new NotSupportedException();
@@ -151,14 +160,12 @@ namespace QS3D.Core.SmokeTests
             {
                 private readonly HostileCountCollection _owner;
                 private readonly int _yieldCount;
-                private readonly bool _throwOnCurrent;
                 private int _index = -1;
 
-                internal Enumerator(HostileCountCollection owner, int yieldCount, bool throwOnCurrent)
+                internal Enumerator(HostileCountCollection owner, int yieldCount)
                 {
                     _owner = owner;
                     _yieldCount = yieldCount;
-                    _throwOnCurrent = throwOnCurrent;
                 }
 
                 public GridReferenceCurve Current
@@ -166,9 +173,7 @@ namespace QS3D.Core.SmokeTests
                     get
                     {
                         _owner.CurrentReads++;
-                        if (_throwOnCurrent)
-                            throw new Exception("Radial ordering consumed caller Current before Count revalidation.");
-                        return GridReferenceCurve.Arc("R" + _index, new Point2(0, 0), 5 + _index, 0, Math.PI / 2);
+                        throw new Exception("Radial ordering consumed caller Current before Count revalidation.");
                     }
                 }
 
@@ -187,15 +192,22 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
-        private sealed class StableShortCollection : ICollection<GridReferenceCurve>, IReadOnlyCollection<GridReferenceCurve>
+        private sealed class StableCountCollection : ICollection<GridReferenceCurve>, IReadOnlyCollection<GridReferenceCurve>
         {
-            private readonly int _count;
-            internal StableShortCollection(int count) => _count = count;
+            private readonly int _reportedCount;
+            private readonly int _yieldCount;
+
+            internal StableCountCollection(int reportedCount, int yieldCount)
+            {
+                _reportedCount = reportedCount;
+                _yieldCount = yieldCount;
+            }
+
             public int MoveNextCalls { get; private set; }
             public int CurrentReads { get; private set; }
-            public int Count => _count;
+            public int Count => _reportedCount;
             public bool IsReadOnly => true;
-            public IEnumerator<GridReferenceCurve> GetEnumerator() => new Enumerator(this);
+            public IEnumerator<GridReferenceCurve> GetEnumerator() => new Enumerator(this, _yieldCount);
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
             public bool Contains(GridReferenceCurve item) => false;
             public void CopyTo(GridReferenceCurve[] array, int arrayIndex) => throw new NotSupportedException();
@@ -205,24 +217,34 @@ namespace QS3D.Core.SmokeTests
 
             private sealed class Enumerator : IEnumerator<GridReferenceCurve>
             {
-                private readonly StableShortCollection _owner;
+                private readonly StableCountCollection _owner;
+                private readonly int _yieldCount;
                 private int _index = -1;
-                internal Enumerator(StableShortCollection owner) => _owner = owner;
+
+                internal Enumerator(StableCountCollection owner, int yieldCount)
+                {
+                    _owner = owner;
+                    _yieldCount = yieldCount;
+                }
+
                 public GridReferenceCurve Current
                 {
                     get
                     {
                         _owner.CurrentReads++;
-                        return GridReferenceCurve.Arc("R1", new Point2(0, 0), 5, 0, Math.PI / 2);
+                        return GridReferenceCurve.Arc("R" + (_index + 1), new Point2(0, 0), 5 + _index * 5, 0, Math.PI / 2);
                     }
                 }
+
                 object IEnumerator.Current => Current;
+
                 public bool MoveNext()
                 {
                     _owner.MoveNextCalls++;
                     _index++;
-                    return _index == 0;
+                    return _index < _yieldCount;
                 }
+
                 public void Reset() => throw new NotSupportedException();
                 public void Dispose() { }
             }
