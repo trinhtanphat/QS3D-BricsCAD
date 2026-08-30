@@ -75,7 +75,7 @@ def main() -> int:
         "structured tool results": r'\"structuredContent\"',
         "single repository truth": r'\"singleRepository\":true',
         "full agent truth": r'\"fullCadAgent\":true',
-        "modular server identity": r'\"embedded-6\"',
+        "modular server identity": r'\"embedded-7\"',
         "tool arguments object scoping": "TryExtractToolCall",
         "top-level scanner dependency": "McpTopLevelJson.TryFindPropertyValue",
     })
