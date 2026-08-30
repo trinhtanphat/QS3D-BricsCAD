@@ -167,9 +167,9 @@ namespace QS3D.Core.SmokeTests
                 "Duplicate regeneration preview target");
 
             var cardinalityBeforeMismatch = new CountedTargetSource(new[] { "B1", "B2", "B3" }, 1, 1, 1);
-            ThrowsMessage<ArgumentException>(
+            ThrowsMessage<InvalidOperationException>(
                 () => service.PreviewSubset(Fixture(), cardinalityBeforeMismatch),
-                "cannot exceed project element count");
+                "more entries than its known count");
 
             var honest = new CountedTargetSource(new[] { "B1" }, 1, 1, 1);
             var honestPreview = service.PreviewSubset(Fixture(), honest);
