@@ -8,16 +8,13 @@ using System.Threading;
 
 namespace QS3D.BricsCAD.V25
 {
-    /// <summary>
-    /// Click-first cloudflared bootstrapper used only by the local QS3D UI.
-    /// The MCP network server never invokes this class. The downloaded executable
-    /// must pass Windows Authenticode verification and be signed by Cloudflare.
-    /// </summary>
     internal static class McpCloudflaredBootstrapper
     {
         private const string DownloadUrl =
             "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe";
         private const string PathEnvironment = "QS3D_CLOUDFLARED_PATH";
+        private const int MaxDownloadAttempts = 3;
+        private const int RetryDelayMilliseconds = 750;
         private static readonly object Sync = new object();
         private static bool _installing;
 
@@ -25,10 +22,7 @@ namespace QS3D.BricsCAD.V25
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "QS3D", "MCP", "bin", "cloudflared.exe");
 
-        public static bool IsInstalling
-        {
-            get { lock (Sync) return _installing; }
-        }
+        public static bool IsInstalling { get { lock (Sync) return _installing; } }
 
         public static void BeginInstall(Action<bool, string> completed)
         {
@@ -91,13 +85,19 @@ namespace QS3D.BricsCAD.V25
             var backupCreated = false;
             try
             {
-#pragma warning disable SYSLIB0014
-                using (var client = new WebClient())
+                string downloadError;
+                if (!DownloadWithRetry(temporary, out downloadError))
                 {
-                    client.Headers[HttpRequestHeader.UserAgent] = "QS3D-BricsCAD-MCP/1";
-                    client.DownloadFile(DownloadUrl, temporary);
+                    string adopted;
+                    if (AdoptExistingManagedBinary(out adopted))
+                    {
+                        message = "Không tải được bản cloudflared mới sau " + MaxDownloadAttempts + " lần thử: " + downloadError
+                                  + " Bản đã xác minh hiện có vẫn được giữ nguyên và tiếp tục dùng được. " + adopted;
+                        return false;
+                    }
+                    message = "Không tải được Cloudflare Tunnel sau " + MaxDownloadAttempts + " lần thử: " + downloadError;
+                    return false;
                 }
-#pragma warning restore SYSLIB0014
 
                 var info = new FileInfo(temporary);
                 if (!info.Exists || info.Length < 1024L * 1024L || info.Length > 250L * 1024L * 1024L)
@@ -146,11 +146,7 @@ namespace QS3D.BricsCAD.V25
                     if (backupCreated && File.Exists(backup)) File.Delete(backup);
                     backupCreated = false;
                 }
-                catch
-                {
-                    // A stale previous binary is harmless; never roll back a verified successful install
-                    // merely because cleanup of the backup was denied by endpoint protection.
-                }
+                catch { }
 
                 string version;
                 try { version = FileVersionInfo.GetVersionInfo(destination).FileVersion ?? string.Empty; }
@@ -173,15 +169,44 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static bool DownloadWithRetry(string targetPath, out string error)
+        {
+            error = string.Empty;
+            Exception? last = null;
+            try { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; } catch { }
+
+            for (var attempt = 1; attempt <= MaxDownloadAttempts; attempt++)
+            {
+                try
+                {
+                    try { if (File.Exists(targetPath)) File.Delete(targetPath); } catch { }
+#pragma warning disable SYSLIB0014
+                    using (var client = new WebClient())
+                    {
+                        client.Headers[HttpRequestHeader.UserAgent] = "QS3D-BricsCAD-MCP/2";
+                        client.Headers[HttpRequestHeader.Accept] = "application/octet-stream";
+                        client.DownloadFile(DownloadUrl, targetPath);
+                    }
+#pragma warning restore SYSLIB0014
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    last = ex;
+                    try { if (File.Exists(targetPath)) File.Delete(targetPath); } catch { }
+                    if (attempt < MaxDownloadAttempts) Thread.Sleep(RetryDelayMilliseconds * attempt);
+                }
+            }
+
+            error = last == null ? "lỗi mạng không xác định." : last.GetType().Name + ": " + last.Message;
+            return false;
+        }
+
         private static void PersistPath(string path)
         {
             Environment.SetEnvironmentVariable(PathEnvironment, path, EnvironmentVariableTarget.Process);
             try { Environment.SetEnvironmentVariable(PathEnvironment, path, EnvironmentVariableTarget.User); }
-            catch
-            {
-                // The current BricsCAD process can still use the verified binary. A locked-down
-                // Windows profile may deny persistent user-environment writes.
-            }
+            catch { }
         }
 
         private static bool VerifyCloudflareBinary(string path, out string signer, out string error)
@@ -243,8 +268,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static readonly Guid WinTrustActionGenericVerifyV2 =
-            new Guid("00AAC56B-CD44-11D0-8CC2-00C04FC295EE");
+        private static readonly Guid WinTrustActionGenericVerifyV2 = new Guid("00AAC56B-CD44-11D0-8CC2-00C04FC295EE");
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         private sealed class WinTrustFileInfo
@@ -256,7 +280,6 @@ namespace QS3D.BricsCAD.V25
                 FileHandle = IntPtr.Zero;
                 KnownSubject = IntPtr.Zero;
             }
-
             public uint StructSize;
             [MarshalAs(UnmanagedType.LPWStr)] public string FilePath;
             public IntPtr FileHandle;
@@ -271,20 +294,16 @@ namespace QS3D.BricsCAD.V25
                 StructSize = (uint)Marshal.SizeOf(typeof(WinTrustData));
                 PolicyCallbackData = IntPtr.Zero;
                 SipClientData = IntPtr.Zero;
-                UiChoice = 2; // WTD_UI_NONE
-                RevocationChecks = 0; // WTD_REVOKE_NONE
-                UnionChoice = 1; // WTD_CHOICE_FILE
+                UiChoice = 2;
+                RevocationChecks = 0;
+                UnionChoice = 1;
                 FileInfoPointer = fileInfo;
-                StateAction = 0; // WTD_STATEACTION_IGNORE
+                StateAction = 0;
                 StateData = IntPtr.Zero;
                 UrlReference = IntPtr.Zero;
-                // Let Windows build the signer chain normally. Cache-only verification can reject
-                // a freshly downloaded valid Cloudflare executable when an intermediate cert is not
-                // already cached on the workstation.
                 ProviderFlags = 0;
                 UiContext = 0;
             }
-
             public uint StructSize;
             public IntPtr PolicyCallbackData;
             public IntPtr SipClientData;
