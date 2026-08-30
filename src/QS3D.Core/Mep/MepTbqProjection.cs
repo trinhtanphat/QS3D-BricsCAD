@@ -119,8 +119,17 @@ namespace QS3D.Core.Mep
             // Traversal is explicit so cardinality checks run before enumerator.Current is observed.
             using (var enumerator = groups.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    if (hasKnownCount)
+                        RequireStableKnownCount(groups, knownCount);
+
+                    var moved = enumerator.MoveNext();
+                    if (!moved)
+                        break;
+
+                    if (hasKnownCount)
+                        RequireStableKnownCount(groups, knownCount);
                     if (index == MaxGroups)
                         ThrowTooManyGroups();
                     if (hasKnownCount && index >= knownCount)
