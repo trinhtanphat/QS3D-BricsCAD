@@ -382,9 +382,12 @@ namespace QS3D.BricsCAD.V25
         {
             var document = RequireDocument();
             var filename = document.Database.Filename ?? string.Empty;
+            var hasLocalPath = Path.IsPathRooted(filename);
+            var modified = SafeInteger(SafeSystemVariable("DBMOD")) != "0";
             return "{\"name\":\"" + Escape(SafeDocumentName(document))
-                   + "\",\"saved\":" + (string.IsNullOrWhiteSpace(filename) ? "false" : "true")
-                   + ",\"hasLocalPath\":" + (Path.IsPathRooted(filename) ? "true" : "false") + "}";
+                   + "\",\"saved\":" + (hasLocalPath && !modified ? "true" : "false")
+                   + ",\"hasLocalPath\":" + (hasLocalPath ? "true" : "false")
+                   + ",\"modified\":" + (modified ? "true" : "false") + "}";
         }
 
         private static string BuildSelectionJson()
@@ -489,12 +492,35 @@ namespace QS3D.BricsCAD.V25
             return InvokeCadMutation(() =>
             {
                 var document = RequireDocument();
+                if (command == "QSAVE") return SaveActiveDocument(document);
                 var script = "_." + command + "\n" + inputs;
                 if (!script.EndsWith("\n", StringComparison.Ordinal)) script += "\n";
                 document.SendStringToExecute(script, true, false, true);
                 Audit("cad_command_sequence", "command=" + command + "; inputChars=" + inputs.Length.ToString(CultureInfo.InvariantCulture));
                 return "{\"accepted\":true,\"command\":\"" + Escape(command) + "\",\"inputChars\":" + inputs.Length.ToString(CultureInfo.InvariantCulture) + "}";
             });
+        }
+
+        private static string SaveActiveDocument(Document document)
+        {
+            var filename = document.Database.Filename ?? string.Empty;
+            if (!Path.IsPathRooted(filename))
+                throw new InvalidOperationException("Active drawing has no existing local path. Use SAVEAS before QSAVE.");
+            if (SafeInteger(SafeSystemVariable("CMDACTIVE")) != "0")
+                throw new InvalidOperationException("Cannot save while a BricsCAD command is active. Wait for idle or cancel the active command before retrying.");
+
+            EnsureCurrentMutationRunning();
+            using (document.LockDocument())
+            {
+                document.Database.Save();
+            }
+
+            var dbmod = SafeInteger(SafeSystemVariable("DBMOD"));
+            if (dbmod != "0")
+                throw new InvalidOperationException("BricsCAD save returned but DBMOD is still non-zero; save completion was not confirmed.");
+
+            Audit("cad_command_sequence", "command=QSAVE; inputChars=0; completed=true");
+            return "{\"accepted\":true,\"completed\":true,\"saved\":true,\"command\":\"QSAVE\",\"inputChars\":0}";
         }
 
         private static string RunQs3dCommand(string body)
