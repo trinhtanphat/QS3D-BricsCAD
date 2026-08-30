@@ -39,7 +39,7 @@ namespace QS3D.Core.SmokeTests
 
             var element = new ProjectElement("W", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
             element.Properties["GeneratedSolidHandle"] = "AA";
-            element.Properties["PhysicalOpeningCutSolidHandle"] = "aa";
+            element.Properties["PhysicalOpeningCutSolidHandle"] = "AA";
             element.Properties["GeneratedCurtainFrameHandles"] = "AA";
             var logical = GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element).ToList();
             if (logical.Count(x => string.Equals(x.Key, "AA", StringComparison.OrdinalIgnoreCase) && string.Equals(x.Value, "GeneratedSolidHandle", StringComparison.OrdinalIgnoreCase)) != 1)

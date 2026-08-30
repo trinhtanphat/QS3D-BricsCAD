@@ -256,11 +256,23 @@ namespace QS3D.Core.Diagnostics
             string.Equals(key, GeneratedSolidOwnerKey, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(key, OpeningCutOwnerKey, StringComparison.OrdinalIgnoreCase);
 
-        private static IEnumerable<string> SplitHandles(string raw) =>
-            (raw ?? string.Empty)
-                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(NormalizeHandleIdentity)
-                .Where(x => x.Length > 0)
-                .Distinct(StringComparer.OrdinalIgnoreCase);
+        private static IReadOnlyList<string> SplitHandles(string raw)
+        {
+            var tokens = (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.None);
+            var handles = new List<string>(tokens.Length);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var token in tokens)
+            {
+                var normalized = NormalizeHandleIdentity(token);
+                if (normalized.Length == 0)
+                    throw new InvalidOperationException("Generated owner handle property contains an empty handle token; persisted ownership provenance is malformed.");
+                if (!string.Equals(token, normalized, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Generated owner handle property contains non-canonical handle token '" + token + "'; expected '" + normalized + "'.");
+                if (!seen.Add(normalized))
+                    throw new InvalidOperationException("Generated owner handle property contains duplicate handle token " + normalized + ".");
+                handles.Add(normalized);
+            }
+            return handles.AsReadOnly();
+        }
     }
 }
