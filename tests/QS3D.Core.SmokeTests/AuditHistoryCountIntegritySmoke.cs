@@ -39,8 +39,8 @@ namespace QS3D.Core.SmokeTests
             ThrowsContaining<InvalidOperationException>(() => { var _ = trail.Events; }, "event count does not match");
 
             Equal(2, source.CountReads);
-            Equal(2, source.MoveNextReads);
-            Equal(1, source.CurrentReads);
+            Equal(0, source.MoveNextReads);
+            Equal(0, source.CurrentReads);
         }
 
         private static void RecordRejectsOverrunWithoutMutation()
