@@ -82,8 +82,8 @@ namespace QS3D.Core.SmokeTests
 
             Contains("quantity evidence source Count changed during traversal", error.Message,
                 "Quantity-evidence Count drift must fail before sorting/grouping publication.");
-            Equal(2, evidence.CountReads,
-                "Quantity-evidence Count must be read before and after traversal.");
+            Equal(6, evidence.CountReads,
+                "Quantity-evidence Count must be bound at admission, rebound around MoveNext and Current, and checked after traversal.");
         }
 
         private static void ExchangeResultCountDriftFailsBeforePublication()
@@ -98,8 +98,8 @@ namespace QS3D.Core.SmokeTests
 
             Contains("IFC exchange result source Count changed during traversal", error.Message,
                 "Exchange-result Count drift must fail before result sorting/publication.");
-            Equal(2, results.CountReads,
-                "Exchange-result Count evidence must be read before and after traversal.");
+            Equal(6, results.CountReads,
+                "Exchange-result Count evidence must be bound at admission, rebound around MoveNext and Current, and checked after traversal.");
         }
 
         private static void RejectsNegativePostTraversalCount()
@@ -167,8 +167,8 @@ namespace QS3D.Core.SmokeTests
                 NewEvidence("NetVolume", 2d, "IFC-HONEST-QTO", "SRC-QTO"));
             Equal(1, IfcRoundTripQuantityEvidenceSet.Create(evidenceSource).CandidateCount,
                 "Stable counted quantity evidence must remain accepted.");
-            Equal(2, evidenceSource.CountReads,
-                "Stable quantity-evidence Count must be rebound exactly once after traversal.");
+            Equal(6, evidenceSource.CountReads,
+                "Stable quantity-evidence Count must be bound at admission, rebound around MoveNext and Current, and checked after traversal.");
 
             var resultSource = new PostTraversalCountCollection<IfcRoundTripExchangeResult>(
                 1,
@@ -176,8 +176,8 @@ namespace QS3D.Core.SmokeTests
                 NewUnsupportedResult("IFC-HONEST-RESULT"));
             Equal(1, IfcRoundTripExchangeResultSet.Create(resultSource).Items.Count,
                 "Stable counted exchange results must remain accepted.");
-            Equal(2, resultSource.CountReads,
-                "Stable exchange-result Count must be rebound exactly once after traversal.");
+            Equal(6, resultSource.CountReads,
+                "Stable exchange-result Count must be bound at admission, rebound around MoveNext and Current, and checked after traversal.");
         }
 
         private static void PureStreamingInputsRemainAccepted()
