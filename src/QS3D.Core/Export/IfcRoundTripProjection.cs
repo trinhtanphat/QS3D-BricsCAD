@@ -85,8 +85,18 @@ namespace QS3D.Core.Export
             var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             using (var enumerator = dimensions.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        dimensions,
+                        knownCount,
+                        "IFC round-trip dimension");
+                    if (!enumerator.MoveNext())
+                        break;
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        dimensions,
+                        knownCount,
+                        "IFC round-trip dimension");
                     IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
                         knownCount,
                         items.Count,
@@ -126,8 +136,18 @@ namespace QS3D.Core.Export
             var seen = new HashSet<string>(StringComparer.Ordinal);
             using (var enumerator = provenance.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        provenance,
+                        knownCount,
+                        "IFC round-trip provenance");
+                    if (!enumerator.MoveNext())
+                        break;
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        provenance,
+                        knownCount,
+                        "IFC round-trip provenance");
                     IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
                         knownCount,
                         items.Count,
@@ -229,8 +249,18 @@ namespace QS3D.Core.Export
             var qs3dElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             using (var enumerator = projections.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        projections,
+                        knownCount,
+                        "IFC round-trip projection");
+                    if (!enumerator.MoveNext())
+                        break;
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        projections,
+                        knownCount,
+                        "IFC round-trip projection");
                     IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
                         knownCount,
                         items.Count,
