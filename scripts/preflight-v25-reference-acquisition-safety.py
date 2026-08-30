@@ -49,6 +49,8 @@ def validate_helper(text: str) -> None:
     require(text, "Stop-OwnedProcessTree -Process $process", "PID-scoped cleanup")
 
     forbid(text, "Get-FileHash", "pathname MSI hash")
+    forbid(text, "[IO.FileShare]::ReadWrite", "write-share MSI generation lock")
+    forbid(text, "[IO.FileShare]::Delete", "delete-share MSI generation lock")
     forbid(text, "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi", "direct canonical download")
     forbid(text, "Get-AuthenticodeSignature -FilePath $msi\n", "unheld MSI Authenticode validation")
 
