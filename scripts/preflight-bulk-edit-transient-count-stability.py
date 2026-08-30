@@ -84,7 +84,7 @@ require_order(
     "target-id traversal",
 )
 
-if "foreach (var element in elements)" in source or "foreach (var value in values)" in source:
+if "foreach (var element in elements)" in object_segment or "foreach (var value in values)" in id_segment:
     fail("caller-controlled bulk-edit traversal must not use foreach")
 
 for method in (
