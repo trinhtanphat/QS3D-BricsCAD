@@ -1,6 +1,6 @@
 # V25 commercial draft release rollback / restart safety
 
-Lane-Key: `issue-4787`
+Lane-Key: `issue-4819`
 
 ## Purpose
 
@@ -24,9 +24,11 @@ The transaction does not weaken the pre-publication commercial gates. The candid
 
 Before cleanup it requires the exact remote tag to resolve unambiguously to the qualified workflow SHA. When `ReleaseId > 0`, it fetches the exact release URI and verifies id, repository URL, draft state and tag before deleting that draft. A published or mismatched release is never deleted.
 
+The destructive DELETE acknowledgement itself is reconciled fail-closed. If the exact draft DELETE throws, the helper performs an authenticated GET of that same release id. Only an authoritative 404 is accepted as proof that the draft deletion committed despite the lost acknowledgement. If the release still exists, the helper validates exact id/repository/draft/tag identity and refuses to assume deletion; a published, mismatched, or unreachable reconciliation also fails closed.
+
 When `ReleaseId = 0`, the helper does not guess a release identity. After optional exact draft deletion it enumerates authenticated repository releases in bounded pages. This includes drafts for the push-authorized workflow token. If any draft or published release still owns the tag, or release enumeration exceeds the bounded page budget, tag deletion is refused.
 
-Immediately before deleting the exact Git ref, the helper resolves the tag again and requires the same qualified workflow SHA. It uses no force push and no broad tag cleanup.
+Immediately before deleting the exact Git ref, the helper resolves the tag again and requires the same qualified workflow SHA. It uses no force push and no broad tag cleanup. If that exact tag-ref DELETE throws, the helper GETs the same escaped ref. Only authoritative 404 proves committed deletion. A surviving ref must still be exactly `refs/tags/<release-tag>` at the qualified workflow SHA and is then treated as a failed deletion; a moved/mismatched/unreachable ref fails closed.
 
 An ambiguous draft-create response therefore fails closed: if GitHub created a draft but the workflow did not receive a trustworthy id, authenticated release enumeration finds ownership and requires explicit manual cleanup instead of deleting the tag underneath an unknown draft.
 
@@ -34,9 +36,11 @@ An ambiguous draft-create response therefore fails closed: if GitHub created a d
 
 If rollback succeeds, publication still fails and reports the original publication error plus an explicit statement that automatic rollback completed and same-tag retry is safe. If rollback fails closed, the workflow reports both the original publication error and rollback error and requires manual cleanup.
 
+A network exception after a destructive DELETE is no longer itself enough to declare rollback failure. Same-tag retry safety is claimed only when the exact destructive resource is authoritatively absent or the ordinary DELETE returned successfully.
+
 ## Deterministic guard
 
-`scripts/preflight-v25-draft-release-rollback.py` pins positive tag ownership, exact ref/SHA creation, zero-or-positive release identity, draft-only deletion, draft-inclusive release-owner enumeration, exact-SHA recheck and workflow catch/rollback wiring. Mutation probes must fail closed when any independent safety property is removed.
+`scripts/preflight-v25-draft-release-rollback.py` pins positive tag ownership, exact ref/SHA creation, zero-or-positive release identity, draft-only deletion, draft-inclusive release-owner enumeration, exact-SHA recheck, exact-resource DELETE acknowledgement reconciliation, and workflow catch/rollback wiring. Mutation probes must fail closed when authoritative-absence classification, surviving-resource identity checks, or any independent safety property is removed.
 
 ## Validation boundary
 
