@@ -34,12 +34,12 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                var candidate = new ScheduleHubWindow(document);
-                candidate.Closed += (_, __) => ReleasePublishedWindow(candidate);
-                Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
-                if (!candidate.IsLoaded) return;
+                var window = new ScheduleHubWindow(document);
+                window.Closed += (_, __) => ReleasePublishedWindow(window);
+                Application.ShowModelessWindow(IntPtr.Zero, window, true);
+                if (!window.IsLoaded) return;
 
-                _window = candidate;
+                _window = window;
                 _document = document;
                 _nativeDatabaseIdentity = nativeDatabaseIdentity;
                 PaletteCoordinator.SetStatus("Schedule Hub: BQ • vật liệu • curtain • cửa/lỗ • cốt thép • khóa theo bản vẽ.");
@@ -82,9 +82,9 @@ namespace QS3D.BricsCAD.V25
             return true;
         }
 
-        private static void ReleasePublishedWindow(ScheduleHubWindow candidate)
+        private static void ReleasePublishedWindow(ScheduleHubWindow window)
         {
-            if (!ReferenceEquals(_window, candidate)) return;
+            if (!ReferenceEquals(_window, window)) return;
             _window = null;
             _document = null;
             _nativeDatabaseIdentity = IntPtr.Zero;
