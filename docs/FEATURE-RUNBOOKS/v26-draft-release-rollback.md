@@ -43,11 +43,11 @@ When `ReleaseId > 0`, the helper additionally verifies before draft deletion:
 - release is still a draft;
 - release tag exactly matches the transaction tag.
 
-When `ReleaseId = 0`, the helper does not guess or search for a draft to delete. This safely covers the case where the transaction created its tag but draft creation failed before returning a trustworthy release identity.
+When `ReleaseId = 0`, the helper does not guess a draft identity. This safely covers the case where the transaction created its tag but draft creation failed before returning a trustworthy release id.
 
-After the optional draft deletion, and always before tag deletion, the helper verifies that no release currently owns the tag and re-resolves the tag to the exact qualified workflow SHA. If a release exists, a draft became published, the tag moved, the tag is ambiguous, the release identity mismatches, or any state is uncertain, the helper refuses tag deletion and the workflow reports an explicit manual-cleanup blocker.
+After the optional draft deletion, and always before tag deletion, the helper exhaustively enumerates authenticated repository releases in bounded pages. GitHub's release listing exposes drafts to callers with push access, unlike the published-only release-by-tag endpoint. If any draft or published release has the transaction tag, tag deletion is refused. The helper then re-resolves the tag and requires the exact qualified workflow SHA again before deleting it.
 
-This also handles an ambiguous draft-POST response safely: if GitHub actually created a release but the workflow never obtained a trustworthy id, the release-by-tag check prevents deleting the transaction tag underneath that release.
+This makes ambiguous draft-POST responses fail closed: if GitHub actually created a draft but the workflow never obtained a trustworthy id, the authenticated release enumeration discovers that draft and prevents deleting the tag underneath it. If release enumeration exceeds the bounded page budget, cleanup also fails closed instead of assuming absence.
 
 The helper does not use force push or broad Git tag deletion. Tag deletion is a single GitHub REST deletion for the exact escaped `refs/tags/<release-tag>` identity after all checks above.
 
@@ -65,8 +65,8 @@ If rollback itself fails closed, the step reports `Automatic V26 draft rollback 
 - exact created-ref identity;
 - exact created-ref SHA binding;
 - draft-only release deletion when a release id is known;
+- draft-inclusive exhaustive release-owner enumeration before tag deletion;
 - exact-SHA ownership before cleanup;
-- no-release-owner check before tag deletion;
 - exact-SHA recheck before tag deletion;
 - workflow rollback wiring after publication failure.
 
