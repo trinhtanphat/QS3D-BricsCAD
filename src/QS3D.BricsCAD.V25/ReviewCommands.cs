@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using Bricscad.ApplicationServices;
+using Application = Bricscad.ApplicationServices.Application;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
@@ -119,10 +120,6 @@ namespace QS3D.BricsCAD.V25
                         closeError);
                 }
 
-                // These review surfaces capture their managed Document wrapper in callbacks.
-                // Native-database equality is therefore not sufficient when BricsCAD replaces
-                // the managed wrapper. Replacement is allowed only after terminal Closed has
-                // synchronously released the exact old publication.
                 if (ReferenceEquals(GetPublished(surface), previous))
                     throw new InvalidOperationException(
                         label + " trước vẫn đang mở; hãy hoàn tất close trước khi mở lại.");
