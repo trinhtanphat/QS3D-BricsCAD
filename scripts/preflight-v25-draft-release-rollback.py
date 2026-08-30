@@ -134,15 +134,17 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
     tag_create_error = workflow_text.find("$tagCreateError = $_", tag_owned + 1)
     reconcile_tag = workflow_text.find("$reconciledTag = Get-ExactReusableReleaseTag", tag_create_error + 1)
     ambiguous_message = workflow_text.find("tag-create acknowledgement was ambiguous, but the exact lightweight tag now exists at workflow SHA; reusing it without deletion ownership.", reconcile_tag + 1)
-    release_create = workflow_text.find('$release = Invoke-RestMethod -Method Post', ambiguous_message + 1)
+    ambiguous_non_owned = workflow_text.find("$tagCreatedByThisRun = $false", ambiguous_message + 1)
+    ambiguous_ready = workflow_text.find("$tagReadyForRelease = $true", ambiguous_non_owned + 1)
+    release_create = workflow_text.find('$release = Invoke-RestMethod -Method Post', ambiguous_ready + 1)
     release_id = workflow_text.find("$releaseId = [long]$release.id", release_create + 1)
     catch_block = workflow_text.find("$publicationError = $_", release_id + 1)
     ready_check = workflow_text.find("if (-not $tagReadyForRelease)", catch_block + 1)
     rollback_call = workflow_text.find("rollback-v25-draft-release.ps1", ready_check + 1)
-    if min(reusable_fn, existing_lookup, reusable_message, tag_create, ownership_type, ownership_sha, tag_owned, tag_create_error, reconcile_tag, ambiguous_message, release_create, release_id, catch_block, ready_check, rollback_call) < 0 or not (
-        reusable_fn < existing_lookup < reusable_message < tag_create < ownership_type < ownership_sha < tag_owned < tag_create_error < reconcile_tag < ambiguous_message < release_create < release_id < catch_block < ready_check < rollback_call
+    if min(reusable_fn, existing_lookup, reusable_message, tag_create, ownership_type, ownership_sha, tag_owned, tag_create_error, reconcile_tag, ambiguous_message, ambiguous_non_owned, ambiguous_ready, release_create, release_id, catch_block, ready_check, rollback_call) < 0 or not (
+        reusable_fn < existing_lookup < reusable_message < tag_create < ownership_type < ownership_sha < tag_owned < tag_create_error < reconcile_tag < ambiguous_message < ambiguous_non_owned < ambiguous_ready < release_create < release_id < catch_block < ready_check < rollback_call
     ):
-        errors.append("workflow order must be reusable-tag admission -> create/ownership -> ambiguous-create reconciliation -> draft publication -> tag-ready bounded rollback")
+        errors.append("workflow order must be reusable-tag admission -> create/ownership -> ambiguous-create reconciliation/non-ownership -> draft publication -> tag-ready bounded rollback")
     return errors
 
 
