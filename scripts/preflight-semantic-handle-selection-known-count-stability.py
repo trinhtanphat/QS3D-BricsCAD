@@ -14,7 +14,7 @@ for path in (source, smoke):
 if source.is_file():
     text = source.read_text(encoding="utf-8")
     start = text.find("private static HashSet<string> MaterializeSelectedHandles(IEnumerable<string> selectedHandles)")
-    end = text.find("private static int? TryGetKnownCount(", start)
+    end = text.find("private static IReadOnlyDictionary<string, ProjectElement> SnapshotElementOwnership", start)
     materialize = text[start:end] if start >= 0 and end > start else ""
     required = (
         "var knownCount = TryGetKnownCount(selectedHandles",
