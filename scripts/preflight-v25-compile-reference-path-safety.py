@@ -47,15 +47,31 @@ def main() -> int:
         "function Test-CanonicalPathEqual",
         "function Test-CanonicalPathWithin",
         "function Assert-NoExistingReparseComponent",
+        "function Open-PinnedMsiReadLock",
+        "function Test-PinnedMsiGeneration",
+        "[IO.FileShare]::Read",
+        "$sha.ComputeHash($stream)",
         "ExtractDir must not be a filesystem root",
         "ExtractDir must not equal or contain MsiPath",
         "ExtractDir must not equal or contain the MSI cache directory",
         "No destructive filesystem mutation may occur before the path-overlap and",
         "reparse-component guards above.",
         "Remove-Item -LiteralPath $extract -Recurse -Force",
+        "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
+        "Test-PinnedMsiGeneration -Path $staging",
+        "[IO.File]::Move($staging, $msi)",
+        "Test-PinnedMsiGeneration -Path $msi -Label 'Published BricsCAD V25 MSI'",
+        "$msiState = Open-PinnedMsiReadLock -Path $msi",
+        "Get-AuthenticodeSignature -FilePath $msiState.Path",
     )
     for token in required_tokens:
         require(token in source, f"missing V25 acquisition path-safety contract token: {token}")
+
+    require("Get-FileHash" not in source, "pathname MSI hashing must remain retired")
+    require(
+        "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi" not in source,
+        "remote MSI bytes must not be downloaded directly to the canonical cache pathname",
+    )
 
     cleanup_index = source.index("Remove-Item -LiteralPath $extract -Recurse -Force")
     root_guard_index = source.index("ExtractDir must not be a filesystem root")
@@ -66,6 +82,17 @@ def main() -> int:
     require(msi_guard_index < cleanup_index, "MSI containment guard occurs after recursive cleanup")
     require(cache_guard_index < cleanup_index, "cache containment guard occurs after recursive cleanup")
     require(reparse_guard_index < cleanup_index, "reparse-component guard occurs after recursive cleanup")
+
+    download_index = source.index("Invoke-WebRequest -Uri $candidate.Url -OutFile $staging")
+    staged_index = source.index("Test-PinnedMsiGeneration -Path $staging", download_index)
+    publish_index = source.index("[IO.File]::Move($staging, $msi)", staged_index)
+    published_index = source.index("Test-PinnedMsiGeneration -Path $msi -Label 'Published BricsCAD V25 MSI'", publish_index)
+    final_lock_index = source.index("$msiState = Open-PinnedMsiReadLock -Path $msi", published_index)
+    signature_index = source.index("Get-AuthenticodeSignature -FilePath $msiState.Path", final_lock_index)
+    require(
+        download_index < staged_index < publish_index < published_index < final_lock_index < signature_index,
+        "V25 acquisition must stage -> held-admit -> publish -> canonical re-admit -> final lock -> Authenticode",
+    )
 
     safe_cases = (
         (
@@ -93,14 +120,6 @@ def main() -> int:
         "unexpected additional recursive extraction cleanup bypasses the guarded path",
     )
     require(
-        "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi" in source,
-        "download destination semantics changed unexpectedly",
-    )
-    require(
-        "Get-AuthenticodeSignature -FilePath $msi" in source,
-        "Authenticode validation was removed from V25 acquisition",
-    )
-    require(
         "^25\\.2\\.10(?:\\.|$)" in source,
         "pinned V25.2.10 MSI identity validation was removed",
     )
@@ -110,11 +129,12 @@ def main() -> int:
     )
 
     print("PASS: V25 compile-reference acquisition path-safety regression")
-    print(" - recursive extraction cleanup is preceded by root/MSI/cache containment guards")
-    print(" - recursive cleanup is also preceded by existing reparse-component guards")
+    print(" - recursive extraction cleanup is preceded by root/MSI/cache containment and reparse guards")
     print(" - normal shared-CI disjoint paths and safe cache-child extraction remain accepted")
     print(" - filesystem-root, MSI-containing and cache-containing extraction layouts fail closed")
-    print(" - hash/signature/version/download/timeout acquisition semantics remain source-guarded")
+    print(" - remote bytes are staged and held-verified before canonical publication/re-admission")
+    print(" - final Authenticode consumption remains bound to the held MSI state")
+    print(" - version and bounded extraction semantics remain source-guarded")
     return 0
 
 
