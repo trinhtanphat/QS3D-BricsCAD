@@ -22,7 +22,7 @@ def main() -> None:
 
     require(text, "TryFindNearest(", "nearest ARC snap API")
     require(text, "GridReferenceCurveKind.Arc", "ARC-only policy")
-    require(text, "GridSnapInputMaterializer.Materialize(curves, MaxCurves, \"Grid ARC snap\")", "shared bounded input admission")
+    require(text, "GridSnapInputMaterializer.Materialize(curves, MaxCurves, \"Grid ARC snap input\")", "shared bounded input admission")
     require(text, "new HashSet<string>(StringComparer.OrdinalIgnoreCase)", "duplicate identity rejection")
     require(text, "AngleWithinSweep", "finite sweep membership")
     require(text, "arc.Radius / radialDistance", "support-circle radial projection")
