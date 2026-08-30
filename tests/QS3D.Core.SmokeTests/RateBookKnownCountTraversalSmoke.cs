@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             UnderYieldFailsAfterTraversal();
             ExactKnownCountTraversalRemainsAccepted();
             CountDriftAfterExactTraversalFailsClosed();
+            CountDriftFromCurrentFailsBeforeNullAcceptance();
             PostTraversalInterfaceConflictFailsClosed();
             HonestMultiInterfaceCountRemainsAccepted();
             PureStreamingInputRemainsAccepted();
@@ -75,6 +76,20 @@ namespace QS3D.Core.SmokeTests
                 "known count changed during traversal",
                 error.Message,
                 "RateBook must reject Count metadata that changes after exact traversal.");
+        }
+
+        private static void CountDriftFromCurrentFailsBeforeNullAcceptance()
+        {
+            var source = new CurrentDriftingReadOnlyCollection(Item(0));
+            var error = Capture<InvalidOperationException>(
+                () => new RateBook("BOOK-KNOWN-COUNT-CURRENT-DRIFT", source));
+
+            Equal(1, source.MoveNextCalls, "Current-induced Count drift must advance only the admitted item.");
+            Equal(1, source.CurrentReads, "Current-induced Count drift must observe Current exactly once before failing.");
+            Contains(
+                "known count changed during traversal",
+                error.Message,
+                "RateBook Current-induced Count drift must win before ordinary returned-item validation.");
         }
 
         private static void PostTraversalInterfaceConflictFailsClosed()
@@ -208,6 +223,46 @@ namespace QS3D.Core.SmokeTests
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class CurrentDriftingReadOnlyCollection : IReadOnlyCollection<RateItem>, IEnumerator<RateItem>
+        {
+            private readonly RateItem _item;
+            private bool _advanced;
+            private bool _currentObserved;
+
+            internal CurrentDriftingReadOnlyCollection(RateItem item)
+            {
+                _item = item ?? throw new ArgumentNullException(nameof(item));
+            }
+
+            public int Count => _currentObserved ? 2 : 1;
+            public RateItem Current
+            {
+                get
+                {
+                    CurrentReads++;
+                    _currentObserved = true;
+                    return null!;
+                }
+            }
+            object IEnumerator.Current => Current;
+            internal int MoveNextCalls { get; private set; }
+            internal int CurrentReads { get; private set; }
+
+            public IEnumerator<RateItem> GetEnumerator() => this;
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            public bool MoveNext()
+            {
+                MoveNextCalls++;
+                if (_advanced) return false;
+                _advanced = true;
+                return true;
+            }
+
+            public void Reset() => throw new NotSupportedException();
+            public void Dispose() { }
         }
 
         private sealed class MultiInterfaceCollection : ICollection<RateItem>, IReadOnlyCollection<RateItem>, ICollection
