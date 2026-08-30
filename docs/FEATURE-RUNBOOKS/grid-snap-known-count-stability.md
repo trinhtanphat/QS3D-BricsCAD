@@ -22,7 +22,7 @@ The materializer is CAD-independent and does not change LINE/ARC duplicate-ID, t
 
 `GridSnapKnownCountStabilitySmoke` instruments Count, `MoveNext`, and `Current` independently. It proves both LINE and ARC reject over-cap metadata before traversal, reject transient Count growth after the first successful `MoveNext` before `Current`, cover negative/conflicting Count evidence, and retain stable counted plus pure-streaming controls.
 
-`preflight-grid-snap-known-count-stability.py` is auto-discovered by Shared CI and prevents either snap planner from returning to `Take(MaxCurves + 1).ToList()` caller materialization.
+`preflight-grid-snap-known-count-stability.py` is auto-discovered by Shared CI and prevents either snap planner from returning to `Take(MaxCurves + 1).ToList()` caller materialization. The guard verifies both parts of the abstraction contract: `ValidateKnownCount(...)` must itself re-read supported Count surfaces via `ReadKnownCount(...)`, and the materializer must invoke `ValidateKnownCount(curves, admittedCount, label)` after `MoveNext()` and before any `Current` read. This intentionally validates behavior across the helper boundary rather than requiring an implementation-detail `ReadKnownCount` call at the traversal site.
 
 ## Runtime disposition
 
