@@ -8,6 +8,7 @@ namespace QS3D.BricsCAD.V25
     public sealed class GeometryExtensionsCommands
     {
         private static GeometryExtensionsWindow? _published;
+        private static GeometryExtensionsWindow? _pending;
 
         [CommandMethod("QS3DGEOMETRYEXT", CommandFlags.Modal)]
         public void ShowGeometryExtensions()
@@ -15,49 +16,96 @@ namespace QS3D.BricsCAD.V25
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
 
-            GeometryExtensionsWindow? window = null;
+            GeometryExtensionsWindow? candidate = null;
             try
             {
+                var pending = _pending;
+                if (pending != null && !TryClosePendingWindow(pending))
+                {
+                    ReportStatus(document, "Geometry Extensions chưa thể mở lại vì cửa sổ lỗi trước đó chưa đóng hoàn toàn.");
+                    return;
+                }
+
                 var previous = _published;
                 if (previous != null)
                 {
                     if (previous.IsLoaded)
                     {
                         try { previous.Activate(); } catch { }
-                        try { PaletteCoordinator.SetStatus("Geometry Extensions đã mở."); } catch { }
+                        ReportStatus(document, "Geometry Extensions đã mở.");
                         return;
                     }
 
-                    if (ReferenceEquals(_published, previous))
-                        _published = null;
+                    ReleasePublishedWindow(previous);
                 }
 
-                window = new GeometryExtensionsWindow();
-                var published = window;
-                window.Closed += (_, __) =>
-                {
-                    if (ReferenceEquals(_published, published)) _published = null;
-                };
+                candidate = new GeometryExtensionsWindow();
+                var window = candidate;
+                _pending = window;
+                window.Closed += (_, __) => ReleaseWindow(window);
 
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
                 if (!window.IsLoaded)
-                    throw new InvalidOperationException("Geometry Extensions host show returned without a loaded window.");
+                    throw new InvalidOperationException("Geometry Extensions host publication did not remain loaded.");
 
-                _published = published;
-                window = null;
-                try { PaletteCoordinator.SetStatus("Đã mở Geometry Extensions."); } catch { }
+                _published = window;
+                ReleasePendingWindow(window);
+                candidate = null;
+                ReportStatus(document, "Đã mở Geometry Extensions.");
             }
             catch (Exception ex)
             {
-                if (window != null)
-                {
-                    try { window.Close(); } catch { }
-                }
-
-                var message = "QS3DGEOMETRYEXT lỗi: " + ex.Message;
-                try { PaletteCoordinator.SetStatus(message); } catch { }
-                try { document.Editor.WriteMessage("\n" + message); } catch { }
+                ReportStatus(document, "QS3DGEOMETRYEXT lỗi khi mở cửa sổ.");
+                try { document.Editor.WriteMessage("\nQS3DGEOMETRYEXT failed (" + ex.GetType().Name + ")."); } catch { }
             }
+            finally
+            {
+                if (candidate != null)
+                    TryClosePendingWindow(candidate);
+            }
+        }
+
+        private static void ReleaseWindow(GeometryExtensionsWindow window)
+        {
+            ReleasePublishedWindow(window);
+            ReleasePendingWindow(window);
+        }
+
+        private static void ReleasePublishedWindow(GeometryExtensionsWindow window)
+        {
+            if (!ReferenceEquals(_published, window)) return;
+            _published = null;
+        }
+
+        private static void ReleasePendingWindow(GeometryExtensionsWindow window)
+        {
+            if (!ReferenceEquals(_pending, window)) return;
+            _pending = null;
+        }
+
+        private static bool TryClosePendingWindow(GeometryExtensionsWindow window)
+        {
+            if (!ReferenceEquals(_pending, window)) return true;
+            if (ReferenceEquals(_published, window))
+            {
+                ReleasePendingWindow(window);
+                return true;
+            }
+
+            if (window.IsLoaded)
+            {
+                try { window.Close(); } catch (Exception) { }
+            }
+
+            if (window.IsLoaded) return false;
+            ReleasePendingWindow(window);
+            return true;
+        }
+
+        private static void ReportStatus(Document document, string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); } catch { }
+            try { document.Editor.WriteMessage("\n" + message); } catch { }
         }
     }
 }
