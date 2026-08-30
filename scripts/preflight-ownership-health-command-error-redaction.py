@@ -15,7 +15,7 @@ else:
         '[CommandMethod("QS3DOWNERSHIPHEALTH", CommandFlags.Modal)]',
         'ProjectContextCoordinator.TryGetReadOnly(document, out var project)',
         'new SafeGeneratedHandleOwnershipHealthService().Inspect(project)',
-        'Application.ShowModelessWindow(IntPtr.Zero, new ModelHealthWindow(document, issues, issue =>',
+        'ModelHealthWindowPresenter.Show(document, issues, issue =>',
         'CadHandleService.Select(document, SemanticReferenceHandles.Get(element))',
         'document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false)',
         'Report(document, "QS3DOWNERSHIPHEALTH lỗi: không thể hoàn tất health check.");',
@@ -27,13 +27,15 @@ else:
             errors.append("Ownership Health command contract missing token: " + token)
 
     forbidden = (
+        'Application.ShowModelessWindow(',
+        'new ModelHealthWindow(',
         'catch (System.Exception ex)',
         'ex.Message',
         'QS3DOWNERSHIPHEALTH lỗi: " +',
     )
     for token in forbidden:
         if token in text:
-            errors.append("Ownership Health command must not reflect exception detail: " + token)
+            errors.append("Ownership Health command must not bypass presenter or reflect exception detail: " + token)
 
     if text.count('PaletteCoordinator.SetStatus(message)') != 1:
         errors.append("Ownership Health command must keep exactly one Palette status sink in Report().")
@@ -46,4 +48,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DOWNERSHIPHEALTH preserves read-only health/modeless locate behavior while top-level exception details remain redacted from Palette and Editor output.")
+print("PASS: QS3DOWNERSHIPHEALTH routes through transactional Model Health publication while preserving read-only locate and redacted error semantics.")
