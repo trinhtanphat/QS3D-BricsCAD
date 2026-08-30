@@ -22,7 +22,7 @@ def main() -> None:
 
     require(text, "TryFindNearest(", "nearest snap API")
     require(text, "GridReferenceCurveKind.Line", "LINE-only policy")
-    require(text, "GridSnapInputMaterializer.Materialize(curves, MaxCurves, \"Grid LINE snap\")", "shared bounded input admission")
+    require(text, "GridSnapInputMaterializer.Materialize(curves, MaxCurves, \"Grid line snap input\")", "shared bounded input admission")
     require(text, "new HashSet<string>(StringComparer.OrdinalIgnoreCase)", "duplicate identity rejection")
     require(text, "NearestOnFiniteSegment", "finite-segment projection")
     require(text, "if (along < 0.0) along = 0.0;", "start clamp")
