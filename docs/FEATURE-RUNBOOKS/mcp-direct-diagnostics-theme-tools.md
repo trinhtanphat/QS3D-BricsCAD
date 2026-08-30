@@ -22,11 +22,13 @@ The tools do not accept filesystem paths. They can read only the canonical `%App
 
 On diagnostics startup, `McpDiagnosticHub` scans only those two bounded canonical audit files for the highest persisted diagnostic sequence and seeds the in-process counter from it. This keeps `diagnostics_since` / `diagnostics_wait` cursors monotonic across a normal QS3D or BricsCAD restart while retained audit history exists, instead of reusing low sequence values from zero.
 
+Host-facing snapshot/state reads are marshalled through BricsCAD `ExecuteInApplicationContext` with a bounded timeout and cancel-before-start behavior. The MCP HTTP worker therefore never directly touches document/project/system-variable state that belongs on BricsCAD's application context.
+
 The underlying `McpDiagnosticHub` continues to redact bearer/token/secret/password-like values and captures MCP transport errors/OAuth activity, QS3D startup/runtime exceptions, QS3D project audit entries, BricsCAD command failures/cancellations, and QS3D command lifecycle events.
 
 ## Theme propagation
 
-`theme_set` does not style only the MCP popup. It calls `Qs3dThemeCoordinator`, which owns the persistent theme mode, changes BricsCAD `COLORTHEME`, recolors canonical QS3D WPF resources and loaded/future QS3D surfaces, and follows Windows app theme changes while configured as `system`.
+`theme_set` does not style only the MCP popup. It calls `Qs3dThemeCoordinator`, which owns the persistent theme mode, changes BricsCAD `COLORTHEME`, recolors canonical QS3D WPF resources and loaded/future QS3D surfaces, and follows Windows app theme changes while configured as `system`. The result-state read is marshalled back onto BricsCAD application context before reading `COLORTHEME`.
 
 ## Security invariants
 
