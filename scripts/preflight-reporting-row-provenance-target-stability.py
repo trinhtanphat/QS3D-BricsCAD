@@ -44,8 +44,8 @@ break_guard = append.index("if (!moved) break;", post_move_count)
 current = append.index("var raw = enumerator.Current;", break_guard)
 post_current_target = append.index("RequireStableTarget(target, targetSnapshot);", current)
 stage = append.index("staged.Add(handle);", post_current_target)
-final_target = append.rindex("RequireStableTarget(target, targetSnapshot);")
-final_count = append.rindex("RequireStableKnownCount(sourceHandles, knownCount);")
+post_traversal_target = append.index("RequireStableTarget(target, targetSnapshot);", stage)
+final_count = append.index("RequireStableKnownCount(sourceHandles, knownCount);", post_traversal_target)
 cardinality = append.index("if (knownCount.HasValue && index != knownCount.Value)", final_count)
 prepublish_target = append.index("RequireStableTarget(target, targetSnapshot);", cardinality)
 publish = append.index("foreach (var handle in staged) target.Add(handle);", prepublish_target)
@@ -53,7 +53,7 @@ publish = append.index("foreach (var handle in staged) target.Add(handle);", pre
 if not (
     snapshot < identity_snapshot < pre_move_target < pre_move_count < move <
     post_move_target < post_move_count < break_guard < current < post_current_target <
-    stage < final_target <= final_count < cardinality < prepublish_target < publish
+    stage < post_traversal_target < final_count < cardinality < prepublish_target < publish
 ):
     raise SystemExit("reporting target-stability traversal/publication ordering changed")
 
