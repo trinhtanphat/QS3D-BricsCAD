@@ -44,8 +44,15 @@ def main() -> int:
         "metadata object rebuild": 'var metadata = "{\\"scope\\":\\""',
     })
 
-    if "return ToolSuccess(McpCadAgentRuntime.Call(tool, arguments));" in server:
-        errors.append("MCP server still sends every runtime result through text-only ToolSuccess")
+    runtime_dispatch = server.find("var runtimeResult = McpCadAgentRuntime.Call(tool, arguments);")
+    screenshot_dispatch = server.find('string.Equals(tool, "desktop_screenshot", StringComparison.Ordinal)', runtime_dispatch)
+    screenshot_result = server.find("return ScreenshotToolSuccess(runtimeResult);", screenshot_dispatch)
+    text_fallback = server.find("return ToolSuccess(runtimeResult);", screenshot_result)
+    if min(runtime_dispatch, screenshot_dispatch, screenshot_result, text_fallback) < 0:
+        errors.append("MCP runtime dispatch sequence is incomplete")
+    elif not (runtime_dispatch < screenshot_dispatch < screenshot_result < text_fallback):
+        errors.append("MCP screenshot interception must precede the generic runtime text fallback")
+
     if server.count('"pngBase64"') > 1:
         errors.append("MCP screenshot response appears to duplicate pngBase64 instead of emitting image data once")
 
