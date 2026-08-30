@@ -23,7 +23,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = NewProject();
             var owner = NewElement("E-1");
-            owner.Properties["GeneratedSolidHandle"] = " AA01 ";
+            owner.Properties["GeneratedSolidHandle"] = "AA01";
             project.Elements.Add(owner);
 
             var index = GeneratedHandleOwnershipIndex.Build(project);

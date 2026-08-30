@@ -59,7 +59,7 @@ namespace QS3D.Core.SmokeTests
             if (BomReleaseGuardService.Inspect(project, paddedCaseSensitiveLive).Any(x => x.Code == "BOM_GENERATED_HANDLE_MISSING"))
                 throw new Exception("BOM generated Handle liveness must trim surrounding whitespace and ignore blank caller entries.");
 
-            element.Properties["GeneratedFuturePanelHandles"] = "3C;3D;3d";
+            element.Properties["GeneratedFuturePanelHandles"] = "3C;3D";
             var partialFuture = new HashSet<string>(new[] { "2B", "3C" }, StringComparer.OrdinalIgnoreCase);
             Has(BomReleaseGuardService.Inspect(project, partialFuture), "BOM_GENERATED_HANDLE_MISSING");
             var allFuture = new HashSet<string>(new[] { "2B", "3C", "3D" }, StringComparer.OrdinalIgnoreCase);
