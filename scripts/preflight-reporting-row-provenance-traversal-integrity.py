@@ -21,7 +21,8 @@ required_source = (
     "using (var enumerator = sourceHandles.GetEnumerator())",
     "while (true)",
     "RequireStableKnownCount(sourceHandles, knownCount);",
-    "if (!enumerator.MoveNext()) break;",
+    "var moved = enumerator.MoveNext();",
+    "if (!moved) break;",
     "if (knownCount.HasValue && index >= knownCount.Value)",
     "if (index >= MaxSourceHandleEntries)",
     "var raw = enumerator.Current;",
@@ -33,20 +34,23 @@ if missing:
     raise SystemExit("reporting provenance traversal-integrity source token(s) missing: " + repr(missing))
 
 append_start = source.index("internal static void AppendSourceHandles")
-helper_start = source.index("private static HashSet<string> SnapshotTargetIdentities", append_start)
+helper_start = source.index("private static string[] SnapshotTargetValues", append_start)
 append = source[append_start:helper_start]
 pre_move = append.index("RequireStableKnownCount(sourceHandles, knownCount);")
-move_next = append.index("if (!enumerator.MoveNext()) break;", pre_move)
+move_next = append.index("var moved = enumerator.MoveNext();", pre_move)
 post_move = append.index("RequireStableKnownCount(sourceHandles, knownCount);", pre_move + 1)
-known_guard = append.index("if (knownCount.HasValue && index >= knownCount.Value)", post_move)
+break_guard = append.index("if (!moved) break;", post_move)
+known_guard = append.index("if (knownCount.HasValue && index >= knownCount.Value)", break_guard)
 cap_guard = append.index("if (index >= MaxSourceHandleEntries)", known_guard)
 current = append.index("var raw = enumerator.Current;", cap_guard)
 stage = append.index("staged.Add(handle);", current)
 final_stability = append.rindex("RequireStableKnownCount(sourceHandles, knownCount);")
 cardinality = append.index("if (knownCount.HasValue && index != knownCount.Value)", final_stability)
 publish = append.index("foreach (var handle in staged) target.Add(handle);", cardinality)
-if not (pre_move < move_next < post_move < known_guard < cap_guard < current < stage < final_stability < cardinality < publish):
+if not (pre_move < move_next < post_move < break_guard < known_guard < cap_guard < current < stage < final_stability < cardinality < publish):
     raise SystemExit("reporting provenance traversal/publication ordering changed")
+if append.count("var moved = enumerator.MoveNext();") != 1 or append.count("if (!moved) break;") != 1:
+    raise SystemExit("reporting provenance MoveNext admission contract changed")
 if "foreach (var raw in sourceHandles)" in append:
     raise SystemExit("reporting provenance regressed to direct foreach traversal/publication")
 if "target.Add(handle);\n                index++;" in append:
