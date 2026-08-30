@@ -58,6 +58,7 @@ namespace QS3D.Core.Audit
                         RequireStableHistoryCount(storedCount);
                         RequireCanReadCurrent(storedCount, observed);
                         var item = enumerator.Current;
+                        RequireStableHistoryCount(storedCount);
                         observed++;
                         if (item == null)
                             throw new InvalidOperationException("Audit trail contains a null event.");
@@ -159,6 +160,7 @@ namespace QS3D.Core.Audit
                     RequireStableHistoryCount(storedCount);
                     RequireCanReadCurrent(storedCount, observed);
                     var existing = enumerator.Current;
+                    RequireStableHistoryCount(storedCount);
                     observed++;
                     if (existing == null)
                         throw new InvalidOperationException("Audit trail contains a null event. Repair the existing audit history before modifying it.");
