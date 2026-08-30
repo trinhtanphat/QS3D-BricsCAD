@@ -285,6 +285,64 @@ jobs:
             }
           }
 
+          function Assert-PublishedReleaseMatchesVerifiedTransaction {
+            param(
+              [Parameter(Mandatory = $true)]$ReleaseSnapshot,
+              [Parameter(Mandatory = $true)][string]$ReleaseUri,
+              [Parameter(Mandatory = $true)][long]$ReleaseId,
+              [Parameter(Mandatory = $true)][string[]]$ExpectedAssets,
+              [Parameter(Mandatory = $true)][hashtable]$VerifiedAssetIds,
+              [Parameter(Mandatory = $true)][hashtable]$LocalAssets,
+              [Parameter(Mandatory = $true)][bool]$IsPrerelease
+            )
+
+            if ($null -eq $ReleaseSnapshot -or [long]$ReleaseSnapshot.id -ne $ReleaseId) {
+              throw "Published V26 release identity mismatch during acknowledgement reconciliation."
+            }
+            if (-not [string]::Equals([string]$ReleaseSnapshot.url, $ReleaseUri, [StringComparison]::Ordinal)) {
+              throw "Published V26 release repository identity mismatch during acknowledgement reconciliation."
+            }
+            if ($ReleaseSnapshot.draft -ne $false) {
+              throw "Published V26 release reconciliation expected draft=false."
+            }
+            if (-not [string]::Equals([string]$ReleaseSnapshot.tag_name, $env:RELEASE_TAG, [StringComparison]::Ordinal)) {
+              throw "Published V26 release tag mismatch during acknowledgement reconciliation."
+            }
+            if (-not [string]::Equals([string]$ReleaseSnapshot.target_commitish, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+              throw "Published V26 release target SHA mismatch during acknowledgement reconciliation."
+            }
+            if ([bool]$ReleaseSnapshot.prerelease -ne $IsPrerelease) {
+              throw "Published V26 release prerelease-state mismatch during acknowledgement reconciliation."
+            }
+
+            Assert-RemoteReleaseTagTargetsWorkflowSha
+
+            if (@($ReleaseSnapshot.assets).Count -ne $ExpectedAssets.Count) {
+              throw "Published V26 release asset count mismatch during acknowledgement reconciliation."
+            }
+            if ($VerifiedAssetIds.Count -ne $ExpectedAssets.Count) {
+              throw "Verified V26 release asset identity set is incomplete; refusing acknowledgement recovery."
+            }
+            foreach ($expectedAsset in $ExpectedAssets) {
+              $matches = @($ReleaseSnapshot.assets | Where-Object { [string]$_.name -ceq $expectedAsset })
+              if ($matches.Count -ne 1) {
+                throw "Published V26 release asset identity is ambiguous for $expectedAsset."
+              }
+              if (-not $VerifiedAssetIds.ContainsKey($expectedAsset) -or -not $LocalAssets.ContainsKey($expectedAsset)) {
+                throw "Verified V26 release asset identity mapping is missing for $expectedAsset."
+              }
+              $publishedAsset = $matches[0]
+              $expectedAssetId = [long]$VerifiedAssetIds[$expectedAsset]
+              if ($expectedAssetId -le 0 -or [long]$publishedAsset.id -ne $expectedAssetId) {
+                throw "Verified V26 release asset identity mismatch for $expectedAsset."
+              }
+              $localLength = [int64](Get-Item -LiteralPath ([string]$LocalAssets[$expectedAsset])).Length
+              if ([int64]$publishedAsset.size -ne $localLength) {
+                throw "Published V26 release asset size mismatch for $expectedAsset during acknowledgement reconciliation."
+              }
+            }
+          }
+
           $isPrerelease = $env:V26_RELEASE_REQUEST_PRERELEASE -eq 'true'
           $signPackage = $env:V26_RELEASE_REQUEST_SIGN_PACKAGE -eq 'true'
           $runtimeState = if ($env:RELEASE_RUN_RUNTIME -eq 'true') {
@@ -305,6 +363,11 @@ jobs:
           $tagCreatedByThisRun = $false
           $releaseId = [long]0
           $release = $null
+          $releaseUri = $null
+          $expectedAssets = @()
+          $localAssets = @{}
+          $verifiedAssetIds = @{}
+          $publishPatchAttempted = $false
 
           try {
             $tagRefUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/refs"
@@ -338,7 +401,6 @@ jobs:
 
             $releaseAssets = @('dist\QS3D-BricsCAD-V26.zip', 'dist\QS3D-BricsCAD-V26.zip.sha256')
             if ($signPackage) { $releaseAssets += 'dist\QS3D-BricsCAD-V26.update.json' }
-            $localAssets = @{}
             $uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''
             foreach ($assetPath in $releaseAssets) {
               $asset = (Resolve-Path -LiteralPath $assetPath).Path
@@ -373,6 +435,10 @@ jobs:
                 }
 
                 $uploadedAsset = $matches[0]
+                $uploadedAssetId = [long]$uploadedAsset.id
+                if ($uploadedAssetId -le 0) {
+                  throw "Uploaded V26 release asset returned no usable identity for $expectedAsset. Release remains a draft."
+                }
                 $localAsset = [string]$localAssets[$expectedAsset]
                 $localLength = [int64](Get-Item -LiteralPath $localAsset).Length
                 $remoteLength = [int64]$uploadedAsset.size
@@ -393,6 +459,7 @@ jobs:
                 if (-not [string]::Equals($localHash, $remoteHash, [StringComparison]::OrdinalIgnoreCase)) {
                   throw "Uploaded V26 release asset SHA-256 mismatch for $expectedAsset. Release remains a draft."
                 }
+                $verifiedAssetIds[$expectedAsset] = $uploadedAssetId
               }
             }
             finally {
@@ -403,6 +470,7 @@ jobs:
 
             Assert-RemoteReleaseTagTargetsWorkflowSha
 
+            $publishPatchAttempted = $true
             $published = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body (@{ draft = $false } | ConvertTo-Json)
             if ($published.draft -ne $false) { throw "V26 GitHub release remained a draft after publish request." }
           }
@@ -410,6 +478,34 @@ jobs:
             $publicationError = $_
             if (-not $tagCreatedByThisRun) {
               throw
+            }
+
+            if ($releaseId -gt 0) {
+              try {
+                $reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
+                if ($reconciledRelease.draft -eq $false) {
+                  if (-not $publishPatchAttempted) {
+                    throw "V26 release became published before this workflow attempted the final publish PATCH."
+                  }
+                  Assert-PublishedReleaseMatchesVerifiedTransaction `
+                    -ReleaseSnapshot $reconciledRelease `
+                    -ReleaseUri $releaseUri `
+                    -ReleaseId $releaseId `
+                    -ExpectedAssets $expectedAssets `
+                    -VerifiedAssetIds $verifiedAssetIds `
+                    -LocalAssets $localAssets `
+                    -IsPrerelease $isPrerelease
+                  Write-Host "V26 publish acknowledgement was ambiguous, but authoritative release state confirms the exact qualified release is already published; treating publication as committed."
+                  return
+                }
+                if ($reconciledRelease.draft -ne $true) {
+                  throw "V26 release draft state is ambiguous during acknowledgement reconciliation."
+                }
+              }
+              catch {
+                $reconciliationError = $_
+                throw "V26 publication acknowledgement reconciliation failed. Original publication error: $($publicationError.Exception.Message) Reconciliation error: $($reconciliationError.Exception.Message) Manual cleanup is required before retry."
+              }
             }
 
             try {

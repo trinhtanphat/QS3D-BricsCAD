@@ -1,12 +1,15 @@
 # V26 draft release rollback / restart safety
 
-Lane-Key: `issue-4780`
+Origin lane: `issue-4780`  
+Publish-acknowledgement hardening: `issue-4812`
 
 ## Purpose
 
 The manual V26 release lane creates a GitHub draft release before uploading and remotely verifying package assets. A post-create failure must not strand transaction-owned remote state, because a same-tag retry would otherwise fail before publication and require manual cleanup.
 
-This runbook defines the bounded automatic rollback contract. It does not authorize release dispatch, signing, or licensed BricsCAD runtime claims.
+The final `draft=false` publish request also has a commit-unknown boundary: GitHub may commit publication but the runner can lose the HTTP acknowledgement. The workflow must distinguish an exact already-committed publication from a still-owned draft before deciding whether rollback is appropriate.
+
+This runbook defines the bounded automatic rollback and acknowledgement-reconciliation contracts. It does not authorize release dispatch, signing, or licensed BricsCAD runtime claims.
 
 ## Positive transaction ownership
 
@@ -25,10 +28,35 @@ After exact ref ownership is established, the existing publication requirements 
 3. only V26 package assets are uploaded;
 4. the draft asset set must exactly match the expected set;
 5. remote size and held-generation SHA-256 verification must match local assets;
-6. the remote tag is re-resolved and must still target `GITHUB_SHA` after asset verification;
-7. only then may the draft be patched to `draft=false`.
+6. each successfully hash-verified remote asset contributes its positive GitHub asset id to the transaction identity set;
+7. the remote tag is re-resolved and must still target `GITHUB_SHA` after asset verification;
+8. the workflow marks `publishPatchAttempted=true` immediately before the final `draft=false` PATCH;
+9. only then may the draft be published.
 
-Any exception after positive tag ownership enters bounded rollback. An error before ownership is established is surfaced unchanged and does not invoke destructive cleanup.
+An error before positive tag ownership is surfaced unchanged and does not invoke destructive cleanup. A failure after ownership enters acknowledgement reconciliation or bounded rollback depending on the authoritative remote state.
+
+## Publish acknowledgement reconciliation
+
+A transport exception from the final publish PATCH is not itself evidence that publication failed. When a positive release id exists, the catch path first fetches that exact release API identity.
+
+If the release is still a draft, the transaction continues into the existing bounded rollback path.
+
+If the release is already published (`draft=false`), the workflow treats the publication as committed only when all of these checks succeed:
+
+- the final publish PATCH was actually attempted by this workflow run;
+- fetched release id and release API URL match the exact transaction identity;
+- the release tag is exactly the requested transaction tag;
+- `target_commitish` is exactly the qualified `GITHUB_SHA`;
+- prerelease state matches the validated release request;
+- the remote tag still resolves exactly to `GITHUB_SHA`;
+- the published asset count exactly matches the expected set;
+- every published asset name is unique and expected;
+- every published asset id equals the exact remote asset id recorded only after that asset passed the earlier held-generation SHA-256 verification;
+- each published asset still reports the expected local byte length.
+
+Only after all checks pass does the workflow emit an acknowledgement-recovery message and return success without invoking rollback. This is not optimistic recovery: it is authoritative reconciliation of the exact transaction whose assets were already hash-verified before the PATCH.
+
+If the release is published before this run attempted its final PATCH, if any identity/tag/SHA/prerelease/asset check disagrees, or if authoritative release state cannot be fetched, the workflow fails closed and requires manual cleanup/review. It never infers success from a transport failure alone.
 
 ## Bounded rollback helper
 
@@ -53,9 +81,11 @@ The helper does not use force push or broad Git tag deletion. Tag deletion is a 
 
 ## Error reporting
 
-The workflow preserves the original publication error. If bounded rollback succeeds, the step fails with `V26 publication failed after transaction tag creation` and explicitly states that automatic rollback completed, making a same-tag retry safe.
+If authoritative reconciliation proves the exact release is already published after a final PATCH acknowledgement failure, the workflow reports that the exact qualified release is already committed and exits successfully without destructive cleanup.
 
-If rollback itself fails closed, the step reports `Automatic V26 draft rollback failed` together with both the original publication error and rollback error, and requires manual cleanup before retry. The original failure is never replaced by a false success.
+If the exact release remains a draft and bounded rollback succeeds, the step fails with `V26 publication failed after transaction tag creation` and explicitly states that automatic rollback completed, making a same-tag retry safe.
+
+If acknowledgement reconciliation is ambiguous or fails, the step reports `V26 publication acknowledgement reconciliation failed` with both the original publication error and reconciliation error and requires manual cleanup/review. If rollback itself fails closed, the step reports `Automatic V26 draft rollback failed` together with both the original publication error and rollback error. The original failure is never replaced by an unverified success.
 
 ## Deterministic source guard
 
@@ -68,7 +98,11 @@ If rollback itself fails closed, the step reports `Automatic V26 draft rollback 
 - draft-inclusive exhaustive release-owner enumeration before tag deletion;
 - exact-SHA ownership before cleanup;
 - exact-SHA recheck before tag deletion;
-- workflow rollback wiring after publication failure.
+- capture of positive remote asset ids only after held-generation SHA-256 verification;
+- explicit proof that the final publish PATCH was attempted;
+- authoritative exact-release GET after a publication exception;
+- exact published release/tag/SHA/prerelease/asset-identity validation before acknowledgement recovery;
+- workflow rollback wiring when the authoritative state is still a draft.
 
 The guard must fail if any of these properties is removed while the surrounding source remains otherwise unchanged.
 
@@ -76,6 +110,6 @@ The guard must fail if any of these properties is removed while the surrounding 
 
 Repository-safe acceptance for this lane is source/guard/hosted CI only. Do not manually dispatch `release-v26.yml` just to test this source change. A real release dispatch remains owner-controlled and may require signing credentials plus licensed BricsCAD V26 runtime evidence according to the existing release policy.
 
-The canonical reservation is intentionally limited to the four files that carry the transaction: the V26 workflow, bounded rollback helper, focused deterministic guard, and this runbook. The broad `preflight-v26-package-release.py` contract was inspected and remains compatible without modification, so it is not reserved by this carrier.
+For `issue-4812`, the canonical reservation is intentionally limited to the V26 workflow, focused deterministic guard, and this runbook. The rollback helper remains unchanged from the already-merged `issue-4780` contract.
 
 For merge readiness, require exact-head Shared CI, latest-main reconciliation, protected PR `preflight` + `core`, expected-head merge, and exact protected-main verification.
