@@ -124,6 +124,7 @@ namespace QS3D.Core.Domain
                         throw MetadataCountError();
 
                     var item = enumerator.Current;
+                    RequireStableKnownPersistenceCount(values, knownCount);
                     observedCount++;
                     if (item.Key == null) throw new ArgumentNullException(nameof(values), "Project metadata contains a null key.");
                     if (next.ContainsKey(item.Key)) throw new ArgumentException("Project metadata contains a duplicate key: " + item.Key + ".", nameof(values));
