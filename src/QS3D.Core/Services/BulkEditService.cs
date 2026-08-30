@@ -28,7 +28,7 @@ namespace QS3D.Core.Services
             var key = SemanticPropertyEditPolicy.RequireEditablePropertyKey(propertyName);
             var beforeTargetEnumeration = project.ChangeVersion;
             var targets = OwnedDistinct(project, elements);
-            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk edit object target enumeration");
+            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk edit object target enumeration.");
             RequireCurrentElementOwnership(project, targets, "Bulk edit object target enumeration");
             var updates = new List<PendingPropertyUpdate>();
             var next = value ?? string.Empty;
@@ -63,7 +63,7 @@ namespace QS3D.Core.Services
 
             var beforeTargetEnumeration = project.ChangeVersion;
             var targets = OwnedDistinct(project, elements);
-            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk numeric object target enumeration");
+            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk numeric object target enumeration.");
             RequireCurrentElementOwnership(project, targets, "Bulk numeric object target enumeration");
             var updates = new List<PendingPropertyUpdate>();
             foreach (var element in targets)
@@ -105,7 +105,7 @@ namespace QS3D.Core.Services
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
             var beforeTargetEnumeration = project.ChangeVersion;
             var targets = OwnedDistinctByIds(project, elementIds);
-            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk edit target-id enumeration");
+            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk edit target-id enumeration.");
             return SetProperty(project, targets, propertyName, value).Count;
         }
 
@@ -120,7 +120,7 @@ namespace QS3D.Core.Services
             var familyOwnership = SnapshotFamilyOwnership(project);
             var beforeTargetEnumeration = project.ChangeVersion;
             var targets = OwnedDistinctByIds(project, elementIds);
-            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk Family target-id enumeration");
+            RequireTargetEnumerationFreshness(project, beforeTargetEnumeration, "Bulk Family target-id enumeration.");
             RequireCurrentFamilyAssignmentOwnership(project, family, targets);
             RequireFamilyOwnershipUnchanged(project, familyOwnership);
 
@@ -352,7 +352,7 @@ namespace QS3D.Core.Services
                 if (string.IsNullOrWhiteSpace(id) || !string.Equals(id, id.Trim(), StringComparison.Ordinal))
                     throw new InvalidOperationException("Project family collection contains a blank or non-canonical family id.");
                 if (!seen.Add(id))
-                    throw new InvalidOperationException("Project contains duplicate family id: " + id + ".");
+                    throw new InvalidOperationException("Project contains duplicate family id: " + id);
             }
         }
 
