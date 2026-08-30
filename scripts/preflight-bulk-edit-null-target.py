@@ -14,18 +14,22 @@ for path in (SERVICE, SMOKE):
 if SERVICE.is_file():
     text = SERVICE.read_text(encoding="utf-8")
     start = text.find("private static IReadOnlyList<ProjectElement> OwnedDistinct(ProjectState project, IEnumerable<ProjectElement> elements)")
-    end = text.find("private static IReadOnlyList<string> MaterializeBounded", start)
+    end = text.find("private static void RequireCurrentElementOwnership", start)
     if start < 0 or end <= start:
         errors.append("cannot isolate BulkEditService.OwnedDistinct")
     else:
         body = text[start:end]
         for token in (
-            "var knownCount = SnapshotKnownCount(elements, \"Bulk edit target collection\")",
+            "var knownCount = SnapshotKnownCount(elements, \"Bulk edit target collection\", out var knownCountSources)",
             "foreach (var projectElement in project.Elements)",
             "if (projectElement == null)",
             "if (projectElements.ContainsKey(projectElementId))",
-            "foreach (var element in elements)",
+            "using (var enumerator = elements.GetEnumerator())",
+            "RequireKnownCountStable(elements, knownCount, knownCountSources, \"Bulk edit target collection\")",
+            "if (!enumerator.MoveNext())",
+            "RequireCanObserveNext(knownCount, inputCount, \"Bulk edit target collection\")",
             "if (inputCount >= MaxTargetInputCount)",
+            "var element = enumerator.Current",
             "if (element == null)",
             'throw new InvalidOperationException("Bulk edit target collection contains a null semantic element entry.")',
             "if (elementId.Length == 0)",
@@ -34,11 +38,22 @@ if SERVICE.is_file():
         ):
             if token not in body:
                 errors.append("OwnedDistinct missing fail-closed target validation: " + token)
-        snapshot = body.find("var knownCount = SnapshotKnownCount(elements, \"Bulk edit target collection\")")
-        enumeration = body.find("foreach (var element in elements)")
-        observed = body.find("RequireObservedCount(knownCount, inputCount, \"Bulk edit target collection\")")
-        if snapshot < 0 or enumeration < 0 or observed < 0 or not (snapshot < enumeration < observed):
-            errors.append("OwnedDistinct must snapshot known Count before target enumeration and bind it to the completed traversal")
+        snapshot = body.find("var knownCount = SnapshotKnownCount(elements, \"Bulk edit target collection\", out var knownCountSources)")
+        enumerator = body.find("using (var enumerator = elements.GetEnumerator())")
+        pre_move_rebound = body.find("RequireKnownCountStable(elements, knownCount, knownCountSources, \"Bulk edit target collection\")", enumerator)
+        move_next = body.find("if (!enumerator.MoveNext())", pre_move_rebound)
+        terminal_break = body.find("break;", move_next)
+        post_move_rebound = body.find("RequireKnownCountStable(elements, knownCount, knownCountSources, \"Bulk edit target collection\")", terminal_break)
+        admission = body.find("RequireCanObserveNext(knownCount, inputCount, \"Bulk edit target collection\")", post_move_rebound)
+        current = body.find("var element = enumerator.Current", admission)
+        null_validation = body.find("if (element == null)", current)
+        observed = body.find("RequireObservedCount(knownCount, inputCount, \"Bulk edit target collection\")", null_validation)
+        if min(snapshot, enumerator, pre_move_rebound, move_next, terminal_break, post_move_rebound, admission, current, null_validation, observed) < 0 or not (
+            snapshot < enumerator < pre_move_rebound < move_next < terminal_break < post_move_rebound < admission < current < null_validation < observed
+        ):
+            errors.append("OwnedDistinct must bind Count, revalidate around successful MoveNext, reject overrun before Current/null validation, and bind completed traversal")
+        if "foreach (var element in elements)" in body:
+            errors.append("OwnedDistinct caller-controlled traversal must not regress to foreach because foreach reads Current before body guards")
         if "if (element == null) continue;" in body:
             errors.append("OwnedDistinct must not silently drop null caller-supplied targets")
 
@@ -78,4 +93,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: object-based bulk edits reject null/invalid caller targets and stale target enumeration before property/dirty/version mutation while retaining bounded Count-integrity and project-ownership validation.")
+print("PASS: object-based bulk edits reject null/invalid caller targets and stale target enumeration before property/dirty/version mutation while retaining explicit no-extra-Current Count integrity, bounded traversal, and project-ownership validation.")
