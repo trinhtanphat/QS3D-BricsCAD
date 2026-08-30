@@ -38,15 +38,28 @@ def main() -> int:
         'ProtocolVersion = "2025-11-25"',
         'PreviousProtocolVersion = "2025-06-18"',
         'LegacyProtocolVersion = "2025-03-26"',
+        'ServerVersion = "embedded-7"',
         '"server/discover"',
         "HandleModernRequest",
         "TryValidateModernRoutingHeaders",
+        "TryValidateModernRequestMeta",
         '"Mcp-Method"',
         '"Mcp-Name"',
+        '"io.modelcontextprotocol/protocolVersion"',
+        '"io.modelcontextprotocol/clientCapabilities"',
+        '"io.modelcontextprotocol/clientInfo"',
+        '"io.modelcontextprotocol/serverInfo"',
         '\\"resultType\\"',
         '\\"ttlMs\\"',
         '\\"cacheScope\\"',
+        "ModernServerInfoMeta",
         "ModernProtocolHeader",
+        "ToolAnnotations",
+        '\\"readOnlyHint\\"',
+        '\\"destructiveHint\\"',
+        '\\"idempotentHint\\"',
+        '\\"openWorldHint\\"',
+        "WithToolAnnotations",
     ):
         require(embedded, needle, "2026-07-28 stateless contract")
 
@@ -60,6 +73,28 @@ def main() -> int:
     discover_route = embedded.find('string.Equals(method, "server/discover"')
     if discover_route < 0:
         fail("server/discover route is missing")
+
+    # Final 2026-07-28 behavior carries request identity/capabilities per request and
+    # stamps server identity in result._meta rather than discover.serverInfo.
+    meta_validation = embedded.find("private static bool TryValidateModernRequestMeta")
+    meta_stamp = embedded.find("private static string ModernServerInfoMeta")
+    tools_list = embedded.find("private static string ToolsListResponse")
+    if meta_validation < 0 or meta_stamp < 0 or tools_list < 0:
+        fail("modern per-request metadata helpers are incomplete")
+    require(embedded[meta_validation:meta_stamp], '"io.modelcontextprotocol/protocolVersion"', "modern protocol-version envelope validation")
+    require(embedded[meta_validation:meta_stamp], '"io.modelcontextprotocol/clientCapabilities"', "modern client-capabilities envelope validation")
+    require(embedded[meta_stamp:tools_list], '"io.modelcontextprotocol/serverInfo"', "modern response server identity stamp")
+
+    modern_handler = embedded[embedded.find("private static void HandleModernRequest"):meta_validation]
+    if '\\"serverInfo\\":' in modern_handler:
+        fail("modern discover must not keep serverInfo in the result body; use result._meta")
+    require(modern_handler, "ModernServerInfoMeta()", "modern discover/ping server identity metadata")
+
+    # Every tool is annotated for ChatGPT action scanning. Desktop descriptors are
+    # enriched at the embedded boundary so the desktop runtime remains independently bounded.
+    tool_annotations = embedded[embedded.find("private static string Tool("):embedded.find("private static string Numeric(")]
+    for needle in ('readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint', 'desktop_'):
+        require(tool_annotations, needle, "full MCP tool annotation surface")
 
     # Keep legacy compatibility explicitly present while modern traffic remains
     # stateless. Do not delete the old session machinery until its deprecation window.
@@ -88,7 +123,7 @@ def main() -> int:
     require(critical, '"Mcp-Method"', "Mcp-Method duplicate rejection")
     require(critical, '"Mcp-Name"', "Mcp-Name duplicate rejection")
 
-    print("PASS embedded MCP 2026-07-28 stateless + legacy compatibility contract")
+    print("PASS embedded MCP 2026-07-28 stateless metadata + full tool annotations + legacy compatibility contract")
     return 0
 
 
