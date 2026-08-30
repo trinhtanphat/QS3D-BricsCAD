@@ -43,6 +43,18 @@ When a new or materially changed local scenario is exposed:
 
 Only a compatible local agent with real evidence tied to the exact tested SHA may record `LOCAL_PASS`.
 
+## Mandatory remote inability handoff
+
+A remote agent must not finish with only a chat note when irreducible local evidence remains.
+
+For the same scenario/candidate:
+
+- reuse the matching `docs/LOCAL-AGENT-INBOX.md` item and update that item instead of creating a duplicate;
+- bind the handoff to the exact source SHA;
+- record the required local evidence and keep it in the same batch as the source/docs change when that handoff was newly introduced or materially changed;
+- treat the inbox as a do-not-repeat remote backlog once the scenario is classified `DO_NOT_RETRY_REMOTE`;
+- never mark `PASS` from remote evidence; only compatible local execution may establish `LOCAL_PASS`.
+
 ## Merge interaction
 
 A parked LOCAL_ONLY item does not block repository-safe completion or same-task merge unless that exact local evidence is explicitly part of the current task's acceptance criteria.
