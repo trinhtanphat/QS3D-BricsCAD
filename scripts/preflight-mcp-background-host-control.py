@@ -75,9 +75,12 @@ for forbidden in (
 # Window mode must not silently fall back to reading desktop pixels, otherwise occlusion/user activity
 # can corrupt what ChatGPT believes is the BricsCAD target-window image.
 screenshot = desktop.split("private static string Screenshot", 1)[1].split("private static RECT ApplyScreenshotCrop", 1)[0]
-if 'scope == "window"' not in screenshot or "CaptureWindowBitmap" not in screenshot:
+if 'if (scope == "window")' not in screenshot or "CaptureWindowBitmap" not in screenshot:
     fail("desktop_screenshot window branch must use CaptureWindowBitmap")
-if "CaptureBitmap(rect.Left" in screenshot and 'scope == "window"' in screenshot.split("CaptureBitmap(rect.Left", 1)[0]:
-    fail("window screenshot still appears to capture the desktop rectangle before branching")
+window_branch = screenshot.split('if (scope == "window")', 1)[1].split("\n            else\n", 1)[0]
+if "CaptureBitmap(" in window_branch or "BitBlt(" in window_branch:
+    fail("window screenshot must not sample desktop pixels")
+if "CaptureBitmap(rect.Left, rect.Top, width, height)" not in screenshot:
+    fail("screen screenshot must retain the bounded desktop BitBlt path")
 
 print("MCP background-host preflight passed.")
