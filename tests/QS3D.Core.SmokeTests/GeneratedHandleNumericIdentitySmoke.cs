@@ -18,7 +18,7 @@ namespace QS3D.Core.SmokeTests
             SameOwnerLogicalHostAliasRemainsAllowed();
             SafeOwnershipDetectsSourceGeneratedAliasConflict();
             RebarOwnershipDetectsCrossSlotAliasConflict();
-            MalformedTokensRetainTextualIdentity();
+            MalformedPersistedTokensFailClosed();
             DistinctHandlesRemainDistinct();
         }
 
@@ -54,13 +54,13 @@ namespace QS3D.Core.SmokeTests
             var first = Element("E-1");
             var second = Element("E-2");
             first.Properties["GeneratedSolidHandle"] = "A";
-            second.Properties["GeneratedRebarHandles"] = "0x000A";
+            second.Properties["GeneratedRebarHandles"] = "A";
             project.Elements.Add(first);
             project.Elements.Add(second);
 
             var index = GeneratedHandleOwnershipIndex.Build(project);
             ExpectInvalid(() => index.TryFindOwner("0A", out _, out _), "numeric aliases claimed by different semantic owners");
-            ExpectInvalid(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "A", out _, out _), "policy lookup across numeric aliases claimed by different semantic owners");
+            ExpectInvalid(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "0x000A", out _, out _), "policy lookup across numeric aliases claimed by different semantic owners");
         }
 
         private static void SameOwnerLogicalHostAliasRemainsAllowed()
@@ -68,7 +68,7 @@ namespace QS3D.Core.SmokeTests
             var project = Project("HOST-ALIAS");
             var owner = Element("E-1");
             owner.Properties["GeneratedSolidHandle"] = "A";
-            owner.Properties["PhysicalOpeningCutSolidHandle"] = "0A";
+            owner.Properties["PhysicalOpeningCutSolidHandle"] = "A";
             project.Elements.Add(owner);
 
             var index = GeneratedHandleOwnershipIndex.Build(project);
@@ -96,7 +96,7 @@ namespace QS3D.Core.SmokeTests
             var first = Element("E-1");
             var second = Element("E-2");
             first.Properties["GeneratedRebarHandles"] = "A";
-            second.Properties["GeneratedTieRebarHandles"] = "000A";
+            second.Properties["GeneratedTieRebarHandles"] = "A";
             project.Elements.Add(first);
             project.Elements.Add(second);
 
@@ -104,18 +104,15 @@ namespace QS3D.Core.SmokeTests
             RequireCode(issues, "REBAR_GENERATED_CROSS_KEY_OWNERSHIP_CONFLICT", "Rebar owner slots using numeric aliases of the same CAD handle must conflict.");
         }
 
-        private static void MalformedTokensRetainTextualIdentity()
+        private static void MalformedPersistedTokensFailClosed()
         {
             var project = Project("MALFORMED");
-            var first = Element("E-1");
-            var second = Element("E-2");
-            first.Properties["GeneratedSolidHandle"] = " BAD-G ";
-            second.Properties["GeneratedRebarHandles"] = "BAD-G";
-            project.Elements.Add(first);
-            project.Elements.Add(second);
+            var owner = Element("E-1");
+            owner.Properties["GeneratedSolidHandle"] = " BAD-G ";
+            project.Elements.Add(owner);
 
-            var index = GeneratedHandleOwnershipIndex.Build(project);
-            ExpectInvalid(() => index.TryFindOwner("BAD-G", out _, out _), "same malformed textual identity claimed by different owners");
+            ExpectInvalid(() => GeneratedHandleOwnershipIndex.Build(project), "non-canonical persisted generated-handle token");
+            ExpectInvalid(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "BAD-G", out _, out _), "policy lookup with malformed persisted generated-handle token");
         }
 
         private static void DistinctHandlesRemainDistinct()
