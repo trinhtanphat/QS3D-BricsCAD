@@ -2,11 +2,14 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Numerics;
 
 namespace QS3D.Core.Cost
 {
     internal static class CostDecimalMath
     {
+        private static readonly BigInteger MaximumDecimalCoefficient = (BigInteger.One << 96) - BigInteger.One;
+
         public static decimal MultiplyPreservingNonZero(decimal left, decimal right, string label)
         {
             var result = checked(left * right);
@@ -50,6 +53,57 @@ namespace QS3D.Core.Cost
             if (right != 0m && result == left)
                 throw new OverflowException("Cost subtraction precision loss: " + label + ".");
             return result;
+        }
+
+        public static bool TrySumNonNegativeExactly(IReadOnlyList<decimal> values, out decimal result)
+        {
+            if (values == null) throw new ArgumentNullException(nameof(values));
+
+            var coefficient = BigInteger.Zero;
+            var scale = 0;
+            for (var i = 0; i < values.Count; i++)
+            {
+                var value = values[i];
+                if (value < 0m)
+                    throw new ArgumentOutOfRangeException(nameof(values), "Exact cost aggregation only accepts non-negative values.");
+
+                var bits = decimal.GetBits(value);
+                var valueScale = (bits[3] >> 16) & 0x7F;
+                var valueCoefficient =
+                    ((BigInteger)(uint)bits[2] << 64) |
+                    ((BigInteger)(uint)bits[1] << 32) |
+                    (uint)bits[0];
+
+                if (valueScale > scale)
+                {
+                    coefficient *= BigInteger.Pow(10, valueScale - scale);
+                    scale = valueScale;
+                }
+                else if (valueScale < scale)
+                {
+                    valueCoefficient *= BigInteger.Pow(10, scale - valueScale);
+                }
+
+                coefficient += valueCoefficient;
+            }
+
+            while (scale > 0 && coefficient % 10 == 0)
+            {
+                coefficient /= 10;
+                scale--;
+            }
+
+            if (scale > 28 || coefficient > MaximumDecimalCoefficient)
+            {
+                result = 0m;
+                return false;
+            }
+
+            var low = (uint)(coefficient & uint.MaxValue);
+            var middle = (uint)((coefficient >> 32) & uint.MaxValue);
+            var high = (uint)((coefficient >> 64) & uint.MaxValue);
+            result = new decimal((int)low, (int)middle, (int)high, false, (byte)scale);
+            return true;
         }
     }
 
@@ -303,16 +357,15 @@ namespace QS3D.Core.Cost
             Components = new ReadOnlyCollection<CostResourceComponent>(snapshot.ToArray());
             OverheadPercent = overheadPercent;
             ProfitPercent = profitPercent;
-            decimal direct = 0m;
+
+            var directContributions = new decimal[snapshot.Count];
+            for (var i = 0; i < snapshot.Count; i++)
+                directContributions[i] = snapshot[i].ExtendedUnitCost;
+            if (!CostDecimalMath.TrySumNonNegativeExactly(directContributions, out var direct))
+                throw new OverflowException("Rate build-up direct unit cost exact aggregate cannot be represented as decimal.");
+
             checked
             {
-                for (var i = 0; i < snapshot.Count; i++)
-                {
-                    direct = CostDecimalMath.AddPreservingNonZeroContribution(
-                        direct,
-                        snapshot[i].ExtendedUnitCost,
-                        "rate build-up direct unit cost");
-                }
                 DirectUnitCost = direct;
                 OverheadUnitCost = CostDecimalMath.ApplyPercentagePreservingPrecision(direct, OverheadPercent, "overhead unit cost");
                 var subtotal = CostDecimalMath.AddPreservingNonZeroContribution(
@@ -551,31 +604,13 @@ namespace QS3D.Core.Cost
 
         private static decimal CalculateAverage(IReadOnlyList<decimal> values)
         {
-            decimal sum = 0m;
-            var sumOverflowed = false;
-            for (var i = 0; i < values.Count; i++)
+            if (CostDecimalMath.TrySumNonNegativeExactly(values, out var exactSum))
             {
-                decimal next;
-                try
-                {
-                    next = checked(sum + values[i]);
-                }
-                catch (OverflowException)
-                {
-                    sumOverflowed = true;
-                    break;
-                }
-
-                if (values[i] != 0m && next == sum)
-                    throw new OverflowException("Cost addition precision loss: benchmark average sum.");
-                sum = next;
-            }
-
-            if (!sumOverflowed)
                 return CostDecimalMath.DividePreservingNonZero(
-                    sum,
+                    exactSum,
                     (decimal)values.Count,
                     "benchmark average");
+            }
 
             var average = values[0];
             for (var i = 1; i < values.Count; i++)
