@@ -803,7 +803,7 @@ namespace QS3D.BricsCAD.V25
                 Tool("cad_entity_set_layer", "Move one entity to a layer, creating that layer if needed.", "\"handle\":{\"type\":\"string\",\"maxLength\":32},\"layer\":{\"type\":\"string\",\"maxLength\":255}," + ConfirmProperty(), "handle","layer","confirmMutation"),
                 Tool("cad_layer", "Create layer or make layer current.", "\"action\":{\"type\":\"string\",\"enum\":[\"create\",\"set_current\"]},\"name\":{\"type\":\"string\",\"maxLength\":255}," + ConfirmProperty(), "action","name","confirmMutation"),
                 Tool("cad_command_catalog", "Return allowlisted native commands available to cad_command_sequence.", ""),
-                Tool("cad_command_sequence", "Run one allowlisted BricsCAD command with bounded newline-delimited prompt inputs.", "\"command\":{\"type\":\"string\",\"maxLength\":40},\"inputs\":{\"type\":\"string\",\"maxLength\":16000}," + ConfirmProperty(), "command","confirmMutation"),
+                Tool("cad_command_sequence", "Run one allowlisted BricsCAD command with bounded newline-delimited prompt inputs; EXTRUDE supports a command-specific numeric post-selection stage.", "\"command\":{\"type\":\"string\",\"maxLength\":40},\"inputs\":{\"type\":\"string\",\"maxLength\":16000}," + ConfirmProperty(), "command","confirmMutation"),
                 Tool("qs3d_run_command", "Run one QS3D* command name.", "\"command\":{\"type\":\"string\",\"pattern\":\"^QS3D[A-Za-z0-9_]*$\",\"maxLength\":80}," + ConfirmProperty(), "command","confirmMutation"),
                 Tool("cad_ui_click", "Click inside active BricsCAD-process window only.", "\"x\":{\"type\":\"integer\"},\"y\":{\"type\":\"integer\"},\"button\":{\"type\":\"string\",\"enum\":[\"left\",\"right\",\"middle\"]},\"count\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":3}," + ConfirmProperty(), "x","y","button","confirmMutation"),
                 Tool("cad_ui_type", "Type bounded Unicode text into active BricsCAD-process window only.", "\"text\":{\"type\":\"string\",\"maxLength\":8000},\"pressEnter\":{\"type\":\"boolean\"}," + ConfirmProperty(), "text","confirmMutation"),
@@ -813,6 +813,8 @@ namespace QS3D.BricsCAD.V25
                 Tool("cad_audit_tail", "Read latest bounded local mutation audit entries.", "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}"),
                 Tool("cad_cancel_command", "Deliver ESC twice to cancel current BricsCAD command; no confirmation required.", "")
             };
+            foreach (var descriptor in McpCadDirectModelRuntime.ToolDescriptors())
+                tools.Add(WithToolAnnotations(descriptor));
             foreach (var descriptor in McpDesktopAutomationRuntime.ToolDescriptors())
                 tools.Add(WithToolAnnotations(descriptor));
             var resultPrefix = modern
@@ -837,6 +839,11 @@ namespace QS3D.BricsCAD.V25
                         + "\"fullCadAgent\":true,\"structuredContent\":true,\"modernMetaEnvelope\":true,\"toolAnnotations\":true,\"automationStopped\":"
                         + (McpCadAgentRuntime.AutomationStopped ? "true" : "false") + "}");
                 }
+                if (string.Equals(tool, "cad_command_sequence", StringComparison.Ordinal)
+                    && McpCadDirectModelRuntime.CanHandleCadCommandSequence(arguments))
+                    return ToolSuccess(McpCadDirectModelRuntime.CallCadCommandSequence(arguments));
+                if (McpCadDirectModelRuntime.IsTool(tool))
+                    return ToolSuccess(McpCadDirectModelRuntime.Call(tool, arguments));
                 var runtimeResult = McpCadAgentRuntime.Call(tool, arguments);
                 if (string.Equals(tool, "desktop_screenshot", StringComparison.Ordinal))
                     return ScreenshotToolSuccess(runtimeResult);
@@ -979,6 +986,13 @@ namespace QS3D.BricsCAD.V25
                 case "cad_ui_click":
                 case "cad_ui_type":
                 case "cad_ui_key":
+                case "cad_create_box":
+                case "cad_extrude":
+                case "cad_boolean_union":
+                case "cad_boolean_subtract":
+                case "cad_boolean_intersect":
+                case "cad_save":
+                case "cad_save_as":
                 case "desktop_window_focus":
                 case "desktop_mouse_move":
                 case "desktop_mouse_click":
