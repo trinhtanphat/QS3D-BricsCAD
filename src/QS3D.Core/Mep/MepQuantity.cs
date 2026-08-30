@@ -131,6 +131,8 @@ namespace QS3D.Core.Mep
                     }
 
                     var element = enumerator.Current;
+                    if (hasKnownCount)
+                        EnsureKnownCountStable(elements, knownCount);
                     if (element == null)
                         throw new ArgumentException("MEP takeoff contains a null element at index " + index + ".", nameof(elements));
                     if (!ids.Add(element.ElementId))

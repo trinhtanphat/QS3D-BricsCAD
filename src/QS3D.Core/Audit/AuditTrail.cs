@@ -46,8 +46,16 @@ namespace QS3D.Core.Audit
                 long textCharacters = 0L;
                 using (var enumerator = _events.GetEnumerator())
                 {
-                    while (enumerator.MoveNext())
+                    while (true)
                     {
+                        RequireStableHistoryCount(storedCount);
+                        if (!enumerator.MoveNext())
+                        {
+                            RequireStableHistoryCount(storedCount);
+                            break;
+                        }
+
+                        RequireStableHistoryCount(storedCount);
                         RequireCanReadCurrent(storedCount, observed);
                         var item = enumerator.Current;
                         observed++;
@@ -139,8 +147,16 @@ namespace QS3D.Core.Audit
             long textCharacters = 0L;
             using (var enumerator = _events.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableHistoryCount(storedCount);
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireStableHistoryCount(storedCount);
+                        break;
+                    }
+
+                    RequireStableHistoryCount(storedCount);
                     RequireCanReadCurrent(storedCount, observed);
                     var existing = enumerator.Current;
                     observed++;
