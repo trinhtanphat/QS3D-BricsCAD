@@ -14,7 +14,7 @@ for path in (SERVICE, SMOKE):
 if SERVICE.is_file():
     text = SERVICE.read_text(encoding="utf-8")
     start = text.find("private static IReadOnlyList<ProjectElement> OwnedDistinct(ProjectState project, IEnumerable<ProjectElement> elements)")
-    end = text.find("private static IReadOnlyList<string> MaterializeBounded", start)
+    end = text.find("private static void RequireCurrentElementOwnership", start)
     if start < 0 or end <= start:
         errors.append("cannot isolate BulkEditService.OwnedDistinct")
     else:
