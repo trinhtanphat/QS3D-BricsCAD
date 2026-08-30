@@ -4,7 +4,7 @@ param(
     [Parameter(Mandatory = $true)][long]$ReleaseId,
     [Parameter(Mandatory = $true)][string]$ReleaseTag,
     [Parameter(Mandatory = $true)][string]$WorkflowSha,
-    [Parameter(Mandatory = $true)][bool]$TagWasAbsentBeforeCreate,
+    [Parameter(Mandatory = $true)][bool]$TagCreatedByThisRun,
     [Parameter(Mandatory = $true)][string]$Token
 )
 
@@ -14,11 +14,11 @@ $ErrorActionPreference = 'Stop'
 if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
     throw "Repository must be owner/name: $Repository"
 }
-if ($ReleaseId -le 0) { throw 'ReleaseId must be positive.' }
+if ($ReleaseId -lt 0) { throw 'ReleaseId must be zero or positive.' }
 if ($ReleaseTag -notmatch '^v[0-9A-Za-z.+-]+$') { throw "Unexpected V26 release tag: $ReleaseTag" }
 if ($WorkflowSha -notmatch '^[0-9a-fA-F]{40}$') { throw 'WorkflowSha must be a full 40-hex commit SHA.' }
-if (-not $TagWasAbsentBeforeCreate) {
-    throw 'Rollback requires proof that the release tag was absent immediately before this transaction created the draft.'
+if (-not $TagCreatedByThisRun) {
+    throw 'Rollback requires positive proof that this workflow run created the exact release tag ref.'
 }
 if ([string]::IsNullOrWhiteSpace($Token)) { throw 'GitHub token is required for bounded draft rollback.' }
 
@@ -27,20 +27,6 @@ $headers = @{
     Accept = 'application/vnd.github+json'
     'X-GitHub-Api-Version' = '2022-11-28'
     'User-Agent' = 'QS3D-V26-Draft-Rollback'
-}
-$releaseUri = "https://api.github.com/repos/$Repository/releases/$ReleaseId"
-$release = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
-if ([long]$release.id -ne $ReleaseId) {
-    throw "Release identity mismatch for $ReleaseId; refusing destructive rollback."
-}
-if (-not [string]::Equals([string]$release.url, $releaseUri, [StringComparison]::Ordinal)) {
-    throw "Release repository identity mismatch for $ReleaseId; refusing destructive rollback."
-}
-if ($release.draft -ne $true) {
-    throw "Release $ReleaseId is not a draft; refusing destructive rollback."
-}
-if (-not [string]::Equals([string]$release.tag_name, $ReleaseTag, [StringComparison]::Ordinal)) {
-    throw "Release $ReleaseId tag mismatch; refusing destructive rollback."
 }
 
 function Resolve-ExactRemoteTagSha {
@@ -69,13 +55,29 @@ if (-not [string]::Equals($resolvedBefore, $WorkflowSha, [StringComparison]::Ord
     throw "Remote tag $ReleaseTag moved to $resolvedBefore; refusing destructive rollback."
 }
 
-Invoke-RestMethod -Method Delete -Uri $releaseUri -Headers $headers | Out-Null
+if ($ReleaseId -gt 0) {
+    $releaseUri = "https://api.github.com/repos/$Repository/releases/$ReleaseId"
+    $release = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
+    if ([long]$release.id -ne $ReleaseId) {
+        throw "Release identity mismatch for $ReleaseId; refusing destructive rollback."
+    }
+    if (-not [string]::Equals([string]$release.url, $releaseUri, [StringComparison]::Ordinal)) {
+        throw "Release repository identity mismatch for $ReleaseId; refusing destructive rollback."
+    }
+    if ($release.draft -ne $true) {
+        throw "Release $ReleaseId is not a draft; refusing destructive rollback."
+    }
+    if (-not [string]::Equals([string]$release.tag_name, $ReleaseTag, [StringComparison]::Ordinal)) {
+        throw "Release $ReleaseId tag mismatch; refusing destructive rollback."
+    }
+    Invoke-RestMethod -Method Delete -Uri $releaseUri -Headers $headers | Out-Null
+}
 
 $tagReleaseUri = "https://api.github.com/repos/$Repository/releases/tags/$([Uri]::EscapeDataString($ReleaseTag))"
 try {
     $remainingRelease = Invoke-RestMethod -Method Get -Uri $tagReleaseUri -Headers $headers
     if ($null -ne $remainingRelease) {
-        throw "A release still owns tag $ReleaseTag after draft deletion; refusing tag deletion."
+        throw "A release still owns tag $ReleaseTag; refusing tag deletion."
     }
 }
 catch {
@@ -96,7 +98,7 @@ Invoke-RestMethod -Method Delete -Uri $tagRefUri -Headers $headers | Out-Null
     ReleaseId = $ReleaseId
     ReleaseTag = $ReleaseTag
     WorkflowSha = $WorkflowSha.ToLowerInvariant()
-    TagWasAbsentBeforeCreate = $true
-    DraftDeleted = $true
+    TagCreatedByThisRun = $true
+    DraftDeleted = ($ReleaseId -gt 0)
     TagDeleted = $true
 }
