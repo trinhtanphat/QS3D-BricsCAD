@@ -76,8 +76,8 @@ for token in (
 if "private static ModelHealthWindow?" in presenter:
     errors.append("presenter must not carry a second Model Health ownership registry")
 show_at = presenter.find("Application.ShowModelessWindow(IntPtr.Zero, candidate, true);")
-loaded_at = presenter.find("if (!candidate.IsLoaded)")
-release_at = presenter.find("candidate = null;")
+loaded_at = presenter.find("if (!candidate.IsLoaded)", show_at)
+release_at = presenter.find("candidate = null;", loaded_at)
 if min(show_at, loaded_at, release_at) < 0 or not (show_at < loaded_at < release_at):
     errors.append("presenter ordering must be host show -> loaded confirmation -> relinquish local candidate")
 
