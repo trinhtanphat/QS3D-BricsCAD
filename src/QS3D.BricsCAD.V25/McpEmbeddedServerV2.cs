@@ -815,6 +815,8 @@ namespace QS3D.BricsCAD.V25
             };
             foreach (var descriptor in McpDesktopAutomationRuntime.ToolDescriptors())
                 tools.Add(WithToolAnnotations(descriptor));
+            foreach (var descriptor in McpCadDirectModelRuntime.ToolDescriptors())
+                tools.Add(WithToolAnnotations(descriptor));
             var resultPrefix = modern
                 ? "{\"resultType\":\"complete\",\"tools\":["
                 : "{\"tools\":[";
