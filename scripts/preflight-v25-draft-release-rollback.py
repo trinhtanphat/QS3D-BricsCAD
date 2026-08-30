@@ -122,7 +122,11 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
     tag_owned = workflow_text.find("$tagCreatedByThisRun = $true", tag_create + 1)
     tag_create_error = workflow_text.find("$tagCreateError = $_", tag_owned + 1)
     reconcile_tag = workflow_text.find("$reconciledTag = Get-ExactReusableReleaseTag", tag_create_error + 1)
-    marker = workflow_text.find("$draftTransactionMarker =", reconcile_tag + 1)
+    tag_order = [reusable_fn, existing_lookup, tag_create, tag_owned, tag_create_error, reconcile_tag]
+    if min(tag_order) < 0 or tag_order != sorted(tag_order):
+        errors.append("V25 tag admission order must remain reusable lookup -> exact create -> positive ownership -> ambiguous create reconciliation")
+
+    marker = workflow_text.find("$draftTransactionMarker =")
     request = workflow_text.find("$releaseRequest = @{", marker + 1)
     release_create = workflow_text.find('$release = Invoke-RestMethod -Method Post', request + 1)
     draft_error = workflow_text.find("$draftCreateError = $_", release_create + 1)
@@ -131,9 +135,9 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
     release_id = workflow_text.find("$releaseId = [long]$release.id", recovered + 1)
     catch_block = workflow_text.find("$publicationError = $_", release_id + 1)
     rollback_call = workflow_text.find("rollback-v25-draft-release.ps1", catch_block + 1)
-    workflow_order = [reusable_fn, existing_lookup, tag_create, tag_owned, tag_create_error, reconcile_tag, marker, request, release_create, draft_error, draft_reconcile, recovered, release_id, catch_block, rollback_call]
-    if min(workflow_order) < 0 or workflow_order != sorted(workflow_order):
-        errors.append("workflow order must remain reusable-tag admission -> tag create/reconcile -> draft marker/request -> one POST -> create-error reconciliation -> positive releaseId -> bounded rollback")
+    draft_order = [marker, request, release_create, draft_error, draft_reconcile, recovered, release_id, catch_block, rollback_call]
+    if min(draft_order) < 0 or draft_order != sorted(draft_order) or release_create <= reconcile_tag:
+        errors.append("V25 draft-create order must remain marker/request -> exact-tag admission -> one POST -> create-error reconciliation -> positive releaseId -> bounded rollback")
 
     return errors
 
