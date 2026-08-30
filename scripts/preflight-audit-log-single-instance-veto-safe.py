@@ -44,22 +44,30 @@ for token in (
 ):
     forbid(token)
 
-close_pos = text.find("published.Close();")
-loaded_after_close_pos = text.find("if (published.IsLoaded)", close_pos + 1)
-release_after_close_pos = text.find("ReleasePublishedWindow(published);", loaded_after_close_pos + 1)
-construct_pos = text.find("var candidate = new AuditLogWindow(document);")
-show_pos = text.find("Application.ShowModelessWindow(IntPtr.Zero, candidate, true);", construct_pos + 1)
-publish_window_pos = text.find("_window = candidate;", show_pos + 1)
-publish_identity_pos = text.find("_nativeDatabaseIdentity = nativeDatabaseIdentity;", publish_window_pos + 1)
-if min(close_pos, loaded_after_close_pos, release_after_close_pos, construct_pos, show_pos, publish_window_pos, publish_identity_pos) < 0:
-    errors.append("unable to prove Audit Log terminal-close/publication ordering")
-elif not (close_pos < loaded_after_close_pos < release_after_close_pos < construct_pos < show_pos < publish_window_pos < publish_identity_pos):
-    errors.append("Audit Log must prove close -> terminal IsLoaded check -> release -> construct -> show -> publish window -> publish native identity")
+prepare_start = text.find("private static bool PreparePublishedWindow")
+release_start = text.find("private static void ReleasePublishedWindow", prepare_start + 1)
+prepare = text[prepare_start:release_start] if prepare_start >= 0 and release_start > prepare_start else ""
+same_native_pos = prepare.find("if (_nativeDatabaseIdentity == requestedNativeDatabaseIdentity)")
+close_pos = prepare.find("published.Close();", same_native_pos + 1)
+loaded_after_close_pos = prepare.find("if (published.IsLoaded)", close_pos + 1)
+release_after_close_pos = prepare.find("ReleasePublishedWindow(published);", loaded_after_close_pos + 1)
+if min(same_native_pos, close_pos, loaded_after_close_pos, release_after_close_pos) < 0:
+    errors.append("unable to prove Audit Log same-native/terminal-close ordering")
+elif not (same_native_pos < close_pos < loaded_after_close_pos < release_after_close_pos):
+    errors.append("Audit Log prepare path must decide same-native reuse before close, then require terminal unload before release")
 
-same_native_pos = text.find("if (_nativeDatabaseIdentity == requestedNativeDatabaseIdentity)")
-close_for_other_pos = text.find("published.Close();", same_native_pos + 1)
-if same_native_pos < 0 or close_for_other_pos < 0 or same_native_pos >= close_for_other_pos:
-    errors.append("same-native reuse must be decided before cross-DWG close")
+show_start = text.find("public void ShowAuditLog()")
+prepare_method_start = text.find("private static bool PreparePublishedWindow", show_start + 1)
+show = text[show_start:prepare_method_start] if show_start >= 0 and prepare_method_start > show_start else ""
+construct_pos = show.find("var candidate = new AuditLogWindow(document);")
+show_pos = show.find("Application.ShowModelessWindow(IntPtr.Zero, candidate, true);", construct_pos + 1)
+loaded_pos = show.find("if (!candidate.IsLoaded) return;", show_pos + 1)
+publish_window_pos = show.find("_window = candidate;", loaded_pos + 1)
+publish_identity_pos = show.find("_nativeDatabaseIdentity = nativeDatabaseIdentity;", publish_window_pos + 1)
+if min(construct_pos, show_pos, loaded_pos, publish_window_pos, publish_identity_pos) < 0:
+    errors.append("unable to prove Audit Log candidate publication ordering")
+elif not (construct_pos < show_pos < loaded_pos < publish_window_pos < publish_identity_pos):
+    errors.append("Audit Log must construct -> show -> confirm loaded -> publish window -> publish native identity")
 
 if errors:
     for error in errors:
