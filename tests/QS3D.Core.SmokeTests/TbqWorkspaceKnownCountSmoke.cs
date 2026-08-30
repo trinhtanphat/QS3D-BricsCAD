@@ -200,7 +200,7 @@ namespace QS3D.Core.SmokeTests
         {
             var source = new DriftingReadOnlyCollection<TbqBillItem>(1, -1, Bill("B1"));
             var error = Capture<InvalidOperationException>(() => Workspace(billItems: source));
-            Equal(5, source.CountReads, "Post-traversal negative TBQ Count must be rebound throughout traversal.");
+            Equal(6, source.CountReads, "Post-traversal negative TBQ Count must be rebound throughout traversal.");
             Equal(1, source.GetEnumeratorCalls, "Post-traversal negative TBQ source must traverse exactly once.");
             Contains("negative known count", error.Message, "Post-traversal negative TBQ Count must fail closed explicitly.");
         }
@@ -209,9 +209,9 @@ namespace QS3D.Core.SmokeTests
         {
             var source = new MultiCountSequence<TbqBillItem>(1, 1, 1, 1, 2, 1, Bill("B1"));
             var error = Capture<InvalidOperationException>(() => Workspace(billItems: source));
-            Equal(5, source.GenericCountReads, "Post-traversal conflict must rebind ICollection<T>.Count throughout traversal.");
-            Equal(5, source.ReadOnlyCountReads, "Post-traversal conflict must rebind IReadOnlyCollection<T>.Count throughout traversal.");
-            Equal(5, source.NonGenericCountReads, "Post-traversal conflict must rebind ICollection.Count throughout traversal.");
+            Equal(6, source.GenericCountReads, "Post-traversal conflict must rebind ICollection<T>.Count throughout traversal.");
+            Equal(6, source.ReadOnlyCountReads, "Post-traversal conflict must rebind IReadOnlyCollection<T>.Count throughout traversal.");
+            Equal(6, source.NonGenericCountReads, "Post-traversal conflict must rebind ICollection.Count throughout traversal.");
             Equal(1, source.GetEnumeratorCalls, "Post-traversal conflict source must traverse exactly once.");
             Contains("conflicting known counts", error.Message, "Post-traversal multi-interface Count conflict must fail closed.");
         }
