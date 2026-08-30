@@ -20,6 +20,8 @@ Expose the already-bounded QS3D/BricsCAD diagnostic stream and host-wide theme c
 
 The tools do not accept filesystem paths. They can read only the canonical `%AppData%/QS3D/mcp-agent-audit.jsonl` stream and its single rotated `.1` file through `McpCadAgentRuntime.AuditFilePath`. Event responses are bounded to 100 entries, individual candidate lines are bounded, and only sequenced diagnostic records are returned.
 
+On diagnostics startup, `McpDiagnosticHub` scans only those two bounded canonical audit files for the highest persisted diagnostic sequence and seeds the in-process counter from it. This keeps `diagnostics_since` / `diagnostics_wait` cursors monotonic across a normal QS3D or BricsCAD restart while retained audit history exists, instead of reusing low sequence values from zero.
+
 The underlying `McpDiagnosticHub` continues to redact bearer/token/secret/password-like values and captures MCP transport errors/OAuth activity, QS3D startup/runtime exceptions, QS3D project audit entries, BricsCAD command failures/cancellations, and QS3D command lifecycle events.
 
 ## Theme propagation
