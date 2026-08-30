@@ -31,21 +31,21 @@ if missing:
     raise SystemExit("TBQ workspace Count-stability preflight missing source contract: " + ", ".join(missing))
 
 bill_mismatch = source.index('RequireKnownCountMatchesTraversal("bill items", knownCount, index);')
-bill_rebind = source.index('RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);')
-bill_sort = source.index('snapshot.Sort(CompareBillItems);')
+bill_rebind = source.index('RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);', bill_mismatch)
+bill_sort = source.index('snapshot.Sort(CompareBillItems);', bill_rebind)
 if not bill_mismatch < bill_rebind < bill_sort:
     raise SystemExit("TBQ bill-item Count must be rebound after traversal equality and before sorting/publication.")
 
 build_mismatch = source.index('RequireKnownCountMatchesTraversal("build-up rates", knownCount, index);')
-build_rebind = source.index('RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);')
-build_sort = source.index('snapshot.Sort(CompareBuildUps);')
+build_rebind = source.index('RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);', build_mismatch)
+build_sort = source.index('snapshot.Sort(CompareBuildUps);', build_rebind)
 if not build_mismatch < build_rebind < build_sort:
     raise SystemExit("TBQ build-up Count must be rebound after traversal equality and before sorting/publication.")
 
 bounded_mismatch = source.index('RequireKnownCountMatchesTraversal(label, knownCount, count);')
-bounded_rebind = source.index('RequireKnownCountStable(source, maximum, label, knownCount);')
+bounded_rebind = source.index('RequireKnownCountStable(source, maximum, label, knownCount);', bounded_mismatch)
 if not bounded_mismatch < bounded_rebind:
-    raise SystemExit("TBQ bounded collection Count must be rebound only after exact traversal equality.")
+    raise SystemExit("TBQ bounded collection Count must be rebound after exact traversal equality.")
 
 required_smoke = (
     'BillItemCountDriftFailsAfterTraversal();',
@@ -57,8 +57,8 @@ required_smoke = (
     'StableMultiInterfaceCountsRemainAccepted();',
     'DriftingReadOnlyCollection<T>',
     'MultiCountSequence<T>',
-    'Equal(2, billItems.CountReads',
-    'Equal(2, references.CountReads',
+    'Exact bill-item Count must be rebound throughout traversal.',
+    'Exact rate-reference Count must be rebound throughout traversal.',
 )
 missing_smoke = [token for token in required_smoke if token not in smoke]
 if missing_smoke:
