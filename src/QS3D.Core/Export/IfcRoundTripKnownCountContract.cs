@@ -6,10 +6,35 @@ namespace QS3D.Core.Export
 {
     internal static class IfcRoundTripKnownCountContract
     {
+        internal static void RequireStableDuringTraversal<T>(
+            IEnumerable<T> values,
+            int? admittedCount,
+            string collectionLabel)
+        {
+            RequireStable(
+                values,
+                admittedCount,
+                collectionLabel,
+                "during traversal");
+        }
+
         internal static void RequireStableAfterTraversal<T>(
             IEnumerable<T> values,
             int? admittedCount,
             string collectionLabel)
+        {
+            RequireStable(
+                values,
+                admittedCount,
+                collectionLabel,
+                "after traversal");
+        }
+
+        private static void RequireStable<T>(
+            IEnumerable<T> values,
+            int? admittedCount,
+            string collectionLabel,
+            string phase)
         {
             if (!admittedCount.HasValue)
                 return;
@@ -21,10 +46,10 @@ namespace QS3D.Core.Export
 
             if (negativeKnownCount)
                 throw new InvalidOperationException(
-                    collectionLabel + " source exposes an invalid negative known Count value after traversal.");
+                    collectionLabel + " source exposes an invalid negative known Count value " + phase + ".");
             if (conflictingKnownCounts)
                 throw new InvalidOperationException(
-                    collectionLabel + " source exposes conflicting known Count values after traversal.");
+                    collectionLabel + " source exposes conflicting known Count values " + phase + ".");
             if (!reboundCount.HasValue || reboundCount.Value != admittedCount.Value)
                 throw new InvalidOperationException(
                     collectionLabel + " source Count changed during traversal.");
