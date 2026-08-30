@@ -24,10 +24,12 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
         "release.tag_name",
         "Resolve-ExactRemoteTagSha",
         "git ls-remote --tags origin $tagRef $peeledRef",
+        "if (-not [string]::Equals($resolvedBefore, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))",
         "Remote tag $ReleaseTag moved to",
         "Invoke-RestMethod -Method Delete -Uri $releaseUri",
         "releases/tags/",
         "A release still owns tag $ReleaseTag after draft deletion; refusing tag deletion.",
+        "if (-not [string]::Equals($resolvedAfter, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))",
         "Remote tag $ReleaseTag changed during rollback; refusing tag deletion.",
         "git/refs/tags/",
         "Invoke-RestMethod -Method Delete -Uri $tagRefUri",
@@ -55,6 +57,7 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
 
     required_workflow = [
         "$preCreateTagLines = @(git ls-remote --tags origin $preCreateTagRef $preCreatePeeledRef)",
+        "if ($preCreateTagLines.Count -ne 0)",
         "Remote V26 release tag already existed before draft creation; refusing transaction ownership",
         "$tagWasAbsentBeforeCreate = $true",
         "$releaseCreatedByThisRun = $false",
