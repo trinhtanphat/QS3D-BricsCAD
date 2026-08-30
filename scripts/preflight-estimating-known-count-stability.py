@@ -5,6 +5,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.Core/Commercial/EstimatingWorkflow.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/EstimatingKnownCountStabilitySmoke.cs"
+CURRENT_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/EstimatingCurrentCountAcceptanceSmoke.cs"
 RUNBOOK = ROOT / "docs/FEATURE-RUNBOOKS/estimating-known-count-stability.md"
 
 
@@ -31,12 +32,18 @@ def require_order(segment: str, markers: tuple[str, ...], label: str) -> None:
         cursor = position
 
 
-for path, label in ((SOURCE, "production source"), (SMOKE, "smoke"), (RUNBOOK, "runbook")):
+for path, label in (
+    (SOURCE, "production source"),
+    (SMOKE, "historical smoke"),
+    (CURRENT_SMOKE, "Current-boundary smoke"),
+    (RUNBOOK, "runbook"),
+):
     if not path.is_file():
         fail(f"missing {label}: {path.relative_to(ROOT)}")
 
 source = SOURCE.read_text(encoding="utf-8")
 smoke = SMOKE.read_text(encoding="utf-8")
+current_smoke = CURRENT_SMOKE.read_text(encoding="utf-8")
 runbook = RUNBOOK.read_text(encoding="utf-8")
 
 for token in (
@@ -55,6 +62,8 @@ require_order(portfolio, (
     "RequireKnownCountStable(lines, knownCount);",
     "if (knownCount.HasValue && snapshot.Count >= knownCount.Value)",
     "var line = enumerator.Current;",
+    "RequireKnownCountStable(lines, knownCount);",
+    "if (line == null)",
 ), "portfolio traversal")
 
 request_start = require(source, "public BulkRateAssignmentRequest(", "bulk request")
@@ -66,6 +75,8 @@ require_order(request, (
     "if (!enumerator.MoveNext())",
     "RequireKnownCountStable(lineIds, lineIdKnownCount, MaximumSelectedLines, \"selected-line\");",
     "var raw = enumerator.Current;",
+    "RequireKnownCountStable(lineIds, lineIdKnownCount, MaximumSelectedLines, \"selected-line\");",
+    "var id = CommercialGuard.RequireToken(raw, nameof(lineIds));",
 ), "selected-line traversal")
 require_order(request, (
     "using (var enumerator = unitRates.GetEnumerator())",
@@ -73,6 +84,8 @@ require_order(request, (
     "if (!enumerator.MoveNext())",
     "RequireKnownCountStable(unitRates, unitRateKnownCount, MaximumUnitRates, \"unit-rate\");",
     "var assignment = enumerator.Current;",
+    "RequireKnownCountStable(unitRates, unitRateKnownCount, MaximumUnitRates, \"unit-rate\");",
+    "if (assignment == null)",
 ), "unit-rate traversal")
 
 for method in (
@@ -83,16 +96,32 @@ for method in (
     "PreserveStableCountedInputs",
     "PreserveStreamingInputs",
 ):
-    require(smoke, method, f"smoke regression {method}")
+    require(smoke, method, f"historical smoke regression {method}")
+
+for method in (
+    "PortfolioRejectsCurrentInducedCountDriftBeforeNullAcceptance",
+    "SelectedLineRejectsCurrentInducedCountDriftBeforeTokenAcceptance",
+    "UnitRateRejectsCurrentInducedCountDriftBeforeNullAcceptance",
+    "StableCountedControlsRemainAccepted",
+):
+    require(current_smoke, method, f"Current-boundary regression {method}")
+for token in (
+    "reached ordinary item acceptance before Count stability was rebound",
+    "CurrentReads",
+    "Current-induced Count drift",
+):
+    require(current_smoke, token, f"Current-boundary smoke token {token}")
 
 for phrase in (
     "before every MoveNext",
     "after every successful MoveNext",
     "before IEnumerator.Current",
+    "immediately after every successful Current",
+    "before semantic acceptance",
     "transient Count drift",
     "streaming",
     "NOT_APPLICABLE",
 ):
     require(runbook, phrase, f"runbook contract {phrase}")
 
-print("PASS: estimating traversal-wide known-Count stability guard")
+print("PASS: estimating known-Count stability includes post-Current acceptance boundary")
