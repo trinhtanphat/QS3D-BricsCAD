@@ -24,6 +24,7 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
         "A release still owns tag $ReleaseTag; refusing tag deletion.",
         "Release enumeration exceeded $maxPages pages",
         "Assert-NoReleaseOwnsTag\n\n$resolvedAfter = Resolve-ExactRemoteTagSha",
+        "if (-not [string]::Equals($resolvedAfter, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))",
         "Remote tag $ReleaseTag changed during rollback; refusing tag deletion.",
         "Invoke-RestMethod -Method Delete -Uri $tagRefUri",
     ]
@@ -46,7 +47,7 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
         "$tagCreatedByThisRun = $true",
         "$releaseId = [long]0",
         "$releaseId = [long]$release.id",
-        "rollback-v25-draft-release.ps1",
+        "& .\\scripts\\rollback-v25-draft-release.ps1",
         "-TagCreatedByThisRun $tagCreatedByThisRun",
         "Automatic V25 draft rollback failed",
         "Automatic rollback completed; retry with the same tag is safe.",
