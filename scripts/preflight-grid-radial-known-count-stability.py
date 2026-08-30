@@ -52,9 +52,11 @@ def main() -> None:
         ("RejectsConflictingCountBeforeTraversal", "conflicting Count regression"),
         ("RejectsTransientGrowthBeforeCurrent", "transient growth regression"),
         ("RejectsTransientShrinkBeforeCurrent", "transient shrink regression"),
+        ("RejectsKnownCountOverrunBeforeSecondCurrent", "stable known-Count overrun regression"),
         ("RejectsKnownCountUnderYield", "under-yield regression"),
         ("StableCountedAndStreamingOrderingRemainSupported", "stable and streaming control"),
         ("Equal(0, source.CurrentReads)", "no caller Current read before transient rejection"),
+        ("Equal(1, source.CurrentReads)", "one admitted Current before overrun/under-yield boundary"),
     ):
         require(smoke, marker, label)
 
