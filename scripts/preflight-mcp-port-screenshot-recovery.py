@@ -44,14 +44,14 @@ def main() -> int:
         "metadata object rebuild": 'var metadata = "{\\"scope\\":\\""',
     })
 
-    desktop_dispatch = server.find("if (McpDesktopAutomationRuntime.TryCall(tool, arguments, out runtimeResult))")
-    screenshot_dispatch = server.find('string.Equals(tool, "desktop_screenshot", StringComparison.Ordinal)', desktop_dispatch)
+    runtime_dispatch = server.find("var runtimeResult = McpCadAgentRuntime.Call(tool, arguments);")
+    screenshot_dispatch = server.find('string.Equals(tool, "desktop_screenshot", StringComparison.Ordinal)', runtime_dispatch)
     screenshot_result = server.find("return ScreenshotToolSuccess(runtimeResult);", screenshot_dispatch)
-    desktop_text_fallback = server.find("return ToolSuccess(runtimeResult);", screenshot_result)
-    if min(desktop_dispatch, screenshot_dispatch, screenshot_result, desktop_text_fallback) < 0:
-        errors.append("MCP desktop dispatch sequence is incomplete")
-    elif not (desktop_dispatch < screenshot_dispatch < screenshot_result < desktop_text_fallback):
-        errors.append("MCP screenshot interception must precede the generic desktop text fallback")
+    text_fallback = server.find("return ToolSuccess(runtimeResult);", screenshot_result)
+    if min(runtime_dispatch, screenshot_dispatch, screenshot_result, text_fallback) < 0:
+        errors.append("MCP runtime dispatch sequence is incomplete")
+    elif not (runtime_dispatch < screenshot_dispatch < screenshot_result < text_fallback):
+        errors.append("MCP screenshot interception must precede the generic runtime text fallback")
 
     if server.count('"pngBase64"') > 1:
         errors.append("MCP screenshot response appears to duplicate pngBase64 instead of emitting image data once")
