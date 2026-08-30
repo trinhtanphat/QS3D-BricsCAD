@@ -17,9 +17,6 @@ if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
 if ($ReleaseId -lt 0) { throw 'ReleaseId must be zero or positive.' }
 if ($ReleaseTag -notmatch '^v[0-9A-Za-z.+-]+$') { throw "Unexpected V26 release tag: $ReleaseTag" }
 if ($WorkflowSha -notmatch '^[0-9a-fA-F]{40}$') { throw 'WorkflowSha must be a full 40-hex commit SHA.' }
-if (-not $TagCreatedByThisRun) {
-    throw 'Rollback requires positive proof that this workflow run created the exact release tag ref.'
-}
 if ([string]::IsNullOrWhiteSpace($Token)) { throw 'GitHub token is required for bounded draft rollback.' }
 
 $headers = @{
@@ -164,6 +161,22 @@ if ($ReleaseId -gt 0) {
     }
     catch {
         Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri
+    }
+}
+
+if (-not $TagCreatedByThisRun) {
+    $resolvedPreserved = Resolve-ExactRemoteTagSha
+    if (-not [string]::Equals($resolvedPreserved, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Non-owned V26 release tag $ReleaseTag changed during draft rollback; refusing to claim restart safety."
+    }
+    Write-Host "Preserving exact V26 tag $ReleaseTag because this run lacks positive tag-creation ownership proof."
+    return [pscustomobject]@{
+        ReleaseId = $ReleaseId
+        ReleaseTag = $ReleaseTag
+        WorkflowSha = $WorkflowSha.ToLowerInvariant()
+        TagCreatedByThisRun = $false
+        DraftDeleted = ($ReleaseId -gt 0)
+        TagDeleted = $false
     }
 }
 
