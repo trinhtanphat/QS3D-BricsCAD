@@ -18,8 +18,11 @@ def main() -> int:
     runbook = RUNBOOK.read_text(encoding="utf-8")
 
     require(source, "out var knownCountSources", "initial deterministic Count-surface snapshot")
-    require(source, "out var currentKnownCountSources", "post-traversal Count-surface rebinding")
-    require(source, "knownCount != currentKnownCount", "post-traversal Count stability comparison")
+    require(source, "private static void RequireStableKnownCounts<T>(", "central Count-stability rebound contract")
+    require(source, "out var currentKnownCountSources", "Count-surface rebinding")
+    require(source, "expectedKnownCountSources != currentKnownCountSources", "Count-source stability comparison")
+    require(source, "expectedCorroboratedKnownCount != currentCorroboratedKnownCount", "Count-corroboration stability comparison")
+    require(source, "expectedKnownCount != currentKnownCount", "Count-value stability comparison")
     require(source, "BCF collection Count changed during enumeration.", "Count drift fail-closed diagnostic")
     require(source, "corroboratedKnownCount && knownCount.HasValue && observedCount >= knownCount.Value", "#4349 corroborated early-overrun precedence")
     require(smoke, "TopicCountDriftFailsAfterExactTraversal", "topic-level Count drift regression")
