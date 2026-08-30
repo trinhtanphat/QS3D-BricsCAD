@@ -357,8 +357,8 @@ jobs:
                 -Headers $assetDownloadHeaders `
                 -OutFile $downloadedAsset `
                 -UseBasicParsing
-              $localHash = (Get-FileHash -LiteralPath $localAsset -Algorithm SHA256).Hash
-              $remoteHash = (Get-FileHash -LiteralPath $downloadedAsset -Algorithm SHA256).Hash
+              $localHash = (& .\scripts\verify-v26-held-file.ps1 -Operation Hash -Path $localAsset).Trim()
+              $remoteHash = (& .\scripts\verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset).Trim()
               if (-not [string]::Equals($localHash, $remoteHash, [StringComparison]::OrdinalIgnoreCase)) {
                 throw "Uploaded V26 release asset SHA-256 mismatch for $expectedAsset. Release remains a draft."
               }

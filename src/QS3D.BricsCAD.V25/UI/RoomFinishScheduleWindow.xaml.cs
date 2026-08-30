@@ -37,6 +37,57 @@ namespace QS3D.BricsCAD.V25.UI
             public string SearchText => string.Join(" ", Floor, Room, Category, FamilyName, Material, RoomIdsText, string.Join(" ", Source.ElementIds)).ToLowerInvariant();
         }
 
+        private sealed class CompensatedVisibleTotal
+        {
+            private double _sum;
+            private double _compensation;
+
+            internal void Add(double value, string label)
+            {
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+                var incoming = QuantityReportMath.NonNegative(value, label);
+
+                var result = _sum + incoming;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Room Finish visible total overflowed: " + label + ".");
+
+                var correction = Math.Abs(_sum) >= Math.Abs(incoming)
+                    ? (_sum - result) + incoming
+                    : (incoming - result) + _sum;
+                var nextCompensation = _compensation + correction;
+                if (double.IsNaN(nextCompensation) || double.IsInfinity(nextCompensation))
+                    throw new OverflowException("Room Finish visible total compensation overflowed: " + label + ".");
+
+                _sum = result == 0d ? 0d : result;
+                _compensation = nextCompensation == 0d ? 0d : nextCompensation;
+            }
+
+            internal double Value(string label)
+            {
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+                var result = _sum + _compensation;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Room Finish visible total overflowed: " + label + ".");
+                if (_compensation != 0d && result == _sum && !IsStrictlyBelowHalfUlp(_sum, _compensation))
+                    throw new OverflowException("Room Finish visible total lost a non-zero compensation at floating-point precision: " + label + ".");
+                if (_sum != 0d && result == _compensation)
+                    throw new OverflowException("Room Finish visible total lost a non-zero accumulated value at floating-point precision: " + label + ".");
+                return result == 0d ? 0d : result;
+            }
+
+            private static bool IsStrictlyBelowHalfUlp(double current, double compensation)
+            {
+                if (current <= 0d || compensation == 0d) return false;
+                var currentBits = BitConverter.DoubleToInt64Bits(current);
+                var adjacentBits = compensation > 0d ? currentBits + 1L : currentBits - 1L;
+                var adjacent = BitConverter.Int64BitsToDouble(adjacentBits);
+                var spacing = Math.Abs(adjacent - current);
+                return Math.Abs(compensation) < spacing / 2d;
+            }
+        }
+
         public RoomFinishScheduleWindow(Document document)
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
@@ -111,14 +162,16 @@ namespace QS3D.BricsCAD.V25.UI
             ScheduleGrid.ItemsSource = visible;
 
             var elementCount = 0;
-            var totalLengthM = 0d;
-            var totalAreaM2 = 0d;
+            var length = new CompensatedVisibleTotal();
+            var area = new CompensatedVisibleTotal();
             foreach (var row in visible)
             {
                 elementCount = QuantityReportMath.AddCount(elementCount, row.Count);
-                totalLengthM = QuantityReportMath.Add(totalLengthM, row.LengthM, "HT_Phòng visible length");
-                totalAreaM2 = QuantityReportMath.Add(totalAreaM2, row.AreaM2, "HT_Phòng visible area");
+                length.Add(row.LengthM, "HT_Phòng visible length");
+                area.Add(row.AreaM2, "HT_Phòng visible area");
             }
+            var totalLengthM = length.Value("HT_Phòng visible length");
+            var totalAreaM2 = area.Value("HT_Phòng visible area");
 
             GroupCountText.Text = visible.Count.ToString(CultureInfo.InvariantCulture);
             ElementCountText.Text = elementCount.ToString(CultureInfo.InvariantCulture);
