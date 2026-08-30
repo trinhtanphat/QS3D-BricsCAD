@@ -30,7 +30,7 @@ namespace QS3D.BricsCAD.V25
                 var message = "Rebar Mode Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
-                var window = new ModelHealthWindow(document, issues, issue =>
+                ModelHealthWindowPresenter.Show(document, issues, issue =>
                 {
                     if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
                     var element = currentProject.FindElement(issue.ElementId);
@@ -42,7 +42,6 @@ namespace QS3D.BricsCAD.V25
                     PaletteCoordinator.SetStatus("Rebar Mode Locate " + element.Id + " • " + count + " CAD object");
                     if (count > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
                 });
-                Application.ShowModelessWindow(IntPtr.Zero, window, true);
             }
             catch (System.Exception)
             {
