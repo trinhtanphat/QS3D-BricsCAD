@@ -109,7 +109,9 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
     create_error = workflow_text.find("$tagCreateError = $_", owned + 1)
     reconcile = workflow_text.find("$reconciledTag = Get-ExactReusableReleaseTag", create_error + 1)
     ambiguous = workflow_text.find("tag-create acknowledgement was ambiguous, but the exact lightweight tag now exists at workflow SHA; reusing it without deletion ownership.", reconcile + 1)
-    release_create = workflow_text.find("$release = Invoke-RestMethod -Method Post", ambiguous + 1)
+    ambiguous_non_owned = workflow_text.find("$tagCreatedByThisRun = $false", ambiguous + 1)
+    ambiguous_ready = workflow_text.find("$tagReadyForRelease = $true", ambiguous_non_owned + 1)
+    release_create = workflow_text.find("$release = Invoke-RestMethod -Method Post", ambiguous_ready + 1)
     asset_verify = workflow_text.find("$verifiedAssetIds[$expectedAsset] = $uploadedAssetId", release_create + 1)
     patch_proof = workflow_text.find("$publishPatchAttempted = $true", asset_verify + 1)
     publish = workflow_text.find("$published = Invoke-RestMethod -Method Patch", patch_proof + 1)
@@ -117,10 +119,10 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
     ready_check = workflow_text.find("if (-not $tagReadyForRelease)", publication_error + 1)
     published_reconcile = workflow_text.find("$reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers", ready_check + 1)
     rollback = workflow_text.find("rollback-v26-draft-release.ps1", published_reconcile + 1)
-    if min(reusable, create, owned, create_error, reconcile, ambiguous, release_create, asset_verify, patch_proof, publish, publication_error, ready_check, published_reconcile, rollback) < 0 or not (
-        reusable < create < owned < create_error < reconcile < ambiguous < release_create < asset_verify < patch_proof < publish < publication_error < ready_check < published_reconcile < rollback
+    if min(reusable, create, owned, create_error, reconcile, ambiguous, ambiguous_non_owned, ambiguous_ready, release_create, asset_verify, patch_proof, publish, publication_error, ready_check, published_reconcile, rollback) < 0 or not (
+        reusable < create < owned < create_error < reconcile < ambiguous < ambiguous_non_owned < ambiguous_ready < release_create < asset_verify < patch_proof < publish < publication_error < ready_check < published_reconcile < rollback
     ):
-        errors.append("workflow order must remain exact-tag admission -> acknowledged ownership -> ambiguous-create reconciliation -> draft/assets -> publish acknowledgement reconciliation -> bounded rollback")
+        errors.append("workflow order must remain exact-tag admission -> acknowledged ownership -> ambiguous-create reconciliation/non-ownership -> draft/assets -> publish acknowledgement reconciliation -> bounded rollback")
 
     return errors
 
@@ -137,6 +139,7 @@ mutations = {
     "created type": (helper, workflow.replace("createdTag.object.type, 'commit'", "createdTag.object.type, 'tag'", 1)),
     "created SHA": (helper, workflow.replace("createdTag.object.sha, $env:GITHUB_SHA", "createdTag.object.sha, ('0' * 40)", 1)),
     "ambiguous create reconciliation": (helper, workflow.replace("$reconciledTag = Get-ExactReusableReleaseTag", "$reconciledTag = $null", 1)),
+    "ambiguous create non-ownership": (helper, workflow.replace("$tagCreatedByThisRun = $false\n                $tagReadyForRelease = $true", "$tagCreatedByThisRun = $true\n                $tagReadyForRelease = $true", 1)),
     "draft delete reconciliation": (helper.replace("Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri", "# removed", 1), workflow),
     "release-owner scan": (helper.replace("Assert-NoReleaseOwnsTag", "# removed", 1), workflow),
     "non-owned preservation": (helper.replace("if (-not $TagCreatedByThisRun)", "if ($false)", 1), workflow),
