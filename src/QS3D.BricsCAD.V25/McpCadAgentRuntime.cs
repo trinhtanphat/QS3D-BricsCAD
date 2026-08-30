@@ -100,7 +100,11 @@ namespace QS3D.BricsCAD.V25
                 case "cad_entity_set_layer": return Mutation(args, tool, () => SetEntityLayer(args));
                 case "cad_layer": return Mutation(args, tool, () => LayerAction(args));
                 case "cad_command_catalog": return CommandCatalogJson();
-                case "cad_command_sequence": return Mutation(args, tool, () => RunCadCommandSequence(args));
+                case "cad_command_sequence":
+                    return Mutation(args, tool, () =>
+                        McpCadDirectModelRuntime.CanHandleCadCommandSequence(args)
+                            ? McpCadDirectModelRuntime.CallCadCommandSequence(args)
+                            : RunCadCommandSequence(args));
                 case "qs3d_run_command": return Mutation(args, tool, () => RunQs3dCommand(args));
                 case "cad_ui_click": return Mutation(args, tool, () => UiClick(args));
                 case "cad_ui_type": return Mutation(args, tool, () => UiType(args));
@@ -110,6 +114,8 @@ namespace QS3D.BricsCAD.V25
                 case "cad_audit_tail": return ReadAuditTail(Integer(args, "limit", 25, 1, 100));
                 case "cad_cancel_command": return CancelCurrentCommand();
                 default:
+                    if (McpCadDirectModelRuntime.IsTool(tool))
+                        return Mutation(args, tool, () => McpCadDirectModelRuntime.Call(tool, args));
                     if (McpDesktopAutomationRuntime.IsTool(tool))
                     {
                         if (McpDesktopAutomationRuntime.RequiresMutation(tool))
@@ -147,7 +153,7 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Automation was stopped or restarted before this mutation could continue. Submit a new confirmed mutation after resume.");
         }
 
-        private static void EnsureCurrentMutationRunning()
+        internal static void EnsureCurrentMutationRunning()
         {
             var epoch = MutationEpoch.Value;
             if (!epoch.HasValue)
