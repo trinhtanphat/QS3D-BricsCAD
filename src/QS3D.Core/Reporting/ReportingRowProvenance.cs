@@ -41,6 +41,7 @@ namespace QS3D.Core.Reporting
 
                     var raw = enumerator.Current;
                     RequireStableTarget(target, targetSnapshot);
+                    RequireStableKnownCount(sourceHandles, knownCount);
                     var handle = raw ?? string.Empty;
                     if (string.IsNullOrWhiteSpace(handle))
                         throw new InvalidOperationException("Report provenance contains an empty stored SourceHandles entry at index " + index + ". Repair source ownership before reporting.");
