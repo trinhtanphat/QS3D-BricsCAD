@@ -93,7 +93,14 @@ jobs:
           "V26_RELEASE_REQUEST_SIGN_PACKAGE=$($signPackage.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
           git rev-parse --verify HEAD | Out-Null
-          if (git tag --list $env:RELEASE_TAG) { throw "Tag already exists locally: $env:RELEASE_TAG" }
+          $localTag = @(git tag --list --format='%(objecttype) %(objectname)' $env:RELEASE_TAG)
+          if ($LASTEXITCODE -ne 0 -or $localTag.Count -gt 1) { throw "Unable to classify local V26 tag identity for $env:RELEASE_TAG." }
+          if ($localTag.Count -eq 1) {
+            $expectedLocal = "commit $($env:GITHUB_SHA.ToLowerInvariant())"
+            if (-not [string]::Equals(([string]$localTag[0]).Trim().ToLowerInvariant(), $expectedLocal, [StringComparison]::Ordinal)) {
+              throw "Existing local V26 release tag $env:RELEASE_TAG is not an exact lightweight tag at workflow SHA $env:GITHUB_SHA."
+            }
+          }
 
           if ($signPackage) {
             if ($env:QS3D_SIGNING_CERT_THUMBPRINT -notmatch '^[0-9A-Fa-f]{40}$') {
@@ -254,9 +261,34 @@ jobs:
             "X-GitHub-Api-Version" = "2022-11-28"
             "User-Agent" = "QS3D-V26-Manual-Release"
           }
+          $tagRef = "refs/tags/$env:RELEASE_TAG"
+
+          function Test-GitHubNotFound {
+            param([Parameter(Mandatory = $true)]$ErrorRecord)
+            $response = $ErrorRecord.Exception.Response
+            if ($null -eq $response) { return $false }
+            try { return ([int]$response.StatusCode -eq 404) }
+            catch { return $false }
+          }
+
+          function Get-ExactReusableReleaseTag {
+            $escapedTag = [Uri]::EscapeDataString($env:RELEASE_TAG)
+            $uri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/ref/tags/$escapedTag"
+            try { $snapshot = Invoke-RestMethod -Method Get -Uri $uri -Headers $headers }
+            catch {
+              if (Test-GitHubNotFound -ErrorRecord $_) { return $null }
+              throw
+            }
+            if ($null -eq $snapshot -or -not [string]::Equals([string]$snapshot.ref, $tagRef, [StringComparison]::Ordinal)) {
+              throw "V26 reusable release tag lookup returned a mismatched ref."
+            }
+            if ($null -eq $snapshot.object -or -not [string]::Equals([string]$snapshot.object.type, 'commit', [StringComparison]::Ordinal) -or -not [string]::Equals([string]$snapshot.object.sha, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+              throw "Existing V26 release tag is annotated, moved, or not bound to the exact qualified workflow SHA."
+            }
+            return $snapshot
+          }
 
           function Assert-RemoteReleaseTagTargetsWorkflowSha {
-            $tagRef = "refs/tags/$env:RELEASE_TAG"
             $peeledRef = $tagRef + '^{}'
             $lines = @(git ls-remote --tags origin $tagRef $peeledRef)
             if ($LASTEXITCODE -ne 0) {
@@ -275,13 +307,11 @@ jobs:
               elseif ([string]::Equals($refName, $peeledRef, [StringComparison]::Ordinal)) { $peeled.Add($sha) }
               else { throw "Unexpected remote ref while resolving V26 release tag: $refName. Release remains a draft." }
             }
-            if ($exact.Count -ne 1 -or $peeled.Count -gt 1) {
-              throw "V26 release tag $env:RELEASE_TAG did not resolve to exactly one remote tag identity. Release remains a draft."
+            if ($exact.Count -ne 1 -or $peeled.Count -ne 0) {
+              throw "V26 release tag $env:RELEASE_TAG must resolve to exactly one lightweight remote tag identity. Release remains a draft."
             }
-
-            $resolvedSha = if ($peeled.Count -eq 1) { $peeled[0] } else { $exact[0] }
-            if (-not [string]::Equals($resolvedSha, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
-              throw "V26 release tag $env:RELEASE_TAG targets $resolvedSha instead of qualified workflow SHA $env:GITHUB_SHA. Release remains a draft."
+            if (-not [string]::Equals($exact[0], $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+              throw "V26 release tag $env:RELEASE_TAG targets $($exact[0]) instead of qualified workflow SHA $env:GITHUB_SHA. Release remains a draft."
             }
           }
 
@@ -361,6 +391,7 @@ jobs:
           } | ConvertTo-Json
 
           $tagCreatedByThisRun = $false
+          $tagReadyForRelease = $false
           $releaseId = [long]0
           $release = $null
           $releaseUri = $null
@@ -371,18 +402,35 @@ jobs:
 
           try {
             $tagRefUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/refs"
-            $tagCreateRequest = @{
-              ref = "refs/tags/$env:RELEASE_TAG"
-              sha = $env:GITHUB_SHA
-            } | ConvertTo-Json
-            $createdTag = Invoke-RestMethod -Method Post -Uri $tagRefUri -Headers $headers -ContentType 'application/json' -Body $tagCreateRequest
-            if ($null -eq $createdTag -or -not [string]::Equals([string]$createdTag.ref, "refs/tags/$env:RELEASE_TAG", [StringComparison]::Ordinal)) {
-              throw "V26 release tag creation returned a mismatched ref; refusing transaction ownership."
+            $existingTag = Get-ExactReusableReleaseTag
+            if ($null -ne $existingTag) {
+              Write-Host "Reusing exact V26 lightweight tag $env:RELEASE_TAG at workflow SHA without claiming deletion ownership."
+              $tagReadyForRelease = $true
             }
-            if ($null -eq $createdTag.object -or -not [string]::Equals([string]$createdTag.object.sha, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
-              throw "V26 release tag creation returned a mismatched SHA; refusing transaction ownership."
+            else {
+              $tagCreateRequest = @{ ref = $tagRef; sha = $env:GITHUB_SHA } | ConvertTo-Json
+              try {
+                $createdTag = Invoke-RestMethod -Method Post -Uri $tagRefUri -Headers $headers -ContentType 'application/json' -Body $tagCreateRequest
+                if ($null -eq $createdTag -or -not [string]::Equals([string]$createdTag.ref, $tagRef, [StringComparison]::Ordinal)) {
+                  throw "V26 release tag creation returned a mismatched ref; refusing transaction ownership."
+                }
+                if ($null -eq $createdTag.object -or -not [string]::Equals([string]$createdTag.object.type, 'commit', [StringComparison]::Ordinal) -or -not [string]::Equals([string]$createdTag.object.sha, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+                  throw "V26 release tag creation returned a non-commit or mismatched SHA; refusing transaction ownership."
+                }
+                $tagCreatedByThisRun = $true
+                $tagReadyForRelease = $true
+              }
+              catch {
+                $tagCreateError = $_
+                $reconciledTag = Get-ExactReusableReleaseTag
+                if ($null -eq $reconciledTag) {
+                  throw "V26 tag-create acknowledgement failed and the exact release tag is authoritatively absent. Original error: $($tagCreateError.Exception.Message)"
+                }
+                Write-Host "V26 tag-create acknowledgement was ambiguous, but the exact lightweight tag now exists at workflow SHA; reusing it without deletion ownership."
+                $tagCreatedByThisRun = $false
+                $tagReadyForRelease = $true
+              }
             }
-            $tagCreatedByThisRun = $true
             Assert-RemoteReleaseTagTargetsWorkflowSha
 
             $release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" -Headers $headers -ContentType 'application/json' -Body $request
@@ -476,7 +524,7 @@ jobs:
           }
           catch {
             $publicationError = $_
-            if (-not $tagCreatedByThisRun) {
+            if (-not $tagReadyForRelease) {
               throw
             }
 
@@ -522,5 +570,5 @@ jobs:
               throw "Automatic V26 draft rollback failed. Original publication error: $($publicationError.Exception.Message) Rollback error: $($rollbackError.Exception.Message) Manual cleanup is required before retry."
             }
 
-            throw "V26 publication failed after transaction tag creation: $($publicationError.Exception.Message) Automatic rollback completed; retry with the same tag is safe."
+            throw "V26 publication failed after exact release-tag admission: $($publicationError.Exception.Message) Automatic rollback completed; retry with the same tag is safe."
           }
