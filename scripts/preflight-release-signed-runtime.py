@@ -49,10 +49,25 @@ def main() -> int:
 
     require(text, "Verify candidate after job boundary", "cross-job candidate verification")
     require(text, "Create draft, verify uploaded bytes, then publish", "draft-first publication gate")
+    require(text, "$tagCreatedByThisRun = $true", "positive publication tag ownership")
+    require(text, "$releaseId = [long]$release.id", "exact draft identity capture")
     require(text, "gh release download $env:RELEASE_TAG", "downloaded draft-byte verification")
-    require(text, "gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --draft=false", "publish transition")
+    require(text, "$published = Invoke-RestMethod -Method Patch -Uri $releaseUri", "exact-release publish transition")
+    require(text, "if ($published.draft -ne $false)", "published-state confirmation")
+    require(text, "rollback-v25-draft-release.ps1", "bounded failure rollback")
 
-    print("PASS: commercial V25 releases are signed-only, remove the ephemeral private key before re-verification, runtime-test the exact finalized signed plugin before manifest/provenance handoff, and verify draft release bytes before publication.")
+    publication = text.find("- name: Create draft, verify uploaded bytes, then publish")
+    tag_owned = text.find("$tagCreatedByThisRun = $true", publication)
+    draft_identity = text.find("$releaseId = [long]$release.id", tag_owned)
+    download = text.find("gh release download $env:RELEASE_TAG", draft_identity)
+    signature = text.find("verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", download)
+    publish = text.find("$published = Invoke-RestMethod -Method Patch -Uri $releaseUri", signature)
+    rollback = text.find("rollback-v25-draft-release.ps1", publish)
+    publish_order = (publication, tag_owned, draft_identity, download, signature, publish, rollback)
+    if any(index < 0 for index in publish_order) or list(publish_order) != sorted(publish_order):
+        raise AssertionError("commercial publication must own exact tag -> capture exact draft -> verify downloaded bytes/signatures -> publish exact release -> retain bounded rollback")
+
+    print("PASS: commercial V25 releases are signed-only, remove the ephemeral private key before re-verification, runtime-test the exact finalized signed plugin, verify draft bytes before exact-release publication, and retain bounded restart-safe rollback.")
     return 0
 
 
