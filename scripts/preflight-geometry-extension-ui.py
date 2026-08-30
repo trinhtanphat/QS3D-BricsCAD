@@ -37,17 +37,39 @@ if xaml.is_file():
 code = ROOT / required[1]
 if code.is_file():
     text = code.read_text(encoding="utf-8")
-    for needle in ("OnCommandClick", "SendStringToExecute", "StatusText.Text"):
+    for needle in (
+        "OnCommandClick",
+        "SendStringToExecute",
+        "StatusText.Text",
+        "Application.DocumentManager.MdiActiveDocument",
+    ):
         if needle not in text:
             errors.append("GeometryExtensionsWindow code-behind missing: " + needle)
 
 command = ROOT / required[2]
 if command.is_file():
     text = command.read_text(encoding="utf-8")
-    if 'CommandMethod("QS3DGEOMETRYEXT"' not in text:
-        errors.append("missing QS3DGEOMETRYEXT command")
-    if "new GeometryExtensionsWindow()" not in text:
-        errors.append("QS3DGEOMETRYEXT does not open GeometryExtensionsWindow")
+    for needle in (
+        'CommandMethod("QS3DGEOMETRYEXT"',
+        "private static GeometryExtensionsWindow? _published;",
+        "var previous = _published;",
+        "if (previous.IsLoaded)",
+        "previous.Activate();",
+        "window = new GeometryExtensionsWindow()",
+        "window.Closed += (_, __) =>",
+        "if (ReferenceEquals(_published, published)) _published = null;",
+        "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+        "if (!window.IsLoaded)",
+        "_published = published;",
+    ):
+        if needle not in text:
+            errors.append("Geometry Extensions command missing lifecycle contract: " + needle)
+
+    show = text.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);")
+    loaded = text.find("if (!window.IsLoaded)", show)
+    publish = text.find("_published = published;", loaded)
+    if min(show, loaded, publish) < 0 or not (show < loaded < publish):
+        errors.append("Geometry Extensions must show, confirm Loaded, then publish its host-global singleton")
 
 adapter = ROOT / "src/QS3D.BricsCAD.V25"
 commands = []
@@ -66,4 +88,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Geometry Extensions modeless panel exposes review-gated wall cleanup, opening booleans, column/tie/shape rebar and unified health commands.")
+print("PASS: Geometry Extensions remains active-document-dispatched while its host-global launcher is single-instance and Loaded-before-published.")

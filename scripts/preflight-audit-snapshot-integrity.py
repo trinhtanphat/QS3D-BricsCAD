@@ -46,6 +46,24 @@ if AUDIT.is_file():
     if "_events as IReadOnlyList<AuditEvent>" in text:
         errors.append("AuditTrail.Events still exposes the mutable backing list through an interface cast.")
 
+    events_pos = text.find("public IReadOnlyList<AuditEvent> Events")
+    for_project_pos = text.find("public static AuditTrail ForProject", events_pos)
+    events_text = text[events_pos:for_project_pos] if events_pos >= 0 and for_project_pos > events_pos else ""
+    events_loop_pos = events_text.find("while (true)")
+    events_pre_count_pos = events_text.find("RequireStableHistoryCount(storedCount);", events_loop_pos)
+    events_move_pos = events_text.find("if (!enumerator.MoveNext())", events_pre_count_pos)
+    events_terminal_count_pos = events_text.find("RequireStableHistoryCount(storedCount);", events_move_pos + 1)
+    events_break_pos = events_text.find("break;", events_terminal_count_pos)
+    events_post_count_pos = events_text.find("RequireStableHistoryCount(storedCount);", events_break_pos + 1)
+    events_gate_pos = events_text.find("RequireCanReadCurrent(storedCount, observed);", events_post_count_pos)
+    events_current_pos = events_text.find("var item = enumerator.Current;", events_gate_pos)
+    if not (
+        events_loop_pos >= 0
+        and events_loop_pos < events_pre_count_pos < events_move_pos < events_terminal_count_pos
+        < events_break_pos < events_post_count_pos < events_gate_pos < events_current_pos
+    ):
+        errors.append("AuditTrail.Events must rebind stored Count before/after MoveNext and before Current.")
+
     record_pos = text.find("public void Record(")
     clear_pos = text.find("public void Clear()", record_pos)
     record_text = text[record_pos:clear_pos] if record_pos >= 0 and clear_pos > record_pos else ""
@@ -71,37 +89,28 @@ if AUDIT.is_file():
     validate_text = text[validate_method_pos:supported_count_method_pos] if validate_method_pos >= 0 and supported_count_method_pos > validate_method_pos else ""
     validate_count_pos = validate_text.find("var storedCount = RequireSupportedHistoryCount(requireAppendCapacity);")
     validate_enumerator_pos = validate_text.find("using (var enumerator = _events.GetEnumerator())", validate_count_pos)
-    validate_move_pos = validate_text.find("while (enumerator.MoveNext())", validate_enumerator_pos)
-    validate_can_read_pos = validate_text.find("RequireCanReadCurrent(storedCount, observed);", validate_move_pos)
+    validate_loop_pos = validate_text.find("while (true)", validate_enumerator_pos)
+    validate_pre_count_pos = validate_text.find("RequireStableHistoryCount(storedCount);", validate_loop_pos)
+    validate_move_pos = validate_text.find("if (!enumerator.MoveNext())", validate_pre_count_pos)
+    validate_terminal_count_pos = validate_text.find("RequireStableHistoryCount(storedCount);", validate_move_pos + 1)
+    validate_break_pos = validate_text.find("break;", validate_terminal_count_pos)
+    validate_post_count_pos = validate_text.find("RequireStableHistoryCount(storedCount);", validate_break_pos + 1)
+    validate_can_read_pos = validate_text.find("RequireCanReadCurrent(storedCount, observed);", validate_post_count_pos)
     validate_current_pos = validate_text.find("var existing = enumerator.Current;", validate_can_read_pos)
     validate_equality_pos = validate_text.find("RequireObservedHistoryCount(storedCount, observed);", validate_current_pos)
     validate_stable_pos = validate_text.find("RequireStableHistoryCount(storedCount);", validate_equality_pos)
     validate_return_pos = validate_text.find("return observed;", validate_stable_pos)
-    if (
-        validate_count_pos < 0
-        or validate_enumerator_pos < 0
-        or validate_move_pos < 0
-        or validate_can_read_pos < 0
-        or validate_current_pos < 0
-        or validate_equality_pos < 0
-        or validate_stable_pos < 0
-        or validate_return_pos < 0
-        or not (
-            validate_count_pos
-            < validate_enumerator_pos
-            < validate_move_pos
-            < validate_can_read_pos
-            < validate_current_pos
-            < validate_equality_pos
-            < validate_stable_pos
-            < validate_return_pos
-        )
+    if not (
+        validate_count_pos >= 0
+        and validate_count_pos < validate_enumerator_pos < validate_loop_pos < validate_pre_count_pos
+        < validate_move_pos < validate_terminal_count_pos < validate_break_pos < validate_post_count_pos
+        < validate_can_read_pos < validate_current_pos < validate_equality_pos < validate_stable_pos < validate_return_pos
     ):
         errors.append(
-            "AuditTrail.ValidateExistingHistory must enforce Count -> MoveNext -> Current-read guard -> Current -> equality -> stable Count -> return ordering inside the modification validator."
+            "AuditTrail.ValidateExistingHistory must enforce Count -> pre-Move rebound -> MoveNext -> post-Move rebound -> Current-read guard -> Current -> equality -> stable Count -> return ordering."
         )
-    if "foreach (var existing in _events)" in validate_text:
-        errors.append("AuditTrail.ValidateExistingHistory must not use foreach because Current would be read before the admitted-Count guard.")
+    if "while (enumerator.MoveNext())" in validate_text or "foreach (var existing in _events)" in validate_text:
+        errors.append("AuditTrail.ValidateExistingHistory must keep explicit Count-safe enumeration around caller-controlled MoveNext/Current.")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -143,4 +152,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: AuditTrail reads and mutations validate stored history, enforce method-local Count-versus-traversal ordering, and reject dishonest history before mutation.")
+print("PASS: AuditTrail reads and mutations validate stored history with Count-safe MoveNext/Current ordering and reject dishonest history before mutation.")

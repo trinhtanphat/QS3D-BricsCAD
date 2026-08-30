@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             CountDriftBeforeMoveNextFailsBeforeAdvancement();
             CountDriftAfterMoveNextFailsBeforeCurrent();
             TransientCountDriftCannotRestoreBeforePublication();
+            CountDriftFromCurrentFailsBeforeNullAcceptance();
             StableCountedInputRemainsAccepted();
         }
 
@@ -47,6 +48,19 @@ namespace QS3D.Core.SmokeTests
             Equal(1, source.MoveNextCalls, "Transient Count drift must be detected at the advancement that caused it.");
             Equal(0, source.CurrentReads, "Transient Count drift must not consume the unstable element before failing.");
             Contains("known count changed during traversal", error.Message, "Transient Count drift must fail even when a later Count read could restore the admitted value.");
+        }
+
+        private static void CountDriftFromCurrentFailsBeforeNullAcceptance()
+        {
+            var source = new CountDriftsFromCurrent(Element("A"));
+            var error = Capture<InvalidOperationException>(() => new MepQuantityService().Aggregate(source));
+
+            Equal(1, source.MoveNextCalls, "MEP Current-induced Count drift must advance only the admitted item.");
+            Equal(1, source.CurrentReads, "MEP Current-induced Count drift must observe Current exactly once before failing.");
+            Contains(
+                "known count changed during traversal",
+                error.Message,
+                "MEP Current-induced Count drift must win over ordinary returned-item validation.");
         }
 
         private static void StableCountedInputRemainsAccepted()
@@ -114,13 +128,15 @@ namespace QS3D.Core.SmokeTests
                 get
                 {
                     CurrentReads++;
-                    return _items[_index];
+                    return ReadCurrent(_items[_index]);
                 }
             }
             object IEnumerator.Current => Current;
             protected int CountReads { get; set; }
             internal int MoveNextCalls { get; private set; }
             internal int CurrentReads { get; private set; }
+
+            protected virtual MepElement ReadCurrent(MepElement item) => item;
 
             public IEnumerator<MepElement> GetEnumerator() => this;
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -173,6 +189,28 @@ namespace QS3D.Core.SmokeTests
                     CountReads++;
                     return MoveNextCalls == 1 && CountReads == 3 ? 2 : 1;
                 }
+            }
+        }
+
+        private sealed class CountDriftsFromCurrent : InstrumentedCounted
+        {
+            private bool _currentObserved;
+
+            internal CountDriftsFromCurrent(params MepElement[] items) : base(items) { }
+
+            public override int Count
+            {
+                get
+                {
+                    CountReads++;
+                    return _currentObserved ? 2 : 1;
+                }
+            }
+
+            protected override MepElement ReadCurrent(MepElement item)
+            {
+                _currentObserved = true;
+                return null!;
             }
         }
 
