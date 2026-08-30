@@ -36,11 +36,11 @@ namespace QS3D.Core.SmokeTests
         private static void TopicPostTraversalCountDriftRejects()
         {
             var source = new CurrentTrackingCollection<BcfTopic>(
-                read => read <= 4 ? 1 : 2,
+                read => read <= 5 ? 1 : 2,
                 NewTopic("00000000-0000-0000-0000-000000000103"));
 
             ThrowsCountIntegrity(() => BcfIssueExchange.Create(source), "topic post-traversal Count drift");
-            Require(source.CountReads >= 5,
+            Require(source.CountReads >= 6,
                 "BCF topic Count evidence was not rebound after terminal MoveNext.");
             Require(source.MoveNextCalls == 2,
                 "BCF topic post-traversal Count drift must observe one admitted item and terminal MoveNext.");

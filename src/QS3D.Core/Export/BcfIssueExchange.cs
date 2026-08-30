@@ -340,6 +340,14 @@ namespace QS3D.Core.Export
                     if (observedCount >= maximumCount)
                         throw new ArgumentException(overflowMessage, parameterName);
                     var value = enumerator.Current;
+                    RequireStableKnownCounts(
+                        values,
+                        maximumCount,
+                        parameterName,
+                        overflowMessage,
+                        knownCount,
+                        corroboratedKnownCount,
+                        knownCountSources);
                     items.Add(value);
                     observedCount++;
                 }
