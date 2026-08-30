@@ -68,36 +68,49 @@ namespace QS3D.Core.Reporting
             var seenElementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var elementIndex = 0;
             var observedCount = 0;
-            foreach (var element in elements)
+
+            using (var enumerator = elements.GetEnumerator())
             {
-                observedCount++;
-                if (knownCount.HasValue && observedCount > knownCount.Value)
-                    throw ElementCountMismatch(knownCount.Value, observedCount);
-                if (element == null)
-                    throw new ArgumentException("Quantity report elements cannot contain null entries. Invalid element index: " + elementIndex + ".", nameof(elements));
-                if (!seenElementIds.Add(element.Id))
-                    throw new InvalidOperationException("Quantity report contains duplicate element id: " + element.Id + ".");
-                var material = NormalizeMaterial(element.Family.Material);
-                var key = GroupKey(element.Floor, element.Family.Category.ToString(), element.Family.Name, material);
-                if (!grouped.TryGetValue(key, out var row))
+                while (true)
                 {
-                    row = new QuantityReportRow
+                    RequireStableKnownElementCount(elements, knownCount);
+                    var moved = enumerator.MoveNext();
+                    RequireStableKnownElementCount(elements, knownCount);
+                    if (!moved) break;
+                    if (knownCount.HasValue && observedCount >= knownCount.Value)
+                        throw ElementCountMismatch(knownCount.Value, observedCount + 1);
+
+                    var element = enumerator.Current;
+                    RequireStableKnownElementCount(elements, knownCount);
+                    observedCount++;
+                    if (element == null)
+                        throw new ArgumentException("Quantity report elements cannot contain null entries. Invalid element index: " + elementIndex + ".", nameof(elements));
+                    if (!seenElementIds.Add(element.Id))
+                        throw new InvalidOperationException("Quantity report contains duplicate element id: " + element.Id + ".");
+                    var material = NormalizeMaterial(element.Family.Material);
+                    var key = GroupKey(element.Floor, element.Family.Category.ToString(), element.Family.Name, material);
+                    if (!grouped.TryGetValue(key, out var row))
                     {
-                        Floor = element.Floor,
-                        Category = element.Family.Category.ToString(),
-                        FamilyName = element.Family.Name,
-                        Material = material
-                    };
-                    grouped.Add(key, row);
-                    accumulators.Add(key, new QuantityAccumulatorSet());
-                    order.Add(key);
+                        row = new QuantityReportRow
+                        {
+                            Floor = element.Floor,
+                            Category = element.Family.Category.ToString(),
+                            FamilyName = element.Family.Name,
+                            Material = material
+                        };
+                        grouped.Add(key, row);
+                        accumulators.Add(key, new QuantityAccumulatorSet());
+                        order.Add(key);
+                    }
+                    row.Count = QuantityReportMath.AddCount(row.Count, 1);
+                    row.ElementIds.Add(element.Id);
+                    ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
+                    accumulators[key].Add(element);
+                    elementIndex++;
                 }
-                row.Count = QuantityReportMath.AddCount(row.Count, 1);
-                row.ElementIds.Add(element.Id);
-                ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
-                accumulators[key].Add(element);
-                elementIndex++;
             }
+
+            RequireStableKnownElementCount(elements, knownCount);
             if (knownCount.HasValue && observedCount != knownCount.Value)
                 throw ElementCountMismatch(knownCount.Value, observedCount);
 
@@ -121,6 +134,16 @@ namespace QS3D.Core.Reporting
             if (elements is ICollection nonGenericCollection)
                 ObserveKnownElementCount(nonGenericCollection.Count, ref knownCount);
             return knownCount;
+        }
+
+        private static void RequireStableKnownElementCount(IEnumerable<ElementInstance> elements, int? expectedCount)
+        {
+            if (!expectedCount.HasValue) return;
+            var observedCount = SnapshotKnownElementCount(elements);
+            if (!observedCount.HasValue || observedCount.Value != expectedCount.Value)
+                throw new InvalidOperationException(
+                    "Quantity report element input known Count changed during enumeration from " + expectedCount.Value + " to " +
+                    (observedCount.HasValue ? observedCount.Value.ToString(CultureInfo.InvariantCulture) : "<none>") + ".");
         }
 
         private static void ObserveKnownElementCount(int count, ref int? knownCount)

@@ -39,10 +39,10 @@ namespace QS3D.BricsCAD.V25.Updates
     internal sealed class GitHubReleaseClient
     {
         internal const string Repository = "trinhtanphat/QS3D-BricsCAD";
-        internal const string ReleasesEndpoint = "https://api.github.com/repos/trinhtanphat/QS3D-BricsCAD/releases?per_page=20";
+        internal const string ReleasesEndpoint = "https://api.github.com/repos/trinhtanphat/QS3D-BricsCAD/releases?per_page=100";
         internal const string UpdateManifestAssetName = "QS3D-BricsCAD-V26.update.json";
-        private const int MaxResponseBytes = 2 * 1024 * 1024;
-        private const int MaxReleasePages = 10;
+        private const int MaxResponseBytes = 4 * 1024 * 1024;
+        private const int MaxReleasePages = 20;
         private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
         private static readonly HttpClient Http = CreateHttpClient();
 
@@ -93,6 +93,7 @@ namespace QS3D.BricsCAD.V25.Updates
             {
                 request.Headers.Accept.ParseAdd("application/vnd.github+json");
                 request.Headers.UserAgent.ParseAdd("QS3D-BricsCAD-V26-Updater");
+                request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
 
                 using (var response = await Http.SendAsync(
                     request,
