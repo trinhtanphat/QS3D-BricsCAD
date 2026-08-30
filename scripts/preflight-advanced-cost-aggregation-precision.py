@@ -17,9 +17,25 @@ runbook = RUNBOOK.read_text(encoding="utf-8")
 for token in (
     "public sealed class CostRateBuildUp",
     "public sealed class CostBenchmarkService",
+    "using System.Numerics;",
+    "MaximumDecimalCoefficient",
+    "TrySumNonNegativeExactly",
+    "decimal.GetBits(value)",
+    "BigInteger.Pow(10, valueScale - scale)",
+    "coefficient % 10 == 0",
+    "directContributions",
+    "exact aggregate cannot be represented as decimal",
+    "CostDecimalMath.TrySumNonNegativeExactly(values, out var exactSum)",
 ):
     if token not in source:
         raise SystemExit("Advanced cost precision source boundary missing: " + token)
+
+for stale in (
+    "next = checked(sum + values[i]);",
+    "direct = CostDecimalMath.AddPreservingNonZeroContribution(\n                        direct,\n                        snapshot[i].ExtendedUnitCost",
+):
+    if stale in source:
+        raise SystemExit("Advanced cost precision stale pairwise aggregate loop remains: " + stale.splitlines()[0])
 
 for token in (
     "RateBuildUpPreservesRecoverableContributions();",
@@ -46,6 +62,4 @@ for phrase in (
     if phrase not in runbook:
         raise SystemExit("Advanced cost precision runbook missing boundary: " + phrase)
 
-# This guard is intentionally regression-first: production tokens are added by the correcting commit.
-# Once production is fixed the guard must pin the exact accumulator contract and reject pairwise aggregate loops.
-print("PASS advanced cost aggregation precision regression contract")
+print("PASS advanced cost aggregation precision production contract")
