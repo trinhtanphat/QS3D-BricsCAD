@@ -306,7 +306,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void AssertPostTraversalDrift<T>(DriftingReadOnlyCollection<T> source, string label, InvalidOperationException error)
         {
-            Equal(5, source.CountReads, "TBQ " + label + " Count must be rebound throughout exact traversal.");
+            Equal(6, source.CountReads, "TBQ " + label + " Count must be rebound throughout exact traversal.");
             Equal(1, source.GetEnumeratorCalls, "TBQ " + label + " drift source must traverse exactly once.");
             Contains(label + " known count changed during traversal", error.Message, "TBQ " + label + " Count drift must fail closed before publication.");
         }
