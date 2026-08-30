@@ -107,11 +107,15 @@ ordered = [
     "BricsApplication.ShowModelessWindow(window)",
     "if (!window.IsLoaded) return;",
     "_window = window;",
-    "candidate = null;",
 ]
 positions = [workspace.find(token) for token in ordered]
 if any(position < 0 for position in positions) or positions != sorted(positions) or len(set(positions)) != len(positions):
-    errors.append("workspace: publication order must be Closed -> host show -> Loaded check -> publish -> cleanup-ownership transfer")
+    errors.append("workspace: publication order must be Closed -> host show -> Loaded check -> publish")
+else:
+    publication_position = positions[-1]
+    cleanup_transfer_position = workspace.find("candidate = null;", publication_position + len(ordered[-1]))
+    if cleanup_transfer_position < 0 or cleanup_transfer_position <= publication_position:
+        errors.append("workspace: cleanup ownership must transfer only after authoritative publication")
 
 if workspace.count("_window = window;") != 1:
     errors.append("workspace: authoritative publication must have exactly one assignment")
