@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Numerics;
 
 namespace QS3D.Core.Cost
 {
@@ -483,10 +484,7 @@ namespace QS3D.Core.Cost
                     checked
                     {
                         aggregate.ItemCount++;
-                        aggregate.TotalCost = CostDecimalMath.AddPreservingNonZeroContribution(
-                            aggregate.TotalCost,
-                            item.Cost,
-                            "trade cost aggregate total");
+                        aggregate.TotalCost.Add(item.Cost);
                     }
                     index++;
                 }
@@ -499,17 +497,101 @@ namespace QS3D.Core.Cost
                 "Trade analysis item collection");
             var rows = new List<TradeCostAnalysisRow>(totals.Count);
             foreach (var aggregate in totals.Values)
-                rows.Add(new TradeCostAnalysisRow(aggregate.TradeCode, aggregate.ItemCount, aggregate.TotalCost, cfaM2));
+                rows.Add(new TradeCostAnalysisRow(
+                    aggregate.TradeCode,
+                    aggregate.ItemCount,
+                    aggregate.TotalCost.ToDecimal(),
+                    cfaM2));
             rows.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.TradeCode, right.TradeCode));
             return new ReadOnlyCollection<TradeCostAnalysisRow>(rows.ToArray());
         }
 
         private sealed class TradeAggregate
         {
-            internal TradeAggregate(string tradeCode) { TradeCode = tradeCode; }
+            internal TradeAggregate(string tradeCode)
+            {
+                TradeCode = tradeCode;
+                TotalCost = new ExactNonNegativeDecimalAccumulator();
+            }
+
             internal string TradeCode { get; set; }
             internal int ItemCount { get; set; }
-            internal decimal TotalCost { get; set; }
+            internal ExactNonNegativeDecimalAccumulator TotalCost { get; }
+        }
+
+        private sealed class ExactNonNegativeDecimalAccumulator
+        {
+            private static readonly BigInteger MaxDecimalCoefficient = (BigInteger.One << 96) - BigInteger.One;
+            private BigInteger _coefficient;
+            private int _scale;
+            private bool _hasValue;
+
+            internal void Add(decimal value)
+            {
+                if (value < 0m)
+                    throw new InvalidOperationException("Trade cost aggregate cannot contain a negative value.");
+
+                var bits = decimal.GetBits(value);
+                var flags = bits[3];
+                if ((flags & int.MinValue) != 0)
+                    throw new InvalidOperationException("Trade cost aggregate cannot contain a negative value.");
+
+                var scale = (flags >> 16) & 0x7f;
+                var coefficient =
+                    new BigInteger((uint)bits[0]) |
+                    (new BigInteger((uint)bits[1]) << 32) |
+                    (new BigInteger((uint)bits[2]) << 64);
+
+                if (!_hasValue)
+                {
+                    _coefficient = coefficient;
+                    _scale = scale;
+                    _hasValue = true;
+                    return;
+                }
+
+                if (scale > _scale)
+                {
+                    _coefficient *= PowerOfTen(scale - _scale);
+                    _scale = scale;
+                }
+                else if (scale < _scale)
+                {
+                    coefficient *= PowerOfTen(_scale - scale);
+                }
+
+                _coefficient += coefficient;
+            }
+
+            internal decimal ToDecimal()
+            {
+                if (!_hasValue || _coefficient.IsZero)
+                    return 0m;
+
+                var coefficient = _coefficient;
+                var scale = _scale;
+                while (scale > 0 && coefficient % 10 == 0)
+                {
+                    coefficient /= 10;
+                    scale--;
+                }
+
+                if (coefficient < BigInteger.Zero || coefficient > MaxDecimalCoefficient)
+                    throw new OverflowException("Trade cost aggregate total exceeds the representable decimal range.");
+
+                var low = unchecked((int)(uint)(coefficient & uint.MaxValue));
+                var mid = unchecked((int)(uint)((coefficient >> 32) & uint.MaxValue));
+                var high = unchecked((int)(uint)((coefficient >> 64) & uint.MaxValue));
+                return new decimal(low, mid, high, false, (byte)scale);
+            }
+
+            private static BigInteger PowerOfTen(int exponent)
+            {
+                var result = BigInteger.One;
+                for (var i = 0; i < exponent; i++)
+                    result *= 10;
+                return result;
+            }
         }
     }
 

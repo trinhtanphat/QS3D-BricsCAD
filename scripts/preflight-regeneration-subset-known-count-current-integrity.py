@@ -19,13 +19,13 @@ else:
 
 required_source = [
     "using (var enumerator = elementIds.GetEnumerator())",
-    "while (enumerator.MoveNext())",
+    "while (true)",
+    "RequireStableKnownTargetIdCounts(elementIds, knownCount)",
+    "if (!enumerator.MoveNext()) break",
     "if (knownCount.HasValue && index >= knownCount.Value)",
     "var value = enumerator.Current",
     "if (result.Contains(raw))",
     "if (result.Count >= maxCount)",
-    "var reboundCount = ValidateKnownTargetIdCounts(elementIds)",
-    "if (reboundCount != knownCount)",
 ]
 for token in required_source:
     if token not in method:
@@ -33,30 +33,54 @@ for token in required_source:
 
 if "foreach (var value in elementIds)" in method:
     errors.append("CanonicalTargetIds regressed to caller-controlled foreach")
+if "while (enumerator.MoveNext())" in method:
+    errors.append("CanonicalTargetIds regressed to MoveNext without a pre-move Count rebound")
+if method.count("RequireStableKnownTargetIdCounts(elementIds, knownCount)") < 3:
+    errors.append("CanonicalTargetIds must rebind Count before MoveNext, after successful MoveNext, and at finalization")
 
 ordered = [
-    "while (enumerator.MoveNext())",
-    "if (knownCount.HasValue && index >= knownCount.Value)",
-    "var value = enumerator.Current",
-    "if (result.Contains(raw))",
-    "if (result.Count >= maxCount)",
+    "RequireStableKnownTargetIdCounts(elementIds, knownCount)",
+    "if (!enumerator.MoveNext()) break",
 ]
 positions = [method.find(token) for token in ordered]
 if any(position < 0 for position in positions) or positions != sorted(positions):
-    errors.append("required MoveNext -> known Count -> Current -> duplicate -> project bound ordering is not preserved")
+    errors.append("required Count rebound -> MoveNext ordering is not preserved")
+
+move = method.find("if (!enumerator.MoveNext()) break")
+post_rebound = method.find("RequireStableKnownTargetIdCounts(elementIds, knownCount)", move + 1)
+overrun = method.find("if (knownCount.HasValue && index >= knownCount.Value)", move + 1)
+current = method.find("var value = enumerator.Current", move + 1)
+if min(move, post_rebound, overrun, current) < 0 or not (move < post_rebound < overrun < current):
+    errors.append("required MoveNext -> Count rebound -> known Count overrun -> Current ordering is not preserved")
 
 required_smoke = [
     "KnownCountOverrunRejectsBeforeUnexpectedCurrent",
     "KnownCountUnderYieldStillFails",
     "PostTraversalCountDriftFailsClosed",
+    "MoveNextTransientGrowthRejectsBeforeCurrent",
+    "MoveNextTransientShrinkRejectsBeforeCurrent",
+    "MoveNextTransientNegativeRejectsBeforeCurrent",
+    "MoveNextTransientCrossInterfaceConflictRejectsBeforeCurrent",
     "ExactKnownCountRemainsAccepted",
+    "PureStreamingRemainsAccepted",
     "MoveNextCalls",
     "CurrentReads",
-    "CountReads",
 ]
 for token in required_smoke:
     if token not in smoke:
         errors.append("missing deterministic smoke token: " + token)
+
+for hostile in [
+    "MoveNextTransientGrowthRejectsBeforeCurrent",
+    "MoveNextTransientShrinkRejectsBeforeCurrent",
+    "MoveNextTransientNegativeRejectsBeforeCurrent",
+    "MoveNextTransientCrossInterfaceConflictRejectsBeforeCurrent",
+]:
+    start = smoke.find("private static void " + hostile)
+    end = smoke.find("private static void ", start + 1)
+    body = smoke[start:end if end >= 0 else len(smoke)] if start >= 0 else ""
+    if "Equal(0, source.CurrentReads)" not in body:
+        errors.append(hostile + " must prove rejection before caller Current")
 
 if errors:
     for error in errors:
