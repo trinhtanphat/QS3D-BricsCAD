@@ -58,12 +58,14 @@ if command.is_file():
         if needle not in text:
             errors.append("Geometry Extensions command missing lifecycle contract: " + needle)
 
+    release_pending = text.find("ReleasePendingWindow(window);")
+    clear_candidate = text.find("candidate = null;", release_pending) if release_pending >= 0 else -1
     positions = [text.find(token) for token in (
         "var pending = _pending;", "if (pending != null && !TryClosePendingWindow(pending))",
         "var previous = _published;", "candidate = new GeometryExtensionsWindow();", "_pending = window;",
         "window.Closed += (_, __) => ReleaseWindow(window);", "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
-        "if (!window.IsLoaded)", "_published = window;", "ReleasePendingWindow(window);", "candidate = null;", "finally",
-        "TryClosePendingWindow(candidate);")]
+        "if (!window.IsLoaded)", "_published = window;", "ReleasePendingWindow(window);")]
+    positions.extend([clear_candidate, text.find("finally"), text.find("TryClosePendingWindow(candidate);")])
     if min(positions) < 0 or positions != sorted(positions):
         errors.append("Geometry Extensions must drain failed pending ownership before construct, then pending -> Closed -> show -> Loaded -> publish -> release pending -> finally cleanup")
 
