@@ -42,9 +42,12 @@ if code.is_file():
         "SendStringToExecute",
         "StatusText.Text",
         "Application.DocumentManager.MdiActiveDocument",
+        "ex.GetType().Name",
     ):
         if needle not in text:
             errors.append("GeometryExtensionsWindow code-behind missing: " + needle)
+    if "ex.Message" in text:
+        errors.append("Geometry Extensions must not expose raw host exception messages in modeless UI/command-line status")
 
 command = ROOT / required[2]
 if command.is_file():
@@ -52,24 +55,71 @@ if command.is_file():
     for needle in (
         'CommandMethod("QS3DGEOMETRYEXT"',
         "private static GeometryExtensionsWindow? _published;",
+        "private static GeometryExtensionsWindow? _pending;",
+        "var pending = _pending;",
+        "if (pending != null && !TryClosePendingWindow(pending))",
         "var previous = _published;",
         "if (previous.IsLoaded)",
         "previous.Activate();",
-        "window = new GeometryExtensionsWindow()",
-        "window.Closed += (_, __) =>",
-        "if (ReferenceEquals(_published, published)) _published = null;",
+        "ReleasePublishedWindow(previous);",
+        "candidate = new GeometryExtensionsWindow();",
+        "_pending = window;",
+        "window.Closed += (_, __) => ReleaseWindow(window);",
         "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
         "if (!window.IsLoaded)",
-        "_published = published;",
+        "_published = window;",
+        "ReleasePendingWindow(window);",
+        "candidate = null;",
+        "finally",
+        "if (candidate != null)",
+        "TryClosePendingWindow(candidate);",
+        "private static void ReleaseWindow(GeometryExtensionsWindow window)",
+        "private static void ReleasePublishedWindow(GeometryExtensionsWindow window)",
+        "if (!ReferenceEquals(_published, window)) return;",
+        "private static void ReleasePendingWindow(GeometryExtensionsWindow window)",
+        "if (!ReferenceEquals(_pending, window)) return;",
+        "private static bool TryClosePendingWindow(GeometryExtensionsWindow window)",
+        "if (!ReferenceEquals(_pending, window)) return true;",
+        "if (ReferenceEquals(_published, window))",
+        "if (window.IsLoaded) return false;",
+        "ex.GetType().Name",
     ):
         if needle not in text:
             errors.append("Geometry Extensions command missing lifecycle contract: " + needle)
 
-    show = text.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);")
-    loaded = text.find("if (!window.IsLoaded)", show)
-    publish = text.find("_published = published;", loaded)
-    if min(show, loaded, publish) < 0 or not (show < loaded < publish):
-        errors.append("Geometry Extensions must show, confirm Loaded, then publish its host-global singleton")
+    positions = [
+        text.find("var pending = _pending;"),
+        text.find("if (pending != null && !TryClosePendingWindow(pending))"),
+        text.find("var previous = _published;"),
+        text.find("candidate = new GeometryExtensionsWindow();"),
+        text.find("_pending = window;"),
+        text.find("window.Closed += (_, __) => ReleaseWindow(window);"),
+        text.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);"),
+        text.find("if (!window.IsLoaded)"),
+        text.find("_published = window;"),
+        text.find("ReleasePendingWindow(window);"),
+        text.find("candidate = null;"),
+        text.find("finally"),
+        text.find("TryClosePendingWindow(candidate);"),
+    ]
+    if min(positions) < 0 or positions != sorted(positions):
+        errors.append("Geometry Extensions must drain failed pending ownership before construct, then pending -> Closed -> show -> Loaded -> publish -> release pending -> finally cleanup")
+
+    helper_start = text.find("private static bool TryClosePendingWindow")
+    helper = text[helper_start:] if helper_start >= 0 else ""
+    helper_positions = [
+        helper.find("if (!ReferenceEquals(_pending, window)) return true;"),
+        helper.find("if (ReferenceEquals(_published, window))"),
+        helper.find("if (window.IsLoaded)"),
+        helper.find("window.Close();"),
+        helper.find("if (window.IsLoaded) return false;"),
+        helper.find("ReleasePendingWindow(window);"),
+    ]
+    if min(helper_positions) < 0 or helper_positions != sorted(helper_positions):
+        errors.append("Geometry Extensions pending cleanup must refuse non-owner cleanup, protect published owner, close best-effort, retain live failures, and release only terminal pending owner")
+
+    if "ex.Message" in text:
+        errors.append("Geometry Extensions launcher must not expose raw host exception messages")
 
 adapter = ROOT / "src/QS3D.BricsCAD.V25"
 commands = []
@@ -88,4 +138,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Geometry Extensions remains active-document-dispatched while its host-global launcher is single-instance and Loaded-before-published.")
+print("PASS: Geometry Extensions keeps active-document dispatch while failed publication remains pending-owned until terminal cleanup, preventing duplicate windows and raw host-error disclosure.")
