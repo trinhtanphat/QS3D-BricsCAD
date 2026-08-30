@@ -68,6 +68,25 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
         if forbidden in helper_text:
             errors.append(f"helper uses stale/broad destructive contract: {forbidden}")
 
+    draft_get = helper_text.find("$remainingRelease = Invoke-RestMethod -Method Get -Uri $ReleaseUri -Headers $headers")
+    draft_not_found = helper_text.find("if (Test-GitHubNotFound -ErrorRecord $_)", draft_get + 1)
+    draft_absent = helper_text.find("V26 draft DELETE acknowledgement was ambiguous, but the exact release is authoritatively absent; treating draft deletion as committed.", draft_not_found + 1)
+    draft_still_exists = helper_text.find("Exact owned V26 draft $ReleaseId still exists after DELETE error; refusing to assume deletion.", draft_absent + 1)
+    if min(draft_get, draft_not_found, draft_absent, draft_still_exists) < 0 or not (
+        draft_get < draft_not_found < draft_absent < draft_still_exists
+    ):
+        errors.append("draft DELETE reconciliation must classify authoritative 404 before accepting absence and must refuse a surviving exact draft")
+
+    tag_get = helper_text.find("$remainingTag = Invoke-RestMethod -Method Get -Uri $TagGetUri -Headers $headers")
+    tag_not_found = helper_text.find("if (Test-GitHubNotFound -ErrorRecord $_)", tag_get + 1)
+    tag_absent = helper_text.find("V26 tag DELETE acknowledgement was ambiguous, but the exact tag is authoritatively absent; treating tag deletion as committed.", tag_not_found + 1)
+    tag_sha = helper_text.find("remainingTag.object.sha, $WorkflowSha", tag_absent + 1)
+    tag_still_exists = helper_text.find("Exact owned V26 tag $ReleaseTag still exists after DELETE error; refusing to assume deletion.", tag_sha + 1)
+    if min(tag_get, tag_not_found, tag_absent, tag_sha, tag_still_exists) < 0 or not (
+        tag_get < tag_not_found < tag_absent < tag_sha < tag_still_exists
+    ):
+        errors.append("tag DELETE reconciliation must classify authoritative 404 before accepting absence and validate exact SHA before refusing a surviving tag")
+
     release_delete = helper_text.find("Invoke-RestMethod -Method Delete -Uri $releaseUri")
     release_reconcile = helper_text.find("Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri", release_delete + 1)
     owner_check = helper_text.find("Assert-NoReleaseOwnsTag", release_reconcile + 1)
@@ -177,6 +196,7 @@ mutations = {
     "exact-SHA tag ownership": (helper.replace("if (-not [string]::Equals($resolvedBefore, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))", "if ($false)", 1), workflow),
     "post-delete exact-SHA recheck": (helper.replace("if (-not [string]::Equals($resolvedAfter, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))", "if ($false)", 1), workflow),
     "tag delete acknowledgement reconciliation": (helper.replace("Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri", "# tag delete reconciliation removed", 1), workflow),
+    "tag delete authoritative absence": (helper[: helper.find("$remainingTag = Invoke-RestMethod -Method Get -Uri $TagGetUri -Headers $headers")] + helper[helper.find("$remainingTag = Invoke-RestMethod -Method Get -Uri $TagGetUri -Headers $headers"):].replace("if (Test-GitHubNotFound -ErrorRecord $_)", "if ($false)", 1), workflow),
     "tag delete exact identity": (helper.replace("remainingTag.object.sha, $WorkflowSha", "remainingTag.object.sha, ('0' * 40)", 1), workflow),
     "verified asset identity capture": (helper, workflow.replace("$verifiedAssetIds[$expectedAsset] = $uploadedAssetId", "# verified asset identity removed", 1)),
     "publish attempt proof": (helper, workflow.replace("$publishPatchAttempted = $true", "$publishPatchAttempted = $false", 1)),
