@@ -26,13 +26,14 @@ for token in (
     "_nativeDatabaseIdentity == requestedNativeDatabaseIdentity && ReferenceEquals(_document, requestedDocument)",
     "published.Close();",
     "if (published.IsLoaded)",
-    "candidate.Closed += (_, __) => ReleasePublishedWindow(candidate);",
-    "Application.ShowModelessWindow(IntPtr.Zero, candidate, true);",
-    "if (!candidate.IsLoaded) return;",
-    "_window = candidate;",
+    "var window = new ScheduleHubWindow(document);",
+    "window.Closed += (_, __) => ReleasePublishedWindow(window);",
+    "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+    "if (!window.IsLoaded) return;",
+    "_window = window;",
     "_document = document;",
     "_nativeDatabaseIdentity = nativeDatabaseIdentity;",
-    "if (!ReferenceEquals(_window, candidate)) return;",
+    "if (!ReferenceEquals(_window, window)) return;",
     "_document = null;",
     "_nativeDatabaseIdentity = IntPtr.Zero;",
     "database.UnmanagedObject",
@@ -41,8 +42,9 @@ for token in (
     require(token)
 
 for token in (
-    "var window = new ScheduleHubWindow(document);",
-    "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+    "var window = new ScheduleHubWindow(document);\n                Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+    "var candidate = new ScheduleHubWindow(document);",
+    "Application.ShowModelessWindow(IntPtr.Zero, candidate, true);",
 ):
     forbid(token)
 
@@ -65,11 +67,11 @@ elif not (exact_owner_pos < close_pos < loaded_after_close_pos < release_after_c
 show_start = text.find("public void ShowScheduleHub()")
 prepare_method_start = text.find("private static bool PreparePublishedWindow", show_start + 1)
 show = text[show_start:prepare_method_start] if show_start >= 0 and prepare_method_start > show_start else ""
-construct_pos = show.find("var candidate = new ScheduleHubWindow(document);")
-closed_pos = show.find("candidate.Closed += (_, __) => ReleasePublishedWindow(candidate);", construct_pos + 1)
-show_pos = show.find("Application.ShowModelessWindow(IntPtr.Zero, candidate, true);", closed_pos + 1)
-loaded_pos = show.find("if (!candidate.IsLoaded) return;", show_pos + 1)
-publish_window_pos = show.find("_window = candidate;", loaded_pos + 1)
+construct_pos = show.find("var window = new ScheduleHubWindow(document);")
+closed_pos = show.find("window.Closed += (_, __) => ReleasePublishedWindow(window);", construct_pos + 1)
+show_pos = show.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);", closed_pos + 1)
+loaded_pos = show.find("if (!window.IsLoaded) return;", show_pos + 1)
+publish_window_pos = show.find("_window = window;", loaded_pos + 1)
 publish_document_pos = show.find("_document = document;", publish_window_pos + 1)
 publish_identity_pos = show.find("_nativeDatabaseIdentity = nativeDatabaseIdentity;", publish_document_pos + 1)
 if min(
@@ -81,7 +83,7 @@ if min(
     publish_document_pos,
     publish_identity_pos,
 ) < 0:
-    errors.append("unable to prove Schedule Hub candidate publication ordering")
+    errors.append("unable to prove Schedule Hub window publication ordering")
 elif not (
     construct_pos
     < closed_pos
