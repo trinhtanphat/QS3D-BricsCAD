@@ -10,7 +10,7 @@ errors = []
 
 def require(token: str) -> None:
     if token not in text:
-        errors.append("missing Rebar 3D Hub single-instance token: " + token)
+        errors.append("missing Rebar 3D Hub lifecycle token: " + token)
 
 
 def forbid(token: str) -> None:
@@ -20,23 +20,31 @@ def forbid(token: str) -> None:
 
 for token in (
     "private static Rebar3DHubWindow? _window;",
+    "Rebar3DHubWindow? candidate = null;",
     "var published = _window;",
     "if (published.IsLoaded)",
     "published.Activate();",
     "ReleasePublishedWindow(published);",
-    "var window = new Rebar3DHubWindow();",
+    "candidate = new Rebar3DHubWindow();",
+    "var window = candidate;",
     "window.Closed += (_, __) => ReleasePublishedWindow(window);",
     "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
     "if (!window.IsLoaded) return;",
     "_window = window;",
+    "candidate = null;",
+    "finally",
+    "if (candidate != null) TryCloseUnpublishedWindow(candidate);",
     "private static void ReleasePublishedWindow(Rebar3DHubWindow window)",
     "if (!ReferenceEquals(_window, window)) return;",
     "_window = null;",
+    "private static void TryCloseUnpublishedWindow(Rebar3DHubWindow window)",
+    "if (ReferenceEquals(_window, window)) return;",
+    "try { window.Close(); } catch (System.Exception) { }",
 ):
     require(token)
 
 for token in (
-    "var window = new Rebar3DHubWindow();\n                Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+    "var window = new Rebar3DHubWindow();",
     "_window = new Rebar3DHubWindow();",
 ):
     forbid(token)
@@ -45,41 +53,37 @@ show_start = text.find("public void ShowRebarHub()")
 release_start = text.find("private static void ReleasePublishedWindow", show_start + 1)
 show = text[show_start:release_start] if show_start >= 0 and release_start > show_start else ""
 
-published_pos = show.find("var published = _window;")
-loaded_owner_pos = show.find("if (published.IsLoaded)", published_pos + 1)
-activate_pos = show.find("published.Activate();", loaded_owner_pos + 1)
-return_pos = show.find("return;", activate_pos + 1)
-stale_release_pos = show.find("ReleasePublishedWindow(published);", return_pos + 1)
-construct_pos = show.find("var window = new Rebar3DHubWindow();", stale_release_pos + 1)
-closed_pos = show.find("window.Closed += (_, __) => ReleasePublishedWindow(window);", construct_pos + 1)
-show_pos = show.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);", closed_pos + 1)
-loaded_candidate_pos = show.find("if (!window.IsLoaded) return;", show_pos + 1)
-publish_pos = show.find("_window = window;", loaded_candidate_pos + 1)
-
-positions = (
-    published_pos,
-    loaded_owner_pos,
-    activate_pos,
-    return_pos,
-    stale_release_pos,
-    construct_pos,
-    closed_pos,
-    show_pos,
-    loaded_candidate_pos,
+publish_pos = show.find("_window = window;")
+transfer_pos = show.find("candidate = null;", publish_pos + 1) if publish_pos >= 0 else -1
+positions = [
+    show.find("Rebar3DHubWindow? candidate = null;"),
+    show.find("var published = _window;"),
+    show.find("ReleasePublishedWindow(published);"),
+    show.find("candidate = new Rebar3DHubWindow();"),
+    show.find("var window = candidate;"),
+    show.find("window.Closed += (_, __) => ReleasePublishedWindow(window);"),
+    show.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);"),
+    show.find("if (!window.IsLoaded) return;"),
     publish_pos,
-)
+    transfer_pos,
+    show.find("finally"),
+    show.find("if (candidate != null) TryCloseUnpublishedWindow(candidate);"),
+]
 if min(positions) < 0:
-    errors.append("unable to prove Rebar 3D Hub reuse/stale-release/publication ordering")
-elif list(positions) != sorted(positions):
-    errors.append(
-        "Rebar 3D Hub must reuse a live owner, clear only stale ownership, then construct -> attach Closed -> show -> confirm loaded -> publish"
-    )
+    errors.append("unable to prove Rebar 3D Hub cleanup/publication ordering")
+elif positions != sorted(positions):
+    errors.append("Rebar 3D Hub candidate must remain cleanup-owned through show/load, transfer only after publication, then finally cleanup only when still unpublished")
 
 release = text[release_start:] if release_start >= 0 else ""
 match_pos = release.find("if (!ReferenceEquals(_window, window)) return;")
 clear_pos = release.find("_window = null;", match_pos + 1)
-if match_pos < 0 or clear_pos < 0 or match_pos >= clear_pos:
-    errors.append("Rebar 3D Hub terminal release must clear only the matching published owner")
+cleanup_start = release.find("private static void TryCloseUnpublishedWindow", clear_pos + 1)
+refuse_pos = release.find("if (ReferenceEquals(_window, window)) return;", cleanup_start + 1)
+close_pos = release.find("window.Close();", refuse_pos + 1)
+if min(match_pos, clear_pos, cleanup_start, refuse_pos, close_pos) < 0:
+    errors.append("unable to prove exact published release and unpublished cleanup refusal")
+elif not (match_pos < clear_pos < cleanup_start < refuse_pos < close_pos):
+    errors.append("cleanup helper must refuse the authoritative published owner before best-effort close")
 
 if errors:
     for error in errors:
@@ -87,6 +91,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print(
-    "PASS: Rebar 3D Hub is application-wide single-instance, reuses the live owner, clears stale ownership, and publishes only a loaded candidate with exact terminal Closed release."
-)
+print("PASS: Rebar 3D Hub reuses the loaded owner, publishes only after host load, and terminally closes only still-unpublished failed candidates.")
