@@ -4,7 +4,6 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 helper_path = root / "scripts" / "rollback-v25-draft-release.ps1"
 workflow_path = root / ".github" / "workflows" / "release-v25.yml"
-
 helper = helper_path.read_text(encoding="utf-8")
 workflow = workflow_path.read_text(encoding="utf-8")
 
@@ -26,14 +25,13 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
         "V25 draft DELETE acknowledgement was ambiguous, but the exact release is authoritatively absent; treating draft deletion as committed.",
         "Exact owned V25 draft $ReleaseId still exists after DELETE error; refusing to assume deletion.",
         "Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri",
-        "Preserving exact V25 tag $ReleaseTag because this run lacks positive tag-creation ownership proof.",
-        "TagCreatedByThisRun = $false",
-        "TagDeleted = $false",
         "function Assert-NoReleaseOwnsTag",
         "releases?per_page=100&page=$page",
         "A release still owns tag $ReleaseTag; refusing tag deletion.",
         "Release enumeration exceeded $maxPages pages",
-        "Assert-NoReleaseOwnsTag\n\n$resolvedAfter = Resolve-ExactRemoteTagSha",
+        "Preserving exact V25 tag $ReleaseTag because this run lacks positive tag-creation ownership proof.",
+        "TagCreatedByThisRun = $false",
+        "TagDeleted = $false",
         "if (-not [string]::Equals($resolvedAfter, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))",
         "Remote tag $ReleaseTag changed during rollback; refusing tag deletion.",
         "$escapedReleaseTag = [Uri]::EscapeDataString($ReleaseTag)",
@@ -59,36 +57,29 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
     draft_not_found = helper_text.find("if (Test-GitHubNotFound -ErrorRecord $_)", draft_get + 1)
     draft_absent = helper_text.find("V25 draft DELETE acknowledgement was ambiguous, but the exact release is authoritatively absent; treating draft deletion as committed.", draft_not_found + 1)
     draft_still_exists = helper_text.find("Exact owned V25 draft $ReleaseId still exists after DELETE error; refusing to assume deletion.", draft_absent + 1)
-    if min(draft_get, draft_not_found, draft_absent, draft_still_exists) < 0 or not (
-        draft_get < draft_not_found < draft_absent < draft_still_exists
-    ):
+    if min(draft_get, draft_not_found, draft_absent, draft_still_exists) < 0 or not (draft_get < draft_not_found < draft_absent < draft_still_exists):
         errors.append("draft DELETE reconciliation must classify authoritative 404 before accepting absence and refuse a surviving exact draft")
 
-    non_owned = helper_text.find("if (-not $TagCreatedByThisRun)")
+    release_delete = helper_text.find("Invoke-RestMethod -Method Delete -Uri $releaseUri")
+    release_reconcile = helper_text.find("Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri", release_delete + 1)
+    owner_check = helper_text.find("Assert-NoReleaseOwnsTag", release_reconcile + 1)
+    non_owned = helper_text.find("if (-not $TagCreatedByThisRun)", owner_check + 1)
     preserve = helper_text.find("Preserving exact V25 tag $ReleaseTag because this run lacks positive tag-creation ownership proof.", non_owned + 1)
-    owner_check = helper_text.find("Assert-NoReleaseOwnsTag", preserve + 1)
-    if min(non_owned, preserve, owner_check) < 0 or not (non_owned < preserve < owner_check):
-        errors.append("non-owned tag path must preserve the exact tag and return before any tag-owner/delete path")
+    post_sha_check = helper_text.find("Remote tag $ReleaseTag changed during rollback; refusing tag deletion.", preserve + 1)
+    tag_delete = helper_text.find("Invoke-RestMethod -Method Delete -Uri $tagRefUri", post_sha_check + 1)
+    tag_reconcile = helper_text.find("Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri", tag_delete + 1)
+    if min(release_delete, release_reconcile, owner_check, non_owned, preserve, post_sha_check, tag_delete, tag_reconcile) < 0 or not (
+        release_delete < release_reconcile < owner_check < non_owned < preserve < post_sha_check < tag_delete < tag_reconcile
+    ):
+        errors.append("helper order must be draft delete -> acknowledgement reconciliation -> exhaustive release-owner scan -> non-owned tag preservation -> owned exact-SHA recheck -> tag delete -> acknowledgement reconciliation")
 
     tag_get = helper_text.find("$remainingTag = Invoke-RestMethod -Method Get -Uri $TagGetUri -Headers $headers")
     tag_not_found = helper_text.find("if (Test-GitHubNotFound -ErrorRecord $_)", tag_get + 1)
     tag_absent = helper_text.find("V25 tag DELETE acknowledgement was ambiguous, but the exact tag is authoritatively absent; treating tag deletion as committed.", tag_not_found + 1)
     tag_sha = helper_text.find("remainingTag.object.sha, $WorkflowSha", tag_absent + 1)
     tag_still_exists = helper_text.find("Exact owned V25 tag $ReleaseTag still exists after DELETE error; refusing to assume deletion.", tag_sha + 1)
-    if min(tag_get, tag_not_found, tag_absent, tag_sha, tag_still_exists) < 0 or not (
-        tag_get < tag_not_found < tag_absent < tag_sha < tag_still_exists
-    ):
+    if min(tag_get, tag_not_found, tag_absent, tag_sha, tag_still_exists) < 0 or not (tag_get < tag_not_found < tag_absent < tag_sha < tag_still_exists):
         errors.append("tag DELETE reconciliation must classify authoritative 404 before accepting absence and validate exact SHA before refusing a surviving tag")
-
-    release_delete = helper_text.find("Invoke-RestMethod -Method Delete -Uri $releaseUri")
-    release_reconcile = helper_text.find("Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri", release_delete + 1)
-    post_sha_check = helper_text.find("Remote tag $ReleaseTag changed during rollback; refusing tag deletion.")
-    tag_delete = helper_text.find("Invoke-RestMethod -Method Delete -Uri $tagRefUri")
-    tag_reconcile = helper_text.find("Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri", tag_delete + 1)
-    if min(release_delete, release_reconcile, owner_check, post_sha_check, tag_delete, tag_reconcile) < 0 or not (
-        release_delete < release_reconcile < non_owned < preserve < owner_check < post_sha_check < tag_delete < tag_reconcile
-    ):
-        errors.append("helper deletion order must be draft delete -> reconciliation -> non-owned preserve boundary -> owned release scan -> exact-SHA recheck -> tag delete -> reconciliation")
 
     required_workflow = [
         '$tagRef = "refs/tags/$env:RELEASE_TAG"',
@@ -113,7 +104,6 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
     for stale in ["$existing = @(git ls-remote --tags origin $tagRef", "& gh @createArgs"]:
         if stale in workflow_text:
             errors.append(f"workflow retains absence/implicit-tag creation contract: {stale}")
-
     return errors
 
 
@@ -127,9 +117,9 @@ mutations = {
     "draft-only delete": (helper.replace("if ($release.draft -ne $true)", "if ($false)", 1), workflow),
     "draft delete acknowledgement reconciliation": (helper.replace("Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri", "# draft delete reconciliation removed", 1), workflow),
     "draft authoritative absence": (helper.replace("if (Test-GitHubNotFound -ErrorRecord $_)", "if ($false)", 1), workflow),
+    "release-owner scan": (helper.replace("Assert-NoReleaseOwnsTag", "# release-owner scan removed", 1), workflow),
     "non-owned tag preservation": (helper.replace("if (-not $TagCreatedByThisRun)", "if ($false)", 1), workflow),
-    "non-owned tag return": (helper.replace("TagDeleted = $false", "TagDeleted = $true", 1), workflow),
-    "release-owner scan": (helper.replace("Assert-NoReleaseOwnsTag\n\n$resolvedAfter", "$resolvedAfter", 1), workflow),
+    "non-owned tag result": (helper.replace("TagDeleted = $false", "TagDeleted = $true", 1), workflow),
     "post-owner SHA recheck": (helper.replace("if (-not [string]::Equals($resolvedAfter, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))", "if ($false)", 1), workflow),
     "tag delete acknowledgement reconciliation": (helper.replace("Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri", "# tag delete reconciliation removed", 1), workflow),
     "tag authoritative absence": (helper[: helper.find("$remainingTag = Invoke-RestMethod -Method Get -Uri $TagGetUri -Headers $headers")] + helper[helper.find("$remainingTag = Invoke-RestMethod -Method Get -Uri $TagGetUri -Headers $headers"):].replace("if (Test-GitHubNotFound -ErrorRecord $_)", "if ($false)", 1), workflow),
