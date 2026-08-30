@@ -6,7 +6,7 @@ This is the everyday operating contract for AI/agent work in `QS3D-BricsCAD`.
 
 The goal is simple: understand the owner's prompt, reuse or create one safe task carrier, implement the requested outcome, fix current-lane failures, pass the protected PR gates, and merge the same task PR when eligible unless the owner explicitly opts out.
 
-## 1. Bootstrap — read this first
+## Mandatory reading order
 
 For a normal owner prompt, do **not** preload a large stack of governance Markdown.
 
@@ -186,11 +186,17 @@ Do not leave an Issue marked ACTIVE after its canonical implementation has reach
 
 Remote/source agents finish all repository-safe implementation, deterministic guards/tests, docs and available remote validation first.
 
+Remote agents must skip execution gates already classified LOCAL_ONLY rather than repeatedly rechecking them.
+
 Only the remaining execution/evidence that genuinely requires licensed BricsCAD, private DWG, Windows UI, signing credentials, proprietary dependencies or another machine-only capability is LOCAL_ONLY.
 
-Park new/materially changed local work in `docs/LOCAL-AGENT-INBOX.md` with the exact pushed SHA. Remote/static evidence must never be called `LOCAL_PASS`.
+Park new/materially changed local work in `docs/LOCAL-AGENT-INBOX.md` with the exact pushed SHA. Register that handoff on the same task branch/PR so source truth and local evidence stay bound to one candidate. Remote/static evidence must never be called `LOCAL_PASS`.
 
 A parked LOCAL_ONLY item does not block an otherwise eligible repository merge unless that exact local evidence is explicitly part of the current task's acceptance.
+
+## Unavailable-work handoff
+
+Start permitted local passes from `docs/LOCAL-AGENT-INBOX.md` and follow the linked exact runbook for the selected item. Do not manufacture local PASS from remote/static evidence, and do not create duplicate handoffs for the same exact candidate/scenario.
 
 ## 12. Cross-agent non-interference
 
@@ -230,7 +236,7 @@ If an intermediate progress update is emitted, describe a pending CI gate with e
 
 ## 15. Product boundary
 
-QS3D remains a BricsCAD V25/V26 Windows x64 hosted plugin. Do not reinterpret workflow language as a request to create a separate CAD engine/standalone product unless the owner explicitly changes the product boundary.
+Locked product form: BricsCAD plugin. QS3D remains a **BricsCAD V25 + V26 Windows x64 hosted plugin**. Do not reinterpret workflow language as a request to create a separate CAD engine/standalone product unless the owner explicitly changes the product boundary. See `docs/PRODUCT-BOUNDARY.md`.
 
 For MCP/ChatGPT/host automation work, read `docs/MCP-CANONICAL-RUNBOOK.md` before changing MCP source.
 
