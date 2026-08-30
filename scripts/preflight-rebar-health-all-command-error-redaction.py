@@ -22,7 +22,7 @@ else:
         'new GeneratedRebarOwnershipHealthService().Inspect(project)',
         'new RebarFabricationQualificationHealthService().Inspect(project)',
         'BbsNativeTableBuilder.Inspect(document, project)',
-        'Application.ShowModelessWindow(IntPtr.Zero, new ModelHealthWindow(document, issues, issue =>',
+        'ModelHealthWindowPresenter.Show(document, issues, issue =>',
         'HandlesForIssue(element, issue.Code)',
         'GeneratedHandleOwnershipPolicy.RebarHandleKeys',
         'document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false)',
@@ -34,9 +34,9 @@ else:
         if token not in text:
             errors.append("Rebar Health All command contract missing token: " + token)
 
-    for token in ('catch (System.Exception ex)', 'ex.Message', 'QS3DREBARHEALTHALL lỗi: " +'):
+    for token in ('Application.ShowModelessWindow(', 'new ModelHealthWindow(', 'catch (System.Exception ex)', 'ex.Message', 'QS3DREBARHEALTHALL lỗi: " +'):
         if token in text:
-            errors.append("Rebar Health All command must not reflect exception detail: " + token)
+            errors.append("Rebar Health All command must not bypass presenter or reflect exception detail: " + token)
 
 if errors:
     for error in errors:
@@ -44,4 +44,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DREBARHEALTHALL preserves all-rebar aggregation and issue-specific locate contracts while top-level exception details remain redacted.")
+print("PASS: QS3DREBARHEALTHALL routes through transactional Model Health publication while preserving all-rebar aggregation, locate and error redaction.")
