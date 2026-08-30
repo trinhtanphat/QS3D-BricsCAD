@@ -128,16 +128,14 @@ namespace QS3D.Core.Cost
         {
             get
             {
-                decimal total = 0m;
+                var contributions = new decimal[BillItems.Count];
                 try
                 {
                     for (var i = 0; i < BillItems.Count; i++)
-                    {
-                        total = CostDecimalMath.AddPreservingNonZeroContribution(
-                            total,
-                            BillItems[i].TotalCost,
-                            "TBQ workspace base total");
-                    }
+                        contributions[i] = BillItems[i].TotalCost;
+
+                    if (!CostDecimalMath.TrySumNonNegativeExactly(contributions, out var total))
+                        throw new OverflowException("TBQ workspace base total is not representable as decimal.");
                     return total;
                 }
                 catch (OverflowException ex)
