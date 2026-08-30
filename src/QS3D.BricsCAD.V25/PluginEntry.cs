@@ -27,6 +27,24 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                McpDiagnosticHub.Start();
+            }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("diagnostics bridge", ex);
+            }
+
+            try
+            {
+                Qs3dThemeCoordinator.Start();
+            }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("host-wide theme coordinator", ex);
+            }
+
+            try
+            {
                 McpEmbeddedServer.Start();
             }
             catch (Exception ex)
@@ -102,6 +120,7 @@ namespace QS3D.BricsCAD.V25
             TryCleanup(QuantityContextMenuCoordinator.Stop);
             TryCleanup(RibbonInitializationCoordinator.Stop);
             TryCleanup(DocumentLifecycleCoordinator.Stop);
+            TryCleanup(Qs3dThemeCoordinator.Stop);
             TryCleanup(StartCenterPaletteCoordinator.Dispose);
             TryCleanup(PaletteCoordinator.Dispose);
             TryCleanup(UpdateRibbonAugmenter.Reset);
@@ -112,6 +131,7 @@ namespace QS3D.BricsCAD.V25
             TryCleanup(ProjectRibbonAugmenter.Reset);
             TryCleanup(RibbonBootstrapper.Reset);
             TryCleanup(ModelessHostQuiescenceCoordinator.Stop);
+            TryCleanup(McpDiagnosticHub.Stop);
         }
 
         private static void TryCleanup(Action cleanup)
@@ -126,6 +146,17 @@ namespace QS3D.BricsCAD.V25
 
         private static void ReportOptionalStartupFailure(string component, Exception error)
         {
+            try
+            {
+                McpDiagnosticHub.Record(
+                    "qs3d",
+                    "warning",
+                    "startup-warning",
+                    component + ": " + error.Message,
+                    Application.DocumentManager.MdiActiveDocument);
+            }
+            catch { }
+
             try
             {
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
