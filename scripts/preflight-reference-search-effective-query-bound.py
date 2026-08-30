@@ -14,7 +14,10 @@ else:
     required = (
         "private const int MaxQueryLength = 512;",
         "DocumentBoundWindowLifetime.Attach(this, _document)",
-        "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)",
+        "var active = Application.DocumentManager.MdiActiveDocument;",
+        "ReferenceEquals(active, _document)",
+        "var activeIdentity = GetNativeDatabaseIdentity(active);",
+        "activeIdentity != _nativeDatabaseIdentity",
         "private static string AppendBoundedSuffix(string query, string suffix, string context)",
         "query.Length + suffix.Length > MaxQueryLength",
         'AppendBoundedSuffix(query, " kỹ thuật xây dựng chi tiết thi công", "ngữ cảnh kỹ thuật")',
@@ -33,6 +36,13 @@ else:
     for token in forbidden:
         if token in text:
             errors.append("shorts suffix bypasses bounded append helper: " + token)
+
+    active_capture = text.find("var active = Application.DocumentManager.MdiActiveDocument;")
+    wrapper_guard = text.find("ReferenceEquals(active, _document)", active_capture)
+    native_lookup = text.find("var activeIdentity = GetNativeDatabaseIdentity(active);", wrapper_guard)
+    native_guard = text.find("activeIdentity != _nativeDatabaseIdentity", native_lookup)
+    if min(active_capture, wrapper_guard, native_lookup, native_guard) < 0 or not active_capture < wrapper_guard < native_lookup < native_guard:
+        errors.append("browser launch affinity must reject managed-wrapper mismatch before native database drift")
 
     helper_start = text.find("private static string AppendBoundedSuffix")
     build_start = text.find("private static string BuildSearchUrl")
@@ -59,4 +69,4 @@ if errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] construction reference search bounds raw and internally expanded effective queries before URL encoding")
+print("[PASS] construction reference search bounds raw/effective queries and preserves exact wrapper/native affinity before URL encoding")
