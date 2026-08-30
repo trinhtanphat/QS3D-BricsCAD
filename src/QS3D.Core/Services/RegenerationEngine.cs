@@ -184,8 +184,12 @@ namespace QS3D.Core.Services
             var index = 0;
             using (var enumerator = elementIds.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableKnownTargetIdCounts(elementIds, knownCount);
+                    if (!enumerator.MoveNext()) break;
+                    RequireStableKnownTargetIdCounts(elementIds, knownCount);
+
                     if (knownCount.HasValue && index >= knownCount.Value)
                         throw new InvalidOperationException("Regeneration target id count changed during enumeration.");
 
@@ -206,10 +210,15 @@ namespace QS3D.Core.Services
 
             if (knownCount.HasValue && knownCount.Value != index)
                 throw new InvalidOperationException("Regeneration target id count changed during enumeration.");
-            var reboundCount = ValidateKnownTargetIdCounts(elementIds);
-            if (reboundCount != knownCount)
-                throw new InvalidOperationException("Regeneration target id count changed during enumeration.");
+            RequireStableKnownTargetIdCounts(elementIds, knownCount);
             return result;
+        }
+
+        private static void RequireStableKnownTargetIdCounts(IEnumerable<string> elementIds, int? expectedCount)
+        {
+            var observedCount = ValidateKnownTargetIdCounts(elementIds);
+            if (observedCount != expectedCount)
+                throw new InvalidOperationException("Regeneration target id count changed during enumeration.");
         }
 
         private static int? ValidateKnownTargetIdCounts(IEnumerable<string> elementIds)

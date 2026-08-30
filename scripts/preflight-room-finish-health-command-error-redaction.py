@@ -15,11 +15,10 @@ else:
         'ProjectContextCoordinator.TryGetReadOnly(document, out var project)',
         'new RoomFinishHealthService().Inspect(project).ToList()',
         'if (issues.Count == 0) return;',
-        'var window = new ModelHealthWindow(document, issues, issue =>',
+        'ModelHealthWindowPresenter.Show(document, issues, issue =>',
         'SourceHandleResolver.Resolve(currentProject, new[] { issue.ElementId })',
         'CadHandleService.Select(document, handles)',
         'document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false)',
-        'Application.ShowModelessWindow(IntPtr.Zero, window, true)',
         'var status = "QS3DROOMFINISHHEALTH lỗi: không thể hoàn tất health check.";',
         'PaletteCoordinator.SetStatus(status)',
         'document.Editor.WriteMessage("\\n" + status)',
@@ -28,9 +27,9 @@ else:
         if token not in text:
             errors.append("Room Finish Health command contract missing token: " + token)
 
-    for token in ('catch (System.Exception ex)', 'ex.Message', 'QS3DROOMFINISHHEALTH lỗi: " +'):
+    for token in ('Application.ShowModelessWindow(', 'new ModelHealthWindow(', 'catch (System.Exception ex)', 'ex.Message', 'QS3DROOMFINISHHEALTH lỗi: " +'):
         if token in text:
-            errors.append("Room Finish Health command must not reflect exception detail: " + token)
+            errors.append("Room Finish Health command must not bypass presenter or reflect exception detail: " + token)
 
 if errors:
     for error in errors:
@@ -38,4 +37,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DROOMFINISHHEALTH preserves room-finish review/locate behavior while top-level exception details remain redacted from Palette and Editor output.")
+print("PASS: QS3DROOMFINISHHEALTH routes through transactional Model Health publication while preserving review/locate and redacted top-level errors.")

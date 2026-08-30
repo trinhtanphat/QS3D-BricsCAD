@@ -43,7 +43,7 @@ namespace QS3D.BricsCAD.V25
     internal static class McpCloudflareAccountTunnelManager
     {
         private const string TunnelName = "qs3d-bricscad";
-        private const string OriginUrl = "http://127.0.0.1:8765";
+        private static string OriginUrl => McpEmbeddedServer.Endpoint.GetLeftPart(UriPartial.Authority);
         private const string ArgoTokenBegin = "-----BEGIN ARGO TUNNEL TOKEN-----";
         private const string ArgoTokenEnd = "-----END ARGO TUNNEL TOKEN-----";
         private const int CommandTimeoutMs = 60000;

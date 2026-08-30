@@ -58,7 +58,9 @@ def main() -> int:
 
     # Active transport is the modular V2 source. The monolith may stay in history only.
     require(server, "internal static class McpEmbeddedServer", errors, "embedded V2 server")
-    require(server, "new TcpListener(IPAddress.Loopback, Port)", errors, "loopback-only listener")
+    require(server, "new TcpListener(IPAddress.Loopback, port)", errors, "loopback-only bounded listener")
+    require(server, "SocketError.AddressAlreadyInUse", errors, "occupied-port recovery")
+    require(server, "MaxPortAttempts", errors, "bounded port recovery attempts")
     require(server, 'TokenFileName = "mcp-bearer-token.txt"', errors, "local bearer token file")
     require(server, 'BearerEnvironment = "QS3D_MCP_BEARER_TOKEN"', errors, "bearer environment override")
     require(server, "ConstantTimeEquals", errors, "constant-time bearer comparison")
