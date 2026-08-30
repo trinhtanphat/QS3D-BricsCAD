@@ -43,9 +43,9 @@ def main() -> int:
         "TryValidateModernRoutingHeaders",
         '"Mcp-Method"',
         '"Mcp-Name"',
-        '"resultType"',
-        '"ttlMs"',
-        '"cacheScope"',
+        '\\"resultType\\"',
+        '\\"ttlMs\\"',
+        '\\"cacheScope\\"',
         "ModernProtocolHeader",
     ):
         require(embedded, needle, "2026-07-28 stateless contract")
