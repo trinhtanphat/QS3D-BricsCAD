@@ -57,8 +57,14 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var edgeEnumerator = edges.GetEnumerator())
             {
-                while (edgeEnumerator.MoveNext())
+                while (true)
                 {
+                    if (knownCount.HasValue)
+                        RequireKnownCountStableDuringTraversal(edges, knownCount.Value);
+                    if (!edgeEnumerator.MoveNext())
+                        break;
+                    if (knownCount.HasValue)
+                        RequireKnownCountStableDuringTraversal(edges, knownCount.Value);
                     if (knownCount.HasValue && index == knownCount.Value)
                         throw new ArgumentException(
                             "Rate reference edge collection contains more entries than its known count.",
@@ -151,7 +157,7 @@ namespace QS3D.Core.Cost
             return expected;
         }
 
-        private static void RequireKnownCountStableAfterTraversal(
+        private static void RequireKnownCountStableDuringTraversal(
             IEnumerable<RateReferenceEdge> edges,
             int admittedKnownCount)
         {
@@ -160,6 +166,13 @@ namespace QS3D.Core.Cost
                 throw new ArgumentException(
                     "Rate reference edge collection known count changed during traversal.",
                     nameof(edges));
+        }
+
+        private static void RequireKnownCountStableAfterTraversal(
+            IEnumerable<RateReferenceEdge> edges,
+            int admittedKnownCount)
+        {
+            RequireKnownCountStableDuringTraversal(edges, admittedKnownCount);
         }
 
         private static int CompareEdges(RateReferenceEdge left, RateReferenceEdge right)
@@ -229,8 +242,20 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var rateEnumerator = rates.GetEnumerator())
             {
-                while (rateEnumerator.MoveNext())
+                while (true)
                 {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        rates,
+                        hasKnownRateCount,
+                        knownRateCount,
+                        "Build-up analysis rate collection");
+                    if (!rateEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        rates,
+                        hasKnownRateCount,
+                        knownRateCount,
+                        "Build-up analysis rate collection");
                     AdvancedCostCollectionContract.RequireCanProcessNext(
                         hasKnownRateCount,
                         knownRateCount,
@@ -422,8 +447,20 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var itemEnumerator = items.GetEnumerator())
             {
-                while (itemEnumerator.MoveNext())
+                while (true)
                 {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        items,
+                        hasKnownItemCount,
+                        knownItemCount,
+                        "Trade analysis item collection");
+                    if (!itemEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        items,
+                        hasKnownItemCount,
+                        knownItemCount,
+                        "Trade analysis item collection");
                     AdvancedCostCollectionContract.RequireCanProcessNext(
                         hasKnownItemCount,
                         knownItemCount,
@@ -524,8 +561,20 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var entryEnumerator = entries.GetEnumerator())
             {
-                while (entryEnumerator.MoveNext())
+                while (true)
                 {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        entries,
+                        hasKnownEntryCount,
+                        knownEntryCount,
+                        "BQ library entry collection");
+                    if (!entryEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        entries,
+                        hasKnownEntryCount,
+                        knownEntryCount,
+                        "BQ library entry collection");
                     AdvancedCostCollectionContract.RequireCanProcessNext(
                         hasKnownEntryCount,
                         knownEntryCount,
@@ -566,8 +615,20 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var projectEntryEnumerator = projectEntries.GetEnumerator())
             {
-                while (projectEntryEnumerator.MoveNext())
+                while (true)
                 {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        projectEntries,
+                        hasKnownProjectEntryCount,
+                        knownProjectEntryCount,
+                        "BQ project import collection");
+                    if (!projectEntryEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        projectEntries,
+                        hasKnownProjectEntryCount,
+                        knownProjectEntryCount,
+                        "BQ project import collection");
                     AdvancedCostCollectionContract.RequireCanProcessNext(
                         hasKnownProjectEntryCount,
                         knownProjectEntryCount,
