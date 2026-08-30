@@ -44,7 +44,7 @@ def main() -> int:
         'Record("mcp"',
         'Record("qs3d"',
         'Record("bricscad"',
-        'Record("qs3d-audit"',
+        '"qs3d-audit"',
         "McpEmbeddedServer.LastError",
         "McpEmbeddedServer.LastOAuthMcpActivityUtc",
         "CommandWillStart",
