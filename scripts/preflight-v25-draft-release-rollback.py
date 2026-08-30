@@ -153,7 +153,7 @@ if canonical_errors:
 mutations = {
     "reusable tag lookup": (helper, workflow.replace("$existingTag = Get-ExactReusableReleaseTag", "$existingTag = $null", 1)),
     "reusable non-owned admission": (helper, workflow.replace("Reusing exact V25 lightweight tag $env:RELEASE_TAG at workflow SHA without claiming deletion ownership.", "reusable tag path removed", 1)),
-    "tag-ready proof": (helper, workflow.replace("$tagReadyForRelease = $true", "$tagReadyForRelease = $false", 1)),
+    "tag-ready proof": (helper, workflow.replace("$tagReadyForRelease = $true", "$tagReadyForRelease = $false")),
     "tag ref binding": (helper, workflow.replace("$tagCreateRequest = @{ ref = $tagRef; sha = $env:GITHUB_SHA } | ConvertTo-Json", "$tagCreateRequest = @{ ref = 'refs/tags/not-owned'; sha = $env:GITHUB_SHA } | ConvertTo-Json", 1)),
     "positive ownership": (helper, workflow.replace("$tagCreatedByThisRun = $true", "$tagCreatedByThisRun = $false", 1)),
     "created-ref identity": (helper, workflow.replace("createdTag.ref, $tagRef", "createdTag.ref, 'refs/tags/other'", 1)),
