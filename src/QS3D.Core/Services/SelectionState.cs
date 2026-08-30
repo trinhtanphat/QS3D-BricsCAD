@@ -41,6 +41,7 @@ namespace QS3D.Core.Services
                     if (inputCount >= MaxInputCount)
                         throw new InvalidOperationException("Semantic selection cannot exceed " + MaxInputCount + " input entries.");
                     var raw = enumerator.Current;
+                    RequireStableKnownCount(ids, knownCount);
                     inputCount++;
                     if (string.IsNullOrWhiteSpace(raw)) continue;
                     next.Add(raw.Trim());
