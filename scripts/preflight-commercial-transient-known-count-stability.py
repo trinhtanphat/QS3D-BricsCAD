@@ -17,7 +17,8 @@ required_smoke = [
 required_source = [
     "RequireStableKnownCountDuringTraversal(records, knownCount)",
     "RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum)",
-    "while (enumerator.MoveNext())",
+    "while (true)",
+    "if (!enumerator.MoveNext())",
     "CommercialGuard.RequireCanProcessNext(knownCount, snapshot.Count, \"Commercial audit batch source\")",
     "RequireCanProcessNext(knownCount, result.Count, paramName)",
 ]
@@ -27,22 +28,27 @@ missing += [token for token in required_source if token not in source]
 if missing:
     raise SystemExit("Commercial transient known-Count stability preflight failed; missing: " + ", ".join(missing))
 
-# Strong ordering contract: traversal-time Count rebound must occur after a successful
-# MoveNext and before both the existing cardinality guard and semantic Current read.
-audit_loop = source.index("while (enumerator.MoveNext())", source.index("public void AppendBatch"))
-audit_rebound = source.index("RequireStableKnownCountDuringTraversal(records, knownCount)", audit_loop)
-audit_overrun = source.index("CommercialGuard.RequireCanProcessNext(knownCount, snapshot.Count", audit_loop)
-audit_current = source.index("var record = enumerator.Current", audit_loop)
-if not audit_loop < audit_rebound < audit_overrun < audit_current:
-    raise SystemExit("Commercial audit traversal must rebind Count before overrun admission and semantic Current.")
+# Strong ordering contract: traversal-time Count must be rebound before MoveNext,
+# rebound again after every successful MoveNext, then checked for overrun before Current.
+audit_method = source.index("public void AppendBatch")
+audit_loop = source.index("while (true)", audit_method)
+audit_pre = source.index("RequireStableKnownCountDuringTraversal(records, knownCount)", audit_loop)
+audit_move = source.index("if (!enumerator.MoveNext())", audit_pre)
+audit_post = source.index("RequireStableKnownCountDuringTraversal(records, knownCount)", audit_move)
+audit_overrun = source.index("CommercialGuard.RequireCanProcessNext(knownCount, snapshot.Count", audit_post)
+audit_current = source.index("var record = enumerator.Current", audit_overrun)
+if not audit_loop < audit_pre < audit_move < audit_post < audit_overrun < audit_current:
+    raise SystemExit("Commercial audit traversal must rebind Count before and after MoveNext, then guard before semantic Current.")
 
 snapshot_method = source.index("internal static IReadOnlyList<T> Snapshot<T>")
-snapshot_loop = source.index("while (enumerator.MoveNext())", snapshot_method)
-snapshot_rebound = source.index("RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum)", snapshot_loop)
-snapshot_overrun = source.index("RequireCanProcessNext(knownCount, result.Count, paramName)", snapshot_loop)
-snapshot_current = source.index("var item = enumerator.Current", snapshot_loop)
-if not snapshot_loop < snapshot_rebound < snapshot_overrun < snapshot_current:
-    raise SystemExit("Commercial shared snapshot traversal must rebind Count before overrun admission and semantic Current.")
+snapshot_loop = source.index("while (true)", snapshot_method)
+snapshot_pre = source.index("RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum)", snapshot_loop)
+snapshot_move = source.index("if (!enumerator.MoveNext())", snapshot_pre)
+snapshot_post = source.index("RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum)", snapshot_move)
+snapshot_overrun = source.index("RequireCanProcessNext(knownCount, result.Count, paramName)", snapshot_post)
+snapshot_current = source.index("var item = enumerator.Current", snapshot_overrun)
+if not snapshot_loop < snapshot_pre < snapshot_move < snapshot_post < snapshot_overrun < snapshot_current:
+    raise SystemExit("Commercial shared snapshot traversal must rebind Count before and after MoveNext, then guard before semantic Current.")
 
 # Historical N+1/null precedence must remain explicitly pinned.
 for token in [
