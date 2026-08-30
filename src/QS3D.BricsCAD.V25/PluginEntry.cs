@@ -58,10 +58,16 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex) { ReportOptionalStartupFailure("Quantity context menu", ex); }
 
             try { UpdateBootstrapper.Start(); }
-            catch (Exception ex) { ReportOptionalStartupFailure("Update service", ex); }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("Update service", ex);
+            }
         }
 
-        public void Terminate() { TeardownHostServices(); }
+        public void Terminate()
+        {
+            TeardownHostServices();
+        }
 
         private static void TeardownHostServices()
         {
