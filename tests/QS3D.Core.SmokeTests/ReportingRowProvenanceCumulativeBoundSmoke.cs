@@ -32,10 +32,10 @@ namespace QS3D.Core.SmokeTests
         private static void CumulativeOverrunFailsAtomically()
         {
             var target = Handles(MaximumPublishedHandles - 1);
-            var before = target.ToArray();
+            var before = new List<string>(target);
             ThrowsContaining(() => Append(target, new[] { "F000", "F001" }), "cannot exceed 10000 published entries");
-            Equal(before.Length, target.Count, "overrun target count");
-            for (var i = 0; i < before.Length; i++)
+            Equal(before.Count, target.Count, "overrun target count");
+            for (var i = 0; i < before.Count; i++)
                 Equal(before[i], target[i], "overrun target value " + i.ToString(CultureInfo.InvariantCulture));
         }
 
