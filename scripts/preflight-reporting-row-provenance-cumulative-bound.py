@@ -23,23 +23,26 @@ require(
     "already-oversize target must fail closed.",
 )
 
-identity = text.index("var identity = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);")
+input_bound = text.index("if (index >= MaxSourceHandleEntries)")
+current = text.index("var raw = enumerator.Current;", input_bound)
+identity = text.index("var identity = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);", current)
 duplicate = text.index("if (existingIdentities.Contains(identity) || !stagedIdentities.Add(identity))", identity)
-cumulative = text.index("if (targetSnapshot.Length + staged.Count >= MaxSourceHandleEntries)", duplicate)
-stage = text.index("staged.Add(handle);", cumulative)
-publish = text.index("foreach (var handle in staged) target.Add(handle);", stage)
+stage = text.index("staged.Add(handle);", duplicate)
+known_count_completion = text.index("if (knownCount.HasValue && index != knownCount.Value)", stage)
+cumulative = text.index("if (targetSnapshot.Length > MaxSourceHandleEntries - staged.Count)", known_count_completion)
+publish = text.index("foreach (var handle in staged) target.Add(handle);", cumulative)
 
 require(
-    identity < duplicate < cumulative < stage < publish,
-    "cumulative bound must execute after canonical/duplicate validation but before staging and publication.",
+    input_bound < current < identity < duplicate < stage < known_count_completion < cumulative < publish,
+    "per-input bound and source validation must finish before cumulative published-bound rejection and publication.",
 )
 require(
     '"Report provenance SourceHandles cannot exceed " + MaxSourceHandleEntries + " published entries."' in text,
     "deterministic cumulative-bound diagnostic must remain present.",
 )
 require(
-    "target.Add(handle);" not in text[:stage],
-    "source handles must not be partially published before full traversal succeeds.",
+    "target.Add(handle);" not in text[:publish],
+    "source handles must not be partially published before full traversal and cumulative validation succeed.",
 )
 
 print("PASS reporting row provenance cumulative bound")
