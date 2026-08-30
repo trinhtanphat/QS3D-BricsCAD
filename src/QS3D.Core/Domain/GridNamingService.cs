@@ -83,6 +83,7 @@ namespace QS3D.Core.Domain
                     if (ids.Count == MaxGridBatch)
                         throw new InvalidOperationException("A Grid renumber batch supports at most " + MaxGridBatch + " elements.");
                     var value = enumerator.Current;
+                    RequireStableKnownCountDuringTraversal(project, orderedGridElementIds, knownCount, targetEnumerationVersion);
                     ids.Add(Required(value, "orderedGridElementIds[" + ids.Count + "]", 128));
                 }
             }

@@ -14,6 +14,8 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
+
+            Rebar3DHubWindow? candidate = null;
             try
             {
                 var published = _window;
@@ -29,12 +31,14 @@ namespace QS3D.BricsCAD.V25
                     ReleasePublishedWindow(published);
                 }
 
-                var window = new Rebar3DHubWindow();
+                candidate = new Rebar3DHubWindow();
+                var window = candidate;
                 window.Closed += (_, __) => ReleasePublishedWindow(window);
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
                 if (!window.IsLoaded) return;
 
                 _window = window;
+                candidate = null;
                 PaletteCoordinator.SetStatus("Rebar 3D Hub đã mở; lệnh luôn gửi sang drawing đang active tại thời điểm bấm.");
             }
             catch (System.Exception ex)
@@ -42,12 +46,22 @@ namespace QS3D.BricsCAD.V25
                 document.Editor.WriteMessage("\nQS3DREBARHUB lỗi: " + ex.Message);
                 PaletteCoordinator.SetStatus("QS3DREBARHUB lỗi: " + ex.Message);
             }
+            finally
+            {
+                if (candidate != null) TryCloseUnpublishedWindow(candidate);
+            }
         }
 
         private static void ReleasePublishedWindow(Rebar3DHubWindow window)
         {
             if (!ReferenceEquals(_window, window)) return;
             _window = null;
+        }
+
+        private static void TryCloseUnpublishedWindow(Rebar3DHubWindow window)
+        {
+            if (ReferenceEquals(_window, window)) return;
+            try { window.Close(); } catch (System.Exception) { }
         }
     }
 }
