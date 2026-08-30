@@ -13,9 +13,9 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             RateBuildUpPreservesRecoverableContributions();
-            RateBuildUpIsOrderIndependent();
+            RateBuildUpIsInputOrderIndependent();
             BenchmarkAveragePreservesRecoverableContributions();
-            BenchmarkAverageIsOrderIndependent();
+            BenchmarkAverageIsInputOrderIndependent();
             OrdinaryControlsRemainExact();
             FinalUnrepresentableRateBuildUpFailsClosed();
             Console.WriteLine("PASS advanced cost aggregate precision");
@@ -24,43 +24,43 @@ namespace QS3D.Core.SmokeTests
         private static void RateBuildUpPreservesRecoverableContributions()
         {
             var buildUp = BuildUp(
-                Component("A-LARGE", Large),
-                Component("A-HALF-1", 0.5m),
-                Component("A-HALF-2", 0.5m));
+                Component("A-0-LARGE", Large),
+                Component("A-1-HALF", 0.5m),
+                Component("A-2-HALF", 0.5m));
             Require(buildUp.DirectUnitCost == ExpectedRecovered,
                 "rate build-up must preserve recoverable half-unit contributions");
         }
 
-        private static void RateBuildUpIsOrderIndependent()
+        private static void RateBuildUpIsInputOrderIndependent()
         {
             var buildUp = BuildUp(
-                Component("B-HALF-1", 0.5m),
-                Component("B-HALF-2", 0.5m),
-                Component("B-LARGE", Large));
+                Component("B-2-HALF", 0.5m),
+                Component("B-1-HALF", 0.5m),
+                Component("B-0-LARGE", Large));
             Require(buildUp.DirectUnitCost == ExpectedRecovered,
-                "rate build-up exact total must not depend on input order");
+                "rate build-up exact total must not depend on caller input order");
         }
 
         private static void BenchmarkAveragePreservesRecoverableContributions()
         {
             var result = Benchmark(
-                Record("A-LARGE", Large),
-                Record("A-HALF-1", 0.5m),
-                Record("A-HALF-2", 0.5m));
+                Record("A-0-LARGE", Large),
+                Record("A-1-HALF", 0.5m),
+                Record("A-2-HALF", 0.5m));
             var expected = ExpectedRecovered / 3m;
             Require(result.AverageUnitCost == expected,
                 "benchmark average must be derived from the complete exact sample sum");
         }
 
-        private static void BenchmarkAverageIsOrderIndependent()
+        private static void BenchmarkAverageIsInputOrderIndependent()
         {
             var result = Benchmark(
-                Record("B-HALF-1", 0.5m),
-                Record("B-HALF-2", 0.5m),
-                Record("B-LARGE", Large));
+                Record("B-2-HALF", 0.5m),
+                Record("B-1-HALF", 0.5m),
+                Record("B-0-LARGE", Large));
             var expected = ExpectedRecovered / 3m;
             Require(result.AverageUnitCost == expected,
-                "benchmark average must not reject a representable complete sum based on input order");
+                "benchmark average must not reject a representable complete sum based on caller input order");
         }
 
         private static void OrdinaryControlsRemainExact()
