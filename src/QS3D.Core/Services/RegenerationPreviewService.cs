@@ -320,27 +320,54 @@ namespace QS3D.Core.Services
             knownCount = count;
         }
 
+        private static void RequireStableKnownPreviewTargetCount(IEnumerable<string> elementIds, int? expectedCount)
+        {
+            if (!expectedCount.HasValue) return;
+            var observedCount = SnapshotKnownPreviewTargetCount(elementIds);
+            if (!observedCount.HasValue || observedCount.Value != expectedCount.Value)
+                throw new InvalidOperationException(
+                    "Regeneration preview target collection known count changed during traversal from " +
+                    expectedCount.Value.ToString(CultureInfo.InvariantCulture) + " to " +
+                    (observedCount.HasValue ? observedCount.Value.ToString(CultureInfo.InvariantCulture) : "<none>") + ".");
+        }
+
         private static IReadOnlyList<string> CanonicalPreviewTargets(IEnumerable<string> elementIds, int maxCount)
         {
             var knownCount = SnapshotKnownPreviewTargetCount(elementIds);
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var value in elementIds)
+            using (var enumerator = elementIds.GetEnumerator())
             {
-                var raw = value ?? string.Empty;
-                if (string.IsNullOrWhiteSpace(raw))
-                    throw new ArgumentException("Regeneration preview target cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
-                if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
-                    throw new ArgumentException("Regeneration preview target must be canonical without surrounding whitespace: " + raw + ".", nameof(elementIds));
-                if (seen.Contains(raw))
-                    throw new ArgumentException("Duplicate regeneration preview target: " + raw + ".", nameof(elementIds));
-                if (result.Count >= maxCount)
-                    throw new ArgumentException("Regeneration preview target set cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
-                seen.Add(raw);
-                result.Add(raw);
-                index++;
+                while (true)
+                {
+                    RequireStableKnownPreviewTargetCount(elementIds, knownCount);
+                    if (!enumerator.MoveNext()) break;
+                    RequireStableKnownPreviewTargetCount(elementIds, knownCount);
+                    if (knownCount.HasValue && result.Count >= knownCount.Value)
+                        throw new InvalidOperationException(
+                            "Regeneration preview target traversal produced more entries than its known count of " +
+                            knownCount.Value.ToString(CultureInfo.InvariantCulture) + ".");
+                    if (result.Count >= maxCount)
+                        throw new ArgumentException(
+                            "Regeneration preview target set cannot exceed project element count of " +
+                            maxCount.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
+
+                    var value = enumerator.Current;
+                    var raw = value ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(raw))
+                        throw new ArgumentException("Regeneration preview target cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
+                    if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                        throw new ArgumentException("Regeneration preview target must be canonical without surrounding whitespace: " + raw + ".", nameof(elementIds));
+                    if (seen.Contains(raw))
+                        throw new ArgumentException("Duplicate regeneration preview target: " + raw + ".", nameof(elementIds));
+                    seen.Add(raw);
+                    result.Add(raw);
+                    index++;
+                }
             }
+
+            RequireStableKnownPreviewTargetCount(elementIds, knownCount);
             if (knownCount.HasValue && knownCount.Value != result.Count)
                 throw new InvalidOperationException(
                     "Regeneration preview target collection known count reported " +
