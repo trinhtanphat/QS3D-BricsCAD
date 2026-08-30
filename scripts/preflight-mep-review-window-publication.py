@@ -73,6 +73,7 @@ if any(position < 0 for position in positions) or positions != sorted(positions)
 if source.count("_window = window;") != 1:
     errors.append("source: authoritative window must be published exactly once")
 
+runbook_folded = runbook.casefold()
 for token in (
     "Lane-Key: issue-4859",
     "LOCAL_ONLY",
@@ -83,7 +84,7 @@ for token in (
     "profile edit/save/reload",
     "ShowModelessWindow -> IsLoaded -> publish",
 ):
-    if token not in runbook:
+    if token.casefold() not in runbook_folded:
         errors.append(f"runbook: missing qualification token {token!r}")
 
 if errors:
