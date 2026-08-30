@@ -408,6 +408,7 @@ namespace QS3D.BricsCAD.V25
         {
             if (McpCadAgentRuntime.AutomationStopped)
                 throw new InvalidOperationException("Automation is emergency-stopped. Resume the MCP CAD agent before mutating the drawing.");
+            McpCadAgentRuntime.EnsureCurrentMutationRunning();
         }
 
         private static void RecordMutation(Document document, string eventName, string detail)
