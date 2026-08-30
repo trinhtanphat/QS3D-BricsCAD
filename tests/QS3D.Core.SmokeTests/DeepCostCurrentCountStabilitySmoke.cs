@@ -56,7 +56,7 @@ namespace QS3D.Core.SmokeTests
             {
                 action();
             }
-            catch (ArgumentException ex)
+            catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
             {
                 if (ex.Message.IndexOf("known count changed during traversal", StringComparison.OrdinalIgnoreCase) >= 0)
                     return;
