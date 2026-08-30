@@ -15,19 +15,21 @@ else:
 for token in (
     'CommandMethod("QS3DREBARHEALTHALL"',
     "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
-    "new ModelHealthWindow(document, issues, issue =>",
+    "ModelHealthWindowPresenter.Show(document, issues, issue =>",
     "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
     "currentProject.FindElement(issue.ElementId)",
 ):
     if token not in source:
         errors.append("Rebar Health All locate contract missing token: " + token)
 
-callback_start = source.find("new ModelHealthWindow(document, issues, issue =>")
+callback_start = source.find("ModelHealthWindowPresenter.Show(document, issues, issue =>")
 if callback_start >= 0:
     callback = source[callback_start:]
     if "var element = project.FindElement(issue.ElementId);" in callback:
         errors.append("Rebar Health All Locate must not use ProjectState captured when the modeless window opened")
 
+if "Application.ShowModelessWindow(" in source or "new ModelHealthWindow(" in source:
+    errors.append("Rebar Health All must route Model Health publication through the transactional presenter")
 if "ProjectContextCoordinator.GetOrCreate(document)" in source:
     errors.append("Rebar Health All must remain read-only and must not create/cache project state")
 
@@ -37,4 +39,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Rebar Health All remains read-only and modeless Locate re-resolves the current project/element after reload lifecycle changes.")
+print("PASS: Rebar Health All remains read-only, presenter-routed, and Locate re-resolves the current project/element after reload lifecycle changes.")
