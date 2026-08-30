@@ -141,6 +141,7 @@ namespace QS3D.Core.Coordination
 
                     if (index == MaximumElements) throw TooManyElements();
                     var element = enumerator.Current;
+                    RequireStableKnownCount(elements, expectedCount);
                     if (element == null)
                         throw new ArgumentException("Duplicate-detection input contains a null element at index " + index + ".", nameof(elements));
                     if (!elementIds.Add(element.ElementId))
@@ -171,6 +172,7 @@ namespace QS3D.Core.Coordination
 
                     if (index == MaximumElements) throw TooManyElements();
                     var candidate = enumerator.Current;
+                    RequireStableKnownCount(candidates, expectedCount);
                     if (candidate == null)
                         throw new ArgumentException("Duplicate-detection input contains a null candidate at index " + index + ".", nameof(candidates));
                     if (!elementIds.Add(candidate.Element.ElementId))

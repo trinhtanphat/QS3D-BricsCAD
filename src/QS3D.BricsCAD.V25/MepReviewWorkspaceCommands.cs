@@ -20,23 +20,52 @@ namespace QS3D.BricsCAD.V25
         [CommandMethod("QS3DMEPREVIEW")]
         public void ShowReviewWorkspace()
         {
-            if (_window != null)
+            var published = _window;
+            if (published != null)
             {
-                if (_window.IsVisible)
+                if (published.IsLoaded)
                 {
-                    _window.Activate();
+                    try { published.Activate(); } catch (System.Exception) { }
                     return;
                 }
-                _window = null;
+
+                ReleasePublishedWindow(published);
             }
 
-            var window = new MepReviewWorkspaceWindow();
-            window.Closed += (_, __) =>
+            MepReviewWorkspaceWindow? candidate = null;
+            try
             {
-                if (ReferenceEquals(_window, window)) _window = null;
-            };
-            _window = window;
-            BricsApplication.ShowModelessWindow(window);
+                candidate = new MepReviewWorkspaceWindow();
+                var window = candidate;
+                window.Closed += (_, __) => ReleasePublishedWindow(window);
+
+                BricsApplication.ShowModelessWindow(window);
+                if (!window.IsLoaded) return;
+
+                _window = window;
+                candidate = null;
+            }
+            catch (System.Exception ex)
+            {
+                var document = BricsApplication.DocumentManager.MdiActiveDocument;
+                document?.Editor.WriteMessage("\nQS3DMEPREVIEW error: " + ex.Message);
+            }
+            finally
+            {
+                if (candidate != null) TryCloseUnpublishedWindow(candidate);
+            }
+        }
+
+        private static void ReleasePublishedWindow(MepReviewWorkspaceWindow window)
+        {
+            if (!ReferenceEquals(_window, window)) return;
+            _window = null;
+        }
+
+        private static void TryCloseUnpublishedWindow(MepReviewWorkspaceWindow window)
+        {
+            if (ReferenceEquals(_window, window)) return;
+            try { window.Close(); } catch (System.Exception) { }
         }
     }
 

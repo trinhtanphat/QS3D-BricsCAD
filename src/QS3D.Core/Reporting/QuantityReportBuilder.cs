@@ -9,6 +9,8 @@ namespace QS3D.Core.Reporting
 {
     public static class QuantityReportBuilder
     {
+        internal const int MaximumInputElements = 10000;
+
         private sealed class QuantityAccumulatorSet
         {
             private QuantityReportMath.FiniteAccumulator _grossConcreteM3;
@@ -79,6 +81,8 @@ namespace QS3D.Core.Reporting
                     if (!moved) break;
                     if (knownCount.HasValue && observedCount >= knownCount.Value)
                         throw ElementCountMismatch(knownCount.Value, observedCount + 1);
+                    if (observedCount >= MaximumInputElements)
+                        throw TooManyInputElements();
 
                     var element = enumerator.Current;
                     RequireStableKnownElementCount(elements, knownCount);
@@ -150,6 +154,8 @@ namespace QS3D.Core.Reporting
         {
             if (count < 0)
                 throw new InvalidOperationException("Quantity report element input reported a negative known count.");
+            if (count > MaximumInputElements)
+                throw TooManyInputElements();
             if (knownCount.HasValue && knownCount.Value != count)
                 throw new InvalidOperationException(
                     "Quantity report element input exposes conflicting known counts: " + knownCount.Value + " and " + count + ".");
@@ -161,6 +167,12 @@ namespace QS3D.Core.Reporting
             return new InvalidOperationException(
                 "Quantity report element input changed during enumeration; Count reported " + reportedCount +
                 " items but enumeration produced " + observedCount + ".");
+        }
+
+        private static InvalidOperationException TooManyInputElements()
+        {
+            return new InvalidOperationException(
+                "Quantity report supports at most " + MaximumInputElements + " input elements.");
         }
 
         private static string GroupKey(params string[] tokens)
