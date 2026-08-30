@@ -86,6 +86,7 @@ namespace QS3D.Core.Rebar
                         throw TooManyResults();
 
                     var result = enumerator.Current;
+                    RequireStableKnownCount(results, expectedCount);
                     if (result == null) throw new ArgumentException("Rebar procurement report cannot contain a null cutting result.", nameof(results));
                     if (!groupIds.Add(result.Demand.GroupId))
                         throw new InvalidOperationException("Duplicate rebar procurement group identity: " + result.Demand.GroupId + ".");
