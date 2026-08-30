@@ -50,6 +50,21 @@ function Resolve-ExactRemoteTagSha {
     return $(if ($peeled.Count -eq 1) { $peeled[0] } else { $exact[0] })
 }
 
+function Assert-NoReleaseOwnsTag {
+    $maxPages = 100
+    for ($page = 1; $page -le $maxPages; $page++) {
+        $listUri = "https://api.github.com/repos/$Repository/releases?per_page=100&page=$page"
+        $releases = @(Invoke-RestMethod -Method Get -Uri $listUri -Headers $headers)
+        foreach ($candidate in $releases) {
+            if ([string]::Equals([string]$candidate.tag_name, $ReleaseTag, [StringComparison]::Ordinal)) {
+                throw "A release still owns tag $ReleaseTag; refusing tag deletion."
+            }
+        }
+        if ($releases.Count -lt 100) { return }
+    }
+    throw "Release enumeration exceeded $maxPages pages while checking tag $ReleaseTag; refusing tag deletion."
+}
+
 $resolvedBefore = Resolve-ExactRemoteTagSha
 if (-not [string]::Equals($resolvedBefore, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase)) {
     throw "Remote tag $ReleaseTag moved to $resolvedBefore; refusing destructive rollback."
@@ -73,18 +88,7 @@ if ($ReleaseId -gt 0) {
     Invoke-RestMethod -Method Delete -Uri $releaseUri -Headers $headers | Out-Null
 }
 
-$tagReleaseUri = "https://api.github.com/repos/$Repository/releases/tags/$([Uri]::EscapeDataString($ReleaseTag))"
-try {
-    $remainingRelease = Invoke-RestMethod -Method Get -Uri $tagReleaseUri -Headers $headers
-    if ($null -ne $remainingRelease) {
-        throw "A release still owns tag $ReleaseTag; refusing tag deletion."
-    }
-}
-catch {
-    $status = $null
-    if ($_.Exception.Response -and $_.Exception.Response.StatusCode) { $status = [int]$_.Exception.Response.StatusCode }
-    if ($status -ne 404) { throw }
-}
+Assert-NoReleaseOwnsTag
 
 $resolvedAfter = Resolve-ExactRemoteTagSha
 if (-not [string]::Equals($resolvedAfter, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase)) {
