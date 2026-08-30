@@ -44,10 +44,24 @@ def main():
 
     for token in (
         '[CommandMethod("QS3DPROJECTPROPERTIES", CommandFlags.Modal)]',
-        'var window = new ProjectPropertiesWindow();',
+        'private static ProjectPropertiesWindow? _published;',
+        'var previous = _published;',
+        'if (previous.IsLoaded)',
+        'previous.Activate();',
+        'window = new ProjectPropertiesWindow();',
+        'window.Closed += (_, __) =>',
+        'if (ReferenceEquals(_published, published)) _published = null;',
         'Application.ShowModelessWindow(IntPtr.Zero, window, true);',
+        'if (!window.IsLoaded)',
+        '_published = published;',
     ):
         require(command, token, "Project Properties command")
+
+    show = command.find('Application.ShowModelessWindow(IntPtr.Zero, window, true);')
+    loaded = command.find('if (!window.IsLoaded)', show)
+    publish = command.find('_published = published;', loaded)
+    if min(show, loaded, publish) < 0 or not (show < loaded < publish):
+        fail("Project Properties must show, confirm Loaded, then publish its host-global singleton")
 
     # The supplied BLT3D screenshot explicitly marks this screen as not built. Preserve that
     # visible contract without inventing unsupported persistence fields or mutating ProjectState.
@@ -74,7 +88,7 @@ def main():
     # V26 must continue consuming the same V25 command/window source automatically.
     require(v26_project, '<Compile Include="..\\QS3D.BricsCAD.V25\\**\\*.cs"', "V26 shared adapter source")
 
-    print("PASS: BLT3D Project Properties stays dedicated while Project Information uses its own host.")
+    print("PASS: BLT3D Project Properties stays dedicated, read-only and single-instance with Loaded-before-publication ordering.")
     return 0
 
 
