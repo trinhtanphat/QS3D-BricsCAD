@@ -23,7 +23,7 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
         "releases?per_page=100&page=$page",
         "A release still owns tag $ReleaseTag; refusing tag deletion.",
         "Release enumeration exceeded $maxPages pages",
-        "Assert-NoReleaseOwnsTag",
+        "Assert-NoReleaseOwnsTag\n\n$resolvedAfter = Resolve-ExactRemoteTagSha",
         "Remote tag $ReleaseTag changed during rollback; refusing tag deletion.",
         "Invoke-RestMethod -Method Delete -Uri $tagRefUri",
     ]
