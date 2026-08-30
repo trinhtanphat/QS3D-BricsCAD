@@ -53,12 +53,12 @@ namespace QS3D.BricsCAD.V25.Updates
     internal sealed class GitHubReleaseClient
     {
         internal const string Repository = "trinhtanphat/QS3D-BricsCAD";
-        internal const string ReleasesEndpoint = "https://api.github.com/repos/trinhtanphat/QS3D-BricsCAD/releases?per_page=20";
+        internal const string ReleasesEndpoint = "https://api.github.com/repos/trinhtanphat/QS3D-BricsCAD/releases?per_page=100";
         internal const string UpdateManifestAssetName = "QS3D-BricsCAD-V25.update.json";
         internal const string PackageAssetName = "QS3D-BricsCAD-V25.zip";
         internal const string PackageChecksumAssetName = "QS3D-BricsCAD-V25.zip.sha256";
-        private const int MaxResponseBytes = 2 * 1024 * 1024;
-        private const int MaxReleasePages = 10;
+        private const int MaxResponseBytes = 4 * 1024 * 1024;
+        private const int MaxReleasePages = 20;
         private const int MaxRequestAttempts = 3;
         private const int BaseRetryDelayMilliseconds = 500;
         private const int MaxRetryDelayMilliseconds = 3000;
