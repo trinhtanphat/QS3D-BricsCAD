@@ -29,8 +29,12 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
         "if (-not [string]::Equals($resolvedBefore, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))",
         "Remote tag $ReleaseTag moved to",
         "Invoke-RestMethod -Method Delete -Uri $releaseUri",
-        "releases/tags/",
+        "function Assert-NoReleaseOwnsTag",
+        "releases?per_page=100&page=$page",
+        "if ([string]::Equals([string]$candidate.tag_name, $ReleaseTag, [StringComparison]::Ordinal))",
         "A release still owns tag $ReleaseTag; refusing tag deletion.",
+        "Release enumeration exceeded $maxPages pages",
+        "Assert-NoReleaseOwnsTag",
         "if (-not [string]::Equals($resolvedAfter, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))",
         "Remote tag $ReleaseTag changed during rollback; refusing tag deletion.",
         "git/refs/tags/",
@@ -42,6 +46,7 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
 
     for forbidden in [
         "TagWasAbsentBeforeCreate",
+        "releases/tags/",
         "git push --delete",
         "git push origin :refs/tags/",
         "-Force",
@@ -50,13 +55,13 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
             errors.append(f"helper uses stale/broad destructive contract: {forbidden}")
 
     release_delete = helper_text.find("Invoke-RestMethod -Method Delete -Uri $releaseUri")
-    owner_check = helper_text.find("A release still owns tag $ReleaseTag; refusing tag deletion.")
+    owner_check = helper_text.find("Assert-NoReleaseOwnsTag", release_delete + 1)
     post_sha_check = helper_text.find("Remote tag $ReleaseTag changed during rollback; refusing tag deletion.")
     tag_delete = helper_text.find("Invoke-RestMethod -Method Delete -Uri $tagRefUri")
     if min(release_delete, owner_check, post_sha_check, tag_delete) < 0 or not (
         release_delete < owner_check < post_sha_check < tag_delete
     ):
-        errors.append("helper deletion order must be optional draft delete -> release-owner check -> exact-SHA recheck -> tag delete")
+        errors.append("helper deletion order must be optional draft delete -> exhaustive release-owner check -> exact-SHA recheck -> tag delete")
 
     required_workflow = [
         '$tagRefUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/refs"',
@@ -128,6 +133,7 @@ mutations = {
     "created-ref identity": (helper, workflow.replace('createdTag.ref, "refs/tags/$env:RELEASE_TAG"', 'createdTag.ref, "refs/tags/other"', 1)),
     "created-ref SHA": (helper, workflow.replace("createdTag.object.sha, $env:GITHUB_SHA", "createdTag.object.sha, ('0' * 40)", 1)),
     "draft-only deletion": (helper.replace("if ($release.draft -ne $true)", "if ($false)", 1), workflow),
+    "exhaustive release owner check": (helper.replace("Assert-NoReleaseOwnsTag\n\n$resolvedAfter", "$resolvedAfter", 1), workflow),
     "exact-SHA tag ownership": (helper.replace("if (-not [string]::Equals($resolvedBefore, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))", "if ($false)", 1), workflow),
     "post-delete exact-SHA recheck": (helper.replace("if (-not [string]::Equals($resolvedAfter, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))", "if ($false)", 1), workflow),
     "transaction rollback wiring": (helper, workflow.replace("& .\\scripts\\rollback-v26-draft-release.ps1", "# rollback removed", 1)),
