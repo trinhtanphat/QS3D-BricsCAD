@@ -130,11 +130,11 @@ Release workflows retain their own confirmation/protection boundaries.
 
 A normal `continue all`, `fix bug`, source change, docs change or CI remediation does not authorize unrelated manual release dispatch/rerun/cancel operations.
 
-## Dependabot generated-PR boundary
+### Dependabot generated-PR boundary
 
 GitHub Dependabot may create dependency-update PRs directly from committed Dependabot configuration.
 
-That generated-PR boundary **does not** authorize Dependabot to merge, write `main`, enable autonomous protected-main merge, bypass checks or publish releases.
+This generated-PR boundary does **not** authorize Dependabot to merge, write `main`, enable autonomous protected-main merge, bypass checks or publish releases.
 
 Dependabot PRs still require the protected current-candidate checks applicable to `main`.
 
