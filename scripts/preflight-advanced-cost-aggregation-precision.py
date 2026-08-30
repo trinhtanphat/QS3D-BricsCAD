@@ -23,9 +23,9 @@ for token in (
 
 for token in (
     "RateBuildUpPreservesRecoverableContributions();",
-    "RateBuildUpIsOrderIndependent();",
+    "RateBuildUpIsInputOrderIndependent();",
     "BenchmarkAveragePreservesRecoverableContributions();",
-    "BenchmarkAverageIsOrderIndependent();",
+    "BenchmarkAverageIsInputOrderIndependent();",
     "OrdinaryControlsRemainExact();",
     "FinalUnrepresentableRateBuildUpFailsClosed();",
     "10000000000000000000000000000m",
