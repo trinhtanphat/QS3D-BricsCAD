@@ -67,7 +67,10 @@ for handler in ("OnSearchClick", "OnQuickQueryClick", "OnQueryKeyDown"):
     require(code, f"{handler}(", f"code-behind handler {handler}")
 
 require(code, "DocumentBoundWindowLifetime.Attach(this, _document)", "window lifetime binding")
-require(code, "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)", "document affinity")
+require(code, "var active = Application.DocumentManager.MdiActiveDocument;", "active document capture")
+require(code, "ReferenceEquals(active, _document)", "exact managed document affinity")
+require(code, "var activeIdentity = GetNativeDatabaseIdentity(active);", "native database affinity lookup")
+require(code, "activeIdentity != _nativeDatabaseIdentity", "native database affinity rejection")
 require(code, "Uri.EscapeDataString", "query encoding")
 require(code, "ProcessStartInfo", "browser launcher")
 require(code, "UseShellExecute = true", "default browser shell launch")
