@@ -43,6 +43,7 @@ namespace QS3D.Core.Reporting
                         throw RowCountMismatch(knownCount.Value, rowIndex + 1);
 
                     var row = enumerator.Current;
+                    RequireKnownRowCountStable(rows, knownCount, knownCountSources);
                     if (row == null)
                         throw new ArgumentException("Quantity report rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
                     totals.Count = QuantityReportMath.AddCount(totals.Count, row.Count);
