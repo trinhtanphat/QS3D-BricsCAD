@@ -76,6 +76,14 @@ namespace QS3D.Core.Interoperability
         public string ScopeKey { get; }
         public bool HasSourceFingerprint => SourceFingerprint != null;
 
+        internal bool MatchesFactSetProvenance(InteroperabilitySourceProvenance other)
+        {
+            if (other == null) return false;
+            return string.Equals(ScopeKey, other.ScopeKey, StringComparison.Ordinal) &&
+                string.Equals(SourceSchemaVersion, other.SourceSchemaVersion, StringComparison.Ordinal) &&
+                string.Equals(ImportBatchId, other.ImportBatchId, StringComparison.Ordinal);
+        }
+
         internal void EnsureDrawingSourceCanBeScoped()
         {
             if (Transport != InteroperabilityTransport.Dwg && Transport != InteroperabilityTransport.Dxf)
@@ -500,8 +508,8 @@ namespace QS3D.Core.Interoperability
                     throw new InvalidOperationException("Interoperability fact set cannot exceed " + MaxRecords + " records.");
                 if (record == null)
                     throw new ArgumentException("Interoperability fact set cannot contain null records.", nameof(records));
-                if (!string.Equals(record.Identity.Provenance.ScopeKey, provenance.ScopeKey, StringComparison.Ordinal))
-                    throw new InvalidOperationException("Interoperability record provenance does not match the fact-set source scope.");
+                if (!record.Identity.Provenance.MatchesFactSetProvenance(provenance))
+                    throw new InvalidOperationException("Interoperability record provenance does not match the fact-set source revision.");
                 items.Add(record);
             }
 
