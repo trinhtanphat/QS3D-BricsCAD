@@ -76,4 +76,6 @@ The guard must fail if any of these properties is removed while the surrounding 
 
 Repository-safe acceptance for this lane is source/guard/hosted CI only. Do not manually dispatch `release-v26.yml` just to test this source change. A real release dispatch remains owner-controlled and may require signing credentials plus licensed BricsCAD V26 runtime evidence according to the existing release policy.
 
+The canonical reservation is intentionally limited to the four files that carry the transaction: the V26 workflow, bounded rollback helper, focused deterministic guard, and this runbook. The broad `preflight-v26-package-release.py` contract was inspected and remains compatible without modification, so it is not reserved by this carrier.
+
 For merge readiness, require exact-head Shared CI, latest-main reconciliation, protected PR `preflight` + `core`, expected-head merge, and exact protected-main verification.
