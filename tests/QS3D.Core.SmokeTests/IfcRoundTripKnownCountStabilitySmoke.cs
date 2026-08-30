@@ -33,8 +33,8 @@ namespace QS3D.Core.SmokeTests
 
             Contains("dimension source Count changed during traversal", error.Message,
                 "Dimension Count drift must fail before canonical projection publication.");
-            Equal(2, dimensions.CountReads,
-                "Dimension Count evidence must be read before and after traversal.");
+            Equal(5, dimensions.CountReads,
+                "Dimension Count evidence must be bound at admission, rebound around MoveNext, and checked after traversal.");
         }
 
         private static void ProvenanceCountDriftFailsBeforePublication()
@@ -50,8 +50,8 @@ namespace QS3D.Core.SmokeTests
 
             Contains("provenance source Count changed during traversal", error.Message,
                 "Provenance Count drift must fail before canonical projection publication.");
-            Equal(2, provenance.CountReads,
-                "Provenance Count evidence must be read before and after traversal.");
+            Equal(5, provenance.CountReads,
+                "Provenance Count evidence must be bound at admission, rebound around MoveNext, and checked after traversal.");
         }
 
         private static void ProjectionSetCountDriftFailsBeforePublication()
@@ -66,8 +66,8 @@ namespace QS3D.Core.SmokeTests
 
             Contains("projection source Count changed during traversal", error.Message,
                 "Projection-set Count drift must fail before canonical sorting/publication.");
-            Equal(2, projections.CountReads,
-                "Projection-set Count evidence must be read before and after traversal.");
+            Equal(5, projections.CountReads,
+                "Projection-set Count evidence must be bound at admission, rebound around MoveNext, and checked after traversal.");
         }
 
         private static void QuantityEvidenceCountDriftFailsBeforePublication()
@@ -147,10 +147,10 @@ namespace QS3D.Core.SmokeTests
                 "Stable counted dimensions must retain canonical ordering.");
             Equal("SRC-A", projection.Provenance[0],
                 "Stable counted provenance must retain canonical ordering.");
-            Equal(2, dimensions.CountReads,
-                "Stable dimension Count must be rebound exactly once after traversal.");
-            Equal(2, provenance.CountReads,
-                "Stable provenance Count must be rebound exactly once after traversal.");
+            Equal(7, dimensions.CountReads,
+                "Stable two-item dimension Count must be bound at admission, rebound around every MoveNext, and checked after traversal.");
+            Equal(7, provenance.CountReads,
+                "Stable two-item provenance Count must be bound at admission, rebound around every MoveNext, and checked after traversal.");
 
             var projectionSource = new PostTraversalCountCollection<IfcRoundTripProjection>(
                 1,
@@ -158,8 +158,8 @@ namespace QS3D.Core.SmokeTests
                 projection);
             Equal(1, IfcRoundTripProjectionSet.Create(projectionSource).Items.Count,
                 "Stable counted projection sets must remain accepted.");
-            Equal(2, projectionSource.CountReads,
-                "Stable projection-set Count must be rebound exactly once after traversal.");
+            Equal(5, projectionSource.CountReads,
+                "Stable one-item projection-set Count must be bound at admission, rebound around MoveNext, and checked after traversal.");
 
             var evidenceSource = new PostTraversalCountCollection<IfcRoundTripQuantityEvidence>(
                 1,
