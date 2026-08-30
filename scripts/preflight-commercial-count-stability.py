@@ -8,6 +8,19 @@ smoke = ROOT / "tests/QS3D.Core.SmokeTests/CommercialCountStabilitySmoke.cs"
 no_overread_smoke = ROOT / "tests/QS3D.Core.SmokeTests/CommercialCountNoOverreadSmoke.cs"
 errors = []
 
+
+def ordered_positions(segment, tokens):
+    positions = []
+    cursor = 0
+    for token in tokens:
+        position = segment.find(token, cursor)
+        positions.append(position)
+        if position < 0:
+            break
+        cursor = position + len(token)
+    return positions
+
+
 for path in (source, smoke, no_overread_smoke):
     if not path.is_file():
         errors.append("missing Commercial Count-stability file: " + str(path.relative_to(ROOT)))
@@ -31,8 +44,8 @@ if source.is_file():
         "RequireStableKnownCount(records, knownCount);",
         "_events.AddRange(snapshot);",
     )
-    append_positions = [append.find(token) for token in append_required]
-    if not append or any(pos < 0 for pos in append_positions) or append_positions != sorted(append_positions):
+    append_positions = ordered_positions(append, append_required)
+    if not append or len(append_positions) != len(append_required) or any(pos < 0 for pos in append_positions):
         errors.append("CommercialAuditLog.AppendBatch must rebind Count before MoveNext and after each successful MoveNext, guard before Current, then rebind before audit publication.")
     if "foreach (var record in records)" in append:
         errors.append("CommercialAuditLog.AppendBatch must not use foreach for caller-controlled counted traversal.")
@@ -53,8 +66,8 @@ if source.is_file():
         "RequireStableSnapshotKnownCount(source, knownCount, paramName, maximum);",
         "return new ReadOnlyCollection<T>(result.ToArray());",
     )
-    snapshot_positions = [snapshot.find(token) for token in snapshot_required]
-    if not snapshot or any(pos < 0 for pos in snapshot_positions) or snapshot_positions != sorted(snapshot_positions):
+    snapshot_positions = ordered_positions(snapshot, snapshot_required)
+    if not snapshot or len(snapshot_positions) != len(snapshot_required) or any(pos < 0 for pos in snapshot_positions):
         errors.append("CommercialGuard.Snapshot must rebind Count before MoveNext and after each successful MoveNext, guard before Current, then rebind before immutable return.")
     if "foreach (var item in source)" in snapshot:
         errors.append("CommercialGuard.Snapshot must not use foreach for caller-controlled counted traversal.")
