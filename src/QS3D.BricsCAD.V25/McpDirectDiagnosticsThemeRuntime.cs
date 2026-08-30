@@ -94,7 +94,11 @@ namespace QS3D.BricsCAD.V25
 
         private static string Snapshot(int limit)
         {
-            McpDiagnosticHub.CaptureSnapshot("mcp-direct");
+            McpDiagnosticHub.InvokeInCadContext(() =>
+            {
+                McpDiagnosticHub.CaptureSnapshot("mcp-direct");
+                return "{}";
+            });
             return ReadEvents(0, limit, true);
         }
 
@@ -234,6 +238,11 @@ namespace QS3D.BricsCAD.V25
         }
 
         private static string ThemeStateJson()
+        {
+            return McpDiagnosticHub.InvokeInCadContext(ThemeStateJsonInCadContext);
+        }
+
+        private static string ThemeStateJsonInCadContext()
         {
             var mode = Qs3dThemeCoordinator.CurrentMode;
             var effectiveDark = Qs3dThemeCoordinator.EffectiveDark;
