@@ -21,8 +21,11 @@ if source.is_file():
     append_required = (
         "var knownCount = TryGetKnownCount(records",
         "using (var enumerator = records.GetEnumerator())",
-        "while (enumerator.MoveNext())",
-        "RequireCanProcessNext(knownCount, snapshot.Count",
+        "while (true)",
+        "RequireStableKnownCountDuringTraversal(records, knownCount);",
+        "if (!enumerator.MoveNext())",
+        "RequireStableKnownCountDuringTraversal(records, knownCount);",
+        "CommercialGuard.RequireCanProcessNext(knownCount, snapshot.Count",
         "var record = enumerator.Current;",
         "snapshot.Count != knownCount.Value",
         "RequireStableKnownCount(records, knownCount);",
@@ -30,7 +33,7 @@ if source.is_file():
     )
     append_positions = [append.find(token) for token in append_required]
     if not append or any(pos < 0 for pos in append_positions) or append_positions != sorted(append_positions):
-        errors.append("CommercialAuditLog.AppendBatch must guard Count before Current, then rebind Count before audit publication.")
+        errors.append("CommercialAuditLog.AppendBatch must rebind Count before MoveNext and after each successful MoveNext, guard before Current, then rebind before audit publication.")
     if "foreach (var record in records)" in append:
         errors.append("CommercialAuditLog.AppendBatch must not use foreach for caller-controlled counted traversal.")
 
@@ -40,7 +43,10 @@ if source.is_file():
     snapshot_required = (
         "var knownCount = SnapshotKnownCount(source, paramName, maximum);",
         "using (var enumerator = source.GetEnumerator())",
-        "while (enumerator.MoveNext())",
+        "while (true)",
+        "RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);",
+        "if (!enumerator.MoveNext())",
+        "RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);",
         "RequireCanProcessNext(knownCount, result.Count",
         "var item = enumerator.Current;",
         "result.Count != knownCount.Value",
@@ -49,7 +55,7 @@ if source.is_file():
     )
     snapshot_positions = [snapshot.find(token) for token in snapshot_required]
     if not snapshot or any(pos < 0 for pos in snapshot_positions) or snapshot_positions != sorted(snapshot_positions):
-        errors.append("CommercialGuard.Snapshot must guard Count before Current, then rebind Count before immutable return.")
+        errors.append("CommercialGuard.Snapshot must rebind Count before MoveNext and after each successful MoveNext, guard before Current, then rebind before immutable return.")
     if "foreach (var item in source)" in snapshot:
         errors.append("CommercialGuard.Snapshot must not use foreach for caller-controlled counted traversal.")
 
@@ -104,4 +110,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Commercial audit and snapshot materializers guard Count before Current and rebind deterministic Count before publication.")
+print("PASS: Commercial audit and snapshot materializers rebind Count around MoveNext, guard before Current, and rebind before publication.")
