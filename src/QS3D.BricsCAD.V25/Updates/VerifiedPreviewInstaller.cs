@@ -128,11 +128,32 @@ namespace QS3D.BricsCAD.V25.Updates
                 var logPath = Path.Combine(logDirectory, "preview-apply-" + handoffId + ".log");
 
                 int parentProcessId;
+                string bricsCadExecutable;
                 using (var currentProcess = Process.GetCurrentProcess())
+                {
                     parentProcessId = currentProcess.Id;
+                    try
+                    {
+                        bricsCadExecutable = currentProcess.MainModule?.FileName ?? string.Empty;
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException("Không đọc được đường dẫn BricsCAD đang chạy để tự mở lại sau cập nhật.", ex);
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(bricsCadExecutable))
+                    throw new InvalidOperationException("Không xác định được bricscad.exe đang chạy để tự mở lại sau cập nhật.");
+                bricsCadExecutable = Path.GetFullPath(bricsCadExecutable);
+                if (!File.Exists(bricsCadExecutable) ||
+                    !string.Equals(Path.GetFileName(bricsCadExecutable), "bricscad.exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Updater chỉ tự khởi động lại đúng bricscad.exe đang chạy.");
+                }
 
                 var startInfo = BuildWorkerStartInfo(
                     parentProcessId,
+                    bricsCadExecutable,
                     handoffId,
                     stagingRoot,
                     logPath,
@@ -254,6 +275,7 @@ namespace QS3D.BricsCAD.V25.Updates
 
         private static ProcessStartInfo BuildWorkerStartInfo(
             int parentProcessId,
+            string bricsCadExecutable,
             string handoffId,
             string stagingRoot,
             string logPath,
@@ -276,6 +298,7 @@ namespace QS3D.BricsCAD.V25.Updates
             };
 
             startInfo.EnvironmentVariables["QS3D_PREVIEW_PARENT_PID"] = parentProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            startInfo.EnvironmentVariables["QS3D_PREVIEW_BRICSCAD"] = bricsCadExecutable;
             startInfo.EnvironmentVariables["QS3D_PREVIEW_HANDOFF"] = handoffId;
             startInfo.EnvironmentVariables["QS3D_PREVIEW_STAGE_ROOT"] = stagingRoot;
             startInfo.EnvironmentVariables["QS3D_PREVIEW_LOG"] = logPath;
@@ -340,15 +363,31 @@ function Write-Log([string]$Text) {
     try { [System.IO.File]::AppendAllText($env:QS3D_PREVIEW_LOG, ((Get-Date).ToString('o') + ' ' + $Text + [Environment]::NewLine)) }
     catch { }
 }
+function Restart-BricsCAD {
+    $exe = $env:QS3D_PREVIEW_BRICSCAD
+    if ([string]::IsNullOrWhiteSpace($exe) -or -not [System.IO.File]::Exists($exe)) {
+        throw 'Captured bricscad.exe is missing; cannot restart host.'
+    }
+    if (-not [string]::Equals([System.IO.Path]::GetFileName($exe), 'bricscad.exe', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Captured host executable is not bricscad.exe.'
+    }
+    $working = [System.IO.Path]::GetDirectoryName($exe)
+    Start-Process -FilePath $env:QS3D_PREVIEW_BRICSCAD -WorkingDirectory $working
+    Write-Log ('RESTART ' + $exe)
+}
 
 $replaceStarted = $false
+$parentExited = $false
+$restarted = $false
 try {
     $parentPid = [int]$env:QS3D_PREVIEW_PARENT_PID
     try {
         $hostProcess = [System.Diagnostics.Process]::GetProcessById($parentPid)
         $hostProcess.WaitForExit()
         $hostProcess.Dispose()
+        $parentExited = $true
     } catch [ArgumentException] {
+        $parentExited = $true
     }
 
     Assert-Hash $env:QS3D_PREVIEW_V25_STAGE $env:QS3D_PREVIEW_V25_STAGE_SHA 'staged V25 adapter'
@@ -363,6 +402,8 @@ try {
     Assert-Hash $env:QS3D_PREVIEW_CORE_DEST $env:QS3D_PREVIEW_CORE_STAGE_SHA 'installed Core'
 
     Write-Log 'PASS verified preview apply'
+    Restart-BricsCAD
+    $restarted = $true
     try { [System.IO.Directory]::Delete($env:QS3D_PREVIEW_STAGE_ROOT, $true) } catch { }
     exit 0
 }
@@ -377,6 +418,16 @@ catch {
         }
     } else {
         Write-Log ('FAIL ' + $message)
+    }
+
+    if ($parentExited -and -not $restarted) {
+        try {
+            Restart-BricsCAD
+            $restarted = $true
+            Write-Log 'RECOVERY-RESTART PASS'
+        } catch {
+            Write-Log ('RECOVERY-RESTART-FAILED ' + $_.Exception.Message)
+        }
     }
     exit 1
 }
