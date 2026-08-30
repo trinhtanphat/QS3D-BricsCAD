@@ -53,6 +53,8 @@ show_start = text.find("public void ShowRebarHub()")
 release_start = text.find("private static void ReleasePublishedWindow", show_start + 1)
 show = text[show_start:release_start] if show_start >= 0 and release_start > show_start else ""
 
+publish_pos = show.find("_window = window;")
+transfer_pos = show.find("candidate = null;", publish_pos + 1) if publish_pos >= 0 else -1
 positions = [
     show.find("Rebar3DHubWindow? candidate = null;"),
     show.find("var published = _window;"),
@@ -62,8 +64,8 @@ positions = [
     show.find("window.Closed += (_, __) => ReleasePublishedWindow(window);"),
     show.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);"),
     show.find("if (!window.IsLoaded) return;"),
-    show.find("_window = window;"),
-    show.find("candidate = null;"),
+    publish_pos,
+    transfer_pos,
     show.find("finally"),
     show.find("if (candidate != null) TryCloseUnpublishedWindow(candidate);"),
 ]
