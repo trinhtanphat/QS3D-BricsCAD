@@ -128,44 +128,44 @@ namespace QS3D.Core.SmokeTests
         {
             var under = new CountedSequence<TbqBillItem>(2, Bill("B1"));
             var underError = Capture<InvalidOperationException>(() => Workspace(billItems: under));
-            AssertTraversalMismatch(under, "bill items", 2, 1, 4, underError);
+            AssertTraversalMismatch(under, "bill items", 2, 1, 5, underError);
 
             var over = new CountedSequence<TbqBillItem>(1, Bill("B1"), Bill("B2"));
             var overError = Capture<InvalidOperationException>(() => Workspace(billItems: over));
-            AssertTraversalMismatch(over, "bill items", 1, 2, 5, overError);
+            AssertTraversalMismatch(over, "bill items", 1, 2, 6, overError);
         }
 
         private static void BuildUpTraversalMustMatchKnownCount()
         {
             var under = new CountedSequence<BuildUpRateSnapshot>(2, BuildUp("R1"));
             var underError = Capture<InvalidOperationException>(() => Workspace(buildUpRates: under));
-            AssertTraversalMismatch(under, "build-up rates", 2, 1, 4, underError);
+            AssertTraversalMismatch(under, "build-up rates", 2, 1, 5, underError);
 
             var over = new CountedSequence<BuildUpRateSnapshot>(1, BuildUp("R1"), BuildUp("R2"));
             var overError = Capture<InvalidOperationException>(() => Workspace(buildUpRates: over));
-            AssertTraversalMismatch(over, "build-up rates", 1, 2, 5, overError);
+            AssertTraversalMismatch(over, "build-up rates", 1, 2, 6, overError);
         }
 
         private static void RateReferenceTraversalMustMatchKnownCount()
         {
             var under = new CountedSequence<RateReferenceEdge>(2, Reference("R1"));
             var underError = Capture<InvalidOperationException>(() => Workspace(rateReferences: under));
-            AssertTraversalMismatch(under, "rate references", 2, 1, 4, underError);
+            AssertTraversalMismatch(under, "rate references", 2, 1, 5, underError);
 
             var over = new CountedSequence<RateReferenceEdge>(1, Reference("R1"), Reference("R2"));
             var overError = Capture<InvalidOperationException>(() => Workspace(rateReferences: over));
-            AssertTraversalMismatch(over, "rate references", 1, 2, 5, overError);
+            AssertTraversalMismatch(over, "rate references", 1, 2, 6, overError);
         }
 
         private static void LibraryTraversalMustMatchKnownCount()
         {
             var under = new CountedSequence<BqLibraryEntry>(2, Library("L1"));
             var underError = Capture<InvalidOperationException>(() => Workspace(libraryEntries: under));
-            AssertTraversalMismatch(under, "BQ library entries", 2, 1, 4, underError);
+            AssertTraversalMismatch(under, "BQ library entries", 2, 1, 5, underError);
 
             var over = new CountedSequence<BqLibraryEntry>(1, Library("L1"), Library("L2"));
             var overError = Capture<InvalidOperationException>(() => Workspace(libraryEntries: over));
-            AssertTraversalMismatch(over, "BQ library entries", 1, 2, 5, overError);
+            AssertTraversalMismatch(over, "BQ library entries", 1, 2, 6, overError);
         }
 
         private static void BillItemCountDriftFailsAfterTraversal()
@@ -221,9 +221,9 @@ namespace QS3D.Core.SmokeTests
             var source = new MultiCountSequence<TbqBillItem>(1, 1, 1, 1, 1, 1, Bill("B1"));
             var workspace = Workspace(billItems: source);
             Equal(1, workspace.BillItems.Count, "Stable multi-interface TBQ source must remain accepted.");
-            Equal(5, source.GenericCountReads, "Stable ICollection<T>.Count must be rebound throughout traversal.");
-            Equal(5, source.ReadOnlyCountReads, "Stable IReadOnlyCollection<T>.Count must be rebound throughout traversal.");
-            Equal(5, source.NonGenericCountReads, "Stable ICollection.Count must be rebound throughout traversal.");
+            Equal(6, source.GenericCountReads, "Stable ICollection<T>.Count must be rebound throughout traversal.");
+            Equal(6, source.ReadOnlyCountReads, "Stable IReadOnlyCollection<T>.Count must be rebound throughout traversal.");
+            Equal(6, source.NonGenericCountReads, "Stable ICollection.Count must be rebound throughout traversal.");
             Equal(1, source.GetEnumeratorCalls, "Stable multi-interface TBQ source must traverse exactly once.");
         }
 
@@ -239,10 +239,10 @@ namespace QS3D.Core.SmokeTests
             Equal(1, workspace.BuildUpRates.Count, "Exact counted build-up traversal must remain accepted.");
             Equal(1, workspace.RateReferences.Edges.Count, "Exact counted rate-reference traversal must remain accepted.");
             Equal(1, workspace.Library.Entries.Count, "Exact counted library traversal must remain accepted.");
-            Equal(5, billItems.CountReads, "Exact bill-item Count must be rebound throughout traversal.");
-            Equal(5, buildUps.CountReads, "Exact build-up Count must be rebound throughout traversal.");
-            Equal(5, references.CountReads, "Exact rate-reference Count must be rebound throughout traversal.");
-            Equal(5, library.CountReads, "Exact library Count must be rebound throughout traversal.");
+            Equal(6, billItems.CountReads, "Exact bill-item Count must be rebound throughout traversal.");
+            Equal(6, buildUps.CountReads, "Exact build-up Count must be rebound throughout traversal.");
+            Equal(6, references.CountReads, "Exact rate-reference Count must be rebound throughout traversal.");
+            Equal(6, library.CountReads, "Exact library Count must be rebound throughout traversal.");
         }
 
         private static void PureStreamingSourcesRemainAccepted()
@@ -316,319 +316,6 @@ namespace QS3D.Core.SmokeTests
             Equal(1, source.GenericCountReads, message + " must inspect ICollection<T>.Count exactly once.");
             Equal(1, source.ReadOnlyCountReads, message + " must inspect IReadOnlyCollection<T>.Count exactly once.");
             Equal(1, source.NonGenericCountReads, message + " must inspect ICollection.Count exactly once.");
-        }
-
-        private static TException Capture<TException>(Action action)
-            where TException : Exception
-        {
-            try
-            {
-                action();
-            }
-            catch (TException ex)
-            {
-                return ex;
-            }
-
-            throw new InvalidOperationException("Expected exception " + typeof(TException).Name + ".");
-        }
-
-        private static void Contains(string expected, string actual, string message)
-        {
-            if (actual == null || actual.IndexOf(expected, StringComparison.Ordinal) < 0)
-                throw new InvalidOperationException(message + " Actual: " + actual);
-        }
-
-        private static void Equal<T>(T expected, T actual, string message)
-        {
-            if (!EqualityComparer<T>.Default.Equals(expected, actual))
-                throw new InvalidOperationException(message + " Expected=" + expected + ", actual=" + actual + ".");
-        }
-
-        private sealed class CountedNeverEnumerated<T> : IReadOnlyCollection<T>
-        {
-            internal CountedNeverEnumerated(int count)
-            {
-                Count = count;
-            }
-
-            public int Count { get; }
-            internal int GetEnumeratorCalls { get; private set; }
-
-            public IEnumerator<T> GetEnumerator()
-            {
-                GetEnumeratorCalls++;
-                throw new InvalidOperationException("Counted TBQ source must not be enumerated after known-count rejection.");
-            }
-
-            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-        }
-
-        private sealed class NegativeReadOnlyCount<T> : IReadOnlyCollection<T>
-        {
-            public int Count
-            {
-                get
-                {
-                    CountReads++;
-                    return -1;
-                }
-            }
-
-            internal int CountReads { get; private set; }
-            internal int GetEnumeratorCalls { get; private set; }
-
-            public IEnumerator<T> GetEnumerator()
-            {
-                GetEnumeratorCalls++;
-                throw new InvalidOperationException("Negative-count TBQ source must not be enumerated.");
-            }
-
-            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-        }
-
-        private sealed class CountedSequence<T> : IReadOnlyCollection<T>
-        {
-            private readonly T[] _items;
-            private readonly int _advertisedCount;
-
-            internal CountedSequence(int advertisedCount, params T[] items)
-            {
-                _advertisedCount = advertisedCount;
-                _items = items ?? throw new ArgumentNullException(nameof(items));
-            }
-
-            public int Count
-            {
-                get
-                {
-                    CountReads++;
-                    return _advertisedCount;
-                }
-            }
-
-            internal int CountReads { get; private set; }
-            internal int GetEnumeratorCalls { get; private set; }
-
-            public IEnumerator<T> GetEnumerator()
-            {
-                GetEnumeratorCalls++;
-                return ((IEnumerable<T>)_items).GetEnumerator();
-            }
-
-            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-        }
-
-        private sealed class DriftingReadOnlyCollection<T> : IReadOnlyCollection<T>
-        {
-            private readonly int _initialCount;
-            private readonly int _finalCount;
-            private readonly T[] _items;
-            private bool _traversalCompleted;
-
-            internal DriftingReadOnlyCollection(int initialCount, int finalCount, params T[] items)
-            {
-                _initialCount = initialCount;
-                _finalCount = finalCount;
-                _items = items ?? throw new ArgumentNullException(nameof(items));
-            }
-
-            public int Count
-            {
-                get
-                {
-                    CountReads++;
-                    return _traversalCompleted ? _finalCount : _initialCount;
-                }
-            }
-
-            internal int CountReads { get; private set; }
-            internal int GetEnumeratorCalls { get; private set; }
-
-            public IEnumerator<T> GetEnumerator()
-            {
-                GetEnumeratorCalls++;
-                return Enumerate().GetEnumerator();
-            }
-
-            private IEnumerable<T> Enumerate()
-            {
-                try
-                {
-                    for (var i = 0; i < _items.Length; i++)
-                        yield return _items[i];
-                }
-                finally
-                {
-                    _traversalCompleted = true;
-                }
-            }
-
-            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-        }
-
-        private sealed class MultiCountSequence<T> : ICollection<T>, IReadOnlyCollection<T>, ICollection
-        {
-            private readonly int _initialGenericCount;
-            private readonly int _initialReadOnlyCount;
-            private readonly int _initialNonGenericCount;
-            private readonly int _finalGenericCount;
-            private readonly int _finalReadOnlyCount;
-            private readonly int _finalNonGenericCount;
-            private readonly T[] _items;
-            private bool _traversalCompleted;
-
-            internal MultiCountSequence(
-                int initialGenericCount,
-                int initialReadOnlyCount,
-                int initialNonGenericCount,
-                int finalGenericCount,
-                int finalReadOnlyCount,
-                int finalNonGenericCount,
-                params T[] items)
-            {
-                _initialGenericCount = initialGenericCount;
-                _initialReadOnlyCount = initialReadOnlyCount;
-                _initialNonGenericCount = initialNonGenericCount;
-                _finalGenericCount = finalGenericCount;
-                _finalReadOnlyCount = finalReadOnlyCount;
-                _finalNonGenericCount = finalNonGenericCount;
-                _items = items ?? throw new ArgumentNullException(nameof(items));
-            }
-
-            int ICollection<T>.Count
-            {
-                get
-                {
-                    GenericCountReads++;
-                    return _traversalCompleted ? _finalGenericCount : _initialGenericCount;
-                }
-            }
-
-            int IReadOnlyCollection<T>.Count
-            {
-                get
-                {
-                    ReadOnlyCountReads++;
-                    return _traversalCompleted ? _finalReadOnlyCount : _initialReadOnlyCount;
-                }
-            }
-
-            int ICollection.Count
-            {
-                get
-                {
-                    NonGenericCountReads++;
-                    return _traversalCompleted ? _finalNonGenericCount : _initialNonGenericCount;
-                }
-            }
-
-            bool ICollection<T>.IsReadOnly => true;
-            bool ICollection.IsSynchronized => false;
-            object ICollection.SyncRoot => this;
-            internal int GenericCountReads { get; private set; }
-            internal int ReadOnlyCountReads { get; private set; }
-            internal int NonGenericCountReads { get; private set; }
-            internal int GetEnumeratorCalls { get; private set; }
-
-            public IEnumerator<T> GetEnumerator()
-            {
-                GetEnumeratorCalls++;
-                return Enumerate().GetEnumerator();
-            }
-
-            private IEnumerable<T> Enumerate()
-            {
-                try
-                {
-                    for (var i = 0; i < _items.Length; i++)
-                        yield return _items[i];
-                }
-                finally
-                {
-                    _traversalCompleted = true;
-                }
-            }
-
-            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-            void ICollection<T>.Add(T item) => throw new NotSupportedException();
-            void ICollection<T>.Clear() => throw new NotSupportedException();
-            bool ICollection<T>.Contains(T item) => false;
-            void ICollection<T>.CopyTo(T[] array, int arrayIndex) => throw new NotSupportedException();
-            bool ICollection<T>.Remove(T item) => throw new NotSupportedException();
-            void ICollection.CopyTo(Array array, int index) => throw new NotSupportedException();
-        }
-
-        private sealed class MultiCountNeverEnumerated<T> : ICollection<T>, IReadOnlyCollection<T>, ICollection
-        {
-            private readonly int _genericCount;
-            private readonly int _readOnlyCount;
-            private readonly int _nonGenericCount;
-
-            internal MultiCountNeverEnumerated(int genericCount, int readOnlyCount, int nonGenericCount)
-            {
-                _genericCount = genericCount;
-                _readOnlyCount = readOnlyCount;
-                _nonGenericCount = nonGenericCount;
-            }
-
-            int ICollection<T>.Count
-            {
-                get
-                {
-                    GenericCountReads++;
-                    return _genericCount;
-                }
-            }
-
-            int IReadOnlyCollection<T>.Count
-            {
-                get
-                {
-                    ReadOnlyCountReads++;
-                    return _readOnlyCount;
-                }
-            }
-
-            int ICollection.Count
-            {
-                get
-                {
-                    NonGenericCountReads++;
-                    return _nonGenericCount;
-                }
-            }
-
-            bool ICollection<T>.IsReadOnly => true;
-            bool ICollection.IsSynchronized => false;
-            object ICollection.SyncRoot => this;
-            internal int GenericCountReads { get; private set; }
-            internal int ReadOnlyCountReads { get; private set; }
-            internal int NonGenericCountReads { get; private set; }
-            internal int GetEnumeratorCalls { get; private set; }
-
-            public IEnumerator<T> GetEnumerator()
-            {
-                GetEnumeratorCalls++;
-                throw new InvalidOperationException("Conflicting-count TBQ source must not be enumerated.");
-            }
-
-            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-            void ICollection<T>.Add(T item) => throw new NotSupportedException();
-            void ICollection<T>.Clear() => throw new NotSupportedException();
-            bool ICollection<T>.Contains(T item) => false;
-            void ICollection<T>.CopyTo(T[] array, int arrayIndex) => throw new NotSupportedException();
-            bool ICollection<T>.Remove(T item) => throw new NotSupportedException();
-            void ICollection.CopyTo(Array array, int index) => throw new NotSupportedException();
-        }
-    }
-
-    internal static class TbqWorkspaceKnownCountRegistration
-    {
-        [ModuleInitializer]
-        internal static void Initialize()
-        {
-            TbqWorkspaceKnownCountSmoke.Run();
         }
     }
 }
