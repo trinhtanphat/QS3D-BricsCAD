@@ -47,7 +47,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("BOM-HANDLE-NUMERIC", "BOM generated handle numeric identity");
             var element = new ProjectElement("BOM-HANDLE-ELEMENT", ElementCategory.Beam);
-            element.Properties["GeneratedSolidHandle"] = "000A";
+            element.Properties["GeneratedSolidHandle"] = "A";
             project.Elements.Add(element);
             return project;
         }
