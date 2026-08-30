@@ -20,13 +20,13 @@ namespace QS3D.BricsCAD.V25
         private const int MaxEvents = 100;
         private const int DefaultTailEvents = 25;
         private const int DefaultSnapshotEvents = 50;
-        private const int MaxScannedEvents = 20000;
+        private const int MaxScannedEventsPerFile = 50000;
         private const int MaxEventCharacters = 8192;
         private const int MaxWaitMilliseconds = 15000;
-        private const int MinPollMilliseconds = 50;
+        private const int MinPollMilliseconds = 100;
         private const int MaxPollMilliseconds = 1000;
         private static readonly Regex SequenceRegex = new Regex(
-            "\\\"sequence\\\"\\s*:\\s*(?<value>[0-9]+)",
+            @"""sequence""\s*:\s*(?<value>[0-9]+)",
             RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         internal static IEnumerable<string> ToolDescriptors()
@@ -36,23 +36,23 @@ namespace QS3D.BricsCAD.V25
                 Tool(
                     "diagnostics_log_tail",
                     "Read the latest bounded unified MCP/QS3D/BricsCAD diagnostic events from the canonical local diagnostic stream.",
-                    "\\\"limit\\\":{\\\"type\\\":\\\"integer\\\",\\\"minimum\\\":1,\\\"maximum\\\":100}",
+                    "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}",
                     true, false, true),
                 Tool(
                     "diagnostics_since",
                     "Read bounded unified diagnostic events with sequence greater than afterSequence.",
-                    "\\\"afterSequence\\\":{\\\"type\\\":\\\"integer\\\",\\\"minimum\\\":0},\\\"limit\\\":{\\\"type\\\":\\\"integer\\\",\\\"minimum\\\":1,\\\"maximum\\\":100}",
+                    "\"afterSequence\":{\"type\":\"integer\",\"minimum\":0},\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}",
                     true, false, true,
                     "afterSequence"),
                 Tool(
                     "diagnostics_snapshot",
                     "Capture current MCP, BricsCAD, QS3D project-audit and theme state into the unified stream and return the newest bounded events.",
-                    "\\\"limit\\\":{\\\"type\\\":\\\"integer\\\",\\\"minimum\\\":1,\\\"maximum\\\":100}",
+                    "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}",
                     true, false, true),
                 Tool(
                     "diagnostics_wait",
                     "Bounded long-poll for unified diagnostic events after a sequence cursor. No unbounded server event stream is opened.",
-                    "\\\"afterSequence\\\":{\\\"type\\\":\\\"integer\\\",\\\"minimum\\\":0},\\\"limit\\\":{\\\"type\\\":\\\"integer\\\",\\\"minimum\\\":1,\\\"maximum\\\":100},\\\"timeoutMs\\\":{\\\"type\\\":\\\"integer\\\",\\\"minimum\\\":0,\\\"maximum\\\":15000},\\\"pollIntervalMs\\\":{\\\"type\\\":\\\"integer\\\",\\\"minimum\\\":50,\\\"maximum\\\":1000}",
+                    "\"afterSequence\":{\"type\":\"integer\",\"minimum\":0},\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":15000},\"pollIntervalMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":1000}",
                     true, false, true,
                     "afterSequence"),
                 Tool(
@@ -63,7 +63,7 @@ namespace QS3D.BricsCAD.V25
                 Tool(
                     "theme_set",
                     "Set host-wide QS3D and BricsCAD theme to system, dark or light. Requires confirmMutation=true and respects the MCP emergency-stop guard.",
-                    "\\\"mode\\\":{\\\"type\\\":\\\"string\\\",\\\"enum\\\":[\\\"system\\\",\\\"dark\\\",\\\"light\\\"]},\\\"confirmMutation\\\":{\\\"type\\\":\\\"boolean\\\"}",
+                    "\"mode\":{\"type\":\"string\",\"enum\":[\"system\",\"dark\",\"light\"]},\"confirmMutation\":{\"type\":\"boolean\"}",
                     false, true, true,
                     "mode", "confirmMutation")
             };
@@ -103,18 +103,25 @@ namespace QS3D.BricsCAD.V25
             var afterSequence = RequiredNonNegativeInteger(body, "afterSequence");
             var limit = Integer(body, "limit", DefaultTailEvents, 1, MaxEvents);
             var timeout = Integer(body, "timeoutMs", 5000, 0, MaxWaitMilliseconds);
-            var poll = Integer(body, "pollIntervalMs", 100, MinPollMilliseconds, MaxPollMilliseconds);
+            var poll = Integer(body, "pollIntervalMs", 250, MinPollMilliseconds, MaxPollMilliseconds);
             var timer = Stopwatch.StartNew();
-            while (true)
+            var result = ReadEventBatch(afterSequence, limit, false);
+            if (result.Events.Count > 0)
+                return EventBatchJson(result, afterSequence, false, timer.ElapsedMilliseconds, false);
+
+            var stamp = DiagnosticStamp();
+            while (timer.ElapsedMilliseconds < timeout)
             {
-                var result = ReadEventBatch(afterSequence, limit, false);
-                if (result.Count > 0)
-                    return EventBatchJson(result, afterSequence, false, timer.ElapsedMilliseconds, false);
-                if (timer.ElapsedMilliseconds >= timeout)
-                    return EventBatchJson(result, afterSequence, false, timer.ElapsedMilliseconds, true);
                 var remaining = Math.Max(1, timeout - (int)Math.Min(timeout, timer.ElapsedMilliseconds));
                 Thread.Sleep(Math.Min(poll, remaining));
+                var nextStamp = DiagnosticStamp();
+                if (nextStamp == stamp) continue;
+                stamp = nextStamp;
+                result = ReadEventBatch(afterSequence, limit, false);
+                if (result.Events.Count > 0)
+                    return EventBatchJson(result, afterSequence, false, timer.ElapsedMilliseconds, false);
             }
+            return EventBatchJson(result, afterSequence, false, timer.ElapsedMilliseconds, true);
         }
 
         private static string ReadEvents(long afterSequence, int limit, bool tail)
@@ -126,20 +133,20 @@ namespace QS3D.BricsCAD.V25
         private static EventBatch ReadEventBatch(long afterSequence, int limit, bool tail)
         {
             var all = new List<DiagnosticEventLine>();
-            var scanned = 0;
             var truncatedScan = false;
             foreach (var path in DiagnosticPaths())
             {
                 if (!File.Exists(path)) continue;
                 try
                 {
+                    var scanned = 0;
                     using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
                     using (var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, false))
                     {
                         string? line;
                         while ((line = reader.ReadLine()) != null)
                         {
-                            if (++scanned > MaxScannedEvents)
+                            if (++scanned > MaxScannedEventsPerFile)
                             {
                                 truncatedScan = true;
                                 break;
@@ -160,7 +167,6 @@ namespace QS3D.BricsCAD.V25
                 {
                     // The canonical diagnostics file can temporarily be unavailable during host shutdown.
                 }
-                if (truncatedScan) break;
             }
 
             all.Sort((left, right) => left.Sequence.CompareTo(right.Sequence));
@@ -178,6 +184,26 @@ namespace QS3D.BricsCAD.V25
             yield return path;
         }
 
+        private static long DiagnosticStamp()
+        {
+            unchecked
+            {
+                long stamp = 17;
+                foreach (var path in DiagnosticPaths())
+                {
+                    try
+                    {
+                        if (!File.Exists(path)) continue;
+                        var info = new FileInfo(path);
+                        stamp = stamp * 31 + info.Length;
+                        stamp = stamp * 31 + info.LastWriteTimeUtc.Ticks;
+                    }
+                    catch { }
+                }
+                return stamp;
+            }
+        }
+
         private static bool TrySequence(string line, out long sequence)
         {
             sequence = 0;
@@ -189,21 +215,21 @@ namespace QS3D.BricsCAD.V25
 
         private static string EventBatchJson(EventBatch batch, long afterSequence, bool tail, long elapsedMilliseconds, bool timedOut)
         {
-            var builder = new StringBuilder(1024).Append("{\\\"events\\\":[");
+            var builder = new StringBuilder(1024).Append("{\"events\":[");
             for (var i = 0; i < batch.Events.Count; i++)
             {
                 if (i > 0) builder.Append(',');
                 builder.Append(batch.Events[i].Json);
             }
             var latest = batch.Events.Count == 0 ? afterSequence : batch.Events[batch.Events.Count - 1].Sequence;
-            builder.Append("],\\\"count\\\":").Append(batch.Events.Count.ToString(CultureInfo.InvariantCulture))
-                .Append(",\\\"latestSequence\\\":").Append(latest.ToString(CultureInfo.InvariantCulture))
-                .Append(",\\\"afterSequence\\\":").Append(afterSequence.ToString(CultureInfo.InvariantCulture))
-                .Append(",\\\"tail\\\":").Append(tail ? "true" : "false")
-                .Append(",\\\"truncated\\\":").Append(batch.Truncated ? "true" : "false");
+            builder.Append("],\"count\":").Append(batch.Events.Count.ToString(CultureInfo.InvariantCulture))
+                .Append(",\"latestSequence\":").Append(latest.ToString(CultureInfo.InvariantCulture))
+                .Append(",\"afterSequence\":").Append(afterSequence.ToString(CultureInfo.InvariantCulture))
+                .Append(",\"tail\":").Append(tail ? "true" : "false")
+                .Append(",\"truncated\":").Append(batch.Truncated ? "true" : "false");
             if (elapsedMilliseconds > 0 || timedOut)
-                builder.Append(",\\\"elapsedMs\\\":").Append(elapsedMilliseconds.ToString(CultureInfo.InvariantCulture))
-                    .Append(",\\\"timedOut\\\":").Append(timedOut ? "true" : "false");
+                builder.Append(",\"elapsedMs\":").Append(elapsedMilliseconds.ToString(CultureInfo.InvariantCulture))
+                    .Append(",\"timedOut\":").Append(timedOut ? "true" : "false");
             return builder.Append('}').ToString();
         }
 
@@ -214,9 +240,9 @@ namespace QS3D.BricsCAD.V25
             var colorTheme = "unknown";
             try { colorTheme = Convert.ToString(Application.GetSystemVariable("COLORTHEME"), CultureInfo.InvariantCulture) ?? "unknown"; }
             catch { }
-            return "{\\\"mode\\\":\\\"" + ModeText(mode)
-                   + "\\\",\\\"effective\\\":\\\"" + (effectiveDark ? "dark" : "light")
-                   + "\\\",\\\"bricscadColorTheme\\\":\\\"" + Escape(colorTheme) + "\\\"}";
+            return "{\"mode\":\"" + ModeText(mode)
+                   + "\",\"effective\":\"" + (effectiveDark ? "dark" : "light")
+                   + "\",\"bricscadColorTheme\":\"" + Escape(colorTheme) + "\"}";
         }
 
         private static string SetTheme(string body, Action? ensureMutationRunning, Action<string> audit)
@@ -275,15 +301,15 @@ namespace QS3D.BricsCAD.V25
         {
             var requiredJson = required == null || required.Length == 0
                 ? string.Empty
-                : ",\\\"required\\\":[\\\"" + string.Join("\\\",\\\"", required) + "\\\"]";
-            return "{\\\"name\\\":\\\"" + Escape(name)
-                   + "\\\",\\\"description\\\":\\\"" + Escape(description)
-                   + "\\\",\\\"inputSchema\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{" + (properties ?? string.Empty)
-                   + "},\\\"additionalProperties\\\":false" + requiredJson + "}"
-                   + ",\\\"annotations\\\":{\\\"readOnlyHint\\\":" + Bool(readOnly)
-                   + ",\\\"destructiveHint\\\":" + Bool(destructive)
-                   + ",\\\"idempotentHint\\\":" + Bool(idempotent)
-                   + ",\\\"openWorldHint\\\":false}}";
+                : ",\"required\":[\"" + string.Join("\",\"", required) + "\"]";
+            return "{\"name\":\"" + Escape(name)
+                   + "\",\"description\":\"" + Escape(description)
+                   + "\",\"inputSchema\":{\"type\":\"object\",\"properties\":{" + (properties ?? string.Empty)
+                   + "},\"additionalProperties\":false" + requiredJson + "}"
+                   + ",\"annotations\":{\"readOnlyHint\":" + Bool(readOnly)
+                   + ",\"destructiveHint\":" + Bool(destructive)
+                   + ",\"idempotentHint\":" + Bool(idempotent)
+                   + ",\"openWorldHint\":false}}";
         }
 
         private static string ModeText(Qs3dThemeMode mode)
