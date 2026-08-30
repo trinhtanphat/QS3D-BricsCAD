@@ -4,50 +4,56 @@ Lane-Key: `issue-4780`
 
 ## Purpose
 
-The manual V26 release lane creates a GitHub draft release before uploading and remotely verifying package assets. GitHub may create the requested tag as part of that draft transaction. A post-create failure must not strand a draft/tag owned by the current run, because a same-tag retry would otherwise fail before publication and require manual cleanup.
+The manual V26 release lane creates a GitHub draft release before uploading and remotely verifying package assets. A post-create failure must not strand transaction-owned remote state, because a same-tag retry would otherwise fail before publication and require manual cleanup.
 
 This runbook defines the bounded automatic rollback contract. It does not authorize release dispatch, signing, or licensed BricsCAD runtime claims.
 
-## Transaction ownership
+## Positive transaction ownership
 
-Before creating the draft, `.github/workflows/release-v26.yml` resolves the exact remote tag and requires that `refs/tags/<release-tag>` is absent. Only after that proof does the workflow POST the new draft and mark `releaseCreatedByThisRun=true` after receiving a usable release id.
+Absence immediately before draft creation is not sufficient ownership proof: another actor could create the same tag at the same qualified SHA between an absence check and the release POST. The workflow therefore does not infer ownership from absence.
 
-A pre-existing remote tag is therefore never owned by this transaction and is never eligible for automatic deletion. If draft creation does not return a usable release identity, cleanup is intentionally not guessed; the workflow surfaces the publication failure for manual inspection.
+Inside the publication transaction, `.github/workflows/release-v26.yml` first creates the exact GitHub ref `refs/tags/<release-tag>` through the GitHub REST API with `sha = GITHUB_SHA`. The transaction marks `tagCreatedByThisRun=true` only after the create response returns both the exact expected ref name and the exact qualified workflow SHA. A pre-existing tag causes the GitHub create-ref request to fail and is never owned or deleted by this transaction.
 
-## Post-create publication envelope
+The draft release is created only after positive tag ownership is established. The workflow records `releaseId` only after receiving a positive release identity. `releaseId=0` is an intentional rollback state for failures after tag creation but before a trustworthy draft identity is available.
 
-Once the run owns the draft, the existing publication requirements remain unchanged inside one `try` envelope:
+## Publication envelope
 
-1. the remote tag must resolve exactly to the qualified `GITHUB_SHA`;
-2. only V26 package assets are uploaded;
-3. the draft asset set must exactly match the expected set;
-4. remote size and held-generation SHA-256 verification must match local assets;
-5. the remote tag is re-resolved and must still target `GITHUB_SHA` after asset verification;
-6. only then may the draft be patched to `draft=false`.
+After exact ref ownership is established, the existing publication requirements remain inside one `try` envelope:
 
-Any exception after owned draft creation enters bounded rollback.
+1. the created remote tag must resolve exactly to the qualified `GITHUB_SHA`;
+2. the draft release must return a positive identity, remain a draft, and match the exact transaction tag;
+3. only V26 package assets are uploaded;
+4. the draft asset set must exactly match the expected set;
+5. remote size and held-generation SHA-256 verification must match local assets;
+6. the remote tag is re-resolved and must still target `GITHUB_SHA` after asset verification;
+7. only then may the draft be patched to `draft=false`.
+
+Any exception after positive tag ownership enters bounded rollback. An error before ownership is established is surfaced unchanged and does not invoke destructive cleanup.
 
 ## Bounded rollback helper
 
-`scripts/rollback-v26-draft-release.ps1` accepts the exact repository, release id, release tag, qualified workflow SHA, the pre-create tag-absence proof, and the workflow token. The helper fails closed unless all destructive preconditions remain true.
+`scripts/rollback-v26-draft-release.ps1` accepts the exact repository, optional positive release id, release tag, qualified workflow SHA, positive `TagCreatedByThisRun` proof, and workflow token. It fails closed unless the destructive preconditions remain true.
 
-Before deleting the draft it verifies:
+Before any cleanup it verifies the exact remote tag still resolves unambiguously to the qualified workflow SHA.
 
-- repository is a valid `owner/name` identity;
-- release id is positive and matches the fetched release object;
+When `ReleaseId > 0`, the helper additionally verifies before draft deletion:
+
+- the fetched release id matches exactly;
 - fetched release URL is exactly the expected repository/release API URL;
 - release is still a draft;
-- release tag exactly matches the transaction tag;
-- the tag-absence-before-create proof is true;
-- the remote tag resolves unambiguously to the qualified workflow SHA.
+- release tag exactly matches the transaction tag.
 
-After deleting the draft release, but before deleting the tag, it verifies that no release still owns the tag and re-resolves the tag to the same qualified workflow SHA. If the release became published, the tag moved, the tag is ambiguous, the release identity mismatches, or any other state is uncertain, the helper refuses tag deletion and the workflow reports an explicit manual-cleanup blocker.
+When `ReleaseId = 0`, the helper does not guess or search for a draft to delete. This safely covers the case where the transaction created its tag but draft creation failed before returning a trustworthy release identity.
 
-The helper does not use force push or broad Git tag deletion. Tag deletion is a single GitHub REST deletion for the exact escaped `refs/tags/<release-tag>` identity after the checks above.
+After the optional draft deletion, and always before tag deletion, the helper verifies that no release currently owns the tag and re-resolves the tag to the exact qualified workflow SHA. If a release exists, a draft became published, the tag moved, the tag is ambiguous, the release identity mismatches, or any state is uncertain, the helper refuses tag deletion and the workflow reports an explicit manual-cleanup blocker.
+
+This also handles an ambiguous draft-POST response safely: if GitHub actually created a release but the workflow never obtained a trustworthy id, the release-by-tag check prevents deleting the transaction tag underneath that release.
+
+The helper does not use force push or broad Git tag deletion. Tag deletion is a single GitHub REST deletion for the exact escaped `refs/tags/<release-tag>` identity after all checks above.
 
 ## Error reporting
 
-The workflow preserves the original publication error. If bounded rollback succeeds, the step fails with `V26 publication failed after draft creation` and explicitly states that automatic rollback completed, making a same-tag retry safe.
+The workflow preserves the original publication error. If bounded rollback succeeds, the step fails with `V26 publication failed after transaction tag creation` and explicitly states that automatic rollback completed, making a same-tag retry safe.
 
 If rollback itself fails closed, the step reports `Automatic V26 draft rollback failed` together with both the original publication error and rollback error, and requires manual cleanup before retry. The original failure is never replaced by a false success.
 
@@ -55,9 +61,12 @@ If rollback itself fails closed, the step reports `Automatic V26 draft rollback 
 
 `scripts/preflight-v26-draft-release-rollback.py` checks helper and workflow ordering and runs mutation probes for these independent safety properties:
 
-- pre-existing remote tag protection;
-- draft-only release deletion;
-- exact-SHA ownership before draft deletion;
+- positive transaction tag ownership rather than absence inference;
+- exact created-ref identity;
+- exact created-ref SHA binding;
+- draft-only release deletion when a release id is known;
+- exact-SHA ownership before cleanup;
+- no-release-owner check before tag deletion;
 - exact-SHA recheck before tag deletion;
 - workflow rollback wiring after publication failure.
 
