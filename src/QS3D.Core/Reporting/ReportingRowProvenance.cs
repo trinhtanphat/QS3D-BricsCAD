@@ -52,8 +52,6 @@ namespace QS3D.Core.Reporting
                     var identity = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
                     if (existingIdentities.Contains(identity) || !stagedIdentities.Add(identity))
                         throw new InvalidOperationException("Report provenance contains duplicate stored SourceHandles identity: " + handle + ". Repair source ownership before reporting.");
-                    if (targetSnapshot.Length + staged.Count >= MaxSourceHandleEntries)
-                        throw TooManyPublishedSourceHandles();
                     staged.Add(handle);
                     index++;
                 }
@@ -65,6 +63,8 @@ namespace QS3D.Core.Reporting
                 throw new InvalidOperationException(
                     "Report provenance SourceHandles known Count reported " + knownCount.Value +
                     " entries but traversal produced " + index + ".");
+            if (targetSnapshot.Length > MaxSourceHandleEntries - staged.Count)
+                throw TooManyPublishedSourceHandles();
 
             RequireStableTarget(target, targetSnapshot);
             foreach (var handle in staged) target.Add(handle);
