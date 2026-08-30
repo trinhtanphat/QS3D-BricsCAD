@@ -169,6 +169,7 @@ namespace QS3D.Core.Commercial
                     if (snapshot.Count >= MaximumLines)
                         throw new InvalidOperationException("Estimating portfolio supports at most 10000 lines.");
                     var line = enumerator.Current;
+                    RequireKnownCountStable(lines, knownCount);
                     if (line == null) throw new ArgumentException("Estimating portfolio contains a null line.", nameof(lines));
                     if (_byId.ContainsKey(line.LineId))
                         throw new ArgumentException("Duplicate estimating line id: " + line.LineId + ".", nameof(lines));
@@ -291,6 +292,7 @@ namespace QS3D.Core.Commercial
                     if (ids.Count >= MaximumSelectedLines)
                         throw new InvalidOperationException("Bulk rate assignment supports at most 10000 selected lines.");
                     var raw = enumerator.Current;
+                    RequireKnownCountStable(lineIds, lineIdKnownCount, MaximumSelectedLines, "selected-line");
                     var id = CommercialGuard.RequireToken(raw, nameof(lineIds));
                     if (!uniqueIds.Add(id))
                         throw new ArgumentException("Bulk rate assignment contains duplicate line id: " + id + ".", nameof(lineIds));
@@ -324,6 +326,7 @@ namespace QS3D.Core.Commercial
                     if (rates.Count >= MaximumUnitRates)
                         throw new InvalidOperationException("Bulk rate assignment supports at most 256 unit rates.");
                     var assignment = enumerator.Current;
+                    RequireKnownCountStable(unitRates, unitRateKnownCount, MaximumUnitRates, "unit-rate");
                     if (assignment == null) throw new ArgumentException("Bulk rate assignment contains a null unit rate.", nameof(unitRates));
                     if (!units.Add(assignment.Unit))
                         throw new ArgumentException("Duplicate unit-rate assignment for unit: " + assignment.Unit + ".", nameof(unitRates));
