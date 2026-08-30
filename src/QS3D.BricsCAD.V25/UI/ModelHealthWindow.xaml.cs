@@ -46,13 +46,22 @@ namespace QS3D.BricsCAD.V25.UI
             _changeVersionAtOpen = projectAtOpen.ChangeVersion;
             _drawingFingerprintAtOpen = projectAtOpen.DrawingFingerprint ?? string.Empty;
             InitializeComponent();
-            DocumentBoundWindowLifetime.Attach(this, _document);
-            Activated += (_, __) => RefreshSnapshotFreshness();
             Loaded += OnPublicationLoaded;
             Closed += OnPublicationClosed;
             ReservePublication(this);
-            UpdateTotalSummary();
-            ApplyFilter();
+            try
+            {
+                DocumentBoundWindowLifetime.Attach(this, _document);
+                Activated += (_, __) => RefreshSnapshotFreshness();
+                UpdateTotalSummary();
+                ApplyFilter();
+            }
+            catch
+            {
+                AbandonPublication(this);
+                try { Close(); } catch { }
+                throw;
+            }
         }
 
         private static void ReservePublication(ModelHealthWindow candidate)
@@ -75,22 +84,29 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static void CloseOwnerBeforeReplacement(ModelHealthWindow owner, string state)
         {
-            if (!owner.IsLoaded)
+            if (!owner.IsLoaded && string.Equals(state, "published", StringComparison.Ordinal))
             {
-                try { owner.Close(); }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException("Model Health " + state + " owner cleanup failed; replacement was refused.", ex);
-                }
-
-                if (ReferenceEquals(_pendingPublication, owner)) _pendingPublication = null;
                 if (ReferenceEquals(_published, owner)) _published = null;
                 return;
             }
 
-            owner.Close();
+            try
+            {
+                owner.Close();
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Model Health " + state + " owner cleanup failed; replacement was refused.", ex);
+            }
+
             if (owner.IsLoaded || ReferenceEquals(_pendingPublication, owner) || ReferenceEquals(_published, owner))
                 throw new InvalidOperationException("The existing Model Health " + state + " owner did not reach terminal close; replacement was refused.");
+        }
+
+        private static void AbandonPublication(ModelHealthWindow candidate)
+        {
+            if (ReferenceEquals(_pendingPublication, candidate)) _pendingPublication = null;
+            if (ReferenceEquals(_published, candidate)) _published = null;
         }
 
         private void OnPublicationLoaded(object? sender, RoutedEventArgs e)
@@ -111,11 +127,7 @@ namespace QS3D.BricsCAD.V25.UI
             _published = this;
         }
 
-        private void OnPublicationClosed(object? sender, EventArgs e)
-        {
-            if (ReferenceEquals(_pendingPublication, this)) _pendingPublication = null;
-            if (ReferenceEquals(_published, this)) _published = null;
-        }
+        private void OnPublicationClosed(object? sender, EventArgs e) => AbandonPublication(this);
 
         private void OnLocateClick(object sender, RoutedEventArgs e) => Locate();
         private void OnGridDoubleClick(object sender, MouseButtonEventArgs e) => Locate();
