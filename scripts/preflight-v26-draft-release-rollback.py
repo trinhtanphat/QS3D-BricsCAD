@@ -74,6 +74,22 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
         "$tagCreatedByThisRun = $true",
         "$releaseId = [long]0",
         "$releaseId = [long]$release.id",
+        "$verifiedAssetIds = @{}",
+        "$uploadedAssetId = [long]$uploadedAsset.id",
+        "$verifiedAssetIds[$expectedAsset] = $uploadedAssetId",
+        "$publishPatchAttempted = $false",
+        "$publishPatchAttempted = $true",
+        "function Assert-PublishedReleaseMatchesVerifiedTransaction",
+        "Published V26 release target SHA mismatch during acknowledgement reconciliation.",
+        "Verified V26 release asset identity mismatch for $expectedAsset.",
+        "if ($VerifiedAssetIds.Count -ne $ExpectedAssets.Count)",
+        "$reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers",
+        "if ($reconciledRelease.draft -eq $false)",
+        "if (-not $publishPatchAttempted)",
+        "Assert-PublishedReleaseMatchesVerifiedTransaction",
+        "authoritative release state confirms the exact qualified release is already published; treating publication as committed.",
+        "V26 publication acknowledgement reconciliation failed.",
+        "Manual cleanup is required before retry.",
         "try {",
         "catch {",
         "$publicationError = $_",
@@ -87,13 +103,12 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
         "Automatic V26 draft rollback failed",
         "Original publication error:",
         "Rollback error:",
-        "Manual cleanup is required before retry.",
         "V26 publication failed after transaction tag creation",
         "Automatic rollback completed; retry with the same tag is safe.",
     ]
     for needle in required_workflow:
         if needle not in workflow_text:
-            errors.append(f"workflow missing positive-ownership transaction contract: {needle}")
+            errors.append(f"workflow missing positive-ownership/acknowledgement contract: {needle}")
 
     for stale in [
         "$preCreateTagLines",
@@ -112,14 +127,21 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
     first_tag_check = workflow_text.find("Assert-RemoteReleaseTagTargetsWorkflowSha", release_id + 1)
     held_local_hash = workflow_text.find("verify-v26-held-file.ps1 -Operation Hash -Path $localAsset", first_tag_check + 1)
     held_remote_hash = workflow_text.find("verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset", held_local_hash + 1)
-    second_tag_check = workflow_text.find("Assert-RemoteReleaseTagTargetsWorkflowSha", held_remote_hash + 1)
-    publish_release = workflow_text.find("$published = Invoke-RestMethod -Method Patch", second_tag_check + 1)
+    asset_identity = workflow_text.find("$verifiedAssetIds[$expectedAsset] = $uploadedAssetId", held_remote_hash + 1)
+    second_tag_check = workflow_text.find("Assert-RemoteReleaseTagTargetsWorkflowSha", asset_identity + 1)
+    patch_attempted = workflow_text.find("$publishPatchAttempted = $true", second_tag_check + 1)
+    publish_release = workflow_text.find("$published = Invoke-RestMethod -Method Patch", patch_attempted + 1)
     catch_block = workflow_text.find("$publicationError = $_", publish_release + 1)
-    rollback_call = workflow_text.find("rollback-v26-draft-release.ps1", catch_block + 1)
-    if min(tag_create, tag_owned, ownership_sha, release_create, release_id, first_tag_check, held_local_hash, held_remote_hash, second_tag_check, publish_release, catch_block, rollback_call) < 0 or not (
-        tag_create < ownership_sha < tag_owned < release_create < release_id < first_tag_check < held_local_hash < held_remote_hash < second_tag_check < publish_release < catch_block < rollback_call
+    reconcile_get = workflow_text.find("$reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers", catch_block + 1)
+    published_branch = workflow_text.find("if ($reconciledRelease.draft -eq $false)", reconcile_get + 1)
+    patch_proof = workflow_text.find("if (-not $publishPatchAttempted)", published_branch + 1)
+    reconcile_call = workflow_text.find("Assert-PublishedReleaseMatchesVerifiedTransaction", patch_proof + 1)
+    committed_message = workflow_text.find("authoritative release state confirms the exact qualified release is already published; treating publication as committed.", reconcile_call + 1)
+    rollback_call = workflow_text.find("rollback-v26-draft-release.ps1", committed_message + 1)
+    if min(tag_create, tag_owned, ownership_sha, release_create, release_id, first_tag_check, held_local_hash, held_remote_hash, asset_identity, second_tag_check, patch_attempted, publish_release, catch_block, reconcile_get, published_branch, patch_proof, reconcile_call, committed_message, rollback_call) < 0 or not (
+        tag_create < ownership_sha < tag_owned < release_create < release_id < first_tag_check < held_local_hash < held_remote_hash < asset_identity < second_tag_check < patch_attempted < publish_release < catch_block < reconcile_get < published_branch < patch_proof < reconcile_call < committed_message < rollback_call
     ):
-        errors.append("workflow order must be exact-ref create/validate/ownership -> draft create -> exact-SHA/assets -> publish -> bounded rollback catch")
+        errors.append("workflow order must be exact-ref ownership -> draft/assets hash+identity -> publish attempt -> authoritative commit reconciliation -> bounded rollback")
 
     return errors
 
@@ -136,10 +158,15 @@ mutations = {
     "exhaustive release owner check": (helper.replace("Assert-NoReleaseOwnsTag\n\n$resolvedAfter", "$resolvedAfter", 1), workflow),
     "exact-SHA tag ownership": (helper.replace("if (-not [string]::Equals($resolvedBefore, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))", "if ($false)", 1), workflow),
     "post-delete exact-SHA recheck": (helper.replace("if (-not [string]::Equals($resolvedAfter, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))", "if ($false)", 1), workflow),
+    "verified asset identity capture": (helper, workflow.replace("$verifiedAssetIds[$expectedAsset] = $uploadedAssetId", "# verified asset identity removed", 1)),
+    "publish attempt proof": (helper, workflow.replace("$publishPatchAttempted = $true", "$publishPatchAttempted = $false", 1)),
+    "authoritative publish reconciliation": (helper, workflow.replace("$reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers", "$reconciledRelease = $null", 1)),
+    "published-state branch": (helper, workflow.replace("if ($reconciledRelease.draft -eq $false)", "if ($false)", 1)),
+    "verified published transaction": (helper, workflow.replace("Assert-PublishedReleaseMatchesVerifiedTransaction `", "# published transaction validation removed `", 1)),
     "transaction rollback wiring": (helper, workflow.replace("& .\\scripts\\rollback-v26-draft-release.ps1", "# rollback removed", 1)),
 }
 for label, (mutated_helper, mutated_workflow) in mutations.items():
     if not validate(mutated_helper, mutated_workflow):
         raise SystemExit(f"V26 draft rollback mutation probe did not fail closed: {label}")
 
-print("PASS V26 draft release rollback contract")
+print("PASS V26 draft release rollback and publish acknowledgement contract")
