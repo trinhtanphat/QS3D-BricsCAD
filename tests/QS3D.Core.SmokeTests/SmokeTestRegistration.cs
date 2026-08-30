@@ -168,6 +168,7 @@ namespace QS3D.Core.SmokeTests
             ProjectInterchangeAppendOnlyImporterSmoke.Run();
             IfcRoundTripQuantityEvidenceNullFailFastSmoke.Run();
             InteroperabilityContractsSmoke.Run();
+            InteroperabilityFactSetProvenanceSmoke.Run();
             InteroperabilityKnownCountContractSmoke.Run();
             BcfIssueExchangeSmoke.Run();
             BcfSemanticOutputBoundSmoke.Run();

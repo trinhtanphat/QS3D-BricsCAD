@@ -14,12 +14,15 @@ else:
     for token in (
         '[CommandMethod("QS3DRELEASECHECK", CommandFlags.Modal)]',
         "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
-        "new ModelHealthWindow(document, issues, issue => Locate(document, issue))",
+        "ModelHealthWindowPresenter.Show(document, issues, issue => Locate(document, issue))",
         "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)",
         "currentProject.FindElement(issue.ElementId)",
     ):
         if token not in text:
             errors.append("ReleaseReadinessCommands.cs missing read-only token: " + token)
+    for bypass in ("Application.ShowModelessWindow(", "new ModelHealthWindow("):
+        if bypass in text:
+            errors.append("QS3DRELEASECHECK must route Model Health publication through the transactional presenter: " + bypass)
     if "ProjectContextCoordinator.GetOrCreate" in text:
         errors.append("QS3DRELEASECHECK must never create/cache project state merely to inspect release readiness.")
     for stale in (
@@ -36,4 +39,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DRELEASECHECK is read-only and modeless Locate re-resolves current project state by stable element identity.")
+print("PASS: QS3DRELEASECHECK stays read-only, re-resolves current project state, and routes fresh snapshots through transactional Model Health publication.")
