@@ -30,7 +30,8 @@ else:
     known_count = find_after("IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(", rebound_after_move)
     capacity = find_after("if (items.Count == MaxProjections)", known_count)
     current = find_after("var projection = enumerator.Current;", capacity)
-    null_guard = find_after('if (projection == null) throw new ArgumentException("Projection collection cannot contain null entries.", nameof(projections));', current)
+    rebound_after_current = find_after(rebound_token, current)
+    null_guard = find_after('if (projection == null) throw new ArgumentException("Projection collection cannot contain null entries.", nameof(projections));', rebound_after_current)
     ifc_identity = find_after("if (!ifcGlobalIds.Add(projection.IfcGlobalId))", null_guard)
     qs3d_identity = find_after("if (!qs3dElementIds.Add(projection.Qs3dElementId))", ifc_identity)
     append = find_after("items.Add(projection);", qs3d_identity)
@@ -45,6 +46,7 @@ else:
         known_count,
         capacity,
         current,
+        rebound_after_current,
         null_guard,
         ifc_identity,
         qs3d_identity,
@@ -55,11 +57,11 @@ else:
     elif list(positions) != sorted(positions):
         failures.append(
             "projection-set traversal must enforce loop -> Count rebound -> MoveNext -> Count rebound -> "
-            "Count/capacity admission -> Current -> semantic identity -> append: " + str(positions)
+            "Count/capacity admission -> Current -> Count rebound -> semantic identity -> append: " + str(positions)
         )
 
-    if window.count(rebound_token) != 2:
-        failures.append("projection-set traversal must contain exactly two traversal-time Count rebound checks")
+    if window.count(rebound_token) != 3:
+        failures.append("projection-set traversal must contain exactly three traversal-time Count rebound checks")
     if "while (enumerator.MoveNext())" in window:
         failures.append("projection-set traversal cannot hide the pre-MoveNext Count rebound inside the loop condition")
     if "for (var index = 0; index < items.Count; index++)" in window:

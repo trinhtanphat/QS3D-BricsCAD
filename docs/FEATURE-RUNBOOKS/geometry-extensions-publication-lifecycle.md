@@ -12,7 +12,7 @@ The window continues to resolve `Application.DocumentManager.MdiActiveDocument` 
 
 ## Remote validation
 
-Run `python scripts/preflight-geometry-extension-ui.py`. Shared CI also runs the aggregate feature guard suite and compiles the V25 plugin against trusted locked references. These checks are source/static/compile evidence only.
+Run `python scripts/preflight-geometry-extension-ui.py` and `python scripts/preflight-host-global-utility-window-publication.py`. The historical host-global guard retains the Project Properties publication contract while validating Geometry Extensions against its stronger pending-owner failure-clean lifecycle. Shared CI also runs the aggregate feature guard suite and compiles the V25 plugin against trusted locked references. These checks are source/static/compile evidence only.
 
 ## LOCAL_ONLY licensed V25 matrix
 

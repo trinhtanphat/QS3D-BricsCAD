@@ -19,31 +19,17 @@ xaml = ROOT / required[0]
 if xaml.is_file():
     text = xaml.read_text(encoding="utf-8")
     for tag in (
-        'Tag="QS3DWALLJUNCTIONS"',
-        'Tag="QS3DWALLSNAPPREVIEW"',
-        'Tag="QS3DWALLSNAPAPPLY"',
-        'Tag="QS3DAUTOLINKHOSTS"',
-        'Tag="QS3DCUTOPENINGS"',
-        'Tag="QS3DCUTOPENINGSCURVED"',
-        'Tag="QS3DREBAR3D"',
-        'Tag="QS3DREBARTIES3D"',
-        'Tag="QS3DREBAR3DSHAPE"',
-        'Tag="QS3DREBARHEALTHALL"',
-        'Click="OnCommandClick"',
-    ):
+        'Tag="QS3DWALLJUNCTIONS"', 'Tag="QS3DWALLSNAPPREVIEW"', 'Tag="QS3DWALLSNAPAPPLY"',
+        'Tag="QS3DAUTOLINKHOSTS"', 'Tag="QS3DCUTOPENINGS"', 'Tag="QS3DCUTOPENINGSCURVED"',
+        'Tag="QS3DREBAR3D"', 'Tag="QS3DREBARTIES3D"', 'Tag="QS3DREBAR3DSHAPE"',
+        'Tag="QS3DREBARHEALTHALL"', 'Click="OnCommandClick"'):
         if tag not in text:
             errors.append("GeometryExtensionsWindow missing tag/handler: " + tag)
 
 code = ROOT / required[1]
 if code.is_file():
     text = code.read_text(encoding="utf-8")
-    for needle in (
-        "OnCommandClick",
-        "SendStringToExecute",
-        "StatusText.Text",
-        "Application.DocumentManager.MdiActiveDocument",
-        "ex.GetType().Name",
-    ):
+    for needle in ("OnCommandClick", "SendStringToExecute", "StatusText.Text", "Application.DocumentManager.MdiActiveDocument", "ex.GetType().Name"):
         if needle not in text:
             errors.append("GeometryExtensionsWindow code-behind missing: " + needle)
     if "ex.Message" in text:
@@ -53,71 +39,41 @@ command = ROOT / required[2]
 if command.is_file():
     text = command.read_text(encoding="utf-8")
     for needle in (
-        'CommandMethod("QS3DGEOMETRYEXT"',
-        "private static GeometryExtensionsWindow? _published;",
-        "private static GeometryExtensionsWindow? _pending;",
-        "var pending = _pending;",
-        "if (pending != null && !TryClosePendingWindow(pending))",
-        "var previous = _published;",
-        "if (previous.IsLoaded)",
-        "previous.Activate();",
-        "ReleasePublishedWindow(previous);",
-        "candidate = new GeometryExtensionsWindow();",
-        "_pending = window;",
-        "window.Closed += (_, __) => ReleaseWindow(window);",
-        "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
-        "if (!window.IsLoaded)",
-        "_published = window;",
-        "ReleasePendingWindow(window);",
-        "candidate = null;",
-        "finally",
-        "if (candidate != null)",
-        "TryClosePendingWindow(candidate);",
+        'CommandMethod("QS3DGEOMETRYEXT"', "private static GeometryExtensionsWindow? _published;",
+        "private static GeometryExtensionsWindow? _pending;", "var pending = _pending;",
+        "if (pending != null && !TryClosePendingWindow(pending))", "var previous = _published;",
+        "if (previous.IsLoaded)", "previous.Activate();", "ReleasePublishedWindow(previous);",
+        "candidate = new GeometryExtensionsWindow();", "_pending = window;",
+        "window.Closed += (_, __) => ReleaseWindow(window);", "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+        "if (!window.IsLoaded)", "_published = window;", "ReleasePendingWindow(window);", "candidate = null;",
+        "finally", "if (candidate != null)", "TryClosePendingWindow(candidate);",
         "private static void ReleaseWindow(GeometryExtensionsWindow window)",
         "private static void ReleasePublishedWindow(GeometryExtensionsWindow window)",
         "if (!ReferenceEquals(_published, window)) return;",
         "private static void ReleasePendingWindow(GeometryExtensionsWindow window)",
         "if (!ReferenceEquals(_pending, window)) return;",
         "private static bool TryClosePendingWindow(GeometryExtensionsWindow window)",
-        "if (!ReferenceEquals(_pending, window)) return true;",
-        "if (ReferenceEquals(_published, window))",
-        "if (window.IsLoaded) return false;",
-        "ex.GetType().Name",
-    ):
+        "if (!ReferenceEquals(_pending, window)) return true;", "if (ReferenceEquals(_published, window))",
+        "if (window.IsLoaded) return false;", "ex.GetType().Name"):
         if needle not in text:
             errors.append("Geometry Extensions command missing lifecycle contract: " + needle)
 
-    positions = [
-        text.find("var pending = _pending;"),
-        text.find("if (pending != null && !TryClosePendingWindow(pending))"),
-        text.find("var previous = _published;"),
-        text.find("candidate = new GeometryExtensionsWindow();"),
-        text.find("_pending = window;"),
-        text.find("window.Closed += (_, __) => ReleaseWindow(window);"),
-        text.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);"),
-        text.find("if (!window.IsLoaded)"),
-        text.find("_published = window;"),
-        text.find("ReleasePendingWindow(window);"),
-        text.find("candidate = null;"),
-        text.find("finally"),
-        text.find("TryClosePendingWindow(candidate);"),
-    ]
+    positions = [text.find(token) for token in (
+        "var pending = _pending;", "if (pending != null && !TryClosePendingWindow(pending))",
+        "var previous = _published;", "candidate = new GeometryExtensionsWindow();", "_pending = window;",
+        "window.Closed += (_, __) => ReleaseWindow(window);", "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+        "if (!window.IsLoaded)", "_published = window;", "ReleasePendingWindow(window);", "candidate = null;", "finally",
+        "TryClosePendingWindow(candidate);")]
     if min(positions) < 0 or positions != sorted(positions):
         errors.append("Geometry Extensions must drain failed pending ownership before construct, then pending -> Closed -> show -> Loaded -> publish -> release pending -> finally cleanup")
 
     helper_start = text.find("private static bool TryClosePendingWindow")
     helper = text[helper_start:] if helper_start >= 0 else ""
-    helper_positions = [
-        helper.find("if (!ReferenceEquals(_pending, window)) return true;"),
-        helper.find("if (ReferenceEquals(_published, window))"),
-        helper.find("if (window.IsLoaded)"),
-        helper.find("window.Close();"),
-        helper.find("if (window.IsLoaded) return false;"),
-        helper.find("ReleasePendingWindow(window);"),
-    ]
+    helper_positions = [helper.find(token) for token in (
+        "if (!ReferenceEquals(_pending, window)) return true;", "if (ReferenceEquals(_published, window))",
+        "if (window.IsLoaded)", "window.Close();", "if (window.IsLoaded) return false;", "ReleasePendingWindow(window);")]
     if min(helper_positions) < 0 or helper_positions != sorted(helper_positions):
         errors.append("Geometry Extensions pending cleanup must refuse non-owner cleanup, protect published owner, close best-effort, retain live failures, and release only terminal pending owner")
-
     if "ex.Message" in text:
         errors.append("Geometry Extensions launcher must not expose raw host exception messages")
 
@@ -126,9 +82,7 @@ commands = []
 if adapter.is_dir():
     for path in adapter.rglob("*.cs"):
         commands += re.findall(r'CommandMethod\("([A-Za-z0-9_]+)"', path.read_text(encoding="utf-8"))
-for required_command in (
-    "QS3DGEOMETRYEXT", "QS3DCUTOPENINGSCURVED", "QS3DREBARTIES3D", "QS3DREBARHEALTHALL",
-    "QS3DWALLSNAPPREVIEW", "QS3DWALLSNAPAPPLY"):
+for required_command in ("QS3DGEOMETRYEXT", "QS3DCUTOPENINGSCURVED", "QS3DREBARTIES3D", "QS3DREBARHEALTHALL", "QS3DWALLSNAPPREVIEW", "QS3DWALLSNAPAPPLY"):
     if commands.count(required_command) != 1:
         errors.append(required_command + " must be declared exactly once")
 
@@ -137,5 +91,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-
 print("PASS: Geometry Extensions keeps active-document dispatch while failed publication remains pending-owned until terminal cleanup, preventing duplicate windows and raw host-error disclosure.")
