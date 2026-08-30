@@ -76,9 +76,9 @@ require_success_path(
     "target-id traversal",
 )
 
-if "foreach (var element in elements)" in source:
+if "foreach (var element in elements)" in object_segment:
     fail("caller-controlled object targets must not regress to foreach")
-if "foreach (var value in values)" in source:
+if "foreach (var value in values)" in id_segment:
     fail("caller-controlled target IDs must not regress to foreach")
 
 require(source, "RequireObservedCount(knownCount, inputCount, \"Bulk edit target collection\");", "object under-yield check")
