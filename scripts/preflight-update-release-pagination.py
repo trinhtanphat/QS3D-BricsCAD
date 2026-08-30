@@ -25,8 +25,9 @@ def reject(text: str, needle: str, label: str) -> None:
 def main() -> int:
     client = read(CLIENT)
 
-    require(client, 'ReleasesEndpoint = "https://api.github.com/repos/trinhtanphat/QS3D-BricsCAD/releases?per_page=20"', "pinned first-page endpoint")
-    require(client, "private const int MaxReleasePages = 10;", "hard release-page scan bound")
+    require(client, 'ReleasesEndpoint = "https://api.github.com/repos/trinhtanphat/QS3D-BricsCAD/releases?per_page=100"', "pinned high-density first-page endpoint")
+    require(client, "private const int MaxResponseBytes = 4 * 1024 * 1024;", "bounded larger per-page response ceiling")
+    require(client, "private const int MaxReleasePages = 20;", "hard release-page scan bound")
     require(client, "for (var pageNumber = 1; pageNumber <= MaxReleasePages; pageNumber++)", "sequential bounded page scan")
     require(client, 'ReleasesEndpoint + "&page=" + pageNumber.ToString', "explicit GitHub page addressing")
     require(client, 'response.Headers["Link"]', "GitHub pagination Link inspection")
@@ -57,7 +58,7 @@ def main() -> int:
     require(client, "private static async Task CopyBoundedAsync", "bounded response streaming helper")
     require(client, "if (total > maxBytes)", "streaming byte ceiling")
 
-    print("PASS: GitHub release discovery scans bounded sequential pages, handles the current bounded response helper, and fails closed on an incomplete history window while response streaming remains independently byte-bounded.")
+    print("PASS: GitHub release discovery scans up to 2,000 releases in bounded sequential pages, keeps per-page response limits, and still fails closed on an incomplete history window.")
     return 0
 
 
