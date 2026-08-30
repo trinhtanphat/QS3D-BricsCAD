@@ -33,6 +33,9 @@ namespace QS3D.BricsCAD.V25
         private static readonly Regex SecretRegex = new Regex(
             "(?i)((?:access[_-]?token|refresh[_-]?token|bearer|token|secret|password|client[_-]?secret)\\s*[:=]\\s*)[^\\s;,\\\"]+",
             RegexOptions.CultureInvariant | RegexOptions.Compiled);
+        private static readonly Regex SequenceRegex = new Regex(
+            @"""sequence""\s*:\s*(?<value>[0-9]+)",
+            RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         private static Timer? _pollTimer;
         private static bool _started;
@@ -79,6 +82,7 @@ namespace QS3D.BricsCAD.V25
             lock (Gate)
             {
                 if (_started) return;
+                _sequence = Math.Max(_sequence, LoadLatestPersistedSequence());
                 _started = true;
                 _lastMcpError = string.Empty;
                 _lastOAuthActivityUtc = DateTime.MinValue;
@@ -284,6 +288,42 @@ namespace QS3D.BricsCAD.V25
         private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
         {
             Record("qs3d", "error", "unobserved-task-exception", e.Exception == null ? "Unobserved task exception." : e.Exception.ToString());
+        }
+
+        private static long LoadLatestPersistedSequence()
+        {
+            var latest = 0L;
+            var path = McpCadAgentRuntime.AuditFilePath;
+            latest = Math.Max(latest, ReadLatestSequence(path + ".1"));
+            latest = Math.Max(latest, ReadLatestSequence(path));
+            return latest;
+        }
+
+        private static long ReadLatestSequence(string path)
+        {
+            if (!File.Exists(path)) return 0L;
+            var latest = 0L;
+            try
+            {
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                using (var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, false))
+                {
+                    string? line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        if (line.Length == 0 || line.Length > 8192) continue;
+                        var match = SequenceRegex.Match(line);
+                        if (!match.Success) continue;
+                        long value;
+                        if (long.TryParse(match.Groups["value"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out value)
+                            && value > latest)
+                            latest = value;
+                    }
+                }
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            return latest;
         }
 
         private static void AppendLine(string line)
