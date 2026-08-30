@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 source = ROOT / "src/QS3D.Core/Commercial/CommercialContracts.cs"
 smoke = ROOT / "tests/QS3D.Core.SmokeTests/CommercialCountStabilitySmoke.cs"
 no_overread_smoke = ROOT / "tests/QS3D.Core.SmokeTests/CommercialCountNoOverreadSmoke.cs"
+current_smoke = ROOT / "tests/QS3D.Core.SmokeTests/CommercialCurrentCountAcceptanceSmoke.cs"
 errors = []
 
 
@@ -21,7 +22,7 @@ def ordered_positions(segment, tokens):
     return positions
 
 
-for path in (source, smoke, no_overread_smoke):
+for path in (source, smoke, no_overread_smoke, current_smoke):
     if not path.is_file():
         errors.append("missing Commercial Count-stability file: " + str(path.relative_to(ROOT)))
 
@@ -40,13 +41,15 @@ if source.is_file():
         "RequireStableKnownCountDuringTraversal(records, knownCount);",
         "CommercialGuard.RequireCanProcessNext(knownCount, snapshot.Count",
         "var record = enumerator.Current;",
+        "RequireStableKnownCountDuringTraversal(records, knownCount);",
+        "if (record == null)",
         "snapshot.Count != knownCount.Value",
         "RequireStableKnownCount(records, knownCount);",
         "_events.AddRange(snapshot);",
     )
     append_positions = ordered_positions(append, append_required)
     if not append or len(append_positions) != len(append_required) or any(pos < 0 for pos in append_positions):
-        errors.append("CommercialAuditLog.AppendBatch must rebind Count before MoveNext and after each successful MoveNext, guard before Current, then rebind before audit publication.")
+        errors.append("CommercialAuditLog.AppendBatch must rebind Count before/after MoveNext and immediately after Current before audit acceptance/publication.")
     if "foreach (var record in records)" in append:
         errors.append("CommercialAuditLog.AppendBatch must not use foreach for caller-controlled counted traversal.")
 
@@ -62,13 +65,15 @@ if source.is_file():
         "RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);",
         "RequireCanProcessNext(knownCount, result.Count",
         "var item = enumerator.Current;",
+        "RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);",
+        "if (item == null)",
         "result.Count != knownCount.Value",
         "RequireStableSnapshotKnownCount(source, knownCount, paramName, maximum);",
         "return new ReadOnlyCollection<T>(result.ToArray());",
     )
     snapshot_positions = ordered_positions(snapshot, snapshot_required)
     if not snapshot or len(snapshot_positions) != len(snapshot_required) or any(pos < 0 for pos in snapshot_positions):
-        errors.append("CommercialGuard.Snapshot must rebind Count before MoveNext and after each successful MoveNext, guard before Current, then rebind before immutable return.")
+        errors.append("CommercialGuard.Snapshot must rebind Count before/after MoveNext and immediately after Current before item acceptance/immutable return.")
     if "foreach (var item in source)" in snapshot:
         errors.append("CommercialGuard.Snapshot must not use foreach for caller-controlled counted traversal.")
 
@@ -116,6 +121,21 @@ if no_overread_smoke.is_file():
         if token not in text:
             errors.append("Commercial Count no-overread smoke missing regression token: " + token)
 
+if current_smoke.is_file():
+    text = current_smoke.read_text(encoding="utf-8")
+    for token in (
+        "[ModuleInitializer]",
+        "AuditBatchRejectsCurrentInducedCountDriftBeforeNullAcceptance",
+        "RevisionSnapshotRejectsCurrentInducedCountDriftBeforeNullAcceptance",
+        "StableCountedControlsRemainAccepted",
+        "known Count changed during traversal",
+        "reached ordinary item acceptance before Count stability was rebound",
+        "CurrentReads",
+        "partially publish audit events",
+    ):
+        if token not in text:
+            errors.append("Commercial Current-count acceptance smoke missing regression token: " + token)
+
 print("QS3D Commercial collection Count-stability preflight")
 if errors:
     for error in errors:
@@ -123,4 +143,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Commercial audit and snapshot materializers rebind Count around MoveNext, guard before Current, and rebind before publication.")
+print("PASS: Commercial audit and snapshot materializers rebind Count before/after MoveNext and after Current before semantic acceptance/publication.")
