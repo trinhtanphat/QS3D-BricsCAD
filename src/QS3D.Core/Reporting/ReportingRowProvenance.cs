@@ -14,6 +14,7 @@ namespace QS3D.Core.Reporting
             if (target == null) throw new ArgumentNullException(nameof(target));
             if (sourceHandles == null) throw new ArgumentNullException(nameof(sourceHandles));
 
+            RequireTargetWithinBound(target);
             var targetSnapshot = SnapshotTargetValues(target);
             var knownCount = ResolveKnownCount(sourceHandles);
             var existingIdentities = SnapshotTargetIdentities(targetSnapshot);
@@ -51,6 +52,8 @@ namespace QS3D.Core.Reporting
                     var identity = GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(handle);
                     if (existingIdentities.Contains(identity) || !stagedIdentities.Add(identity))
                         throw new InvalidOperationException("Report provenance contains duplicate stored SourceHandles identity: " + handle + ". Repair source ownership before reporting.");
+                    if (targetSnapshot.Length + staged.Count >= MaxSourceHandleEntries)
+                        throw TooManyPublishedSourceHandles();
                     staged.Add(handle);
                     index++;
                 }
@@ -65,6 +68,18 @@ namespace QS3D.Core.Reporting
 
             RequireStableTarget(target, targetSnapshot);
             foreach (var handle in staged) target.Add(handle);
+        }
+
+        private static void RequireTargetWithinBound(IList<string> target)
+        {
+            if (target.Count > MaxSourceHandleEntries)
+                throw TooManyPublishedSourceHandles();
+        }
+
+        private static InvalidOperationException TooManyPublishedSourceHandles()
+        {
+            return new InvalidOperationException(
+                "Report provenance SourceHandles cannot exceed " + MaxSourceHandleEntries + " published entries.");
         }
 
         private static string[] SnapshotTargetValues(IList<string> target)
