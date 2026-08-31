@@ -37,11 +37,15 @@ def patched_target_source(original):
         ("ClassifyFailure(string toolName, Exception exception)", "ClassifyFailure(string toolName, Exception? exception)"),
         ("IsArgumentFailure(Exception exception, string message)", "IsArgumentFailure(Exception? exception, string message)"),
         ("IsQs3dSourceBug(Exception exception, string message)", "IsQs3dSourceBug(Exception? exception, string message)"),
+        (
+            "    remove_between(AGENT,\n        '        private static string RunQs3dCommand(string body)\\n',\n        '        private static string UiClick(string body)\\n')",
+            "    remove_between(AGENT,\n        '        private static string RunQs3dCommand(string body)\\n',\n        '        private static string CommandCatalogJson()\\n')",
+        ),
     ]
     patched = original
     for old, new in replacements:
         if patched.count(old) != 1:
-            raise RuntimeError("nullable repair target mismatch: " + old)
+            raise RuntimeError("repair target mismatch: " + old)
         patched = patched.replace(old, new, 1)
     return patched
 
