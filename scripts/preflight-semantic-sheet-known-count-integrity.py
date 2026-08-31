@@ -104,7 +104,7 @@ required_smoke = [
     "AvailableViewPostTraversalCountDriftRejects();",
     "source.MoveNextCalls == 2",
     "source.CurrentReads == 1",
-    "source.CountReads >= 2",
+    "source.CountReads >= 7",
 ]
 for marker in required_smoke:
     require(marker in smoke, "missing adversarial smoke marker: " + marker)
