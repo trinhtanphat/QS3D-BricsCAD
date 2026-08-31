@@ -37,7 +37,7 @@ status_block = between(status, "private static string BuildStatusJson()", "priva
 
 if "return ToolSuccess(" not in connector_block:
     fail("connector_info must return the normal object ToolSuccess envelope")
-if '"structuredContent"' not in tool_success_block or '"data"' not in tool_success_block:
+if r'\"structuredContent\"' not in tool_success_block or r'\"data\"' not in tool_success_block:
     fail("ToolSuccess must expose structuredContent.data")
 if "return true" in connector_block.lower() or "return false" in connector_block.lower():
     fail("connector_info must not collapse to a scalar boolean contract")
