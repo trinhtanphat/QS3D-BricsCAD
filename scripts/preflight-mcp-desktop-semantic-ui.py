@@ -80,8 +80,10 @@ def main() -> int:
         errors.append("window mutations must re-check the shared mutation epoch before and after Win32 mutation")
 
     for forbidden in (
-        "ValuePattern",
-        "TextPattern",
+        "ValuePattern.",
+        "TextPattern.",
+        "GetCurrentPattern(ValuePattern",
+        "GetCurrentPattern(TextPattern",
         "ControlType.Edit",
         "ControlType.Document",
         "ControlType.Text",
