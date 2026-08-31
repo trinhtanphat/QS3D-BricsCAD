@@ -204,7 +204,7 @@ namespace QS3D.Core.Documentation
 
             var payload = Serialize(list);
             if (payload.Length > MaxPayloadChars) throw new InvalidOperationException("Semantic schedule catalog exceeds the 1 MiB metadata limit.");
-            if (project.Metadata.TryGetValue(MetadataKey, out var current) && string.Equals(current, payload, StringComparison.Ordinal)) return;
+            if (project.Metadata.TryGetValue(MetadataKey, out var storedPayload) && string.Equals(storedPayload, payload, StringComparison.Ordinal)) return;
             project.Metadata[MetadataKey] = payload;
         }
 
