@@ -46,11 +46,18 @@ ordered = [
     "if (!window.IsLoaded)",
     "_published = window;",
     "ReleasePendingWindow(window);",
-    "candidate = null;",
 ]
 positions = [text.find(token) for token in ordered]
 if positions != sorted(positions) or any(position < 0 for position in positions):
     raise SystemExit("Domain Hub publication ownership ordering changed")
+
+release_pending_position = positions[-1]
+cleanup_transfer_position = text.find(
+    "candidate = null;",
+    release_pending_position + len("ReleasePendingWindow(window);"),
+)
+if cleanup_transfer_position < 0 or cleanup_transfer_position <= release_pending_position:
+    raise SystemExit("Domain Hub local cleanup ownership must transfer only after pending ownership is released")
 
 close_body_start = text.find("private static bool TryClosePendingWindow")
 close_body_end = text.find("private static void ReportStatus", close_body_start)
