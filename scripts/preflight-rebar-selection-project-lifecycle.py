@@ -103,7 +103,7 @@ implied_only_cases = (
         "private static void FinalizeUi",
         "Column Rebar",
         "ExistingProjectMutationContext.Require(document, \"Rebar 3D\")",
-        "ColumnRebarSolidBuilder.BuildSelected(document, project)",
+        "ColumnRebarSolidBuilder.BuildSelected(document, project, selectedIds)",
     ),
     (
         ADAPTER / "ColumnTieCommands.cs",
