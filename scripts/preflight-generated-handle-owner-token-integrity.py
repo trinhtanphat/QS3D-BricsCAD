@@ -26,7 +26,11 @@ if split_start < 0:
 split_region = source[split_start:]
 
 required_source = [
-    ".Split(new[] { ';' }, StringSplitOptions.None)",
+    "var source = raw ?? string.Empty;",
+    "for (var index = 0; index <= source.Length; index++)",
+    "source[index] != ';'",
+    "handles.Count >= MaxDestructiveHandleCount",
+    "source.Substring(tokenStart, index - tokenStart)",
     "var normalized = NormalizeHandleIdentity(token);",
     "if (normalized.Length == 0)",
     "if (!string.Equals(token, normalized, StringComparison.Ordinal))",
@@ -44,9 +48,12 @@ for forbidden in (
     "StringSplitOptions.RemoveEmptyEntries",
     ".Where(x => x.Length > 0)",
     ".Distinct(StringComparer.OrdinalIgnoreCase)",
+    ".Split(new[] { ';' }, StringSplitOptions.None)",
+    ".Split(';')",
+    ".Split(\";\")",
 ):
     if forbidden in split_region:
-        fail("SplitHandles must not silently repair malformed owner tokens: " + forbidden)
+        fail("SplitHandles must not silently repair or eagerly materialize malformed owner tokens: " + forbidden)
 
 required_smoke = [
     "LeadingDelimiterFailsClosed",
