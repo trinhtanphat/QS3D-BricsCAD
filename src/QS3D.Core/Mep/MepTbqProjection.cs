@@ -315,9 +315,10 @@ namespace QS3D.Core.Mep
                 throw new InvalidOperationException("MEP/TBQ CSV row Count channels changed during serialization.");
             }
 
-            // Secondary Count getters are caller-controlled too; re-read the primary channel
-            // so a getter cannot mutate the IReadOnlyList count after its first check.
-            if (rows.Count != expected.ReadOnlyCount)
+            // Secondary Count getters are caller-controlled too. Re-read the primary channel only
+            // when a secondary channel was observed, preserving the historical primary-only cadence.
+            if ((expected.GenericCount.HasValue || expected.NonGenericCount.HasValue) &&
+                rows.Count != expected.ReadOnlyCount)
                 throw new InvalidOperationException("MEP/TBQ CSV row Count changed during serialization.");
         }
 
