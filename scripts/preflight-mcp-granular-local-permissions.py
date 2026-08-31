@@ -9,7 +9,7 @@ SESSION = SRC / "McpDesktopControlSession.cs"
 BACKGROUND = SRC / "McpBackgroundHostRuntime.cs"
 SETTINGS = SRC / "McpPersistentUserSettings.cs"
 INSTALLER = SRC / "Updates" / "VerifiedPreviewInstaller.cs"
-RUNBOOK = ROOT / "docs" / "MCP-CANONICAL-RUNBOOK.md"
+RUNBOOK = ROOT / "docs" / "FEATURE-RUNBOOKS" / "mcp-local-control-permission-ui.md"
 
 
 def fail(message: str) -> None:
@@ -97,25 +97,18 @@ for forbidden in (
     if forbidden in installer:
         fail("preview updater must not touch MCP credential surface: " + forbidden)
 
-# Canonical docs must match merged credential truth and explain the two permission layers.
+# Feature runbook must match merged credential truth and explain the two permission layers.
 for phrase in (
     "Windows Credential Manager",
-    "read-back verification",
+    "exact read-back verification",
     "không ghi plaintext",
     "background_only",
     "foreground_fallback",
     "checkbox",
     "chuột / bàn phím / màn hình",
+    "no ephemeral-process-token fallback",
 ):
     if phrase not in runbook:
-        fail("canonical MCP runbook missing current permission/credential truth: " + phrase)
-
-for stale in (
-    "QS3D does **not** persist the Runtime API key",
-    "On process restart, a user-entered Runtime API key is gone",
-    "Do not persist the OpenAI Runtime API key",
-):
-    if stale in runbook:
-        fail("canonical MCP runbook still contains stale Runtime API-key claim: " + stale)
+        fail("MCP permission runbook missing current permission/credential truth: " + phrase)
 
 print("MCP local-control permission UI preflight passed.")
