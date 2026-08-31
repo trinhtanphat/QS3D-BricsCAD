@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 V25 = ROOT / "src" / "QS3D.BricsCAD.V25"
 SERVER = V25 / "McpEmbeddedServerV2.cs"
 RUNTIME = V25 / "McpCadAgentRuntime.cs"
+DOMAIN_RUNTIME = V25 / "McpQs3dDomainRuntime.cs"
 LEGACY_SERVER = V25 / "McpEmbeddedServer.cs"
 COMMANDS = V25 / "McpConnectorRibbonCommands.cs"
 TOKEN_ONBOARDING = V25 / "McpCloudflareOnboarding.cs"
@@ -42,6 +43,7 @@ def main() -> int:
     errors: list[str] = []
     server = read(SERVER, errors)
     runtime = read(RUNTIME, errors)
+    domain_runtime = read(DOMAIN_RUNTIME, errors)
     legacy_server = read(LEGACY_SERVER, errors)
     commands = read(COMMANDS, errors)
     token_onboarding = read(TOKEN_ONBOARDING, errors)
@@ -99,7 +101,8 @@ def main() -> int:
     require(runtime, "ManualResetEventSlim", errors, "bounded CAD dispatch wait")
     require(runtime, 'McpTopLevelJson.ExtractBoolean(body, "confirmMutation")', errors, "top-level mutation gate")
     require(runtime, '"^QS3D[A-Za-z0-9_]*$"', errors, "QS3D-only command allowlist")
-    require(runtime, "SendStringToExecute(command + \"\\n\"", errors, "guarded QS3D command dispatch")
+    require(domain_runtime, "McpCadAgentRuntime.Qs3dCommandPattern", errors, "QS3D domain command allowlist binding")
+    require(domain_runtime, "SendStringToExecute(command + \"\\n\"", errors, "guarded QS3D domain command dispatch")
     require(runtime, "CadWorkQueued = 0", errors, "CAD dispatch queued state")
     require(runtime, "CadWorkRunning = 1", errors, "CAD dispatch running state")
     require(runtime, "CadWorkCancelledBeforeStart = 2", errors, "CAD dispatch cancelled-before-start state")
