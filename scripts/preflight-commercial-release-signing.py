@@ -54,7 +54,7 @@ required_workflow = (
     '$tagRefUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/refs"',
     "$tagCreatedByThisRun = $true",
     "$releaseId = [long]$release.id",
-    "gh release upload $env:RELEASE_TAG $asset --repo $env:GITHUB_REPOSITORY",
+    "gh release upload $env:RELEASE_TAG $resolvedAsset --repo $env:GITHUB_REPOSITORY",
     "gh release download $env:RELEASE_TAG",
     "$published = Invoke-RestMethod -Method Patch -Uri $releaseUri",
     "if ($published.draft -ne $false)",

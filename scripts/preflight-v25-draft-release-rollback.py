@@ -80,8 +80,21 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
         "$reconciledTag = Get-ExactReusableReleaseTag",
         "tag-create acknowledgement failed and the exact release tag is authoritatively absent",
         "tag-create acknowledgement was ambiguous, but the exact lightweight tag now exists at workflow SHA; reusing it without deletion ownership.",
+        "QS3D-DRAFT-CREATE-V25:",
         "$releaseId = [long]0",
         "$releaseId = [long]$release.id",
+        "$verifiedAssetIds = @{}",
+        "$verifiedAssetIds[$name] = $uploadedAssetId",
+        "$publishPatchAttempted = $false",
+        "$publishPatchAttempted = $true",
+        "function Assert-PublishedReleaseMatchesVerifiedTransaction",
+        "$reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers",
+        "if ($reconciledRelease.draft -eq $false)",
+        "if (-not $publishPatchAttempted)",
+        "Assert-PublishedReleaseMatchesVerifiedTransaction",
+        "authoritative release state confirms the exact qualified release is already published; treating publication as committed.",
+        "publication acknowledgement reconciliation failed",
+        "Manual cleanup is required before retry.",
         "& .\\scripts\\rollback-v25-draft-release.ps1",
         "-TagCreatedByThisRun $tagCreatedByThisRun",
         "Automatic V25 draft rollback failed",
@@ -90,10 +103,15 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
     ]
     require_all(workflow_text, required_workflow, "workflow", errors)
 
+    draft_create_start = workflow_text.find("function Resolve-AmbiguousDraftCreate")
+    publish_assert_start = workflow_text.find("function Assert-PublishedReleaseMatchesVerifiedTransaction", draft_create_start + 1)
+    if draft_create_start < 0 or publish_assert_start <= draft_create_start:
+        errors.append("workflow draft-create acknowledgement missing bounded Resolve-AmbiguousDraftCreate function scope")
+        draft_create_scope = ""
+    else:
+        draft_create_scope = workflow_text[draft_create_start:publish_assert_start]
+
     draft_create_contract = [
-        "$draftTransactionMarker =",
-        "QS3D-DRAFT-CREATE-V25:",
-        "$expectedReleaseName = \"QS3D for BricsCAD V25 $env:RELEASE_TAG\"",
         "function Resolve-AmbiguousDraftCreate",
         "releases?per_page=100&page=$page",
         "$maxPages = 20",
@@ -105,12 +123,36 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
         "ReleaseSnapshot.body",
         "$body.IndexOf($TransactionMarker, [StringComparison]::Ordinal)",
         "matching V25 draft-create transaction marker",
-        "$draftCreateError = $_",
-        "$reconciledDraft = Resolve-AmbiguousDraftCreate",
-        "draft-create acknowledgement was ambiguous, but exactly one transaction-owned draft was recovered",
-        "$release = $reconciledDraft",
     ]
-    require_all(workflow_text, draft_create_contract, "workflow draft-create acknowledgement", errors)
+    require_all(draft_create_scope, draft_create_contract, "workflow Resolve-AmbiguousDraftCreate", errors)
+
+    publish_assert_end = workflow_text.find("$notes =", publish_assert_start + 1)
+    if publish_assert_start < 0 or publish_assert_end <= publish_assert_start:
+        errors.append("workflow publish acknowledgement missing Assert-PublishedReleaseMatchesVerifiedTransaction function scope")
+        publish_assert_scope = ""
+    else:
+        publish_assert_scope = workflow_text[publish_assert_start:publish_assert_end]
+
+    publish_identity_contract = [
+        "function Assert-PublishedReleaseMatchesVerifiedTransaction",
+        "[long]$ReleaseSnapshot.id -ne $ReleaseId",
+        "ReleaseSnapshot.url, $ReleaseUri",
+        "ReleaseSnapshot.draft -ne $false",
+        "ReleaseSnapshot.tag_name, $env:RELEASE_TAG",
+        "ReleaseSnapshot.target_commitish, $env:GITHUB_SHA",
+        "ReleaseSnapshot.name, $ExpectedReleaseName",
+        "ReleaseSnapshot.prerelease -ne $IsPrerelease",
+        "ReleaseSnapshot.body",
+        "$TransactionMarker",
+        "Assert-RemoteReleaseTagTargetsWorkflowSha",
+        "@($ReleaseSnapshot.assets).Count -ne $ExpectedAssets.Count",
+        "$VerifiedAssetIds.Count -ne $ExpectedAssets.Count",
+        "$VerifiedAssetIds.ContainsKey($expectedAsset)",
+        "$LocalAssets.ContainsKey($expectedAsset)",
+        "[long]$publishedAsset.id -ne $expectedAssetId",
+        "[int64]$publishedAsset.size -ne $localLength",
+    ]
+    require_all(publish_assert_scope, publish_identity_contract, "workflow published-release acknowledgement", errors)
 
     for stale in ["$existing = @(git ls-remote --tags origin $tagRef", "& gh @createArgs", "if (git tag --list $env:RELEASE_TAG) { throw"]:
         if stale in workflow_text:
@@ -133,11 +175,15 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
     draft_reconcile = workflow_text.find("$reconciledDraft = Resolve-AmbiguousDraftCreate", draft_error + 1)
     recovered = workflow_text.find("$release = $reconciledDraft", draft_reconcile + 1)
     release_id = workflow_text.find("$releaseId = [long]$release.id", recovered + 1)
-    catch_block = workflow_text.find("$publicationError = $_", release_id + 1)
-    rollback_call = workflow_text.find("rollback-v25-draft-release.ps1", catch_block + 1)
-    draft_order = [marker, request, release_create, draft_error, draft_reconcile, recovered, release_id, catch_block, rollback_call]
-    if min(draft_order) < 0 or draft_order != sorted(draft_order) or release_create <= reconcile_tag:
-        errors.append("V25 draft-create order must remain marker/request -> exact-tag admission -> one POST -> create-error reconciliation -> positive releaseId -> bounded rollback")
+    publish_attempt = workflow_text.find("$publishPatchAttempted = $true", release_id + 1)
+    publish_patch = workflow_text.find("Invoke-RestMethod -Method Patch -Uri $releaseUri", publish_attempt + 1)
+    catch_block = workflow_text.find("$publicationError = $_", publish_patch + 1)
+    publish_get = workflow_text.find("$reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers", catch_block + 1)
+    publish_match = workflow_text.find("Assert-PublishedReleaseMatchesVerifiedTransaction", publish_get + 1)
+    rollback_call = workflow_text.find("rollback-v25-draft-release.ps1", publish_match + 1)
+    transaction_order = [marker, request, release_create, draft_error, draft_reconcile, recovered, release_id, publish_attempt, publish_patch, catch_block, publish_get, publish_match, rollback_call]
+    if min(transaction_order) < 0 or transaction_order != sorted(transaction_order) or release_create <= reconcile_tag:
+        errors.append("V25 release transaction order must remain marker/request -> exact-tag admission -> one draft POST -> create-error reconciliation -> positive releaseId -> publish-attempt proof -> PATCH -> authoritative GET/match -> bounded rollback")
 
     return errors
 
@@ -167,10 +213,24 @@ mutations = {
     "release-owner scan": (helper.replace("\nAssert-NoReleaseOwnsTag\n", "\n# removed\n", 1), workflow),
     "non-owned tag preservation": (helper.replace("if (-not $TagCreatedByThisRun)", "if ($false)", 1), workflow),
     "tag delete acknowledgement reconciliation": (helper.replace("Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri", "# removed", 1), workflow),
+    "verified asset identity": (helper, workflow.replace("$verifiedAssetIds[$name] = $uploadedAssetId", "# removed", 1)),
+    "publish attempt proof": (helper, workflow.replace("$publishPatchAttempted = $true", "$publishPatchAttempted = $false", 1)),
+    "published reconciliation GET": (helper, workflow.replace("$reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers", "$reconciledRelease = $null", 1)),
+    "published release id": (helper, workflow.replace("[long]$ReleaseSnapshot.id -ne $ReleaseId", "$false", 1)),
+    "published repository identity": (helper, workflow.replace("ReleaseSnapshot.url, $ReleaseUri", "ReleaseSnapshot.url, 'other'", 1)),
+    "published exact tag": (helper, workflow.replace("ReleaseSnapshot.tag_name, $env:RELEASE_TAG", "ReleaseSnapshot.tag_name, 'other'", 2)),
+    "published exact SHA": (helper, workflow.replace("ReleaseSnapshot.target_commitish, $env:GITHUB_SHA", "ReleaseSnapshot.target_commitish, ('0' * 40)", 2)),
+    "published exact name": (helper, workflow.replace("ReleaseSnapshot.name, $ExpectedReleaseName", "ReleaseSnapshot.name, 'other'", 2)),
+    "published prerelease": (helper, workflow.replace("ReleaseSnapshot.prerelease -ne $IsPrerelease", "$false", 2)),
+    "published remote tag proof": (helper, workflow.replace("Published V25 release transaction marker mismatch during acknowledgement reconciliation.' }\n            Assert-RemoteReleaseTagTargetsWorkflowSha", "Published V25 release transaction marker mismatch during acknowledgement reconciliation.' }\n            # removed", 1)),
+    "published asset count": (helper, workflow.replace("@($ReleaseSnapshot.assets).Count -ne $ExpectedAssets.Count", "$false", 1)),
+    "published asset id": (helper, workflow.replace("[long]$publishedAsset.id -ne $expectedAssetId", "$false", 1)),
+    "published asset bytes": (helper, workflow.replace("[int64]$publishedAsset.size -ne $localLength", "$false", 1)),
+    "pre-PATCH publication veto": (helper, workflow.replace("if (-not $publishPatchAttempted)", "if ($false)", 1)),
     "rollback wiring": (helper, workflow.replace("& .\\scripts\\rollback-v25-draft-release.ps1", "# removed", 1)),
 }
 for label, (mutated_helper, mutated_workflow) in mutations.items():
     if not validate(mutated_helper, mutated_workflow):
         raise SystemExit(f"V25 draft rollback mutation probe did not fail closed: {label}")
 
-print("PASS V25 restart-safe tag admission, draft-create acknowledgement recovery, rollback, non-owned tag preservation, and destructive acknowledgement contract")
+print("PASS V25 restart-safe tag admission, draft-create acknowledgement recovery, publish acknowledgement reconciliation, rollback, non-owned tag preservation, and destructive acknowledgement contract")
