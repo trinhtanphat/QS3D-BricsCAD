@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
         {
             GrowthRejectsBeforeSecondAdvance();
             ShrinkRejectsBeforeFirstCurrentRead();
+            CurrentCountDriftWinsBeforeNullValidation();
             FinalReboundRejectsAfterEnumerationEnds();
             StableKnownCountProducesExpectedClash();
             PureStreamingEnumerableRemainsSupported();
@@ -36,9 +37,18 @@ namespace QS3D.Core.SmokeTests
             Equal(0, source.CurrentReads, "shrink Current reads");
         }
 
+        private static void CurrentCountDriftWinsBeforeNullValidation()
+        {
+            var source = new CurrentCountDriftEnumerable();
+            ExpectCountDrift(() => new ClashDetectionService().Detect(source), "Current-induced drift");
+            Equal(1, source.MoveNextCalls, "Current-induced drift MoveNext calls");
+            Equal(1, source.CurrentReads, "Current-induced drift Current reads");
+            Equal(4, source.CountReads, "Current-induced drift Count reads");
+        }
+
         private static void FinalReboundRejectsAfterEnumerationEnds()
         {
-            var source = HostileKnownCountEnumerable.WithCounts(2, 2, 2, 2, 2, 2, 3);
+            var source = HostileKnownCountEnumerable.WithCounts(2, 2, 2, 2, 2, 2, 2, 2, 3);
             ExpectCountDrift(() => new ClashDetectionService().Detect(source), "final rebound");
             Equal(3, source.MoveNextCalls, "final rebound MoveNext calls");
             Equal(2, source.CurrentReads, "final rebound Current reads");
@@ -46,7 +56,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void StableKnownCountProducesExpectedClash()
         {
-            var source = HostileKnownCountEnumerable.WithCounts(2, 2, 2, 2, 2, 2, 2);
+            var source = HostileKnownCountEnumerable.WithCounts(2, 2, 2, 2, 2, 2, 2, 2, 2);
             var results = new ClashDetectionService().Detect(source, includeSameDiscipline: true);
             Equal(1, results.Count, "stable result count");
             Equal(ClashKind.Hard, results[0].Kind, "stable clash kind");
@@ -54,7 +64,7 @@ namespace QS3D.Core.SmokeTests
             Equal("B", results[0].RightElementId, "stable right id");
             Equal(3, source.MoveNextCalls, "stable MoveNext calls");
             Equal(2, source.CurrentReads, "stable Current reads");
-            Equal(7, source.CountReads, "stable Count reads");
+            Equal(9, source.CountReads, "stable Count reads");
         }
 
         private static void PureStreamingEnumerableRemainsSupported()
@@ -98,6 +108,58 @@ namespace QS3D.Core.SmokeTests
         {
             if (!EqualityComparer<T>.Default.Equals(expected, actual))
                 throw new Exception(label + ": expected=" + expected + ", actual=" + actual + ".");
+        }
+
+        private sealed class CurrentCountDriftEnumerable : IReadOnlyCollection<CoordinationElement>
+        {
+            private int _count = 1;
+
+            internal int CountReads { get; private set; }
+            internal int MoveNextCalls { get; private set; }
+            internal int CurrentReads { get; private set; }
+
+            public int Count
+            {
+                get
+                {
+                    CountReads++;
+                    return _count;
+                }
+            }
+
+            public IEnumerator<CoordinationElement> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class Enumerator : IEnumerator<CoordinationElement>
+            {
+                private readonly CurrentCountDriftEnumerable _owner;
+                private bool _moved;
+
+                internal Enumerator(CurrentCountDriftEnumerable owner) => _owner = owner;
+
+                public CoordinationElement Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        _owner._count = 2;
+                        return null!;
+                    }
+                }
+
+                object IEnumerator.Current => Current;
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    if (_moved) return false;
+                    _moved = true;
+                    return true;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
         }
 
         private sealed class HostileKnownCountEnumerable : IReadOnlyCollection<CoordinationElement>
