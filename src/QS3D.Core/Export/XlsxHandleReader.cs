@@ -146,6 +146,7 @@ namespace QS3D.Core.Export
                 XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
                 var headerRows = new List<XElement>(MaxHeaderRows);
                 XElement? target = null;
+                var targetMatches = 0;
                 foreach (var row in sheet.Descendants(ns + "row"))
                 {
                     var declaredRowText = (string?)row.Attribute("r");
@@ -155,15 +156,16 @@ namespace QS3D.Core.Export
                         throw new InvalidDataException("Excel worksheet row number is invalid or exceeds the XLSX row limit.");
                     if (declaredRow == rowNumber)
                     {
-                        if (target != null)
-                            throw new InvalidDataException("Excel worksheet contains duplicate row number " + rowNumber + ".");
-                        target = row;
+                        targetMatches++;
+                        if (target == null) target = row;
                     }
                     else if (declaredRow < rowNumber && headerRows.Count < MaxHeaderRows)
                     {
                         headerRows.Add(row);
                     }
                 }
+                if (targetMatches > 1)
+                    throw new InvalidDataException("Excel worksheet contains duplicate row number " + rowNumber + ".");
                 if (target == null)
                     return new XlsxHandleLookupResult(Array.Empty<string>(), Array.Empty<string>(), string.Empty, false, worksheet.Name, false, worksheet.IsEd2Detail);
 
