@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -54,21 +55,61 @@ namespace QS3D.Core.Export
 
         private static IReadOnlyList<string> MaterializeIdentityValues(IEnumerable<string> values, string label)
         {
+            var admittedCount = ReadKnownCount(values, label);
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var observed = 0;
-            foreach (var value in values)
+            using (var enumerator = values.GetEnumerator())
             {
-                observed++;
-                if (observed > MaximumIdentityValues)
-                    throw new InvalidOperationException(
-                        "Xlsx handle lookup " + label + " exceeds the supported bound of " +
-                        MaximumIdentityValues + " identity values.");
-                if (string.IsNullOrWhiteSpace(value)) continue;
-                var canonical = value.Trim();
-                if (seen.Add(canonical)) result.Add(canonical);
+                RequireKnownCountStable(values, admittedCount, label);
+                while (true)
+                {
+                    RequireKnownCountStable(values, admittedCount, label);
+                    var moved = enumerator.MoveNext();
+                    RequireKnownCountStable(values, admittedCount, label);
+                    if (!moved) break;
+                    if (admittedCount.HasValue && observed >= admittedCount.Value)
+                        throw new InvalidOperationException(
+                            "Xlsx handle lookup " + label + " enumerated more identity values than its reported Count " + admittedCount.Value + ".");
+                    if (observed >= MaximumIdentityValues)
+                        throw new InvalidOperationException(
+                            "Xlsx handle lookup " + label + " exceeds the supported bound of " + MaximumIdentityValues + " identity values.");
+                    var value = enumerator.Current;
+                    RequireKnownCountStable(values, admittedCount, label);
+                    observed++;
+                    if (string.IsNullOrWhiteSpace(value)) continue;
+                    var canonical = value.Trim();
+                    if (seen.Add(canonical)) result.Add(canonical);
+                }
             }
+            RequireKnownCountStable(values, admittedCount, label);
+            if (admittedCount.HasValue && observed != admittedCount.Value)
+                throw new InvalidOperationException(
+                    "Xlsx handle lookup " + label + " reported Count " + admittedCount.Value + " but enumerated " + observed + " identity values.");
             return result.AsReadOnly();
+        }
+
+        private static void RequireKnownCountStable(IEnumerable<string> values, int? admittedCount, string label)
+        {
+            var currentCount = ReadKnownCount(values, label);
+            if (currentCount != admittedCount)
+                throw new InvalidOperationException("Xlsx handle lookup " + label + " Count changed during materialization.");
+        }
+
+        private static int? ReadKnownCount(IEnumerable<string> values, string label)
+        {
+            var counts = new List<int>(3);
+            if (values is ICollection<string> collection) counts.Add(collection.Count);
+            if (values is IReadOnlyCollection<string> readOnlyCollection) counts.Add(readOnlyCollection.Count);
+            if (values is ICollection nonGenericCollection) counts.Add(nonGenericCollection.Count);
+            if (counts.Any(count => count < 0))
+                throw new InvalidOperationException("Xlsx handle lookup " + label + " reported a negative identity Count.");
+            if (counts.Any(count => count > MaximumIdentityValues))
+                throw new InvalidOperationException(
+                    "Xlsx handle lookup " + label + " exceeds the supported bound of " + MaximumIdentityValues + " identity values.");
+            if (counts.Count > 1 && counts.Any(count => count != counts[0]))
+                throw new InvalidOperationException("Xlsx handle lookup " + label + " reported conflicting identity Count values.");
+            return counts.Count == 0 ? (int?)null : counts[0];
         }
     }
 

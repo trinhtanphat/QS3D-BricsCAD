@@ -139,11 +139,11 @@ namespace QS3D.BricsCAD.V25
             {
                 _panel.RefreshFromActiveDocument();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 try
                 {
-                    e.Document?.Editor.WriteMessage("\nQS3DSTART refresh warning: " + ex.Message);
+                    e.Document?.Editor.WriteMessage("\nQS3DSTART refresh could not update the Start Center.");
                 }
                 catch
                 {

@@ -46,7 +46,7 @@ def main() -> int:
     require(commands, "requireAutoAcceptance: requireLiveConfidence", "ReviewCommands")
     require(commands, "RecognitionApplyBatchService.PrepareBestEffort", "ReviewCommands")
     require(commands, "RecognitionApplyBatchService.Commit", "ReviewCommands")
-    require(commands, "batch đã rollback, không giữ partial semantic capture", "ReviewCommands")
+    require(commands, "batch đã rollback an toàn; không giữ partial semantic capture", "ReviewCommands")
     forbid(commands, "foreach (var result in batch.AutoAccepted)\n                    {\n                        try { apply(result); }", "ReviewCommands")
 
     require(service, "bool requireAutoAcceptance = false", "RecognitionApplyBatchService")
