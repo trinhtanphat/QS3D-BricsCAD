@@ -258,11 +258,21 @@ namespace QS3D.Core.Diagnostics
 
         private static IReadOnlyList<string> SplitHandles(string raw)
         {
-            var tokens = (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.None);
-            var handles = new List<string>(tokens.Length);
+            var source = raw ?? string.Empty;
+            var handles = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var token in tokens)
+            var tokenStart = 0;
+
+            for (var index = 0; index <= source.Length; index++)
             {
+                if (index < source.Length && source[index] != ';') continue;
+                if (handles.Count >= MaxDestructiveHandleCount)
+                    throw new InvalidOperationException(
+                        "Generated owner handle property cannot exceed " + MaxDestructiveHandleCount +
+                        " handle tokens; persisted ownership provenance is outside the destructive safety envelope.");
+
+                var token = source.Substring(tokenStart, index - tokenStart);
+                tokenStart = index + 1;
                 var normalized = NormalizeHandleIdentity(token);
                 if (normalized.Length == 0)
                     throw new InvalidOperationException("Generated owner handle property contains an empty handle token; persisted ownership provenance is malformed.");
