@@ -231,6 +231,61 @@ def main():
         (14, "agent/bad"),
     ]
 
+    inferred_event = {
+        "number": 100,
+        "sender": {"login": "trinhtanphat"},
+        "pull_request": {
+            "number": 100,
+            "body": "## Summary\nNo duplicated lane metadata here.",
+            "head": {
+                "ref": "agent/opaque-20260828/issue-2305-infer-lane",
+                "repo": {"full_name": "trinhtanphat/QS3D-BricsCAD"},
+            },
+        },
+    }
+    key, conflicts = gate.validate_pull_request_event(
+        inferred_event, "trinhtanphat/QS3D-BricsCAD", peers
+    )
+    assert key == "issue-2305"
+    assert conflicts == [
+        (10, "agent/a/task"),
+        (12, "agent/c/task"),
+        (14, "agent/bad"),
+    ]
+
+    mismatched_event = {
+        **inferred_event,
+        "pull_request": {
+            **inferred_event["pull_request"],
+            "body": "Lane-Key: issue-9999",
+        },
+    }
+    expect_raises(
+        lambda: gate.validate_pull_request_event(
+            mismatched_event, "trinhtanphat/QS3D-BricsCAD", peers
+        ),
+        "does not match branch-derived Lane-Key 'issue-2305'",
+    )
+
+    integration_missing_event = {
+        "number": 101,
+        "sender": {"login": "trinhtanphat"},
+        "pull_request": {
+            "number": 101,
+            "body": "## Summary\nIntegration batch without explicit lane metadata.",
+            "head": {
+                "ref": "integration/batch-a",
+                "repo": {"full_name": "trinhtanphat/QS3D-BricsCAD"},
+            },
+        },
+    }
+    expect_raises(
+        lambda: gate.validate_pull_request_event(
+            integration_missing_event, "trinhtanphat/QS3D-BricsCAD", peers
+        ),
+        "requires a Lane-Key in the PR body",
+    )
+
     print("PASS: agent reservation/Lane-Key collision preflight regression")
     return 0
 
