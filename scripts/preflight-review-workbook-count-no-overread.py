@@ -30,20 +30,34 @@ helper_end = source.index(quantity_marker, helper_start)
 helper = source[helper_start:helper_end]
 
 required_helper = (
-    "while (enumerator.MoveNext())",
+    "void RequireStableCount()",
+    "while (true)",
+    "RequireStableCount();\n                    var moved = enumerator.MoveNext();",
+    "var moved = enumerator.MoveNext();\n                    RequireStableCount();",
+    "if (!moved)",
     "if (result.Count >= expectedCount)",
-    "result.Add(enumerator.Current);",
+    "var value = enumerator.Current;",
+    "var value = enumerator.Current;\n                    RequireStableCount();",
+    "result.Add(value);",
     "if (result.Count != expectedCount)",
-    "if (source.Count != expectedCount)",
 )
 for token in required_helper:
     if token not in helper:
         fail(f"SnapshotCounted<T> is missing token: {token}")
 
-if helper.index("if (result.Count >= expectedCount)") > helper.index("result.Add(enumerator.Current);"):
-    fail("SnapshotCounted<T> observes Current before known-Count admission")
-if helper.index("if (result.Count != expectedCount)") > helper.index("if (source.Count != expectedCount)"):
-    fail("SnapshotCounted<T> must establish traversal cardinality before post-traversal Count rebind")
+pre_move = helper.index("RequireStableCount();\n                    var moved = enumerator.MoveNext();")
+post_move = helper.index("var moved = enumerator.MoveNext();\n                    RequireStableCount();")
+overrun = helper.index("if (result.Count >= expectedCount)")
+current = helper.index("var value = enumerator.Current;")
+post_current = helper.index("var value = enumerator.Current;\n                    RequireStableCount();")
+retain = helper.index("result.Add(value);")
+exact = helper.index("if (result.Count != expectedCount)")
+final_rebind = helper.rfind("RequireStableCount();")
+
+if not (pre_move < post_move < overrun < current <= post_current < retain < exact < final_rebind):
+    fail("SnapshotCounted<T> must rebind Count around traversal and after Current before retention, while rejecting overrun before Current")
+if helper.count("RequireStableCount();") != 4:
+    fail("SnapshotCounted<T> must retain exactly four traversal/final Count rebound calls")
 
 for token in (
     "var detailCount = quantityDetails.Count;",
@@ -83,12 +97,15 @@ for token in (
     "KnownCountOverrunStopsBeforeUnexpectedCurrent",
     "ZeroCountOverrunNeverReadsCurrent",
     "UnderYieldFailsExactCardinality",
+    "MoveNextInducedCountDriftFailsBeforeCurrent",
+    "CurrentInducedCountDriftFailsBeforeRetention",
     "PostTraversalCountDriftFailsClosed",
     "StableCountedSnapshotReadsEachAdmittedCurrentExactlyOnce",
     "var admittedCount = source.Count;",
     "MoveNextCalls",
     "CurrentReads",
     "CountReads",
+    "source.CountReads == 10",
     "[ModuleInitializer]",
 ):
     if token not in smoke:
