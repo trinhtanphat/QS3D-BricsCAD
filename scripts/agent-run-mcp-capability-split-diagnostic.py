@@ -32,10 +32,30 @@ def commit_and_push(message, paths):
     run(["git", "push", "origin", "HEAD:" + branch])
 
 
+def patched_target_source(original):
+    replacements = [
+        ("ClassifyFailure(string toolName, Exception exception)", "ClassifyFailure(string toolName, Exception? exception)"),
+        ("IsArgumentFailure(Exception exception, string message)", "IsArgumentFailure(Exception? exception, string message)"),
+        ("IsQs3dSourceBug(Exception exception, string message)", "IsQs3dSourceBug(Exception? exception, string message)"),
+    ]
+    patched = original
+    for old, new in replacements:
+        if patched.count(old) != 1:
+            raise RuntimeError("nullable repair target mismatch: " + old)
+        patched = patched.replace(old, new, 1)
+    return patched
+
+
 def main():
-    completed = subprocess.run(
-        [sys.executable, str(TARGET)], cwd=ROOT, text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    original_target = TARGET.read_text(encoding="utf-8")
+    TARGET.write_text(patched_target_source(original_target), encoding="utf-8")
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(TARGET)], cwd=ROOT, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    finally:
+        TARGET.write_text(original_target, encoding="utf-8")
+
     output = completed.stdout or ""
     print(output, flush=True)
 
