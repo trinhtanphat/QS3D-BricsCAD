@@ -33,9 +33,17 @@ def main() -> None:
     before_move = materializer.find("ValidateKnownCount(curves, admittedCount, label);")
     move = materializer.find("var moved = enumerator.MoveNext();")
     after_move = materializer.find("ValidateKnownCount(curves, admittedCount, label);", before_move + 1)
-    current = materializer.find("result.Add(enumerator.Current);")
-    if min(before_move, move, after_move, current) < 0 or not (before_move < move < after_move < current):
-        raise SystemExit("ERROR: Grid radial Count stability guard requires Count rebound -> MoveNext -> Count rebound -> Current ordering")
+    overrun = materializer.find("if (admittedCount.HasValue && result.Count >= admittedCount.Value)")
+    current = materializer.find("var curve = enumerator.Current;")
+    after_current = materializer.find("ValidateKnownCount(curves, admittedCount, label);", after_move + 1)
+    retain = materializer.find("result.Add(curve);")
+    if min(before_move, move, after_move, overrun, current, after_current, retain) < 0 or not (
+        before_move < move < after_move < overrun < current < after_current < retain
+    ):
+        raise SystemExit(
+            "ERROR: Grid radial Count stability guard requires Count rebound -> MoveNext -> Count rebound -> "
+            "overrun/ceiling -> Current -> Count rebound -> retention ordering"
+        )
 
     require(materializer, "ReadKnownCount(curves, label)", "known Count admission")
     require(materializer, "ICollection<GridReferenceCurve>", "generic collection Count surface")
