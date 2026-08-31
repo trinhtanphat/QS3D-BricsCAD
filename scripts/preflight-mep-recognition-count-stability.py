@@ -4,9 +4,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.Core/Mep/MepRecognition.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/MepRecognitionCurrentIntegritySmoke.cs"
+CURRENT_DRIFT_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/MepRecognitionCurrentCountDriftSmoke.cs"
 
 source = SOURCE.read_text(encoding="utf-8")
 smoke = SMOKE.read_text(encoding="utf-8")
+current_drift_smoke = CURRENT_DRIFT_SMOKE.read_text(encoding="utf-8")
 
 
 def fail(message: str) -> None:
@@ -37,7 +39,7 @@ for token in (
 ):
     require(token, source, "production Count contract")
 
-for constructor_marker, enumerator_marker, count_marker, index_marker, overrun_marker, current_marker, under_yield_marker, label in (
+for constructor_marker, enumerator_marker, count_marker, index_marker, overrun_marker, current_marker, semantic_marker, under_yield_marker, label in (
     (
         "if (tokens == null) throw new ArgumentNullException(nameof(tokens));",
         "using (var enumerator = tokens.GetEnumerator())",
@@ -45,6 +47,7 @@ for constructor_marker, enumerator_marker, count_marker, index_marker, overrun_m
         "if (knownCount.HasValue && tokenIndex >= knownCount.Value)",
         "knownCount.Value, tokenIndex + 1",
         "var token = enumerator.Current;",
+        "tokenIndex++;",
         "knownCount.Value, tokenIndex, nameof(tokens)",
         "token traversal",
     ),
@@ -55,6 +58,7 @@ for constructor_marker, enumerator_marker, count_marker, index_marker, overrun_m
         "if (knownCount.HasValue && index >= knownCount.Value)",
         "knownCount.Value, index + 1",
         "var rule = enumerator.Current;",
+        "if (rule == null)",
         "knownCount.Value, index, nameof(rules)",
         "rule traversal",
     ),
@@ -75,6 +79,8 @@ for constructor_marker, enumerator_marker, count_marker, index_marker, overrun_m
             index_marker,
             overrun_marker,
             current_marker,
+            count_marker,
+            semantic_marker,
             under_yield_marker,
             count_marker,
         ),
@@ -93,6 +99,17 @@ for token in (
     "StableCountedInputsRemainAccepted",
     "Equal(0, source.CurrentReads",
 ):
-    require(token, smoke, "deterministic smoke")
+    require(token, smoke, "historical deterministic smoke")
+
+for token in (
+    "TokenCurrentCountDriftWinsBeforeMalformedTokenValidation",
+    "RuleCurrentCountDriftWinsBeforeNullRuleValidation",
+    "CurrentCountDriftProbe<string>(\" \")",
+    "CurrentCountDriftProbe<MepRecognitionRule>(null!)",
+    "known count changed during traversal",
+    "_owner._count = 2;",
+    "Equal(1, source.CurrentReads",
+):
+    require(token, current_drift_smoke, "post-Current deterministic smoke")
 
 print("PASS MEP recognition known-Count stability")
