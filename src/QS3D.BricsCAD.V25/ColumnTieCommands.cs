@@ -19,11 +19,18 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                // ColumnTieSolidBuilder owns the single implied-selection read at the
-                // native mutation boundary. Do not pre-read here: two independent
-                // SelectImplied calls can observe different pick sets.
+                // Capture PICKFIRST once before binding the canonical project. The same
+                // snapshot is passed into native generation, so admission and mutation
+                // cannot observe two different implied-selection sets.
+                var selectedIds = CadSelectionGuard.ReadImpliedSelection(document);
+                if (selectedIds.Length == 0)
+                {
+                    Report(document, SelectionGuidance);
+                    return;
+                }
+
                 var project = ExistingProjectMutationContext.Require(document, "Column Tie 3D");
-                var count = ColumnTieSolidBuilder.BuildSelected(document, project);
+                var count = ColumnTieSolidBuilder.BuildSelected(document, project, selectedIds);
                 var message = count == 0
                     ? SelectionGuidance
                     : "Tie 3D: đã tạo/cập nhật " + count + " đai cột.";
