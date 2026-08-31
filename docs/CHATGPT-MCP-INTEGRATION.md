@@ -60,7 +60,7 @@ Production uses a persistent **Named Tunnel**. `Quick Tunnel · test only` is su
 12. QS3D displays a local approval prompt inside BricsCAD. Approve only when the ChatGPT connection is expected.
 13. ChatGPT exchanges the one-time code for an access token and calls `/mcp` with `Authorization: Bearer <OAuth access token>`.
 14. Back in Agent Center, click **Đã thêm MCP trong ChatGPT** and run protocol/read-only verification.
-15. Leave desktop-wide permission **OFF** unless the task genuinely needs to interact with another Windows application. Resume it locally from **Agent** only when needed; it expires after 10 minutes of desktop-action inactivity.
+15. Leave desktop-wide permission **OFF** unless the task genuinely needs to interact with another Windows application. Resume it locally from **Agent** only when needed; after Resume it stays ON with AUTO-RENEW for the current BricsCAD process until a local safety control or shutdown revokes it.
 
 The legacy generated static bearer token remains available only under **Nâng cao** for local/backward-compatible engineering paths. It is **not** the normal ChatGPT authentication path.
 
@@ -69,7 +69,7 @@ The legacy generated static bearer token remains available only under **Nâng ca
 The Control Center is split into four task-focused tabs:
 
 - **Kết nối** — guided MCP/cloudflared/Cloudflare/Named Tunnel/ChatGPT setup;
-- **Agent** — local desktop permission, idle countdown, current local MCP action/Action ID/result, next step, recent events, Pause/Resume and Emergency Stop/cancel;
+- **Agent** — local desktop permission, AUTO-RENEW/session state, current local MCP action/Action ID/result, next step, recent events, Pause/Resume and Emergency Stop/cancel;
 - **Backup & khôi phục** — autosave/BAK status, manual versioned backup, latest recovery-to-copy;
 - **Nâng cao** — Quick Tunnel test fallback, engineering bearer compatibility, read-only self-test and audit access.
 
@@ -119,9 +119,10 @@ Desktop mutations require top-level `confirmMutation=true`; clipboard/screenshot
 
 - is process-memory-only;
 - resets on every BricsCAD start;
-- expires after 10 minutes without a newly started guarded desktop action;
+- after explicit local Resume remains ON with AUTO-RENEW for the current BricsCAD process and has no idle-expiry countdown;
 - can be paused/resumed only locally;
 - cannot be remotely enabled through MCP;
+- is immediately revoked by Pause desktop, Emergency Stop, physical Esc×2 or BricsCAD/QS3D shutdown;
 - displays a topmost click-through blue border/banner while a guarded desktop call is active.
 
 A physical **Esc twice within 1.2 seconds** disables desktop consent, advances the MCP emergency-stop epoch, hides the overlay and requests BricsCAD command cancellation. Desktop control cannot resume until the user locally resumes it.
@@ -181,7 +182,7 @@ Hosted CI can prove source guards and compilation only. Before claiming `LOCAL_P
 8. Verify DCR, PKCE S256 and `tools/list`, including all 15 current desktop tools and no `desktop_macro` alias.
 9. Call representative read-only CAD tools and desktop cursor/window observation/wait.
 10. With desktop permission OFF, verify desktop mutation and clipboard/screenshot reads fail closed.
-11. Resume desktop permission locally and verify idle countdown + blue overlay during guarded desktop calls.
+11. Resume desktop permission locally and verify AUTO-RENEW remains ON beyond 10 minutes of idle time, while the blue overlay still appears during guarded desktop calls.
 12. Verify clipboard read/screenshot require `confirmSensitiveRead=true`, crop remains bounded and no sensitive payload is persisted to audit.
 13. On disposable content, verify exact-target focus/mouse/click/scroll/drag/type/key/clipboard-write with `confirmMutation=true`.
 14. Verify a disposable single-window `desktop_sequence` succeeds within hard caps.
