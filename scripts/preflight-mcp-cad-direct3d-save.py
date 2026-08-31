@@ -9,14 +9,12 @@ DIRECT = SRC / "McpCadDirectModelRuntime.cs"
 SERVER = SRC / "McpEmbeddedServerV2.cs"
 
 
-def between(text: str, start: str, end: str) -> str:
-    start_index = text.find(start)
-    if start_index < 0:
+def method_block(source: str, signature: str) -> str:
+    start = source.find(signature)
+    if start < 0:
         return ""
-    end_index = text.find(end, start_index + len(start))
-    if end_index < 0:
-        return text[start_index:]
-    return text[start_index:end_index]
+    next_method = source.find("\n        private static ", start + len(signature))
+    return source[start:] if next_method < 0 else source[start:next_method]
 
 
 def require(errors: list[str], text: str, tokens: tuple[str, ...], label: str) -> None:
@@ -37,15 +35,15 @@ def main() -> int:
     server = SERVER.read_text(encoding="utf-8")
     errors: list[str] = []
 
-    run_block = between(runtime, "private static string RunCadCommandSequence", "private static string RunQs3dCommand")
-    save_block = between(runtime, "private static string SaveActiveDocument", "private static string RunQs3dCommand")
-    active_document_block = between(runtime, "private static string BuildActiveDocumentJson", "private static string BuildSelectionJson")
-    call_block = between(runtime, "public static string Call", "private static string Mutation")
-    direct_command_block = between(direct, "internal static string CallCadCommandSequence", "private static string CreateBox")
-    extrude_block = between(direct, "private static string Extrude", "private static string Boolean")
-    boolean_block = between(direct, "private static string Boolean", "private static string PlaceSingleFooting")
-    direct_save_block = between(direct, "private static string Save()", "private static string NormalizeExtrudeInputs")
-    dbmod_block = between(direct, "private static void WaitForCleanDbmod", "private static void RequireConfirmedMutation")
+    run_block = method_block(runtime, "private static string RunCadCommandSequence")
+    save_block = method_block(runtime, "private static string SaveActiveDocument")
+    active_document_block = method_block(runtime, "private static string BuildActiveDocumentJson")
+    call_block = method_block(runtime, "public static string Call")
+    direct_command_block = method_block(direct, "internal static string CallCadCommandSequence")
+    extrude_block = method_block(direct, "private static string Extrude")
+    boolean_block = method_block(direct, "private static string Boolean")
+    direct_save_block = method_block(direct, "private static string Save()")
+    dbmod_block = method_block(direct, "private static void WaitForCleanDbmod")
 
     require(errors, run_block, (
         'if (command == "QSAVE") return SaveActiveDocument(document);',
