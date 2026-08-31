@@ -35,21 +35,21 @@ namespace QS3D.BricsCAD.V25
             return new[]
             {
                 Tool("bricscad_interaction_policy_get",
-                    "Read whether MCP BricsCAD interaction is background-only or permits the explicit foreground desktop fallback.", ""),
+                    "Read the simultaneous Background Control and explicit Foreground Control capability state. Background Control is preferred/default and never implies a foreground fallback.", ""),
                 Tool("bricscad_interaction_policy_set",
-                    "Set BricsCAD MCP interaction policy. background_only is safe/default. foreground_fallback additionally requires current local desktop consent and still keeps every desktop mutation behind confirmMutation.",
+                    "Set the explicit Foreground Control policy gate. background_only is safe/default; foreground_fallback additionally requires current local desktop consent and never changes the preferred Background Control route.",
                     "\"mode\":{\"type\":\"string\",\"enum\":[\"background_only\",\"foreground_fallback\"]}," + ConfirmMutationProperty(),
                     "mode", "confirmMutation"),
                 Tool("bricscad_ui_text_snapshot",
-                    "Read bounded visible title/control text only from windows owned by the current BricsCAD process. Useful for command-line/status/popup diagnostics without screen OCR. Captured text is returned to the caller and is not written to the MCP audit stream.",
+                    "BACKGROUND CONTROL: Read bounded visible title/control text only from windows owned by the current BricsCAD process. Useful for command-line/status/popup diagnostics without screen OCR, focus stealing or global input. Captured text is returned to the caller and is not written to the MCP audit stream.",
                     "\"scope\":{\"type\":\"string\",\"enum\":[\"all\",\"commandline\",\"popup\"]},"
                     + "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":200},"
                     + ConfirmSensitiveReadProperty(), "scope", "confirmSensitiveRead"),
                 Tool("bricscad_ui_invoke",
-                    "Invoke one visible standard Button control owned by the current BricsCAD process using a bounded window message. Does not focus the window, move the cursor or inject keyboard/mouse input.",
+                    "BACKGROUND CONTROL: Invoke one visible standard Button control owned by the current BricsCAD process using a bounded window message. Does not focus the window, move the cursor or inject keyboard/mouse input. Unsupported controls fail instead of falling back to Foreground Control.",
                     ControlHandleProperty() + "," + ConfirmMutationProperty(), "controlHandle", "confirmMutation"),
                 Tool("bricscad_ui_set_text",
-                    "Set bounded text on one visible standard Edit/RichEdit control owned by the current BricsCAD process using WM_SETTEXT. Does not focus the window or inject global keyboard input.",
+                    "BACKGROUND CONTROL: Set bounded text on one visible standard Edit/RichEdit control owned by the current BricsCAD process using WM_SETTEXT. Does not focus the window or inject global keyboard input. Unsupported controls fail instead of falling back to Foreground Control.",
                     ControlHandleProperty() + ",\"text\":{\"type\":\"string\",\"maxLength\":4000}," + ConfirmMutationProperty(),
                     "controlHandle", "text", "confirmMutation")
             };
@@ -70,13 +70,40 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        internal static bool IsForegroundPolicyEnabled
+        {
+            get { return Volatile.Read(ref _interactionPolicy) == ForegroundFallback; }
+        }
+
+        internal static bool IsForegroundAvailable
+        {
+            get { return IsForegroundPolicyEnabled && McpDesktopControlSession.IsEnabled; }
+        }
+
+        internal static void EnableForegroundFromLocalUser()
+        {
+            McpDesktopControlSession.RequireLocalConsent("foreground-local-enable");
+            Interlocked.Exchange(ref _interactionPolicy, ForegroundFallback);
+        }
+
+        internal static void DisableForegroundFromLocalUser()
+        {
+            Interlocked.Exchange(ref _interactionPolicy, BackgroundOnly);
+        }
+
         internal static void EnsureGlobalInteractionAllowed(string toolName)
         {
             if (!UsesGlobalInteraction(toolName)) return;
-            if (Volatile.Read(ref _interactionPolicy) == ForegroundFallback) return;
-            throw new InvalidOperationException(
-                "Global Windows input is disabled by the BricsCAD MCP background_only interaction policy. "
-                + "Prefer direct CAD/QS3D/background-host tools. To use the explicit desktop fallback, locally enable QS3D desktop control and then set bricscad_interaction_policy_set mode=foreground_fallback with confirmMutation=true.");
+            if (!IsForegroundPolicyEnabled)
+            {
+                throw new InvalidOperationException(
+                    "Global Windows input is disabled by the BricsCAD MCP background_only interaction policy. "
+                    + "Background requests never automatically fall back to Foreground Control. Prefer direct CAD/QS3D/background-host tools, or have the local user explicitly enable Foreground Control before calling desktop_* tools.");
+            }
+
+            // Foreground policy alone is not permission to take over global input. Consent is a
+            // separate local-only gate and can be revoked independently (Pause/Emergency/Esc).
+            McpDesktopControlSession.RequireLocalConsent(toolName ?? "foreground-global-interaction");
         }
 
         private static bool UsesGlobalInteraction(string toolName)
@@ -100,10 +127,21 @@ namespace QS3D.BricsCAD.V25
 
         private static string PolicyJson()
         {
-            var foreground = Volatile.Read(ref _interactionPolicy) == ForegroundFallback;
-            return "{\"mode\":\"" + (foreground ? "foreground_fallback" : "background_only")
-                   + "\",\"globalInputAllowed\":" + (foreground ? "true" : "false")
-                   + ",\"defaultMode\":\"background_only\",\"processScoped\":true}";
+            var foregroundPolicy = IsForegroundPolicyEnabled;
+            var localConsent = McpDesktopControlSession.IsEnabled;
+            var foregroundAvailable = foregroundPolicy && localConsent;
+
+            // Stable JSON capability contract: "backgroundControl", "foregroundControl",
+            // "defaultRoute":"background", "fallback":"explicit_only", "implicitForegroundFallback":false.
+            return "{\"mode\":\"" + (foregroundPolicy ? "foreground_fallback" : "background_only")
+                   + "\",\"globalInputAllowed\":" + (foregroundAvailable ? "true" : "false")
+                   + ",\"defaultMode\":\"background_only\",\"processScoped\":true"
+                   + ",\"backgroundControl\":{\"available\":true,\"preferred\":true,\"usesGlobalInput\":false}"
+                   + ",\"foregroundControl\":{\"available\":" + (foregroundAvailable ? "true" : "false")
+                   + ",\"localConsent\":" + (localConsent ? "true" : "false")
+                   + ",\"policyEnabled\":" + (foregroundPolicy ? "true" : "false")
+                   + ",\"usesGlobalInput\":true}"
+                   + ",\"defaultRoute\":\"background\",\"fallback\":\"explicit_only\",\"implicitForegroundFallback\":false}";
         }
 
         private static string SetPolicy(string body, Action ensureMutationRunning, Action<string> audit)
@@ -115,7 +153,7 @@ namespace QS3D.BricsCAD.V25
             if (mode == "foreground_fallback")
             {
                 // Remote MCP cannot silently enable global mouse/keyboard takeover. The user must
-                // first enable the existing non-persistent local desktop consent in Agent Center.
+                // first enable the existing local desktop consent in Agent Center.
                 McpDesktopControlSession.RequireLocalConsent("foreground-fallback-enable");
                 ensureMutationRunning();
                 Interlocked.Exchange(ref _interactionPolicy, ForegroundFallback);
