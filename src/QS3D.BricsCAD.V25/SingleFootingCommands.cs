@@ -18,8 +18,9 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Native BricsCAD authoring for Workspace Móng đơn. The Family owns dimensions in meters;
-    /// the command only acquires center points. A closed footprint remains the semantic CAD source
-    /// and the visible Solid3d is marked with standard QS3D generated-geometry ownership.
+    /// the interactive command acquires center points while the internal one-shot bridge accepts
+    /// an already-resolved center. A closed footprint remains the semantic CAD source and the
+    /// visible Solid3d is marked with standard QS3D generated-geometry ownership.
     /// </summary>
     public sealed class SingleFootingCommands
     {
@@ -66,7 +67,29 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void PlaceOne(
+        /// <summary>
+        /// Deterministic one-shot bridge for callers that already resolved a center point (for
+        /// example a bounded automation surface). It deliberately shares the same Family,
+        /// semantic source, generated Solid3d ownership and rollback path as the interactive
+        /// command instead of reimplementing Móng đơn geometry.
+        /// </summary>
+        internal static string PlaceActiveSingleFootingAt(Document document, Point3d center)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            RequireFiniteCenter(center);
+            RequireModelSpace(document);
+
+            var project = ExistingProjectMutationContext.Require(document, "Đặt Móng đơn");
+            var family = ProjectFamilyActivationService.GetActive(project);
+            if (!SingleFootingContract.IsSingleFooting(family))
+                throw new InvalidOperationException("Chọn Móng → Móng đơn và một Family Móng đơn trước khi đặt theo tọa độ.");
+
+            var dimensions = SingleFootingContract.Read(family!);
+            RequireCurrentContext(document, project.ProjectId, family!.Id, dimensions);
+            return PlaceOne(document, project, family, dimensions, center);
+        }
+
+        private static string PlaceOne(
             Document document,
             ProjectState project,
             ProjectFamily family,
@@ -158,7 +181,8 @@ namespace QS3D.BricsCAD.V25
 
                 try { document.Editor.SetImpliedSelection(new[] { sourceId }); } catch { }
                 try { CadPostCommitUi.TryRegen(document, "Móng đơn"); } catch { }
-                Report(document, "Đã tạo Móng đơn " + family.Name + " tại tâm pick • Solid3d " + generatedHandle + ".");
+                Report(document, "Đã tạo Móng đơn " + family.Name + " tại tâm đã chọn • Solid3d " + generatedHandle + ".");
+                return generatedHandle;
             }
             catch (Exception operationError)
             {
@@ -336,13 +360,21 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Kích thước Family Móng đơn đã thay đổi; chạy lại lệnh để dùng thông số mới.");
         }
 
+        private static void RequireFiniteCenter(Point3d center)
+        {
+            if (!IsFinite(center.X) || !IsFinite(center.Y) || !IsFinite(center.Z))
+                throw new InvalidOperationException("Tâm Móng đơn phải có tọa độ hữu hạn.");
+        }
+
+        private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
         private static bool SameDimensions(SingleFootingDimensions a, SingleFootingDimensions b) =>
             a.L1M == b.L1M && a.W1M == b.W1M && a.L2M == b.L2M && a.W2M == b.W2M && a.H1M == b.H1M && a.H2M == b.H2M;
 
         private static void RequireModelSpace(Document document)
         {
             if (document.Database.TileMode) return;
-            throw new InvalidOperationException("QS3DDRAWSINGLEFOOTING chỉ author trong Model Space.");
+            throw new InvalidOperationException("QS3D Móng đơn chỉ author trong Model Space.");
         }
 
         private static string Mm(double meters) =>
