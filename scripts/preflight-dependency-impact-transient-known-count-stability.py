@@ -33,6 +33,10 @@ for token in (
     "TransientShrinkRejectsBeforeCurrent",
     "TransientNegativeRejectsBeforeCurrent",
     "TransientConflictRejectsBeforeCurrent",
+    "CurrentGrowthRejectsImmediatelyAfterCurrent",
+    "CurrentShrinkRejectsImmediatelyAfterCurrent",
+    "CurrentNegativeRejectsImmediatelyAfterCurrent",
+    "CountReadsAfterCurrent == 1",
     "StableCountedInputStillPlans",
     "StreamingInputStillPlans",
     "MoveNextCalls == 1 && source.CurrentReads == 0",
@@ -49,10 +53,19 @@ ordered = (
     "index >= knownCount.Value",
     "index >= maxRootCount",
     "var value = enumerator.Current;",
+    "RequireKnownCountStableDuringTraversal(sourceElementIds, knownCount, nameof(sourceElementIds));",
+    "var raw = value ?? string.Empty;",
+    "result.Add(raw);",
 )
-positions = [method.find(token) for token in ordered]
-if not method or any(pos < 0 for pos in positions) or positions != sorted(positions):
-    errors.append("Dependency-impact traversal must enforce MoveNext -> Count rebound -> cardinality gates -> Current.")
+search_from = 0
+positions = []
+for token in ordered:
+    pos = method.find(token, search_from)
+    positions.append(pos)
+    if pos >= 0:
+        search_from = pos + len(token)
+if not method or any(pos < 0 for pos in positions):
+    errors.append("Dependency-impact traversal must enforce MoveNext -> Count rebound -> cardinality gates -> Current -> Count rebound -> semantic retention.")
 if "foreach (var value in sourceElementIds)" in method:
     errors.append("Dependency-impact caller-controlled roots must not use foreach before Count revalidation.")
 
@@ -65,4 +78,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: dependency-impact transient Count drift rejects after MoveNext and before semantic Current.")
+print("PASS: dependency-impact transient Count drift rejects around MoveNext/Current before semantic retention.")
