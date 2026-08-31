@@ -5,6 +5,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "scripts" / "agent-apply-mcp-capability-split.py"
+EMBEDDED_PREFLIGHT = ROOT / "scripts" / "preflight-embedded-mcp.py"
 FAILURE = ROOT / "agent-mcp-capability-split.failure.txt"
 
 
@@ -32,6 +33,12 @@ def commit_and_push(message, paths):
     run(["git", "push", "origin", "HEAD:" + branch])
 
 
+def replace_exact(text, old, new, label):
+    if text.count(old) != 1:
+        raise RuntimeError(label + " target mismatch")
+    return text.replace(old, new, 1)
+
+
 def patched_target_source(original):
     replacements = [
         ("ClassifyFailure(string toolName, Exception exception)", "ClassifyFailure(string toolName, Exception? exception)"),
@@ -44,13 +51,36 @@ def patched_target_source(original):
     ]
     patched = original
     for old, new in replacements:
-        if patched.count(old) != 1:
-            raise RuntimeError("repair target mismatch: " + old)
-        patched = patched.replace(old, new, 1)
+        patched = replace_exact(patched, old, new, "helper repair")
     return patched
 
 
+def patch_embedded_preflight():
+    text = EMBEDDED_PREFLIGHT.read_text(encoding="utf-8")
+    text = replace_exact(
+        text,
+        'RUNTIME = V25 / "McpCadAgentRuntime.cs"\n',
+        'RUNTIME = V25 / "McpCadAgentRuntime.cs"\nDOMAIN_RUNTIME = V25 / "McpQs3dDomainRuntime.cs"\n',
+        "embedded preflight domain path",
+    )
+    text = replace_exact(
+        text,
+        '    runtime = read(RUNTIME, errors)\n',
+        '    runtime = read(RUNTIME, errors)\n    domain_runtime = read(DOMAIN_RUNTIME, errors)\n',
+        "embedded preflight domain read",
+    )
+    text = replace_exact(
+        text,
+        '    require(runtime, "SendStringToExecute(command + \\\"\\\\n\\\"", errors, "guarded QS3D command dispatch")\n',
+        '    require(domain_runtime, "McpCadAgentRuntime.Qs3dCommandPattern", errors, "QS3D domain command allowlist binding")\n'
+        '    require(domain_runtime, "SendStringToExecute(command + \\\"\\\\n\\\"", errors, "guarded QS3D domain command dispatch")\n',
+        "embedded preflight QS3D dispatch owner",
+    )
+    EMBEDDED_PREFLIGHT.write_text(text, encoding="utf-8")
+
+
 def main():
+    patch_embedded_preflight()
     original_target = TARGET.read_text(encoding="utf-8")
     TARGET.write_text(patched_target_source(original_target), encoding="utf-8")
     try:
