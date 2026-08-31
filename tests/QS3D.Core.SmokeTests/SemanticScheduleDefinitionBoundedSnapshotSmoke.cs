@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using QS3D.Core.Documentation;
 using QS3D.Core.Domain;
@@ -14,6 +15,9 @@ namespace QS3D.Core.SmokeTests
             IncludeIdsStopAtFirstOverBoundItem();
             ExcludeIdsStopAtFirstOverBoundItem();
             ColumnsStopAtFirstOverBoundItem();
+            MoveNextCountDriftFailsBeforeCurrent();
+            CurrentCountDriftFailsBeforeRetention();
+            StableKnownCountRemainsAccepted();
             AcceptedCollectionsRemainDefensiveSnapshots();
         }
 
@@ -97,6 +101,61 @@ namespace QS3D.Core.SmokeTests
                 "Semantic schedule requires 1..32 columns.");
         }
 
+        private static void MoveNextCountDriftFailsBeforeCurrent()
+        {
+            var source = new DriftKnownCountCollection(driftOnMoveNext: true, driftOnCurrent: false);
+            MustFailCount(
+                () => new SemanticScheduleDefinition(
+                    "S-COUNT-MOVE",
+                    "MoveNext Count",
+                    "MOVE COUNT",
+                    new[] { ElementCategory.Beam },
+                    string.Empty,
+                    string.Empty,
+                    source,
+                    Array.Empty<string>(),
+                    OneColumn()),
+                "after MoveNext");
+            Equal(0, source.CurrentReads);
+        }
+
+        private static void CurrentCountDriftFailsBeforeRetention()
+        {
+            var source = new DriftKnownCountCollection(driftOnMoveNext: false, driftOnCurrent: true);
+            MustFailCount(
+                () => new SemanticScheduleDefinition(
+                    "S-COUNT-CURRENT",
+                    "Current Count",
+                    "CURRENT COUNT",
+                    new[] { ElementCategory.Beam },
+                    string.Empty,
+                    string.Empty,
+                    source,
+                    Array.Empty<string>(),
+                    OneColumn()),
+                "after Current");
+            Equal(1, source.CurrentReads);
+        }
+
+        private static void StableKnownCountRemainsAccepted()
+        {
+            var source = new DriftKnownCountCollection(driftOnMoveNext: false, driftOnCurrent: false);
+            var definition = new SemanticScheduleDefinition(
+                "S-COUNT-STABLE",
+                "Stable Count",
+                "STABLE COUNT",
+                new[] { ElementCategory.Beam },
+                string.Empty,
+                string.Empty,
+                source,
+                Array.Empty<string>(),
+                OneColumn());
+
+            Equal(1, definition.IncludeElementIds.Count);
+            Equal("E-1", definition.IncludeElementIds[0]);
+            Equal(1, source.CurrentReads);
+        }
+
         private static void AcceptedCollectionsRemainDefensiveSnapshots()
         {
             var categories = new List<ElementCategory> { ElementCategory.Beam };
@@ -175,6 +234,102 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Expected bounded Semantic Schedule capacity failure, got " + ex.GetType().Name + ".", ex);
             }
             throw new Exception("Expected bounded Semantic Schedule capacity failure.");
+        }
+
+        private static void MustFailCount(Action action, string phase)
+        {
+            var expected = "Semantic schedule collection source known Count changed or conflicted " + phase + ".";
+            try
+            {
+                action();
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (!string.Equals(ex.Message, expected, StringComparison.Ordinal))
+                    throw new Exception("Unexpected Count-stability error: " + ex.Message);
+                return;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Expected semantic schedule Count-stability failure, got " + ex.GetType().Name + ".", ex);
+            }
+            throw new Exception("Expected semantic schedule Count-stability failure.");
+        }
+
+        private sealed class DriftKnownCountCollection : IReadOnlyCollection<string>
+        {
+            private readonly bool _driftOnMoveNext;
+            private readonly bool _driftOnCurrent;
+            private int _count = 1;
+
+            internal DriftKnownCountCollection(bool driftOnMoveNext, bool driftOnCurrent)
+            {
+                _driftOnMoveNext = driftOnMoveNext;
+                _driftOnCurrent = driftOnCurrent;
+            }
+
+            public int Count => _count;
+            internal int CurrentReads { get; private set; }
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                return new DriftEnumerator(this);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return GetEnumerator();
+            }
+
+            private sealed class DriftEnumerator : IEnumerator<string>
+            {
+                private readonly DriftKnownCountCollection _owner;
+                private int _index = -1;
+
+                internal DriftEnumerator(DriftKnownCountCollection owner)
+                {
+                    _owner = owner;
+                }
+
+                public string Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        if (_owner._driftOnMoveNext)
+                            _owner._count = 1;
+                        if (_owner._driftOnCurrent)
+                            _owner._count = 2;
+                        return "E-1";
+                    }
+                }
+
+                object IEnumerator.Current => Current;
+
+                public bool MoveNext()
+                {
+                    if (_index < 0)
+                    {
+                        _index = 0;
+                        if (_owner._driftOnMoveNext)
+                            _owner._count = 2;
+                        return true;
+                    }
+
+                    _index = 1;
+                    _owner._count = 1;
+                    return false;
+                }
+
+                public void Reset()
+                {
+                    throw new NotSupportedException();
+                }
+
+                public void Dispose()
+                {
+                }
+            }
         }
 
         private static void Equal<T>(T expected, T actual)

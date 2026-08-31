@@ -64,12 +64,18 @@ namespace QS3D.Core.Documentation
             var result = new List<T>(knownCount ?? Math.Min(maxCount, 256));
             using (var enumerator = values.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "before MoveNext");
+                    var moved = enumerator.MoveNext();
+                    ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "after MoveNext");
+                    if (!moved) break;
                     if (result.Count >= maxCount) throw new InvalidOperationException(capacityError);
                     if (knownCount.HasValue && result.Count >= knownCount.Value)
                         throw new InvalidOperationException("Semantic schedule collection source known Count does not match completed traversal.");
-                    result.Add(enumerator.Current);
+                    var current = enumerator.Current;
+                    ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "after Current");
+                    result.Add(current);
                 }
             }
 
@@ -357,7 +363,6 @@ namespace QS3D.Core.Documentation
                 var include = RequireExactlyOneChild(schedule, "include");
                 var exclude = RequireExactlyOneChild(schedule, "exclude");
                 var columns = RequireExactlyOneChild(schedule, "columns");
-
                 ValidateElement(categories, "categories", Array.Empty<string>(), new[] { "category" });
                 foreach (var category in categories.Elements("category"))
                 {
