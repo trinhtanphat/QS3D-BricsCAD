@@ -79,6 +79,9 @@ namespace QS3D.BricsCAD.V25
             "desktop_foreground_window",
             "desktop_wait_for_window",
             "desktop_window_focus",
+            "desktop_window_set_state",
+            "desktop_window_move_resize",
+            "desktop_ui_tree",
             "desktop_mouse_move",
             "desktop_mouse_click",
             "desktop_mouse_scroll",
@@ -98,6 +101,8 @@ namespace QS3D.BricsCAD.V25
             "bricscad_ui_invoke",
             "bricscad_ui_set_text",
             "desktop_window_focus",
+            "desktop_window_set_state",
+            "desktop_window_move_resize",
             "desktop_mouse_move",
             "desktop_mouse_click",
             "desktop_mouse_scroll",
@@ -111,7 +116,8 @@ namespace QS3D.BricsCAD.V25
         private static readonly HashSet<string> SensitiveTools = new HashSet<string>(StringComparer.Ordinal)
         {
             "desktop_clipboard_read",
-            "desktop_screenshot"
+            "desktop_screenshot",
+            "desktop_ui_tree"
         };
 
         private static readonly HashSet<string> SequenceAllowedTools = new HashSet<string>(StringComparer.Ordinal)
@@ -183,6 +189,7 @@ namespace QS3D.BricsCAD.V25
                     + ConfirmMutationProperty() + "," + ConfirmSensitiveReadProperty(),
                     "windowHandle", "stepsJson", "confirmMutation")
             };
+            descriptors.AddRange(McpDesktopUiAutomationRuntime.ToolDescriptors());
             descriptors.AddRange(McpDirectDiagnosticsThemeRuntime.ToolDescriptors());
             descriptors.AddRange(McpBackgroundHostRuntime.ToolDescriptors());
             return descriptors;
@@ -222,6 +229,10 @@ namespace QS3D.BricsCAD.V25
                     case "bricscad_ui_invoke":
                     case "bricscad_ui_set_text":
                         result = McpBackgroundHostRuntime.Call(tool, args, ensureMutationRunning, audit); break;
+                    case "desktop_window_set_state":
+                    case "desktop_window_move_resize":
+                    case "desktop_ui_tree":
+                        result = McpDesktopUiAutomationRuntime.Call(tool, args, ensureMutationRunning, audit); break;
                     case "desktop_cursor_position": result = CursorPositionJson(); break;
                     case "desktop_window_list": result = WindowListJson(Integer(args, "limit", 30, 1, MaxWindows)); break;
                     case "desktop_foreground_window": result = ForegroundWindowJson(); break;
@@ -684,7 +695,7 @@ namespace QS3D.BricsCAD.V25
                 Thread.Sleep(slice);
                 remaining -= slice;
             }
-            EnsureSequenceRunning(hwnd, ensureMutationRunning, sequenceStarted, maxDuration);
+            EnsureSequenceRunning(hwnd, ensureMutationRunning, started: sequenceStarted, maxDuration: maxDuration);
         }
 
         private static void EnsureSequenceRunning(IntPtr hwnd, Action ensureMutationRunning, Stopwatch started, int maxDuration)
