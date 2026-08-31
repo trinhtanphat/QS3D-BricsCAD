@@ -43,6 +43,7 @@ def main() -> int:
     extrude_block = method_block(direct, "private static string Extrude")
     boolean_block = method_block(direct, "private static string Boolean")
     direct_save_block = method_block(direct, "private static string Save()")
+    direct_save_as_block = method_block(direct, "private static string SaveAs")
     dbmod_block = method_block(direct, "private static void WaitForCleanDbmod")
 
     require(errors, run_block, (
@@ -115,11 +116,20 @@ def main() -> int:
     require(errors, direct_save_block, (
         'document.Database.SaveAs(filename, DwgVersion.Current);',
         'WaitForCleanDbmod();',
-        'document.Database.SaveAs(fullPath, DwgVersion.Current);',
         'route=SaveAs-current-path',
     ), "save/reopen regression guard")
     if 'document.Database.Save();' in direct_save_block:
         errors.append("direct cad_save must not use Database.Save(), which regressed after close/reopen with eCantOpenFile")
+
+    require(errors, direct_save_as_block, (
+        'EnsureWritableDirectory(directory);',
+        'document.Database.SaveAs(fullPath, DwgVersion.Current);',
+        'WaitForCleanDbmod();',
+        'Path.GetFullPath(actual), fullPath',
+    ), "save-as publication guard")
+    if 'document.Database.Save();' in direct_save_as_block:
+        errors.append("direct cad_save_as must not use Database.Save()")
+
     require(errors, dbmod_block, (
         'DateTime.UtcNow.AddSeconds(2)',
         'Application.GetSystemVariable("DBMOD")',
@@ -141,7 +151,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct 3D/save tools keep QSAVE owned by the bounded direct CAD runtime, use database-resident curve inputs for Region creation, transient clones for boolean kernel operands, preserve bounded mutation routing, avoid Database.Save after reopen, and confirm save completion with a bounded DBMOD settle wait.")
+    print("PASS: MCP direct 3D/save tools keep QSAVE owned by the bounded direct CAD runtime, use database-resident curve inputs for Region creation, transient clones for boolean kernel operands, preserve bounded mutation routing, avoid Database.Save after reopen, and confirm save/save-as completion with a bounded DBMOD settle wait.")
     return 0
 
 
