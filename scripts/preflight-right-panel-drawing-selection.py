@@ -32,14 +32,17 @@ else:
             "LayerList?.UnselectAll();",
             "ApplyLayerFilter();",
             '"Không có bản vẽ BricsCAD đang active."',
+            "_viewModel.Status = RefreshFailureStatus;",
         ):
             if token not in body:
-                errors.append("RightPanel no-document refresh contract missing: " + token)
+                errors.append("RightPanel no-document/refresh contract missing: " + token)
         stale_return = "var doc = Application.DocumentManager.MdiActiveDocument;\n            if (doc == null) return;"
         if stale_return in body:
             errors.append("RightPanel.Refresh must clear stale drawings/layers instead of returning with prior-document UI")
         if "_layerSnapshots" in body:
             errors.append("RightPanel no-document reset must clear the canonical layer VM collection, not a removed duplicate snapshot cache")
+        if "ex.Message" in body:
+            errors.append("RightPanel.Refresh must not expose raw host exception detail")
 
     refresh_drawings = re.search(
         r"private void RefreshDrawingsOnly\(\)\s*\{(?P<body>.*?)\n        \}\n\n        private void RefreshAfterXrefMutation",
@@ -78,12 +81,14 @@ else:
             "RefreshDrawingsOnly();",
             "ReloadLayers();",
             "_viewModel.Status = successStatus;",
-            '_viewModel.Status = successStatus + " • cảnh báo làm mới panel: " + ex.Message;',
+            "_viewModel.Status = successStatus + RefreshWarningSuffix;",
         ):
             if token not in body:
                 errors.append("Xref post-mutation refresh feedback missing: " + token)
         if "Refresh();" in body:
             errors.append("Xref post-mutation helper must use throwing refresh primitives so refresh failures cannot be silently masked as success")
+        if "ex.Message" in body:
+            errors.append("Xref post-mutation refresh warning must not expose raw host exception detail")
 
     clear_click = re.search(
         r"private void OnClearDrawingSelectionClick\(object sender, RoutedEventArgs e\)\s*\{(?P<body>.*?)\n        \}\n\n        private void OnDrawingSelectionChanged",
@@ -99,6 +104,7 @@ else:
             "DrawingList.UnselectAll();",
             "_refreshingDrawings = false;",
             "doc.Editor.SetImpliedSelection(Array.Empty<ObjectId>());",
+            "_viewModel.Status = ClearSelectionFailureStatus;",
         ):
             if token not in body:
                 errors.append("RightPanel explicit clear-selection contract missing: " + token)
@@ -106,6 +112,8 @@ else:
         cad_clear = body.find("doc.Editor.SetImpliedSelection(Array.Empty<ObjectId>());")
         if unselect < 0 or cad_clear < unselect:
             errors.append("RightPanel clear button must suppress list selection callbacks before one explicit CAD implied-selection clear")
+        if "ex.Message" in body:
+            errors.append("RightPanel clear-selection failure must not expose raw host exception detail")
 
     match = re.search(
         r"private void OnDrawingSelectionChanged\(object sender, SelectionChangedEventArgs e\)\s*\{(?P<body>.*?)\n        \}\n\n        private void OnLayerChecked",
@@ -124,8 +132,9 @@ else:
             "if (item == null || !item.IsXref)",
             "doc.Editor.SetImpliedSelection(Array.Empty<ObjectId>());",
             '"Bản vẽ chính " + item.Name + " • đã bỏ chọn Xref trong CAD."',
-            '"Không thể bỏ chọn Xref trong CAD: " + ex.Message',
+            "_viewModel.Status = ClearSelectionFailureStatus;",
             "var count = XrefService.SelectInstances(doc, item.Name);",
+            "_viewModel.Status = XrefSelectionFailureStatus;",
         ):
             if token not in body:
                 errors.append("RightPanel drawing-selection contract missing: " + token)
@@ -139,10 +148,12 @@ else:
         stale = "if (doc == null || item == null || !item.IsXref) return;"
         if stale in body:
             errors.append("RightPanel must not leave stale implied Xref selection when MODEL/null is selected")
+        if "ex.Message" in body:
+            errors.append("RightPanel drawing selection failure must not expose raw host exception detail")
 
-    for method, action, status in (
-        ("OnReloadXrefClick", "XrefService.Reload(doc, item.Name);", 'RefreshAfterXrefMutation("Đã nạp lại Xref " + item.Name);'),
-        ("OnDeleteDrawingClick", "XrefService.Detach(doc, item.Name);", 'RefreshAfterXrefMutation("Đã gỡ Xref " + item.Name);'),
+    for method, action, status, failure_status in (
+        ("OnReloadXrefClick", "XrefService.Reload(doc, item.Name);", 'RefreshAfterXrefMutation("Đã nạp lại Xref " + item.Name);', "XrefReloadFailureStatus"),
+        ("OnDeleteDrawingClick", "XrefService.Detach(doc, item.Name);", 'RefreshAfterXrefMutation("Đã gỡ Xref " + item.Name);', "XrefDetachFailureStatus"),
     ):
         method_match = re.search(
             r"private void " + re.escape(method) + r"\(object sender, RoutedEventArgs e\)\s*\{(?P<body>.*?)\n        \}",
@@ -159,6 +170,10 @@ else:
             errors.append(method + " must mutate first, then use the warning-aware live refresh helper")
         if "Refresh();" in body:
             errors.append(method + " must not use swallow-and-overwrite Refresh for mutation feedback")
+        if "_viewModel.Status = " + failure_status + ";" not in body:
+            errors.append(method + " must use stable redacted failure status " + failure_status)
+        if "ex.Message" in body:
+            errors.append(method + " must not expose raw host exception detail")
 
 print("QS3D RightPanel drawing-selection preflight")
 if errors:
@@ -167,4 +182,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: RightPanel clears canonical drawing/layer UI state when no document exists, removes vanished-Xref implied selection, maps drawing selection cleanly to CAD state, avoids duplicate clear callbacks, and distinguishes Xref mutation success from refresh warnings.")
+print("PASS: RightPanel clears canonical drawing/layer UI state when no document exists, removes vanished-Xref implied selection, maps drawing selection cleanly to CAD state, distinguishes Xref mutation success from refresh warnings, and redacts host failure details.")
